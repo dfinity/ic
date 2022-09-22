@@ -17,11 +17,11 @@ use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
     AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
-    PrincipalId, QueueIndex, Time,
+    PrincipalId, Time,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
 use phantom_newtype::AmountOf;
-pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE};
+pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY};
 use std::collections::BTreeSet;
 use std::convert::From;
 use std::sync::Arc;
@@ -179,7 +179,6 @@ impl CanisterState {
     /// `SchedulerImpl::induct_messages_on_same_subnet()`
     pub fn push_input(
         &mut self,
-        index: QueueIndex,
         msg: RequestOrResponse,
         max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
@@ -187,7 +186,6 @@ impl CanisterState {
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         self.system_state.push_input(
-            index,
             msg,
             self.available_message_memory(max_canister_memory_size, own_subnet_type),
             subnet_available_memory,
@@ -538,7 +536,6 @@ pub mod testing {
         /// Testing only: Publicly exposes `CanisterState::push_input()`.
         fn push_input(
             &mut self,
-            index: QueueIndex,
             msg: RequestOrResponse,
         ) -> Result<(), (StateError, RequestOrResponse)>;
     }
@@ -546,11 +543,9 @@ pub mod testing {
     impl CanisterStateTesting for CanisterState {
         fn push_input(
             &mut self,
-            index: QueueIndex,
             msg: RequestOrResponse,
         ) -> Result<(), (StateError, RequestOrResponse)> {
             (self as &mut CanisterState).push_input(
-                index,
                 msg,
                 (i64::MAX as u64 / 2).into(),
                 &mut (i64::MAX / 2),

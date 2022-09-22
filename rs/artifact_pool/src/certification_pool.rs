@@ -1,7 +1,6 @@
 use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_crypto::crypto_hash;
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet, MutableCertificationPool},
     consensus_pool::HeightIndexedPool,
@@ -9,6 +8,7 @@ use ic_interfaces::{
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_types::crypto::crypto_hash;
 use ic_types::{
     artifact::CertificationMessageId,
     consensus::certification::{

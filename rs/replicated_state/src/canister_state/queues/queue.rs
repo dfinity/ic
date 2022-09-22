@@ -99,11 +99,6 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
         self.queue.front()
     }
 
-    /// Number of messages in the queue.
-    fn num_messages(&self) -> usize {
-        self.queue.len()
-    }
-
     /// Returns the number of reserved slots in the queue.
     pub(super) fn reserved_slots(&self) -> usize {
         self.num_slots_reserved
@@ -193,22 +188,17 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
     }
 }
 
-/// Representation of a single Canister input queue.  There is an upper bound on
-/// number of messages it can store.  There is also a `QueueIndex` which can be
-/// used effectively as a sequence number for the next message that the queue
-/// expects.  The queue will refuse to insert a message that was not presented
-/// with the expected sequence number.
+/// Representation of a single canister input queue. There is an upper bound on
+/// the number of messages it can store.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct InputQueue {
     queue: QueueWithReservation<RequestOrResponse>,
-    index: QueueIndex,
 }
 
 impl InputQueue {
     pub(super) fn new(capacity: usize) -> Self {
         Self {
             queue: QueueWithReservation::new(capacity),
-            index: QueueIndex::from(0),
         }
     }
 
@@ -222,18 +212,8 @@ impl InputQueue {
 
     pub(super) fn push(
         &mut self,
-        msg_index: QueueIndex,
         msg: RequestOrResponse,
     ) -> Result<(), (StateError, RequestOrResponse)> {
-        if msg_index == self.index {
-            self.index.inc_assign();
-        } else if msg_index != super::QUEUE_INDEX_NONE {
-            // We don't pass `QueueIndex` values through streams, this should never happen.
-            panic!(
-                "Expected queue index {}, got {}. Message: {:?}",
-                self.index, msg_index, msg
-            );
-        }
         match msg {
             RequestOrResponse::Request(_) => self.queue.push(msg),
             RequestOrResponse::Response(_) => self.queue.push_into_reserved_slot(msg),
@@ -254,12 +234,17 @@ impl InputQueue {
 
     /// Returns the number of messages in the queue.
     pub(super) fn num_messages(&self) -> usize {
-        self.queue.num_messages()
+        self.queue.queue.len()
     }
 
     /// Returns the number of reserved slots in the queue.
     pub(super) fn reserved_slots(&self) -> usize {
         self.queue.reserved_slots()
+    }
+
+    /// Returns `true` if the queue is empty (no messages and no reserved slots).
+    pub(super) fn is_empty(&self) -> bool {
+        self.queue.reserved_slots() == 0 && self.queue.queue.is_empty()
     }
 
     /// Returns the amount of cycles contained in the queue.
@@ -290,7 +275,7 @@ impl From<&InputQueue> for pb_queues::InputOutputQueue {
     fn from(q: &InputQueue) -> Self {
         Self {
             queue: (&q.queue).into(),
-            index: q.index.get(),
+            index: 0,
             capacity: q.queue.capacity as u64,
             num_slots_reserved: q.queue.num_slots_reserved as u64,
             deadline_range_ends: Vec::<pb_queues::MessageDeadline>::new(),
@@ -308,7 +293,6 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
             ));
         }
         Ok(Self {
-            index: q.index.into(),
             queue: q.try_into()?,
         })
     }
@@ -467,15 +451,13 @@ impl OutputQueue {
     /// Pops a message off the queue and returns it.
     ///
     /// Ensures there is always a 'Some' at the front.
-    pub(crate) fn pop(&mut self) -> Option<(QueueIndex, RequestOrResponse)> {
+    pub(crate) fn pop(&mut self) -> Option<RequestOrResponse> {
         match self.queue.pop() {
             None => None,
             Some(None) => {
                 panic!("OutputQueue invariant violated: Found `None` at the front.");
             }
             Some(Some(msg)) => {
-                let ret = Some((self.index, msg));
-
                 self.index.inc_assign();
                 self.advance_to_next_message();
 
@@ -485,7 +467,7 @@ impl OutputQueue {
                     self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
                 );
 
-                ret
+                Some(msg)
             }
         }
     }
@@ -510,10 +492,8 @@ impl OutputQueue {
 
     /// Returns the message that `pop` would have returned, without removing it
     /// from the queue.
-    pub(crate) fn peek(&self) -> Option<(QueueIndex, &RequestOrResponse)> {
-        self.queue
-            .peek()
-            .map(|msg| (self.index, msg.as_ref().unwrap()))
+    pub(crate) fn peek(&self) -> Option<&RequestOrResponse> {
+        self.queue.peek().map(|msg| msg.as_ref().unwrap())
     }
 
     /// Number of actual messages in the queue (`None` are ignored).
@@ -524,6 +504,11 @@ impl OutputQueue {
     /// Returns the number of reserved slots in the queue.
     pub(super) fn reserved_slots(&self) -> usize {
         self.queue.reserved_slots()
+    }
+
+    /// Returns `true` if the queue is empty (no messages and no reserved slots).
+    pub(super) fn is_empty(&self) -> bool {
+        self.queue.reserved_slots() == 0 && self.num_messages == 0
     }
 
     /// Returns the amount of cycles contained in the queue.
@@ -616,7 +601,7 @@ impl<'a> Iterator for TimedOutRequestsIter<'a> {
 }
 
 impl std::iter::Iterator for OutputQueue {
-    type Item = (QueueIndex, RequestOrResponse);
+    type Item = RequestOrResponse;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.pop()

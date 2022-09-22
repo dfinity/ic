@@ -89,7 +89,7 @@ pub struct SendTransactionResponse {}
 /// Wraps the different types of requests to the Bitcoin Adapter.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterRequestWrapper {
-    #[prost(oneof = "bitcoin_adapter_request_wrapper::R", tags = "1, 2")]
+    #[prost(oneof = "bitcoin_adapter_request_wrapper::R", tags = "1, 2, 3")]
     pub r: ::core::option::Option<bitcoin_adapter_request_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterRequestWrapper`.
@@ -100,12 +100,14 @@ pub mod bitcoin_adapter_request_wrapper {
         GetSuccessorsRequest(super::GetSuccessorsRequest),
         #[prost(message, tag = "2")]
         SendTransactionRequest(super::SendTransactionRequest),
+        #[prost(message, tag = "3")]
+        CanisterGetSuccessorsRequest(super::CanisterGetSuccessorsRequestInitial),
     }
 }
 /// Wraps the different types of responses from the Bitcoin Adapter.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterResponseWrapper {
-    #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "1, 2")]
+    #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "1, 2, 3")]
     pub r: ::core::option::Option<bitcoin_adapter_response_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterResponseWrapper`.
@@ -116,6 +118,8 @@ pub mod bitcoin_adapter_response_wrapper {
         GetSuccessorsResponse(super::GetSuccessorsResponse),
         #[prost(message, tag = "2")]
         SendTransactionResponse(super::SendTransactionResponse),
+        #[prost(message, tag = "3")]
+        CanisterGetSuccessorsResponse(super::CanisterGetSuccessorsResponseComplete),
     }
 }
 /// A Bitcoin Adapter request, used to store the requests in the
@@ -180,6 +184,30 @@ pub struct Utxo {
     pub txout: ::core::option::Option<TxOut>,
     #[prost(uint32, tag = "3")]
     pub height: u32,
+}
+/// A request to retrieve new blocks from the specified Bitcoin network.
+/// NOTE: This request is specific to the Bitcoin wasm canister. It supersedes the
+/// `GetSuccessorsRequest` above, which will be deleted once the  Bitcoin replica canister is
+/// phased out.
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct CanisterGetSuccessorsRequestInitial {
+    #[prost(enumeration = "Network", tag = "1")]
+    pub network: i32,
+    #[prost(bytes = "vec", repeated, tag = "2")]
+    pub processed_block_hashes: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub anchor: ::prost::alloc::vec::Vec<u8>,
+}
+/// A response containing new successor blocks from the Bitcoin network.
+/// NOTE: This response is specific to the Bitcoin wasm canister. It supersedes the
+/// `GetSuccessorsResponse` above, which will be deleted once the  Bitcoin replica canister is
+/// phased out.
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct CanisterGetSuccessorsResponseComplete {
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub blocks: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", repeated, tag = "2")]
+    pub next: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// Represents the Bitcoin state that isn't stored in PageMaps.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]

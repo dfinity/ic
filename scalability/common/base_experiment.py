@@ -436,7 +436,7 @@ class BaseExperiment:
         Note that canisters are currently always installed as best effort.
         """
         print("Installing canister .. ")
-        cmd = [self.workload_generator_path, "http://[{}]:8080".format(target), "-n", "1", "-r", "1"]
+        cmd = [self.workload_generator_path, "http://[{}]:8080".format(target), "-n", "1", "-r", "0"]
         if canister is not None:
             cmd += ["--canister", canister]
         return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -462,7 +462,7 @@ class BaseExperiment:
         this_canister = canister if canister is not None else "counter"
         this_canister_name = "".join(this_canister.split("#")[0])
 
-        cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "1"]
+        cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "0"]
         if this_canister_name != "counter":
             canister_in_artifacts = os.path.join(self.artifacts_path, f"../canisters/{this_canister_name}.wasm")
             canister_in_repo = os.path.join(f"canisters/{this_canister_name}.wasm")

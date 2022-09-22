@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::cmp::{max, min};
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -9,7 +9,7 @@ use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
     api::{call_with_cleanup, caller, set_certified_data},
-    over, over_async, over_init, stable, BytesS,
+    over, over_async, over_init, over_may_reject, stable, BytesS,
 };
 use dfn_protobuf::protobuf;
 use ic_crypto_tree_hash::{
@@ -21,7 +21,7 @@ use ic_ledger_core::block::BlockType;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
-    AccountIdentifier, Block, BlockHeight, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
+    AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
     Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire, NewType};
@@ -111,12 +111,29 @@ struct State {
 
     total_cycles_minted: Cycles,
 
-    blocks_notified: Option<BTreeMap<BlockHeight, NotificationStatus>>,
-    last_purged_notification: Option<BlockHeight>,
+    blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
+    last_purged_notification: Option<BlockIndex>,
 
     /// The current maturity modulation in basis points (permyriad), i.e.,
     /// a value of 123 corresponds to 1.23%.
     maturity_modulation_permyriad: Option<i32>,
+
+    /// Maintains the mapping of subnet types to subnet ids. Users can choose to
+    /// deploy their canisters on subnets with specific characteristics by
+    /// selecting one of these types.
+    ///
+    ///
+    /// These user facing subnet types capture common useful characteristics of
+    /// the subnets and should not be confused with the existing concept of
+    /// subnet types that exists in the registry (system/verified/application).
+    /// The idea is that these types provide an easy way for users to set their
+    /// preferences during canister creation. If no subnet type is provided
+    /// during canister creation, a subnet without a special type will be picked
+    /// at random as no special requirements were provided.
+    ///
+    /// Each subnet can be assigned to at most one type and cannot be a default
+    /// or an authorized subnet.
+    subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
 }
 
 impl State {
@@ -180,6 +197,7 @@ impl Default for State {
             blocks_notified: Some(BTreeMap::new()),
             last_purged_notification: Some(0),
             maturity_modulation_permyriad: Some(0),
+            subnet_types_to_subnets: Some(BTreeMap::new()),
         }
     }
 }
@@ -239,6 +257,26 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
             panic!("Only the governance canister can set authorized subnetwork lists.");
         }
 
+        let assigned_to_types: BTreeSet<&SubnetId> = state
+            .subnet_types_to_subnets
+            .as_ref()
+            .expect("subnet types to subnets mapping is not `None`")
+            .values()
+            .flatten()
+            .collect();
+        let mut already_assigned = vec![];
+        for subnet in subnets.iter() {
+            if assigned_to_types.contains(subnet) {
+                already_assigned.push(*subnet);
+            }
+        }
+        if !already_assigned.is_empty() {
+            panic!(
+                "Subnets {:?} are already assigned to a type and cannot be authorized.",
+                already_assigned
+            );
+        }
+
         if let Some(who) = who {
             if subnets.is_empty() {
                 print(format!("[cycles] removing subnet list for {}", who));
@@ -252,6 +290,254 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
             state.default_subnets = subnets;
         }
     });
+}
+
+#[export_name = "canister_update update_subnet_type"]
+fn update_subnet_type_() {
+    over_may_reject(candid_one, |args: UpdateSubnetTypeArgs| {
+        update_subnet_type(args).map_err(|err| err.to_string())
+    })
+}
+
+/// Updates the set of available subnet types.
+///
+/// Preconditions:
+//   * Only the governance canister can call this method
+//   * Add: type does not already exist
+//   * Remove: type exists and no assigned subnets to this type exist
+fn update_subnet_type(args: UpdateSubnetTypeArgs) -> UpdateSubnetTypeResult {
+    let governance_canister_id = with_state(|state| state.governance_canister_id);
+
+    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+        panic!("Only the governance canister can update the available subnet types.");
+    }
+
+    match args {
+        UpdateSubnetTypeArgs::Add(subnet_type) => add_subnet_type(subnet_type),
+        UpdateSubnetTypeArgs::Remove(subnet_type) => remove_subnet_type(subnet_type),
+    }
+}
+
+fn add_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
+    with_state_mut(|state| {
+        let subnet_types_to_subnets = &mut state
+            .subnet_types_to_subnets
+            .as_mut()
+            .expect("subnet types to subnets mapping is not `None`");
+
+        match subnet_types_to_subnets.entry(subnet_type.clone()) {
+            Entry::Vacant(entry) => {
+                print(format!("[cycles] Adding new subnet type: {}", subnet_type));
+                entry.insert(BTreeSet::new());
+                Ok(())
+            }
+            Entry::Occupied(_) => Err(UpdateSubnetTypeError::Duplicate(subnet_type)),
+        }
+    })
+}
+
+fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
+    with_state_mut(|state| {
+        let subnet_types_to_subnets = &mut state
+            .subnet_types_to_subnets
+            .as_mut()
+            .expect("subnet types to subnets mapping is not `None`");
+
+        match subnet_types_to_subnets.get(&subnet_type) {
+            Some(subnets) => {
+                if !subnets.is_empty() {
+                    Err(UpdateSubnetTypeError::TypeHasAssignedSubnets((
+                        subnet_type,
+                        subnets.iter().copied().collect(),
+                    )))
+                } else {
+                    print(format!("[cycles] Removing subnet type: {}", subnet_type));
+                    // Type does not have any assigned subnets, so it can be removed.
+                    subnet_types_to_subnets.remove(&subnet_type);
+                    Ok(())
+                }
+            }
+            None => Err(UpdateSubnetTypeError::TypeDoesNotExist(subnet_type)),
+        }
+    })
+}
+
+#[export_name = "canister_update change_subnet_type_assignment"]
+fn change_subnet_type_assignment_() {
+    over_may_reject(candid_one, |args: ChangeSubnetTypeAssignmentArgs| {
+        change_subnet_type_assignment(args).map_err(|err| err.to_string())
+    })
+}
+
+/// Changes the assignment of provided subnets to subnet types.
+///
+/// Preconditions:
+///  * Only the governance canister can call this method
+///  * Add: type exists and all subnet ids should be currently unassigned and not part of the authorized subnets
+///  * Remove: type exists and all subnet ids are currently assigned to this type
+fn change_subnet_type_assignment(
+    args: ChangeSubnetTypeAssignmentArgs,
+) -> ChangeSubnetTypeAssignmentResult {
+    let governance_canister_id = with_state(|state| state.governance_canister_id);
+
+    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+        panic!(
+            "Only the governance canister can change the assignment of subnets to subnet types."
+        );
+    }
+
+    match args {
+        ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
+            subnets,
+            subnet_type,
+        }) => add_subnets_to_type(subnets, subnet_type),
+        ChangeSubnetTypeAssignmentArgs::Remove(SubnetListWithType {
+            subnets,
+            subnet_type,
+        }) => remove_subnets_from_type(subnets, subnet_type),
+    }
+}
+
+fn add_subnets_to_type(
+    subnets: Vec<SubnetId>,
+    subnet_type: String,
+) -> ChangeSubnetTypeAssignmentResult {
+    with_state_mut(|state| {
+        let subnet_types_to_subnets = &mut state
+            .subnet_types_to_subnets
+            .as_mut()
+            .expect("subnet types to subnets mapping is not `None`");
+
+        // Check that the subnets we are trying to assign to `subnet_type` are
+        // not already assigned to another type.
+        let mut assigned_subnets = vec![];
+        for (subnet_type_tmp, subnets_tmp) in subnet_types_to_subnets.iter() {
+            let mut tmp = vec![];
+            for subnet in subnets.iter() {
+                if subnets_tmp.contains(subnet) {
+                    tmp.push(*subnet);
+                }
+            }
+            if !tmp.is_empty() {
+                assigned_subnets.push(SubnetListWithType {
+                    subnets: tmp,
+                    subnet_type: subnet_type_tmp.clone(),
+                });
+            }
+        }
+
+        if !assigned_subnets.is_empty() {
+            return Err(ChangeSubnetTypeAssignmentError::SubnetsAreAssigned(
+                assigned_subnets,
+            ));
+        }
+
+        // Check that the subnets we are trying to assign to `subnet_type` are
+        // not already in the authorized or default subnet list.
+        let mut authorized_and_default_subnets: BTreeSet<&SubnetId> =
+            state.default_subnets.iter().collect();
+        let tmp: BTreeSet<&SubnetId> = state.authorized_subnets.values().flatten().collect();
+        authorized_and_default_subnets.extend(tmp);
+        let mut already_authorized_subnets = vec![];
+        for subnet in subnets.iter() {
+            if authorized_and_default_subnets.contains(subnet) {
+                already_authorized_subnets.push(*subnet);
+            }
+        }
+        if !already_authorized_subnets.is_empty() {
+            return Err(ChangeSubnetTypeAssignmentError::SubnetsAreAuthorized(
+                already_authorized_subnets,
+            ));
+        }
+
+        // We can now safely assign the subnets.
+        match subnet_types_to_subnets.entry(subnet_type.clone()) {
+            Entry::Occupied(mut entry) => {
+                print(format!(
+                    "[cycles] Adding subnets {:?} to type: {}",
+                    subnets, subnet_type
+                ));
+                let existing_subnets = entry.get_mut();
+                existing_subnets.extend(subnets);
+                Ok(())
+            }
+            Entry::Vacant(_) => Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
+                subnet_type,
+            )),
+        }
+    })
+}
+
+fn remove_subnets_from_type(
+    subnets: Vec<SubnetId>,
+    subnet_type: String,
+) -> ChangeSubnetTypeAssignmentResult {
+    with_state_mut(|state| {
+        let subnet_types_to_subnets = &mut state
+            .subnet_types_to_subnets
+            .as_mut()
+            .expect("subnet types to subnets mapping is not `None`");
+
+        match subnet_types_to_subnets.entry(subnet_type.clone()) {
+            Entry::Occupied(mut entry) => {
+                // Check that the provided subnets are assigned to the type
+                // that we're trying to remove them from.
+                let mut not_assigned_subnets = vec![];
+                for subnet in subnets.iter() {
+                    if !entry.get().contains(subnet) {
+                        not_assigned_subnets.push(*subnet);
+                    }
+                }
+
+                if !not_assigned_subnets.is_empty() {
+                    return Err(ChangeSubnetTypeAssignmentError::SubnetsAreNotAssigned(
+                        SubnetListWithType {
+                            subnets: not_assigned_subnets,
+                            subnet_type,
+                        },
+                    ));
+                }
+
+                // Subnets can now safely be removed from the type.
+                print(format!(
+                    "[cycles] Removing subnets {:?} from type: {}",
+                    subnets, subnet_type
+                ));
+                let existing_subnets = entry.get_mut();
+                for subnet in subnets.iter() {
+                    existing_subnets.remove(subnet);
+                }
+                Ok(())
+            }
+            // Type not found.
+            Entry::Vacant(_) => Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
+                subnet_type,
+            )),
+        }
+    })
+}
+
+#[candid_method(query, rename = "get_subnet_types_to_subnets")]
+fn get_subnet_types_to_subnets() -> SubnetTypesToSubnetsResponse {
+    with_state(|state| {
+        let subnet_types_to_subnets: Vec<(String, Vec<SubnetId>)> = state
+            .subnet_types_to_subnets
+            .as_ref()
+            .expect("subnet types to subnets mapping is not `None`")
+            .iter()
+            .map(|(k, v)| (k.clone(), v.iter().copied().collect()))
+            .collect();
+
+        SubnetTypesToSubnetsResponse {
+            data: subnet_types_to_subnets,
+        }
+    })
+}
+
+/// Retrieves the current mapping of subnet types to subnets.
+#[export_name = "canister_query get_subnet_types_to_subnets"]
+fn get_subnet_types_to_subnets_() {
+    over(candid_one, |_: ()| get_subnet_types_to_subnets())
 }
 
 /// Constructs a hash tree that can be used to certify requests for the
@@ -708,6 +994,7 @@ async fn notify_create_canister(
     NotifyCreateCanister {
         block_index,
         controller,
+        subnet_type,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
     let cmc_id = dfn_core::api::id();
@@ -743,7 +1030,7 @@ async fn notify_create_canister(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_create_canister(controller, from, amount).await;
+            let result = process_create_canister(controller, from, amount, subnet_type).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.as_mut().unwrap().insert(
@@ -760,10 +1047,7 @@ async fn notify_create_canister(
     }
 }
 
-async fn query_block(
-    block_index: BlockHeight,
-    ledger_id: CanisterId,
-) -> Result<Block, NotifyError> {
+async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<Block, NotifyError> {
     fn failed_to_fetch_block(error_message: String) -> NotifyError {
         NotifyError::Other {
             error_code: NotifyErrorCode::FailedToFetchBlock as u64,
@@ -818,13 +1102,13 @@ fn memo_to_intent_str(memo: Memo) -> String {
 }
 
 async fn fetch_transaction(
-    block_height: BlockHeight,
+    block_index: BlockIndex,
     expected_to: AccountIdentifier,
     expected_memo: Memo,
 ) -> Result<(Tokens, AccountIdentifier), NotifyError> {
     let ledger_id = with_state(|state| state.ledger_canister_id);
 
-    let block = query_block(block_height, ledger_id).await?;
+    let block = query_block(block_index, ledger_id).await?;
 
     let (from, to, amount) = match block.transaction().operation {
         Operation::Transfer {
@@ -909,7 +1193,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
             .ok_or_else(|| "Reserving requires a principal.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        match process_create_canister(controller, from, tn.amount).await {
+        match process_create_canister(controller, from, tn.amount, None).await {
             Ok(canister_id) => (
                 Ok(CyclesResponse::CanisterCreated(canister_id)),
                 Some(NotificationStatus::NotifiedCreateCanister(Ok(canister_id))),
@@ -1011,6 +1295,7 @@ async fn process_create_canister(
     controller: PrincipalId,
     from: AccountIdentifier,
     amount: Tokens,
+    subnet_type: Option<String>,
 ) -> Result<CanisterId, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -1024,7 +1309,7 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match create_canister(controller, cycles).await {
+    match create_canister(controller, cycles, subnet_type).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
@@ -1097,7 +1382,7 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
         to: minting_account_id,
         created_at_time: None,
     };
-    let res: Result<BlockHeight, (Option<i32>, String)> =
+    let res: Result<BlockIndex, (Option<i32>, String)> =
         call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
 
     match res {
@@ -1118,7 +1403,7 @@ async fn refund(
     to: AccountIdentifier,
     amount: Tokens,
     extra_fee: Tokens,
-) -> Result<Option<BlockHeight>, NotifyError> {
+) -> Result<Option<BlockIndex>, NotifyError> {
     let ledger_canister_id = with_state(|state| state.ledger_canister_id);
     let mut refund_block_index = None;
 
@@ -1140,7 +1425,7 @@ async fn refund(
             to,
             created_at_time: None,
         };
-        let send_res: Result<BlockHeight, (Option<i32>, String)> =
+        let send_res: Result<BlockIndex, (Option<i32>, String)> =
             call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
         let block = send_res.map_err(|(code, err)| {
             let code = code.unwrap_or_default();
@@ -1185,8 +1470,42 @@ async fn deposit_cycles(canister_id: CanisterId, cycles: Cycles) -> Result<(), S
     Ok(())
 }
 
-async fn create_canister(controller_id: PrincipalId, cycles: Cycles) -> Result<CanisterId, String> {
-    let subnets = get_permuted_subnets_for(&controller_id).await?;
+async fn create_canister(
+    controller_id: PrincipalId,
+    cycles: Cycles,
+    subnet_type: Option<String>,
+) -> Result<CanisterId, String> {
+    // Retrieve randomness from the system to use later to get a random
+    // permutation of subnets. Performing the asynchronous call before
+    // we retrieve the list of subnets to avoid having the list of
+    // subnets change in the meantime.
+    let mut rng = get_rng().await?;
+
+    // If subnet_type is `Some`, then use it to determine the eligible list
+    // of subnets. Otherwise, fall back to the list of subnets for the
+    // provided controller id.
+    let mut subnets: Vec<SubnetId> = match subnet_type {
+        Some(subnet_type) => with_state(|state| {
+            let subnet_types_to_subnets = state
+                .subnet_types_to_subnets
+                .as_ref()
+                .expect("subnet types to subnets mapping is not `None`");
+            match subnet_types_to_subnets.get(&subnet_type) {
+                Some(s) => Ok(s.iter().copied().collect()),
+                None => {
+                    return Err(format!(
+                        "Provided subnet type {} does not exist",
+                        subnet_type
+                    ))
+                }
+            }
+        }),
+        None => Ok(get_subnets_for(&controller_id)),
+    }?;
+
+    // Perform a random permutation of the eligible list of subnets to ensure
+    // that we load balance canister creations among them.
+    subnets.shuffle(&mut rng);
 
     let mut last_err = None;
 
@@ -1276,21 +1595,14 @@ fn total_supply_() {
 
 /// Return the list of subnets in which this controller is allowed to create
 /// canisters
-async fn get_permuted_subnets_for(controller_id: &PrincipalId) -> Result<Vec<SubnetId>, String> {
-    let mut subnets = {
-        with_state(|state| {
-            if let Some(subnets) = state.authorized_subnets.get(controller_id) {
-                subnets.clone()
-            } else {
-                state.default_subnets.clone()
-            }
-        })
-    };
-
-    let mut rng = get_rng().await?;
-    subnets.shuffle(&mut rng);
-
-    Ok(subnets)
+fn get_subnets_for(controller_id: &PrincipalId) -> Vec<SubnetId> {
+    with_state(|state| {
+        if let Some(subnets) = state.authorized_subnets.get(controller_id) {
+            subnets.clone()
+        } else {
+            state.default_subnets.clone()
+        }
+    })
 }
 
 async fn get_rng() -> Result<StdRng, String> {
@@ -1332,7 +1644,12 @@ fn post_upgrade() {
             bytes.len(),
         ));
 
-        STATE.with(|state| state.replace(Some(State::decode(&bytes).unwrap())));
+        let mut new_state = State::decode(&bytes).unwrap();
+        if new_state.subnet_types_to_subnets.is_none() {
+            new_state.subnet_types_to_subnets = Some(BTreeMap::new());
+        }
+
+        STATE.with(|state| state.replace(Some(new_state)));
     })
 }
 
@@ -1380,6 +1697,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
 
     fn init_test_state() {
@@ -1432,7 +1750,7 @@ mod tests {
 
     #[test]
     fn test_purge_notifications() {
-        fn block_index_to_cycles(block_index: BlockHeight) -> Cycles {
+        fn block_index_to_cycles(block_index: BlockIndex) -> Cycles {
             Cycles::new(block_index as u128)
         }
         let mut state = State {
@@ -1721,6 +2039,168 @@ mod tests {
         let maturity_modulation = (term1 + term2 + term3 + term4) / 4;
 
         assert_eq!(maturity_modulation, computed_maturity_modulation);
+    }
+
+    #[test]
+    fn test_add_subnet_type() {
+        init_test_state();
+
+        assert_eq!(add_subnet_type("Fiduciary".to_string()), Ok(()));
+        assert_eq!(add_subnet_type("Storage".to_string()), Ok(()));
+
+        assert_eq!(
+            add_subnet_type("Storage".to_string()),
+            Err(UpdateSubnetTypeError::Duplicate("Storage".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_remove_subnet_type() {
+        init_test_state();
+
+        add_subnet_type("Fiduciary".to_string()).unwrap();
+        add_subnet_type("Storage".to_string()).unwrap();
+        let subnet1 = subnet_test_id(0);
+        let subnet2 = subnet_test_id(1);
+        add_subnets_to_type(vec![subnet1, subnet2], "Fiduciary".to_string()).unwrap();
+
+        assert_eq!(remove_subnet_type("Storage".to_string()), Ok(()));
+
+        assert_eq!(
+            remove_subnet_type("MyType".to_string()),
+            Err(UpdateSubnetTypeError::TypeDoesNotExist(
+                "MyType".to_string()
+            ))
+        );
+
+        assert_eq!(
+            remove_subnet_type("Fiduciary".to_string()),
+            Err(UpdateSubnetTypeError::TypeHasAssignedSubnets((
+                "Fiduciary".to_string(),
+                vec![subnet1, subnet2]
+            )))
+        );
+    }
+
+    #[test]
+    fn test_add_subnets_to_type() {
+        let type1 = "Type1".to_string();
+        let type2 = "Type2".to_string();
+        let type3 = "Type3".to_string();
+
+        let subnet1 = subnet_test_id(0);
+        let subnet2 = subnet_test_id(1);
+        let subnet3 = subnet_test_id(2);
+        let subnet4 = subnet_test_id(3);
+        let subnet5 = subnet_test_id(4);
+        let subnet6 = subnet_test_id(5);
+
+        let mut authorized_subnets = BTreeMap::new();
+        authorized_subnets.insert(user_test_id(0).get(), vec![subnet5]);
+        STATE.with(|state| {
+            state.replace(Some(State {
+                authorized_subnets,
+                default_subnets: vec![subnet6],
+                ..Default::default()
+            }))
+        });
+
+        add_subnet_type(type1.clone()).unwrap();
+        add_subnet_type(type2.clone()).unwrap();
+        add_subnet_type(type3.clone()).unwrap();
+
+        // Add subnet1 and subnet2 to "Type1".
+        assert_eq!(
+            add_subnets_to_type(vec![subnet1, subnet2], type1.clone()),
+            Ok(())
+        );
+
+        // Add subnet3 to "Type2".
+        assert_eq!(add_subnets_to_type(vec![subnet3], type2.clone()), Ok(()));
+
+        // Attempt to add subnet2 and subnet3 to "Type3". Should fail because they are
+        // already assigned to other types.
+        assert_eq!(
+            add_subnets_to_type(vec![subnet2, subnet3], type3.clone()),
+            Err(ChangeSubnetTypeAssignmentError::SubnetsAreAssigned(vec![
+                SubnetListWithType {
+                    subnets: vec![subnet2],
+                    subnet_type: type1,
+                },
+                SubnetListWithType {
+                    subnets: vec![subnet3],
+                    subnet_type: type2,
+                }
+            ]))
+        );
+
+        // Attempt to add subnet4 to subnet type "unknown" that does not exist.
+        assert_eq!(
+            add_subnets_to_type(vec![subnet4], "unknown".to_string()),
+            Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
+                "unknown".to_string()
+            ))
+        );
+
+        // Attempt to add subnet5 and subnet6 to type3 but they are already
+        // authorized for public access.
+        assert_eq!(
+            add_subnets_to_type(vec![subnet5, subnet6], type3),
+            Err(ChangeSubnetTypeAssignmentError::SubnetsAreAuthorized(vec![
+                subnet5, subnet6
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_remove_subnets_from_type() {
+        init_test_state();
+
+        let type1 = "Type1".to_string();
+        let type2 = "Type2".to_string();
+        let type3 = "Type3".to_string();
+
+        add_subnet_type(type1.clone()).unwrap();
+        add_subnet_type(type2.clone()).unwrap();
+        add_subnet_type(type3.clone()).unwrap();
+
+        let subnet1 = subnet_test_id(0);
+        let subnet2 = subnet_test_id(1);
+        let subnet3 = subnet_test_id(2);
+        let subnet4 = subnet_test_id(3);
+
+        // Add subnet1 and subnet2 to "Type1".
+        // Add subnet3 and subnet4 to "Type2".
+        add_subnets_to_type(vec![subnet1, subnet2], type1.clone()).unwrap();
+        add_subnets_to_type(vec![subnet3, subnet4], type2.clone()).unwrap();
+
+        // Remove a subnet from an existing type.
+        assert_eq!(remove_subnets_from_type(vec![subnet4], type2), Ok(()));
+
+        // Attempt to remove a subnet from an non-existing type.
+        assert_eq!(
+            remove_subnets_from_type(vec![subnet3], "unknown".to_string()),
+            Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
+                "unknown".to_string()
+            ))
+        );
+
+        // Attempt to remove subnets from a type they do not belong to.
+        assert_eq!(
+            remove_subnets_from_type(vec![subnet2, subnet3], type3.clone()),
+            Err(ChangeSubnetTypeAssignmentError::SubnetsAreNotAssigned(
+                SubnetListWithType {
+                    subnets: vec![subnet2, subnet3],
+                    subnet_type: type3,
+                }
+            ))
+        );
+
+        // Remove multiple subnets from an existing type.
+        assert_eq!(
+            remove_subnets_from_type(vec![subnet1, subnet2], type1),
+            Ok(())
+        );
     }
 
     #[test]

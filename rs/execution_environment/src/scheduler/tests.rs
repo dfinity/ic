@@ -7,7 +7,10 @@ use crate::scheduler::test_utilities::{on_response, other_side};
 use candid::Encode;
 use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-use ic_ic00_types::{BitcoinGetBalanceArgs, CanisterIdRecord, EmptyBlob, Method};
+use ic_ic00_types::{
+    BitcoinGetBalanceArgs, CanisterHttpRequestArgs, CanisterIdRecord, EcdsaCurve, EcdsaKeyId,
+    EmptyBlob, HttpMethod, Method, Payload as _, SignWithECDSAArgs, TransformFunc, TransformType,
+};
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
@@ -25,7 +28,9 @@ use ic_test_utilities::{
     },
 };
 use ic_test_utilities_metrics::{fetch_int_gauge, fetch_int_gauge_vec, metric_vec};
-use ic_types::messages::{Payload, MAX_RESPONSE_COUNT_BYTES};
+use ic_types::messages::{
+    Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
+};
 use ic_types::methods::SystemMethod;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
 use proptest::prelude::*;
@@ -651,7 +656,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     let bytes_per_cycle = (1_u128 << 30)
         .checked_div(
             CyclesAccountManagerConfig::application_subnet()
-                .gib_storage_per_second_fee
+                .gib_storage_per_second_fee(test.use_cost_scaling(), test.subnet_size())
                 .get(),
         )
         .unwrap() as u64
@@ -1071,6 +1076,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             max_instructions_per_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),
+            max_instructions_per_install_code_slice: NumInstructions::new(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -2856,6 +2862,126 @@ fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size
     balance_before - balance_after
 }
 
+fn simulate_sign_with_ecdsa_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    // This function simulates `execute_round` to get the cost of signing with ECDSA.
+    // Limitation of the test -- caller canister is not charged.
+    // Payment is done via attaching cycles to request and the cost is subtracted from it
+    // after executing the message.
+    let ecdsa_key = EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "secp256k1".to_string(),
+    };
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(subnet_type)
+        .with_cost_scaling(true)
+        .with_subnet_size(subnet_size)
+        .with_ecdsa_key(ecdsa_key.clone())
+        .build();
+    let canister_id = test.create_canister();
+
+    let payment_before = Cycles::new(15_000_000_000) * subnet_size;
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        Encode!(&SignWithECDSAArgs {
+            message_hash: [0; 32],
+            derivation_path: Vec::new(),
+            key_id: ecdsa_key
+        })
+        .unwrap(),
+        payment_before,
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts;
+    assert_eq!(sign_with_ecdsa_contexts.len(), 1);
+    let (_, context) = sign_with_ecdsa_contexts.iter().next().unwrap();
+    let payment_after = context.request.payment;
+
+    payment_before - payment_after
+}
+
+fn simulate_http_request_fee_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    // This function simulates `execute_round` to get the cost of sending http request.
+    // Limitation of the test -- caller canister is not charged.
+    // Payment is done via attaching cycles to request and the cost is subtracted from it
+    // after executing the message.
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(subnet_type)
+        .with_cost_scaling(true)
+        .with_subnet_size(subnet_size)
+        .build();
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    let canister_id = test.create_canister();
+
+    let payment_before = Cycles::new(211_000_000_000) * subnet_size;
+    // Create payload of the request.
+    let url = "https://".to_string();
+    let args = CanisterHttpRequestArgs {
+        url,
+        max_response_bytes: None,
+        headers: Vec::new(),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformType::Function(TransformFunc(candid::Func {
+            principal: canister_id.get().0,
+            method: "transform".to_string(),
+        }))),
+    };
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        args.encode(),
+        payment_before,
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    let (_, context) = canister_http_request_contexts.iter().next().unwrap();
+    let payment_after = context.request.payment;
+
+    payment_before - payment_after
+}
+
+fn calculate_http_request_fee_cycles(
+    config: &CyclesAccountManagerConfig,
+    request_size: NumBytes,
+    response_size_limit: Option<NumBytes>,
+    subnet_size: usize,
+) -> Cycles {
+    let response_size = match response_size_limit {
+        Some(response_size) => response_size.get(),
+        // Defaults to maximum response size.
+        None => MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+    };
+    let total_bytes = response_size + request_size.get();
+    scale_cost(
+        config,
+        config.http_request_baseline_fee + config.http_request_per_byte_fee * total_bytes,
+        subnet_size,
+    )
+}
+
+fn calculate_sign_with_ecdsa_cycles(
+    config: &CyclesAccountManagerConfig,
+    subnet_size: usize,
+) -> Cycles {
+    scale_cost(config, config.ecdsa_signature_fee, subnet_size)
+}
+
 fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountManagerConfig {
     match subnet_type {
         SubnetType::System => CyclesAccountManagerConfig::system_subnet(),
@@ -2867,7 +2993,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
 }
 
 fn scale_cost(config: &CyclesAccountManagerConfig, cycles: Cycles, subnet_size: usize) -> Cycles {
-    Cycles::from((cycles.get() * (subnet_size as u128)) / config.reference_subnet_size)
+    Cycles::from((cycles.get() * (subnet_size as u128)) / (config.reference_subnet_size as u128))
 }
 
 fn memory_cost(
@@ -2877,13 +3003,21 @@ fn memory_cost(
     subnet_size: usize,
 ) -> Cycles {
     let one_gib = 1024 * 1024 * 1024;
+    let use_cost_scaling = true;
     let cycles = Cycles::from(
         (bytes.get() as u128
-            * config.gib_storage_per_second_fee.get()
+            * config
+                .gib_storage_per_second_fee(use_cost_scaling, subnet_size)
+                .get()
             * duration.as_secs() as u128)
             / one_gib,
     );
-    scale_cost(config, cycles, subnet_size)
+    // No scaling below non-subsidised storage cost threshold.
+    if subnet_size < CyclesAccountManagerConfig::fair_storage_cost_subnet_size() {
+        cycles
+    } else {
+        scale_cost(config, cycles, subnet_size)
+    }
 }
 
 fn compute_allocation_cost(
@@ -2900,8 +3034,8 @@ fn compute_allocation_cost(
 
 fn calculate_one_gib_per_second_cost(
     config: &CyclesAccountManagerConfig,
-    compute_allocation: ComputeAllocation,
     subnet_size: usize,
+    compute_allocation: ComputeAllocation,
 ) -> Cycles {
     let one_gib = NumBytes::from(1 << 30);
     let duration = Duration::from_secs(1);
@@ -2956,29 +3090,81 @@ fn calculate_execution_cycles(
     withdraw - refund
 }
 
+// This function compares Cycles with absolute and relative tolerance.
+//
+// Simulated and calculated costs may carry calculation error, that has to be ignored in assertions.
+// Eg. simulated cost may lose precision when is composed from several other integer costs (accumulated error).
+fn is_almost_eq(a: Cycles, b: Cycles) -> bool {
+    let a = a.get();
+    let b = b.get();
+    let mx = std::cmp::max(a, b);
+    let rel_tolerance = mx / 1_000;
+    let abs_tolerance = 1;
+    let diff = a.abs_diff(b);
+
+    diff <= abs_tolerance && diff <= rel_tolerance
+}
+
+fn trillion_cycles(value: f64) -> Cycles {
+    let trillion = 1e12;
+    Cycles::new((value * trillion) as u128)
+}
+
 #[test]
-fn test_subnet_size_one_gib_and_zero_compute_allocation() {
+fn test_subnet_size_one_gib_storage_default_cost() {
+    let subnet_size_lo = 13;
+    let subnet_size_hi = 34;
+    let subnet_type = SubnetType::Application;
+    let compute_allocation = ComputeAllocation::zero();
+    let per_year: u64 = 60 * 60 * 24 * 365;
+
+    // Assert small subnet size cost per year.
+    let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_lo, compute_allocation);
+    assert_eq!(cost * per_year, trillion_cycles(4.005_072));
+
+    // Assert big subnet size cost per year.
+    let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_hi, compute_allocation);
+    assert_eq!(cost * per_year, trillion_cycles(4_652.792_300_736));
+
+    // Assert big subnet size cost per year scaled to a small size.
+    let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(1_779.008_800_464));
+}
+
+// Storage cost tests split into 2: zero and non-zero compute allocation.
+// Reasons:
+// - storage cost includes both memory cost and compute allocation cost
+// - memory cost differs depending on subnet size
+//   -  <20 nodes: memory cost is subsidised and does not scale
+//   - >=20 nodes: memory cost is not-subsidised and scales according to subnet size
+// - allocation cost always scales according to subnet size
+
+#[test]
+fn test_subnet_size_one_gib_storage_zero_compute_allocation() {
     let compute_allocation = ComputeAllocation::zero();
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size as usize;
-    let reference_cost =
-        calculate_one_gib_per_second_cost(&config, compute_allocation, reference_subnet_size);
 
     // Check default cost.
     assert_eq!(
         simulate_one_gib_per_second_cost(subnet_type, reference_subnet_size, compute_allocation),
-        reference_cost
+        calculate_one_gib_per_second_cost(&config, reference_subnet_size, compute_allocation)
     );
 
-    // Check if cost is increasing with subnet size.
-    assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 2, compute_allocation)
+    // Below subnet size threshold: check if cost is the same.
+    assert_eq!(
+        simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation),
+        simulate_one_gib_per_second_cost(subnet_type, 13, compute_allocation)
     );
+    assert_eq!(
+        simulate_one_gib_per_second_cost(subnet_type, 13, compute_allocation),
+        simulate_one_gib_per_second_cost(subnet_type, 19, compute_allocation)
+    );
+    // Equal or above subnet size threshold: check if cost is increasing with subnet size.
     assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 11, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 12, compute_allocation)
+        simulate_one_gib_per_second_cost(subnet_type, 31, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 32, compute_allocation)
     );
     assert!(
         simulate_one_gib_per_second_cost(subnet_type, 101, compute_allocation)
@@ -2989,108 +3175,135 @@ fn test_subnet_size_one_gib_and_zero_compute_allocation() {
             < simulate_one_gib_per_second_cost(subnet_type, 1_002, compute_allocation)
     );
 
-    // Check linear scaling.
-    for k in 1..10 {
-        assert_eq!(
-            simulate_one_gib_per_second_cost(
-                subnet_type,
-                reference_subnet_size * k,
-                compute_allocation
-            ),
-            reference_cost * k
+    // Check with/without linear scaling.
+    // Both lo/hi subnet sizes have to be a factor of reference_subnet_size from config
+    // to avoid round errors.
+    let reference_subnet_size_lo = config.reference_subnet_size as usize;
+    let reference_subnet_size_hi = 2 * config.reference_subnet_size as usize;
+    let subnet_size_threshold = CyclesAccountManagerConfig::fair_storage_cost_subnet_size();
+    // Make sure subnet sizes comply to `lo < threshold <= hi`.
+    assert!(reference_subnet_size_lo < subnet_size_threshold);
+    assert!(subnet_size_threshold <= reference_subnet_size_hi);
+
+    let reference_cost_lo =
+        calculate_one_gib_per_second_cost(&config, reference_subnet_size_lo, compute_allocation);
+    let reference_cost_hi =
+        calculate_one_gib_per_second_cost(&config, reference_subnet_size_hi, compute_allocation);
+
+    for subnet_size in 1..50 {
+        let simulated_cost =
+            simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation);
+        // Choose corresponding reference values according to a threshold value.
+        let calculated_cost = if subnet_size < subnet_size_threshold {
+            // No scaling, constant cost.
+            reference_cost_lo
+        } else {
+            // Linear scaling.
+            Cycles::new(
+                reference_cost_hi.get() * subnet_size as u128 / reference_subnet_size_hi as u128,
+            )
+        };
+
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "compute_allocation={:?}, subnet_size={}",
+            compute_allocation,
+            subnet_size
         );
     }
 }
 
 #[test]
-fn test_subnet_size_one_gib_and_50_compute_allocation() {
-    let compute_allocation = ComputeAllocation::try_from(50).unwrap();
-    let subnet_type = SubnetType::Application;
-    let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size as usize;
-    let reference_cost =
-        calculate_one_gib_per_second_cost(&config, compute_allocation, reference_subnet_size);
+fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
+    for compute_allocation in [
+        ComputeAllocation::try_from(1).unwrap(),
+        ComputeAllocation::try_from(50).unwrap(),
+        ComputeAllocation::try_from(100).unwrap(),
+    ] {
+        let subnet_type = SubnetType::Application;
+        let config = get_cycles_account_manager_config(subnet_type);
+        let reference_subnet_size = config.reference_subnet_size as usize;
 
-    // Check default cost.
-    assert_eq!(
-        simulate_one_gib_per_second_cost(subnet_type, reference_subnet_size, compute_allocation),
-        reference_cost
-    );
-
-    // Check if cost is increasing with subnet size.
-    assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 2, compute_allocation)
-    );
-    assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 11, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 12, compute_allocation)
-    );
-    assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 101, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 102, compute_allocation)
-    );
-    assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 1_001, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 1_002, compute_allocation)
-    );
-
-    // Check linear scaling.
-    for k in 1..10 {
+        // Check default cost.
         assert_eq!(
             simulate_one_gib_per_second_cost(
                 subnet_type,
-                reference_subnet_size * k,
+                reference_subnet_size,
                 compute_allocation
             ),
-            reference_cost * k
+            calculate_one_gib_per_second_cost(&config, reference_subnet_size, compute_allocation)
         );
-    }
-}
 
-#[test]
-fn test_subnet_size_one_gib_and_100_compute_allocation() {
-    let compute_allocation = ComputeAllocation::try_from(100).unwrap();
-    let subnet_type = SubnetType::Application;
-    let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size as usize;
-    let reference_cost =
-        calculate_one_gib_per_second_cost(&config, compute_allocation, reference_subnet_size);
-
-    // Check default cost.
-    assert_eq!(
-        simulate_one_gib_per_second_cost(subnet_type, reference_subnet_size, compute_allocation),
-        reference_cost
-    );
-
-    // Check if cost is increasing with subnet size.
-    assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 2, compute_allocation)
-    );
-    assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 11, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 12, compute_allocation)
-    );
-    assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 101, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 102, compute_allocation)
-    );
-    assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 1_001, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 1_002, compute_allocation)
-    );
-
-    // Check linear scaling.
-    for k in 1..10 {
-        assert_eq!(
-            simulate_one_gib_per_second_cost(
-                subnet_type,
-                reference_subnet_size * k,
-                compute_allocation
-            ),
-            reference_cost * k
+        // Check if cost is increasing with subnet size.
+        assert!(
+            simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation)
+                < simulate_one_gib_per_second_cost(subnet_type, 2, compute_allocation)
         );
+        assert!(
+            simulate_one_gib_per_second_cost(subnet_type, 11, compute_allocation)
+                < simulate_one_gib_per_second_cost(subnet_type, 12, compute_allocation)
+        );
+        assert!(
+            simulate_one_gib_per_second_cost(subnet_type, 101, compute_allocation)
+                < simulate_one_gib_per_second_cost(subnet_type, 102, compute_allocation)
+        );
+        assert!(
+            simulate_one_gib_per_second_cost(subnet_type, 1_001, compute_allocation)
+                < simulate_one_gib_per_second_cost(subnet_type, 1_002, compute_allocation)
+        );
+
+        // Check linear scaling.
+        // Both lo/hi subnet sizes have to be a factor of reference_subnet_size from config
+        // to avoid round errors.
+        let reference_subnet_size_lo = config.reference_subnet_size as usize;
+        let reference_subnet_size_hi = 2 * config.reference_subnet_size as usize;
+        let subnet_size_threshold = CyclesAccountManagerConfig::fair_storage_cost_subnet_size();
+        // Make sure subnet sizes comply to `lo < threshold <= hi`.
+        assert!(reference_subnet_size_lo < subnet_size_threshold);
+        assert!(subnet_size_threshold <= reference_subnet_size_hi);
+
+        let reference_cost_base = calculate_one_gib_per_second_cost(
+            &config,
+            reference_subnet_size_lo,
+            ComputeAllocation::zero(),
+        );
+        let reference_cost_lo = calculate_one_gib_per_second_cost(
+            &config,
+            reference_subnet_size_lo,
+            compute_allocation,
+        ) - reference_cost_base;
+        let reference_cost_hi = calculate_one_gib_per_second_cost(
+            &config,
+            reference_subnet_size_hi,
+            compute_allocation,
+        );
+
+        for subnet_size in 1..50 {
+            let simulated_cost =
+                simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation);
+            // Choose corresponding reference values according to a threshold value.
+            let calculated_cost = if subnet_size < subnet_size_threshold {
+                // Linear scaling with memory cost offset.
+                reference_cost_base
+                    + Cycles::new(
+                        reference_cost_lo.get() * subnet_size as u128
+                            / reference_subnet_size_lo as u128,
+                    )
+            } else {
+                // Linear scaling.
+                Cycles::new(
+                    reference_cost_hi.get() * subnet_size as u128
+                        / reference_subnet_size_hi as u128,
+                )
+            };
+
+            assert!(
+                is_almost_eq(simulated_cost, calculated_cost),
+                "compute_allocation={:?}, subnet_size={}",
+                compute_allocation,
+                subnet_size
+            );
+        }
     }
 }
 
@@ -3127,10 +3340,16 @@ fn test_subnet_size_execute_message() {
     );
 
     // Check linear scaling.
-    for k in 1..10 {
-        assert_eq!(
-            simulate_execute_message_cost(subnet_type, reference_subnet_size * k),
-            reference_cost * k
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_execute_message_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
         );
     }
 }
@@ -3168,10 +3387,16 @@ fn test_subnet_size_execute_install_code() {
     );
 
     // Check linear scaling.
-    for k in 1..10 {
-        assert_eq!(
-            simulate_execute_install_code_cost(subnet_type, reference_subnet_size * k),
-            reference_cost * k
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_execute_install_code_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_execute_install_code_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
         );
     }
 }
@@ -3209,10 +3434,17 @@ fn test_subnet_size_execute_heartbeat() {
     );
 
     // Check linear scaling.
-    for k in 1..10 {
-        assert_eq!(
-            simulate_execute_canister_heartbeat_cost(subnet_type, reference_subnet_size * k),
-            reference_cost * k
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        simulate_execute_canister_heartbeat_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
         );
     }
 }
@@ -3258,6 +3490,299 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
 }
 
 #[test]
+fn test_subnet_size_sign_with_ecdsa() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = calculate_sign_with_ecdsa_cycles(&config, reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_sign_with_ecdsa_cost(subnet_type, 1)
+            < simulate_sign_with_ecdsa_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_sign_with_ecdsa_cost(subnet_type, 11)
+            < simulate_sign_with_ecdsa_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_sign_with_ecdsa_cost(subnet_type, 101)
+            < simulate_sign_with_ecdsa_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_sign_with_ecdsa_cost(subnet_type, 1_001)
+            < simulate_sign_with_ecdsa_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_sign_with_ecdsa_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_http_request_fee() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        calculate_http_request_fee_cycles(&config, NumBytes::new(17), None, reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_http_request_fee_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 1)
+            < simulate_http_request_fee_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 11)
+            < simulate_http_request_fee_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 101)
+            < simulate_http_request_fee_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 1_001)
+            < simulate_http_request_fee_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_http_request_fee_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_http_request_fee_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
+        );
+    }
+}
+
+#[test_strategy::proptest]
+fn complete_concurrent_long_executions(
+    #[strategy(2..10_usize)] scheduler_cores: usize,
+    #[strategy(0..10_usize)] num_canisters: usize,
+    #[strategy(1..10_u64)] num_slices: u64,
+) {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(100 * num_slices),
+            max_instructions_per_message: NumInstructions::from(100 * num_slices),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_paused_executions: num_canisters,
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let mut message_ids = vec![];
+    for _ in 0..num_canisters {
+        let canister_id = test.create_canister();
+        let message_id = test.send_ingress(canister_id, ingress(100 * num_slices));
+        message_ids.push(message_id);
+    }
+
+    // There are no aborts, as `max_paused_executions == num_canisters`
+    let number_of_rounds_to_complete =
+        num_canisters as u64 * num_slices / scheduler_cores as u64 + num_slices;
+    for _ in 0..number_of_rounds_to_complete {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+
+    for message_id in message_ids.iter() {
+        let message_error = test.ingress_error(message_id).code();
+        assert_eq!(message_error, ErrorCode::CanisterDidNotReply,);
+    }
+}
+
+#[test_strategy::proptest]
+fn respect_max_paused_executions(
+    #[strategy(2..10_usize)] scheduler_cores: usize,
+    #[strategy(1..10_usize)] num_canisters: usize,
+    #[strategy(1..10_u64)] num_slices: u64,
+    #[strategy(1..2.max(#num_canisters - 1))] max_paused_executions: usize,
+) {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(100 * num_slices),
+            max_instructions_per_message: NumInstructions::from(100 * num_slices),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_paused_executions,
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let mut message_ids = vec![];
+    for _ in 0..num_canisters {
+        let canister_id = test.create_canister();
+        let message_id = test.send_ingress(canister_id, ingress(100 * num_slices));
+        message_ids.push(message_id);
+    }
+
+    test.execute_all_with(|test| {
+        let paused_executions = test
+            .state()
+            .canisters_iter()
+            .filter(|canister| canister.has_paused_execution())
+            .count();
+        // Make sure the `max_paused_executions` is respected after each round
+        assert!(paused_executions <= max_paused_executions);
+    });
+
+    // Make sure all the messages are complete
+    for message_id in message_ids.iter() {
+        let message_error = test.ingress_error(message_id).code();
+        assert_eq!(message_error, ErrorCode::CanisterDidNotReply,);
+    }
+}
+
+/// Scenario:
+/// 1. One canister with many long messages `slice + 1` instructions each.
+/// 2. Many canisters with 4 short messages `slice` instructions each.
+///
+/// Expectations:
+/// 1. As all the canisters have the same compute allocation (0), they all
+///    should be scheduled the same number of times.
+/// 2. All short executions should be done.
+#[test_strategy::proptest(ProptestConfig { cases: 8, ..ProptestConfig::default() })]
+fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) {
+    let max_instructions_per_slice = SchedulerConfig::application_subnet()
+        .max_instructions_per_slice
+        .get();
+    let num_short_messages = 4;
+    let num_long_messages = 10;
+    let num_canisters = scheduler_cores * 2;
+    let num_rounds = num_canisters * num_short_messages / scheduler_cores;
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            max_instructions_per_message: (max_instructions_per_slice * 2).into(),
+            max_paused_executions: num_canisters,
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    // Create one canister with many long messages
+    let long_canister_id = test.create_canister();
+    let mut long_message_ids = vec![];
+    for _ in 0..num_long_messages {
+        let long_message_id =
+            test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
+        long_message_ids.push(long_message_id);
+    }
+
+    // Create many canisters with 4 short messages each
+    let mut short_message_ids = vec![];
+    // The minus one long canister
+    for _ in 0..num_canisters - 1 {
+        let short_canister_id = test.create_canister();
+        for _ in 0..num_short_messages {
+            let short_message_id =
+                test.send_ingress(short_canister_id, ingress(max_instructions_per_slice));
+            short_message_ids.push(short_message_id);
+        }
+    }
+
+    for _round in 0..num_rounds {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+
+    // As all the canisters have the same compute allocation (0), they all
+    // should be scheduled the same number of times.
+    for canister in test.state().canisters_iter() {
+        if canister.canister_id() == long_canister_id {
+            continue;
+        }
+        prop_assert_eq!(
+            canister.system_state.canister_metrics.executed,
+            num_short_messages as u64
+        );
+    }
+    // All short executions should be done.
+    for message_id in short_message_ids.iter() {
+        let message_error = test.ingress_error(message_id).code();
+        prop_assert_eq!(message_error, ErrorCode::CanisterDidNotReply);
+    }
+}
+
+/// Scenario:
+/// 1. One canister with two long messages `slice + 1` instructions each.
+///
+/// Expectations:
+/// 1. After the first round the canister should have a paused long execution.
+/// 2. After the second round the canister should have no executions, i.e. the
+///    finish the paused execution and should not start any new executions.
+#[test]
+fn filter_after_long_executions() {
+    let max_instructions_per_slice = SchedulerConfig::application_subnet()
+        .max_instructions_per_slice
+        .get();
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            max_instructions_per_message: (max_instructions_per_slice * 2).into(),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    // Create a canister with long messages
+    let mut long_message_ids = vec![];
+    let long_canister_id = test.create_canister();
+    for _ in 0..2 {
+        let long_message_id =
+            test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
+        long_message_ids.push(long_message_id);
+    }
+
+    // After the first round the canister should have a paused long execution.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    for canister in test.state().canisters_iter() {
+        assert_eq!(canister.system_state.canister_metrics.executed, 1);
+        assert!(canister.has_paused_execution());
+    }
+
+    // After the second round the canister should have no executions, i.e. the
+    // finish the paused execution and should not start any new executions.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    for canister in test.state().canisters_iter() {
+        assert_eq!(canister.system_state.canister_metrics.executed, 2);
+        assert!(!canister.has_paused_execution());
+    }
+}
+
+#[test]
 fn dts_allow_only_one_long_install_code_execution_at_any_time() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
@@ -3267,6 +3792,7 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             max_instructions_per_message: NumInstructions::from(40),
             max_instructions_per_slice: NumInstructions::from(10),
             max_instructions_per_install_code: NumInstructions::new(40),
+            max_instructions_per_install_code_slice: NumInstructions::new(10),
             ..SchedulerConfig::application_subnet()
         })
         .with_deterministic_time_slicing()

@@ -12,7 +12,7 @@ use ic_ledger_canister_core::{
     range_utils,
 };
 use ic_ledger_core::{
-    block::{BlockHeight, BlockType, EncodedBlock},
+    block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},
 };
@@ -103,7 +103,7 @@ fn add_payment(
     memo: Memo,
     operation: Operation,
     created_at_time: Option<TimeStamp>,
-) -> (BlockHeight, ic_ledger_core::block::HashOf<EncodedBlock>) {
+) -> (BlockIndex, ic_ledger_core::block::HashOf<EncodedBlock>) {
     let (height, hash) = ledger_canister::add_payment(memo, operation, created_at_time);
     set_certified_data(&hash.into_bytes());
     (height, hash)
@@ -133,7 +133,7 @@ async fn send(
     from_subaccount: Option<Subaccount>,
     to: AccountIdentifier,
     created_at_time: Option<TimeStamp>,
-) -> Result<BlockHeight, TransferError> {
+) -> Result<BlockIndex, TransferError> {
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
@@ -212,7 +212,7 @@ async fn send(
 ///   protobuf or candid.
 #[cfg(feature = "notify-method")]
 pub async fn notify(
-    block_height: BlockHeight,
+    block_height: BlockIndex,
     max_fee: Tokens,
     from_subaccount: Option<Subaccount>,
     to_canister: CanisterId,
@@ -385,7 +385,7 @@ fn tip_of_chain() -> TipOfChainRes {
 }
 
 // This is going away and being replaced by getblocks
-fn block(block_index: BlockHeight) -> Option<Result<EncodedBlock, CanisterId>> {
+fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
     let state = LEDGER.read().unwrap();
     if block_index < state.blockchain.num_archived_blocks() {
         // The block we are looking for better be in the archive because it has
@@ -533,7 +533,7 @@ fn send_() {
 }
 
 #[candid_method(update, rename = "send_dfx")]
-async fn send_dfx(arg: SendArgs) -> BlockHeight {
+async fn send_dfx(arg: SendArgs) -> BlockIndex {
     transfer_candid(arg.into()).await.unwrap()
 }
 
@@ -577,7 +577,7 @@ fn notify_() {
 }
 
 #[candid_method(update, rename = "transfer")]
-async fn transfer_candid(arg: TransferArgs) -> Result<BlockHeight, TransferError> {
+async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
         trap_with(&format!("Invalid account identifier: {}", e));
         unreachable!()
@@ -728,7 +728,7 @@ fn total_supply_() {
     })
 }
 
-/// Get multiple blocks by *offset into the container* (not BlockHeight) and
+/// Get multiple blocks by *offset into the container* (not BlockIndex) and
 /// length. Note that this simply iterates the blocks available in the Ledger
 /// without taking into account the archive. For example, if the ledger contains
 /// blocks with heights [100, 199] then iter_blocks(0, 1) will return the block
@@ -741,7 +741,7 @@ fn iter_blocks_() {
     });
 }
 
-/// Get multiple blocks by BlockHeight and length. If the query is outside the
+/// Get multiple blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
@@ -789,7 +789,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
         chain_length,
         certificate: dfn_core::api::data_certificate().map(serde_bytes::ByteBuf::from),
         blocks,
-        first_block_index: local_blocks.start as BlockHeight,
+        first_block_index: local_blocks.start as BlockIndex,
         archived_blocks,
     }
 }
@@ -912,7 +912,6 @@ mod tests {
     use super::*;
     use candid::utils::{service_compatible, CandidSource};
     use std::path::PathBuf;
-    use std::process::Command;
 
     fn source_to_str(source: &CandidSource) -> String {
         match source {
@@ -960,31 +959,6 @@ mod tests {
             CandidSource::Text(&new_interface),
             "declared candid interface in ledger.did file",
             CandidSource::File(old_interface.as_path()),
-        );
-
-        // check the public interface against the master version if we are in a
-        // repository
-        let commit = Command::new("git")
-            .args(["merge-base", "HEAD", "origin/master"])
-            .output()
-            .expect("Failed to execute git merge-base HEAD origin/master")
-            .stdout;
-        let commit = String::from_utf8(commit).unwrap();
-        let commit = commit.trim();
-        let commit_file = format!("{}:rs/rosetta-api/ledger_canister/ledger.did", commit);
-
-        let master_interface = Command::new("git")
-            .args(["show", &commit_file])
-            .output()
-            .unwrap_or_else(|e| panic!("Failed to execute git show {}: {}", commit_file, e))
-            .stdout;
-        let master_interface = String::from_utf8(master_interface).unwrap();
-
-        check_service_compatible(
-            "current branch ledger.did",
-            CandidSource::File(old_interface.as_path()),
-            &format!("merge-base master (commit: {}) ledger.did", commit),
-            CandidSource::Text(&master_interface),
         );
     }
 }

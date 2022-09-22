@@ -1,8 +1,0 @@
-[package]
-name = "stable-structures"
-version = "0.1.0"
-edition = "2021"
-
-[dev-dependencies]
-maplit = "1.0.2"
-proptest = "0.9.4"

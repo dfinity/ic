@@ -461,7 +461,7 @@ fn bytes_to_cbor(bytes: Vec<u8>) -> Result<CBOR, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ed25519_public_key_to_der;
+    use crate::{ed25519_public_key_to_der, Ed25519KeyPair};
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities::types::ids::node_test_id;
     use ic_types::malicious_flags::MaliciousFlags;
@@ -469,8 +469,8 @@ mod tests {
     use ic_types::time::current_time;
     use ic_types::{PrincipalId, RegistryVersion, UserId};
     use ic_validator::get_authorized_canisters;
+    use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
-    use rand_core::SeedableRng;
     use std::convert::TryFrom;
     use tokio_test::assert_ok;
 
@@ -489,7 +489,7 @@ mod tests {
         // Set up an arbitrary legal input
         let keypair = {
             let mut rng = ChaChaRng::seed_from_u64(789_u64);
-            ed25519_dalek::Keypair::generate(&mut rng)
+            Ed25519KeyPair::generate(&mut rng)
         };
         let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
@@ -500,7 +500,7 @@ mod tests {
                 nonce: None,
                 sender: Blob(
                     UserId::from(PrincipalId::new_self_authenticating(
-                        &ed25519_public_key_to_der(keypair.public.to_bytes().to_vec()),
+                        &ed25519_public_key_to_der(keypair.public_key.to_vec()),
                     ))
                     .get()
                     .into_vec(),
@@ -633,10 +633,10 @@ mod tests {
         // Set up an arbitrary legal input
         let keypair = {
             let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            ed25519_dalek::Keypair::generate(&mut rng)
+            Ed25519KeyPair::generate(&mut rng)
         };
         let sender = UserId::from(PrincipalId::new_self_authenticating(
-            &ed25519_public_key_to_der(keypair.public.to_bytes().to_vec()),
+            &ed25519_public_key_to_der(keypair.public_key.to_vec()),
         ));
         let content = HttpQueryContent::Query {
             query: HttpUserQuery {

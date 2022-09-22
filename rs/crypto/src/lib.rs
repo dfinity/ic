@@ -15,7 +15,6 @@ mod sign;
 mod tls;
 
 pub use common::utils;
-pub use ic_crypto_hash::crypto_hash;
 pub use sign::get_tecdsa_master_public_key;
 pub use sign::utils::{
     ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, rsa_signature_from_bytes,
@@ -25,45 +24,34 @@ pub use sign::utils::{
 
 use crate::common::utils::{derive_node_id, TempCryptoComponent};
 use crate::sign::ThresholdSigDataStoreImpl;
-use crate::utils::get_node_keys_or_generate_if_missing;
+use crate::utils::NodeKeysToGenerate;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_internal_csp::keygen::public_key_hash_as_key_id;
-use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
-use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, KeyManager, MultiSigVerifier,
-    ThresholdSigVerifierByPublicKey,
-};
+use ic_interfaces::crypto::{BasicSigner, Crypto, KeyManager, ThresholdSigVerifierByPublicKey};
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_types::consensus::{
-    Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-};
+use ic_types::consensus::CatchUpContentProtobufBytes;
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::messages::MessageId;
-use ic_types::{NodeId, PrincipalId, RegistryVersion};
+use ic_types::{NodeId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 use std::fmt;
 use std::sync::Arc;
-use tempfile::TempDir;
 
 /// Defines the maximum number of entries contained in the
 /// `ThresholdSigDataStore`.
 pub const THRESHOLD_SIG_DATA_STORE_CAPACITY: usize = ThresholdSigDataStoreImpl::CAPACITY;
 
-/// A type alias for `CryptoComponentFatClient<Csp<OsRng,
-/// ProtoSecretKeyStore, ProtoSecretKeyStore>>`. See the Rust documentation of
-/// `CryptoComponentFatClient`.
-pub type CryptoComponent =
-    CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>;
+/// A type alias for `CryptoComponentFatClient<Csp>`.
+/// See the Rust documentation of `CryptoComponentFatClient`.
+pub type CryptoComponent = CryptoComponentFatClient<Csp>;
 
 /// A crypto component that offers limited functionality and can be used outside
 /// of the replica process.
@@ -103,29 +91,11 @@ impl<T> CryptoComponentForNonReplicaProcess for T where
 
 /// A crypto component that only allows signature verification. These operations
 /// do not require secret keys.
-pub trait CryptoComponentForVerificationOnly:
-    MultiSigVerifier<FinalizationContent>
-    + BasicSigVerifier<Block>
-    + BasicSigVerifierByPublicKey<MessageId>
-    + ThresholdSigVerifierByPublicKey<CatchUpContent>
-    + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
-    + Send
-    + Sync
-{
-}
+pub trait CryptoComponentForVerificationOnly: Crypto + TlsHandshake + Send + Sync {}
 
 // Blanket implementation of `CryptoComponentForVerificationOnly` for all types
 // that fulfill the requirements.
-impl<T> CryptoComponentForVerificationOnly for T where
-    T: MultiSigVerifier<FinalizationContent>
-        + BasicSigVerifier<Block>
-        + BasicSigVerifierByPublicKey<MessageId>
-        + ThresholdSigVerifierByPublicKey<CatchUpContent>
-        + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
-        + Send
-        + Sync
-{
-}
+impl<T> CryptoComponentForVerificationOnly for T where T: Crypto + TlsHandshake + Send + Sync {}
 
 /// Allows Internet Computer nodes to perform crypto operations such as
 /// distributed key generation, signing, signature verification, and TLS
@@ -168,14 +138,12 @@ impl LockableThresholdSigDataStore {
     }
 }
 
-/// Note that `R: 'static` is required so that `CspTlsHandshakeSignerProvider`
-/// can be implemented for [Csp]. See the documentation of the respective `impl`
-/// block for more details on the meaning of `R: 'static`.
-impl<R: Rng + CryptoRng + Send + Sync + Clone + 'static>
-    CryptoComponentFatClient<Csp<R, ProtoSecretKeyStore, VolatileSecretKeyStore>>
-{
+impl CryptoComponentFatClient<Csp> {
     /// Creates a crypto component using the given `csprng` and fake `node_id`.
-    pub fn new_with_rng_and_fake_node_id(
+    /// Note that `R: 'static` is required so that `CspTlsHandshakeSignerProvider`
+    /// can be implemented for [Csp]. See the documentation of the respective `impl`
+    /// block for more details on the meaning of `R: 'static`.
+    pub fn new_with_rng_and_fake_node_id<R: Rng + CryptoRng + Send + Sync + Clone + 'static>(
         csprng: R,
         config: &CryptoConfig,
         logger: ReplicaLogger,
@@ -219,7 +187,7 @@ impl<C: CryptoServiceProvider> fmt::Debug for CryptoComponentFatClient<C> {
     }
 }
 
-impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>> {
+impl CryptoComponentFatClient<Csp> {
     /// Creates a new crypto component.
     ///
     /// This is the constructor to use to create the replica's / node's crypto
@@ -229,9 +197,9 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     /// due to concurrent state access. To achieve this, we recommend to
     /// instantiate multiple components as in the example below.
     ///
-    /// WARNING: Multiple crypto componets must be instantiated with
+    /// WARNING: Multiple crypto components must be instantiated with
     /// `Arc::clone` as in the example. Do not create multiple crypto
-    /// componets with the same config (as opposed to using `Arc::clone`),
+    /// components with the same config (as opposed to using `Arc::clone`),
     /// as this will lead to concurrency issues e.g. when the components
     /// access the secret key store simultaneously.
     ///
@@ -330,27 +298,6 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
         }
     }
 
-    /// Creates a crypto component with all keys newly generated and secret keys
-    /// stored in a temporary directory.  The returned temporary directory must
-    /// remain alive as long as the component is in use.
-    pub fn new_temp_with_all_keys(
-        registry_client: Arc<dyn RegistryClient>,
-        logger: ReplicaLogger,
-    ) -> (Self, NodeId, TempDir) {
-        let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
-        let metrics = Arc::new(CryptoMetrics::none());
-        let (_npks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let crypto = CryptoComponentFatClient {
-            lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
-            csp: Csp::new(&config, None, None, Arc::clone(&metrics)),
-            registry_client,
-            node_id,
-            logger,
-            metrics,
-        };
-        (crypto, node_id, temp_dir)
-    }
-
     /// Creates a crypto component that offers limited functionality and can be
     /// used outside of the replica process.
     ///
@@ -388,16 +335,24 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
         CryptoComponentFatClient::new(config, tokio_runtime_handle, registry_client, logger, None)
     }
 
-    /// Creates a crypto component that only allows signature verification.
-    /// Verification does not require secret keys.
+    /// Returns a crypto component that should only be used for verification.
+    ///
+    /// All keys are newly generated, and the secret parts are stored in a
+    /// temporary directory that is deleted automatically when the crypto
+    /// component goes out of scope. This is is the reason why the returned
+    /// crypto component should only be used for public key operations, i.e.,
+    /// for verification only.
+    ///
+    /// The returned crypto component is _hidden_ behind a trait, where the
+    /// trait's name acts as reminder that it should be used for verification
+    /// only.
     pub fn new_for_verification_only(
         registry_client: Arc<dyn RegistryClient>,
     ) -> impl CryptoComponentForVerificationOnly {
-        // We use a dummy node id since it is irrelevant for verification.
-        let dummy_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
-        // Using the `TempCryptoComponent` with a temporary secret key file is fine
-        // since the secret keys are never used for verification.
-        TempCryptoComponent::new(registry_client, dummy_node_id)
+        TempCryptoComponent::builder()
+            .with_registry(registry_client)
+            .with_keys(NodeKeysToGenerate::all())
+            .build()
     }
 
     /// Returns the `NodeId` of this crypto component.

@@ -16,7 +16,7 @@ pub enum DkgKeyRemovalError {
     MalformedFsEncryptionPublicKey(MalformedFsEncryptionPublicKeyError),
     Registry(RegistryClientError),
     FsKeyNotInSecretKeyStoreError(KeyNotFoundError),
-    InternalError(InternalError),
+    TransientInternalError(InternalError),
 }
 
 impl fmt::Display for DkgKeyRemovalError {

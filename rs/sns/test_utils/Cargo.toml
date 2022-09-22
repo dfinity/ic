@@ -10,6 +10,7 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = "0.3.8"
+ic-base-types = { path = "../../types/base_types" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-sha = { path = "../../crypto/sha" }
@@ -19,15 +20,22 @@ ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
+ic-ic00-types = { path = "../../types/ic00_types" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-sns-governance = { path = "../governance" }
+ic-nns-test-utils = { path = "../../nns/test_utils/" }
+ic-sns-governance = { path = "../governance", features = ["test"] }
+ic-nns-common = { path = "../../nns/common" }
+ic-nns-governance = { path = "../../nns/governance" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 lazy_static = "1.4.0"
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 maplit = "1.0.2"
 num-traits = "0.2.14"
 on_wire = { path = "../../rust_canisters/on_wire" }

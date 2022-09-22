@@ -13,9 +13,10 @@ rust_library(
     deps = [
         "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
         "//rs/crypto/sha",
-        "//rs/interfaces",
         "//rs/types/base_types",
         "//rs/types/types",
-        "@crate_index//:ed25519-dalek",
+        "@crate_index//:ed25519-consensus",
+        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand_chacha_0_3_1",
     ],
 )

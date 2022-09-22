@@ -41,7 +41,7 @@ members = [
   "criterion_time",
   "crypto",
   "crypto/extended_bip32",
-  "crypto/hash",
+  "crypto/iccsa",
   "crypto/internal/crypto_lib/basic_sig/der_utils",
   "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
   "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
@@ -184,6 +184,7 @@ members = [
   "rosetta-api/icrc1/agent",
   "rosetta-api/icrc1/client",
   "rosetta-api/icrc1/client/cdk",
+  "rosetta-api/icrc1/index",
   "rosetta-api/icrc1/ledger",
   "rosetta-api/icrc1/archive",
   "rosetta-api/hardware_wallet_tests",
@@ -217,7 +218,6 @@ members = [
   "sns/root/protobuf_generator",
   "sns/swap",
   "sns/test_utils",
-  "stable-structures",
   "starter",
   "state_manager",
   "state_machine_tests",
@@ -232,6 +232,7 @@ members = [
   "test_utilities/logger",
   "test_utilities/metrics",
   "test_utilities/registry",
+  "test_utilities/tmpdir",
   "tests",
   "tests/test_canisters/http_counter",
   "transport",
@@ -254,6 +255,8 @@ members = [
   "xnet/payload_builder",
   "xnet/uri",
 ]
+
+resolver = "2"
 
 exclude = ["universal_canister/impl"]
 

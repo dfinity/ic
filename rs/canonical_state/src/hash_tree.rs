@@ -512,14 +512,12 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
                 let range = ht.preallocate_nodes(f.labels(), parent);
                 let mut nodes = VecDeque::new();
 
-                for i in range {
-                    let child = go(
-                        &f.edge(&ht.node_labels[i]).expect("missing fork tree"),
-                        ht,
-                        NodeId::node(i),
-                    );
+                for (i, (label, child)) in range.zip(f.children()) {
+                    debug_assert_eq!(label, ht.node_labels[i]);
+
+                    let child = go(&child, ht, NodeId::node(i));
                     let mut h = Hasher::for_domain("ic-hashtree-labeled");
-                    h.update(ht.node_labels[i].as_bytes());
+                    h.update(label.as_bytes());
                     h.update(ht.digest(child).as_bytes());
                     ht.node_digests[i] = h.finalize();
                     ht.node_children[i] = child;

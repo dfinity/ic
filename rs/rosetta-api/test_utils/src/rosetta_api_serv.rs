@@ -2,7 +2,7 @@ use ic_rosetta_api::models::Error as RosettaError;
 use ic_rosetta_api::models::*;
 use ic_types::CanisterId;
 
-use ledger_canister::{AccountIdentifier, BlockHeight};
+use ledger_canister::{AccountIdentifier, BlockIndex};
 
 use crate::store_threshold_sig_pk;
 use ic_rosetta_api::models::operation::Operation;
@@ -468,7 +468,7 @@ impl RosettaApiHandle {
         Err(format!("Timeout on waiting for block at {}", idx))
     }
 
-    pub async fn wait_for_tip_sync(&self, tip_idx: BlockHeight) -> Result<(), String> {
+    pub async fn wait_for_tip_sync(&self, tip_idx: BlockIndex) -> Result<(), String> {
         let timeout = std::time::Duration::from_secs(5);
         let now = std::time::SystemTime::now();
 

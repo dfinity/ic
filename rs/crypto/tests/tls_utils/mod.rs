@@ -1,6 +1,5 @@
 use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_interfaces::crypto::KeyManager;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use std::sync::Arc;
@@ -11,6 +10,7 @@ pub mod test_server;
 pub mod test_server_openssl;
 
 pub use ic_crypto_test_utils::tls::registry::REG_V1;
+use ic_interfaces::crypto::KeyManager;
 
 pub fn temp_crypto_component_with_tls_keys(
     registry: Arc<FakeRegistryClient>,

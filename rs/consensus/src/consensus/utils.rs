@@ -3,8 +3,7 @@ use crate::consensus::{membership::Membership, pool_reader::PoolReader, prelude:
 use ic_interfaces::consensus::{PayloadTransientError, PayloadValidationError};
 use ic_interfaces::validation::ValidationError;
 use ic_interfaces::{
-    consensus_pool::ConsensusPoolCache, crypto::CryptoHashable, registry::RegistryClient,
-    time_source::TimeSource,
+    consensus_pool::ConsensusPoolCache, registry::RegistryClient, time_source::TimeSource,
 };
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
@@ -14,7 +13,10 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::replica_config::ReplicaConfig;
 use ic_types::{
     consensus::Rank,
-    crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
+        CryptoHashable,
+    },
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
@@ -60,7 +62,7 @@ impl RoundRobin {
 
 /// Convert a CryptoHashable into a 32 bytes which can be used to seed a RNG
 pub fn crypto_hashable_to_seed<T: CryptoHashable>(hashable: &T) -> [u8; 32] {
-    let hash = ic_crypto::crypto_hash(hashable);
+    let hash = ic_types::crypto::crypto_hash(hashable);
     let CryptoHash(hash_bytes) = hash.get();
     let mut seed = [0; 32]; // zero padded if digest is less than 32 bytes
     let n = hash_bytes.len().min(32);
@@ -354,7 +356,7 @@ pub(crate) fn group_shares<C: Eq + Ord, S: Ord, Shares: Iterator<Item = Signed<C
 
 /// Return the hash of a block as a string.
 pub fn get_block_hash_string(block: &Block) -> String {
-    hex::encode(ic_crypto::crypto_hash(block).get().0)
+    hex::encode(ic_types::crypto::crypto_hash(block).get().0)
 }
 
 /// Helper function to lookup replica version, and log errors if any.

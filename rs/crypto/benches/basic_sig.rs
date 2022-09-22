@@ -3,14 +3,16 @@ use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 
 use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, SignableMock, DOMAIN_IC_REQUEST,
+    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, KeyManager,
 };
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, UserPublicKey};
+use ic_types::crypto::{
+    AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, SignableMock, UserPublicKey, DOMAIN_IC_REQUEST,
+};
 use ic_types::messages::MessageId;
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
@@ -184,11 +186,12 @@ fn temp_crypto(
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
 
-    let (crypto_component, node_pubkeys) = TempCryptoComponent::new_with_node_keys_generation(
-        Arc::clone(&registry) as Arc<_>,
-        node_id,
-        NodeKeysToGenerate::only_node_signing_key(),
-    );
+    let crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&registry) as Arc<_>)
+        .with_node_id(node_id)
+        .with_keys(NodeKeysToGenerate::only_node_signing_key())
+        .build();
+    let node_pubkeys = crypto_component.node_public_keys();
 
     add_node_signing_pubkey_to_registry(
         node_id,

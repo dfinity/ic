@@ -8,53 +8,55 @@ use crate::{derive_node_id, CryptoComponent, CryptoComponentFatClient};
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
-use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
-use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_seed::Seed;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
     TlsServerHandshakeError, TlsStream,
 };
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, CanisterSigVerifier, IDkgProtocol, KeyManager,
-    MultiSigVerifier, Signable, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, IDkgProtocol,
+    KeyManager, LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
+    PublicKeyRegistrationStatus, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
-    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
-    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
+    IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptParams, SignedIDkgDealing,
+    IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
+use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
+use ic_types::crypto::threshold_sig::ni_dkg::errors::{
+    create_dealing_error::DkgCreateDealingError, create_transcript_error::DkgCreateTranscriptError,
+    key_removal_error::DkgKeyRemovalError, load_transcript_error::DkgLoadTranscriptError,
+    verify_dealing_error::DkgVerifyDealingError,
+};
+use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgDealing, NiDkgTranscript};
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
-    IndividualMultiSigOf, KeyPurpose, ThresholdSigShareOf, UserPublicKey,
+    IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf, UserPublicKey,
 };
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
-use rand::rngs::OsRng;
-use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -67,8 +69,7 @@ mod tests;
 
 /// A crypto component set up in a temporary directory. The directory is
 /// automatically deleted when this component goes out of scope.
-pub type TempCryptoComponent =
-    TempCryptoComponentGeneric<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>;
+pub type TempCryptoComponent = TempCryptoComponentGeneric<Csp>;
 
 /// This struct combines the following two items:
 /// * a crypto component whose state lives in a temporary directory
@@ -129,6 +130,7 @@ pub struct TempCryptoBuilder {
     vault_server_runtime_handle: Option<tokio::runtime::Handle>,
     vault_client_runtime_handle: Option<tokio::runtime::Handle>,
     connected_remote_vault: Option<Arc<TempCspVaultServer>>,
+    temp_dir_source: Option<PathBuf>,
     logger: Option<ReplicaLogger>,
 }
 
@@ -160,6 +162,11 @@ impl TempCryptoBuilder {
 
     pub fn with_logger(mut self, logger: ReplicaLogger) -> Self {
         self.logger = Some(logger);
+        self
+    }
+
+    pub fn with_temp_dir_source(mut self, source: PathBuf) -> Self {
+        self.temp_dir_source = Some(source);
         self
     }
 
@@ -202,6 +209,9 @@ impl TempCryptoBuilder {
 
     pub fn build(self) -> TempCryptoComponent {
         let (mut config, temp_dir) = CryptoConfig::new_in_temp_dir();
+        if let Some(source) = self.temp_dir_source {
+            copy_crypto_root(&source, temp_dir.path());
+        }
         let mut csp = csp_for_config(&config, None);
         let node_keys_to_generate = self
             .node_keys_to_generate
@@ -289,16 +299,23 @@ impl TempCryptoBuilder {
             fake_registry_client as Arc<dyn RegistryClient>
         });
 
-        let node_pubkeys = NodePublicKeys {
-            version: 1,
-            node_signing_pk,
-            committee_signing_pk,
-            dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk,
-            tls_certificate,
-        };
-        public_key_store::store_node_public_keys(&config.crypto_root, &node_pubkeys)
-            .unwrap_or_else(|_| panic!("failed to store public key material"));
+        if node_keys_to_generate != NodeKeysToGenerate::none() {
+            public_key_store::read_node_public_keys(&config.crypto_root).expect_err(
+                "New private keys were generated and so the corresponding \
+                public keys need to be saved. This would have overwritten the existing \
+                public keys store and so is probably not what you wanted.",
+            );
+            let node_pubkeys = NodePublicKeys {
+                version: 1,
+                node_signing_pk,
+                committee_signing_pk,
+                dkg_dealing_encryption_pk,
+                idkg_dealing_encryption_pk,
+                tls_certificate,
+            };
+            public_key_store::store_node_public_keys(&config.crypto_root, &node_pubkeys)
+                .unwrap_or_else(|_| panic!("failed to store public key material"));
+        }
 
         let opt_remote_vault_environment = if self.start_remote_vault {
             let vault_server =
@@ -420,136 +437,21 @@ impl TempCryptoComponent {
             node_keys_to_generate: None,
             registry_version: None,
             connected_remote_vault: None,
+            temp_dir_source: None,
             logger: None,
         }
     }
 
-    pub fn new(registry_client: Arc<dyn RegistryClient>, node_id: NodeId) -> Self {
-        TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .build()
-    }
-
-    pub fn new_with_ni_dkg_dealing_encryption_key_generation(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> (Self, PublicKeyProto) {
-        let temp_crypto = TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .with_keys(NodeKeysToGenerate::only_dkg_dealing_encryption_key())
-            .build();
-        let dkg_dealing_encryption_pubkey = temp_crypto
-            .node_public_keys()
-            .dkg_dealing_encryption_pk
-            .expect("missing dkg_dealing_encryption_pk");
-        (temp_crypto, dkg_dealing_encryption_pubkey)
-    }
-
-    // TODO (CRP-1275): Remove this once MEGa key is in NodePublicKeys
-    pub fn new_with_signing_idkg_dealing_encryption_and_multisigning_keys_generation(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> (Self, IDkgMEGaAndMultisignPublicKeys) {
-        let temp_crypto = TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .with_keys(NodeKeysToGenerate {
-                generate_node_signing_keys: true,
-                generate_committee_signing_keys: true,
-                generate_idkg_dealing_encryption_keys: true,
-                ..NodeKeysToGenerate::none()
-            })
-            .build();
-        let node_public_keys = temp_crypto.node_public_keys();
-
-        let node_signing_pk = node_public_keys
-            .node_signing_pk
-            .expect("missing node_signing_pk");
-        let committee_signing_pk = node_public_keys
-            .committee_signing_pk
-            .expect("missing committee_signing_pk");
-        let idkg_dealing_encryption_pk = node_public_keys
-            .idkg_dealing_encryption_pk
-            .expect("missing idkg_dealing_encryption_pk");
-        (
-            temp_crypto,
-            IDkgMEGaAndMultisignPublicKeys {
-                node_signing_pubkey: node_signing_pk,
-                mega_pubkey: idkg_dealing_encryption_pk,
-                multisign_pubkey: committee_signing_pk,
-            },
-        )
-    }
-
-    pub fn new_with_tls_key_generation(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> (Self, TlsPublicKeyCert) {
-        let temp_crypto = TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
-            .build();
-        let tls_certificate = temp_crypto
+    pub fn node_tls_public_key_certificate(&self) -> TlsPublicKeyCert {
+        let tls_certificate = self
             .node_public_keys()
             .tls_certificate
             .expect("missing tls_certificate");
-        let tls_pubkey = TlsPublicKeyCert::new_from_der(tls_certificate.certificate_der)
-            .expect("failed to create X509 cert from DER");
-        (temp_crypto, tls_pubkey)
+        TlsPublicKeyCert::new_from_der(tls_certificate.certificate_der)
+            .expect("failed to create X509 cert from DER")
     }
 
-    pub fn new_with_node_keys_generation(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-        selector: NodeKeysToGenerate,
-    ) -> (Self, NodePublicKeys) {
-        let temp_crypto = TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .with_keys(selector)
-            .build();
-        let node_pubkeys = temp_crypto.node_public_keys();
-        (temp_crypto, node_pubkeys)
-    }
-
-    pub fn new_with(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-        config: &CryptoConfig,
-        temp_dir: TempDir,
-    ) -> Self {
-        let crypto_component = CryptoComponent::new_with_fake_node_id(
-            config,
-            None,
-            registry_client,
-            node_id,
-            no_op_logger(),
-        );
-
-        TempCryptoComponent {
-            crypto_component,
-            remote_vault_environment: None,
-            temp_dir,
-        }
-    }
-
-    pub fn multiple_new(
-        nodes: &[NodeId],
-        registry: Arc<dyn RegistryClient>,
-    ) -> BTreeMap<NodeId, TempCryptoComponent> {
-        nodes
-            .iter()
-            .map(|node| {
-                let temp_crypto = Self::new(Arc::clone(&registry), *node);
-                (*node, temp_crypto)
-            })
-            .collect()
-    }
-
-    pub fn temp_dir_path(&self) -> &std::path::Path {
+    pub fn temp_dir_path(&self) -> &Path {
         self.temp_dir.path()
     }
 
@@ -564,18 +466,14 @@ impl TempCryptoComponent {
             .as_ref()
             .map(|env| env.vault_client_runtime.handle())
     }
-}
 
-/// Bundles the public keys needed for canister threshold signature protocol
-// TODO (CRP-1275): Remove this once MEGa key is in NodePublicKeys
-pub struct IDkgMEGaAndMultisignPublicKeys {
-    pub node_signing_pubkey: PublicKeyProto,
-    pub mega_pubkey: PublicKeyProto,
-    pub multisign_pubkey: PublicKeyProto,
+    pub fn copy_crypto_root_to(&self, target: &Path) {
+        copy_crypto_root(self.temp_dir_path(), target);
+    }
 }
 
 /// Selects which keys should be generated for a `TempCryptoComponent`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct NodeKeysToGenerate {
     pub generate_node_signing_keys: bool,
     pub generate_committee_signing_keys: bool,
@@ -655,27 +553,15 @@ impl NodeKeysToGenerate {
     }
 }
 
-impl TempCryptoComponentGeneric<Csp<ChaChaRng, ProtoSecretKeyStore, VolatileSecretKeyStore>> {
-    pub fn new_from_seed(
-        seed: Seed,
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> Self {
-        let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
-        let csprng = seed.into_rng();
-        let crypto_component = CryptoComponentFatClient::new_with_rng_and_fake_node_id(
-            csprng,
-            &config,
-            no_op_logger(),
-            registry_client,
-            node_id,
-        );
-
-        TempCryptoComponentGeneric {
-            crypto_component,
-            remote_vault_environment: None,
-            temp_dir,
-        }
+impl<C: CryptoServiceProvider, T: Signable> BasicSigner<T> for TempCryptoComponentGeneric<C> {
+    fn sign_basic(
+        &self,
+        message: &T,
+        signer: NodeId,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<BasicSigOf<T>> {
+        self.crypto_component
+            .sign_basic(message, signer, registry_version)
     }
 }
 
@@ -717,7 +603,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
         &self,
         params: &IDkgTranscriptParams,
     ) -> Result<IDkgDealing, IDkgCreateDealingError> {
-        self.crypto_component.create_dealing(params)
+        IDkgProtocol::create_dealing(&self.crypto_component, params)
     }
 
     fn verify_dealing_public(
@@ -738,12 +624,21 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
             .verify_dealing_private(params, signed_dealing)
     }
 
+    fn verify_initial_dealings(
+        &self,
+        params: &IDkgTranscriptParams,
+        initial_dealings: &InitialIDkgDealings,
+    ) -> Result<(), IDkgVerifyInitialDealingsError> {
+        self.crypto_component
+            .verify_initial_dealings(params, initial_dealings)
+    }
+
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
         dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
-        self.crypto_component.create_transcript(params, dealings)
+        IDkgProtocol::create_transcript(&self.crypto_component, params, dealings)
     }
 
     fn verify_transcript(
@@ -758,7 +653,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
         &self,
         transcript: &IDkgTranscript,
     ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
-        self.crypto_component.load_transcript(transcript)
+        IDkgProtocol::load_transcript(&self.crypto_component, transcript)
     }
 
     fn verify_complaint(
@@ -1006,5 +901,102 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
                 subnet_id,
                 registry_version,
             )
+    }
+}
+
+impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
+    fn check_keys_with_registry(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<PublicKeyRegistrationStatus> {
+        self.crypto_component
+            .check_keys_with_registry(registry_version)
+    }
+
+    fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion) {
+        self.crypto_component
+            .collect_and_store_key_count_metrics(registry_version)
+    }
+
+    fn node_public_keys(&self) -> NodePublicKeys {
+        self.crypto_component.node_public_keys()
+    }
+}
+
+impl<C: CryptoServiceProvider> NiDkgAlgorithm for TempCryptoComponentGeneric<C> {
+    fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError> {
+        NiDkgAlgorithm::create_dealing(&self.crypto_component, config)
+    }
+
+    fn verify_dealing(
+        &self,
+        config: &NiDkgConfig,
+        dealer: NodeId,
+        dealing: &NiDkgDealing,
+    ) -> Result<(), DkgVerifyDealingError> {
+        self.crypto_component
+            .verify_dealing(config, dealer, dealing)
+    }
+
+    fn create_transcript(
+        &self,
+        config: &NiDkgConfig,
+        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+    ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
+        NiDkgAlgorithm::create_transcript(&self.crypto_component, config, verified_dealings)
+    }
+
+    fn load_transcript(
+        &self,
+        transcript: &NiDkgTranscript,
+    ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError> {
+        NiDkgAlgorithm::load_transcript(&self.crypto_component, transcript)
+    }
+
+    fn retain_only_active_keys(
+        &self,
+        transcripts: HashSet<NiDkgTranscript>,
+    ) -> Result<(), DkgKeyRemovalError> {
+        self.crypto_component.retain_only_active_keys(transcripts)
+    }
+}
+
+impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for TempCryptoComponentGeneric<C> {
+    fn sign_threshold(&self, message: &T, dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
+        self.crypto_component.sign_threshold(message, dkg_id)
+    }
+}
+
+impl<C: CryptoServiceProvider, T: Signable> MultiSigner<T> for TempCryptoComponentGeneric<C> {
+    fn sign_multi(
+        &self,
+        message: &T,
+        signer: NodeId,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<IndividualMultiSigOf<T>> {
+        self.crypto_component
+            .sign_multi(message, signer, registry_version)
+    }
+}
+
+/// Copies the given source directory into a newly-created directory.
+///
+/// Note: The copy is only of files and only one level deep (all that's
+/// required for a CryptoComponent).
+fn copy_crypto_root(src: &Path, dest: &Path) {
+    std::fs::create_dir_all(dest).unwrap_or_else(|err| {
+        panic!(
+            "Failed to create crypto root directory {}: {}",
+            dest.display(),
+            err
+        )
+    });
+    for entry in std::fs::read_dir(src).expect("src directory doesn't exist") {
+        let path = entry.expect("failed to get path in src dir").path();
+        if path.is_file() {
+            let filename = path.file_name().expect("failed to get src path");
+            let dest_path = dest.join(filename);
+            std::fs::copy(&path, &dest_path).expect("failed to copy file");
+        }
     }
 }

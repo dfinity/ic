@@ -68,10 +68,12 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
                     panic_prefix, ciphertext_epoch, secret_key_epoch
                 );
             }
-            CspDkgLoadPrivateKeyError::InternalError(e) => {
-                DkgLoadTranscriptError::InternalError(ic_types::crypto::error::InternalError {
-                    internal_error: e.internal_error,
-                })
+            CspDkgLoadPrivateKeyError::TransientInternalError(e) => {
+                DkgLoadTranscriptError::TransientInternalError(
+                    ic_types::crypto::error::InternalError {
+                        internal_error: e.internal_error,
+                    },
+                )
             }
         }
     }

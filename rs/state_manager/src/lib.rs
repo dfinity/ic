@@ -57,7 +57,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Mutex,
@@ -74,6 +74,9 @@ const CRITICAL_ERROR_REUSED_CHUNK_HASH: &str =
 
 /// Critical error tracking unexpectedly corrupted chunks.
 const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_chunks";
+
+/// How long to keep diverged state.
+const ARCHIVED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// Labels for manifest metrics
 const LABEL_TYPE: &str = "type";
@@ -614,7 +617,7 @@ type Deallocation = Box<dyn std::any::Any + Send + 'static>;
 const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
 
 /// The number of diverged states to keep before we start deleting the old ones.
-const MAX_DIVERGED_STATES_TO_KEEP: usize = 2;
+const MAX_ARCHIVED_CHECKPOINTS_TO_KEEP: usize = 2;
 
 /// The number of extra checkpoints to keep for state sync.
 const EXTRA_CHECKPOINTS_TO_KEEP: usize = 1;
@@ -701,8 +704,10 @@ fn load_checkpoint_as_tip(
 
     info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
+    let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+
     state_layout
-        .reset_tip_to(snapshot.height)
+        .reset_tip_to(snapshot.height, Some(&mut thread_pool))
         .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err));
 
     let tip_layout = state_layout
@@ -720,13 +725,46 @@ fn load_checkpoint_as_tip(
     tip
 }
 
+/// Return duration since path creation (or modification, if no creation)
+/// Return zero duration and log a warning on failure.
+fn path_age(log: &ReplicaLogger, path: &Path) -> Duration {
+    let now = SystemTime::now();
+    match path
+        .metadata()
+        .and_then(|m| m.created().or_else(|_| m.modified()))
+    {
+        Ok(ctime) => {
+            if let Ok(duration) = now.duration_since(ctime) {
+                duration
+            } else {
+                // Only happens when created in the future. Return 0 is OK
+                Duration::from_secs(0)
+            }
+        }
+        Err(err) => {
+            warn!(
+                log,
+                "Could not determine age for the path {}; error: {:?}",
+                path.display(),
+                err
+            );
+            Duration::from_secs(0)
+        }
+    }
+}
+
 /// Deletes obsolete diverged states and state backups, keeping at most
-/// MAX_DIVERGED_STATES_TO_KEEP.
+/// MAX_ARCHIVED_CHECKPOINTS_TO_KEEP checkpoints and backups no older than
+/// ARCHIVED_CHECKPOINT_MAX_AGE
 fn cleanup_diverged_states(log: &ReplicaLogger, layout: &StateLayout) {
     if let Ok(diverged_heights) = layout.diverged_checkpoint_heights() {
-        if diverged_heights.len() > MAX_DIVERGED_STATES_TO_KEEP {
-            let to_remove = diverged_heights.len() - MAX_DIVERGED_STATES_TO_KEEP;
-            for h in diverged_heights.iter().take(to_remove) {
+        let to_remove = diverged_heights
+            .len()
+            .saturating_sub(MAX_ARCHIVED_CHECKPOINTS_TO_KEEP);
+        for (i, h) in diverged_heights.iter().enumerate() {
+            if i < to_remove
+                || path_age(log, &layout.diverged_checkpoint_path(*h)) > ARCHIVED_CHECKPOINT_MAX_AGE
+            {
                 match layout.remove_diverged_checkpoint(*h) {
                     Ok(()) => info!(log, "Successfully removed diverged state {}", *h),
                     Err(err) => info!(log, "{}", err),
@@ -735,9 +773,13 @@ fn cleanup_diverged_states(log: &ReplicaLogger, layout: &StateLayout) {
         }
     }
     if let Ok(backup_heights) = layout.backup_heights() {
-        if backup_heights.len() > MAX_DIVERGED_STATES_TO_KEEP {
-            let to_remove = backup_heights.len() - MAX_DIVERGED_STATES_TO_KEEP;
-            for h in backup_heights.iter().take(to_remove) {
+        let to_remove = backup_heights
+            .len()
+            .saturating_sub(MAX_ARCHIVED_CHECKPOINTS_TO_KEEP);
+        for (i, h) in backup_heights.iter().enumerate() {
+            if i < to_remove
+                || path_age(log, &layout.backup_checkpoint_path(*h)) > ARCHIVED_CHECKPOINT_MAX_AGE
+            {
                 match layout.remove_backup(*h) {
                     Ok(()) => info!(log, "Successfully removed backup {}", *h),
                     Err(err) => info!(log, "Failed to remove backup {}", err),
@@ -755,8 +797,6 @@ fn report_last_diverged_checkpoint(
     match state_layout.diverged_checkpoint_heights() {
         Err(e) => warn!(log, "failed to enumerate diverged checkpoints: {}", e),
         Ok(heights) => {
-            use std::time::SystemTime;
-
             let mut last_time = SystemTime::UNIX_EPOCH;
             for h in heights {
                 let p = state_layout.diverged_checkpoint_path(h);
@@ -1810,32 +1850,22 @@ impl StateManagerImpl {
         let prev_height = height - Height::from(1);
 
         if prev_height == Self::INITIAL_STATE_HEIGHT {
-            // This code is executed at most once per subnet, no need to
-            // optimize this.
-            let hash_tree = hash_lazy_tree(&LazyTree::from(
-                initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
-            ));
-            state.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
-                crypto_hash_of_tree(&hash_tree),
-            ));
             return;
         }
 
         let states = self.states.read();
         if let Some(metadata) = states.certifications_metadata.get(&prev_height) {
-            state.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
-                metadata.certified_state_hash.clone(),
-            ));
+            assert_eq!(
+                state.metadata.prev_state_hash,
+                Some(CryptoHashOfPartialState::from(
+                    metadata.certified_state_hash.clone(),
+                ))
+            );
         } else {
-            let checkpoint_heights = self.checkpoint_heights();
-            fatal!(
+            info!(
                 self.log,
-                "Couldn't populate previous state hash for height {}.\nLatest state: {:?}\nLoaded states: {:?}\nHave metadata for states: {:?}\nCheckpoints: {:?}",
-                height,
-                self.latest_state_height.load(Ordering::Relaxed),
-                states.snapshots.iter().map(|s| s.height).collect::<Vec<_>>(),
-                states.certifications_metadata.keys().collect::<Vec<_>>(),
-                checkpoint_heights,
+                "The previous certification metadata at height {} has been removed. This can happen when the replica syncs a newer state concurrently and removes the states below.",
+                prev_height,
             );
         }
     }
@@ -2278,12 +2308,41 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["take_tip"])
             .start_timer();
 
-        let mut states = self.states.write();
-        let (tip_height, tip) = states.tip.take().expect("failed to get TIP");
+        let hash_at = |tip_height: Height, certifications_metadata: &CertificationsMetadata| {
+            if tip_height > Self::INITIAL_STATE_HEIGHT {
+                let tip_metadata = certifications_metadata.get(&tip_height).unwrap_or_else(|| {
+                    fatal!(self.log, "Bug: missing tip metadata @{}", tip_height)
+                });
 
-        let target_snapshot = match states.snapshots.back() {
-            Some(snapshot) if snapshot.height > tip_height => snapshot.clone(),
-            _ => return (tip_height, tip),
+                // Since the state machine will use this tip to compute the *next* state,
+                // we populate the prev_state_hash with the hash of the current tip.
+                Some(CryptoHashOfPartialState::from(
+                    tip_metadata.certified_state_hash.clone(),
+                ))
+            } else {
+                // This code is executed at most once per subnet, no need to
+                // optimize this.
+                let hash_tree = hash_lazy_tree(&LazyTree::from(
+                    initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
+                ));
+                Some(CryptoHashOfPartialState::from(crypto_hash_of_tree(
+                    &hash_tree,
+                )))
+            }
+        };
+
+        let mut states = self.states.write();
+        let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
+
+        let (target_snapshot, target_hash) = match states.snapshots.back() {
+            Some(snapshot) if snapshot.height > tip_height => (
+                snapshot.clone(),
+                hash_at(snapshot.height, &states.certifications_metadata),
+            ),
+            _ => {
+                tip.metadata.prev_state_hash = hash_at(tip_height, &states.certifications_metadata);
+                return (tip_height, tip);
+            }
         };
 
         // The latest checkpoint is newer than tip.
@@ -2304,7 +2363,7 @@ impl StateManager for StateManagerImpl {
         // take_tip() and commit_and_certify() — the state machine thread.
         std::mem::drop(states);
 
-        let new_tip = load_checkpoint_as_tip(
+        let mut new_tip = load_checkpoint_as_tip(
             #[cfg(debug_assertions)]
             &self.load_checkpoint_as_tip_guard,
             &self.log,
@@ -2313,6 +2372,8 @@ impl StateManager for StateManagerImpl {
             &target_snapshot,
             self.own_subnet_type,
         );
+
+        new_tip.metadata.prev_state_hash = target_hash;
 
         // This might still not be the latest version: there might have been
         // another successful state sync while we were updating the tip.
@@ -2886,26 +2947,26 @@ impl StateManager for StateManagerImpl {
         }
     }
 
-    fn report_diverged_state(&self, height: Height) {
-        let _timer = self
-            .metrics
-            .api_call_duration
-            .with_label_values(&["report_diverged_state"])
-            .start_timer();
-
+    fn report_diverged_checkpoint(&self, height: Height) {
         let mut states = self.states.write();
-        let mut heights = self.checkpoint_heights();
+        let heights = self.checkpoint_heights();
 
-        while let Some(h) = heights.pop() {
-            info!(self.log, "Removing potentially diverged checkpoint @{}", h);
-            if let Err(err) = self.state_layout.mark_checkpoint_diverged(h) {
-                error!(
-                    self.log,
-                    "Failed to mark checkpoint @{} diverged: {}", h, err
-                );
-            }
-            if h <= height {
-                break;
+        info!(self.log, "Moving diverged checkpoint @{}", height);
+        if let Err(err) = self.state_layout.mark_checkpoint_diverged(height) {
+            error!(
+                self.log,
+                "Failed to mark checkpoint @{} diverged: {}", height, err
+            );
+        }
+        for h in heights {
+            if h > height {
+                info!(self.log, "Removing diverged checkpoint @{}", h);
+                if let Err(err) = self.state_layout.remove_checkpoint(h) {
+                    error!(
+                        self.log,
+                        "Failed to remove diverged checkpoint @{}: {}", h, err
+                    );
+                }
             }
         }
 

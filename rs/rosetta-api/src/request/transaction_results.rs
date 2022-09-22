@@ -2,7 +2,7 @@ use crate::errors::ApiError;
 use crate::models::Object;
 use crate::request::request_result::RequestResult;
 use crate::transaction_id::TransactionIdentifier;
-use ledger_canister::BlockHeight;
+use ledger_canister::BlockIndex;
 use serde_json::Value;
 
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,7 @@ impl TransactionResults {
             .all(|e| e.retriable())
     }
 
-    pub fn last_block_index(&self) -> Option<BlockHeight> {
+    pub fn last_block_index(&self) -> Option<BlockIndex> {
         self.operations.iter().rev().find_map(|r| r.block_index)
     }
 

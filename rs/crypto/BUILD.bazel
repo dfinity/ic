@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/config",
-    "//rs/crypto/hash",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
     "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
@@ -17,8 +16,6 @@ DEPENDENCIES = [
     "//rs/crypto/internal/logmon",
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/node_key_validation/tls_cert_validation",
-    "//rs/crypto/prng",
-    "//rs/crypto/sha",
     "//rs/crypto/tecdsa",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
@@ -71,6 +68,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
     "//rs/crypto/internal/crypto_lib/tls",
     "//rs/crypto/internal/csp_test_utils",
+    "//rs/crypto/sha",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/keygen",

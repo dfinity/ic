@@ -1,6 +1,5 @@
 use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
-use ed25519_dalek::Keypair;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
@@ -252,7 +251,7 @@ async fn assert_neurons_can_only_be_donated_by_account_owner(nns_canisters: &Nns
 async fn assert_unclaimed_neurons_can_be_forwarded(
     nns_canisters: &NnsCanisters<'_>,
     custodian_neuron_id: NeuronId,
-    custodian_key_pair: &Keypair,
+    custodian_key_pair: &ic_canister_client_sender::Ed25519KeyPair,
 ) {
     let gtc = &nns_canisters.genesis_token;
     let governance = &nns_canisters.governance;
@@ -402,7 +401,7 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
 async fn assert_neurons_can_be_donated(
     nns_canisters: &NnsCanisters<'_>,
     custodian_neuron_id: NeuronId,
-    custodian_key_pair: &'static Keypair,
+    custodian_key_pair: &ic_canister_client_sender::Ed25519KeyPair,
     test_identity: &'static TestIdentity,
 ) {
     let gtc = &nns_canisters.genesis_token;

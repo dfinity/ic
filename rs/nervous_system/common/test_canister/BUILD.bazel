@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_rust//rust:defs.bzl", "rust_test")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -23,16 +24,50 @@ cargo_build_script(
     srcs = ["build.rs"],
     build_script_env = {
         "CARGO_PKG_VERSION": "0.1.0",
+        "CARGO_PKG_NAME": "ic-nervous-system-common-test-canister",
     },
     data = [],  # build script data (e.g. template files) goes here
     deps = BUILD_DEPENDENCIES,
 )
 
 rust_canister(
-    name = "test_canister",
+    name = "test_canister_raw",
     srcs = glob(["src/**"]),
     crate_name = "ic_nervous_system_common_test_canister",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES + [":build_script"],
+)
+
+optimized_canister(
+    name = "test_canister",
+    wasm = ":test_canister_raw",
+)
+
+rust_test(
+    name = "canister_unit_test",
+    crate = ":_wasm_test_canister_raw",
+    data = [":interface.did"],
+    env = {"CARGO_MANIFEST_DIR": "rs/nervous_system/common/test_canister"},
+)
+
+rust_test(
+    name = "integration_tests",
+    srcs = ["tests/test.rs"],
+    data = [
+        ":test_canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath :test_canister)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    deps = [
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+        "@crate_index//:candid",
+    ],
 )

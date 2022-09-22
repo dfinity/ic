@@ -172,6 +172,7 @@ RUN apt-get clean && \
 COPY opt /opt
 
 # Update POSIX permissions in /opt/ic/
+RUN chown root:root /opt
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
@@ -179,4 +180,5 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
 
 COPY boot /boot
 # Update POSIX permissions in /boot/
+RUN chown root:root /boot
 RUN chmod 0644 /boot/extra_boot_args /boot/version.txt

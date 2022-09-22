@@ -5,7 +5,6 @@
 //! stateless crypto lib.
 
 use crate::api::{NiDkgCspClient, NodePublicKeyData};
-use crate::secret_key_store::SecretKeyStore;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::Csp;
@@ -24,7 +23,7 @@ use ic_logger::debug;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes};
-use rand::{CryptoRng, Rng};
+
 use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(test)]
@@ -36,9 +35,7 @@ pub const NIDKG_FS_SCOPE: Scope = Scope::Const(ConstScope::NiDkgFsEncryptionKeys
 /// Non-interactive distributed key generation client
 ///
 /// Please see the trait definition for full documentation.
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspClient
-    for Csp<R, S, C>
-{
+impl NiDkgCspClient for Csp {
     /// Creates a key pair for encrypting threshold key shares in transmission
     /// from dealers to receivers.
     fn create_forward_secure_key_pair(

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -43,6 +43,15 @@ DEV_DEPENDENCIES = []
 MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
+
+rust_library(
+    name = "cli",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_sns_cli",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
 
 rust_binary(
     name = "sns",

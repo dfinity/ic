@@ -23,10 +23,9 @@ use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPok, FsEncryptionPublicKey,
 };
 use ic_crypto_secrets_containers::SecretArray;
-use ic_interfaces::crypto::CryptoHashableTestDummy;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey};
+use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashableTestDummy, UserPublicKey};
 use std::convert::TryFrom;
 use strum::EnumCount;
 

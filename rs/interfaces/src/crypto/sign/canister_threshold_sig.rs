@@ -5,13 +5,14 @@ use ic_base_types::NodeId;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
-    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
-    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
+    IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptParams, SignedIDkgDealing,
+    IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
@@ -83,6 +84,23 @@ pub trait IDkgProtocol {
         params: &IDkgTranscriptParams,
         signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError>;
+
+    /// Verifies initial dealings for XNet resharing.
+    ///
+    /// Verification ensures that
+    /// * the `params` are equal to the params of `initial_dealings`
+    /// *  public dealing verification is successful for all dealings in `initial_dealings`
+    ///
+    /// # Errors
+    /// * `IDkgVerifyInitialDealingsError::MismatchingTranscriptParams` if the
+    ///   `params` are equal to the params of `initial_dealings`.
+    /// * `IDkgVerifyInitialDealingsError::PublicVerificationFailure` if public
+    ///   dealing verification fails for some dealing in `initial_dealings`.
+    fn verify_initial_dealings(
+        &self,
+        params: &IDkgTranscriptParams,
+        initial_dealings: &InitialIDkgDealings,
+    ) -> Result<(), IDkgVerifyInitialDealingsError>;
 
     /// Combine the given dealings into a transcript.
     ///

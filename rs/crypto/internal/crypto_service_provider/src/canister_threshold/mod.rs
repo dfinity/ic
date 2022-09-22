@@ -11,7 +11,6 @@ use crate::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
 };
 use crate::keygen::{commitment_key_id, mega_key_id};
-use crate::secret_key_store::SecretKeyStore;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
@@ -38,7 +37,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
-use rand::{CryptoRng, Rng};
+
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const IDKG_MEGA_SCOPE: Scope = Scope::Const(ConstScope::IDkgMEGaEncryptionKeys);
@@ -47,9 +46,7 @@ pub const IDKG_THRESHOLD_KEYS_SCOPE: Scope = Scope::Const(ConstScope::IDkgThresh
 /// Interactive distributed key generation client
 ///
 /// Please see the trait definition for full documentation.
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspIDkgProtocol
-    for Csp<R, S, C>
-{
+impl CspIDkgProtocol for Csp {
     fn idkg_create_dealing(
         &self,
         algorithm_id: AlgorithmId,
@@ -287,9 +284,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
 /// Threshold-ECDSA signature share generation client.
 ///
 /// Please see the trait definition for full documentation.
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspThresholdEcdsaSigner
-    for Csp<R, S, C>
-{
+impl CspThresholdEcdsaSigner for Csp {
     fn ecdsa_sign_share(
         &self,
         derivation_path: &ExtendedDerivationPath,
@@ -321,9 +316,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
 /// Threshold-ECDSA signature verification client.
 ///
 /// Please see the trait definition for full documentation.
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    CspThresholdEcdsaSigVerifier for Csp<R, S, C>
-{
+impl CspThresholdEcdsaSigVerifier for Csp {
     fn ecdsa_combine_sig_shares(
         &self,
         derivation_path: &ExtendedDerivationPath,

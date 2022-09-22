@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::{uninstall_canister, InstallCodeContext},
+    canister_manager::uninstall_canister,
     execution_environment::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
         ExecutionEnvironment, RoundInstructions, RoundLimits,
@@ -13,9 +13,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
-    CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method, Payload as _,
-};
+use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
 use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler},
@@ -24,9 +22,8 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState,
-    canister_state::{NextExecution, QUEUE_INDEX_NONE},
-    CanisterState, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
+    bitcoin_state::BitcoinState, canister_state::NextExecution, CanisterState, ExecutionTask,
+    InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -42,7 +39,6 @@ use std::cmp::Reverse;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
-    convert::TryFrom,
     str::FromStr,
     sync::Arc,
 };
@@ -91,13 +87,23 @@ impl SchedulerImpl {
         }
     }
 
+    /// Orders canister round states according to the scheduling strategy.
+    /// The function is to keep in sync `apply_scheduling_strategy()` and
+    /// `abort_paused_executions_above_limit()`
+    fn order_canister_round_states(&self, round_states: &mut [CanisterRoundState]) {
+        round_states.sort_by_key(|rs| {
+            (
+                Reverse(rs.long_execution_mode),
+                Reverse(rs.has_aborted_or_paused_execution),
+                Reverse(rs.accumulated_priority),
+                rs.canister_id,
+            )
+        });
+    }
+
     /// Orders the canisters and updates their accumulated priorities according to
-    /// the strategy described in the Scheduler Analysis document:
-    ///   https://drive.google.com/file/d/1hSmUphdQv0zyB9sohOk8GhfVVlS5TjHo
-    /// DTS Scheduler design doc:
-    ///   https://docs.google.com/document/d/12mpg2qUq-IAl4BVM_DDClAuwm9LzLvLs_R5mU2aP6WY
-    /// Scheduler simulator:
-    ///   https://github.com/dfinity-lab/scheduler_simulator
+    /// the strategy described in RUN-58.
+    ///
     /// A shorter description of the scheduling strategy is available in the note
     /// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
     fn apply_scheduling_strategy(
@@ -184,14 +190,7 @@ impl SchedulerImpl {
         let long_execution_cores = ((long_executions_compute_allocation + 100 * multiplier - 1)
             / (100 * multiplier)) as usize;
 
-        round_states.sort_by_key(|rs| {
-            (
-                Reverse(rs.long_execution_mode),
-                Reverse(rs.has_aborted_or_paused_execution),
-                Reverse(rs.accumulated_priority),
-                rs.canister_id,
-            )
-        });
+        self.order_canister_round_states(&mut round_states);
 
         let round_schedule = RoundSchedule::new(
             scheduler_cores,
@@ -289,7 +288,7 @@ impl SchedulerImpl {
             let instruction_limits = InstructionLimits::new(
                 self.deterministic_time_slicing,
                 self.config.max_instructions_per_install_code,
-                self.config.max_instructions_per_slice,
+                self.config.max_instructions_per_install_code_slice,
             );
             let instructions_before = round_limits.instructions;
             state = self.exec_env.resume_install_code(
@@ -349,12 +348,10 @@ impl SchedulerImpl {
                 break;
             }
             if let Some(msg) = state.pop_subnet_input() {
-                let max_instructions_per_message =
-                    get_instructions_limit_for_subnet_message(&self.config, &msg);
-                let instruction_limits = InstructionLimits::new(
+                let instruction_limits = get_instructions_limits_for_subnet_message(
                     self.deterministic_time_slicing,
-                    max_instructions_per_message,
-                    self.config.max_instructions_per_slice,
+                    &self.config,
+                    &msg,
                 );
 
                 if is_bitcoin_request(&msg) {
@@ -918,7 +915,6 @@ impl SchedulerImpl {
                 .output_queues_for_each(|canister_id, msg| match canisters.get_mut(canister_id) {
                     Some(dest_canister) => dest_canister
                         .push_input(
-                            QUEUE_INDEX_NONE,
                             (*msg).clone(),
                             max_canister_memory_size,
                             &mut subnet_available_memory,
@@ -972,6 +968,36 @@ impl SchedulerImpl {
         true
     }
 
+    /// Aborts paused execution above `max_paused_executions` based on scheduler priority.
+    fn abort_paused_executions_above_limit(&self, state: &mut ReplicatedState) {
+        let mut paused_round_states = state
+            .canisters_iter()
+            .filter_map(|canister| {
+                if canister.has_paused_execution() {
+                    Some(CanisterRoundState {
+                        canister_id: canister.canister_id(),
+                        accumulated_priority: canister.scheduler_state.accumulated_priority.value(),
+                        compute_allocation: 0, // not used
+                        long_execution_mode: canister.scheduler_state.long_execution_mode,
+                        has_aborted_or_paused_execution: true,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        self.order_canister_round_states(&mut paused_round_states);
+
+        paused_round_states
+            .iter()
+            .skip(self.config.max_paused_executions)
+            .for_each(|rs| {
+                let canister = state.canister_states.get_mut(&rs.canister_id).unwrap();
+                self.exec_env.abort_canister(canister);
+            });
+    }
+
     // Code that must be executed unconditionally after each round.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
@@ -984,10 +1010,14 @@ impl SchedulerImpl {
 
                 if self.deterministic_time_slicing == FlagStatus::Enabled {
                     // Abort all paused execution before the checkpoint.
-                    self.exec_env.abort_paused_executions(state);
+                    self.exec_env.abort_all_paused_executions(state);
                 }
             }
-            ExecutionRoundType::OrdinaryRound => {}
+            ExecutionRoundType::OrdinaryRound => {
+                if self.deterministic_time_slicing == FlagStatus::Enabled {
+                    self.abort_paused_executions_above_limit(state);
+                }
+            }
         }
         self.check_dts_invariants(state, current_round_type);
     }
@@ -1081,15 +1111,15 @@ impl Scheduler for SchedulerImpl {
                 FlagStatus::Enabled => state
                     .canister_states
                     .iter()
-                    .filter(
-                        |(_, canister_state)| match canister_state.next_execution() {
-                            NextExecution::None => false,
-                            NextExecution::StartNew => false,
-                            NextExecution::ContinueLong => true,
-                            NextExecution::ContinueInstallCode => true,
-                        },
-                    )
-                    .map(|(canister_id, _)| *canister_id)
+                    .filter_map(|(&canister_id, canister_state)| {
+                        if canister_state.has_paused_execution()
+                            || canister_state.has_paused_install_code()
+                        {
+                            Some(canister_id)
+                        } else {
+                            None
+                        }
+                    })
                     .collect(),
                 // Don't iterate through canisters if DTS is not enabled.
                 FlagStatus::Disabled => BTreeSet::new(),
@@ -1498,6 +1528,7 @@ fn execute_canisters_on_thread(
         // - it has not tasks and input messages to execute
         // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
+        // - or the canister finishes a long execution
         loop {
             match canister.next_execution() {
                 NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -1520,7 +1551,7 @@ fn execute_canisters_on_thread(
             let timer = metrics.msg_execution_duration.start_timer();
 
             let instructions_before = round_limits.instructions;
-            // TODO(RUN-301): break the loop after finishing long execution
+            let canister_had_paused_execution = canister.has_paused_execution();
             let ExecuteCanisterResult {
                 canister: new_canister,
                 heap_delta,
@@ -1566,6 +1597,10 @@ fn execute_canisters_on_thread(
                 );
             }
             if total_heap_delta >= config.max_heap_delta_per_iteration {
+                break;
+            }
+            if canister_had_paused_execution && !canister.has_paused_execution() {
+                // Break the loop, as the canister just finished its long execution
                 break;
             }
         }
@@ -1746,26 +1781,26 @@ fn can_execute_msg(
 }
 
 /// Based on the type of the subnet message to execute, figure out its
-/// instruction limit.
+/// instruction limits.
 ///
 /// This is primarily done because upgrading a canister might need to
 /// (de)-serialize a large state and thus consume a lot of instructions.
-fn get_instructions_limit_for_subnet_message(
+fn get_instructions_limits_for_subnet_message(
+    dts: FlagStatus,
     config: &SchedulerConfig,
     msg: &CanisterInputMessage,
-) -> NumInstructions {
-    let (method_name, payload, sender) = match &msg {
-        CanisterInputMessage::Response(_) => return config.max_instructions_per_message,
-        CanisterInputMessage::Ingress(ingress) => (
-            &ingress.method_name,
-            &ingress.method_payload,
-            ingress.source.get(),
-        ),
-        CanisterInputMessage::Request(request) => (
-            &request.method_name,
-            &request.method_payload,
-            request.sender.get(),
-        ),
+) -> InstructionLimits {
+    let default_limits = InstructionLimits::new(
+        dts,
+        config.max_instructions_per_message,
+        config.max_instructions_per_slice,
+    );
+    let method_name = match &msg {
+        CanisterInputMessage::Response(_) => {
+            return default_limits;
+        }
+        CanisterInputMessage::Ingress(ingress) => &ingress.method_name,
+        CanisterInputMessage::Request(request) => &request.method_name,
     };
 
     use Ic00Method::*;
@@ -1792,16 +1827,14 @@ fn get_instructions_limit_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | ProvisionalCreateCanisterWithCycles
-            | ProvisionalTopUpCanister => config.max_instructions_per_message,
-            InstallCode => match InstallCodeArgs::decode(payload) {
-                Err(_) => config.max_instructions_per_message,
-                Ok(args) => match InstallCodeContext::try_from((sender, args)) {
-                    Err(_) => config.max_instructions_per_message,
-                    Ok(_) => config.max_instructions_per_install_code,
-                },
-            },
+            | ProvisionalTopUpCanister => default_limits,
+            InstallCode => InstructionLimits::new(
+                dts,
+                config.max_instructions_per_install_code,
+                config.max_instructions_per_install_code_slice,
+            ),
         },
-        Err(_) => config.max_instructions_per_message,
+        Err(_) => default_limits,
     }
 }
 

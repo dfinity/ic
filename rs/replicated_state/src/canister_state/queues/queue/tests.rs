@@ -13,36 +13,28 @@ fn input_queue_constructor_test() {
     let capacity: usize = 14;
     let mut queue = InputQueue::new(capacity);
     assert_eq!(queue.num_messages(), 0);
+    assert!(queue.is_empty());
     assert_eq!(queue.pop(), None);
 }
 
 #[test]
-fn input_queue_is_empty() {
+fn input_queue_with_message_is_not_empty() {
     let mut input_queue = InputQueue::new(1);
-    assert_eq!(input_queue.num_messages(), 0);
+
     input_queue
-        .push(
-            QueueIndex::from(0),
-            RequestBuilder::default().build().into(),
-        )
+        .push(RequestBuilder::default().build().into())
         .expect("could push");
     assert_ne!(input_queue.num_messages(), 0);
+    assert!(!input_queue.is_empty());
 }
 
-/// Test affirming success on successive pushes with incrementing indices.
 #[test]
-fn input_queue_push_succeeds_on_incremented_id() {
-    let capacity: usize = 4;
-    let mut input_queue = InputQueue::new(capacity);
-    for index in 0..capacity {
-        assert_eq!(
-            Ok(()),
-            input_queue.push(
-                QueueIndex::from(index as u64),
-                RequestBuilder::default().build().into()
-            )
-        );
-    }
+fn input_queue_with_reservation_is_not_empty() {
+    let mut input_queue = InputQueue::new(1);
+    input_queue.reserve_slot().unwrap();
+
+    assert_eq!(input_queue.num_messages(), 0);
+    assert!(!input_queue.is_empty());
 }
 
 /// Test affirming success on popping pushed messages.
@@ -51,13 +43,10 @@ fn input_queue_pushed_messages_get_popped() {
     let capacity: usize = 4;
     let mut input_queue = InputQueue::new(capacity);
     let mut msg_queue = VecDeque::new();
-    for index in 0..capacity {
+    for _ in 0..capacity {
         let req: RequestOrResponse = RequestBuilder::default().build().into();
         msg_queue.push_back(req.clone());
-        assert_eq!(
-            Ok(()),
-            input_queue.push(QueueIndex::from(index as u64), req)
-        );
+        assert_eq!(Ok(()), input_queue.push(req));
     }
     while !msg_queue.is_empty() {
         assert_eq!(input_queue.pop(), msg_queue.pop_front());
@@ -66,55 +55,16 @@ fn input_queue_pushed_messages_get_popped() {
     assert_eq!(None, input_queue.pop());
 }
 
-/// Test affirming that non-sequential pushes fail.
+// Pushing a message succeeds if there is space.
 #[test]
-#[should_panic(expected = "Expected queue index 1, got 0. Message: Request")]
-#[allow(unused_must_use)]
-fn input_queue_push_fails_on_non_sequential_id() {
+fn input_queue_push_succeeds() {
     let capacity: usize = 4;
     let mut input_queue = InputQueue::new(capacity);
     input_queue
-        .push(
-            QueueIndex::from(0),
-            RequestBuilder::default().build().into(),
-        )
+        .push(RequestBuilder::default().build().into())
         .unwrap();
 
-    input_queue.push(
-        QueueIndex::from(0),
-        RequestBuilder::default().build().into(),
-    );
-}
-
-// Pushing a message with QueueIndex QUEUE_INDEX_NONE succeeds if there is
-// space.
-#[test]
-fn input_queue_push_succeeds_with_queue_index_none() {
-    let capacity: usize = 4;
-    let mut input_queue = InputQueue::new(capacity);
-    input_queue
-        .push(
-            QueueIndex::from(0),
-            RequestBuilder::default().build().into(),
-        )
-        .unwrap();
-
-    input_queue
-        .push(
-            super::super::QUEUE_INDEX_NONE,
-            RequestBuilder::default().build().into(),
-        )
-        .unwrap();
-
-    input_queue
-        .push(
-            QueueIndex::from(1),
-            RequestBuilder::default().build().into(),
-        )
-        .unwrap();
-
-    assert_eq!(QueueIndex::from(2), input_queue.index);
-    assert_eq!(3, input_queue.num_messages());
+    assert_eq!(1, input_queue.num_messages());
 }
 
 /// Test that overfilling an input queue with messages and reservations
@@ -125,12 +75,9 @@ fn input_queue_push_to_full_queue_fails() {
     // First fill up the queue.
     let capacity: usize = 4;
     let mut input_queue = InputQueue::new(capacity);
-    for index in 0..capacity / 2 {
+    for _ in 0..capacity / 2 {
         input_queue
-            .push(
-                QueueIndex::from(index as u64),
-                RequestBuilder::default().build().into(),
-            )
+            .push(RequestBuilder::default().build().into())
             .unwrap();
     }
     for _index in capacity / 2..capacity {
@@ -141,20 +88,7 @@ fn input_queue_push_to_full_queue_fails() {
     // Now push an extraneous message in.
     assert_eq!(
         input_queue
-            .push(
-                QueueIndex::from(capacity as u64 / 2),
-                RequestBuilder::default().build().into(),
-            )
-            .map_err(|(err, _)| err),
-        Err(StateError::QueueFull { capacity })
-    );
-    // With QueueIndex QUEUE_INDEX_NONE.
-    assert_eq!(
-        input_queue
-            .push(
-                super::super::QUEUE_INDEX_NONE,
-                RequestBuilder::default().build().into(),
-            )
+            .push(RequestBuilder::default().build().into(),)
             .map_err(|(err, _)| err),
         Err(StateError::QueueFull { capacity })
     );
@@ -169,10 +103,7 @@ fn input_queue_push_to_full_queue_fails() {
 fn input_push_without_reservation_fails() {
     let mut queue = InputQueue::new(10);
     queue
-        .push(
-            QueueIndex::from(0),
-            ResponseBuilder::default().build().into(),
-        )
+        .push(ResponseBuilder::default().build().into())
         .unwrap_err();
 }
 
@@ -182,10 +113,7 @@ fn input_queue_available_slots_is_correct() {
     let mut input_queue = InputQueue::new(capacity);
     assert_eq!(input_queue.available_slots(), 2);
     input_queue
-        .push(
-            QueueIndex::from(0),
-            RequestBuilder::default().build().into(),
-        )
+        .push(RequestBuilder::default().build().into())
         .unwrap();
     assert_eq!(input_queue.available_slots(), 1);
     input_queue.reserve_slot().unwrap();
@@ -196,11 +124,10 @@ fn input_queue_available_slots_is_correct() {
 #[test]
 fn input_queue_decode_with_non_empty_deadlines_fails() {
     let mut q = InputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-    for i in 0..2_u64 {
-        let _ = q.push(
-            QueueIndex::from(i),
-            RequestOrResponse::Request(RequestBuilder::default().build().into()),
-        );
+    for _ in 0..2 {
+        let _ = q.push(RequestOrResponse::Request(
+            RequestBuilder::default().build().into(),
+        ));
     }
     let mut proto_queue: pb_queues::InputOutputQueue = (&q).into();
     proto_queue
@@ -214,10 +141,29 @@ fn input_queue_decode_with_non_empty_deadlines_fails() {
 
 #[test]
 fn output_queue_constructor_test() {
-    let capacity: usize = 14;
-    let mut queue = OutputQueue::new(capacity);
+    let mut queue = OutputQueue::new(14);
     assert_eq!(queue.num_messages(), 0);
     assert_eq!(queue.pop(), None);
+}
+
+#[test]
+fn output_queue_with_message_is_not_empty() {
+    let mut queue = OutputQueue::new(14);
+
+    queue
+        .push_request(RequestBuilder::default().build().into(), mock_time())
+        .expect("could push");
+    assert_eq!(queue.num_messages(), 1);
+    assert!(!queue.is_empty());
+}
+
+#[test]
+fn output_queue_with_reservation_is_not_empty() {
+    let mut queue = OutputQueue::new(14);
+    queue.reserve_slot().unwrap();
+
+    assert_eq!(queue.num_messages(), 0);
+    assert!(!queue.is_empty());
 }
 
 /// Test that overfilling an output queue with messages and reservations
@@ -254,7 +200,7 @@ fn output_queue_push_to_full_queue_fails() {
 
 #[test]
 #[should_panic(expected = "called `Result::unwrap()` on an `Err` value")]
-fn output_push_into_reserved_slot_fails() {
+fn output_push_without_reserved_slot_fails() {
     let mut queue = OutputQueue::new(10);
     queue.push_response(ResponseBuilder::default().build().into());
 }
@@ -335,6 +281,9 @@ fn output_queue_explicit_push_and_pop_test() {
         (deadline_2, QueueIndex::from(4_u64))
     );
     assert_eq!(4_usize, q.num_messages());
+
+    // After 4 pushes, the index is still 0 since the front of the queue didn't move.
+    assert_eq!(q.index, QueueIndex::from(0_u64));
 
     // Pop a request, the queue is now PQQ_3, [1], {(3,3), (7,4)}
     q.pop();
@@ -491,23 +440,18 @@ proptest! {
         let initial_len = q.queue.queue.len();
         let initial_index = q.index;
 
-        let mut last_index = None;
-        while q.num_messages()>0 {
+        while q.num_messages() > 0 {
             // Head is always Some(_).
             prop_assert!(q.queue.queue.front().unwrap().is_some());
 
-            // Indices are strictly increasing.
-            let (index, msg_ref) = q.peek().unwrap();
-            if let Some(last_index) = last_index {
-                prop_assert!(index > last_index);
-            }
-            last_index = Some(index);
+            // Peek message at the front.
+            let msg_ref = q.peek().unwrap();
 
             // Second peek() returns what the first peek returned.
-            prop_assert_eq!((index, msg_ref), q.peek().unwrap());
+            prop_assert_eq!(msg_ref, q.peek().unwrap());
 
             // pop() returns what peek() returned.
-            prop_assert_eq!((index, msg_ref.clone()), q.pop().unwrap());
+            prop_assert_eq!(msg_ref.clone(), q.pop().unwrap());
         }
         prop_assert_eq!((q.index - initial_index).get(), initial_len as u64);
     }
@@ -557,11 +501,11 @@ proptest! {
         // Fill up the queue and keep track of deadlines inserted.
         loop {
             match q.peek() {
-                Some((_, RequestOrResponse::Request(req))) => {
+                Some(RequestOrResponse::Request(req)) => {
                     let _ = test_q.push_request(req.clone(), q.deadline_range_ends[0].0);
                     deadlines_tracker.push_back(q.deadline_range_ends[0].0);
                 }
-                Some((_, RequestOrResponse::Response(resp))) => {
+                Some(RequestOrResponse::Response(resp)) => {
                     let _ = test_q.reserve_slot();
                     test_q.push_response(resp.clone());
                 }
@@ -601,12 +545,12 @@ proptest! {
         // Empty out the queue, check deadlines popped are the same entered.
         loop {
             match test_q.peek() {
-                Some((_, RequestOrResponse::Request(_))) => {
+                Some(RequestOrResponse::Request(_)) => {
                     prop_assert_eq!(deadlines_tracker.pop_front().unwrap(),
                                     test_q.deadline_range_ends[0].0);
                     test_q.pop();
                 }
-                Some((_, RequestOrResponse::Response(_))) => {
+                Some(RequestOrResponse::Response(_)) => {
                     test_q.pop();
                 }
                 None => {
@@ -855,11 +799,10 @@ proptest! {
         // This ensures timing out happened for all requests with a deadline <= time,
         // but not for any of the requests after that.
         let mut timed_out_requests_iter = timed_out_requests.into_iter();
-        while let Some((ref_index, rr)) = ref_q.pop() {
+        while let Some(rr) = ref_q.pop() {
             match rr {
                 RequestOrResponse::Response(ref_response) => {
-                    if let Some((index, RequestOrResponse::Response(response))) = q.pop() {
-                        prop_assert_eq!(ref_index, index);
+                    if let Some(RequestOrResponse::Response(response)) = q.pop() {
                         prop_assert_eq!(ref_response, response);
                     } else {
                         prop_assert!(false, "bad queue after time out");
@@ -868,8 +811,7 @@ proptest! {
                 RequestOrResponse::Request(ref_request) => {
                     if let Some(request) = timed_out_requests_iter.next() {
                         prop_assert_eq!(ref_request, request);
-                    } else if let Some((index, RequestOrResponse::Request(request))) = q.pop() {
-                        prop_assert_eq!(ref_index, index);
+                    } else if let Some(RequestOrResponse::Request(request)) = q.pop() {
                         prop_assert_eq!(ref_request, request);
                     } else {
                         prop_assert!(false, "bad queue after time out");

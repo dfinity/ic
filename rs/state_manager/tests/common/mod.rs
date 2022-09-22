@@ -19,6 +19,7 @@ use ic_test_utilities::{
     types::ids::{subnet_test_id, user_test_id},
     with_test_replica_logger,
 };
+use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
     artifact::{Artifact, StateSyncMessage},
     chunkable::{
@@ -33,7 +34,6 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
-use tempfile::Builder;
 
 const EMPTY_WASM: &[u8] = &[
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
@@ -439,7 +439,7 @@ pub fn state_manager_test_with_verifier_result<F: FnOnce(&MetricsRegistry, State
     should_pass_verification: bool,
     f: F,
 ) {
-    let tmp = Builder::new().prefix("test").tempdir().unwrap();
+    let tmp = tmpdir("sm");
     let config = Config::new(tmp.path().into());
     let metrics_registry = MetricsRegistry::new();
     let own_subnet = subnet_test_id(42);
@@ -478,7 +478,7 @@ where
         Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
     ),
 {
-    let tmp = Builder::new().prefix("test").tempdir().unwrap();
+    let tmp = tmpdir("sm");
     let config = Config::new(tmp.path().into());
     let own_subnet = subnet_test_id(42);
     let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
@@ -521,7 +521,7 @@ where
         Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
     ),
 {
-    let tmp = Builder::new().prefix("test").tempdir().unwrap();
+    let tmp = tmpdir("sm");
     let config = Config::new(tmp.path().into());
     let own_subnet = subnet_test_id(42);
     let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());

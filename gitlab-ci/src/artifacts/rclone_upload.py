@@ -56,7 +56,7 @@ class RcloneUpload:
                 break
             except subprocess.SubprocessError as e:
                 # stop-gap solution to IDX-2477
-                if e.output is not None and "immutable file modified" in e.output:
+                if e.output is not None and b"immutable file modified" in e.output:
                     logging.warning(
                         "rclone failed (%d) with exception: %s\n%s",
                         e.returncode,

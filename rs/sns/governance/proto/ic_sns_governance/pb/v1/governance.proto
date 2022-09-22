@@ -1023,6 +1023,8 @@ message Governance {
 
   SnsMetadata sns_metadata = 21;
 
+  // The initialization parameters used to spawn an SNS
+  string sns_initialization_parameters = 22;
   // A version of the SNS defined by the WASM hashes of its canisters.
   message Version {
     // The hash of the Root canister WASM.
@@ -1046,12 +1048,14 @@ message Governance {
     // Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
     // allowing us to fail in case we otherwise have gotten stuck.
     uint64 checking_upgrade_lock = 3;
+    // The proposal that initiated this upgrade
+    uint64 proposal_id = 4;
   }
   // Current version that this SNS is running.
-  Version deployed_version = 22;
+  Version deployed_version = 23;
 
   // Version SNS is in process of upgrading to.
-  UpgradeInProgress pending_version = 23;
+  UpgradeInProgress pending_version = 24;
 }
 
 // Request message for 'get_metadata'.
@@ -1065,6 +1069,13 @@ message GetMetadataResponse {
   optional string description = 4;
 }
 
+// Request message for 'get_sns_initialization_parameters'
+message GetSnsInitializationParametersRequest {}
+
+// Response message for 'get_sns_initialization_parameters'
+message GetSnsInitializationParametersResponse {
+  string sns_initialization_parameters = 1;
+}
 // Request for the SNS's currently running version.
 message GetRunningSnsVersionRequest {}
 

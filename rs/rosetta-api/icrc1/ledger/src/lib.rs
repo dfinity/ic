@@ -17,7 +17,7 @@ use ic_ledger_canister_core::{
 };
 use ic_ledger_core::{
     balances::Balances,
-    block::{BlockHeight, BlockType, HashOf},
+    block::{BlockIndex, BlockType, HashOf},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
@@ -108,7 +108,7 @@ pub struct Ledger {
 
     minting_account: Account,
 
-    transactions_by_hash: BTreeMap<HashOf<Transaction>, BlockHeight>,
+    transactions_by_hash: BTreeMap<HashOf<Transaction>, BlockIndex>,
     transactions_by_height: VecDeque<TransactionInfo<Transaction>>,
     transfer_fee: Tokens,
 
@@ -211,13 +211,11 @@ impl LedgerData for Ledger {
         &mut self.blockchain
     }
 
-    fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockHeight> {
+    fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex> {
         &self.transactions_by_hash
     }
 
-    fn transactions_by_hash_mut(
-        &mut self,
-    ) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockHeight> {
+    fn transactions_by_hash_mut(&mut self) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockIndex> {
         &mut self.transactions_by_hash
     }
 
@@ -229,7 +227,7 @@ impl LedgerData for Ledger {
         &mut self.transactions_by_height
     }
 
-    fn on_purged_transaction(&mut self, _height: BlockHeight) {}
+    fn on_purged_transaction(&mut self, _height: BlockIndex) {}
 }
 
 impl Ledger {
@@ -272,7 +270,7 @@ impl Ledger {
     }
 
     /// Returns transactions in the specified range.
-    pub fn get_transactions(&self, start: BlockHeight, length: usize) -> GetTransactionsResponse {
+    pub fn get_transactions(&self, start: BlockIndex, length: usize) -> GetTransactionsResponse {
         let locations = block_locations(self, start, length);
 
         let local_blocks = range_utils::take(&locations.local_blocks, MAX_TRANSACTIONS_PER_REQUEST);

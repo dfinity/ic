@@ -40,7 +40,6 @@ lazy_static = "1.4.0"
 canister-test = { path = "../../rust_canisters/canister_test" }
 crossbeam = "0.8.0"
 crossbeam-channel = "0.5.5"
-ed25519-dalek = "1.0.1"
 futures-util = "0.3.8"
 hex = "0.4.2"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
@@ -64,13 +63,12 @@ ic-registry-transport = { path = "../../registry/transport" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 libsecp256k1 = "0.5.0"
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }
-randomkit = "0.1.1"
-rand = "0.7.3"
-rand_core = "0.5.1"
+rand = "0.8"
 registry-canister = { path = "../../registry/canister" }
 rustc-hash = "1.1.0"
 serde = { version = "1.0", features = ["derive"] }

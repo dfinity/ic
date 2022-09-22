@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/monitoring/metrics_encoder",
     "//rs/nervous_system/common",
-    "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -52,6 +51,7 @@ BUILD_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/config",
+    "//rs/nervous_system/common/test_keys",
     "//rs/nns/common",
     "//rs/rosetta-api/ledger_canister",
     "//rs/sns/swap/protobuf_generator:lib",
@@ -129,16 +129,13 @@ rust_test(
 )
 
 rust_test(
-    name = "canister_test",
-    srcs = glob(["canister/*.rs"]),
-    aliases = ALIASES,
-    crate_root = "canister/canister.rs",
-    data = ["canister/swap.did"],
+    name = "canister_unit_test",
+    crate = ":_wasm_sns-swap-canister-raw",
+    data = [":canister/swap.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/swap",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":swap"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = ["@crate_index//:tokio"],
 )
 
 rust_test_suite(

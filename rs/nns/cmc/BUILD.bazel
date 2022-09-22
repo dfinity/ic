@@ -42,10 +42,6 @@ BUILD_DEPENDENCIES = [
     "@crate_index//:build-info-build",
 ]
 
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
 ALIASES = {}
 
 cargo_build_script(
@@ -85,16 +81,15 @@ optimized_canister(
 
 rust_test(
     name = "cmc_test",
-    srcs = glob(["src/**"]),
-    aliases = ALIASES,
-    crate_root = "src/main.rs",
+    crate = ":cmc",
+)
+
+rust_test(
+    name = "canister_unit_test",
+    crate = ":_wasm_cycles-minting-canister-raw",
     data = ["cmc.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/cmc",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
-        ":cmc",
-        ":build_script",
-    ],
+    deps = ["//rs/types/types_test_utils"],
 )

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:prost.bzl", "generated_files_check")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
@@ -15,7 +15,6 @@ DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/crypto/utils/basic_sig",
     "//rs/nervous_system/common",
-    "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -43,8 +42,39 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
+DEV_DEPENDENCIES = [
+    "@crate_index//:assert_matches",
+    "@crate_index//:itertools",
+    "@crate_index//:lazy_static",
+    "@crate_index//:maplit",
+    "@crate_index//:rand_0_7_3",
+    "@crate_index//:rand_core",
+    "@crate_index//:rand_distr",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "//rs/rust_canisters/canister_test",
+    "//rs/canister_client/sender",
+    "//rs/config",
+    "//rs/crypto",
+    "//rs/crypto/tree_hash",
+    "//rs/interfaces",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nns/test_utils",
+    "//rs/replica_tests",
+    "//rs/registry/fake",
+    "//rs/registry/nns_data_provider",
+    "//rs/registry/proto/generator",
+    "//rs/registry/proto_data_provider",
+    "//rs/test_utilities",
+    "//rs/test_utilities/compare_dirs",
+]
+
 MACRO_DEPENDENCIES = [
     "//rs/nervous_system/common/build_metadata",
+]
+
+DEV_MACRO_DEPENDENCIES = [
+    "//rs/nns/test_utils_macros",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -84,9 +114,69 @@ rust_canister(
     deps = DEPENDENCIES + [":canister"] + [":build_script"],
 )
 
+rust_test(
+    name = "registry_canister_canister_test",
+    srcs = glob(["canister/*.rs"]),
+    crate_root = "canister/canister.rs",
+    data = [
+        "canister/registry.did",
+        ":registry-canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/nns/cmc:cycles-minting-canister",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/registry/canister",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES + [":canister"] + [":build_script"],
+)
+
+rust_test(
+    name = "registry_canister_test",
+    crate = ":canister",
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "registry_canister_integration_test",
+    size = "large",
+    srcs = glob(["tests/**/*.rs"]),
+    args = [
+        "--test-threads",
+        "1",
+    ],
+    crate_root = "tests/integration_tests.rs",
+    data = [
+        ":registry-canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/nns/cmc:cycles-minting-canister",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/registry/canister",
+        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
+        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    flaky = True,
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    tags = ["cpu:4"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canister"],
+)
+
 optimized_canister(
     name = "registry-canister",
     wasm = ":registry-canister-raw",
+)
+
+rust_test(
+    name = "test_helpers_test",
+    srcs = glob(["tests/**/*.rs"]),
+    crate_root = "tests/test_helpers.rs",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canister"],
 )
 
 generated_files_check(

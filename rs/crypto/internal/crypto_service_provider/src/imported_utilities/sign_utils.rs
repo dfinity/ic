@@ -9,10 +9,10 @@ use ic_crypto_internal_basic_sig_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes as BlsPublicKeyBytes;
-use ic_interfaces::crypto::Signable;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, CombinedThresholdSigOf, CryptoError, CryptoResult, UserPublicKey,
+    AlgorithmId, BasicSig, CombinedThresholdSigOf, CryptoError, CryptoResult, Signable,
+    UserPublicKey,
 };
 use std::convert::{TryFrom, TryInto};
 
@@ -85,7 +85,7 @@ pub fn user_public_key_from_bytes(
         (key_bytes.0.key, alg_id, key_contents_type)
     } else if pkix_algo_id == iccsa::algorithm_identifier() {
         (
-            iccsa::api::public_key_bytes_from_der(bytes)?.0,
+            iccsa::public_key_bytes_from_der(bytes)?.0,
             AlgorithmId::IcCanisterSignature,
             KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer,
         )

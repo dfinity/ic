@@ -1,6 +1,19 @@
 //! Defines crypto component types.
 pub mod canister_threshold_sig;
 pub mod dkg;
+
+mod hash;
+
+pub use hash::crypto_hash;
+pub use hash::CryptoHashDomain;
+pub use hash::CryptoHashable;
+pub use hash::CryptoHashableTestDummy;
+pub use hash::DOMAIN_IC_REQUEST;
+
+mod sign;
+
+pub use sign::{Signable, SignableMock};
+
 pub mod error;
 pub mod threshold_sig;
 

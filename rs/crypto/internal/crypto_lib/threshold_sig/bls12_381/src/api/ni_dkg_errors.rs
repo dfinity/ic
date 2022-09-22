@@ -71,7 +71,7 @@ pub enum CspDkgUpdateFsEpochError {
     /// variant.
     UnsupportedAlgorithmId(AlgorithmId),
     FsKeyNotInSecretKeyStoreError(KeyNotFoundError),
-    InternalError(InternalError),
+    TransientInternalError(InternalError),
 }
 
 /// Encrypting or zero-knowledge proving during DKG failed.
@@ -428,7 +428,7 @@ pub enum CspDkgCreateReshareTranscriptError {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CspDkgRetainThresholdKeysError {
     // An internal error, e.g. an RPC error.
-    InternalError(InternalError),
+    TransientInternalError(InternalError),
 }
 
 impl From<CspDkgCreateTranscriptError> for CspDkgCreateReshareTranscriptError {
@@ -477,8 +477,8 @@ pub enum CspDkgLoadPrivateKeyError {
         ciphertext_epoch: Epoch,
         secret_key_epoch: Epoch,
     },
-    // An internal error, e.g. an RPC error.
-    InternalError(InternalError),
+    // A transient internal error, e.g. an RPC error.
+    TransientInternalError(InternalError),
 }
 
 impl CspDkgVerifyReshareDealingError {

@@ -488,7 +488,6 @@ mod tests {
     use super::*;
     use crate::tests::{access_ingress_pool, setup, setup_registry, setup_with_params};
     use assert_matches::assert_matches;
-    use ic_crypto::crypto_hash;
     use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
     use ic_interfaces::{
         artifact_pool::UnvalidatedArtifact,
@@ -508,6 +507,7 @@ mod tests {
         },
         FastForwardTimeSource,
     };
+    use ic_types::crypto::crypto_hash;
     use ic_types::{
         artifact::{IngressMessageAttribute, IngressMessageId},
         batch::IngressPayload,
@@ -1789,7 +1789,7 @@ mod tests {
 
                 let msg_id = IngressMessageId::from(&msg);
                 let msg_attribute = IngressMessageAttribute::new(&msg);
-                let msg_hash = ic_crypto::crypto_hash(msg.binary()).get();
+                let msg_hash = crypto_hash(msg.binary()).get();
                 let _payload = IngressPayload::from(vec![msg.clone()]);
 
                 ingress_pool.write().unwrap().insert(UnvalidatedArtifact {

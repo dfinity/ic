@@ -9,6 +9,10 @@
 set -o errexit
 set -o pipefail
 
+err() {
+    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
+}
+
 BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
@@ -31,6 +35,8 @@ Arguments:
   -b=, --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
        --prober-hosts=                  specify hosts to run the prober on
+       --geolite2-country-db=           specify path to GeoLite2 Country Database
+       --geolite2-city-db=              specify path to GeoLite2 City Database
        --git-revision=                  git revision for which to prepare the media
        --deployment-type={prod|dev}     production or development deployment type
   -x,  --debug                          enable verbose console output
@@ -70,14 +76,15 @@ Arguments:
         --prober-hosts=*)
             PROBER_HOSTS="${argument#*=}"
             ;;
+        --geolite2-country-db=*)
+            GEOLITE2_COUNTRY_DB="${argument#*=}"
+            ;;
+        --geolite2-city-db=*)
+            GEOLITE2_CITY_DB="${argument#*=}"
+            ;;
         --deployment-type=*)
             DEPLOYMENT_TYPE="${argument#*=}"
             shift
-            # mark the deployment as a dev/prod
-            if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ]; then
-                echo "only prod or dev deployment types supported"
-                exit 1
-            fi
             ;;
         *)
             echo 'Error: Argument is not supported.'
@@ -94,6 +101,11 @@ CERT_DIR="${CERT_DIR:=""}"
 DENY_LIST="${DENY_LIST:=""}"
 GIT_REVISION="${GIT_REVISION:=}"
 DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:="prod"}"
+
+if [[ "${DEPLOYMENT_TYPE}" != "prod" && "${DEPLOYMENT_TYPE}" != "dev" ]]; then
+    err "only prod or dev deployment types supported"
+    exit 1
+fi
 
 if [[ -z "$GIT_REVISION" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
@@ -408,6 +420,28 @@ function copy_certs() {
     fi
 }
 
+function copy_geolite2_dbs() {
+    if [[ -z "${GEOLITE2_COUNTRY_DB}" || -z "${GEOLITE2_CITY_DB}" ]]; then
+        err "please provide both country and city geolite2 dbs"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs"
+        cp "${GEOLITE2_COUNTRY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
+        cp "${GEOLITE2_CITY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
+    done
+}
+
 function build_tarball() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -436,7 +470,7 @@ function build_removable_media() {
 
             #echo "${DEPLOYMENT}.$subnet_idx.$node_idx"
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            truncate --size 4M "${OUTPUT}/$NODE_PREFIX.img"
+            truncate --size 100M "${OUTPUT}/$NODE_PREFIX.img"
             mkfs.vfat "${OUTPUT}/$NODE_PREFIX.img"
             mcopy -i "${OUTPUT}/$NODE_PREFIX.img" -o -s ${TARBALL_DIR}/$NODE_PREFIX/ic-bootstrap.tar ::
         fi
@@ -460,6 +494,7 @@ function main() {
     copy_ssh_keys
     copy_certs
     copy_deny_list
+    copy_geolite2_dbs
     build_tarball
     build_removable_media
     # remove_temporary_directories

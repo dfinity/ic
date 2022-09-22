@@ -16,23 +16,18 @@ use ic_types::{
         MAX_RESPONSE_COUNT_BYTES,
     },
     xnet::{QueueId, SessionId},
-    CanisterId, CountBytes, Cycles, QueueIndex, Time,
+    CanisterId, CountBytes, Cycles, Time,
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
-use std::time::Duration;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::{From, TryFrom},
     ops::{AddAssign, SubAssign},
     sync::Arc,
+    time::Duration,
 };
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
-
-/// "None" queue index used internally by Message Routing for reject responses
-/// generated e.g. when a request cannot be inducted due to a full input queue
-/// (and enqueuing the response into the output queue might also fail).
-pub const QUEUE_INDEX_NONE: QueueIndex = QueueIndex::new(std::u64::MAX);
 
 /// The default lifetime of a request in OutputQueue from which the deadline
 /// is computed as time + DEFAULT_OUTPUT_REQUEST_LIFETIME.
@@ -162,24 +157,24 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     }
 
     /// Returns a reference to the message that `pop` / `next` would return.
-    pub fn peek(&self) -> Option<(QueueId, QueueIndex, &RequestOrResponse)> {
+    pub fn peek(&self) -> Option<(QueueId, &RequestOrResponse)> {
         if let Some((receiver, queue)) = self.queues.front() {
-            let (queue_index, msg) = queue.peek().expect("Empty queue in iterator");
+            let msg = queue.peek().expect("Empty queue in iterator");
             let queue_id = QueueId {
                 src_canister: self.owner,
                 dst_canister: **receiver,
                 session_id: SessionId::new(0),
             };
-            return Some((queue_id, queue_index, msg));
+            return Some((queue_id, msg));
         }
         None
     }
 
     /// Pops a message from the next queue. If this was not the last message in
     /// that queue, the queue is moved to the back of the iteration order.
-    pub fn pop(&mut self) -> Option<(QueueId, QueueIndex, RequestOrResponse)> {
+    pub fn pop(&mut self) -> Option<(QueueId, RequestOrResponse)> {
         if let Some((receiver, queue)) = self.queues.pop_front() {
-            let (queue_index, msg) = queue.pop().expect("Empty queue in iterator");
+            let msg = queue.pop().expect("Empty queue in iterator");
             let queue_id = QueueId {
                 src_canister: self.owner,
                 dst_canister: *receiver,
@@ -195,7 +190,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
             self.size -= 1;
             debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
-            return Some((queue_id, queue_index, msg));
+            return Some((queue_id, msg));
         }
         None
     }
@@ -232,7 +227,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 }
 
 impl Iterator for CanisterOutputQueuesIterator<'_> {
-    type Item = (QueueId, QueueIndex, RequestOrResponse);
+    type Item = (QueueId, RequestOrResponse);
 
     /// Alias for `pop`.
     fn next(&mut self) -> Option<Self::Item> {
@@ -272,14 +267,13 @@ impl CanisterQueues {
         F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
     {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
-            while let Some((_, msg)) = queue.peek() {
+            while let Some(msg) = queue.peek() {
                 match f(canister_id, msg) {
                     Err(_) => break,
                     Ok(_) => {
                         let msg = queue
                             .pop()
-                            .expect("peek() returned a message, pop() should not fail")
-                            .1;
+                            .expect("peek() returned a message, pop() should not fail");
                         let oq_stats_delta = OutputQueuesStats::stats_delta(&msg);
                         self.output_queues_stats -= oq_stats_delta;
                         self.memory_usage_stats -=
@@ -332,7 +326,6 @@ impl CanisterQueues {
     ///  expecting one.
     pub(super) fn push_input(
         &mut self,
-        index: QueueIndex,
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
@@ -358,7 +351,7 @@ impl CanisterQueues {
         let iq_stats_delta = InputQueuesStats::stats_delta(QueueOp::Push, &msg);
         let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Push, &msg);
 
-        input_queue.push(index, msg)?;
+        input_queue.push(msg)?;
 
         // Add sender canister ID to the input schedule queue if it isn't already there.
         // Sender was not scheduled iff its input queue was empty before the push (i.e.
@@ -607,10 +600,13 @@ impl CanisterQueues {
             request.receiver, IC_00,
             "reject_ic00_output_request can only be used to reject management canister requests"
         );
+
         let (input_queue, _output_queue) = self.get_or_insert_queues(&request.receiver);
         input_queue.reserve_slot()?;
         self.input_queues_stats.reserved_slots += 1;
         self.memory_usage_stats += MemoryUsageStats::response_slot_delta();
+        debug_assert!(self.stats_ok());
+
         let response = RequestOrResponse::Response(Arc::new(Response {
             originator: request.sender,
             respondent: IC_00,
@@ -618,7 +614,7 @@ impl CanisterQueues {
             refund: request.payment,
             response_payload: Payload::Reject(reject_context),
         }));
-        self.push_input(QUEUE_INDEX_NONE, response, InputQueueType::LocalSubnet)
+        self.push_input(response, InputQueueType::LocalSubnet)
             .map_err(|(e, _msg)| e)
     }
 
@@ -671,7 +667,7 @@ impl CanisterQueues {
     /// Returns a reference to the message at the head of the respective output
     /// queue, if any.
     pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
-        Some(self.canister_queues.get(canister_id)?.1.peek()?.1)
+        self.canister_queues.get(canister_id)?.1.peek()
     }
 
     /// Tries to induct a message from the output queue to `own_canister_id`
@@ -683,10 +679,9 @@ impl CanisterQueues {
             .get(&own_canister_id)
             .and_then(|(_, output_queue)| output_queue.peek())
             .ok_or(())?
-            .1
             .clone();
 
-        self.push_input(QUEUE_INDEX_NONE, msg, InputQueueType::LocalSubnet)
+        self.push_input(msg, InputQueueType::LocalSubnet)
             .map_err(|_| ())?;
 
         let msg = self
@@ -695,11 +690,11 @@ impl CanisterQueues {
             .expect("Output queue existed above so should not fail.")
             .1
             .pop()
-            .expect("Message peeked above so pop should not fail.")
-            .1;
+            .expect("Message peeked above so pop should not fail.");
         let oq_stats_delta = OutputQueuesStats::stats_delta(&msg);
         self.output_queues_stats -= oq_stats_delta;
         self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
+        debug_assert!(self.stats_ok());
 
         Ok(())
     }
@@ -796,16 +791,70 @@ impl CanisterQueues {
         &mut self,
         canister_id: &CanisterId,
     ) -> (&mut InputQueue, &mut OutputQueue) {
-        let mut queue_bytes = 0;
         let (input_queue, output_queue) =
             self.canister_queues.entry(*canister_id).or_insert_with(|| {
                 let input_queue = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
                 let output_queue = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
-                queue_bytes = input_queue.calculate_size_bytes();
+                self.input_queues_stats.size_bytes += input_queue.calculate_size_bytes();
                 (input_queue, output_queue)
             });
-        self.input_queues_stats.size_bytes += queue_bytes;
         (input_queue, output_queue)
+    }
+
+    /// Garbage collects all input and output queue pairs that are both empty.
+    ///
+    /// Because there is no useful information in an empty queue, there is no
+    /// need to retain them. In order to avoid state divergence (e.g. because
+    /// some replicas have an empty queue pair and some have garbage collected
+    /// it) we simply need to ensure that queues are garbage collected
+    /// deterministically across all replicas (e.g. at checkpointing time or
+    /// every round; but not e.g. when deserializing, which may happen at
+    /// different times on restarting or state syncing replicas).
+    ///
+    /// Time complexity: `O(num_queues)`.
+    pub fn garbage_collect(&mut self) {
+        self.garbage_collect_impl();
+
+        // Reset all fields to default if we have no messages. This is so that an empty
+        // `CanisterQueues` serializes as an empty byte array (and there is no need to
+        // persist it explicitly).
+        if self.canister_queues.is_empty() && self.ingress_queue.is_empty() {
+            // The schedules and stats will already have default (zero) values, only
+            // `next_input_queue` must be reset explicitly.
+            self.next_input_queue = Default::default();
+
+            // Trust but verify. Ensure everything is actually set to default.
+            debug_assert_eq!(CanisterQueues::default(), *self);
+        }
+    }
+
+    /// Implementation of `garbage_collect()`, ensuring the latter always resets
+    /// all fields to their default values when all queues are empty, regardless
+    /// of whether we bail out early or not.
+    fn garbage_collect_impl(&mut self) {
+        if self.canister_queues.is_empty() {
+            return;
+        }
+
+        // Adjust stats for any queue pairs we are going to GC.
+        let mut have_empty_pair = false;
+        for (_canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
+            if input_queue.is_empty() && output_queue.is_empty() {
+                self.input_queues_stats.size_bytes -= input_queue.calculate_size_bytes();
+                have_empty_pair = true;
+            }
+        }
+        // Bail out early if there is nothing to GC.
+        if !have_empty_pair {
+            return;
+        }
+
+        // Actually drop empty queue pairs.
+        self.canister_queues
+            .retain(|_canister_id, (input_queue, output_queue)| {
+                !input_queue.is_empty() || !output_queue.is_empty()
+            });
+        debug_assert!(self.stats_ok());
     }
 
     /// Helper function to concisely validate stats adjustments in debug builds,
@@ -814,6 +863,10 @@ impl CanisterQueues {
         debug_assert_eq!(
             Self::calculate_input_queues_stats(&self.canister_queues),
             self.input_queues_stats
+        );
+        debug_assert_eq!(
+            Self::calculate_output_queues_stats(&self.canister_queues),
+            self.output_queues_stats
         );
         debug_assert_eq!(
             Self::calculate_memory_usage_stats(&self.canister_queues),
@@ -917,7 +970,9 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
             // TODO: input_schedule is deprecated and should be removed next release
             input_schedule: [].into(),
             next_input_queue: match item.next_input_queue {
-                NextInputQueue::LocalSubnet => ProtoNextInputQueue::LocalSubnet,
+                // Encode `LocalSubnet` as `Unspecified` because it is decoded as such (and it
+                // serializes to zero bytes).
+                NextInputQueue::LocalSubnet => ProtoNextInputQueue::Unspecified,
                 NextInputQueue::Ingress => ProtoNextInputQueue::Ingress,
                 NextInputQueue::RemoteSubnet => ProtoNextInputQueue::RemoteSubnet,
             } as i32,
@@ -1286,7 +1341,7 @@ pub mod testing {
     use ic_interfaces::messages::CanisterInputMessage;
     use ic_types::{
         messages::{Request, RequestOrResponse},
-        CanisterId, QueueIndex, Time,
+        CanisterId, Time,
     };
     use std::{collections::VecDeque, sync::Arc};
 
@@ -1297,12 +1352,8 @@ pub mod testing {
         fn ingress_queue_size(&self) -> usize;
 
         /// Pops the next message from the output queue associated with
-        /// `dst_canister`. Returned `QueueIndex` values are sequential across
-        /// successful calls.
-        fn pop_canister_output(
-            &mut self,
-            dst_canister: &CanisterId,
-        ) -> Option<(QueueIndex, RequestOrResponse)>;
+        /// `dst_canister`.
+        fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse>;
 
         /// Returns the number of output queues, empty or not.
         fn output_queues_len(&self) -> usize;
@@ -1313,7 +1364,6 @@ pub mod testing {
         /// Publicly exposes `CanisterQueues::push_input()`.
         fn push_input(
             &mut self,
-            index: QueueIndex,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
         ) -> Result<(), (StateError, RequestOrResponse)>;
@@ -1333,15 +1383,12 @@ pub mod testing {
             self.ingress_queue.size()
         }
 
-        fn pop_canister_output(
-            &mut self,
-            dst_canister: &CanisterId,
-        ) -> Option<(QueueIndex, RequestOrResponse)> {
+        fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse> {
             match self.canister_queues.get_mut(dst_canister) {
                 None => None,
                 Some((_, canister_out_queue)) => {
                     let ret = canister_out_queue.pop();
-                    if let Some((_, msg)) = &ret {
+                    if let Some(msg) = &ret {
                         self.output_queues_stats -= OutputQueuesStats::stats_delta(msg);
                         self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, msg);
                     }
@@ -1363,11 +1410,10 @@ pub mod testing {
 
         fn push_input(
             &mut self,
-            index: QueueIndex,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
         ) -> Result<(), (StateError, RequestOrResponse)> {
-            self.push_input(index, msg, input_queue_type)
+            self.push_input(msg, input_queue_type)
         }
 
         fn pop_input(&mut self) -> Option<CanisterInputMessage> {

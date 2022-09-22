@@ -3,6 +3,24 @@ use super::*;
 use ic_ledger_canister_blocks_synchronizer_test_utils::init_test_logger;
 use log::debug;
 
+fn rosetta_cli() -> String {
+    match std::env::var("ROSETTA_CLI").ok() {
+        Some(binary) => binary,
+        None => String::from("rosetta-cli"),
+    }
+}
+
+fn local(file: &str) -> String {
+    match std::env::var("CARGO_MANIFEST_DIR") {
+        Ok(path) => std::path::PathBuf::from(path)
+            .join(file)
+            .into_os_string()
+            .into_string()
+            .unwrap(),
+        Err(_) => String::from(file),
+    }
+}
+
 #[actix_rt::test]
 async fn rosetta_cli_data_test() {
     init_test_logger();
@@ -38,13 +56,11 @@ async fn rosetta_cli_data_test() {
         debug!("Server thread done");
     }));
 
-    let output = Command::new("timeout")
+    let output = Command::new(rosetta_cli())
         .args(&[
-            "300s",
-            "rosetta-cli",
             "check:data",
             "--configuration-file",
-            "test/rosetta-cli_data_test.json",
+            local("test/rosetta-cli_data_test.json").as_str(),
         ])
         .output()
         .expect("failed to execute rosetta-cli");
@@ -105,13 +121,11 @@ async fn rosetta_cli_construction_create_account_test() {
         debug!("Server thread done");
     }));
 
-    let output = Command::new("timeout")
+    let output = Command::new(rosetta_cli())
         .args(&[
-            "300s",
-            "rosetta-cli",
             "check:construction",
             "--configuration-file",
-            "test/rosetta-cli_construction_create_account_test.json",
+            local("test/rosetta-cli_construction_create_account_test.json").as_str(),
         ])
         .output()
         .expect("failed to execute rosetta-cli");
@@ -191,16 +205,12 @@ async fn rosetta_cli_construction_test() {
         debug!("Server thread done");
     }));
 
-    let output = Command::new("timeout")
+    let output = Command::new(rosetta_cli())
         .args(&[
-            "300s",
-            "rosetta-cli",
             "check:construction",
             "--configuration-file",
-            "test/rosetta-cli_construction_test.json",
+            local("test/rosetta-cli_construction_test.json").as_str(),
         ])
-        //.stdout(std::process::Stdio::inherit())
-        //.stderr(std::process::Stdio::inherit())
         .output()
         .expect("failed to execute rosetta-cli");
 

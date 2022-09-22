@@ -93,8 +93,11 @@ pub fn decode_stream_header(bytes: &[u8]) -> Result<StreamHeader, ProxyDecodeErr
 }
 
 /// Encodes a `SystemMetadata` into canonical CBOR representation.
-pub fn encode_metadata(msg: &SystemMetadata) -> Vec<u8> {
-    types::SystemMetadata::proxy_encode(msg).unwrap()
+pub fn encode_metadata(
+    metadata: &SystemMetadata,
+    certification_version: CertificationVersion,
+) -> Vec<u8> {
+    types::SystemMetadata::proxy_encode((metadata, certification_version)).unwrap()
 }
 
 /// Encodes the list of canister ID ranges assigned to a subnet according to

@@ -15,7 +15,6 @@
 
 use crate::tests::{access_ingress_pool, setup_with_params};
 use ic_constants::MAX_INGRESS_TTL;
-use ic_crypto::crypto_hash;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     gossip_pool::GossipPool,
@@ -32,6 +31,7 @@ use ic_test_utilities::{
     },
     FastForwardTimeSource,
 };
+use ic_types::crypto::crypto_hash;
 use ic_types::{
     artifact::{IngressMessageAttribute, IngressMessageId, SignedIngress},
     batch::ValidationContext,

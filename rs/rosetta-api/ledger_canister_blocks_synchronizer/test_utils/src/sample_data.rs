@@ -1,8 +1,7 @@
-pub use ed25519_dalek::Keypair as EdKeypair;
 use ic_ledger_core::block::BlockType;
 use ic_types::PrincipalId;
 use ledger_canister::{
-    AccountIdentifier, Block, BlockHeight, Memo, Operation, Tokens, Transaction,
+    AccountIdentifier, Block, BlockIndex, Memo, Operation, Tokens, Transaction,
     DEFAULT_TRANSFER_FEE,
 };
 
@@ -15,9 +14,8 @@ use std::time::SystemTime;
 
 pub fn acc_id(seed: u64) -> AccountIdentifier {
     let mut rng = StdRng::seed_from_u64(seed);
-    let keypair = EdKeypair::generate(&mut rng);
-    let public_key_der =
-        ic_canister_client::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
+    let keypair = ic_canister_client::Ed25519KeyPair::generate(&mut rng);
+    let public_key_der = ic_canister_client::ed25519_public_key_to_der(keypair.public_key.to_vec());
 
     PrincipalId::new_self_authenticating(&public_key_der).into()
 }
@@ -84,7 +82,7 @@ impl Scribe {
         Memo(self.next_index() as u64)
     }
 
-    fn next_index(&self) -> BlockHeight {
+    fn next_index(&self) -> BlockIndex {
         self.blockchain.len() as u64
     }
 

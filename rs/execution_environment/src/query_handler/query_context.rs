@@ -331,8 +331,7 @@ impl<'a> QueryContext<'a> {
         let mut sent_messages = false;
         let canister_id = canister.canister_id();
 
-        let outgoing_messages: Vec<_> =
-            canister.output_into_iter().map(|(_, _, msg)| msg).collect();
+        let outgoing_messages: Vec<_> = canister.output_into_iter().map(|(_, msg)| msg).collect();
         let call_context_manager = canister
             .system_state
             .call_context_manager_mut()

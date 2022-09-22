@@ -13,7 +13,6 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE,
     replicated_state::{LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_OUT_OF_MEMORY},
     testing::ReplicatedStateTesting,
     CanisterState, ReplicatedState, Stream,
@@ -245,12 +244,7 @@ fn induct_loopback_stream_reroute_response() {
 
         // The `inducted_msg` is expected to be inducted to the input queue of the local canister.
         expected_state
-            .push_input(
-                QUEUE_INDEX_NONE,
-                inducted_msg,
-                (u64::MAX / 2).into(),
-                &mut (i64::MAX / 2),
-            )
+            .push_input(inducted_msg, (u64::MAX / 2).into(), &mut (i64::MAX / 2))
             .unwrap();
 
         // A reject signal is generated at index 23 and then garbage-collected.
@@ -2923,12 +2917,7 @@ where
     for (_stream_index, msg) in messages {
         assert_eq!(
             Ok(()),
-            state.push_input(
-                QUEUE_INDEX_NONE,
-                msg.clone(),
-                (u64::MAX / 2).into(),
-                &mut (i64::MAX / 2)
-            )
+            state.push_input(msg.clone(), (u64::MAX / 2).into(), &mut (i64::MAX / 2))
         );
     }
 }

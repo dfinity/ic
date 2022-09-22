@@ -4,7 +4,7 @@
 
 notify-gitlab-success:
   extends: 
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .on-success-rules
   stage: finalize
   dependencies: []  # don't copy artifacts from other jobs
@@ -28,7 +28,7 @@ notify-gitlab-success:
 
 notify-gitlab-failure:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .on-failure-rules
   stage: finalize
   dependencies: []  # don't copy artifacts from other jobs

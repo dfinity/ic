@@ -1,4 +1,5 @@
 from os import environ
+from typing import Callable
 from typing import Optional
 
 from artifacts.collector import Collector
@@ -8,7 +9,12 @@ from ci import sh
 from ci import show_sccache_stats
 
 
-def run(build_command: Optional[str] = None, artifact_ext: str = "", sccache_stats=False):
+def run(
+    target: str = "//:binaries",
+    artifact_ext: str = "",
+    sccache_stats=False,
+    after_script: Optional[Callable[[], None]] = None,
+):
     # TODO: get rid of this usage of git revision
     environ["VERSION"] = ENV.build_id
 
@@ -28,13 +34,13 @@ def run(build_command: Optional[str] = None, artifact_ext: str = "", sccache_sta
         )
 
     with buildevent("cargo-build"):
-        if build_command is not None:
-            sh("bash", "-c", build_command, cwd=f"{ENV.top}/rs")
-        else:
-            sh(
-                f"{ENV.top}/gitlab-ci/src/job_scripts/lib/cargo-build-release-linux-native.sh",
-                cwd=f"{ENV.top}/rs",
-            )
+        sh(
+            f"{ENV.top}/gitlab-ci/src/job_scripts/lib/cargo-build-release-linux-native.sh",
+            target,
+            cwd=f"{ENV.top}/rs",
+        )
+        if after_script is not None:
+            after_script()
 
     sh("ls", "-l", f"{ENV.platform_target_dir}/release")
 

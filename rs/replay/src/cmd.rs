@@ -19,7 +19,7 @@ impl std::str::FromStr for ClapSubnetId {
 #[clap(version = "1.0")]
 pub struct ReplayToolArgs {
     /// Path to Replica configuration file.
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 
     /// Caller id that is allowed to mutate the registry canister.
     #[clap(long)]
@@ -30,7 +30,7 @@ pub struct ReplayToolArgs {
 
     /// Subnet id of the replica, whose state we use
     #[clap(long)]
-    pub subnet_id: ClapSubnetId,
+    pub subnet_id: Option<ClapSubnetId>,
 
     /// Data root directory; if not specified, the value from the replica config is used
     #[clap(long)]
@@ -72,6 +72,9 @@ pub enum SubCommand {
     /// WARNING: This is a test-only sub-command and should only be used in
     /// tests.
     WithTrustedNeuronsFollowingNeuronForTests(WithTrustedNeuronsFollowingNeuronCmd),
+
+    /// Verify the signature of a CUP from a subnet
+    VerifySubnetCUP(VerifySubnetCUPCmd),
 }
 
 #[derive(Clone, Parser)]
@@ -152,4 +155,12 @@ pub struct WithNeuronCmd {
     pub neuron_controller: PrincipalId,
     /// How much stake the neuron will have.
     pub neuron_stake_e8s: u64,
+}
+
+#[derive(Clone, Parser, Debug)]
+pub struct VerifySubnetCUPCmd {
+    /// File wih the content of the CUP
+    pub cup_file: PathBuf,
+    /// File wih the content of the public key
+    pub public_key_file: PathBuf,
 }

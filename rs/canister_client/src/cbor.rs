@@ -1,5 +1,5 @@
 use crate::agent::{sign_query, sign_read_state, sign_submit, Agent};
-use ic_crypto_tree_hash::{LabeledTree, Path};
+use ic_crypto_tree_hash::{LabeledTree, LookupStatus, Path};
 use ic_types::Time;
 use ic_types::{
     messages::{
@@ -51,6 +51,16 @@ pub fn parse_read_state_response(
 
     let certificate: Certificate = serde_cbor::from_slice(response.certificate.as_slice())
         .map_err(|source| format!("decoding Certificate failed: {}", source))?;
+
+    match certificate
+        .tree
+        .lookup(&[&b"request_status"[..], request_id.as_ref()])
+    {
+        LookupStatus::Found(_) => (),
+        // TODO(MR-249): return an error in the Unknown case once the replica
+        // implements absence proofs.
+        LookupStatus::Absent | LookupStatus::Unknown => return Ok(RequestStatus::unknown()),
+    }
 
     // Parse the tree.
     let tree = LabeledTree::try_from(certificate.tree)
@@ -217,7 +227,7 @@ fn to_blob(canister_id: &CanisterId) -> Blob {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_crypto_tree_hash::MixedHashTree;
+    use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
     use ic_types::messages::HttpReadStateResponse;
     use serde::Serialize;
 
@@ -314,6 +324,69 @@ mod tests {
 
         // Request ID that doesn't exist.
         let request_id: MessageId = MessageId::from([0; 32]);
+        assert_eq!(
+            parse_read_state_response(&request_id, response),
+            Ok(RequestStatus::unknown())
+        );
+    }
+
+    #[test]
+    fn test_parse_read_state_response_pruned() {
+        fn mklabeled(l: impl Into<Label>, t: MixedHashTree) -> MixedHashTree {
+            MixedHashTree::Labeled(l.into(), Box::new(t))
+        }
+
+        fn mkfork(l: MixedHashTree, r: MixedHashTree) -> MixedHashTree {
+            MixedHashTree::Fork(Box::new((l, r)))
+        }
+
+        let tree = mkfork(
+            mklabeled(
+                "request_status",
+                mkfork(
+                    mklabeled(
+                        vec![
+                            184, 255, 145, 192, 128, 156, 132, 76, 67, 213, 87, 237, 189, 136, 206,
+                            184, 254, 192, 233, 210, 142, 173, 27, 123, 112, 187, 82, 222, 130,
+                            129, 245, 40,
+                        ],
+                        MixedHashTree::Pruned(Digest([0; 32])),
+                    ),
+                    mklabeled(
+                        vec![
+                            184, 255, 145, 192, 128, 156, 132, 76, 67, 213, 87, 237, 189, 136, 206,
+                            184, 254, 192, 233, 210, 142, 173, 27, 123, 112, 187, 82, 222, 130,
+                            129, 245, 42,
+                        ],
+                        MixedHashTree::Pruned(Digest([0; 32])),
+                    ),
+                ),
+            ),
+            mklabeled("time", MixedHashTree::Leaf(vec![1])),
+        );
+
+        let certificate = Certificate {
+            tree,
+            signature: Blob(vec![]),
+            delegation: None,
+        };
+
+        let certificate_cbor: Vec<u8> = to_self_describing_cbor(&certificate).unwrap();
+
+        let response = HttpReadStateResponse {
+            certificate: Blob(certificate_cbor),
+        };
+
+        let response_cbor: Vec<u8> = to_self_describing_cbor(&response).unwrap();
+
+        let response: CBOR = serde_cbor::from_slice(response_cbor.as_slice()).unwrap();
+
+        // Request ID that is between two pruned labels.
+        let request_id: MessageId = MessageId::from([
+            184, 255, 145, 192, 128, 156, 132, 76, 67, 213, 87, 237, 189, 136, 206, 184, 254, 192,
+            233, 210, 142, 173, 27, 123, 112, 187, 82, 222, 130, 129, 245, 41,
+        ]);
+
         assert_eq!(
             parse_read_state_response(&request_id, response),
             Ok(RequestStatus::unknown())

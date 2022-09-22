@@ -1,0 +1,39 @@
+// adapted from https://internetcomputer.org/docs/current/references/ic-interface-spec/#http-gateway-interface
+
+type HeaderField = record { text; text; };
+
+type HttpRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+type HttpResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+  upgrade : opt bool;
+  streaming_strategy: opt StreamingStrategy;
+};
+
+type Token = variant {
+  "type": reserved;
+};
+
+type StreamingCallbackHttpResponse = record {
+  body: blob;
+  token: opt Token;
+};
+
+type StreamingStrategy = variant {
+  Callback: record {
+    callback: func (Token) -> (opt StreamingCallbackHttpResponse) query;
+    token: Token;
+  };
+};
+
+service : {
+  http_request: (request: HttpRequest) -> (HttpResponse) query;
+  http_request_update: (request: HttpRequest) -> (HttpResponse);
+}

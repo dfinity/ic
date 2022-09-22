@@ -8,7 +8,7 @@ use ic_ledger_canister_blocks_synchronizer::{
     canister_access::CanisterAccess,
     ledger_blocks_sync::{LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics},
 };
-use ic_ledger_core::block::BlockHeight;
+use ic_ledger_core::block::BlockIndex;
 use ic_types::CanisterId;
 use url::Url;
 
@@ -35,7 +35,7 @@ struct Args {
 
     /// Sync the chain up to this block. This block will be available in the local copy, the next one won't.
     #[clap(short = 'b', long)]
-    pub up_to_block: Option<BlockHeight>,
+    pub up_to_block: Option<BlockIndex>,
 }
 
 struct PrintMetrics {}

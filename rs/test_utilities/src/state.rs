@@ -17,7 +17,6 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         testing::new_canister_queues_for_test,
-        QUEUE_INDEX_NONE,
     },
     metadata_state::Stream,
     page_map::PageMap,
@@ -299,7 +298,7 @@ impl CanisterStateBuilder {
         for input in self.inputs {
             system_state
                 .queues_mut()
-                .push_input(QUEUE_INDEX_NONE, input, InputQueueType::RemoteSubnet)
+                .push_input(input, InputQueueType::RemoteSubnet)
                 .unwrap();
         }
 

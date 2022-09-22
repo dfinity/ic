@@ -77,8 +77,8 @@ fn network_and_public_key_to_p2wpkh(network: Network, public_key: Vec<u8>) -> St
 }
 
 pub async fn get_btc_address(args: GetBtcAddressArgs) -> GetBtcAddressResult {
-    init_ecdsa_public_key().await;
     let caller = PrincipalId(ic_cdk::caller());
+    init_ecdsa_public_key().await;
     let public_key = derive_public_key(Account {
         owner: caller,
         subaccount: args.subaccount,

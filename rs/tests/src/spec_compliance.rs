@@ -28,7 +28,6 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /non-existence proofs for non-existing request id/",
     "$0 ~ /module_hash of empty canister/",
     "$0 ~ /metadata.absent/",
-    "$0 ~ /zero-length metadata name/",
 ];
 
 pub fn ic_with_system_subnet() -> InternetComputer {

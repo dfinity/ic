@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,11 +29,10 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-# Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
-# rust_doc_test(
-#     name = "image_upgrader_doc_test",
-#     crate = ":image_upgrader",
-# )
+rust_doc_test(
+    name = "image_upgrader_doc_test",
+    crate = ":image_upgrader",
+)
 
 rust_test(
     name = "image_upgrader_test",

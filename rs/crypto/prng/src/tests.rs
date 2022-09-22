@@ -1,8 +1,8 @@
 use super::*;
-use ic_interfaces::crypto::CryptoHashDomain;
 use ic_types::consensus::RandomBeaconContent;
 use ic_types::crypto::{
-    CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
+    CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashDomain, CryptoHashOf,
+    Signed,
 };
 use ic_types::signature::ThresholdSignature;
 use ic_types::{

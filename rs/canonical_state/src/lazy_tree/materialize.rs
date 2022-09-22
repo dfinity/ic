@@ -14,12 +14,8 @@ fn materialize(lazy_tree: &LazyTree<'_>) -> Option<LabeledTree<Vec<u8>>> {
         LazyBlob(f) => Some(LabeledTree::Leaf(f().to_vec())),
         LazyFork(f) => {
             let children: Vec<_> = f
-                .labels()
-                .filter_map(|l| {
-                    let lazy_tree = f.edge(&l)?;
-                    let t = materialize(&lazy_tree)?;
-                    Some((l, t))
-                })
+                .children()
+                .filter_map(|(l, t)| Some((l, materialize(&t)?)))
                 .collect();
 
             if children.is_empty() {

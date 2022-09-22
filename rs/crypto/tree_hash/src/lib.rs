@@ -375,6 +375,48 @@ pub enum MixedHashTree {
     Pruned(Digest),
 }
 
+/// The result of a path lookup in a hash tree.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LookupStatus<'a> {
+    /// The label exists in the tree.
+    Found(&'a MixedHashTree),
+    /// The tree contains a proof that the label does not exist.
+    Absent,
+    /// There is no way to tell whether the label is in the tree.
+    Unknown,
+}
+
+impl LookupStatus<'_> {
+    /// Returns true if the status is Found.
+    pub fn is_found(&self) -> bool {
+        matches!(self, Self::Found(_))
+    }
+
+    /// Returns true if the status is Absent.
+    pub fn is_absent(&self) -> bool {
+        self == &Self::Absent
+    }
+
+    /// Returns true if the status is Unknown.
+    pub fn is_unknown(&self) -> bool {
+        self == &Self::Unknown
+    }
+}
+
+/// The result of [MixedHashTree::search_label] call.
+enum SearchStatus<'a> {
+    /// The label exists in the tree.
+    Found(&'a MixedHashTree),
+    /// The tree contains a proof that the label does not exist.
+    Absent,
+    /// There is no way to tell whether the label is in the tree.
+    Unknown,
+    /// The label is lexicographically less than all other labels in the tree.
+    Lt,
+    /// The label is lexicographically greater than all other labels in the tree.
+    Gt,
+}
+
 impl MixedHashTree {
     /// Recomputes root hash of the full tree that this mixed tree was
     /// constructed from.
@@ -388,6 +430,72 @@ impl MixedHashTree {
             Self::Leaf(buf) => tree_hash::compute_leaf_digest(&buf[..]),
             Self::Pruned(digest) => digest.clone(),
         }
+    }
+
+    /// Finds a label in a hash tree.
+    fn search_label<'a>(&'a self, label: &[u8]) -> SearchStatus<'a> {
+        use std::cmp::Ordering;
+
+        match self {
+            Self::Empty => SearchStatus::Absent,
+            Self::Leaf(_) => SearchStatus::Absent,
+            Self::Fork(fork) => match fork.0.search_label(label) {
+                SearchStatus::Lt => {
+                    // The label is less than all the labels in the left
+                    // subtree.  All labels in the right tree are even greater,
+                    // so we don't have to search there.
+                    SearchStatus::Absent
+                }
+                SearchStatus::Unknown => {
+                    // The left tree is probably pruned, let's look at the right tree.
+                    match fork.1.search_label(label) {
+                        SearchStatus::Lt => {
+                            // The label is less than all the nodes in the right
+                            // tree and we don't know what's in the left tree.
+                            SearchStatus::Unknown
+                        }
+                        SearchStatus::Gt => SearchStatus::Absent,
+                        other => other,
+                    }
+                }
+                SearchStatus::Gt => {
+                    // The label is greater than all the labels in the left
+                    // subtree, let's search the right subtree.
+                    match fork.1.search_label(label) {
+                        SearchStatus::Lt | SearchStatus::Gt => SearchStatus::Absent,
+                        other => other,
+                    }
+                }
+                other => other,
+            },
+            Self::Labeled(l, t) => match label.cmp(l.as_bytes()) {
+                Ordering::Equal => SearchStatus::Found(&*t),
+                Ordering::Less => SearchStatus::Lt,
+                Ordering::Greater => SearchStatus::Gt,
+            },
+            Self::Pruned(_) => SearchStatus::Unknown,
+        }
+    }
+
+    /// Finds a tree node identified by the path.  This algorithm gives results
+    /// similar to the `lookup_path` function in the public spec:
+    /// https://internetcomputer.org/docs/current/references/ic-interface-spec/#lookup
+    /// but does not allocate memory on the heap.
+    ///
+    /// This function is also more general the `lookup_path` function in the
+    /// spec because it returns a subtree, not a leaf value.
+    pub fn lookup<'a, L: AsRef<[u8]>>(&'a self, path: &[L]) -> LookupStatus<'a> {
+        let mut t = self;
+        for entry in path {
+            t = match t.search_label(entry.as_ref()) {
+                SearchStatus::Found(t) => t,
+                SearchStatus::Absent | SearchStatus::Lt | SearchStatus::Gt => {
+                    return LookupStatus::Absent
+                }
+                SearchStatus::Unknown => return LookupStatus::Unknown,
+            }
+        }
+        LookupStatus::Found(t)
     }
 
     /// Merges two trees into a tree that combines the data parts of both inputs
@@ -449,29 +557,60 @@ pub enum InvalidHashTreeError {
     LabelsNotSorted(Label),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MixedHashTreeConversionError {
+    /// The hash tree contains a non-root leaf that is not a direct child of a
+    /// labeled node.
+    UnlabeledLeaf,
+    /// Labels in the hash tree are not sorted.
+    LabelsNotSorted(Label),
+    /// The top-level node is a pruned.
+    Pruned,
+}
+
 /// Extracts the data part from a mixed hash tree by removing all forks and
 /// pruned nodes.
 impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
-    type Error = InvalidHashTreeError;
+    type Error = MixedHashTreeConversionError;
 
-    fn try_from(root: MixedHashTree) -> Result<Self, InvalidHashTreeError> {
+    fn try_from(root: MixedHashTree) -> Result<Self, Self::Error> {
+        type E = MixedHashTreeConversionError;
+
         fn collect_children(
             t: MixedHashTree,
             children: &mut FlatMap<Label, LabeledTree<Vec<u8>>>,
-        ) -> Result<(), InvalidHashTreeError> {
+        ) -> Result<(), E> {
             match t {
-                MixedHashTree::Leaf(_) => Err(InvalidHashTreeError::UnlabeledLeaf),
-                MixedHashTree::Labeled(label, subtree) => {
-                    children
-                        .try_append(label, (*subtree).try_into()?)
-                        .map_err(|(label, _)| InvalidHashTreeError::LabelsNotSorted(label))?;
-                    Ok(())
-                }
-                MixedHashTree::Fork(lr) => {
-                    collect_children(lr.0, children)?;
-                    collect_children(lr.1, children)
-                }
-                MixedHashTree::Pruned(_) | MixedHashTree::Empty => Ok(()),
+                MixedHashTree::Leaf(_) => Err(E::UnlabeledLeaf),
+                MixedHashTree::Labeled(label, subtree) => match (*subtree).try_into() {
+                    Ok(labeled_subtree) => children
+                        .try_append(label, labeled_subtree)
+                        .map_err(|(label, _)| E::LabelsNotSorted(label)),
+                    // Pruned nodes with labels are commonly used for absence proofs.
+                    Err(E::Pruned) => Ok(()),
+                    Err(e) => Err(e),
+                },
+                MixedHashTree::Fork(lr) => match (
+                    collect_children(lr.0, children),
+                    collect_children(lr.1, children),
+                ) {
+                    // We can tolerate one of the children being pruned, but not
+                    // both. This allows us to collapse weird trees like the one below:
+                    //
+                    // * - labeled L - fork --- pruned X
+                    //                      \
+                    //                       `- pruned Y
+                    (Ok(()), Ok(())) => Ok(()),
+                    (Ok(()), Err(E::Pruned)) => Ok(()),
+                    (Err(E::Pruned), Ok(())) => Ok(()),
+                    (Err(E::Pruned), Err(e)) => Err(e),
+                    (Err(e), Err(E::Pruned)) => Err(e),
+                    (Ok(()), e) => e,
+                    (e, Ok(())) => e,
+                    (e, _) => e,
+                },
+                MixedHashTree::Pruned(_) => Err(E::Pruned),
+                MixedHashTree::Empty => Ok(()),
             }
         }
 
@@ -483,9 +622,9 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
 
                 LabeledTree::SubTree(children)
             }
-            MixedHashTree::Pruned(_) | MixedHashTree::Empty => {
-                LabeledTree::SubTree(Default::default())
-            }
+
+            MixedHashTree::Pruned(_) => return Err(E::Pruned),
+            MixedHashTree::Empty => LabeledTree::SubTree(Default::default()),
         })
     }
 }

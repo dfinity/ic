@@ -76,5 +76,6 @@ rust_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["requires-network"],
     deps = [":adapter"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

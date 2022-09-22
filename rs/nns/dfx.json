@@ -7,17 +7,17 @@
       "wasm": "../target/wasm32-unknown-unknown/release/registry-canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p registry-canister"
     },
-    "tokens": {
-      "type": "custom",
-      "candid": "gtc/canister/gtc.did",
-      "wasm": "../target/wasm32-unknown-unknown/release/genesis-token-canister.wasm",
-      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-nns-gtc"
-    },
     "governance": {
       "type": "custom",
       "candid": "governance/canister/governance.did",
       "wasm": "../target/wasm32-unknown-unknown/release/governance-canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p ic-nns-governance"
+    },
+    "ledger": {
+      "type": "custom",
+      "candid": "../rosetta-api/ledger_canister/ledger.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/ledger-canister.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ledger-canister"
     },
     "root": {
       "type": "custom",
@@ -25,8 +25,23 @@
       "wasm": "../target/wasm32-unknown-unknown/release/root-canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p ic-nns-handler-root"
     },
+    "cycles-minting": {
+      "type": "custom",
+      "candid": "cmc/cmc.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/cycles-minting-canister.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p cycles-minting-canister"
+    },
     "lifeline": {
-      "candid": "handlers/lifeline/lifeline.did"
+      "type": "custom",
+      "candid": "handlers/lifeline/lifeline.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/lifeline.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p lifeline"
+    },
+    "genesis-token": {
+      "type": "custom",
+      "candid": "gtc/canister/gtc.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/genesis-token-canister.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-nns-gtc"
     },
     "sns-wasm": {
       "type": "custom",

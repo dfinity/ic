@@ -56,6 +56,17 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(7 * B);
 // with roughly 100MB of state, so we set the limit to 40x.
 const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(40 * 5 * B);
 
+// The limit on the number of instructions a slice of an `install_code` message
+// is allowed to executed.
+//
+// If deterministic time slicing is enabled, then going above this limit
+// causes the Wasm execution to pause until the next slice.
+//
+// If deterministic time slicing is disabled, then this limit is ignored and
+// `MAX_INSTRUCTIONS_PER_INSTALL_CODE` is used for execution of the
+// single slice.
+const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions = NumInstructions::new(40 * 5 * B);
+
 // The factor to bump the instruction limit for system subnets.
 const SYSTEM_SUBNET_FACTOR: u64 = 10;
 
@@ -81,6 +92,17 @@ pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 //    If you change this number please adjust other constants as well.
 const NUMBER_OF_EXECUTION_THREADS: usize = 4;
 
+/// Maximum number of concurrent long-running executions.
+/// In the worst case there will be no more than 11 running canisters during the round:
+///
+///   long installs + long updates + scheduler cores + query threads = 1 + 4 + 4 + 2 = 11
+///
+/// And no more than 7 running canisters in between the rounds:
+///
+///   long installs + long updates + query threads = 1 + 4 + 2 = 7
+///
+const MAX_PAUSED_EXECUTIONS: usize = 4;
+
 /// 10B cycles corresponds to 1 SDR cent. Assuming we can create 1 signature per
 /// second, that would come to  26k SDR per month if we spent the whole time
 /// creating signatures. At 13 nodes and 2k SDR per node per month this would
@@ -90,7 +112,13 @@ pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
-const DEFAULT_REFERENCE_SUBNET_SIZE: u128 = 13;
+const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
+
+/// Non-subsidised storage subnet size threshold.
+///
+/// Below this subnet size threshold storage cost is subsidised (~4 SRD for 1 GiB per year).
+/// Equal or above subnet size does not have storage cost subsidised.
+const FAIR_STORAGE_COST_SUBNET_SIZE: usize = 20;
 
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
@@ -98,6 +126,14 @@ pub struct SchedulerConfig {
     /// Number of canisters that the scheduler is allowed to schedule in
     /// parallel.
     pub scheduler_cores: usize,
+
+    /// Maximum number of concurrent paused long-running install updates.
+    /// After each round there might be some pending long update executions.
+    /// Pending executions above this limit will be aborted and restarted later,
+    /// once scheduled.
+    ///
+    /// Note: this number does not limit the number of queries or short executions.
+    pub max_paused_executions: usize,
 
     /// Maximum amount of instructions a single round can consume (on one
     /// thread).
@@ -124,6 +160,10 @@ pub struct SchedulerConfig {
 
     /// Maximum number of instructions an `install_code` message can consume.
     pub max_instructions_per_install_code: NumInstructions,
+
+    /// Maximum number of instructions a single slice of `install_code` message
+    /// can consume. This should not exceed `max_instructions_per_install_code`.
+    pub max_instructions_per_install_code_slice: NumInstructions,
 
     /// This specifies the upper limit on how much heap delta all the canisters
     /// together on the subnet can produce in between checkpoints. This is a
@@ -162,6 +202,7 @@ impl SchedulerConfig {
     pub fn application_subnet() -> Self {
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
+            max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
@@ -170,6 +211,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
+            max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
@@ -182,6 +224,7 @@ impl SchedulerConfig {
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
+            max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR,
@@ -190,6 +233,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code,
+            max_instructions_per_install_code_slice: max_instructions_per_install_code,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
@@ -205,6 +249,7 @@ impl SchedulerConfig {
     pub fn verified_application_subnet() -> Self {
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
+            max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
@@ -213,6 +258,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
+            max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
@@ -234,7 +280,7 @@ impl SchedulerConfig {
 pub struct CyclesAccountManagerConfig {
     /// Reference value of a subnet size that all the fees below are calculated for.
     /// Fees for a real subnet are calculated proportionally to this reference value.
-    pub reference_subnet_size: u128,
+    pub reference_subnet_size: usize,
 
     /// Fee for creating canisters on a subnet
     pub canister_creation_fee: Cycles,
@@ -261,8 +307,17 @@ pub struct CyclesAccountManagerConfig {
     /// Fee for every byte received in an ingress message.
     pub ingress_byte_reception_fee: Cycles,
 
-    /// Fee for storing a GiB of data per second.
-    pub gib_storage_per_second_fee: Cycles,
+    /// Subsidised fee for storing a GiB of data per second.
+    /// Used when `subnet_size < FAIR_STORAGE_COST_SUBNET_SIZE`.
+    /// The value is calculated for `reference_subnet_size` and has NO SCALING
+    /// according to a subnet size.
+    subsidised_gib_storage_per_second_fee: Cycles,
+
+    /// Fair (not subsidised) fee for storing a GiB of data per second.
+    /// Used when `subnet_size >= FAIR_STORAGE_COST_SUBNET_SIZE`.
+    /// The value is calculated for `reference_subnet_size` and is scaled
+    /// according to a subnet size.
+    fair_gib_storage_per_second_fee: Cycles,
 
     /// Fee for each percent of the reserved compute allocation. Note that
     /// reserved compute allocation is a scarce resource, and should be
@@ -303,7 +358,9 @@ impl CyclesAccountManagerConfig {
             ingress_message_reception_fee: Cycles::new(1_200_000),
             ingress_byte_reception_fee: Cycles::new(2_000),
             // 4 SDR per GiB per year => 4e12 Cycles per year
-            gib_storage_per_second_fee: Cycles::new(127_000),
+            subsidised_gib_storage_per_second_fee: Cycles::new(127_000),
+            // 1779 SDR per GiB per year => 1779e12 Cycles per year
+            fair_gib_storage_per_second_fee: Cycles::new(56_412_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_baseline_fee: Cycles::new(400_000_000),
@@ -323,7 +380,8 @@ impl CyclesAccountManagerConfig {
             xnet_byte_transmission_fee: Cycles::new(0),
             ingress_message_reception_fee: Cycles::new(0),
             ingress_byte_reception_fee: Cycles::new(0),
-            gib_storage_per_second_fee: Cycles::new(0),
+            subsidised_gib_storage_per_second_fee: Cycles::new(0),
+            fair_gib_storage_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
             /// The ECDSA signature fee is the fee charged when creating a
             /// signature on this subnet. The request likely came from a
@@ -334,6 +392,26 @@ impl CyclesAccountManagerConfig {
             http_request_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
         }
+    }
+
+    /// Fee for storing 1 GiB per second adjusted according to subnet size.
+    pub fn gib_storage_per_second_fee(&self, use_cost_scaling: bool, subnet_size: usize) -> Cycles {
+        match use_cost_scaling {
+            false => self.subsidised_gib_storage_per_second_fee,
+            true => {
+                if subnet_size < FAIR_STORAGE_COST_SUBNET_SIZE {
+                    self.subsidised_gib_storage_per_second_fee
+                } else {
+                    self.fair_gib_storage_per_second_fee
+                }
+            }
+        }
+    }
+
+    /// Fair storage cost subnet size threshold. Made public for tests.
+    #[doc(hidden)]
+    pub fn fair_storage_cost_subnet_size() -> usize {
+        FAIR_STORAGE_COST_SUBNET_SIZE
     }
 }
 

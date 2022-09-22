@@ -1,6 +1,6 @@
 //! Helper functionality for the tests
 
-use ic_crypto::utils::TempCryptoComponent;
+use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_tls_cert_key;
@@ -40,8 +40,12 @@ pub fn create_crypto(
     println!("create crypto {}", node_id);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
-    let (crypto, tls_pubkey_cert) =
-        TempCryptoComponent::new_with_tls_key_generation(Arc::clone(&registry) as Arc<_>, node_id);
+    let crypto = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&registry) as Arc<_>)
+        .with_node_id(node_id)
+        .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
+        .build();
+    let tls_pubkey_cert = crypto.node_tls_public_key_certificate();
     {
         let filename = format!("tls_pubkey_cert.{}", node_index);
         println!("writing {}", filename);

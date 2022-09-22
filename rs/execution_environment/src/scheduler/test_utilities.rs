@@ -20,7 +20,7 @@ use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_error_types::UserError;
-use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
+use ic_ic00_types::{CanisterInstallMode, EcdsaKeyId, InstallCodeArgs, Method, Payload};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
     RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
@@ -30,10 +30,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{
-        execution_state::{self, WasmMetadata},
-        QUEUE_INDEX_NONE,
-    },
+    canister_state::execution_state::{self, WasmMetadata},
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, ReplicatedState,
 };
@@ -50,6 +47,7 @@ use ic_test_utilities::{
     },
 };
 use ic_types::{
+    crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response},
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
@@ -104,6 +102,8 @@ pub(crate) struct SchedulerTest {
     wasm_executor: Arc<TestWasmExecutor>,
     // Registry Execution Settings.
     registry_settings: RegistryExecutionSettings,
+    // ECDSA keys.
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -154,6 +154,14 @@ impl SchedulerTest {
 
     pub fn registry_settings(&self) -> &RegistryExecutionSettings {
         &self.registry_settings
+    }
+
+    pub fn subnet_size(&self) -> usize {
+        self.registry_settings.subnet_size
+    }
+
+    pub fn use_cost_scaling(&self) -> bool {
+        self.scheduler().cycles_account_manager.use_cost_scaling()
     }
 
     /// Returns how many instructions were executed by a canister on a thread
@@ -276,7 +284,6 @@ impl SchedulerTest {
         self.state_mut()
             .subnet_queues_mut()
             .push_input(
-                QUEUE_INDEX_NONE,
                 RequestBuilder::new()
                     .sender(caller)
                     .receiver(CanisterId::ic_00())
@@ -330,7 +337,6 @@ impl SchedulerTest {
         self.state_mut()
             .subnet_queues_mut()
             .push_input(
-                QUEUE_INDEX_NONE,
                 RequestBuilder::new()
                     .sender(caller)
                     .receiver(CanisterId::ic_00())
@@ -352,7 +358,7 @@ impl SchedulerTest {
         let xnet_canister_id = self.xnet_canister_id;
         let subnet_queue = self.state_mut().subnet_queues_mut();
 
-        while let Some((_, msg)) = subnet_queue.pop_canister_output(&xnet_canister_id) {
+        while let Some(msg) = subnet_queue.pop_canister_output(&xnet_canister_id) {
             match msg {
                 RequestOrResponse::Request(request) => {
                     panic!(
@@ -388,13 +394,31 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            BTreeMap::new(),
+            self.ecdsa_subnet_public_keys.clone(),
             self.round,
             round_type,
             self.registry_settings(),
         );
         self.state = Some(state);
         self.increment_round();
+    }
+
+    /// Executes ordinary rounds until there is no more progress,
+    /// calling closure `f` after each round.
+    pub fn execute_all_with<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut Self),
+    {
+        let mut number_of_executed_slices = 0;
+        loop {
+            self.execute_round(ExecutionRoundType::OrdinaryRound);
+            f(self);
+            let prev_number_of_executed_slices = number_of_executed_slices;
+            number_of_executed_slices = self.executed_schedule().len();
+            if prev_number_of_executed_slices == number_of_executed_slices {
+                break;
+            }
+        }
     }
 
     pub fn drain_subnet_messages(
@@ -470,6 +494,7 @@ pub(crate) struct SchedulerTestBuilder {
     rate_limiting_of_heap_delta: bool,
     deterministic_time_slicing: bool,
     log: ReplicaLogger,
+    ecdsa_keys: Vec<EcdsaKeyId>,
     /// [EXC-1168] Temporary development flag to enable cost scaling according to subnet size.
     use_cost_scaling_flag: bool,
 }
@@ -498,6 +523,7 @@ impl Default for SchedulerTestBuilder {
             rate_limiting_of_heap_delta: false,
             deterministic_time_slicing: false,
             log: no_op_logger(),
+            ecdsa_keys: Vec::new(),
             use_cost_scaling_flag: false,
         }
     }
@@ -585,6 +611,12 @@ impl SchedulerTestBuilder {
         }
     }
 
+    pub fn with_ecdsa_key(self, key: EcdsaKeyId) -> Self {
+        let mut ecdsa_keys = self.ecdsa_keys;
+        ecdsa_keys.push(key);
+        Self { ecdsa_keys, ..self }
+    }
+
     pub fn build(self) -> SchedulerTest {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let first_xnet_canister = u64::MAX / 2;
@@ -620,7 +652,7 @@ impl SchedulerTestBuilder {
             self.own_subnet_id,
             config,
         );
-        cycles_account_manager.use_cost_scaling(self.use_cost_scaling_flag);
+        cycles_account_manager.set_using_cost_scaling(self.use_cost_scaling_flag);
         let cycles_account_manager = Arc::new(cycles_account_manager);
         let rate_limiting_of_instructions = if self.rate_limiting_of_instructions {
             FlagStatus::Enabled
@@ -688,6 +720,16 @@ impl SchedulerTestBuilder {
             rate_limiting_of_instructions,
             deterministic_time_slicing,
         );
+        let mut ecdsa_subnet_public_keys = BTreeMap::new();
+        for ecdsa_key in self.ecdsa_keys {
+            ecdsa_subnet_public_keys.insert(
+                ecdsa_key,
+                MasterEcdsaPublicKey {
+                    algorithm_id: AlgorithmId::EcdsaSecp256k1,
+                    public_key: b"master_ecdsa_public_key".to_vec(),
+                },
+            );
+        }
         SchedulerTest {
             state: Some(state),
             next_canister_id: 0,
@@ -698,6 +740,7 @@ impl SchedulerTestBuilder {
             scheduler,
             wasm_executor,
             registry_settings: self.registry_settings,
+            ecdsa_subnet_public_keys,
         }
     }
 }

@@ -1,6 +1,8 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
-use ic_btc_types::Network;
-use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
+use ic_btc_types::{Network, NetworkSnakeCase};
+use ic_btc_types_internal::{
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
+};
 use ic_interfaces::{
     registry::RegistryClient,
     self_validating_payload::{
@@ -20,7 +22,7 @@ use ic_types::{
     registry::RegistryClientError,
     CountBytes, Height, NumBytes, SubnetId,
 };
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use thiserror::Error;
 
 const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";
@@ -101,6 +103,16 @@ impl BitcoinPayloadBuilder {
             .map_err(|e| GetPayloadError::GetStateFailed(validation_context.certified_height, e))?
             .take();
 
+        // If there are requests from the bitcoin wasm canister, then process those.
+        if !state
+            .metadata
+            .subnet_call_context_manager
+            .bitcoin_get_successors_contexts
+            .is_empty()
+        {
+            return Ok(self.build_canister_payload(state, past_payloads, byte_limit));
+        }
+
         let bitcoin_feature = self
             .registry
             .get_features(self.subnet_id, validation_context.registry_version)
@@ -135,7 +147,7 @@ impl BitcoinPayloadBuilder {
                         continue;
                     }
 
-                    // If we're above the allowed byte_limit, stop sending more requests.
+                    // If we've reached the byte_limit, stop sending more requests.
                     if current_payload_size >= byte_limit.get() {
                         break;
                     }
@@ -193,6 +205,103 @@ impl BitcoinPayloadBuilder {
         }
     }
 
+    // Builds a payload for requests from the Bitcoin Wasm canister.
+    // Support for the bitcoin replica requests will be removed from this file once the transition
+    // to the bitcoin canister is complete (EXC-1239).
+    fn build_canister_payload(
+        &self,
+        state: Arc<ReplicatedState>,
+        past_payloads: &[&SelfValidatingPayload],
+        byte_limit: NumBytes,
+    ) -> SelfValidatingPayload {
+        let mut responses = vec![];
+        let mut current_payload_size: u64 = 0;
+
+        let past_callback_ids: BTreeSet<u64> = past_payloads
+            .iter()
+            .flat_map(|x| x.get())
+            .map(|x| x.callback_id)
+            .collect();
+
+        for (callback_id, context) in state
+            .metadata
+            .subnet_call_context_manager
+            .bitcoin_get_successors_contexts
+            .iter()
+        {
+            // We have already created a payload with the response for
+            // this callback id, so skip it.
+            if past_callback_ids.contains(&callback_id.get()) {
+                continue;
+            }
+
+            let adapter_client = match context.payload.network {
+                NetworkSnakeCase::Mainnet => &self.bitcoin_mainnet_adapter_client,
+                NetworkSnakeCase::Testnet | NetworkSnakeCase::Regtest => {
+                    &self.bitcoin_testnet_adapter_client
+                }
+            };
+
+            // Send request to the adapter.
+            let request =
+                BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(context.payload.clone());
+            let timer = Timer::start();
+            let result = adapter_client.send_request(
+                request.clone(),
+                Options {
+                    timeout: Duration::from_millis(50),
+                },
+            );
+
+            match result {
+                Ok(response_wrapper) => {
+                    self.metrics.observe_adapter_request_duration(
+                        ADAPTER_REQUEST_STATUS_SUCCESS,
+                        request.to_request_type_label(),
+                        timer,
+                    );
+
+                    if let BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r) =
+                        &response_wrapper
+                    {
+                        self.metrics
+                            .observe_blocks_per_get_successors_response(r.blocks.len());
+                    }
+
+                    let response = BitcoinAdapterResponse {
+                        response: response_wrapper,
+                        callback_id: callback_id.get(),
+                    };
+
+                    let response_size = response.count_bytes() as u64;
+                    self.metrics.observe_adapter_response_size(response_size);
+                    if response_size + current_payload_size > byte_limit.get() {
+                        // Stop if we're about to exceed the byte limit.
+                        break;
+                    }
+                    current_payload_size += response_size;
+                    responses.push(response);
+                }
+                Err(err) => {
+                    self.metrics.observe_adapter_request_duration(
+                        ADAPTER_REQUEST_STATUS_FAILURE,
+                        request.to_request_type_label(),
+                        timer,
+                    );
+                    log!(
+                        self.log,
+                        slog::Level::Error,
+                        "Sending the request with callback id {} to the adapter failed with {:?}",
+                        callback_id,
+                        err
+                    );
+                }
+            }
+        }
+
+        SelfValidatingPayload::new(responses)
+    }
+
     fn validate_self_validating_payload_impl(
         &self,
         payload: &SelfValidatingPayload,
@@ -201,35 +310,9 @@ impl BitcoinPayloadBuilder {
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
         let timer = Timer::start();
 
-        // TODO(EXC-786): Validate the payload. For now we rubberstamp all payloads as
-        // valid.
-
         // An empty block is always valid.
         if *payload == SelfValidatingPayload::default() {
             return Ok(0.into());
-        }
-
-        // Reject nonempty payloads, if the bitcoin feature is disabled in the registry
-        let bitcoin_feature = self
-            .registry
-            .get_features(self.subnet_id, validation_context.registry_version)
-            .map_err(|err| {
-                SelfValidatingPayloadValidationError::Transient(
-                    SelfValidatingTransientValidationError::GetRegistryFailed(err),
-                )
-            })?
-            .unwrap_or_default()
-            .bitcoin();
-
-        match bitcoin_feature.status {
-            BitcoinFeatureStatus::Disabled | BitcoinFeatureStatus::Paused => {
-                return Err(SelfValidatingPayloadValidationError::Permanent(
-                    InvalidSelfValidatingPayload::Disabled,
-                ));
-            }
-            BitcoinFeatureStatus::Enabled | BitcoinFeatureStatus::Syncing => {
-                // Continue with payload validation.
-            }
         }
 
         self.metrics

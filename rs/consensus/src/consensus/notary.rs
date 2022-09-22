@@ -156,7 +156,7 @@ impl Notary {
         block: &'a Block,
     ) -> Option<NotarizationShare> {
         let registry_version = pool.registry_version(block.height)?;
-        let content = NotarizationContent::new(block.height, ic_crypto::crypto_hash(block));
+        let content = NotarizationContent::new(block.height, ic_types::crypto::crypto_hash(block));
         match self
             .crypto
             .sign(&content, self.replica_config.node_id, registry_version)

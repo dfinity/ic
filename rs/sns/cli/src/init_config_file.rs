@@ -46,41 +46,44 @@ enum SubCommand {
 #[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
 pub struct SnsCliInitConfig {
     /// Fee of a transaction.
-    transaction_fee_e8s: Option<u64>,
+    pub transaction_fee_e8s: Option<u64>,
 
     /// The name of the token issued by an SNS Ledger.
-    token_name: Option<String>,
+    pub token_name: Option<String>,
 
     /// The symbol of the token issued by an SNS Ledger.
-    token_symbol: Option<String>,
+    pub token_symbol: Option<String>,
 
     /// Cost of making a proposal that is rejected.
-    proposal_reject_cost_e8s: Option<u64>,
+    pub proposal_reject_cost_e8s: Option<u64>,
 
-    /// The minimum amount a neuron needs to have staked.
-    neuron_minimum_stake_e8s: Option<u64>,
+    /// The minimum amount of SNS Token e8s an SNS Ledger account must have to stake a neuron.
+    pub neuron_minimum_stake_e8s: Option<u64>,
+
+    /// The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
+    pub neuron_minimum_dissolve_delay_to_vote_seconds: Option<u64>,
 
     /// The logo for the SNS project represented as a path to the logo file in the local filesystem.
-    logo: Option<PathBuf>,
+    pub logo: Option<PathBuf>,
 
     /// The URL to the dapp that is controlled by the SNS project.
-    url: Option<String>,
+    pub url: Option<String>,
 
     /// The name of the SNS project. This may differ from the name of the associated token.
-    name: Option<String>,
+    pub name: Option<String>,
 
     /// A description of the SNS project.
-    description: Option<String>,
+    pub description: Option<String>,
 
     /// If the swap fails, control of the dapp canister(s) will be set to these
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s).
-    fallback_controller_principal_ids: Vec<String>,
+    pub fallback_controller_principal_ids: Vec<String>,
 
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
-    initial_token_distribution: Option<InitialTokenDistribution>,
+    pub initial_token_distribution: Option<InitialTokenDistribution>,
 }
 
 impl Default for SnsCliInitConfig {
@@ -93,6 +96,8 @@ impl Default for SnsCliInitConfig {
             token_symbol: None,
             proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
             neuron_minimum_stake_e8s: nervous_system_parameters_default.neuron_minimum_stake_e8s,
+            neuron_minimum_dissolve_delay_to_vote_seconds: nervous_system_parameters_default
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
             fallback_controller_principal_ids: vec![],
             logo: None,
             url: None,
@@ -185,15 +190,20 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
     fn try_from(sns_cli_init_config: SnsCliInitConfig) -> Result<Self, Self::Error> {
         let optional_logo = match sns_cli_init_config.logo {
             None => None,
-            Some(logo_path) => Some(load_logo(&logo_path)?),
+            Some(ref logo_path) => Some(load_logo(logo_path)?),
         };
 
         Ok(SnsInitPayload {
+            sns_initialization_parameters: Some(get_config_file_contents(
+                sns_cli_init_config.clone(),
+            )),
             transaction_fee_e8s: sns_cli_init_config.transaction_fee_e8s,
             token_name: sns_cli_init_config.token_name,
             token_symbol: sns_cli_init_config.token_symbol,
             proposal_reject_cost_e8s: sns_cli_init_config.proposal_reject_cost_e8s,
             neuron_minimum_stake_e8s: sns_cli_init_config.neuron_minimum_stake_e8s,
+            neuron_minimum_dissolve_delay_to_vote_seconds: sns_cli_init_config
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
             fallback_controller_principal_ids: sns_cli_init_config
                 .fallback_controller_principal_ids,
             logo: optional_logo,
@@ -224,7 +234,7 @@ fn new(init_config_file_path: PathBuf) {
         .expect("Unable to write init config file");
 }
 
-fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
+pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
     let nervous_system_parameters_default = NervousSystemParameters::with_default_values();
     let yaml_payload = serde_yaml::to_string(&sns_cli_init_config)
         .expect("Error when converting sns_cli_init_config to yaml");
@@ -302,9 +312,10 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
 #    - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
 #
 # - developer_distribution has one field:
-#    - developer_neurons: A list of NeuronDistributions that specify the neuron's stake and
-#      controlling principal. These neurons will be available at genesis in PreInitializationSwap
-#      mode. The voting power multiplier is applied to these neurons.
+#    - developer_neurons: A list of NeuronDistributions that specify the neuron's stake,
+#      controlling principal, a unique memo, and dissolve delay. These neurons will be
+#      available at genesis in PreInitializationSwap mode. The voting power multiplier
+#      is applied to these neurons.
 #
 # - treasury_distribution has one field:
 #    - total_e8s: The total amount of tokens in the treasury bucket.
@@ -315,7 +326,7 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
 #    - initial_swap_amount_e8s: The initial amount of tokens deposited in the sale canister for
 #      the initial token sale.
 #
-# - aidrop_distribution has one field:
+# - airdrop_distribution has one field:
 #    - airdrop_neurons: A list of NeuronDistributions that specify the neuron's stake and
 #      controlling principal. These neurons will be available at genesis in PreInitializationSwap
 #      mode. No voting power multiplier is applied to these neurons.
@@ -327,8 +338,12 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
 #       developer_neurons:
 #         - controller: x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae
 #           stake_e8s: 1500000000
+#           memo: 0,
+#           dissolve_delay_seconds: 15780000 # 6 months
 #         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
 #           stake_e8s: 1500000000
+#           memo: 1,
+#           dissolve_delay_seconds: 31560000 # 1 year
 #     treasury_distribution:
 #       total_e8s: 5000000000
 #     swap_distribution:
@@ -338,6 +353,8 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
 #       airdrop_neurons:
 #         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
 #           stake_e8s: 500000000
+#           memo: 0,
+#           dissolve_delay_seconds: 15780000 # 6 months
 #"##
             .to_string(),
         ),
@@ -358,11 +375,23 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
             Regex::new(r"neuron_minimum_stake_e8s*").unwrap(),
             format!(
                 r##"#
-# The minimum amount of e8s a neuron needs to have staked.
+# The minimum amount of SNS Token e8s an SNS Ledger account must have to stake a neuron.
 # Default value = {}
 #"##,
                 nervous_system_parameters_default
                     .neuron_minimum_stake_e8s
+                    .unwrap(),
+            ),
+        ),
+        (
+            Regex::new(r"neuron_minimum_dissolve_delay_to_vote_seconds*").unwrap(),
+            format!(
+                r##"#
+# The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
+# Default value = {}
+#"##,
+                nervous_system_parameters_default
+                    .neuron_minimum_dissolve_delay_to_vote_seconds
                     .unwrap(),
             ),
         ),
@@ -461,6 +490,7 @@ fn validate(init_config_file: PathBuf) {
 #[cfg(test)]
 mod test {
     use crate::init_config_file::{get_config_file_contents, SnsCliInitConfig};
+    use ic_sns_governance::types::ONE_MONTH_SECONDS;
     use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower as FDVP;
     use ic_sns_init::pb::v1::{FractionalDeveloperVotingPower, SnsInitPayload};
     use std::convert::TryFrom;
@@ -479,6 +509,7 @@ mod test {
                 token_symbol: Some("SNS".to_string()),
                 proposal_reject_cost_e8s: Some(2),
                 neuron_minimum_stake_e8s: Some(3),
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
                 fallback_controller_principal_ids: vec![
                     "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe".to_string(),
                 ],
@@ -515,12 +546,15 @@ token_name: Bitcoin
 token_symbol: BTC
 proposal_reject_cost_e8s: 100000000
 neuron_minimum_stake_e8s: 100000000
+neuron_minimum_dissolve_delay_to_vote_seconds: 15780000
 initial_token_distribution:
   FractionalDeveloperVotingPower:
     developer_distribution:
       developer_neurons:
         - controller: x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae
           stake_e8s: 1500000000
+          memo: 0
+          dissolve_delay_seconds: 15780000
     treasury_distribution:
       total_e8s: 5000000000
     swap_distribution:
@@ -530,6 +564,8 @@ initial_token_distribution:
       airdrop_neurons:
         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
           stake_e8s: 500000000
+          memo: 0
+          dissolve_delay_seconds: 15780000
 
 fallback_controller_principal_ids: [fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe]
 logo: {}
@@ -537,10 +573,20 @@ description: Launching an SNS
 name: ServiceNervousSystemTest
 url: https://internetcomputer.org/
         "#,
-            logo_path.into_os_string().into_string().unwrap()
+            logo_path.clone().into_os_string().into_string().unwrap()
         );
         let resulting_payload: SnsCliInitConfig = serde_yaml::from_str(&file_contents).unwrap();
         assert!(resulting_payload.validate().is_ok());
+
+        let sns_init_payload = SnsInitPayload::try_from(resulting_payload.clone())
+            .expect("Expected to be able to convert");
+        assert_eq!(
+            serde_yaml::from_str::<SnsCliInitConfig>(
+                &sns_init_payload.sns_initialization_parameters.unwrap()
+            )
+            .unwrap(),
+            resulting_payload
+        );
 
         // We add a string repeating the field "name", this should fail
         let mut file_contents = file_contents;
@@ -562,6 +608,10 @@ url: https://internetcomputer.org/
         };
 
         assert_eq!(
+            get_config_file_contents(sns_cli_init_config.clone()),
+            sns_init_payload.sns_initialization_parameters.unwrap()
+        );
+        assert_eq!(
             sns_cli_init_config.transaction_fee_e8s,
             sns_init_payload.transaction_fee_e8s
         );
@@ -577,6 +627,10 @@ url: https://internetcomputer.org/
         assert_eq!(
             sns_cli_init_config.neuron_minimum_stake_e8s,
             sns_init_payload.neuron_minimum_stake_e8s
+        );
+        assert_eq!(
+            sns_cli_init_config.neuron_minimum_dissolve_delay_to_vote_seconds,
+            sns_init_payload.neuron_minimum_dissolve_delay_to_vote_seconds
         );
         assert_eq!(
             sns_cli_init_config.fallback_controller_principal_ids,

@@ -4,6 +4,7 @@ Purpose: Measure IC performance give a complex workload.
 
 The workload configuration to use is being read from a seperate workload description file.
 """
+import json
 import os
 import shutil
 import sys
@@ -26,6 +27,15 @@ gflags.DEFINE_integer("increment_rps", 50, "Increment of requests per second per
 gflags.DEFINE_integer(
     "max_rps", 40000, "Maximum requests per second to be sent. Experiment will wrap up beyond this number."
 )
+
+NUM_MACHINES_PER_WORKLOAD = 1  # TODO - make configurable in toml
+
+
+class BytesEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, bytes):
+            return obj.decode("utf-8")
+        return json.JSONEncoder.default(self, obj)
 
 
 class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
@@ -54,12 +64,10 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         f_stderr = os.path.join(self.iter_outdir, "workload-generator-{}.stderr.txt")
 
         results = {}
-        threads = []
+        threads = []  # Array of type: [workload.Workload]
         curr_workload_generator_index = 0
-        NUM_MACHINES_PER_WORKLOAD = 1  # TODO - make configurable in toml
         for wl in self.workload_description:
             print(wl)
-            timeout = max(2 * wl.duration, 300)
             rps = int(config["load_total"] * wl.rps_ratio)
             if wl.rps < 0:
                 wl = wl._replace(rps=rps)
@@ -78,40 +86,35 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                 load_generators,
                 self.target_nodes,
                 wl,
+                self.iter_outdir,
                 f_stdout,
                 f_stderr,
-                timeout,
             )
-            commands, _ = load.get_commands()
-            n = 0
-            while True:
-                n += 1
-                try:
-                    filename = os.path.join(self.iter_outdir, f"workload-generator-cmd-{n}")
-                    # Try to open file in exclusive mode
-                    with open(filename, "x") as cmd_file:
-                        for cmd in commands:
-                            cmd_file.write(cmd + "\n")
-                    break
-                except FileExistsError:
-                    print("Failed to open - file already exists")
-
             load.start()
             threads.append(load)
 
         all_destinations = []
+        # dictionary of type: dict[str] = (workload.Workload, str)
+        workload_command_summary_map = {}
         for num, thread in enumerate(threads):
+            thread: workload.Workload = thread
             thread.join()
-            destinations = [
-                "{}/summary_workload_{}_{}_machine_{}".format(
-                    self.iter_outdir, num, idx, load_generator.replace(":", "_")
-                )
-                for idx, load_generator in enumerate(thread.load_generators)
-            ]
-            thread.fetch_results(destinations, self.iter_outdir)
+            commands = thread.get_commands()
+            destinations = thread.fetch_results()
+            assert len(commands) == len(destinations) == len(thread.uuids)
+            for command, destination, uid in zip(commands, destinations, thread.uuids):
+                workload_command_summary_map[str(uid)] = {
+                    "command": command,
+                    "workload_description": json.dumps(thread.workload, cls=BytesEncoder, indent=4),
+                    "summary_file": destination,
+                }
+
             print("Evaluating results from machines: {}".format(destinations))
             all_destinations += destinations
             results[num] = report.evaluate_summaries(destinations)
+
+        with open(os.path.join(self.iter_outdir, "workload_command_summary_map.json"), "x") as map_file:
+            map_file.write(json.dumps(workload_command_summary_map, cls=BytesEncoder, indent=4))
 
         aggregated = report.evaluate_summaries(all_destinations)
         return (results, aggregated)

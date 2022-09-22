@@ -18,6 +18,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::pb::v1::manage_neuron::ChangeAutoStakeMaturity;
 #[cfg(feature = "test")]
 use ic_nns_governance::{
     governance::governance_minting_account,
@@ -4914,6 +4915,7 @@ fn test_merge_neurons_small(
 #[test]
 fn test_merge_neurons_normal(
     n1_stake in 0u64..500_000_000,
+
     n1_maturity in 0u64..500_000_000,
     n1_fees in 0u64..20_000,
     n1_dissolve in 0u64..MAX_DISSOLVE_DELAY_SECONDS,
@@ -5543,6 +5545,140 @@ fn test_neuron_with_non_self_authenticating_controller_cannot_be_spawned() {
         result,
         Err(GovernanceError{ error_type: code, error_message: msg })
             if code == PreconditionFailed as i32 && msg.contains("must be self-authenticating"));
+}
+
+#[test]
+fn test_staked_maturity() {
+    let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    // Compute the subaccount to which the transfer would have been made
+    let nonce = 1234u64;
+
+    let block_height = 543212234;
+    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let neuron_stake_e8s = 10 * 100_000_000; // 10 ICP
+
+    let (mut driver, mut gov, id, _to_subaccount) = governance_with_staked_neuron(
+        dissolve_delay_seconds,
+        neuron_stake_e8s,
+        block_height,
+        from,
+        nonce,
+    );
+
+    {
+        let neuron = gov.proto.neurons.get_mut(&id.id).unwrap();
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+        assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
+
+        // Configure the neuron to auto-stake any future maturity.
+        neuron
+            .configure(
+                &from,
+                driver.now(),
+                &Configure {
+                    operation: Some(Operation::ChangeAutoStakeMaturity(
+                        ChangeAutoStakeMaturity {
+                            requested_setting_for_auto_stake_maturity: true,
+                        },
+                    )),
+                },
+            )
+            .unwrap();
+    }
+
+    // Now make a proposal and have it be accepted.
+    let _ = match gov
+        .manage_neuron(
+            &from,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id.clone())),
+                command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                    title: Some("Dummy governance proposal".to_string()),
+                    summary: "".to_string(),
+                    url: "".to_string(),
+                    action: Some(proposal::Action::Motion(Motion {
+                        motion_text: "".to_string(),
+                    })),
+                }))),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .expect("Couldn't submit proposal.")
+        .command
+        .unwrap()
+    {
+        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        _ => panic!("Invalid response"),
+    };
+
+    // Advance time by 5 days and run periodic tasks so that the neuron is granted (staked) maturity.
+    driver.advance_time_by(5 * 24 * 3600);
+    gov.run_periodic_tasks().now_or_never();
+
+    let neuron = gov.proto.neurons.get_mut(&id.id).unwrap().clone();
+    assert!(neuron.staked_maturity_e8s_equivalent.is_some());
+    // Neuron should get the maturity equivalent of 5 days as staked maturity.
+    assert_eq!(
+        neuron.staked_maturity_e8s_equivalent.unwrap(),
+        54719555847781u64
+    );
+    assert_eq!(neuron.maturity_e8s_equivalent, 0);
+
+    // Try to spawn, should fail, since there's no regular maturity.
+    match gov
+        .manage_neuron(
+            &from,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id.clone())),
+                command: Some(manage_neuron::Command::Spawn(Spawn {
+                    new_controller: None,
+                    nonce: None,
+                    percentage_to_spawn: None,
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .command
+        .unwrap()
+    {
+        manage_neuron_response::Command::Error(e) => {
+            e.error_message.contains("There isn't enough maturity")
+        }
+        _ => panic!("Invalid response"),
+    };
+
+    // Nowset the neuron to dissolve and advance time
+    {
+        let neuron = gov.proto.neurons.get_mut(&id.id).unwrap();
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+        assert_eq!(
+            neuron.staked_maturity_e8s_equivalent,
+            Some(54719555847781u64)
+        );
+
+        // Configure the neuron to auto-stake any future maturity.
+        neuron
+            .configure(
+                &from,
+                driver.now(),
+                &Configure {
+                    operation: Some(Operation::StartDissolving(StartDissolving {})),
+                },
+            )
+            .unwrap();
+    }
+
+    driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS);
+    gov.run_periodic_tasks().now_or_never();
+
+    // All the maturity should now be regular maturity
+    let neuron = gov.proto.neurons.get_mut(&id.id).unwrap();
+    assert_eq!(neuron.maturity_e8s_equivalent, 54719555847781u64);
+    assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
 }
 
 #[test]
@@ -10570,7 +10706,8 @@ fn test_open_sns_token_swap_proposal() {
             method_name: "open",
             request: Encode!(&sns_swap_pb::OpenRequest {
                 params: Some(params.clone()),
-                cf_participants,
+                cf_participants: cf_participants.clone(),
+                open_sns_token_swap_proposal_id: Some(1),
             })
             .unwrap(),
         },
@@ -10628,6 +10765,11 @@ fn test_open_sns_token_swap_proposal() {
         proposal.executed_timestamp_seconds, DEFAULT_TEST_START_TIMESTAMP_SECONDS,
         "{:#?}",
         proposal
+    );
+    assert_eq!(proposal.cf_participants, cf_participants);
+    assert_eq!(
+        proposal.sns_token_swap_lifecycle,
+        Some(sns_swap_pb::Lifecycle::Open as i32)
     );
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);

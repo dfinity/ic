@@ -37,6 +37,7 @@ use candid::Decode;
 use ic_btc_types::Network;
 use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
+use ic_types::Height;
 use ic_universal_canister::{management, wasm};
 use slog::info;
 use std::{
@@ -93,6 +94,7 @@ docker run  --name=bitcoind-node -d \
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(10))
                 .with_features(SubnetFeatures {
                     bitcoin: Some(BitcoinFeature {
                         network: Network::Regtest,
@@ -111,13 +113,13 @@ fn get_bitcoind_log(env: &TestEnv) {
         let r = {
             let universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
 
-            // Give log file user permisison to copy it from the host.
+            // Give log file user permission to copy it from the host.
             universal_vm.block_on_bash_script(
                 ADMIN,
                 "sudo chown -R $(id -u):$(id -g) /tmp/regtest/debug.log",
             )?;
 
-            // log file is mapped from docker contrainer to tmp directory
+            // Log file is mapped from docker container to tmp directory.
             let session = universal_vm.block_on_ssh_session(ADMIN).unwrap();
             let (mut remote_file, _) = session.scp_recv(Path::new("/tmp/regtest/debug.log"))?;
 

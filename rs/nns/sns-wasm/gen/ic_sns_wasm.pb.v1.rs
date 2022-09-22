@@ -14,6 +14,8 @@ pub struct StableCanisterState {
     pub upgrade_path: ::core::option::Option<UpgradePath>,
     #[prost(bool, tag = "5")]
     pub access_controls_enabled: bool,
+    #[prost(message, repeated, tag = "6")]
+    pub allowed_principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
 /// Details the offset and size of a WASM binary in stable memory and the hash of this binary.
 #[derive(
@@ -225,6 +227,25 @@ pub struct GetNextSnsVersionRequest {
 pub struct GetNextSnsVersionResponse {
     #[prost(message, optional, tag = "1")]
     pub next_version: ::core::option::Option<SnsVersion>,
+}
+/// The request type accepted by update_allowed_principals.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct UpdateAllowedPrincipalsRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub add: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "2")]
+    pub remove: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
+/// The response type returned by update_allowed_principals.
+/// Returns the allowed principals after the update.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct UpdateAllowedPrincipalsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub allowed_principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
 /// The type of canister a particular WASM is intended to be installed on.
 #[derive(

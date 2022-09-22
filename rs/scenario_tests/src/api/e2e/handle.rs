@@ -1,7 +1,6 @@
 use crate::api::e2e::testnet::{Testnet, TestnetT};
 use crate::api::handle::{Ic, Node, Subnet};
 use canister_test::*;
-use ed25519_dalek::{Keypair, PublicKey, SecretKey};
 use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_crypto_internal_types::sign::eddsa::ed25519::{
     PublicKey as InternalPublicKey, SecretKey as InternalSecretKey,
@@ -125,27 +124,27 @@ pub(crate) struct IcInnerHandle {
     agent_client: HttpClient,
 
     // The keypair corresponding to the principal that is used for calling into the IC
-    caller_principal: (Keypair, PrincipalId),
+    caller_principal: (ic_canister_client::Ed25519KeyPair, PrincipalId),
 }
 
 impl IcInnerHandle {
     pub fn from_testnet(testnet: Testnet) -> Self {
-        Self::from_testnet_with_principal(testnet, &ic_test_identity::TEST_IDENTITY_KEYPAIR)
+        Self::from_testnet_with_principal(testnet, *ic_test_identity::TEST_IDENTITY_KEYPAIR)
     }
 
-    fn from_testnet_with_principal(testnet: Testnet, caller_principal: &Keypair) -> Self {
+    fn from_testnet_with_principal(
+        testnet: Testnet,
+        caller_principal: ic_canister_client::Ed25519KeyPair,
+    ) -> Self {
         let principal_id = PrincipalId::new_self_authenticating(
-            InternalPublicKey(caller_principal.public.to_bytes())
+            InternalPublicKey(caller_principal.public_key)
                 .to_der()
                 .as_slice(),
         );
         Self {
             testnet,
             agent_client: HttpClient::new(),
-            caller_principal: (
-                Keypair::from_bytes(&caller_principal.to_bytes()).unwrap(),
-                principal_id,
-            ),
+            caller_principal: (caller_principal, principal_id),
         }
     }
 
@@ -156,14 +155,12 @@ impl IcInnerHandle {
         ));
         let (secret_key, public_key) =
             InternalSecretKey::from_pem(&key_file).expect("Invalid secret key.");
-        let secret_bytes = secret_key.as_bytes();
-        let public_bytes = public_key.as_bytes();
 
         Self::from_testnet_with_principal(
             testnet,
-            &Keypair {
-                secret: SecretKey::from_bytes(secret_bytes).unwrap(),
-                public: PublicKey::from_bytes(public_bytes).unwrap(),
+            ic_canister_client::Ed25519KeyPair {
+                secret_key: secret_key.0,
+                public_key: public_key.0,
             },
         )
     }

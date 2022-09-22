@@ -159,7 +159,7 @@ impl From<&Batch> for BatchStats {
             batch_height: batch.batch_number.get(),
             ingress_messages_delivered: batch.payload.ingress.message_count(),
             ingress_message_bytes_delivered: batch.payload.ingress.count_bytes(),
-            xnet_bytes_delivered: batch.payload.xnet.count_bytes(),
+            xnet_bytes_delivered: batch.payload.xnet.size_bytes(),
             ingress_ids: batch.payload.ingress.message_ids(),
             canister_http_success_delivered: batch.payload.canister_http.responses.len(),
             canister_http_timeouts_delivered: batch.payload.canister_http.timeouts.len(),
@@ -376,7 +376,7 @@ pub struct PayloadBuilderMetrics {
     pub past_payloads_length: Histogram,
 
     /// Critical error for payloads above the maximum supported size
-    pub cricital_error_payload_too_large: IntCounter,
+    pub critical_error_payload_too_large: IntCounter,
 
     /// Critical error for newly created payloads that do not pass their own validation function
     pub critical_error_validation_not_passed: IntCounter,
@@ -407,7 +407,7 @@ impl PayloadBuilderMetrics {
                 "The length of past_payloads in payload selection",
                 linear_buckets(0.0, 1.0, 6),
             ),
-            cricital_error_payload_too_large: metrics_registry
+            critical_error_payload_too_large: metrics_registry
                 .error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE),
             critical_error_validation_not_passed: metrics_registry
                 .error_counter(CRITICAL_ERROR_VALIDATION_NOT_PASSED),

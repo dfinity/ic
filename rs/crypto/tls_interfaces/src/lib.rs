@@ -167,8 +167,6 @@ pub enum TlsServerHandshakeError {
     HandshakeError {
         internal_error: String,
     },
-    ClientNotAllowed(PeerNotAllowedError),
-    UnauthenticatedClient,
 }
 
 impl Display for TlsServerHandshakeError {
@@ -200,22 +198,6 @@ impl From<MalformedPeerCertificateError> for TlsServerHandshakeError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// Errors from a TLS handshake due to an unauthorized peer
-pub enum PeerNotAllowedError {
-    /// Validation of claimed identity against authorized identities failed.
-    HandshakeCertificateNodeIdNotAllowed,
-    /// Peer's certificate offered during the handshake
-    /// doesn't match the trusted certificate.
-    CertificatesDiffer,
-}
-
-impl From<PeerNotAllowedError> for TlsServerHandshakeError {
-    fn from(peer_not_allowed_error: PeerNotAllowedError) -> Self {
-        TlsServerHandshakeError::ClientNotAllowed(peer_not_allowed_error)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 /// Errors from a TLS handshake performed as the client. Please refer to the
 /// `TlsHandshake` method for detailed error variant descriptions.
 pub enum TlsClientHandshakeError {
@@ -228,16 +210,9 @@ pub enum TlsClientHandshakeError {
         internal_error: String,
     },
     MalformedServerCertificate(MalformedPeerCertificateError),
-    CreateConnectorError {
-        description: String,
-        client_cert_der: Option<Vec<u8>>,
-        server_cert_der: Option<Vec<u8>>,
-        internal_error: String,
-    },
     HandshakeError {
         internal_error: String,
     },
-    ServerNotAllowed(PeerNotAllowedError),
 }
 
 impl Display for TlsClientHandshakeError {
@@ -251,12 +226,6 @@ impl std::error::Error for TlsClientHandshakeError {}
 impl From<MalformedPeerCertificateError> for TlsClientHandshakeError {
     fn from(malformed_peer_cert_error: MalformedPeerCertificateError) -> Self {
         TlsClientHandshakeError::MalformedServerCertificate(malformed_peer_cert_error)
-    }
-}
-
-impl From<PeerNotAllowedError> for TlsClientHandshakeError {
-    fn from(peer_not_allowed_error: PeerNotAllowedError) -> Self {
-        TlsClientHandshakeError::ServerNotAllowed(peer_not_allowed_error)
     }
 }
 
@@ -426,17 +395,14 @@ pub trait TlsHandshake {
     /// * TlsServerHandshakeError::MalformedSelfCertificate if the node's own
     ///   server certificate is malformed.
     /// * TlsServerHandshakeError::MalformedClientCertificate if a client
-    ///   certificate corresponding to an client in `allowed_clients` is
+    ///   certificate corresponding to a client in `allowed_clients` is
     ///   malformed.
     /// * TlsServerHandshakeError::HandshakeError if there is an error during
-    ///   the TLS handshake, or the handshake fails.
-    /// * TlsServerHandshakeError::ClientNotAllowed if the node_id in the
+    ///   the TLS handshake, or the handshake fails, e.g., if the node_id in the
     ///   subject CN of the client's certificate presented in the handshake is
     ///   not in `allowed_clients`, or if the client's certificate presented in
     ///   the handshake does not exactly match the client's certificate in the
     ///   registry.
-    /// * TlsServerHandshakeError::UnauthenticatedClient if the client did not
-    ///   authenticate using a client certificate.
     ///
     /// # Panics
     /// * If the secret key corresponding to the server certificate cannot be
@@ -515,11 +481,8 @@ pub trait TlsHandshake {
     /// * TlsClientHandshakeError::MalformedServerCertificate if the server
     ///   certificate obtained from the registry (as specified by `server)` is
     ///   malformed.
-    /// * TlsClientHandshakeError::CreateConnectorError if there is a problem
-    ///   configuring the TLS client for connecting to the `server`.
-    /// * TlsServerHandshakeError::HandshakeError if there is an error during
-    ///   the TLS handshake, or the handshake fails.
-    /// * TlsClientHandshakeError::ServerNotAllowed if the node_id in the
+    /// * TlsClientHandshakeError::HandshakeError if there is an error during
+    ///   the TLS handshake, or the handshake fails, e.g., if the node_id in the
     ///   subject CN of the server's certificate presented in the handshake does
     ///   not equal `server`, or if the server's certificate presented in the
     ///   handshake does not exactly match the `server`'s certificate in the

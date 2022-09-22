@@ -2,7 +2,7 @@ use candid::CandidType;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
-    AccountIdentifier, BlockHeight, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use serde::{Deserialize, Serialize};
 
@@ -16,21 +16,22 @@ pub struct CyclesCanisterInitPayload {
     pub ledger_canister_id: CanisterId,
     pub governance_canister_id: CanisterId,
     pub minting_account_id: Option<AccountIdentifier>,
-    pub last_purged_notification: Option<BlockHeight>,
+    pub last_purged_notification: Option<BlockIndex>,
 }
 
 /// Argument taken by top up notification endpoint
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct NotifyTopUp {
-    pub block_index: BlockHeight,
+    pub block_index: BlockIndex,
     pub canister_id: CanisterId,
 }
 
 /// Argument taken by create canister notification endpoint
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct NotifyCreateCanister {
-    pub block_index: BlockHeight,
+    pub block_index: BlockIndex,
     pub controller: PrincipalId,
+    pub subnet_type: Option<String>,
 }
 
 /// Error for notify endpoints
@@ -38,10 +39,10 @@ pub struct NotifyCreateCanister {
 pub enum NotifyError {
     Refunded {
         reason: String,
-        block_index: Option<BlockHeight>,
+        block_index: Option<BlockIndex>,
     },
     InvalidTransaction(String),
-    TransactionTooOld(BlockHeight),
+    TransactionTooOld(BlockIndex),
     Processing,
     Other {
         error_code: u64,
@@ -139,11 +140,11 @@ pub fn top_up_canister_txn(
 
 /// The result of create_canister transaction notification. In case of
 /// an error, contains the index of the refund block.
-pub type CreateCanisterResult = Result<CanisterId, (String, Option<BlockHeight>)>;
+pub type CreateCanisterResult = Result<CanisterId, (String, Option<BlockIndex>)>;
 
 /// The result of top_up_canister transaction notification. In case of
 /// an error, contains the index of the refund block.
-pub type TopUpCanisterResult = Result<(), (String, Option<BlockHeight>)>;
+pub type TopUpCanisterResult = Result<(), (String, Option<BlockIndex>)>;
 
 pub struct TokensToCycles {
     /// Number of 1/10,000ths of XDR that 1 ICP is worth.
@@ -173,6 +174,119 @@ pub struct SetAuthorizedSubnetworkListArgs {
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct RemoveSubnetFromAuthorizedSubnetListArgs {
     pub subnet: SubnetId,
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum UpdateSubnetTypeArgs {
+    Add(String),
+    Remove(String),
+}
+
+/// Errors that can happen when attempting to update an available subnet type.
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum UpdateSubnetTypeError {
+    Duplicate(String),
+    TypeDoesNotExist(String),
+    TypeHasAssignedSubnets((String, Vec<SubnetId>)),
+}
+
+impl std::fmt::Display for UpdateSubnetTypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Duplicate(subnet_type) => {
+                write!(f, "Cannot add duplicate subnet type {}.", subnet_type)
+            }
+            Self::TypeDoesNotExist(subnet_type) => {
+                write!(
+                    f,
+                    "The subnet type provided {} does not exist and cannot be removed.",
+                    subnet_type
+                )
+            }
+            Self::TypeHasAssignedSubnets((subnet_type, subnet_ids)) => {
+                write!(
+                    f,
+                    "The subnet type provided {} has the following assigned subnets {:?} and cannot be removed.",
+                    subnet_type,
+                    subnet_ids
+                )
+            }
+        }
+    }
+}
+
+/// The result to a call to `update_subnet_type`.
+pub type UpdateSubnetTypeResult = Result<(), UpdateSubnetTypeError>;
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct SubnetListWithType {
+    pub subnets: Vec<SubnetId>,
+    pub subnet_type: String,
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum ChangeSubnetTypeAssignmentArgs {
+    Add(SubnetListWithType),
+    Remove(SubnetListWithType),
+}
+
+/// Errors that can happen when attempting to change the assignment of a list of
+///  subnets to a subnet type.
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum ChangeSubnetTypeAssignmentError {
+    /// The provided type does not exist.
+    TypeDoesNotExist(String),
+    /// Some of the provided subnets are already assigned to another type.
+    SubnetsAreAssigned(Vec<SubnetListWithType>),
+    /// Some of the provided subnets are already in the authorized or default
+    /// subnets list maintained by CMC and cannot be assigned a type.
+    SubnetsAreAuthorized(Vec<SubnetId>),
+    /// Some of the provided subnets that were submitted to be removed from a
+    /// type are not currently assigned to the type.
+    SubnetsAreNotAssigned(SubnetListWithType),
+}
+
+impl std::fmt::Display for ChangeSubnetTypeAssignmentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TypeDoesNotExist(subnet_type) => {
+                write!(
+                    f,
+                    "Cannot add subnets to the subnet type {} as this subnet type does not exist.",
+                    subnet_type
+                )
+            }
+            Self::SubnetsAreAssigned(subnets_with_type) => {
+                write!(
+                    f,
+                    "Some of the provided subnets are already assigned to a type {:?}.",
+                    subnets_with_type
+                )
+            }
+            Self::SubnetsAreAuthorized(subnet_ids) => {
+                write!(
+                    f,
+                    "The provided subnets {:?} are authorized for public access and cannot be assigned a type.",
+                    subnet_ids
+                )
+            }
+            Self::SubnetsAreNotAssigned(subnets_with_type) => {
+                write!(
+                    f,
+                    "The provided subnets are not assigned to a type {:?}.",
+                    subnets_with_type
+                )
+            }
+        }
+    }
+}
+
+/// The result to a call to `change_subnet_type_assignment`.
+pub type ChangeSubnetTypeAssignmentResult = Result<(), ChangeSubnetTypeAssignmentError>;
+
+#[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
+pub struct SubnetTypesToSubnetsResponse {
+    pub data: Vec<(String, Vec<SubnetId>)>,
 }
 
 #[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]

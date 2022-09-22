@@ -1,28 +1,33 @@
 // This module defines how response callbacks are executed.
 // See https://smartcontracts.org/docs/interface-spec/index.html#_callback_invocation.
 
-use crate::execution_environment::{
-    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
-};
+use std::sync::Arc;
+
+use prometheus::IntCounter;
+
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::messages::CanisterInputMessage;
+use ic_logger::error;
 use ic_replicated_state::{CallOrigin, CanisterState};
+use ic_sys::PAGE_SIZE;
+use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallContextId, CallbackId, Payload, Response};
+use ic_types::methods::{Callback, FuncRef, WasmClosure};
+use ic_types::Cycles;
 use ic_types::{NumBytes, NumInstructions, Time};
 
 use crate::execution::common;
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, update_round_limits,
 };
-use ic_interfaces::execution_environment::HypervisorError;
-use ic_logger::error;
-use ic_sys::PAGE_SIZE;
-use ic_system_api::{ApiType, ExecutionParameters};
-use ic_types::methods::{Callback, FuncRef, WasmClosure};
-use ic_types::Cycles;
-use prometheus::IntCounter;
-use std::sync::Arc;
+use crate::execution_environment::{
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
+};
+
+#[cfg(test)]
+mod tests;
 
 /// The algorithm for executing the response callback works with two canisters:
 /// - `clean_canister`: the canister state from the current replicated state

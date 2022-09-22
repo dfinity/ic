@@ -152,7 +152,7 @@ impl CanisterHttpPoolManagerImpl {
                     None
                 } else {
                     Some(CanisterHttpChangeAction::RemoveValidated(
-                        ic_crypto_hash::crypto_hash(share),
+                        ic_types::crypto::crypto_hash(share),
                     ))
                 }
             })
@@ -164,7 +164,7 @@ impl CanisterHttpPoolManagerImpl {
                             None
                         } else {
                             Some(CanisterHttpChangeAction::RemoveUnvalidated(
-                                ic_crypto_hash::crypto_hash(share),
+                                ic_types::crypto::crypto_hash(share),
                             ))
                         }
                     }),
@@ -276,7 +276,7 @@ impl CanisterHttpPoolManagerImpl {
                         id: response.id,
                         timeout: response.timeout,
                         registry_version,
-                        content_hash: ic_crypto_hash::crypto_hash(&response),
+                        content_hash: ic_types::crypto::crypto_hash(&response),
                     };
                     let signature = if let Ok(signature) = self
                         .crypto
@@ -349,7 +349,7 @@ impl CanisterHttpPoolManagerImpl {
                     .ok()?;
                 if !node_is_in_committee {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
-                        ic_crypto::crypto_hash(share),
+                        ic_types::crypto::crypto_hash(share),
                         "Share signed by node that is not a member of the canister http committee"
                             .to_string(),
                     ));
@@ -360,13 +360,13 @@ impl CanisterHttpPoolManagerImpl {
 
                     self.metrics.shares_marked_invalid.inc();
                     Some(CanisterHttpChangeAction::HandleInvalid(
-                        ic_crypto::crypto_hash(share),
+                        ic_types::crypto::crypto_hash(share),
                         format!("Unable to verify signature of share, {}", err),
                     ))
                 } else {
                     self.metrics.shares_validated.inc();
                     Some(CanisterHttpChangeAction::MoveToValidated(
-                        ic_crypto::crypto_hash(share),
+                        ic_types::crypto::crypto_hash(share),
                     ))
                 }
             })

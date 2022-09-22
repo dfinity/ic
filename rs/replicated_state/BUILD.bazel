@@ -45,6 +45,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "@crate_index//:criterion",
     "@crate_index//:proptest",
+    "@crate_index//:prost",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde_cbor",
 ]

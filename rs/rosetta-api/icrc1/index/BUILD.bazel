@@ -1,0 +1,84 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/monitoring/metrics_encoder",
+    "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/icrc1/ledger",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_http_metrics",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:num-traits",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
+]
+
+rust_library(
+    name = "index",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "ic_icrc1_index",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "index_canister_raw",
+    srcs = ["src/main.rs"],
+    crate_name = "ic_icrc1_index_canister",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":index"] + DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "index_canister",
+    wasm = ":index_canister_raw",
+)
+
+rust_test(
+    name = "index_crate_test",
+    crate = ":index",
+    deps = DEPENDENCIES + [
+        "@crate_index//:proptest",
+    ],
+)
+
+rust_test(
+    name = "index_test",
+    srcs = ["tests/tests.rs"],
+    data = [
+        ":index_canister.wasm",
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
+    ],
+    edition = "2018",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/index",
+        "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath :index_canister.wasm)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
+    },
+    deps = [
+        ":index",
+        "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/icrc1/ledger",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:num-traits",
+        "@crate_index//:proptest",
+    ],
+)

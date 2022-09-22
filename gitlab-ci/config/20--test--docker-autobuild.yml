@@ -65,7 +65,7 @@ docker-autobuild-protected:
 
 docker-autobuild:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .rules-prs-dockerfile-changes
   needs: []
   stage: test

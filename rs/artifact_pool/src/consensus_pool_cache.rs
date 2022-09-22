@@ -376,7 +376,8 @@ mod test {
     use super::*;
     use ic_consensus_message::ConsensusMessageHashable;
     use ic_ic00_types::EcdsaKeyId;
-    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
+    use ic_interfaces::consensus_pool::HEIGHT_CONSIDERED_BEHIND;
+    use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities::{
         consensus::fake::*,
         crypto::CryptoReturningOk,
@@ -486,6 +487,53 @@ mod test {
             assert_eq!(consensus_cache.catch_up_package(), catch_up_package);
             assert_eq!(consensus_cache.finalized_block().height(), Height::from(4));
             check_finalized_chain(&consensus_cache, &[Height::from(4)]);
+        })
+    }
+
+    /// Tests that `is_replica_behind` (trait method of [`ConsensusPoolCache`]) works as expected
+    #[test]
+    fn test_is_replica_behind() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_records = vec![(
+                1,
+                SubnetRecordBuilder::from(&[node_test_id(0)])
+                    .with_dkg_interval_length(3)
+                    .build(),
+            )];
+
+            let mut pool = TestConsensusPool::new(
+                subnet_test_id(1),
+                pool_config,
+                FastForwardTimeSource::new(),
+                setup_registry(subnet_test_id(1), subnet_records),
+                Arc::new(CryptoReturningOk::default()),
+                Arc::new(FakeStateManager::new()),
+                None,
+            );
+
+            let consensus_cache = ConsensusCacheImpl::new(&pool);
+
+            // Initially the replica is not behind
+            assert!(!consensus_cache.is_replica_behind(Height::new(0)));
+
+            // Advance and set the certified height to one below where the replica would be considered behind
+            pool.advance_round_normal_operation_n(HEIGHT_CONSIDERED_BEHIND.get() - 1);
+            Round::new(&mut pool)
+                .with_certified_height(HEIGHT_CONSIDERED_BEHIND)
+                .advance();
+            consensus_cache.update(&pool, vec![CacheUpdateAction::Finalization]);
+
+            // Check that the replica is still not considered behind
+            assert!(!consensus_cache.is_replica_behind(Height::new(0)));
+
+            // Advance one more round
+            Round::new(&mut pool)
+                .with_certified_height(HEIGHT_CONSIDERED_BEHIND + Height::new(1))
+                .advance();
+            consensus_cache.update(&pool, vec![CacheUpdateAction::Finalization]);
+
+            // At this height, the replica should be considered behind
+            assert!(consensus_cache.is_replica_behind(Height::new(0)))
         })
     }
 

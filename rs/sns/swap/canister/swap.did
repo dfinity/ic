@@ -39,6 +39,7 @@ type FailedUpdate = record {
   dapp_canister_id : opt principal;
 };
 type FinalizeSwapResponse = record {
+  settle_community_fund_participation_result : opt SettleCommunityFundParticipationResult;
   set_dapp_controllers_result : opt SetDappControllersCallResult;
   sns_governance_normal_mode_enabled : opt SetModeCallResult;
   sweep_icp : opt SweepResult;
@@ -49,6 +50,7 @@ type GetBuyerStateRequest = record { principal_id : opt principal };
 type GetBuyerStateResponse = record { buyer_state : opt BuyerState };
 type GetBuyersTotalResponse = record { buyers_total : nat64 };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
+type GovernanceError = record { error_message : text; error_type : int32 };
 type Init = record {
   sns_root_canister_id : text;
   fallback_controller_principal_ids : vec text;
@@ -64,6 +66,7 @@ type Investor = variant {
 type OpenRequest = record {
   cf_participants : vec CfParticipant;
   params : opt Params;
+  open_sns_token_swap_proposal_id : opt nat64;
 };
 type Params = record {
   min_participant_icp_e8s : nat64;
@@ -74,19 +77,24 @@ type Params = record {
   max_participant_icp_e8s : nat64;
   min_icp_e8s : nat64;
 };
-type Possibility = variant {
+type Possibility = variant { Ok : Response; Err : CanisterCallError };
+type Possibility_1 = variant {
   Ok : SetDappControllersResponse;
   Err : CanisterCallError;
 };
-type Possibility_1 = variant { Err : CanisterCallError };
+type Possibility_2 = variant { Err : CanisterCallError };
 type RefreshBuyerTokensRequest = record { buyer : text };
 type RefreshBuyerTokensResponse = record {
+  icp_accepted_participation_e8s : nat64;
   icp_ledger_account_balance_e8s : nat64;
-  icp_accepted_partipation_e8s : nat64;
 };
-type SetDappControllersCallResult = record { possibility : opt Possibility };
+type Response = record { governance_error : opt GovernanceError };
+type SetDappControllersCallResult = record { possibility : opt Possibility_1 };
 type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
-type SetModeCallResult = record { possibility : opt Possibility_1 };
+type SetModeCallResult = record { possibility : opt Possibility_2 };
+type SettleCommunityFundParticipationResult = record {
+  possibility : opt Possibility;
+};
 type SnsNeuronRecipe = record {
   sns : opt TransferableAmount;
   investor : opt Investor;
@@ -98,7 +106,7 @@ type Swap = record {
   lifecycle : int32;
   buyers : vec record { text; BuyerState };
   params : opt Params;
-  cf_minting : opt TransferableAmount;
+  open_sns_token_swap_proposal_id : opt nat64;
 };
 type SweepResult = record { failure : nat32; skipped : nat32; success : nat32 };
 type TransferableAmount = record {

@@ -6,12 +6,12 @@ use ic_logger::{debug, new_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
-    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
-    IDkgVerifyTranscriptError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
+    IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptParams, SignedIDkgDealing,
+    IDkgTranscriptId, IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::NodeId;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -125,6 +125,42 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         self.metrics.observe_full_duration_seconds(
             MetricsDomain::IDkgProtocol,
             "verify_dealing_private",
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
+    fn verify_initial_dealings(
+        &self,
+        params: &IDkgTranscriptParams,
+        initial_dealings: &InitialIDkgDealings,
+    ) -> Result<(), IDkgVerifyInitialDealingsError> {
+        let log_id = get_log_id(&self.logger, module_path!());
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "IDkgProtocol",
+            crypto.method_name => "verify_initial_dealings",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_dealing => format!("{:?}", initial_dealings),
+        );
+        let start_time = self.metrics.now();
+        let result = dealing::verify_initial_dealings(
+            &self.csp,
+            &self.registry_client,
+            params,
+            initial_dealings,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            "verify_initial_dealings",
             start_time,
         );
         debug!(logger;

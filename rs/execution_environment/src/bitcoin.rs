@@ -3,12 +3,15 @@ use candid::Encode;
 use ic_btc_canister::state::State as BitcoinCanisterState;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
-    BitcoinNetwork, BitcoinSendTransactionArgs, EmptyBlob, Method as Ic00Method, Payload,
+    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetSuccessorsArgs,
+    BitcoinGetUtxosArgs, BitcoinNetwork, BitcoinSendTransactionArgs, EmptyBlob,
+    Method as Ic00Method, Payload,
 };
 use ic_registry_subnet_features::BitcoinFeatureStatus;
-use ic_replicated_state::ReplicatedState;
-use ic_types::Cycles;
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext, ReplicatedState,
+};
+use ic_types::{messages::Request, Cycles};
 
 // A number of last transactions in a block chain to calculate fee percentiles.
 // Assumed to be ~10'000 transactions to cover the last ~4-10 blocks.
@@ -180,6 +183,37 @@ pub fn send_transaction(
                 .map(|()| EmptyBlob.encode())
         },
     )
+}
+
+/// Handles a `bitcoin_get_successors` request.
+/// Returns Ok if the request has been accepted, and an error otherwise.
+pub fn get_successors(request: &Request, state: &mut ReplicatedState) -> Result<(), UserError> {
+    match BitcoinGetSuccessorsArgs::decode(request.method_payload()) {
+        Ok(get_successors_request) => {
+            match get_successors_request {
+                BitcoinGetSuccessorsArgs::Initial(payload) => {
+                    // Insert request into subnet call contexts.
+                    state
+                        .metadata
+                        .subnet_call_context_manager
+                        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+                            request: request.clone(),
+                            payload,
+                        });
+
+                    Ok(())
+                }
+                BitcoinGetSuccessorsArgs::FollowUp(_) => {
+                    // TODO(EXC-1237): Support pagination.
+                    Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        "Follow up requests are not yet supported",
+                    ))
+                }
+            }
+        }
+        Err(err) => Err(candid_error_to_user_error(err)),
+    }
 }
 
 fn is_feature_enabled(state: &mut ReplicatedState) -> bool {

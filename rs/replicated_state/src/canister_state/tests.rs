@@ -41,7 +41,6 @@ fn canister_state_push_input_request_success() {
     canister_state_test(|mut canister_state| {
         canister_state
             .push_input(
-                QueueIndex::from(0),
                 RequestBuilder::default()
                     .receiver(CANISTER_ID)
                     .build()
@@ -91,7 +90,6 @@ fn canister_state_push_input_response_no_reservation() {
         assert_eq!(
             Err((StateError::QueueFull { capacity: 0 }, response.clone())),
             canister_state.push_input(
-                QueueIndex::from(0),
                 response,
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
@@ -143,7 +141,6 @@ fn canister_state_push_input_response_success() {
 
         canister_state
             .push_input(
-                QueueIndex::from(0),
                 ResponseBuilder::default()
                     .respondent(OTHER_CANISTER_ID)
                     .originator(CANISTER_ID)
@@ -165,7 +162,6 @@ fn canister_state_push_input_request_mismatched_receiver() {
     canister_state_test(|mut canister_state| {
         canister_state
             .push_input(
-                QueueIndex::from(0),
                 RequestBuilder::default()
                     .receiver(OTHER_CANISTER_ID)
                     .build()
@@ -185,7 +181,6 @@ fn canister_state_push_input_response_mismatched_originator() {
     canister_state_test(|mut canister_state| {
         canister_state
             .push_input(
-                QueueIndex::from(0),
                 ResponseBuilder::default()
                     .originator(OTHER_CANISTER_ID)
                     .build()
@@ -310,7 +305,6 @@ fn canister_state_push_input_request_memory_limit_test_impl(
 
         let mut subnet_available_memory_ = subnet_available_memory;
         let res = canister_state.push_input(
-            QueueIndex::from(0),
             request.clone(),
             max_canister_memory_size,
             &mut subnet_available_memory_,
@@ -374,7 +368,6 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
         let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
         canister_state
             .push_input(
-                QueueIndex::from(0),
                 request,
                 max_canister_memory_size,
                 &mut subnet_available_memory,
@@ -484,7 +477,6 @@ fn canister_state_push_input_response_memory_limit_test_impl(
         let mut subnet_available_memory = -13;
         canister_state
             .push_input(
-                QueueIndex::from(0),
                 response.clone(),
                 NumBytes::new(14),
                 &mut subnet_available_memory,

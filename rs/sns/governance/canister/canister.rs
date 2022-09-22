@@ -38,7 +38,8 @@ use ic_sns_governance::{
     pb::v1::{
         governance, GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse,
         GetProposal, GetProposalResponse, GetRunningSnsVersionRequest,
-        GetRunningSnsVersionResponse, Governance as GovernanceProto,
+        GetRunningSnsVersionResponse, GetSnsInitializationParametersRequest,
+        GetSnsInitializationParametersResponse, Governance as GovernanceProto,
         ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
         ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
         RewardEvent, SetMode, SetModeResponse,
@@ -312,6 +313,21 @@ fn get_metadata_(request: GetMetadataRequest) -> GetMetadataResponse {
     governance().get_metadata(&request)
 }
 
+/// Returns the initialization parameters used to spawn an SNS
+#[export_name = "canister_query get_sns_initialization_parameters"]
+fn get_sns_initialization_parameters() {
+    println!("{}get_sns_initialization_parameters", log_prefix());
+    over(candid_one, get_sns_initialization_parameters_)
+}
+
+/// Internal method for calling get_sns_initialization_parameters.
+#[candid_method(query, rename = "get_sns_initialization_parameters")]
+fn get_sns_initialization_parameters_(
+    request: GetSnsInitializationParametersRequest,
+) -> GetSnsInitializationParametersResponse {
+    governance().get_sns_initialization_parameters(&request)
+}
+
 /// Performs a command on a neuron if the caller is authorised to do so.
 /// The possible neuron commands are (for details, see the SNS's governance.proto):
 /// - configuring the neuron (increasing or setting its dissolve delay or changing the
@@ -378,7 +394,6 @@ fn list_neurons_(list_neurons: ListNeurons) -> ListNeuronsResponse {
 /// Returns the full proposal corresponding to the `proposal_id`.
 #[export_name = "canister_query get_proposal"]
 fn get_proposal() {
-    println!("{}get_proposal", log_prefix());
     over(candid_one, get_proposal_)
 }
 
@@ -452,7 +467,6 @@ fn get_latest_reward_event() {
 /// governance controls.
 #[export_name = "canister_update get_root_canister_status"]
 fn get_root_canister_status() {
-    println!("{}get_root_canister_status", log_prefix());
     over_async(candid_one, get_root_canister_status_)
 }
 

@@ -62,11 +62,14 @@ ic-btc-types = { path = "../bitcoin/types/public" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
+ic-types-test-utils = { path = "../types/types_test_utils" }
+ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libflate = "1.1.2"
 maplit = "1.0.2"
 mockall = "0.7.2"
-proptest = "0.9.4"
+proptest = "1.0"
+test-strategy = "0.2"
 tempfile = "3.1.0"
 tokio = "1.15.0"
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }

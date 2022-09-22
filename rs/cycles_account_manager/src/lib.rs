@@ -98,8 +98,13 @@ impl CyclesAccountManager {
     }
 
     /// [EXC-1168] Helper function to set the flag to enable cost scaling according to subnet size.
-    pub fn use_cost_scaling(&mut self, use_cost_scaling_flag: bool) {
+    pub fn set_using_cost_scaling(&mut self, use_cost_scaling_flag: bool) {
         self.use_cost_scaling_flag = use_cost_scaling_flag;
+    }
+
+    /// [EXC-1168] Helper function to read the flag to enable cost scaling according to subnet size.
+    pub fn use_cost_scaling(&self) -> bool {
+        self.use_cost_scaling_flag
     }
 
     /// Returns the subnet type of this [`CyclesAccountManager`].
@@ -117,7 +122,8 @@ impl CyclesAccountManager {
         match self.use_cost_scaling_flag {
             false => cycles,
             true => Cycles::from(
-                (cycles.get() * (subnet_size as u128)) / self.config.reference_subnet_size,
+                (cycles.get() * (subnet_size as u128))
+                    / (self.config.reference_subnet_size as u128),
             ),
         }
     }
@@ -140,7 +146,15 @@ impl CyclesAccountManager {
 
     /// Returns the fee for storing a GiB of data per second.
     pub fn gib_storage_per_second_fee(&self, subnet_size: usize) -> Cycles {
-        self.scale_cost(self.config.gib_storage_per_second_fee, subnet_size)
+        let fee = self
+            .config
+            .gib_storage_per_second_fee(self.use_cost_scaling_flag, subnet_size);
+        // No scaling below non-subsidised storage cost threshold.
+        if subnet_size < CyclesAccountManagerConfig::fair_storage_cost_subnet_size() {
+            fee
+        } else {
+            self.scale_cost(fee, subnet_size)
+        }
     }
 
     /// Returns the fee per byte of ingress message received in [`Cycles`].
@@ -183,7 +197,10 @@ impl CyclesAccountManager {
             };
             let total_memory_fee = memory.get() as u128
                 * seconds_per_day
-                * self.config.gib_storage_per_second_fee.get();
+                * self
+                    .config
+                    .gib_storage_per_second_fee(self.use_cost_scaling_flag, subnet_size)
+                    .get();
 
             // Round up the memory fee.
             if total_memory_fee > 0 && total_memory_fee < one_gib {
@@ -434,8 +451,8 @@ impl CyclesAccountManager {
     }
 
     /// Amount to charge for an ECDSA signature.
-    pub fn ecdsa_signature_fee(&self) -> Cycles {
-        self.config.ecdsa_signature_fee
+    pub fn ecdsa_signature_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.ecdsa_signature_fee, subnet_size)
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -474,11 +491,19 @@ impl CyclesAccountManager {
         let one_gib = 1024 * 1024 * 1024;
         let cycles = Cycles::from(
             (bytes.get() as u128
-                * self.config.gib_storage_per_second_fee.get()
+                * self
+                    .config
+                    .gib_storage_per_second_fee(self.use_cost_scaling_flag, subnet_size)
+                    .get()
                 * duration.as_secs() as u128)
                 / one_gib,
         );
-        self.scale_cost(cycles, subnet_size)
+        // No scaling below non-subsidised storage cost threshold.
+        if subnet_size < CyclesAccountManagerConfig::fair_storage_cost_subnet_size() {
+            cycles
+        } else {
+            self.scale_cost(cycles, subnet_size)
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -832,7 +857,7 @@ mod tests {
     use super::*;
     use ic_test_utilities::types::ids::subnet_test_id;
 
-    fn create_cycles_account_manager(reference_subnet_size: u128) -> CyclesAccountManager {
+    fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
         let mut config = CyclesAccountManagerConfig::application_subnet();
         config.reference_subnet_size = reference_subnet_size;
 

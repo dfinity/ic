@@ -1,5 +1,8 @@
 use canister_test::Canister;
-use cycles_minting_canister::{IcpXdrConversionRateCertifiedResponse, MEMO_TOP_UP_CANISTER};
+use cycles_minting_canister::{
+    ChangeSubnetTypeAssignmentArgs, IcpXdrConversionRateCertifiedResponse, SubnetListWithType,
+    SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, MEMO_TOP_UP_CANISTER,
+};
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
@@ -16,8 +19,9 @@ use ic_nns_test_utils::{
     ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
+use ic_types_test_utils::ids::subnet_test_id;
 use ledger_canister::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockHeight, CyclesResponse, Memo,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex, CyclesResponse, Memo,
     NotifyCanisterArgs, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 
@@ -198,7 +202,7 @@ async fn send_cycles(
         created_at_time: None,
     };
 
-    let block_height: BlockHeight = ledger
+    let block_height: BlockIndex = ledger
         .update_from_sender(
             "send_dfx",
             candid_one,
@@ -243,4 +247,145 @@ async fn send_cycles(
         .unwrap();
 
     cycles_response
+}
+
+async fn update_subnet_type(nns: &NnsCanisters<'_>, payload: UpdateSubnetTypeArgs) {
+    let proposal_id: ProposalId = submit_external_update_proposal(
+        &nns.governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::UpdateSubnetType,
+        payload.clone(),
+        "<proposal created by update_subnet_type>".to_string(),
+        "".to_string(),
+    )
+    .await;
+
+    // Wait for the proposal to be accepted and executed.
+    assert_eq!(
+        wait_for_final_state(&nns.governance, proposal_id)
+            .await
+            .status(),
+        ProposalStatus::Executed
+    );
+}
+
+#[test]
+fn test_update_subnet_type() {
+    local_test_on_nns_subnet(|runtime| async move {
+        let nns_init_payload = NnsInitPayloadsBuilder::new()
+            .with_initial_invariant_compliant_mutations()
+            .with_test_neurons()
+            .build();
+        let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
+
+        let payload = UpdateSubnetTypeArgs::Add("Fiduciary".to_string());
+
+        update_subnet_type(&nns_canisters, payload).await;
+
+        let response: SubnetTypesToSubnetsResponse = nns_canisters
+            .cycles_minting
+            .query_("get_subnet_types_to_subnets", candid_one, ())
+            .await
+            .unwrap();
+        assert_eq!(
+            response,
+            SubnetTypesToSubnetsResponse {
+                data: vec![("Fiduciary".to_string(), vec![])]
+            }
+        );
+
+        Ok(())
+    });
+}
+
+async fn change_subnet_type_assignment(
+    nns: &NnsCanisters<'_>,
+    payload: ChangeSubnetTypeAssignmentArgs,
+) {
+    let proposal_id: ProposalId = submit_external_update_proposal(
+        &nns.governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::ChangeSubnetTypeAssignment,
+        payload.clone(),
+        "<proposal created by change_subnet_type_assignment>".to_string(),
+        "".to_string(),
+    )
+    .await;
+
+    // Wait for the proposal to be accepted and executed.
+    assert_eq!(
+        wait_for_final_state(&nns.governance, proposal_id)
+            .await
+            .status(),
+        ProposalStatus::Executed
+    );
+}
+
+#[test]
+fn test_change_subnet_type_assignment() {
+    local_test_on_nns_subnet(|runtime| async move {
+        let nns_init_payload = NnsInitPayloadsBuilder::new()
+            .with_initial_invariant_compliant_mutations()
+            .with_test_neurons()
+            .build();
+        let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
+
+        let type1 = "Type1".to_string();
+        let type2 = "Type2".to_string();
+        update_subnet_type(&nns_canisters, UpdateSubnetTypeArgs::Add(type1.clone())).await;
+        update_subnet_type(&nns_canisters, UpdateSubnetTypeArgs::Add(type2.clone())).await;
+
+        let subnet1 = subnet_test_id(0);
+        let subnet2 = subnet_test_id(1);
+        let subnet3 = subnet_test_id(2);
+
+        let payload = ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
+            subnets: vec![subnet1, subnet2],
+            subnet_type: type1.clone(),
+        });
+        change_subnet_type_assignment(&nns_canisters, payload).await;
+
+        let payload = ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
+            subnets: vec![subnet3],
+            subnet_type: type2.clone(),
+        });
+        change_subnet_type_assignment(&nns_canisters, payload).await;
+
+        let response: SubnetTypesToSubnetsResponse = nns_canisters
+            .cycles_minting
+            .query_("get_subnet_types_to_subnets", candid_one, ())
+            .await
+            .unwrap();
+        assert_eq!(
+            response,
+            SubnetTypesToSubnetsResponse {
+                data: vec![
+                    (type1.clone(), vec![subnet1, subnet2]),
+                    (type2.clone(), vec![subnet3])
+                ]
+            }
+        );
+
+        let payload = ChangeSubnetTypeAssignmentArgs::Remove(SubnetListWithType {
+            subnets: vec![subnet2],
+            subnet_type: type1.clone(),
+        });
+        change_subnet_type_assignment(&nns_canisters, payload).await;
+
+        let response: SubnetTypesToSubnetsResponse = nns_canisters
+            .cycles_minting
+            .query_("get_subnet_types_to_subnets", candid_one, ())
+            .await
+            .unwrap();
+        assert_eq!(
+            response,
+            SubnetTypesToSubnetsResponse {
+                data: vec![(type1, vec![subnet1]), (type2, vec![subnet3])]
+            }
+        );
+
+        Ok(())
+    });
 }

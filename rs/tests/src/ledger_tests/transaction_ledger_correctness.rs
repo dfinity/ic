@@ -33,9 +33,8 @@ use async_recursion::async_recursion;
 use canister_test::{Canister, Runtime};
 use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
-use ed25519_dalek::{Keypair, PublicKey, SecretKey};
 use ic_agent::Agent;
-use ic_canister_client::Sender;
+use ic_canister_client::{Ed25519KeyPair, Sender};
 use ic_ledger_core::block::BlockType;
 use ic_nervous_system_common_test_keys::ed25519_public_key_to_der;
 use ic_nns_constants::{
@@ -44,11 +43,11 @@ use ic_nns_constants::{
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockHeight, BlockRes, Memo,
+    AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockIndex, BlockRes, Memo,
     Operation, Tokens, Transaction, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
 use quickcheck::{Arbitrary, Gen};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 
 /* Runbook::
 . Setup NNS with a ledger canister tracking test neurons' account
@@ -92,12 +91,10 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .expect("could not create agent?");
 
-        // Note: We are impedance matching a rand_core-0.6 rng to a rand_core-0.5 one
         let re_seed: [u8; 32] = rng.gen();
-        use rand_core_05::SeedableRng;
-        let mut rng_05 = rand_chacha_02::ChaCha8Rng::from_seed(re_seed);
+        let mut rng = rand_chacha::ChaCha8Rng::from_seed(re_seed);
 
-        let plan = populate_plan(&rt, &agent, &plan, &mut rng_05).await;
+        let plan = populate_plan(&rt, &agent, &plan, &mut rng).await;
         info!(ctx.logger, "populated plan is {:?}", plan);
 
         // convert the test plan to actions
@@ -355,17 +352,14 @@ async fn populate_plan(
     app_rt: &Runtime,
     agent: &Agent,
     plan: &Plan,
-    rng: &mut rand_chacha_02::ChaCha8Rng,
+    rng: &mut rand_chacha::ChaCha8Rng,
 ) -> Plan {
     match plan {
         Plan::Empty => Plan::Empty,
         Plan::IdentityAccount(Err(_), tail) => {
             let tail = populate_plan(app_rt, agent, tail, rng).await;
-            let keypair = Keypair::generate(rng);
-            Plan::IdentityAccount(
-                Ok((keypair.secret.to_bytes(), keypair.public.to_bytes())),
-                Box::new(tail),
-            )
+            let keypair = Ed25519KeyPair::generate(rng);
+            Plan::IdentityAccount(Ok((keypair.secret_key, keypair.public_key)), Box::new(tail))
         }
         Plan::CanisterAccount(Err(_), tail) => {
             let (tail, can) = tokio::join!(
@@ -394,7 +388,7 @@ enum Message {
 /// arguments for sending information (and processing results)
 /// in the IC. The `Message` part also encodes the method name
 /// and whether the send is a query or an update.
-type Action = (Result<PrincipalId, Keypair>, Message);
+type Action = (Result<PrincipalId, Ed25519KeyPair>, Message);
 
 /// `actions_from_plan` turns a populated `Plan` into a sequence
 /// of actions.
@@ -431,10 +425,12 @@ fn actions_from_plan(acc: &mut Vec<Action>, plan: &Plan) {
             };
             actions_from_plan(acc, tail);
 
-            fn from_addr(from0: &Result<PrincipalId, RawKeypair>) -> Result<PrincipalId, Keypair> {
-                from0.map_err(|(secret, public)| Keypair {
-                    secret: SecretKey::from_bytes(&secret).unwrap(),
-                    public: PublicKey::from_bytes(&public).unwrap(),
+            fn from_addr(
+                from0: &Result<PrincipalId, RawKeypair>,
+            ) -> Result<PrincipalId, Ed25519KeyPair> {
+                from0.map_err(|(secret_key, public_key)| Ed25519KeyPair {
+                    secret_key,
+                    public_key,
                 })
             }
 
@@ -462,7 +458,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
             Message::InitialAccountQuery(want_to_see) => {
                 let princ: PrincipalId = match owner {
                     Ok(princ) => *princ,
-                    Err(keypair) => ed25519_public_to_principal(&keypair.public.to_bytes()),
+                    Err(keypair) => ed25519_public_to_principal(&keypair.public_key),
                 };
                 let balance: Tokens = ledger
                     .query_(
@@ -479,7 +475,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
             Message::Send((from_funds, to_funds), to, amount) => {
                 let to_account = AccountIdentifier::new(*to, None);
                 let debit = (*amount + DEFAULT_TRANSFER_FEE).unwrap();
-                let block: Option<(BlockHeight, AccountIdentifier, Memo)> = match owner {
+                let block: Option<(BlockIndex, AccountIdentifier, Memo)> = match owner {
                     Ok(princ) => {
                         let rt = if *princ == LIFELINE_CANISTER_ID.get() {
                             nns_rt
@@ -512,7 +508,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
                             to: to_account.to_address(),
                             created_at_time: None,
                         };
-                        let result: Result<Result<BlockHeight, TransferError>, String> = ledger
+                        let result: Result<Result<BlockIndex, TransferError>, String> = ledger
                             .update_from_sender(
                                 "transfer",
                                 candid_one,
@@ -521,8 +517,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
                             )
                             .await;
                         if debit <= *from_funds {
-                            let from_princ =
-                                ed25519_public_to_principal(&keypair.public.to_bytes());
+                            let from_princ = ed25519_public_to_principal(&keypair.public_key);
                             Some((
                                 result.unwrap().unwrap(),
                                 AccountIdentifier::new(from_princ, None),
@@ -564,7 +559,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
 
 /// Given a block height, obtain the corresponding block from
 /// the ledger and compare its contents with expectations.
-async fn obtain_block(ledger: &Canister<'_>, block: BlockHeight) -> Transaction {
+async fn obtain_block(ledger: &Canister<'_>, block: BlockIndex) -> Transaction {
     let BlockRes(result) = ledger
         .query_("block_pb", protobuf, BlockArg(block))
         .await

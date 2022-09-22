@@ -15,7 +15,6 @@ rust_library(
     deps = [
         "//rs/canonical_state",
         "//rs/config",
-        "//rs/crypto/hash",
         "//rs/crypto/sha",
         "//rs/crypto/tree_hash",
         "//rs/interfaces",
@@ -51,6 +50,8 @@ rust_library(
 rust_test(
     name = "state_manager_lib_tests",
     crate = ":state_manager",
+    flaky = True,
+    tags = ["exclusive"],
     deps = [
         "//rs/bitcoin/types/internal",
         "//rs/bitcoin/types/public",
@@ -58,6 +59,7 @@ rust_test(
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/test_utilities",
+        "//rs/test_utilities/tmpdir",
         "//rs/types/ic00_types",
         "//rs/types/wasm_types",
         "@crate_index//:maplit",
@@ -88,6 +90,7 @@ rust_test(
         "//rs/sys",
         "//rs/test_utilities",
         "//rs/test_utilities/metrics",
+        "//rs/test_utilities/tmpdir",
         "//rs/types/base_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
@@ -109,6 +112,7 @@ rust_bench(
         "//rs/replicated_state",
         "//rs/state_layout",
         "//rs/test_utilities",
+        "//rs/test_utilities/tmpdir",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:criterion",

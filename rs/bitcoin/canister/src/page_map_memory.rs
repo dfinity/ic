@@ -1,6 +1,6 @@
 use ic_replicated_state::page_map::{Buffer, PageMap, PersistenceError};
+use ic_stable_structures::Memory;
 use ic_types::Height;
-use stable_structures::Memory;
 use std::sync::{Arc, Mutex};
 
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 65536;

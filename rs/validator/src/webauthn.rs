@@ -1,8 +1,7 @@
 use ic_crypto::{ecdsa_p256_signature_from_der_bytes, rsa_signature_from_bytes};
-use ic_interfaces::crypto::{IngressSigVerifier, Signable};
-use ic_types::crypto::BasicSig;
+use ic_interfaces::crypto::IngressSigVerifier;
 use ic_types::{
-    crypto::{AlgorithmId, BasicSigOf, UserPublicKey},
+    crypto::{AlgorithmId, BasicSig, BasicSigOf, Signable, UserPublicKey},
     messages::{WebAuthnEnvelope, WebAuthnSignature},
 };
 use std::convert::TryFrom;
@@ -74,10 +73,10 @@ mod tests {
         ECDSA_P256_PK_COSE_DER_WRAPPED_HEX, ECDSA_WEBAUTHN_SIG_HELLO_HEX,
     };
     use ic_crypto::user_public_key_from_bytes;
-    use ic_interfaces::crypto::SignableMock;
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities::types::ids::{message_test_id, node_test_id};
     use ic_types::{
+        crypto::SignableMock,
         messages::{Blob, Delegation},
         time::UNIX_EPOCH,
     };

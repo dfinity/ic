@@ -160,8 +160,12 @@ enum Lifecycle {
 // - On reject of proposal to open decentralization sale:
 //   - Assign the control of the dapp (now under the SNS control) back to the specified principals.
 message Swap {
-  // Was 'state'.
+  reserved "state";
   reserved 2;
+
+  reserved "cf_minting";
+  reserved 8;
+
   // The current lifecycle of the swap.
   Lifecycle lifecycle = 3;
   // Specified on creation. That is, always specified and immutable.
@@ -183,9 +187,9 @@ message Swap {
   // When the swap is committed, this field is initialized according
   // to the outcome of the swap.
   repeated SnsNeuronRecipe neuron_recipes = 7;
-  // This field represents the request to NNS governance to mint ICP
-  // for SNS governance on behalf of the community fund investments.
-  TransferableAmount cf_minting = 8;
+  // Gets set to whatever value is in the corresponding field of OpenRequest
+  // (that field is required at the application level).
+  optional uint64 open_sns_token_swap_proposal_id = 9;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -353,9 +357,11 @@ message SnsNeuronRecipe {
 
 message OpenRequest {
   // The parameters of the swap.
-  Params params = 1;  
+  Params params = 1;
   // Community fund participation.
   repeated CfParticipant cf_participants = 2;
+  // The ID of the proposal whose execution consists of calling this method.
+  optional uint64 open_sns_token_swap_proposal_id = 3;
 }
 
 message OpenResponse {}
@@ -410,7 +416,7 @@ message RefreshBuyerTokensRequest {
   string buyer = 1;
 }
 message RefreshBuyerTokensResponse {
-  uint64 icp_accepted_partipation_e8s = 1;
+  uint64 icp_accepted_participation_e8s = 1;
   uint64 icp_ledger_account_balance_e8s = 2;
 }
 
@@ -424,6 +430,7 @@ message FinalizeSwapResponse {
   SweepResult create_neuron = 3;
   SetModeCallResult sns_governance_normal_mode_enabled = 4;
   SetDappControllersCallResult set_dapp_controllers_result = 5;
+  SettleCommunityFundParticipationResult settle_community_fund_participation_result = 6;
 }
 
 message SweepResult {
@@ -452,7 +459,23 @@ message SetDappControllersCallResult {
   }
 }
 
-// TODO(NNS1-1589): Delete these.
+message SettleCommunityFundParticipationResult {
+  message Response {
+    // Can be blank.
+    GovernanceError governance_error = 1;
+  }
+
+  oneof possibility {
+    Response ok = 1;
+    CanisterCallError err = 2;
+  }
+}
+
+// TODO(NNS1-1589): Delete these copied definitions.
+
+// BEGIN NNS1-1589 HACKS
+
+// Copied from sns root.proto
 message SetDappControllersRequest {
   repeated ic_base_types.pb.v1.PrincipalId controller_principal_ids = 1;
 }
@@ -463,6 +486,103 @@ message SetDappControllersResponse {
   }
   repeated FailedUpdate failed_updates = 1;
 }
+
+// Copied from nns governance.proto.
+message GovernanceError {
+  enum ErrorType {
+     ERROR_TYPE_UNSPECIFIED = 0;
+     // The operation was successfully completed.
+     ERROR_TYPE_OK = 1;
+     // This operation is not available, e.g., not implemented.
+     ERROR_TYPE_UNAVAILABLE = 2;
+     // The caller is not authorized to perform this operation.
+     ERROR_TYPE_NOT_AUTHORIZED = 3;
+     // Some entity required for the operation (for example, a neuron) was not found.
+     ERROR_TYPE_NOT_FOUND = 4;
+     // The command was missing or invalid. This is a permanent error.
+     ERROR_TYPE_INVALID_COMMAND = 5;
+     // The neuron is dissolving or dissolved and the operation requires it to
+     // be not dissolving (that is, having a non-zero dissolve delay that is
+     // accumulating age).
+     ERROR_TYPE_REQUIRES_NOT_DISSOLVING = 6;
+     // The neuron is not dissolving or dissolved and the operation requires
+     // it to be dissolving (that is, having a non-zero dissolve delay with
+     // zero age that is not accumulating).
+     ERROR_TYPE_REQUIRES_DISSOLVING = 7;
+     // The neuron is not dissolving and not dissolved and the operation
+     // requires it to be dissolved (that is, having a dissolve delay of zero
+     // and an age of zero).
+     ERROR_TYPE_REQUIRES_DISSOLVED = 8;
+     // When adding or removing a hot key: the key to add was already
+     // present or the key to remove was not present or the key to add
+     // was invalid or adding another hot key would bring the total
+     // number of the maximum number of allowed hot keys per neuron.
+     ERROR_TYPE_HOT_KEY = 9;
+     // Some canister side resource is exhausted, so this operation cannot be
+     // performed.
+     ERROR_TYPE_RESOURCE_EXHAUSTED = 10;
+     // Some precondition for executing this method was not met (e.g. the
+     // neuron's desolve time is too short). There could be a change in the
+     // state of the system such that the operation becomes allowed (e.g. the
+     // owner of the neuron increases its desolve delay).
+     ERROR_TYPE_PRECONDITION_FAILED = 11;
+     // Executing this method failed for some reason external to the
+     // governance canister.
+     ERROR_TYPE_EXTERNAL = 12;
+     // A neuron has an ongoing ledger update and thus can't be
+     // changed.
+     ERROR_TYPE_LEDGER_UPDATE_ONGOING = 13;
+     // There wasn't enough funds to perform the operation.
+     ERROR_TYPE_INSUFFICIENT_FUNDS = 14;
+     // The principal provided was invalid.
+     ERROR_TYPE_INVALID_PRINCIPAL = 15;
+     // The proposal is defective in some way (e.g. title is too long). If the
+     // same proposal is submitted again without modification, it will be
+     // rejected regardless of changes in the system's state (e.g. increasing
+     // the neuron's desolve delay will not make the proposal acceptable).
+     ERROR_TYPE_INVALID_PROPOSAL = 16;
+     // The neuron attempted to join the community fund while already
+     // a member.
+     ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND = 17;
+     // The neuron attempted to leave the community fund but is not a member.
+     ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND = 18;
+  }
+
+  ErrorType error_type = 1;
+  string error_message = 2;
+}
+
+// Copied from nns governance.proto.
+message SettleCommunityFundParticipation {
+  // The caller's principal ID must match the value in the
+  // target_swap_canister_id field in the proposal (more precisely, in the
+  // OpenSnsTokenSwap).
+  optional uint64 open_sns_token_swap_proposal_id = 1;
+
+  // Each of the possibilities here corresponds to one of two ways that a swap
+  // can terminate. See also sns_swap_pb::Lifecycle::is_terminal.
+  oneof result {
+    Committed committed = 2;
+    Aborted aborted = 3;
+  }
+
+  // When this happens, ICP needs to be minted, and sent to the SNS governance
+  // canister's main account on the ICP Ledger. As with Aborted, the amount of
+  // ICP that needs to be minted can be deduced from the ProposalData's
+  // cf_participants field.
+  message Committed {
+    // This is where the minted ICP will be sent. In principal, this could be
+    // fetched using the swap canister's get_state method.
+    ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 1;
+  }
+
+  // When this happens, maturity needs to be restored to CF neurons. The amounts
+  // to be refunded can be found in the ProposalData's cf_participants field.
+  message Aborted {
+  }
+}
+
+// END NNS1-1589 HACKS
 
 message CanisterCallError {
   optional int32 code = 1;

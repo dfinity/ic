@@ -33,9 +33,15 @@ impl<'a, T: Clone> Lazy<'a, T> {
 /// The trait representing interface of a fork in the lazy tree.
 pub trait LazyFork<'a> {
     /// Retrieves a subtree with the specified `label`.
+    ///
+    /// ∀ l ∈ self.labels : self.edge(&l).is_some() == true
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>>;
+
     /// Enumerates all the labels reachable from this fork.
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_>;
+
+    /// Enumerates all the children in this fork and their labels.
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_>;
 }
 
 /// A tree that can lazily expand while it's being traversed.

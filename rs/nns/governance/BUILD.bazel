@@ -179,6 +179,15 @@ generated_files_check(
 )
 
 rust_test(
+    name = "canister_unit_test",
+    crate = ":_wasm_governance-canister-raw",
+    data = [":canister/governance.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/nns/governance",
+    },
+)
+
+rust_test(
     name = "governance_test",
     aliases = ALIASES,
     crate = ":governance",

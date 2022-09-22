@@ -870,7 +870,11 @@ fn main() {}
 
 #[test]
 fn check_did_file() {
-    let did = String::from_utf8(std::fs::read("canister/registry.did").unwrap()).unwrap();
+    let did_file_loc = format!(
+        "{}/canister/registry.did",
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
+    );
+    let did = String::from_utf8(std::fs::read(did_file_loc).unwrap()).unwrap();
 
     // See comments in main above
     candid::export_service!();

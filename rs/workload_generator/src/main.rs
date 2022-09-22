@@ -250,6 +250,18 @@ async fn main() {
                 .takes_value(true)
                 .help("If specified, sets this option when building the hyper http client."),
         )
+        .arg(
+            Arg::new("query-timeout-secs")
+                .long("query-timeout-secs")
+                .takes_value(true)
+                .help("The number of seconds to wait before timing out queries."),
+        )
+        .arg(
+            Arg::new("ingress-timeout-secs")
+                .long("ingress-timeout-secs")
+                .takes_value(true)
+                .help("The number of seconds to wait before timing out ingress messages."),
+        )
 
         .get_matches();
 
@@ -369,24 +381,31 @@ async fn main() {
     }
     let host = matches.value_of("host").map(ToString::to_string);
 
+    let query_timeout = matches
+        .value_of("query-timeout-secs")
+        .map(|s| Duration::from_secs(s.parse::<u64>().unwrap()));
+    let ingress_timeout = matches
+        .value_of("ingress-timeout-secs")
+        .map(|s| Duration::from_secs(s.parse::<u64>().unwrap()));
+
     let http_client = HttpClient::new();
     let (sender, pubkey_bytes) = match principal_id {
         None => (
             AgentSender::from_keypair(&TEST_IDENTITY_KEYPAIR),
-            TEST_IDENTITY_KEYPAIR.public.to_bytes(),
+            TEST_IDENTITY_KEYPAIR.public_key.to_vec(),
         ),
         Some(_principal_id) => match matches.value_of("pem-file") {
             Some(f) => {
                 let pem_file = fs::read_to_string(f).unwrap();
-                let keypair: ed25519_dalek::Keypair = { get_pair(Some(&pem_file)) };
+                let keypair: ic_canister_client::Ed25519KeyPair = { get_pair(Some(&pem_file)) };
                 (
                     AgentSender::from_keypair(&keypair),
-                    keypair.public.to_bytes(),
+                    keypair.public_key.to_vec(),
                 )
             }
             None => (
                 AgentSender::from_keypair(&TEST_IDENTITY_KEYPAIR_HARD_CODED),
-                TEST_IDENTITY_KEYPAIR_HARD_CODED.public.to_bytes(),
+                TEST_IDENTITY_KEYPAIR_HARD_CODED.public_key.to_vec(),
             ),
         },
     };
@@ -423,8 +442,15 @@ async fn main() {
                 }
                 _ => {}
             }
-            let eng =
-                engine::Engine::new(sender.clone(), sender_field, &url, http_client_config, host);
+            let eng = engine::Engine::new(
+                sender.clone(),
+                sender_field,
+                &url,
+                http_client_config,
+                host,
+                query_timeout,
+                ingress_timeout,
+            );
 
             if !matches.is_present("no-status-check") {
                 eng.wait_for_all_agents_to_be_healthy().await;

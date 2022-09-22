@@ -15,7 +15,7 @@ use ic_interfaces::crypto::{
     ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
     ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
-use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner, Signable};
+use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces::registry::RegistryClient;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -34,7 +34,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoResult, IndividualMultiSig,
-    IndividualMultiSigOf, ThresholdSigShare, ThresholdSigShareOf, UserPublicKey,
+    IndividualMultiSigOf, Signable, ThresholdSigShare, ThresholdSigShareOf, UserPublicKey,
 };
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::*;
@@ -50,7 +50,10 @@ pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {
 }
 
 pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoComponent {
-    TempCryptoComponent::new(empty_fake_registry(), node_id)
+    TempCryptoComponent::builder()
+        .with_registry(empty_fake_registry())
+        .with_node_id(node_id)
+        .build()
 }
 
 fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
@@ -492,6 +495,14 @@ impl IDkgProtocol for CryptoReturningOk {
         _params: &IDkgTranscriptParams,
         _signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        Ok(())
+    }
+
+    fn verify_initial_dealings(
+        &self,
+        _params: &IDkgTranscriptParams,
+        _initial_dealings: &InitialIDkgDealings,
+    ) -> Result<(), IDkgVerifyInitialDealingsError> {
         Ok(())
     }
 

@@ -97,7 +97,7 @@ impl<'a> CatchUpPackageMaker {
             if catch_up_package.height().get() > 0 && hash != catch_up_package.content.state_hash {
                 // This will delete the diverged states and panic.
                 self.state_manager
-                    .report_diverged_state(catch_up_package.height())
+                    .report_diverged_checkpoint(catch_up_package.height())
             }
         }
     }
@@ -202,8 +202,8 @@ impl<'a> CatchUpPackageMaker {
             }
             Ok(state_hash) => {
                 let content = CatchUpContent::new(
-                    HashedBlock::new(ic_crypto::crypto_hash, start_block),
-                    HashedRandomBeacon::new(ic_crypto::crypto_hash, random_beacon),
+                    HashedBlock::new(ic_types::crypto::crypto_hash, start_block),
+                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
                     state_hash,
                 );
                 let share_content = CatchUpShareContent::from(&content);
@@ -299,7 +299,7 @@ mod tests {
             let mut proposal = pool.make_next_block();
             let mut block = proposal.content.as_mut();
             block.context.certified_height = block.height();
-            proposal.content = HashedBlock::new(ic_crypto::crypto_hash, block.clone());
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
             pool.insert_validated(proposal.clone());
             pool.notarize(&proposal);
             pool.finalize(&proposal);
@@ -450,7 +450,7 @@ mod tests {
 
             state_manager
                 .get_mut()
-                .expect_report_diverged_state()
+                .expect_report_diverged_checkpoint()
                 .times(1)
                 .return_const(());
             cup_maker.on_state_change(&PoolReader::new(&pool));

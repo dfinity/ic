@@ -44,11 +44,12 @@ pub struct Round<'a> {
     n_shares: u32,
     rb_shares: u32,
     f_shares: u32,
+    certified_height: Option<Height>,
     pool: &'a mut TestConsensusPool,
 }
 
 impl<'a> Round<'a> {
-    fn new(pool: &'a mut TestConsensusPool) -> Self {
+    pub fn new(pool: &'a mut TestConsensusPool) -> Self {
         Self {
             pool,
             max_replicas: 1,
@@ -60,6 +61,7 @@ impl<'a> Round<'a> {
             n_shares: 0,
             rb_shares: 0,
             f_shares: 0,
+            certified_height: None,
         }
     }
 
@@ -103,6 +105,11 @@ impl<'a> Round<'a> {
         self
     }
 
+    pub fn with_certified_height(mut self, height: Height) -> Self {
+        self.certified_height = Some(height);
+        self
+    }
+
     pub fn advance(&mut self) -> Height {
         self.pool.advance_round(
             self.max_replicas,
@@ -114,6 +121,7 @@ impl<'a> Round<'a> {
             self.n_shares,
             self.rb_shares,
             self.f_shares,
+            self.certified_height,
         )
     }
 }
@@ -198,7 +206,7 @@ impl TestConsensusPool {
         let mut block = Block::from_parent(parent);
         block.context.registry_version = self.registry_client.get_latest_version();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
-        block.payload = Payload::new(ic_crypto::crypto_hash, dkg_payload.into());
+        block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
         BlockProposal::fake(block, node_test_id(0))
     }
 
@@ -248,8 +256,8 @@ impl TestConsensusPool {
             .unwrap();
         CatchUpPackage {
             content: CatchUpContent::new(
-                HashedBlock::new(ic_crypto::crypto_hash, block),
-                HashedRandomBeacon::new(ic_crypto::crypto_hash, random_beacon.clone()),
+                HashedBlock::new(ic_types::crypto::crypto_hash, block),
+                HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon.clone()),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
             ),
             signature: ThresholdSignature {
@@ -327,6 +335,7 @@ impl TestConsensusPool {
         let n_shares = 0;
         let rb_shares = 0;
         let f_shares = 0;
+        let certified_height = None;
         self.advance_round(
             max_replicas,
             new_blocks,
@@ -337,6 +346,7 @@ impl TestConsensusPool {
             n_shares,
             rb_shares,
             f_shares,
+            certified_height,
         )
     }
 
@@ -352,6 +362,7 @@ impl TestConsensusPool {
         let n_shares = 0;
         let rb_shares = 0;
         let f_shares = 0;
+        let certified_height = None;
         self.advance_round(
             max_replicas,
             new_blocks,
@@ -362,6 +373,7 @@ impl TestConsensusPool {
             n_shares,
             rb_shares,
             f_shares,
+            certified_height,
         )
     }
 
@@ -392,6 +404,7 @@ impl TestConsensusPool {
         rb_shares: u32,
         f_shares: u32,
         // this is a vector of 32-element arrays with random usize numbers
+        certfied_height: Option<Height>,
     ) -> Height {
         let notarized_height = self
             .pool
@@ -452,6 +465,10 @@ impl TestConsensusPool {
                 add_catch_up_package_if_needed = false;
             }
             block.rank = Rank(i as u64);
+            match certfied_height {
+                Some(height) => block.context.certified_height = height,
+                None => (),
+            };
             let block_proposal = BlockProposal::fake(
                 block.clone(),
                 node_test_id((*rand_num.next().unwrap() % max_replicas as usize) as u64),
@@ -489,7 +506,7 @@ impl TestConsensusPool {
 
         // create RB shares for new blocks
         for i in 0..rb_shares {
-            let content = RandomBeaconContent::new(height, ic_crypto::crypto_hash(&beacon));
+            let content = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(&beacon));
             let share = RandomBeaconShare {
                 signature: crypto
                     .sign_threshold(&content, DkgId::IDkgId(dkg_id))
@@ -562,7 +579,8 @@ impl TestConsensusPool {
     }
 
     pub fn finalize_block(&mut self, block: &Block) {
-        let content = FinalizationContent::new(block.height(), ic_crypto::crypto_hash(block));
+        let content =
+            FinalizationContent::new(block.height(), ic_types::crypto::crypto_hash(block));
         self.insert_validated(Finalization::fake(content))
     }
 

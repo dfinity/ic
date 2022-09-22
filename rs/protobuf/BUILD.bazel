@@ -1,5 +1,5 @@
 load("//bazel:prost.bzl", "generated_files_check")
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -30,6 +30,11 @@ rust_library(
 
 rust_test(
     name = "protobuf_test",
+    crate = ":protobuf",
+)
+
+rust_doc_test(
+    name = "protobuf_doc_test",
     crate = ":protobuf",
 )
 

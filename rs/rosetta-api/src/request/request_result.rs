@@ -2,7 +2,7 @@ use crate::models::Object;
 use crate::request::Request;
 use crate::request_types::{RequestResultMetadata, Status};
 use crate::transaction_id::TransactionIdentifier;
-use ledger_canister::BlockHeight;
+use ledger_canister::BlockIndex;
 
 use crate::errors;
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ pub struct RequestResult {
     pub _type: Request,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub block_index: Option<BlockHeight>,
+    pub block_index: Option<BlockIndex>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub neuron_id: Option<u64>,

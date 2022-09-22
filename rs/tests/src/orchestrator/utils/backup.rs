@@ -44,6 +44,10 @@ impl Backup {
         }
     }
 
+    pub fn working_dir(&self) -> String {
+        self.backup_dir.clone()
+    }
+
     pub fn replay(&self, replica_version: &str) -> Result<StateParams, ReplayError> {
         let start_height = self.get_start_height(replica_version);
         info!(
@@ -51,8 +55,8 @@ impl Backup {
             "Starting to replay from height {}", start_height
         );
         let args = ReplayToolArgs {
-            subnet_id: ClapSubnetId(self.subnet_id),
-            config: PathBuf::from(&self.config_path()),
+            subnet_id: Some(ClapSubnetId(self.subnet_id)),
+            config: Some(PathBuf::from(&self.config_path())),
             canister_caller_id: None,
             replay_until_height: None,
             subcmd: Some(SubCommand::RestoreFromBackup(RestoreFromBackupCmd {
@@ -186,7 +190,7 @@ impl Backup {
             Block::new(
                 hash.clone(),
                 Payload::new(
-                    ic_crypto::crypto_hash,
+                    ic_types::crypto::crypto_hash,
                     (ic_types::consensus::dkg::Summary::fake(), None).into(),
                 ),
                 height,

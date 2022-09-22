@@ -22,7 +22,7 @@ use ic_types::{
 use mockall::*;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Barrier, RwLock};
 
 mock! {
     pub StateManager {}
@@ -73,7 +73,7 @@ mock! {
             scope: CertificationScope,
         );
 
-        fn report_diverged_state(&self, height: Height);
+        fn report_diverged_checkpoint(&self, height: Height);
     }
 }
 
@@ -108,6 +108,8 @@ pub struct FakeStateManager {
     states: Arc<RwLock<Vec<Snapshot>>>,
     tip: Arc<RwLock<Option<(Height, ReplicatedState)>>>,
     _tempdir: Arc<tempfile::TempDir>,
+    /// Size 1 by default (no op).
+    pub encode_certified_stream_slice_barrier: Arc<RwLock<Barrier>>,
 }
 
 impl Default for FakeStateManager {
@@ -141,6 +143,7 @@ impl FakeStateManager {
                 ),
             )))),
             _tempdir: Arc::new(tmpdir),
+            encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
         }
     }
 }
@@ -299,7 +302,7 @@ impl StateManager for FakeStateManager {
         *tip = Some((height, state));
     }
 
-    fn report_diverged_state(&self, height: Height) {
+    fn report_diverged_checkpoint(&self, height: Height) {
         panic!("Diverged at height {}", height)
     }
 }
@@ -471,6 +474,10 @@ impl CertifiedStreamStore for FakeStateManager {
         mut msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> Result<CertifiedStreamSlice, EncodeStreamError> {
+        self.encode_certified_stream_slice_barrier
+            .read()
+            .unwrap()
+            .wait();
         use ic_types::{
             consensus::certification::CertificationContent,
             crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
@@ -624,8 +631,8 @@ impl StateManager for RefMockStateManager {
             .commit_and_certify(state, height, scope)
     }
 
-    fn report_diverged_state(&self, height: Height) {
-        self.mock.read().unwrap().report_diverged_state(height)
+    fn report_diverged_checkpoint(&self, height: Height) {
+        self.mock.read().unwrap().report_diverged_checkpoint(height)
     }
 }
 

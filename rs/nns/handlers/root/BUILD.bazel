@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -45,6 +45,25 @@ BUILD_DEPENDENCIES = [
 
 ALIASES = {}
 
+DEV_DEPENDENCIES = select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/rust_canisters/canister_test",
+        "//rs/nns/handlers/root/protobuf_generator:lib",
+        "//rs/nns/test_utils",
+        "//rs/types/types",
+        "//rs/test_utilities",
+        "//rs/test_utilities/compare_dirs",
+        "//rs/registry/canister",
+        "@crate_index//:tempfile",
+        "@crate_index//:assert_matches",
+        "@crate_index//:hex",
+        "@crate_index//:lazy_static",
+    ],
+})
+
+MACRO_DEV_DEPENDENCIES = []
+
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
@@ -89,7 +108,7 @@ rust_canister(
 )
 
 optimized_canister(
-    name = "upgrade-test-canisterr",
+    name = "upgrade-test-canister",
     wasm = "upgrade-test-canister-raw",
 )
 
@@ -107,4 +126,30 @@ generated_files_check(
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
     ],
+)
+
+rust_test_suite(
+    name = "root_integration_test",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = ["tests/check_generated_files.rs"],
+    ),
+    aliases = ALIASES,
+    data = [
+        ":root-canister",
+        ":upgrade-test-canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/registry/canister:registry-canister",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/nns/handlers/root",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+        "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:root-canister)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "UPGRADE_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:upgrade-test-canister)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":root"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )

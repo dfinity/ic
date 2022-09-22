@@ -47,7 +47,6 @@ fn enqueuing_unexpected_response_does_not_panic() {
     // Enqueue a request to create a queue for `other`.
     queues
         .push_input(
-            QueueIndex::from(0),
             RequestBuilder::default()
                 .sender(other)
                 .receiver(this)
@@ -60,7 +59,6 @@ fn enqueuing_unexpected_response_does_not_panic() {
     // panic.
     queues
         .push_input(
-            QUEUE_INDEX_NONE,
             ResponseBuilder::default()
                 .respondent(other)
                 .originator(this)
@@ -79,7 +77,6 @@ fn can_push_output_response_after_input_request() {
     let mut queues = CanisterQueues::default();
     queues
         .push_input(
-            QueueIndex::from(0),
             RequestBuilder::default()
                 .sender(other)
                 .receiver(this)
@@ -104,7 +101,6 @@ fn can_push_input_request() {
     let mut queues = CanisterQueues::default();
     queues
         .push_input(
-            QueueIndex::from(0),
             RequestBuilder::default().receiver(this).build().into(),
             InputQueueType::RemoteSubnet,
         )
@@ -119,7 +115,6 @@ fn cannot_push_input_response_without_output_request() {
     let mut queues = CanisterQueues::default();
     queues
         .push_input(
-            QueueIndex::from(0),
             ResponseBuilder::default().originator(this).build().into(),
             InputQueueType::RemoteSubnet,
         )
@@ -145,7 +140,6 @@ fn can_push_input_response_after_output_request() {
         .unwrap();
     queues
         .push_input(
-            QueueIndex::from(0),
             ResponseBuilder::default()
                 .respondent(other)
                 .originator(this)
@@ -200,13 +194,11 @@ fn test_message_picking_round_robin_on_one_queue() {
     let mut queues = CanisterQueues::default();
     assert!(queues.pop_input().is_none());
 
-    let list = vec![(0, other), (1, other), (2, other)];
-    for (ix, id) in list.iter() {
+    for _ in 0..3 {
         queues
             .push_input(
-                QueueIndex::from(*ix),
                 RequestBuilder::default()
-                    .sender(*id)
+                    .sender(other)
                     .receiver(this)
                     .build()
                     .into(),
@@ -215,7 +207,7 @@ fn test_message_picking_round_robin_on_one_queue() {
             .expect("could not push");
     }
 
-    for _ in 0..list.len() {
+    for _ in 0..3 {
         match queues.pop_input().expect("could not pop a message") {
             CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other),
             msg => panic!("unexpected message popped: {:?}", msg),
@@ -238,10 +230,9 @@ fn test_message_picking_round_robin() {
     let mut queues = CanisterQueues::default();
     assert!(queues.pop_input().is_none());
 
-    for (ix, id) in &[(0, other_1), (1, other_1), (0, other_3)] {
+    for id in &[other_1, other_1, other_3] {
         queues
             .push_input(
-                QueueIndex::from(*ix),
                 RequestBuilder::default()
                     .sender(*id)
                     .receiver(this)
@@ -266,7 +257,6 @@ fn test_message_picking_round_robin() {
     // above which reserved a slot for the expected response here.
     queues
         .push_input(
-            QueueIndex::from(0),
             ResponseBuilder::default()
                 .respondent(other_2)
                 .originator(this)
@@ -279,7 +269,6 @@ fn test_message_picking_round_robin() {
     // Another high-priority request
     queues
         .push_input(
-            QueueIndex::from(1),
             RequestBuilder::default()
                 .sender(other_2)
                 .receiver(this)
@@ -361,10 +350,9 @@ fn test_input_scheduling() {
     let mut queues = CanisterQueues::default();
     assert!(!queues.has_input());
 
-    let push_input_from = |queues: &mut CanisterQueues, sender: &CanisterId, index: u64| {
+    let push_input_from = |queues: &mut CanisterQueues, sender: &CanisterId| {
         queues
             .push_input(
-                QueueIndex::from(index),
                 RequestBuilder::default()
                     .sender(*sender)
                     .receiver(this)
@@ -385,16 +373,16 @@ fn test_input_scheduling() {
         _ => unreachable!(),
     };
 
-    push_input_from(&mut queues, &other_1, 0);
+    push_input_from(&mut queues, &other_1);
     assert_schedule(&queues, &[&other_1]);
 
-    push_input_from(&mut queues, &other_2, 0);
+    push_input_from(&mut queues, &other_2);
     assert_schedule(&queues, &[&other_1, &other_2]);
 
-    push_input_from(&mut queues, &other_1, 1);
+    push_input_from(&mut queues, &other_1);
     assert_schedule(&queues, &[&other_1, &other_2]);
 
-    push_input_from(&mut queues, &other_3, 0);
+    push_input_from(&mut queues, &other_3);
     assert_schedule(&queues, &[&other_1, &other_2, &other_3]);
 
     assert_sender(&other_1, queues.pop_input().unwrap());
@@ -596,22 +584,21 @@ fn test_output_into_iter() {
     }
 
     let expected = vec![
-        (&other_1, 0, 0),
-        (&other_2, 0, 1),
-        (&other_3, 0, 3),
-        (&other_1, 1, 2),
-        (&other_2, 1, 4),
-        (&other_1, 2, 5),
+        (&other_1, 0),
+        (&other_2, 1),
+        (&other_3, 3),
+        (&other_1, 2),
+        (&other_2, 4),
+        (&other_1, 5),
     ];
     assert_eq!(expected.len(), queues.output_message_count());
 
-    for (i, (qid, idx, msg)) in queues.output_into_iter(this).enumerate() {
+    for (i, (qid, msg)) in queues.output_into_iter(this).enumerate() {
         assert_eq!(this, qid.src_canister);
         assert_eq!(*expected[i].0, qid.dst_canister);
-        assert_eq!(expected[i].1, idx.get());
         match msg {
             RequestOrResponse::Request(msg) => {
-                assert_eq!(vec![expected[i].2], msg.method_payload)
+                assert_eq!(vec![expected[i].1], msg.method_payload)
             }
             msg => panic!("unexpected message popped: {:?}", msg),
         }
@@ -631,14 +618,12 @@ fn encode_roundtrip() {
     let other = canister_test_id(14);
     queues
         .push_input(
-            QueueIndex::from(0),
             RequestBuilder::default().sender(this).build().into(),
             InputQueueType::RemoteSubnet,
         )
         .unwrap();
     queues
         .push_input(
-            QueueIndex::from(0),
             RequestBuilder::default().sender(other).build().into(),
             InputQueueType::RemoteSubnet,
         )
@@ -654,11 +639,24 @@ fn encode_roundtrip() {
     assert_eq!(queues, decoded);
 }
 
+/// Tests that serializing an empty `CanisterQueues` produces zero bytes.
+#[test]
+fn encode_empty() {
+    use prost::Message;
+
+    let queues = CanisterQueues::default();
+
+    let encoded: pb_queues::CanisterQueues = (&queues).into();
+    let mut serialized: Vec<u8> = Vec::new();
+    encoded.encode(&mut serialized).unwrap();
+
+    let expected: &[u8] = &[];
+    assert_eq!(expected, serialized.as_slice());
+}
+
 fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
     for req in requests {
-        queues
-            .push_input(QUEUE_INDEX_NONE, req.clone().into(), input_type)
-            .unwrap()
+        queues.push_input(req.clone().into(), input_type).unwrap()
     }
 }
 
@@ -811,7 +809,7 @@ fn test_stats() {
             .into();
         msg_size[i] = msg.count_bytes();
         queues
-            .push_input(QUEUE_INDEX_NONE, msg, InputQueueType::RemoteSubnet)
+            .push_input(msg, InputQueueType::RemoteSubnet)
             .expect("could not push");
 
         // Added a new input queue and `msg`.
@@ -907,7 +905,7 @@ fn test_stats() {
         .next()
         .expect("could not pop a message")
     {
-        (_, _, RequestOrResponse::Response(msg)) => {
+        (_, RequestOrResponse::Response(msg)) => {
             expected_oq_stats -= OutputQueuesStats {
                 message_count: 1,
                 cycles: msg.refund,
@@ -929,7 +927,7 @@ fn test_stats() {
         .next()
         .expect("could not pop a message")
     {
-        (_, _, RequestOrResponse::Request(msg)) => {
+        (_, RequestOrResponse::Request(msg)) => {
             expected_oq_stats -= OutputQueuesStats {
                 message_count: 1,
                 cycles: msg.payment,
@@ -961,7 +959,7 @@ fn test_stats() {
         .into();
     msg_size[5] = msg.count_bytes();
     queues
-        .push_input(QUEUE_INDEX_NONE, msg, InputQueueType::RemoteSubnet)
+        .push_input(msg, InputQueueType::RemoteSubnet)
         .expect("could not push");
     // Added a new input message.
     expected_iq_stats += InputQueuesStats {
@@ -1157,6 +1155,222 @@ fn test_stats_induct_message_to_self() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 }
 
+/// Simulates sending an outgoing request and receiving an incoming response,
+/// calling `garbage_collect()` throughout. This is always a no-op, until after
+/// the response was consumed, when the queue pair is GC-ed and all fields are
+/// reset to their default values.
+#[test]
+fn test_garbage_collect() {
+    let this = canister_test_id(1);
+    let other = canister_test_id(2);
+
+    // A matching request and response pair.
+    let request = RequestBuilder::default()
+        .sender(this)
+        .receiver(other)
+        .build();
+    let response = ResponseBuilder::default()
+        .respondent(other)
+        .originator(this)
+        .build();
+
+    // Empty `CanisterQueues`.
+    let mut queues = CanisterQueues::default();
+    assert!(queues.canister_queues.is_empty());
+    // No-op.
+    queues.garbage_collect();
+    assert_eq!(CanisterQueues::default(), queues);
+
+    // Push output request.
+    queues
+        .push_output_request(request.into(), mock_time())
+        .unwrap();
+    // No-op.
+    queues.garbage_collect();
+    assert!(queues.has_output());
+    assert_eq!(1, queues.canister_queues.len());
+
+    // "Route" output request.
+    queues.output_into_iter(this).next();
+    // No-op.
+    queues.garbage_collect();
+    // No messages, but the queue pair is not GC-ed (due to the reservation).
+    assert!(!queues.has_output());
+    assert_eq!(1, queues.canister_queues.len());
+
+    // Push input response.
+    queues
+        .push_input(response.into(), InputQueueType::LocalSubnet)
+        .unwrap();
+    // Before popping any input, `queue.next_input_queue` has default value.
+    assert_eq!(NextInputQueue::default(), queues.next_input_queue);
+    // No-op.
+    queues.garbage_collect();
+    // Still one queue pair.
+    assert!(queues.has_input());
+    assert_eq!(1, queues.canister_queues.len());
+
+    // "Process" response.
+    queues.pop_input();
+    // After having popped an input, `next_input_queue` has advanced.
+    assert_ne!(NextInputQueue::default(), queues.next_input_queue);
+    // No more inputs, but we still have the queue pair.
+    assert!(!queues.has_input());
+    assert_eq!(1, queues.canister_queues.len());
+
+    // Queue pair can finally be GC-ed.
+    queues.garbage_collect();
+    // No canister queues left.
+    assert!(queues.canister_queues.is_empty());
+    // And all fields have been reset to their default values.
+    assert_eq!(CanisterQueues::default(), queues);
+}
+
+/// Tests that even when `garbage_collect()` would otherwis be a no-op, fields
+/// are always reset to default.
+#[test]
+fn test_garbage_collect_restores_defaults() {
+    let this = canister_test_id(1);
+
+    // Empty `CanisterQueues`.
+    let mut queues = CanisterQueues::default();
+    assert_eq!(CanisterQueues::default(), queues);
+
+    // Push and pop an ingress message.
+    queues.push_ingress(IngressBuilder::default().receiver(this).build());
+    assert!(queues.pop_input().is_some());
+    // `next_input_queue` has now advanced to `RemoteSubnet`.
+    assert_ne!(CanisterQueues::default(), queues);
+
+    // But `garbage_collect()` should restore the struct to its default value.
+    queues.garbage_collect();
+    assert_eq!(CanisterQueues::default(), queues);
+}
+
+#[test]
+fn test_reject_ic00_output_request() {
+    let this = canister_test_id(1);
+
+    let request = RequestBuilder::default()
+        .sender(this)
+        .receiver(IC_00)
+        .build();
+    let reject_context = RejectContext {
+        code: ic_error_types::RejectCode::DestinationInvalid,
+        message: "".into(),
+    };
+
+    let mut queues = CanisterQueues::default();
+
+    // Reject an output request without having enqueued it first.
+    queues
+        .reject_ic00_output_request(request, reject_context.clone())
+        .unwrap();
+
+    // There is now a reject response.
+    assert_eq!(
+        CanisterInputMessage::Response(Arc::new(
+            ResponseBuilder::default()
+                .respondent(IC_00)
+                .originator(this)
+                .response_payload(Payload::Reject(reject_context))
+                .build()
+        )),
+        queues.pop_input().unwrap()
+    );
+
+    // And after popping it, there are no messages or reservations left.
+    queues.garbage_collect();
+    assert!(queues.canister_queues.is_empty());
+}
+
+#[test]
+fn test_output_queues_for_each() {
+    let this = canister_test_id(13);
+    let other_1 = canister_test_id(1);
+    let other_2 = canister_test_id(2);
+
+    // 3 requests to `other_1`, one to `other_2`.
+    let request_1 = RequestBuilder::default()
+        .sender(this)
+        .receiver(other_1)
+        .method_name("request_1")
+        .build();
+    let request_2 = RequestBuilder::default()
+        .sender(this)
+        .receiver(other_1)
+        .method_name("request_2")
+        .build();
+    let request_3 = RequestBuilder::default()
+        .sender(this)
+        .receiver(other_1)
+        .method_name("request_3")
+        .build();
+    let request_4 = RequestBuilder::default()
+        .sender(this)
+        .receiver(other_2)
+        .method_name("request_4")
+        .build();
+
+    let mut queues = CanisterQueues::default();
+    queues
+        .push_output_request(request_1.into(), mock_time())
+        .unwrap();
+    queues
+        .push_output_request(request_2.into(), mock_time())
+        .unwrap();
+    queues
+        .push_output_request(request_3.into(), mock_time())
+        .unwrap();
+    queues
+        .push_output_request(request_4.into(), mock_time())
+        .unwrap();
+
+    // Should have 2 queue pairs (one for `other_1`, one for `other_2`).
+    assert_eq!(2, queues.canister_queues.len());
+
+    let mut seen = Vec::new();
+    queues.output_queues_for_each(|canister_id, msg| match msg {
+        RequestOrResponse::Request(req) => {
+            seen.push((*canister_id, req.method_name.clone()));
+            // Turn down `request_2`, accept everything else.
+            if req.method_name == "request_2" {
+                return Err(());
+            }
+            Ok(())
+        }
+        _ => unreachable!(),
+    });
+
+    // Ensure we've seen `request_1` and `request_2` to `other_1`; and
+    // `request_4` to `other_2`; but not `request_3`.
+    assert_eq!(
+        vec![
+            (other_1, "request_1".into()),
+            (other_1, "request_2".into()),
+            (other_2, "request_4".into())
+        ],
+        seen
+    );
+
+    // `request_2` and `request_3` should have been left in place.
+    let mut seen = Vec::new();
+    queues.output_queues_for_each(|canister_id, msg| match msg {
+        RequestOrResponse::Request(req) => {
+            seen.push((*canister_id, req.method_name.clone()));
+            Ok(())
+        }
+        _ => unreachable!(),
+    });
+    assert_eq!(
+        vec![(other_1, "request_2".into()), (other_1, "request_3".into())],
+        seen
+    );
+
+    // No output left.
+    assert!(!queues.has_output());
+}
+
 // Must be duplicated here, because the `ic_test_utilities` one pulls in the
 // `CanisterQueues` defined by a its `ic_replicated_state`, not the ones from
 // `crate` and we wouldn't have access to its non-public methods.
@@ -1183,9 +1397,9 @@ proptest! {
         let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
 
         let mut popped = 0;
-        while let Some((queue_id, idx, msg)) = output_iter.peek() {
+        while let Some((queue_id, msg)) = output_iter.peek() {
             popped += 1;
-            assert_eq!(Some((queue_id, idx, msg.clone())), output_iter.next());
+            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
         }
 
         assert_eq!(output_iter.next(), None);
@@ -1203,7 +1417,7 @@ proptest! {
         let mut i = start;
         let mut popped = 0;
         let mut excluded = 0;
-        while let Some((queue_id, idx, msg)) = output_iter.peek() {
+        while let Some((queue_id, msg)) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
@@ -1211,7 +1425,7 @@ proptest! {
                 continue;
             }
             popped += 1;
-            assert_eq!(Some((queue_id, idx, msg.clone())), output_iter.next());
+            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
         }
         assert_eq!(output_iter.pop(), None);
         assert_eq!(raw_requests.len(), excluded + popped);
@@ -1229,7 +1443,7 @@ proptest! {
             let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
 
             for _ in 0..num_requests / 2 {
-                let (_, _, popped_message) = output_iter.next().unwrap();
+                let (_, popped_message) = output_iter.next().unwrap();
                 let expected_message = raw_requests.pop_front().unwrap();
                 assert_eq!(popped_message, expected_message);
             }
@@ -1240,7 +1454,7 @@ proptest! {
         // Ensure that the messages that have not been consumed above are still in the queues
         // after dropping `output_iter`.
         while let Some(raw) = raw_requests.pop_front() {
-            if let Some((_, msg)) = canister_queues.pop_canister_output(&raw.receiver()) {
+            if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
                 assert_eq!(raw, msg);
             } else {
                 panic!("Not all unconsumed messages left in canister queues");
@@ -1276,7 +1490,7 @@ proptest! {
                     continue;
                 }
 
-                let (_, _, popped_message) = output_iter.pop().unwrap();
+                let (_, popped_message) = output_iter.pop().unwrap();
                 let expected_message = raw_requests.pop_front().unwrap();
                 assert_eq!(popped_message, expected_message);
             }
@@ -1287,7 +1501,7 @@ proptest! {
         // Ensure that the messages that have not been consumed above are still in the queues
         // after dropping `output_iter`.
         while let Some(raw) = excluded_requests.pop_front() {
-            if let Some((_, msg)) = canister_queues.pop_canister_output(&raw.receiver()) {
+            if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
                 assert_eq!(raw, msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw);
             } else {
                 panic!("Not all unconsumed messages left in canister queues");
@@ -1304,7 +1518,7 @@ proptest! {
     ) {
         let recovered: VecDeque<_> = canister_queues
             .output_into_iter(CanisterId::from_u64(0))
-            .map(|(_, _, msg)| msg)
+            .map(|(_, msg)| msg)
             .collect();
 
         assert_eq!(raw_requests, recovered);

@@ -70,6 +70,19 @@ impl std::fmt::Display for NetworkInRequest {
     }
 }
 
+/// An enum representing a Bitcoin network.
+// TODO(EXC-1234): Exclusively use this enum and remove the legacy `Network` and
+// `NetworkInRequest` enums.
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+pub enum NetworkSnakeCase {
+    #[serde(rename = "mainnet")]
+    Mainnet,
+    #[serde(rename = "testnet")]
+    Testnet,
+    #[serde(rename = "regtest")]
+    Regtest,
+}
+
 /// A reference to a transaction output.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
 pub struct OutPoint {

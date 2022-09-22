@@ -1,6 +1,6 @@
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportError, TransportEventHandler, TransportPayload,
+    Transport, TransportChannelId, TransportError, TransportEventHandler, TransportPayload,
 };
 use mockall::*;
 use std::net::SocketAddr;
@@ -29,7 +29,7 @@ mock! {
         fn send(
             &self,
             peer: &NodeId,
-            flow: FlowTag,
+            channel_id: TransportChannelId,
             message: TransportPayload,
         ) -> Result<(), TransportError>;
 

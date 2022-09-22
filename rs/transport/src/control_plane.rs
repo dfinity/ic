@@ -11,11 +11,13 @@ use crate::{
         Connecting, ConnectionRole, ConnectionState, PeerState, QueueSize, ServerPortState,
         TransportImpl,
     },
-    utils::get_peer_label,
+    utils::{get_peer_label, start_listener},
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
-use ic_interfaces_transport::{FlowTag, TransportError, TransportEvent, TransportEventHandler};
+use ic_interfaces_transport::{
+    TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
+};
 use ic_logger::{error, warn};
 use std::{net::SocketAddr, time::Duration};
 use strum::AsRefStr;
@@ -73,12 +75,12 @@ impl TransportImpl {
         }
 
         // TODO: P2P-514
-        let flow_tag = FlowTag::from(self.config.legacy_flow_tag);
+        let channel_id = TransportChannelId::from(self.config.legacy_flow_tag);
         if role == ConnectionRole::Server {
             let peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
             let peer_state = PeerState::new(
                 self.log.clone(),
-                flow_tag,
+                channel_id,
                 peer_label,
                 ConnectionState::Listening,
                 QueueSize::from(self.config.send_queue_size),
@@ -90,27 +92,30 @@ impl TransportImpl {
         }
 
         let peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
-        let connecting_task = self.spawn_connect_task(flow_tag, *peer_id, peer_addr);
+        let connecting_task = self.spawn_connect_task(channel_id, *peer_id, peer_addr);
         let connecting_state = Connecting {
             peer_addr,
             connecting_task,
         };
         let peer_state = PeerState::new(
             self.log.clone(),
-            flow_tag,
+            channel_id,
             peer_label,
             ConnectionState::Connecting(connecting_state),
             QueueSize::from(self.config.send_queue_size),
             self.send_queue_metrics.clone(),
             self.control_plane_metrics.clone(),
         );
-
         peer_map.insert(*peer_id, RwLock::new(peer_state));
         Ok(())
     }
 
     /// Starts the async task to accept the incoming TcpStreams in server mode.
-    fn spawn_accept_task(&self, flow_tag: FlowTag, tcp_listener: TcpListener) -> JoinHandle<()> {
+    fn spawn_accept_task(
+        &self,
+        channel_id: TransportChannelId,
+        tcp_listener: TcpListener,
+    ) -> JoinHandle<()> {
         let weak_self = self.weak_self.read().unwrap().clone();
         let rt_handle = self.rt_handle.clone();
         let async_tasks_gauge_vec = self.control_plane_metrics.async_tasks.clone();
@@ -197,7 +202,7 @@ impl TransportImpl {
                             };
                             let connected_state = create_connected_state(
                                 peer_id,
-                                flow_tag,
+                                channel_id,
                                 peer_state.peer_label.clone(),
                                 peer_state.send_queue.get_reader(),
                                 ConnectionRole::Server,
@@ -216,7 +221,7 @@ impl TransportImpl {
                             peer_state.update(ConnectionState::Connected(connected_state));
                             arc_self.control_plane_metrics
                                 .tcp_accept_conn_success
-                                .with_label_values(&[&flow_tag.to_string()])
+                                .with_label_values(&[&channel_id.to_string()])
                                     .inc()
                         });
                     }
@@ -236,7 +241,7 @@ impl TransportImpl {
     /// connection is established or peer is removed)
     fn spawn_connect_task(
         &self,
-        flow_tag: FlowTag,
+        channel_id: TransportChannelId,
         peer_id: NodeId,
         peer_addr: SocketAddr,
     ) -> JoinHandle<()> {
@@ -308,7 +313,7 @@ impl TransportImpl {
                         };
                         let connected_state = create_connected_state(
                             peer_id,
-                            flow_tag,
+                            channel_id,
                             peer_state.peer_label.clone(),
                             peer_state.send_queue.get_reader(),
                             ConnectionRole::Client,
@@ -329,7 +334,7 @@ impl TransportImpl {
                             .tcp_conn_to_server_success
                             .with_label_values(&[
                                 &peer_id.to_string(),
-                                &flow_tag.to_string(),
+                                &channel_id.to_string(),
                             ])
                             .inc();
                         return;
@@ -357,12 +362,12 @@ impl TransportImpl {
     }
 
     /// Retries to establish a connection
-    pub(crate) async fn on_disconnect(&self, peer_id: NodeId, flow_tag: FlowTag) {
+    pub(crate) async fn on_disconnect(&self, peer_id: NodeId, channel_id: TransportChannelId) {
         warn!(
             self.log,
-            "ControlPlane::retry_connection(): node_id = {:?}, flow_tag = {:?}, peer_id = {:?}",
+            "ControlPlane::retry_connection(): node_id = {:?}, channel_id = {:?}, peer_id = {:?}",
             self.node_id,
-            flow_tag,
+            channel_id,
             peer_id
         );
         let peer_map = self.peer_map.read().await;
@@ -373,7 +378,7 @@ impl TransportImpl {
         let mut peer_state = peer_state_mu.write().await;
         let connected = match peer_state.get_connected() {
             Some(connected) => connected,
-            // Flow is already disconnected/reconnecting, skip reconnect processing
+            // Channel is already disconnected/reconnecting, skip reconnect processing
             None => return,
         };
         let mut event_handler = match self.event_handler.lock().await.as_ref() {
@@ -382,7 +387,7 @@ impl TransportImpl {
         };
         self.control_plane_metrics
             .retry_connection
-            .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
+            .with_label_values(&[&peer_id.to_string(), &channel_id.to_string()])
             .inc();
 
         let socket_addr = connected.peer_addr;
@@ -392,15 +397,15 @@ impl TransportImpl {
             warn!(
                 self.log,
                 "ControlPlane::process_disconnect(): waiting for peer to reconnect: \
-                 node_id = {:?}, flow_tag = {:?}, peer_id = {:?}",
+                 node_id = {:?}, channel_id = {:?}, peer_id = {:?}",
                 self.node_id,
-                flow_tag,
+                channel_id,
                 peer_id
             );
             ConnectionState::Listening
         } else {
             // reconnect if we have a listener
-            let connecting_task = self.spawn_connect_task(flow_tag, peer_id, socket_addr);
+            let connecting_task = self.spawn_connect_task(channel_id, peer_id, socket_addr);
             let connecting_state = Connecting {
                 peer_addr: socket_addr,
                 connecting_task,
@@ -408,10 +413,10 @@ impl TransportImpl {
             warn!(
                 self.log,
                 "ControlPlane::process_disconnect(): spawning reconnect task: node = {:?}/{:?}, \
-                    flow_tag = {:?}, peer = {:?}/{:?}, peer_port = {:?}",
+                channel_id = {:?}, peer = {:?}/{:?}, peer_port = {:?}",
                 self.node_id,
                 self.node_ip,
-                flow_tag,
+                channel_id,
                 peer_id,
                 socket_addr.ip(),
                 socket_addr.port(),
@@ -473,7 +478,6 @@ impl TransportImpl {
     pub(crate) fn init_client(&self, event_handler: TransportEventHandler) {
         // Creating the listeners requres that we are within a tokio runtime context.
         let _rt_enter_guard = self.rt_handle.enter();
-        // Bind to the server ports.
         let server_addr = SocketAddr::new(self.node_ip, self.config.listening_port);
         let tcp_listener = start_listener(server_addr).unwrap_or_else(|err| {
             panic!(
@@ -482,8 +486,8 @@ impl TransportImpl {
             )
         });
 
-        let flow_tag = FlowTag::from(self.config.legacy_flow_tag);
-        let accept_task = self.spawn_accept_task(flow_tag, tcp_listener);
+        let channel_id = TransportChannelId::from(self.config.legacy_flow_tag);
+        let accept_task = self.spawn_accept_task(channel_id, tcp_listener);
         *self.accept_port.blocking_lock() = Some(ServerPortState { accept_task });
         *self.event_handler.blocking_lock() = Some(event_handler);
     }
@@ -503,20 +507,6 @@ async fn connect_to_server(
     let stream = socket.connect(peer_addr).await?;
     stream.set_nodelay(true)?;
     Ok(stream)
-}
-
-// Sets up the server side socket with the node IP:port
-// Panics in case of unrecoverable error.
-fn start_listener(local_addr: SocketAddr) -> std::io::Result<TcpListener> {
-    let socket = if local_addr.is_ipv6() {
-        TcpSocket::new_v6()?
-    } else {
-        TcpSocket::new_v4()?
-    };
-    socket.set_reuseaddr(true)?;
-    socket.set_reuseport(true)?;
-    socket.bind(local_addr)?;
-    socket.listen(128)
 }
 
 /// Returns our role wrt the peer connection

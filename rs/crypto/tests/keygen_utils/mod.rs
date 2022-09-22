@@ -1,5 +1,6 @@
 use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
+use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::registry::RegistryDataProvider;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
@@ -84,11 +85,12 @@ impl TestKeygenCryptoBuilder {
         let node_id = node_test_id(node_id);
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
-        let (temp_crypto, node_pubkeys) = TempCryptoComponent::new_with_node_keys_generation(
-            Arc::clone(&registry_client) as Arc<_>,
-            node_id,
-            self.node_keys_to_generate.clone(),
-        );
+        let temp_crypto = TempCryptoComponent::builder()
+            .with_registry(Arc::clone(&registry_client) as Arc<_>)
+            .with_node_id(node_id)
+            .with_keys(self.node_keys_to_generate.clone())
+            .build();
+        let node_pubkeys = temp_crypto.node_public_keys();
         self.add_node_signing_key_to_registry_if_present(
             registry_version,
             node_id,

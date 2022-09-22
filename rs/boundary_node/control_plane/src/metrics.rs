@@ -87,7 +87,15 @@ impl<T: Snapshot> Snapshot for WithMetrics<T> {
         counter.add(1, labels);
         recorder.record(duration, labels);
 
-        info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
+        let (out, registry_version) = match out {
+            Ok(rt) => {
+                let v = rt.registry_version.to_string();
+                (Ok(rt), v)
+            }
+            _ => (out, String::from("N/A")),
+        };
+
+        info!(action = action.as_str(), status, duration, registry_version, error = ?out.as_ref().err());
 
         out
     }

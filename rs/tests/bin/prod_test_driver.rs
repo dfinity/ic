@@ -6,7 +6,7 @@ use ic_fondue::{
 };
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    btc_integration, canister_http, consensus, execution, icrc1_agent_test, ledger_tests,
+    btc_integration, canister_http, ckbtc, consensus, execution, icrc1_agent_test, ledger_tests,
     message_routing, networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
     wasm_generator_test, workload_counter_canister_test,
 };
@@ -292,10 +292,16 @@ fn get_test_suites() -> HashMap<String, Suite> {
             vec![pot_with_setup(
                 "boundary_nodes_sev_snp_pot",
                 boundary_nodes_snp_tests::boundary_nodes_snp::config,
-                par(vec![sys_t(
-                    "boundary_nodes_sev_snp_kernel_test",
-                    boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
-                )]),
+                par(vec![
+                    sys_t(
+                        "boundary_nodes_sev_snp_kernel_test",
+                        boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_sev_snp_basic_test",
+                        boundary_nodes_snp_tests::boundary_nodes_snp::snp_basic_test,
+                    ),
+                ]),
             )
             .with_alert(ENG_NODE_CHANNEL)],
         )
@@ -342,6 +348,24 @@ fn get_test_suites() -> HashMap<String, Suite> {
         )
         .with_alert(ENG_CONSENSUS_CHANNEL),
     );
+
+    m.add_suite(suite(
+        "ckbtc_pre_master",
+        vec![pot_with_setup(
+            "minter_pot",
+            ckbtc::minter::config,
+            par(vec![
+                sys_t(
+                    "minter_get_btc_address_test",
+                    ckbtc::minter::get_btc_address_test,
+                ),
+                sys_t(
+                    "minter_get_withdrawal_account_test",
+                    ckbtc::minter::get_withdrawal_account_test,
+                ),
+            ]),
+        )],
+    ));
 
     m.add_suite(suite(
         "pre_master",
@@ -461,6 +485,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             ),
             pot(
+                "cycles_minting_pot_with_multiple_app_subnets",
+                nns_tests::cycles_minting::config_with_multiple_app_subnets(),
+                par(vec![t(
+                    "cycles_minting_with_subnet_types_test",
+                    nns_tests::cycles_minting::create_canister_on_specific_subnet_type,
+                )]),
+            ),
+            pot(
                 "nns_voting_fuzzing_poc_pot",
                 nns_tests::nns_voting_fuzzing_poc_test::config(),
                 par(vec![t(
@@ -575,15 +607,18 @@ fn get_test_suites() -> HashMap<String, Suite> {
         )],
     ));
 
-    let xnet_120_subnets = message_routing::xnet_slo_test::config_120_subnets();
+    let xnet_nightly_120_subnets = message_routing::xnet_slo_test::config_nightly_120_subnets();
     m.add_suite(
         suite(
             "staging", //runs nightly, allowed to fail
             vec![
                 pot(
                     "xnet_120_subnets_pot",
-                    xnet_120_subnets.build(),
-                    par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
+                    xnet_nightly_120_subnets.build(),
+                    par(vec![t(
+                        "xnet_slo_120_subnets_test",
+                        xnet_nightly_120_subnets.test(),
+                    )]),
                 ),
                 pot_with_setup(
                     "boundary_nodes_pot",
@@ -651,16 +686,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "http_fault_tolerance",
                         canister_http::http_fault_tolerance::test,
                     )]),
-                ),
-                pot_with_setup(
-                    "boundary_subnet_workload_pot",
-                    networking::subnet_update_workload::boundary_config,
-                    seq(vec![
-                        sys_t(
-                            "boundary_subnet_update_workload_test",
-                            networking::subnet_update_workload::boundary_test,
-                        ),
-                    ]),
                 ),
                 pot_with_setup(
                     "large_subnet_workload_pot",
@@ -793,6 +818,16 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "hourly",
             vec![
+                pot_with_setup(
+                    "boundary_subnet_workload_pot",
+                    networking::subnet_update_workload::boundary_config,
+                    seq(vec![
+                        sys_t(
+                            "boundary_subnet_update_workload_test",
+                            networking::subnet_update_workload::boundary_test,
+                        ),
+                    ]),
+                ),
                 pot_with_setup(
                     "basic_health_pot_single_host",
                     basic_health_test::config_single_host,
@@ -1014,6 +1049,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             )],
         )
+        .with_alert(ENG_FINANCIAL_INTEGRATION)
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 

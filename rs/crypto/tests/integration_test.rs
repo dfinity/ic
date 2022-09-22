@@ -1143,25 +1143,30 @@ fn new_tokio_runtime() -> tokio::runtime::Runtime {
 }
 
 fn well_formed_dkg_dealing_encryption_pk() -> PublicKey {
-    let dummy_node_id = node_test_id(NODE_ID);
-    let dummy_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-    let dummy_registry_client = Arc::new(FakeRegistryClient::new(dummy_data_provider));
-    let (_temp_crypto, node_pubkeys) = TempCryptoComponent::new_with_node_keys_generation(
-        Arc::clone(&dummy_registry_client) as Arc<_>,
-        dummy_node_id,
-        NodeKeysToGenerate::only_dkg_dealing_encryption_key(),
-    );
-    node_pubkeys.dkg_dealing_encryption_pk.unwrap()
+    let temp_crypto =
+        new_temp_crypto_component(NodeKeysToGenerate::only_dkg_dealing_encryption_key());
+    temp_crypto
+        .node_public_keys()
+        .dkg_dealing_encryption_pk
+        .unwrap()
 }
 
 fn well_formed_idkg_dealing_encryption_pk() -> PublicKey {
+    let temp_crypto =
+        new_temp_crypto_component(NodeKeysToGenerate::only_idkg_dealing_encryption_key());
+    temp_crypto
+        .node_public_keys()
+        .idkg_dealing_encryption_pk
+        .unwrap()
+}
+
+fn new_temp_crypto_component(selector: NodeKeysToGenerate) -> TempCryptoComponent {
     let dummy_node_id = node_test_id(NODE_ID);
     let dummy_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let dummy_registry_client = Arc::new(FakeRegistryClient::new(dummy_data_provider));
-    let (_temp_crypto, node_pubkeys) = TempCryptoComponent::new_with_node_keys_generation(
-        Arc::clone(&dummy_registry_client) as Arc<_>,
-        dummy_node_id,
-        NodeKeysToGenerate::only_idkg_dealing_encryption_key(),
-    );
-    node_pubkeys.idkg_dealing_encryption_pk.unwrap()
+    TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&dummy_registry_client) as Arc<_>)
+        .with_node_id(dummy_node_id)
+        .with_keys(selector)
+        .build()
 }

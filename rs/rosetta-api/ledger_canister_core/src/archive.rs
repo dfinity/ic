@@ -85,7 +85,7 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
 
     controller_id: PrincipalId,
 
-    // BlockHeights of Blocks stored in each archive node.
+    // BlockIndexs of Blocks stored in each archive node.
 
     // We need this because Blocks are stored in encoded format as
     // EncodedBlocks, and different EncodedBlocks may have different lengths.
@@ -240,7 +240,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                 Err((_, msg)) => return Err((num_sent_blocks, FailedToArchiveBlocks(msg))),
             };
 
-            // Keep track of BlockHeights
+            // Keep track of BlockIndexs
             let heights = inspect_archive(&archive, |archive| {
                 let heights = archive.nodes_block_ranges.get_mut(node_index);
                 match heights {

@@ -44,8 +44,7 @@ use dfn_candid::{candid, candid_one};
 use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID};
 
 use assert_matches::assert_matches;
-use ed25519_dalek::Keypair;
-use ic_canister_client::Sender;
+use ic_canister_client::{Ed25519KeyPair, Sender};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR,
 };
@@ -76,11 +75,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         let valid_topic = Topic::ParticipantManagement as i32;
 
-        let n1: (ic_nns_common::types::NeuronId, &Keypair) =
+        let n1: (ic_nns_common::types::NeuronId, &Ed25519KeyPair) =
             (NeuronId(TEST_NEURON_1_ID), &TEST_NEURON_1_OWNER_KEYPAIR);
-        let n2: (ic_nns_common::types::NeuronId, &Keypair) =
+        let n2: (ic_nns_common::types::NeuronId, &Ed25519KeyPair) =
             (NeuronId(TEST_NEURON_2_ID), &TEST_NEURON_2_OWNER_KEYPAIR);
-        let n3: (ic_nns_common::types::NeuronId, &Keypair) =
+        let n3: (ic_nns_common::types::NeuronId, &Ed25519KeyPair) =
             (NeuronId(TEST_NEURON_3_ID), &TEST_NEURON_3_OWNER_KEYPAIR);
 
         // expect everything working
@@ -126,7 +125,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                         && err.error_message.contains("Invalid topic"));
 
         // expect reject
-        let n2_not_authz: (ic_nns_common::types::NeuronId, &Keypair) =
+        let n2_not_authz: (ic_nns_common::types::NeuronId, &Ed25519KeyPair) =
             (NeuronId(TEST_NEURON_2_ID), &TEST_NEURON_3_OWNER_KEYPAIR);
         let reject = setup_following(&ctx.logger, &governance, n2_not_authz, n1, valid_topic)
             .await
@@ -140,7 +139,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         // a random neuron NeuronIdOrSubaccount. At least we don't use magic Ids.
         // Expect reject, a non-existent neuron cannot have followees.
         let fake_neuron_id: u64 = rng.gen_range(0..u64::MAX);
-        let n_fake: (ic_nns_common::types::NeuronId, &Keypair) =
+        let n_fake: (ic_nns_common::types::NeuronId, &Ed25519KeyPair) =
             (NeuronId(fake_neuron_id), &TEST_NEURON_2_OWNER_KEYPAIR);
         let reject = setup_following(&ctx.logger, &governance, n_fake, n1, valid_topic)
             .await
@@ -312,7 +311,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         // n2 -> n1a -> n3 -> n1
         let n1a_id = split_neuron(&ctx.logger, &governance, n1, 500_000_000).await;
 
-        let n1a: (ic_nns_common::types::NeuronId, &Keypair) =
+        let n1a: (ic_nns_common::types::NeuronId, &Ed25519KeyPair) =
             (n1a_id, &TEST_NEURON_1_OWNER_KEYPAIR);
 
         setup_following_asserting(
@@ -404,7 +403,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 async fn setup_followees(
     logger: &slog::Logger,
     gov: &Canister<'_>,
-    follower: (NeuronId, &Keypair),
+    follower: (NeuronId, &Ed25519KeyPair),
     leaders: Vec<NeuronId>,
     topic: i32,
 ) -> ManageNeuronResponse {
@@ -437,8 +436,8 @@ async fn setup_followees(
 async fn setup_following(
     logger: &slog::Logger,
     gov: &Canister<'_>,
-    follower: (NeuronId, &Keypair),
-    leader: (NeuronId, &Keypair),
+    follower: (NeuronId, &Ed25519KeyPair),
+    leader: (NeuronId, &Ed25519KeyPair),
     topic: i32,
 ) -> ManageNeuronResponse {
     setup_followees(logger, gov, follower, vec![leader.0], topic).await
@@ -447,8 +446,8 @@ async fn setup_following(
 async fn setup_following_asserting(
     logger: &slog::Logger,
     gov: &Canister<'_>,
-    follower: (NeuronId, &Keypair),
-    leader: (NeuronId, &Keypair),
+    follower: (NeuronId, &Ed25519KeyPair),
+    leader: (NeuronId, &Ed25519KeyPair),
     topic: Topic,
 ) {
     let result = setup_following(logger, gov, follower, leader, topic as i32)
@@ -464,7 +463,7 @@ async fn setup_following_asserting(
 async fn clear_followees(
     logger: &slog::Logger,
     gov: &Canister<'_>,
-    follower: (NeuronId, &Keypair),
+    follower: (NeuronId, &Ed25519KeyPair),
     topic: i32,
 ) {
     let result = setup_followees(logger, gov, follower, vec![], topic)
@@ -480,7 +479,7 @@ async fn clear_followees(
 async fn split_neuron(
     logger: &slog::Logger,
     gov: &Canister<'_>,
-    neuron: (NeuronId, &Keypair),
+    neuron: (NeuronId, &Ed25519KeyPair),
     amount: u64,
 ) -> NeuronId {
     let result: ManageNeuronResponse = gov
@@ -508,7 +507,7 @@ async fn split_neuron(
     }
 }
 
-async fn get_neuron_ids(gov: &Canister<'_>, neuron: &Keypair) -> HashSet<NeuronId> {
+async fn get_neuron_ids(gov: &Canister<'_>, neuron: &Ed25519KeyPair) -> HashSet<NeuronId> {
     gov.query_from_sender("get_neuron_ids", candid, (), &Sender::from_keypair(neuron))
         .await
         .unwrap()
@@ -517,7 +516,7 @@ async fn get_neuron_ids(gov: &Canister<'_>, neuron: &Keypair) -> HashSet<NeuronI
 async fn obtain_followees(
     logger: &slog::Logger,
     gov: &Canister<'_>,
-    neuron: (NeuronId, &Keypair),
+    neuron: (NeuronId, &Ed25519KeyPair),
     topic: i32,
 ) -> Vec<NeuronId> {
     let followees = gov
@@ -544,7 +543,7 @@ async fn obtain_followees(
 async fn assert_no_followees(
     logger: &slog::Logger,
     gov: &Canister<'_>,
-    neuron: (NeuronId, &Keypair),
+    neuron: (NeuronId, &Ed25519KeyPair),
     topic: i32,
 ) {
     let followees = gov
@@ -570,7 +569,7 @@ async fn assert_no_followees(
 async fn submit_proposal(
     logger: &slog::Logger,
     gov: &Canister<'_>,
-    neuron: (NeuronId, &Keypair),
+    neuron: (NeuronId, &Ed25519KeyPair),
     update_type: NnsFunction,
 ) -> ProposalId {
     let proposal = Proposal {
@@ -611,7 +610,7 @@ async fn submit_proposal(
 async fn cast_vote(
     logger: &slog::Logger,
     gov: &Canister<'_>,
-    neuron: (NeuronId, &Keypair),
+    neuron: (NeuronId, &Ed25519KeyPair),
     proposal: ProposalId,
 ) {
     let result: ManageNeuronResponse = gov
@@ -659,7 +658,7 @@ async fn check_ballots(
     logger: &slog::Logger,
     gov: &Canister<'_>,
     proposal: ProposalId,
-    by: &(ic_nns_common::types::NeuronId, &Keypair),
+    by: &(ic_nns_common::types::NeuronId, &Ed25519KeyPair),
 ) -> (u64, Vote) {
     let reply = gov
         .query_from_sender(

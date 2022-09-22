@@ -3,7 +3,8 @@ use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput};
 
 use ic_crypto_test_utils_multi_sigs::MultiSigTestEnvironment;
-use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner, SignableMock};
+use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
+use ic_types::crypto::SignableMock;
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 

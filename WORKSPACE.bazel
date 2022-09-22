@@ -198,6 +198,12 @@ new_git_repository(
     remote = "https://github.com/AMDESE/sev-tool.git",
 )
 
+# Rosetta CLI
+
+load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
+
+rosetta_cli_repository(name = "rosetta-cli")
+
 # NodeJS dependencies
 
 http_archive(

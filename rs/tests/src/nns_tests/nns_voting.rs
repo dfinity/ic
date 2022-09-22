@@ -55,7 +55,7 @@ use canister_test::{Canister, Runtime};
 use dfn_candid::candid_one;
 use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID};
 
-use ic_canister_client::Sender;
+use ic_canister_client::{Ed25519KeyPair, Sender};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR,
 };
@@ -308,7 +308,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                  error_message,
              }| {
                 error_type == ErrorType::PreconditionFailed as i32
-                    && error_message.contains("'t have enough stake to submit proposal")
+                    && error_message.contains("'t have enough minted stake to submit proposal")
             },
         );
         assert_eq!(submit_reject, Result::Err(true));
@@ -362,7 +362,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 // execution).
 async fn submit_proposal_by_neuron(
     neuron: NeuronId,
-    keypair: &ed25519_dalek::Keypair,
+    keypair: &Ed25519KeyPair,
     runtime: &Runtime,
 ) -> Result<ProposalId, GovernanceError> {
     let root = Canister::new(runtime, ROOT_CANISTER_ID);

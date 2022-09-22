@@ -45,24 +45,27 @@ check-bins-linux:
     - .rules-parent-pipeline
   stage: cargo-test
   needs:
-    - dfx-build-release-linux
+    - job: dfx-build-release-linux
+      artifacts: false
   image:
     # 21.04
     name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
   before_script: /bin/true
   after_script: /bin/true
   variables:
-    ARTIFACT_PREFIX: artifacts/sdk-release/x86_64-linux
+    ARTIFACT_PREFIX: sdk-release/x86_64-linux
   script:
     - |
       set -exuo pipefail
 
-      gunzip < "$ARTIFACT_PREFIX/replica.gz" > /tmp/replica
+      apt-get update && apt-get install --yes --no-install-recommends curl ca-certificates
+
+      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/replica.gz" | gunzip > /tmp/replica
       chmod +x /tmp/replica
       ldd /tmp/replica
       /tmp/replica --print-sample-config --replica-version 1 >/dev/null
 
-      gunzip < "$ARTIFACT_PREFIX/ic-starter.gz" > /tmp/ic-starter
+      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/ic-starter.gz" | gunzip > /tmp/ic-starter
       chmod +x /tmp/ic-starter
       ldd /tmp/ic-starter
       /tmp/ic-starter --version
@@ -72,35 +75,27 @@ check-bins-darwin:
     - .rules-parent-pipeline-protected-branch-only
   stage: cargo-test
   needs:
-    - dfx-build-release-darwin
+    - job: dfx-build-release-darwin
+      artifacts: false
   tags:
     - dfinity
     - macos
   before_script: /usr/bin/true
   after_script: /usr/bin/true
   variables:
-    ARTIFACT_PREFIX: artifacts/sdk-release/x86_64-darwin
+    ARTIFACT_PREFIX: sdk-release/x86_64-darwin
+    # https://curl.se/mail/lib-2020-06/0010.html
+    CURL_SSL_BACKEND: secure-transport
   script:
     - |
       set -exuo pipefail
 
-      gunzip < "$ARTIFACT_PREFIX/replica.gz" > /tmp/replica
+      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/replica.gz" | gunzip > /tmp/replica
       chmod +x /tmp/replica
       otool -L /tmp/replica
       /tmp/replica --print-sample-config --replica-version 1 >/dev/null
 
-      gunzip < "$ARTIFACT_PREFIX/ic-starter.gz" > /tmp/ic-starter
+      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/ic-starter.gz" | gunzip > /tmp/ic-starter
       chmod +x /tmp/ic-starter
       otool -L /tmp/ic-starter
       /tmp/ic-starter --version
-
-ic-p8s-sd-e2e-test:
-  extends:
-    - .ubuntu-nix-docker-pinned-dc
-    - .rules-parent-pipeline
-  needs:
-    - cargo-build-release-linux-native
-  stage: cargo-test
-  script:
-    - |
-      $SHELL_WRAPPER python3 "${CI_PROJECT_DIR}"/rs/ic_p8s_service_discovery/tests/e2e-test.py

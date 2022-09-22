@@ -544,7 +544,8 @@ mod tests {
                 let ingress_msg_0 = SignedIngressBuilder::new().nonce(1).build();
                 let message_id0 = IngressMessageId::from(&ingress_msg_0);
                 let attribute_0 = IngressMessageAttribute::new(&ingress_msg_0);
-                let msg_0_integrity_hash = ic_crypto::crypto_hash(ingress_msg_0.binary()).get();
+                let msg_0_integrity_hash =
+                    ic_types::crypto::crypto_hash(ingress_msg_0.binary()).get();
 
                 ingress_pool.insert(UnvalidatedArtifact {
                     message: ingress_msg_0,
@@ -626,7 +627,7 @@ mod tests {
                         .build();
                     let message_id = IngressMessageId::from(&ingress);
                     let attribute = IngressMessageAttribute::new(&ingress);
-                    let integrity_hash = ic_crypto::crypto_hash(ingress.binary()).get();
+                    let integrity_hash = ic_types::crypto::crypto_hash(ingress.binary()).get();
                     let peer_id = (i % 10) as u64;
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress,

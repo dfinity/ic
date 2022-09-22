@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces_transport::{FlowTag, TransportEventHandler, TransportPayload};
+use ic_interfaces_transport::{TransportChannelId, TransportEventHandler, TransportPayload};
 use ic_logger::{warn, ReplicaLogger};
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
@@ -107,6 +107,44 @@ pub(crate) struct TransportImpl {
     pub weak_self: std::sync::RwLock<Weak<TransportImpl>>,
 }
 
+pub(crate) struct TransportImplH2 {
+    /// The node ID of this replica
+    pub _node_id: NodeId,
+    /// The IP address of this node
+    pub node_ip: IpAddr,
+    /// Configuration
+    pub config: TransportConfig,
+
+    /// Port used to accept connections for this transport-client
+    pub accept_port: Mutex<Option<ServerPortState>>,
+    /// Mapping of peers to their corresponding state
+    pub peer_map: RwLock<HashMap<NodeId, RwLock<PeerStateH2>>>,
+    /// Event handler to report back to the transport client
+    pub event_handler: Mutex<Option<TransportEventHandler>>,
+
+    // Crypto and data required for TLS handshakes
+    /// Clients that are allowed to connect to this node
+    pub allowed_clients: Arc<RwLock<BTreeSet<NodeId>>>,
+    /// The registry version that is used
+    pub registry_version: Arc<RwLock<RegistryVersion>>,
+    /// Reference to the crypto component
+    pub _crypto: Arc<dyn TlsHandshake + Send + Sync>,
+
+    /// Data plane metrics
+    pub _data_plane_metrics: DataPlaneMetrics,
+    /// Control plane metrics
+    pub control_plane_metrics: ControlPlaneMetrics,
+    /// Send queue metrics
+    pub send_queue_metrics: SendQueueMetrics,
+
+    /// The tokio runtime
+    pub rt_handle: Handle,
+    /// Logger
+    pub log: ReplicaLogger,
+    /// Guarded self weak-reference
+    pub weak_self: std::sync::RwLock<Weak<TransportImplH2>>,
+}
+
 /// Our role in a connection
 #[derive(Debug, PartialEq, Eq, Copy, Clone, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
@@ -133,8 +171,8 @@ impl Drop for ServerPortState {
 /// Per-peer state, specific to a transport client
 pub(crate) struct PeerState {
     log: ReplicaLogger,
-    /// Flow tag as a metrics label
-    flow_tag_label: String,
+    /// Transport channel label, used for metrics
+    pub channel_id_label: String,
     /// Peer label, used for metrics
     pub peer_label: String,
     /// Connection state
@@ -148,7 +186,7 @@ pub(crate) struct PeerState {
 impl PeerState {
     pub(crate) fn new(
         log: ReplicaLogger,
-        flow_tag: FlowTag,
+        channel_id: TransportChannelId,
         peer_label: String,
         connection_state: ConnectionState,
         queue_size: QueueSize,
@@ -157,13 +195,13 @@ impl PeerState {
     ) -> Self {
         let send_queue = Box::new(SendQueueImpl::new(
             peer_label.clone(),
-            &flow_tag,
+            channel_id,
             queue_size,
             send_queue_metrics,
         ));
         let ret = Self {
             log,
-            flow_tag_label: flow_tag.to_string(),
+            channel_id_label: channel_id.to_string(),
             peer_label,
             connection_state,
             send_queue,
@@ -183,7 +221,7 @@ impl PeerState {
     fn report_connection_state(&self) {
         self.control_plane_metrics
             .flow_state
-            .with_label_values(&[&self.peer_label, &self.flow_tag_label])
+            .with_label_values(&[&self.peer_label, &self.channel_id_label])
             .set(self.connection_state.idx());
     }
 
@@ -200,7 +238,7 @@ impl Drop for PeerState {
         if self
             .control_plane_metrics
             .flow_state
-            .remove_label_values(&[&self.peer_label, &self.flow_tag_label])
+            .remove_label_values(&[&self.peer_label, &self.channel_id_label])
             .is_err()
         {
             warn!(
@@ -208,6 +246,94 @@ impl Drop for PeerState {
                 "Transport:PeerState drop: Could not remove peer metric {:?}", self.peer_label
             )
         }
+    }
+}
+
+pub(crate) struct PeerStateH2 {
+    _log: ReplicaLogger,
+    /// Transport channel label, used for metrics
+    pub _channel_id_label: String,
+    /// Peer label, used for metrics
+    pub _peer_label: String,
+    /// Connection state where peer is server
+    _connection_state_write_path: ConnectionState,
+    /// Connection state where peer is client
+    _connection_state_read_path: ConnectionState,
+    /// The send queue of this flow
+    pub send_queue: Box<dyn SendQueue + Send + Sync>,
+    /// Metrics
+    _control_plane_metrics: ControlPlaneMetrics,
+}
+
+impl PeerStateH2 {
+    pub(crate) fn new(
+        log: ReplicaLogger,
+        channel_id: TransportChannelId,
+        peer_label: String,
+        connection_state_write_path: ConnectionState,
+        connection_state_read_path: ConnectionState,
+        queue_size: QueueSize,
+        send_queue_metrics: SendQueueMetrics,
+        control_plane_metrics: ControlPlaneMetrics,
+    ) -> Self {
+        let send_queue = Box::new(SendQueueImpl::new(
+            peer_label.clone(),
+            channel_id,
+            queue_size,
+            send_queue_metrics,
+        ));
+        let ret = Self {
+            _log: log,
+            _channel_id_label: channel_id.to_string(),
+            _peer_label: peer_label,
+            _connection_state_write_path: connection_state_write_path,
+            _connection_state_read_path: connection_state_read_path,
+            send_queue,
+            _control_plane_metrics: control_plane_metrics,
+        };
+        ret.report_connection_state(ConnectionRole::Client);
+        ret.report_connection_state(ConnectionRole::Server);
+        ret
+    }
+
+    // Connection role represents role of calling node, not the peer
+    pub(crate) fn _update_peer_state(
+        &mut self,
+        connection_state: ConnectionState,
+        connection_role: ConnectionRole,
+    ) {
+        match connection_role {
+            ConnectionRole::Client => self._connection_state_write_path.update(connection_state),
+            ConnectionRole::Server => self._connection_state_read_path.update(connection_state),
+        }
+        self.report_connection_state(connection_role);
+    }
+
+    /// Reports the state of a flow to metrics
+    fn report_connection_state(&self, _connection_role: ConnectionRole) {
+        //TODO - metrics
+    }
+
+    pub(crate) fn _get_connected(&self, connection_role: ConnectionRole) -> Option<&Connected> {
+        match connection_role {
+            ConnectionRole::Client => {
+                if let ConnectionState::Connected(connected) = &self._connection_state_write_path {
+                    return Some(connected);
+                }
+            }
+            ConnectionRole::Server => {
+                if let ConnectionState::Connected(connected) = &self._connection_state_read_path {
+                    return Some(connected);
+                }
+            }
+        }
+        None
+    }
+}
+
+impl Drop for PeerStateH2 {
+    fn drop(&mut self) {
+        // TODO: Metrics
     }
 }
 

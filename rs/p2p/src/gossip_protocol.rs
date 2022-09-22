@@ -55,12 +55,12 @@ use crate::{
     download_management::{DownloadManager, DownloadManagerImpl},
     metrics::GossipMetrics,
     use_gossip_malicious_behavior_on_chunk_request,
-    utils::FlowMapper,
+    utils::TransportChannelIdMapper,
     P2PError, P2PErrorCode, P2PResult,
 };
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::registry::RegistryClient;
-use ic_interfaces_transport::{FlowTag, Transport};
+use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::{info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;
@@ -211,13 +211,13 @@ pub(crate) enum GossipAdvertAction {
 }
 
 /// A *Gossip* message can be converted into a
-/// `FlowTag`.
-impl From<&GossipMessage> for FlowTag {
+/// `TransportChannelId`.
+impl From<&GossipMessage> for TransportChannelId {
     /// The method returns the flow tag corresponding to the gossip message.
     ///
     /// Currently, the flow tag is always 0.
     fn from(_: &GossipMessage) -> Self {
-        FlowTag::from(0)
+        TransportChannelId::from(0)
     }
 }
 
@@ -249,7 +249,7 @@ impl GossipImpl {
         registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
         transport: Arc<dyn Transport>,
-        flow_tags: Vec<FlowTag>,
+        transport_channels: Vec<TransportChannelId>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         malicious_flags: MaliciousFlags,
@@ -261,7 +261,7 @@ impl GossipImpl {
             registry_client.clone(),
             artifact_manager.clone(),
             transport.clone(),
-            Arc::new(FlowMapper::new(flow_tags)),
+            Arc::new(TransportChannelIdMapper::new(transport_channels)),
             log.clone(),
             metrics_registry,
         );

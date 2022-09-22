@@ -15,7 +15,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{Ingress, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext},
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, QueueIndex, Time,
+    CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreeset;
@@ -192,8 +192,8 @@ pub enum ExecutionTask {
     Heartbeat,
 
     // A paused execution task exists only within an epoch (between
-    // checkpoints). It is never serialized and turns into `AbortedExecution`
-    // before the checkpoint.
+    // checkpoints). It is never serialized, and it turns into `AbortedExecution`
+    // before the checkpoint or when there are too many long-running executions.
     PausedExecution(PausedExecutionId),
 
     // A paused `install_code` task exists only within an epoch (between
@@ -567,7 +567,6 @@ impl SystemState {
     /// already exist or does not have a reserved slot.
     pub(crate) fn push_input(
         &mut self,
-        index: QueueIndex,
         msg: RequestOrResponse,
         canister_available_memory: i64,
         subnet_available_memory: &mut i64,
@@ -614,7 +613,6 @@ impl SystemState {
                 }
                 push_input(
                     &mut self.queues,
-                    index,
                     msg,
                     canister_available_memory,
                     subnet_available_memory,
@@ -763,6 +761,11 @@ impl SystemState {
             *subnet_available_memory -= memory_usage;
         }
     }
+
+    /// Garbage collects empty input and output queue pairs.
+    pub fn garbage_collect_canister_queues(&mut self) {
+        self.queues.garbage_collect();
+    }
 }
 
 /// Implements memory limits verification for pushing a canister-to-canister
@@ -777,7 +780,6 @@ impl SystemState {
 /// See `CanisterQueues::push_input()` for further details.
 pub(crate) fn push_input(
     queues: &mut CanisterQueues,
-    index: QueueIndex,
     msg: RequestOrResponse,
     queues_available_memory: i64,
     subnet_available_memory: &mut i64,
@@ -802,7 +804,7 @@ pub(crate) fn push_input(
     // memory_usage_after`. Defer the accounting to `CanisterQueues`, to avoid
     // duplication (and the possibility of divergence).
     *subnet_available_memory += queues.memory_usage() as i64;
-    let res = queues.push_input(index, msg, input_queue_type);
+    let res = queues.push_input(msg, input_queue_type);
     *subnet_available_memory -= queues.memory_usage() as i64;
     res
 }

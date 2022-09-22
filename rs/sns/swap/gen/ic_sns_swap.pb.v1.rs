@@ -155,10 +155,10 @@ pub struct Swap {
     /// to the outcome of the swap.
     #[prost(message, repeated, tag = "7")]
     pub neuron_recipes: ::prost::alloc::vec::Vec<SnsNeuronRecipe>,
-    /// This field represents the request to NNS governance to mint ICP
-    /// for SNS governance on behalf of the community fund investments.
-    #[prost(message, optional, tag = "8")]
-    pub cf_minting: ::core::option::Option<TransferableAmount>,
+    /// Gets set to whatever value is in the corresponding field of OpenRequest
+    /// (that field is required at the application level).
+    #[prost(uint64, optional, tag = "9")]
+    pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
@@ -436,6 +436,9 @@ pub struct OpenRequest {
     /// Community fund participation.
     #[prost(message, repeated, tag = "2")]
     pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
+    /// The ID of the proposal whose execution consists of calling this method.
+    #[prost(uint64, optional, tag = "3")]
+    pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
 }
 #[derive(
     candid::CandidType,
@@ -593,7 +596,7 @@ pub struct RefreshBuyerTokensRequest {
 )]
 pub struct RefreshBuyerTokensResponse {
     #[prost(uint64, tag = "1")]
-    pub icp_accepted_partipation_e8s: u64,
+    pub icp_accepted_participation_e8s: u64,
     #[prost(uint64, tag = "2")]
     pub icp_ledger_account_balance_e8s: u64,
 }
@@ -627,6 +630,9 @@ pub struct FinalizeSwapResponse {
     pub sns_governance_normal_mode_enabled: ::core::option::Option<SetModeCallResult>,
     #[prost(message, optional, tag = "5")]
     pub set_dapp_controllers_result: ::core::option::Option<SetDappControllersCallResult>,
+    #[prost(message, optional, tag = "6")]
+    pub settle_community_fund_participation_result:
+        ::core::option::Option<SettleCommunityFundParticipationResult>,
 }
 #[derive(
     candid::CandidType,
@@ -705,7 +711,57 @@ pub mod set_dapp_controllers_call_result {
         Err(super::CanisterCallError),
     }
 }
-/// TODO(NNS1-1589): Delete these.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SettleCommunityFundParticipationResult {
+    #[prost(
+        oneof = "settle_community_fund_participation_result::Possibility",
+        tags = "1, 2"
+    )]
+    pub possibility:
+        ::core::option::Option<settle_community_fund_participation_result::Possibility>,
+}
+/// Nested message and enum types in `SettleCommunityFundParticipationResult`.
+pub mod settle_community_fund_participation_result {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Response {
+        /// Can be blank.
+        #[prost(message, optional, tag = "1")]
+        pub governance_error: ::core::option::Option<super::GovernanceError>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Possibility {
+        #[prost(message, tag = "1")]
+        Ok(Response),
+        #[prost(message, tag = "2")]
+        Err(super::CanisterCallError),
+    }
+}
+// TODO(NNS1-1589): Delete these copied definitions.
+
+// BEGIN NNS1-1589 HACKS
+
+/// Copied from sns root.proto
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -747,6 +803,167 @@ pub mod set_dapp_controllers_response {
         pub err: ::core::option::Option<super::CanisterCallError>,
     }
 }
+/// Copied from nns governance.proto.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GovernanceError {
+    #[prost(enumeration = "governance_error::ErrorType", tag = "1")]
+    pub error_type: i32,
+    #[prost(string, tag = "2")]
+    pub error_message: ::prost::alloc::string::String,
+}
+/// Nested message and enum types in `GovernanceError`.
+pub mod governance_error {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum ErrorType {
+        Unspecified = 0,
+        /// The operation was successfully completed.
+        Ok = 1,
+        /// This operation is not available, e.g., not implemented.
+        Unavailable = 2,
+        /// The caller is not authorized to perform this operation.
+        NotAuthorized = 3,
+        /// Some entity required for the operation (for example, a neuron) was not found.
+        NotFound = 4,
+        /// The command was missing or invalid. This is a permanent error.
+        InvalidCommand = 5,
+        /// The neuron is dissolving or dissolved and the operation requires it to
+        /// be not dissolving (that is, having a non-zero dissolve delay that is
+        /// accumulating age).
+        RequiresNotDissolving = 6,
+        /// The neuron is not dissolving or dissolved and the operation requires
+        /// it to be dissolving (that is, having a non-zero dissolve delay with
+        /// zero age that is not accumulating).
+        RequiresDissolving = 7,
+        /// The neuron is not dissolving and not dissolved and the operation
+        /// requires it to be dissolved (that is, having a dissolve delay of zero
+        /// and an age of zero).
+        RequiresDissolved = 8,
+        /// When adding or removing a hot key: the key to add was already
+        /// present or the key to remove was not present or the key to add
+        /// was invalid or adding another hot key would bring the total
+        /// number of the maximum number of allowed hot keys per neuron.
+        HotKey = 9,
+        /// Some canister side resource is exhausted, so this operation cannot be
+        /// performed.
+        ResourceExhausted = 10,
+        /// Some precondition for executing this method was not met (e.g. the
+        /// neuron's desolve time is too short). There could be a change in the
+        /// state of the system such that the operation becomes allowed (e.g. the
+        /// owner of the neuron increases its desolve delay).
+        PreconditionFailed = 11,
+        /// Executing this method failed for some reason external to the
+        /// governance canister.
+        External = 12,
+        /// A neuron has an ongoing ledger update and thus can't be
+        /// changed.
+        LedgerUpdateOngoing = 13,
+        /// There wasn't enough funds to perform the operation.
+        InsufficientFunds = 14,
+        /// The principal provided was invalid.
+        InvalidPrincipal = 15,
+        /// The proposal is defective in some way (e.g. title is too long). If the
+        /// same proposal is submitted again without modification, it will be
+        /// rejected regardless of changes in the system's state (e.g. increasing
+        /// the neuron's desolve delay will not make the proposal acceptable).
+        InvalidProposal = 16,
+        /// The neuron attempted to join the community fund while already
+        /// a member.
+        AlreadyJoinedCommunityFund = 17,
+        /// The neuron attempted to leave the community fund but is not a member.
+        NotInTheCommunityFund = 18,
+    }
+}
+/// Copied from nns governance.proto.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SettleCommunityFundParticipation {
+    /// The caller's principal ID must match the value in the
+    /// target_swap_canister_id field in the proposal (more precisely, in the
+    /// OpenSnsTokenSwap).
+    #[prost(uint64, optional, tag = "1")]
+    pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
+    /// Each of the possibilities here corresponds to one of two ways that a swap
+    /// can terminate. See also sns_swap_pb::Lifecycle::is_terminal.
+    #[prost(oneof = "settle_community_fund_participation::Result", tags = "2, 3")]
+    pub result: ::core::option::Option<settle_community_fund_participation::Result>,
+}
+/// Nested message and enum types in `SettleCommunityFundParticipation`.
+pub mod settle_community_fund_participation {
+    /// When this happens, ICP needs to be minted, and sent to the SNS governance
+    /// canister's main account on the ICP Ledger. As with Aborted, the amount of
+    /// ICP that needs to be minted can be deduced from the ProposalData's
+    /// cf_participants field.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Committed {
+        /// This is where the minted ICP will be sent. In principal, this could be
+        /// fetched using the swap canister's get_state method.
+        #[prost(message, optional, tag = "1")]
+        pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    }
+    /// When this happens, maturity needs to be restored to CF neurons. The amounts
+    /// to be refunded can be found in the ProposalData's cf_participants field.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Aborted {}
+    /// Each of the possibilities here corresponds to one of two ways that a swap
+    /// can terminate. See also sns_swap_pb::Lifecycle::is_terminal.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Result {
+        #[prost(message, tag = "2")]
+        Committed(Committed),
+        #[prost(message, tag = "3")]
+        Aborted(Aborted),
+    }
+}
+// END NNS1-1589 HACKS
+
 #[derive(
     candid::CandidType,
     candid::Deserialize,

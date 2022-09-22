@@ -10,8 +10,11 @@ use crate::{
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
-use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponse};
+use ic_btc_types_internal::{
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
+};
 use ic_error_types::{ErrorCode, UserError};
+use ic_ic00_types::{BitcoinGetSuccessorsResponse, Payload as _};
 use ic_interfaces::{
     execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
 };
@@ -21,9 +24,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::Ingress;
 use ic_types::{
     ingress::IngressStatus,
-    messages::{CallbackId, MessageId, RequestOrResponse, Response},
+    messages::{CallbackId, MessageId, Payload, RequestOrResponse, Response},
     xnet::QueueId,
-    CanisterId, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
+    CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -166,21 +169,21 @@ impl<'a> OutputIterator<'a> {
 }
 
 impl std::iter::Iterator for OutputIterator<'_> {
-    type Item = (QueueId, QueueIndex, RequestOrResponse);
+    type Item = (QueueId, RequestOrResponse);
 
     /// Pops a message from the next canister. If this was not the last message
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
-            if let Some((queue_id, queue_index, msg)) = canister_iterator.next() {
+            if let Some((queue_id, msg)) = canister_iterator.next() {
                 self.size -= 1;
                 if !canister_iterator.is_empty() {
                     self.canister_iterators.push_back(canister_iterator);
                 }
                 debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
 
-                return Some((queue_id, queue_index, msg));
+                return Some((queue_id, msg));
             }
         }
         None
@@ -192,12 +195,10 @@ impl std::iter::Iterator for OutputIterator<'_> {
     }
 }
 
-pub trait PeekableOutputIterator:
-    std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)>
-{
+pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOrResponse)> {
     /// Peeks into the iterator and returns a reference to the item `next`
     /// would return.
-    fn peek(&self) -> Option<(QueueId, QueueIndex, &RequestOrResponse)>;
+    fn peek(&self) -> Option<(QueueId, &RequestOrResponse)>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
     /// with the same sender and receiver as the next). The mesages are retained
@@ -206,7 +207,7 @@ pub trait PeekableOutputIterator:
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
-    fn peek(&self) -> Option<(QueueId, QueueIndex, &RequestOrResponse)> {
+    fn peek(&self) -> Option<(QueueId, &RequestOrResponse)> {
         self.canister_iterators.front().and_then(|it| it.peek())
     }
 
@@ -621,7 +622,6 @@ impl ReplicatedState {
     /// Updates `subnet_available_memory` to reflect any change in memory usage.
     pub fn push_input(
         &mut self,
-        index: QueueIndex,
         msg: RequestOrResponse,
         max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
@@ -636,7 +636,6 @@ impl ReplicatedState {
         };
         match self.canister_state_mut(&msg.receiver()) {
             Some(receiver_canister) => receiver_canister.push_input(
-                index,
                 msg,
                 max_canister_memory_size,
                 subnet_available_memory,
@@ -648,7 +647,6 @@ impl ReplicatedState {
                 if msg.receiver().get_ref() == subnet_id {
                     push_input(
                         &mut self.subnet_queues,
-                        index,
                         msg,
                         // No canister limit, so pass the subnet limit twice.
                         *subnet_available_memory,
@@ -767,6 +765,14 @@ impl ReplicatedState {
         self.canister_states.len()
     }
 
+    /// Garbage collects empty canister and subnet queues.
+    pub fn garbage_collect_canister_queues(&mut self) {
+        for (_canister_id, canister) in self.canister_states.iter_mut() {
+            canister.system_state.garbage_collect_canister_queues();
+        }
+        self.subnet_queues.garbage_collect();
+    }
+
     /// Returns a reference to the `BitcoinState`.
     pub fn bitcoin(&self) -> &BitcoinState {
         &self.bitcoin
@@ -798,25 +804,57 @@ impl ReplicatedState {
         }
     }
 
-    /// Pushes a response from the Bitcoin Adapter to the testnet `BitcoinState`
-    /// iff the bitcoin testnet feature is not disabled and returns a `StateError`
-    /// otherwise.
-    ///
-    /// See documentation of `BitcoinState::push_response` for more information.
+    /// Pushes a response from the Bitcoin Adapter into the state.
     pub fn push_response_bitcoin(
         &mut self,
         response: BitcoinAdapterResponse,
     ) -> Result<(), StateError> {
-        match self.metadata.own_subnet_features.bitcoin().status {
-            BitcoinFeatureStatus::Enabled
-            | BitcoinFeatureStatus::Syncing
-            | BitcoinFeatureStatus::Paused => self
-                .bitcoin
-                .push_response(response)
-                .map_err(StateError::BitcoinStateError),
-            BitcoinFeatureStatus::Disabled => Err(StateError::BitcoinStateError(
-                BitcoinStateError::FeatureNotEnabled,
-            )),
+        match response.response {
+            BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r) => {
+                // Received a response to a request from the bitcoin wasm canister.
+                // Retrieve the associated request.
+                let callback_id = CallbackId::from(response.callback_id);
+                let context = self
+                    .metadata
+                    .subnet_call_context_manager
+                    .bitcoin_get_successors_contexts
+                    .get_mut(&callback_id)
+                    .ok_or_else(|| {
+                        StateError::BitcoinStateError(BitcoinStateError::NonMatchingResponse {
+                            callback_id: callback_id.get(),
+                        })
+                    })?;
+
+                // Encode the response and insert it into the consensus queue.
+                let response = Response {
+                    originator: context.request.sender(),
+                    respondent: CanisterId::ic_00(),
+                    originator_reply_callback: callback_id,
+                    refund: context.request.take_cycles(),
+                    response_payload: Payload::Data(
+                        BitcoinGetSuccessorsResponse::Complete(r).encode(),
+                    ),
+                };
+
+                // Add response to the consensus queue.
+                self.consensus_queue.push(response);
+
+                Ok(())
+            }
+            BitcoinAdapterResponseWrapper::GetSuccessorsResponse(_)
+            | BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
+                match self.metadata.own_subnet_features.bitcoin().status {
+                    BitcoinFeatureStatus::Enabled
+                    | BitcoinFeatureStatus::Syncing
+                    | BitcoinFeatureStatus::Paused => self
+                        .bitcoin
+                        .push_response(response)
+                        .map_err(StateError::BitcoinStateError),
+                    BitcoinFeatureStatus::Disabled => Err(StateError::BitcoinStateError(
+                        BitcoinStateError::FeatureNotEnabled,
+                    )),
+                }
+            }
         }
     }
 
