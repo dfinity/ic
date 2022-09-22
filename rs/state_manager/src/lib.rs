@@ -704,8 +704,10 @@ fn load_checkpoint_as_tip(
 
     info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
+    let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+
     state_layout
-        .reset_tip_to(snapshot.height)
+        .reset_tip_to(snapshot.height, Some(&mut thread_pool))
         .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err));
 
     let tip_layout = state_layout

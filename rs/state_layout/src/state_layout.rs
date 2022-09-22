@@ -441,7 +441,11 @@ impl StateLayout {
     }
 
     /// Resets "tip" to a checkpoint identified by height.
-    pub fn reset_tip_to(&self, height: Height) -> Result<(), LayoutError> {
+    pub fn reset_tip_to(
+        &self,
+        height: Height,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
         let cp_name = self.checkpoint_name(height);
         let tip = self.tip_path();
         if tip.exists() {
@@ -462,7 +466,7 @@ impl StateLayout {
             cp_path.as_path(),
             &tip,
             FilePermissions::ReadWrite,
-            None,
+            thread_pool,
         ) {
             Ok(()) => Ok(()),
             Err(e) => {
