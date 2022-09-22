@@ -1,41 +1,38 @@
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/types/base_types",
-    "//rs/types/ic00_types",
-    "//rs/types/types",
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:serde",
-    "@crate_index//:wasm-bindgen",
-]
-
-MACRO_DEPENDENCIES = [
-    "@crate_index//:ic-cdk-macros",
-]
-
 rust_library(
-    name = "proxy_canister",
-    srcs = glob(["src/**/*.rs"]),
+    name = "lib",
+    srcs = ["src/lib.rs"],
     crate_name = "proxy_canister",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        "//rs/types/ic00_types",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_canister(
-    name = "proxy_canister_canister",
+    name = "proxy_canister_raw",
     srcs = ["src/main.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":proxy_canister"] + DEPENDENCIES,
+    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
+    deps = [
+        ":lib",
+        "//rs/types/ic00_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+    ],
+)
+
+optimized_canister(
+    name = "proxy_canister",
+    wasm = ":proxy_canister_raw",
 )
 
 rust_test(
     name = "proxy_canister_test",
-    crate = ":proxy_canister",
+    crate = ":_wasm_proxy_canister_raw",
 )

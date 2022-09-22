@@ -59,7 +59,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/rust_canisters/proxy_canister",
+    "//rs/rust_canisters/proxy_canister:lib",
     "//rs/rust_canisters/xnet_test",
     "//rs/test_utilities",
     "//rs/test_utilities/identity",
