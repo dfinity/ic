@@ -42,8 +42,9 @@ Arguments:
   -o=, --output=                        removable media output directory (Default: ./build-out/)
   -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
   -c=, --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
-  -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form http://[ip]:port this file will override nns urls derived from input json file
-  -b=, --denylist=                      a deny list of canisters
+  -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form `http://[ip]:port` this file will override nns urls derived from input json file
+       --replicas-ipv6=                 specify a file that lists on each line an ipv6 firewall rule to allow replicas of the form `ipv6-addr/prefix-length` (# comments and trailing whitespace will be stripped)
+       --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
        --geolite2-country-db=           specify path to GeoLite2 Country Database
        --geolite2-city-db=              specify path to GeoLite2 City Database
@@ -270,7 +271,8 @@ function generate_network_config() {
             REPLICAS_IPV6+="${ipv6_address}/64,"
         done
     else
-        REPLICAS_IPV6=$(cat ${REPLICA_IPV6_OVERRIDE} | awk '$1=$1' ORS=',')
+        # Remove comments and comma separate
+        REPLICAS_IPV6=$(cat ${REPLICA_IPV6_OVERRIDE} | sed 's/[[:blank:]]*#.*//' | awk '$1=$1' ORS=',')
     fi
     REPLICAS_IPV6=$(echo ${REPLICAS_IPV6} | sed 's/,$//g')
 
