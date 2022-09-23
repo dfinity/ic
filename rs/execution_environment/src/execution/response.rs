@@ -487,6 +487,7 @@ impl PausedExecution for PausedResponseExecution {
                     (helper, result)
                 }
                 Err((helper, err)) => {
+                    self.paused_wasm_execution.abort();
                     let result = wasm_execution_error(
                         err,
                         self.execution_parameters.instruction_limits.message(),
@@ -551,6 +552,7 @@ impl PausedExecution for PausedCleanupExecution {
                     (helper, result)
                 }
                 Err((helper, err)) => {
+                    self.paused_wasm_execution.abort();
                     let result = wasm_execution_error(
                         err,
                         self.execution_parameters.instruction_limits.message(),

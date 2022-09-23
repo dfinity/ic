@@ -315,7 +315,10 @@ impl PausedExecution for PausedCallExecution {
             match UpdateHelper::resume(&clean_canister, &self.original, &round, self.paused_helper)
             {
                 Ok(helper) => helper,
-                Err(err) => return finish_err(clean_canister, err, self.original, round),
+                Err(err) => {
+                    self.paused_wasm_execution.abort();
+                    return finish_err(clean_canister, err, self.original, round);
+                }
             };
 
         let execution_state = helper.canister().execution_state.as_ref().unwrap();

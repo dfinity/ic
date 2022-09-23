@@ -456,6 +456,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left)) => {
+                self.paused_wasm_execution.abort();
                 return finish_err(canister, instructions_left, self.original, round, err);
             }
         };
@@ -524,6 +525,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left)) => {
+                self.paused_wasm_execution.abort();
                 return finish_err(canister, instructions_left, self.original, round, err);
             }
         };
@@ -591,6 +593,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left)) => {
+                self.paused_wasm_execution.abort();
                 return finish_err(canister, instructions_left, self.original, round, err);
             }
         };
