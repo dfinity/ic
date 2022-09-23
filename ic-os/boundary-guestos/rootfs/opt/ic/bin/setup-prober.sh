@@ -2,60 +2,59 @@
 
 set -euox pipefail
 
-readonly RUN_NODE_DIR='/run/ic-node'
-readonly NODE_CONFIG_SRC_DIR='/boot/config'
-readonly PROBER_CONFIG_SRC_DIR='/boot/config/prober'
-readonly PROBER_CONFIG_DST_DIR='/etc/prober'
+readonly BOOT_CONFIG='/boot/config/prober'
+readonly RUN_DIR='/run/ic-node/etc/prober'
 
-err() {
+function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
 }
 
-function main() {
-    if [[ ! -d "${NODE_CONFIG_SRC_DIR}" ]]; then
-        err "missing node configuration directory: ${NODE_CONFIG_SRC_DIR}"
+function read_variables() {
+    if [[ ! -d "${BOOT_CONFIG}" ]]; then
+        err "missing prober configuration directory: ${BOOT_CONFIG}"
         exit 1
     fi
 
-    if [[ ! -d "${PROBER_CONFIG_SRC_DIR}" ]]; then
-        err "missing prober configuration directory: ${PROBER_CONFIG_SRC_DIR}"
+    if [[ -f "${BOOT_CONFIG}/prober.disabled" ]]; then
+        PROBER_DISABLED="true"
+        return
+    fi
+
+    if [ ! -f "${BOOT_CONFIG}/identity.pem" ]; then
+        err "missing prober identity: ${BOOT_CONFIG}/identity.pem"
         exit 1
     fi
 
-    if [[ ! -d "${PROBER_CONFIG_DST_DIR}" ]]; then
-        err "missing prober configuration directory: ${PROBER_CONFIG_DST_DIR}"
+    if [ ! -f "${BOOT_CONFIG}/nns_public_key.pem" ]; then
+        err "missing nns public key: ${BOOT_CONFIG}/nns_public_key.pem"
         exit 1
     fi
+}
 
+function generate_prober_config() {
     # Create config dir
-    mkdir -p "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}"
+    mkdir -p "${RUN_DIR}"
 
-    # Retain pre-existing config
-    cp \
-        "${PROBER_CONFIG_DST_DIR}"/* \
-        "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}"
+    # Setup enable/disable flag
+    if [[ "${PROBER_DISABLED}" == "true" ]]; then
+        touch "${RUN_DIR}/prober.disabled"
+        return
+    fi
 
     # Setup prober identity
-    cp \
-        "${PROBER_CONFIG_SRC_DIR}/identity.pem" \
-        "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}/identity.pem"
+    cp "${BOOT_CONFIG}/identity.pem" "${RUN_DIR}/identity.pem"
 
     # Setup network key
-    cat "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}/ic_public_key.pem" \
+    cat "${BOOT_CONFIG}/nns_public_key.pem" \
         | sed '1d;$d' \
         | tr -d '\n' \
         | base64 -d \
-            >"${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}/root_key.der"
+            >"${RUN_DIR}/root_key.der"
 
-    # Setup enable/disable flag
-    if [[ -f "${PROBER_CONFIG_SRC_DIR}/prober.disabled" ]]; then
-        cp \
-            "${PROBER_CONFIG_SRC_DIR}/prober.disabled" \
-            "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}/prober.disabled"
-    fi
-
-    # Setup bind mount
-    mount --bind "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}" "${PROBER_CONFIG_DST_DIR}"
+}
+function main() {
+    read_variables
+    generate_prober_config
 }
 
 main "$@"

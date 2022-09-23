@@ -12,6 +12,3 @@ WantedBy=multi-user.target
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-hostname.sh
-
-[Install]
-WantedBy=multi-user.target
