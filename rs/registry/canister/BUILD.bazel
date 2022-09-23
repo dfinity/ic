@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:prost.bzl", "generated_files_check")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -139,15 +140,15 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+rust_test_suite_with_extra_srcs(
     name = "registry_canister_integration_test",
-    size = "large",
-    srcs = glob(["tests/**/*.rs"]),
-    args = [
-        "--test-threads",
-        "1",
-    ],
-    crate_root = "tests/integration_tests.rs",
+    srcs = glob(
+        ["tests/*.rs"],
+        exclude = [
+            "tests/mod.rs",
+            "tests/check_generated_files.rs",
+        ],
+    ),
     data = [
         ":registry-canister",
         "//rs/canister_sandbox",
@@ -161,22 +162,14 @@ rust_test(
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
-    flaky = True,
+    extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
-    tags = ["cpu:4"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canister"],
 )
 
 optimized_canister(
     name = "registry-canister",
     wasm = ":registry-canister-raw",
-)
-
-rust_test(
-    name = "test_helpers_test",
-    srcs = glob(["tests/**/*.rs"]),
-    crate_root = "tests/test_helpers.rs",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canister"],
 )
 
 generated_files_check(

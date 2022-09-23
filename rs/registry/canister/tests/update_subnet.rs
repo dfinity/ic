@@ -1,5 +1,3 @@
-use crate::test_helpers::get_subnet_record;
-
 use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
@@ -30,6 +28,9 @@ use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_update_subnet::UpdateSubnetPayload,
 };
 use std::str::FromStr;
+
+mod common;
+use common::test_helpers::get_subnet_record;
 
 fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {

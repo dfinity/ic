@@ -1,8 +1,3 @@
-use crate::test_helpers::{
-    dummy_cup_for_subnet, get_cup_contents, get_subnet_holding_ecdsa_keys, get_subnet_record,
-    prepare_registry_with_nodes, set_up_universal_canister_as_governance,
-    setup_registry_synced_with_fake_client, wait_for_ecdsa_setup,
-};
 use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{subnet_id_into_protobuf, PrincipalId, SubnetId};
@@ -39,6 +34,13 @@ use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_recover_subnet::RecoverSubnetPayload,
 };
 use std::convert::TryFrom;
+
+mod common;
+use common::test_helpers::{
+    dummy_cup_for_subnet, get_cup_contents, get_subnet_holding_ecdsa_keys, get_subnet_record,
+    prepare_registry_with_nodes, set_up_universal_canister_as_governance,
+    setup_registry_synced_with_fake_client, wait_for_ecdsa_setup,
+};
 
 /// Test that calling "recover_subnet" produces the expected Registry mutations,
 /// namely that a subnet's `CatchUpPackageContents` and node membership are
