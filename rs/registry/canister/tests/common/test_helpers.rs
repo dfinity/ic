@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
@@ -10,6 +12,7 @@ use ic_nns_test_utils::itest_helpers::{
 };
 use ic_nns_test_utils::registry::get_value_or_panic;
 use ic_protobuf::registry::node::v1::NodeRecord;
+use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
 use ic_registry_client_fake::FakeRegistryClient;
@@ -18,6 +21,7 @@ use ic_registry_keys::{
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
@@ -263,4 +267,27 @@ pub async fn wait_for_ecdsa_setup(
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
+}
+
+pub fn check_error_message<T: std::fmt::Debug>(
+    result: Result<T, String>,
+    expected_substring: &str,
+) {
+    match result {
+        Ok(value) => panic!(
+            "expected the call to fail with message '{}', got Ok({:?})",
+            expected_substring, value
+        ),
+        Err(e) => assert!(
+            e.contains(expected_substring),
+            "expected the call to fail with message '{}', got:  {}",
+            expected_substring,
+            e
+        ),
+    }
+}
+
+pub async fn get_routing_table(canister: &canister_test::Canister<'_>) -> RoutingTable {
+    let pb_routing_table: pb::RoutingTable = get_value_or_panic(canister, b"routing_table").await;
+    RoutingTable::try_from(pb_routing_table).expect("failed to decode routing table")
 }

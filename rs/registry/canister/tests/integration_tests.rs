@@ -1,5 +1,4 @@
-mod test_helpers;
-mod tests;
+mod common;
 
 use assert_matches::assert_matches;
 use candid::Encode;

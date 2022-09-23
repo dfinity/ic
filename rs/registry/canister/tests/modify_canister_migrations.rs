@@ -1,4 +1,3 @@
-use crate::tests::reroute_canister_ranges::check_error_message;
 use candid::Encode;
 use ic_base_types::SubnetId;
 use ic_nns_test_utils::{
@@ -21,6 +20,9 @@ use registry_canister::{
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
 };
+
+mod common;
+use common::test_helpers::*;
 
 async fn get_canister_migrations(canister: &canister_test::Canister<'_>) -> CanisterMigrations {
     let pb_canister_migrations: pb::CanisterMigrations =

@@ -1,4 +1,3 @@
-use crate::tests::reroute_canister_ranges::{check_error_message, get_routing_table};
 use candid::Encode;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -19,8 +18,11 @@ use registry_canister::{
     },
 };
 
+mod common;
+use common::test_helpers::{check_error_message, get_routing_table};
+
 #[test]
-fn test_roll_back_canister_migration() {
+fn test_reroute_canister_ranges() {
     local_test_on_nns_subnet(|runtime| {
         async move {
             let (subnet_1_mutation, subnet_id_1, _, _) = prepare_registry(
@@ -56,8 +58,6 @@ fn test_roll_back_canister_migration() {
             )
             .await;
 
-            let routing_table_original = get_routing_table(&registry).await;
-
             let governance_fake = set_up_universal_canister(&runtime).await;
             assert_eq!(
                 governance_fake.canister_id(),
@@ -66,16 +66,10 @@ fn test_roll_back_canister_migration() {
 
             // Add canister migrations entries.
             let payload = PrepareCanisterMigrationPayload {
-                canister_id_ranges: vec![
-                    CanisterIdRange {
-                        start: CanisterId::from(10),
-                        end: CanisterId::from(11),
-                    },
-                    CanisterIdRange {
-                        start: CanisterId::from(13),
-                        end: CanisterId::from(14),
-                    },
-                ],
+                canister_id_ranges: vec![CanisterIdRange {
+                    start: CanisterId::from(10),
+                    end: CanisterId::from(11),
+                }],
                 source_subnet: nns_subnet,
                 destination_subnet: subnet_id_1,
             };
@@ -110,6 +104,10 @@ fn test_roll_back_canister_migration() {
             let routing_table = get_routing_table(&registry).await;
 
             assert_eq!(
+                routing_table.route(CanisterId::from(9).into()),
+                Some(nns_subnet)
+            );
+            assert_eq!(
                 routing_table.route(CanisterId::from(10).into()),
                 Some(subnet_id_1)
             );
@@ -118,17 +116,29 @@ fn test_roll_back_canister_migration() {
                 Some(subnet_id_1)
             );
             assert_eq!(
-                routing_table.route(CanisterId::from(13).into()),
-                Some(nns_subnet)
-            );
-            assert_eq!(
-                routing_table.route(CanisterId::from(14).into()),
+                routing_table.route(CanisterId::from(12).into()),
                 Some(nns_subnet)
             );
 
-            // Try to roll back the canister migration.
-            // Invalid request: although there is an entry of canister migrations for the given range,
-            // the payload is still considered invalid because the range is not currently assigned to subnet 1.
+            check_error_message(
+                registry
+                    .update_(
+                        "reroute_canister_ranges",
+                        dfn_candid::candid_one,
+                        RerouteCanisterRangesPayload {
+                            reassigned_canister_ranges: vec![CanisterIdRange {
+                                start: CanisterId::from(12),
+                                end: CanisterId::from(15),
+                            }],
+                            source_subnet: nns_subnet,
+                            destination_subnet: subnet_id_1,
+                        },
+                    )
+                    .await as Result<(), String>,
+                "not authorized",
+            );
+
+            // Invalid request: canister ID ranges are not well formed
             check_error_message(
                 try_call_via_universal_canister(
                     &governance_fake,
@@ -136,45 +146,39 @@ fn test_roll_back_canister_migration() {
                     "reroute_canister_ranges",
                     Encode!(&RerouteCanisterRangesPayload {
                         reassigned_canister_ranges: vec![CanisterIdRange {
-                            start: CanisterId::from(13),
-                            end: CanisterId::from(14),
-                        }],
-                        source_subnet: subnet_id_1,
-                        destination_subnet: nns_subnet,
+                            start: CanisterId::from(15),
+                            end: CanisterId::from(10),
+                        },],
+                        source_subnet: nns_subnet,
+                        destination_subnet: subnet_id_1,
                     })
                     .unwrap(),
                 )
                 .await,
-                "not all canisters to be migrated are hosted by the provided source subnet",
+                "not well formed",
             );
+
+            // Invalid request: non-existing subnet
+            check_error_message(
+                try_call_via_universal_canister(
+                    &governance_fake,
+                    &registry,
+                    "reroute_canister_ranges",
+                    Encode!(&RerouteCanisterRangesPayload {
+                        reassigned_canister_ranges: vec![CanisterIdRange {
+                            start: CanisterId::from(12),
+                            end: CanisterId::from(15),
+                        },],
+                        source_subnet: nns_subnet,
+                        destination_subnet: subnet_test_id(9999),
+                    })
+                    .unwrap(),
+                )
+                .await,
+                "not a known subnet",
+            );
+
             assert_eq!(get_routing_table(&registry).await, routing_table);
-
-            let payload = RerouteCanisterRangesPayload {
-                reassigned_canister_ranges: vec![CanisterIdRange {
-                    start: CanisterId::from(10),
-                    end: CanisterId::from(11),
-                }],
-                source_subnet: subnet_id_1,
-                destination_subnet: nns_subnet,
-            };
-
-            try_call_via_universal_canister(
-                &governance_fake,
-                &registry,
-                "reroute_canister_ranges",
-                Encode!(&payload).unwrap(),
-            )
-            .await
-            .unwrap();
-
-            let routing_table = get_routing_table(&registry).await;
-            for id in 10..=14 {
-                assert_eq!(
-                    routing_table.route(CanisterId::from(id).into()),
-                    Some(nns_subnet)
-                );
-            }
-            assert_eq!(routing_table, routing_table_original);
 
             Ok(())
         }

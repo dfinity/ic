@@ -27,11 +27,6 @@ use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_create_subnet::CreateSubnetPayload,
 };
 
-use crate::test_helpers::{
-    get_added_subnet, get_cup_contents, get_subnet_list_record, prepare_registry_with_nodes,
-    set_up_universal_canister_as_governance, setup_registry_synced_with_fake_client,
-    wait_for_ecdsa_setup,
-};
 use assert_matches::assert_matches;
 use canister_test::Runtime;
 use ic_base_types::{PrincipalId, SubnetId};
@@ -42,6 +37,14 @@ use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use registry_canister::mutations::common::decode_registry_value;
 use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
+
+mod common;
+
+use common::test_helpers::{
+    get_added_subnet, get_cup_contents, get_subnet_list_record, prepare_registry_with_nodes,
+    set_up_universal_canister_as_governance, setup_registry_synced_with_fake_client,
+    wait_for_ecdsa_setup,
+};
 
 #[test]
 fn test_the_anonymous_user_cannot_create_a_subnet() {
