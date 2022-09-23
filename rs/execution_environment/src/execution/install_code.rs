@@ -43,6 +43,7 @@ pub(crate) enum StableMemoryHandling {
 /// The main steps of `install_code` execution that may fail with an error or
 /// change the canister state.
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum InstallCodeStep {
     ValidateInput,
     ReserveExecutionCycles,
