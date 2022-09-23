@@ -49,9 +49,9 @@ use maplit::btreemap;
 
 use crate::util::process_stopping_canisters;
 use crate::{
-    as_num_instructions, execute_canister, CanisterHeartbeatError, CompilationCostHandling,
-    ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, Hypervisor,
-    IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+    execute_canister, CanisterHeartbeatError, CompilationCostHandling, ExecuteMessageResult,
+    ExecutionEnvironment, ExecutionResponse, Hypervisor, IngressHistoryWriterImpl,
+    InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
@@ -708,8 +708,7 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory.get().into(),
             compute_allocation_used,
         };
-        let instructions_before = round_limits.instructions;
-        let (canister, result) = self.exec_env.execute_canister_heartbeat(
+        let (canister, instructions_used, result) = self.exec_env.execute_canister_heartbeat(
             canister,
             self.instruction_limits.clone(),
             network_topology,
@@ -717,8 +716,6 @@ impl ExecutionTest {
             &mut round_limits,
             self.subnet_size(),
         );
-        let instructions_executed =
-            as_num_instructions(instructions_before - round_limits.instructions);
         self.subnet_available_memory
             .set(round_limits.subnet_available_memory.get());
         state.put_canister_state(canister);
@@ -729,7 +726,7 @@ impl ExecutionTest {
         self.update_execution_stats(
             canister_id,
             self.instruction_limits.message(),
-            instructions_executed,
+            instructions_used,
         );
         result?;
         Ok(())
@@ -773,7 +770,6 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory.get().into(),
             compute_allocation_used,
         };
-        let instructions_before = round_limits.instructions;
         let result = self.exec_env.execute_canister_response(
             canister,
             Arc::new(response),
@@ -783,18 +779,17 @@ impl ExecutionTest {
             &mut round_limits,
             self.subnet_size(),
         );
-        let (canister, response, heap_delta) = match result {
+        let (canister, response, instructions_used, heap_delta) = match result {
             ExecuteMessageResult::Finished {
                 canister,
                 response,
+                instructions_used,
                 heap_delta,
-            } => (canister, response, heap_delta),
+            } => (canister, response, instructions_used, heap_delta),
             ExecuteMessageResult::Paused { .. } => {
                 unreachable!("Unexpected paused execution")
             }
         };
-        let instructions_executed =
-            as_num_instructions(instructions_before - round_limits.instructions);
         self.subnet_available_memory
             .set(round_limits.subnet_available_memory.get());
 
@@ -802,7 +797,7 @@ impl ExecutionTest {
         self.update_execution_stats(
             canister_id,
             self.instruction_limits.message(),
-            instructions_executed,
+            instructions_used,
         );
         state.put_canister_state(canister);
         self.state = Some(state);
@@ -872,8 +867,7 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory.get().into(),
             compute_allocation_used,
         };
-        let instructions_before = round_limits.instructions;
-        let new_state = self.exec_env.execute_subnet_message(
+        let (new_state, instructions_used) = self.exec_env.execute_subnet_message(
             message,
             state,
             self.install_code_instruction_limits.clone(),
@@ -882,8 +876,6 @@ impl ExecutionTest {
             &self.registry_settings,
             &mut round_limits,
         );
-        let instructions_executed =
-            as_num_instructions(instructions_before - round_limits.instructions);
         self.subnet_available_memory
             .set(round_limits.subnet_available_memory.get());
         self.state = Some(new_state);
@@ -891,7 +883,7 @@ impl ExecutionTest {
             self.update_execution_stats(
                 canister_id,
                 self.install_code_instruction_limits.message(),
-                instructions_executed,
+                instructions_used,
             );
         }
         true
@@ -934,7 +926,6 @@ impl ExecutionTest {
                     }
                     NextExecution::StartNew | NextExecution::ContinueLong => {}
                 }
-                let instructions_before = round_limits.instructions;
                 let result = execute_canister(
                     &self.exec_env,
                     canister,
@@ -944,15 +935,13 @@ impl ExecutionTest {
                     &mut round_limits,
                     self.subnet_size(),
                 );
-                let instructions_executed =
-                    as_num_instructions(instructions_before - round_limits.instructions);
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory
                     .set(round_limits.subnet_available_memory.get());
                 self.update_execution_stats(
                     canister_id,
                     self.instruction_limits.message(),
-                    instructions_executed,
+                    result.instructions_used,
                 );
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
@@ -998,22 +987,20 @@ impl ExecutionTest {
                     subnet_available_memory: self.subnet_available_memory.get().into(),
                     compute_allocation_used,
                 };
-                let instructions_before = round_limits.instructions;
-                state = self.exec_env.resume_install_code(
+                let (new_state, instructions_used) = self.exec_env.resume_install_code(
                     state,
                     &canister_id,
                     self.install_code_instruction_limits.clone(),
                     &mut round_limits,
                     self.subnet_size(),
                 );
-                let instructions_executed =
-                    as_num_instructions(instructions_before - round_limits.instructions);
+                state = new_state;
                 self.subnet_available_memory
                     .set(round_limits.subnet_available_memory.get());
                 self.update_execution_stats(
                     canister_id,
                     self.install_code_instruction_limits.message(),
-                    instructions_executed,
+                    instructions_used,
                 );
             }
             NextExecution::StartNew | NextExecution::ContinueLong => {
@@ -1022,7 +1009,6 @@ impl ExecutionTest {
                     subnet_available_memory: self.subnet_available_memory.get().into(),
                     compute_allocation_used,
                 };
-                let instructions_before = round_limits.instructions;
                 let result = execute_canister(
                     &self.exec_env,
                     canister,
@@ -1032,15 +1018,13 @@ impl ExecutionTest {
                     &mut round_limits,
                     self.subnet_size(),
                 );
-                let instructions_executed =
-                    as_num_instructions(instructions_before - round_limits.instructions);
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory
                     .set(round_limits.subnet_available_memory.get());
                 self.update_execution_stats(
                     canister_id,
                     self.instruction_limits.message(),
-                    instructions_executed,
+                    result.instructions_used,
                 );
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {

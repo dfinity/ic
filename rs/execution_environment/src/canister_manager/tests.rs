@@ -296,8 +296,7 @@ fn install_code(
         .method_name(Method::InstallCode)
         .method_payload(args.encode())
         .build();
-    let instructions_before = round_limits.instructions;
-    let (result, canister) = canister_manager.install_code(
+    let (result, instructions_used, canister) = canister_manager.install_code(
         context,
         RequestOrIngress::Ingress(Arc::new(ingress)),
         state,
@@ -305,9 +304,7 @@ fn install_code(
         round_limits,
         SMALL_APP_SUBNET_MAX_SIZE,
     );
-    let instructions_after = round_limits.instructions;
-    let instructions_left = instruction_limit
-        - as_num_instructions(instructions_before - instructions_after).min(instruction_limit);
+    let instructions_left = instruction_limit - instructions_used.min(instruction_limit);
     (instructions_left, result, canister)
 }
 
@@ -779,7 +776,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     // Try installing without any memory allocation.
     let execution_cost_before = test.canister_execution_cost(canister2);
     let err = test
-        .install_canister_with_allocation(canister2, wasm.clone(), None, None)
+        .install_canister_with_allocation(canister2, wasm, None, None)
         .unwrap_err();
     let execution_cost_after = test.canister_execution_cost(canister2);
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
@@ -787,9 +784,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
-        initial_cycles
-            - (execution_cost_after - execution_cost_before)
-            - test.reduced_wasm_compilation_fee(&wasm)
+        initial_cycles - (execution_cost_after - execution_cost_before)
     );
 }
 
@@ -2610,7 +2605,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
     // Try upgrading without any memory allocation.
     let execution_cost_before = test.canister_execution_cost(canister2);
     let err = test
-        .upgrade_canister_with_allocation(canister2, wasm.clone(), None, None)
+        .upgrade_canister_with_allocation(canister2, wasm, None, None)
         .unwrap_err();
     let execution_cost_after = test.canister_execution_cost(canister2);
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
@@ -2618,9 +2613,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
-        cycles_before
-            - (execution_cost_after - execution_cost_before)
-            - test.reduced_wasm_compilation_fee(&wasm)
+        cycles_before - (execution_cost_after - execution_cost_before)
     );
 }
 
@@ -4581,14 +4574,14 @@ fn cycles_correct_if_upgrade_succeeds() {
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
         test.canister_state(id).system_state.balance(),
-        cycles_before - execution_cost - test.reduced_wasm_compilation_fee(&wasm),
+        cycles_before - execution_cost,
     );
     assert_eq!(
         execution_cost,
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(18 + 24) + wasm_compilation_cost(&wasm),
             test.subnet_size()
-        ) - test.reduced_wasm_compilation_fee(&wasm)
+        )
     );
 }
 

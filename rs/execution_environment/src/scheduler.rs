@@ -291,20 +291,21 @@ impl SchedulerImpl {
                 self.config.max_instructions_per_install_code_slice,
             );
             let instructions_before = round_limits.instructions;
-            state = self.exec_env.resume_install_code(
+            let (new_state, _instructions_used) = self.exec_env.resume_install_code(
                 state,
                 canister_id,
                 instruction_limits,
                 round_limits,
                 subnet_size,
             );
+            state = new_state;
             ongoing_long_install_code = state
                 .canister_state(canister_id)
                 .map_or(false, |canister| canister.has_paused_install_code());
 
-            let instructions_executed =
+            let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
-            measurement_scope.add(instructions_executed, NumMessages::from(0));
+            measurement_scope.add(round_instructions_executed, NumMessages::from(0));
 
             // Break when reached the instructions limit or
             // found a canister that has a long install code message in progress.
@@ -359,7 +360,7 @@ impl SchedulerImpl {
                 }
 
                 let instructions_before = round_limits.instructions;
-                state = self.exec_env.execute_subnet_message(
+                let (new_state, _instructions_used) = self.exec_env.execute_subnet_message(
                     msg,
                     state,
                     instruction_limits,
@@ -368,9 +369,10 @@ impl SchedulerImpl {
                     registry_settings,
                     round_limits,
                 );
-                let instructions_executed =
+                state = new_state;
+                let round_instructions_executed =
                     as_num_instructions(instructions_before - round_limits.instructions);
-                measurement_scope.add(instructions_executed, NumMessages::from(1));
+                measurement_scope.add(round_instructions_executed, NumMessages::from(1));
                 if round_limits.instructions <= RoundInstructions::from(0) {
                     break;
                 }
@@ -1210,7 +1212,7 @@ impl Scheduler for SchedulerImpl {
                     self.config.max_instructions_per_slice,
                 );
                 let instructions_before = round_limits.instructions;
-                state = self.exec_env.execute_subnet_message(
+                let (new_state, _instructions_used) = self.exec_env.execute_subnet_message(
                     CanisterInputMessage::Response(response.into()),
                     state,
                     instruction_limits,
@@ -1219,9 +1221,10 @@ impl Scheduler for SchedulerImpl {
                     registry_settings,
                     &mut round_limits,
                 );
-                let instructions_executed =
+                state = new_state;
+                let round_instructions_executed =
                     as_num_instructions(instructions_before - round_limits.instructions);
-                measurement_scope.add(instructions_executed, NumMessages::from(1));
+                measurement_scope.add(round_instructions_executed, NumMessages::from(1));
                 if round_limits.instructions <= RoundInstructions::from(0) {
                     break;
                 }
@@ -1554,6 +1557,7 @@ fn execute_canisters_on_thread(
             let canister_had_paused_execution = canister.has_paused_execution();
             let ExecuteCanisterResult {
                 canister: new_canister,
+                instructions_used,
                 heap_delta,
                 ingress_status,
                 description,
@@ -1567,14 +1571,14 @@ fn execute_canisters_on_thread(
                 subnet_size,
             );
             ingress_results.extend(ingress_status);
-            let instructions_executed =
+            let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
-            measurement_scope.add(instructions_executed, NumMessages::from(1));
+            measurement_scope.add(round_instructions_executed, NumMessages::from(1));
             observe_instructions_consumed_per_message(
                 &logger,
                 &metrics,
                 &new_canister,
-                instructions_executed,
+                instructions_used,
                 instruction_limits.message(),
             );
             canister = new_canister;

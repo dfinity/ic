@@ -15,7 +15,7 @@ use ic_interfaces::messages::CanisterInputMessage;
 use ic_interfaces::messages::RequestOrIngress;
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::CallContextId;
-use ic_types::{Cycles, NumBytes, Time};
+use ic_types::{Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 use ic_system_api::{ApiType, ExecutionParameters};
@@ -280,9 +280,18 @@ impl UpdateHelper {
             original.execution_parameters.instruction_limits.message(),
             original.subnet_size,
         );
+        let instructions_used = NumInstructions::from(
+            original
+                .execution_parameters
+                .instruction_limits
+                .message()
+                .get()
+                .saturating_sub(output.num_instructions_left.get()),
+        );
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
+            instructions_used,
             heap_delta,
         }
     }

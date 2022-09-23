@@ -11,7 +11,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{Cycles, NumBytes, Time};
+use ic_types::{Cycles, NumBytes, NumInstructions, Time};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -21,6 +21,8 @@ mod tests;
 pub struct HeartbeatResult {
     /// The canister state resulted from the heartbeat execution.
     pub canister_state: CanisterState,
+    /// The number of instructions used by the heartbeat execution.
+    pub instructions_used: NumInstructions,
     /// The size of the heap delta change, if execution is successful
     /// or the relevant error in case of failure.
     pub heap_delta_result: Result<NumBytes, CanisterHeartbeatError>,
@@ -29,16 +31,28 @@ pub struct HeartbeatResult {
 impl HeartbeatResult {
     pub fn new(
         canister_state: CanisterState,
+        instructions_used: NumInstructions,
         heap_delta_result: Result<NumBytes, CanisterHeartbeatError>,
     ) -> Self {
         Self {
             canister_state,
+            instructions_used,
             heap_delta_result,
         }
     }
 
-    pub fn into_parts(self) -> (CanisterState, Result<NumBytes, CanisterHeartbeatError>) {
-        (self.canister_state, self.heap_delta_result)
+    pub fn into_parts(
+        self,
+    ) -> (
+        CanisterState,
+        NumInstructions,
+        Result<NumBytes, CanisterHeartbeatError>,
+    ) {
+        (
+            self.canister_state,
+            self.instructions_used,
+            self.heap_delta_result,
+        )
     }
 }
 
@@ -55,6 +69,7 @@ fn validate_canister(
         let status = canister.status();
         return Err(HeartbeatResult::new(
             canister,
+            NumInstructions::from(0),
             Err(CanisterHeartbeatError::CanisterNotRunning { status }),
         ));
     }
@@ -67,6 +82,7 @@ fn validate_canister(
         None => {
             return Err(HeartbeatResult::new(
                 CanisterState::from_parts(None, old_system_state, scheduler_state),
+                NumInstructions::from(0),
                 Err(CanisterHeartbeatError::CanisterExecutionFailed(
                     HypervisorError::WasmModuleNotFound,
                 )),
@@ -77,6 +93,7 @@ fn validate_canister(
     if !execution_state.exports_method(&method) {
         return Err(HeartbeatResult::new(
             CanisterState::from_parts(Some(execution_state), old_system_state, scheduler_state),
+            NumInstructions::from(0),
             // If the Wasm module does not export the method, then this execution
             // succeeds as a no-op.
             Ok(NumBytes::from(0)),
@@ -144,6 +161,7 @@ pub fn execute_heartbeat(
     ) {
         return HeartbeatResult::new(
             CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
+            NumInstructions::from(0),
             Err(CanisterHeartbeatError::OutOfCycles(err)),
         );
     }
@@ -194,5 +212,11 @@ pub fn execute_heartbeat(
         subnet_size,
     );
 
-    HeartbeatResult::new(canister, heap_delta)
+    let instructions_used = NumInstructions::from(
+        message_instruction_limit
+            .get()
+            .saturating_sub(num_instructions_left.get()),
+    );
+
+    HeartbeatResult::new(canister, instructions_used, heap_delta)
 }

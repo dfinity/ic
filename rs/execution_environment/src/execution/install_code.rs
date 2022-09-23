@@ -234,11 +234,18 @@ impl InstallCodeHelper {
             self.canister.scheduler_state.install_code_debit += self.instructions_consumed();
         }
 
+        let instructions_used = NumInstructions::from(
+            message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
+
         let old_wasm_hash = get_wasm_hash(&clean_canister);
         let new_wasm_hash = get_wasm_hash(&self.canister);
         DtsInstallCodeResult::Finished {
             canister: self.canister,
             message: original.message,
+            instructions_used,
             result: Ok(InstallCodeResult {
                 heap_delta: self.total_heap_delta,
                 old_wasm_hash,
@@ -674,10 +681,16 @@ pub(crate) fn finish_err(
         // This can only fail with deterministic time slicing if the balance of
         // the canister has changed while the long-execution was in progress.
         .map_err(CanisterManagerError::InstallCodeNotEnoughCycles);
+    let instructions_used = NumInstructions::from(
+        message_instruction_limit
+            .get()
+            .saturating_sub(instructions_left.get()),
+    );
     if let Err(err) = result {
         return DtsInstallCodeResult::Finished {
             canister: new_canister,
             message: original.message,
+            instructions_used,
             result: Err(err),
         };
     }
@@ -689,13 +702,13 @@ pub(crate) fn finish_err(
     );
 
     if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
-        let instructions_consumed = message_instruction_limit - instructions_left;
-        new_canister.scheduler_state.install_code_debit += instructions_consumed;
+        new_canister.scheduler_state.install_code_debit += instructions_used;
     }
 
     DtsInstallCodeResult::Finished {
         canister: new_canister,
         message: original.message,
+        instructions_used,
         result: Err(err),
     }
 }
