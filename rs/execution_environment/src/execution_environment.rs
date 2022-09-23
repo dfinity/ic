@@ -113,6 +113,9 @@ pub enum ExecuteMessageResult {
         /// to the output queue of the canister or update the ingress status.
         response: ExecutionResponse,
 
+        /// The number of instructions used by the message execution.
+        instructions_used: NumInstructions,
+
         /// The size of the heap delta the canister produced
         heap_delta: NumBytes,
     },
@@ -371,7 +374,7 @@ impl ExecutionEnvironment {
         ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
-    ) -> ReplicatedState {
+    ) -> (ReplicatedState, NumInstructions) {
         let timer = Timer::start(); // Start logging execution time.
 
         let mut msg = match msg {
@@ -381,7 +384,7 @@ impl ExecutionEnvironment {
                     .subnet_call_context_manager
                     .retrieve_request(response.originator_reply_callback, &self.log);
                 return match request {
-                    None => state,
+                    None => (state, NumInstructions::from(0)),
                     Some(request) => {
                         state.push_subnet_output_response(
                             Response {
@@ -393,7 +396,7 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
-                        state
+                        (state, NumInstructions::from(0))
                     }
                 };
             }
@@ -405,6 +408,79 @@ impl ExecutionEnvironment {
         let method = Ic00Method::from_str(msg.method_name());
         let payload = msg.method_payload();
         let result = match method {
+            Ok(Ic00Method::InstallCode) => {
+                // Tail call is needed for deterministic time slicing here to
+                // properly handle the case of a paused execution.
+                return self.execute_install_code(
+                    msg,
+                    state,
+                    instruction_limits,
+                    round_limits,
+                    registry_settings.subnet_size,
+                );
+            }
+
+            Ok(Ic00Method::SignWithECDSA) => match &msg {
+                RequestOrIngress::Request(request) => {
+                    let reject_message = if payload.is_empty() {
+                        "An empty message cannot be signed".to_string()
+                    } else {
+                        String::new()
+                    };
+
+                    if !reject_message.is_empty() {
+                        use ic_types::messages;
+                        state.push_subnet_output_response(
+                            Response {
+                                originator: request.sender,
+                                respondent: CanisterId::from(self.own_subnet_id),
+                                originator_reply_callback: request.sender_reply_callback,
+                                refund: request.payment,
+                                response_payload: messages::Payload::Reject(
+                                    messages::RejectContext {
+                                        code: ic_error_types::RejectCode::CanisterReject,
+                                        message: reject_message,
+                                    },
+                                ),
+                            }
+                            .into(),
+                        );
+                        return (state, NumInstructions::from(0));
+                    }
+
+                    match SignWithECDSAArgs::decode(payload) {
+                        Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
+                        Ok(args) => {
+                            match get_master_ecdsa_public_key(
+                                ecdsa_subnet_public_keys,
+                                self.own_subnet_id,
+                                &args.key_id,
+                            ) {
+                                Err(err) => Some((Err(err), msg.take_cycles())),
+                                Ok(_) => self
+                                    .sign_with_ecdsa(
+                                        (**request).clone(),
+                                        args.message_hash,
+                                        args.derivation_path,
+                                        args.key_id,
+                                        registry_settings.max_ecdsa_queue_size,
+                                        &mut state,
+                                        rng,
+                                        registry_settings.subnet_size,
+                                    )
+                                    .map_or_else(
+                                        |err| Some((Err(err), msg.take_cycles())),
+                                        |()| None,
+                                    ),
+                            }
+                        }
+                    }
+                }
+                RequestOrIngress::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::SignWithECDSA)
+                }
+            },
+
             Ok(Ic00Method::CreateCanister) => {
                 match &mut msg {
                     RequestOrIngress::Ingress(_) =>
@@ -442,18 +518,6 @@ impl ExecutionEnvironment {
                         }
                     }
                 }
-            }
-
-            Ok(Ic00Method::InstallCode) => {
-                // Tail call is needed for deterministic time slicing here to
-                // properly handle the case of a paused execution.
-                return self.execute_install_code(
-                    msg,
-                    state,
-                    instruction_limits,
-                    round_limits,
-                    registry_settings.subnet_size,
-                );
             }
 
             Ok(Ic00Method::UninstallCode) => {
@@ -679,67 +743,6 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::SignWithECDSA) => match &msg {
-                RequestOrIngress::Request(request) => {
-                    let reject_message = if payload.is_empty() {
-                        "An empty message cannot be signed".to_string()
-                    } else {
-                        String::new()
-                    };
-
-                    if !reject_message.is_empty() {
-                        use ic_types::messages;
-                        state.push_subnet_output_response(
-                            Response {
-                                originator: request.sender,
-                                respondent: CanisterId::from(self.own_subnet_id),
-                                originator_reply_callback: request.sender_reply_callback,
-                                refund: request.payment,
-                                response_payload: messages::Payload::Reject(
-                                    messages::RejectContext {
-                                        code: ic_error_types::RejectCode::CanisterReject,
-                                        message: reject_message,
-                                    },
-                                ),
-                            }
-                            .into(),
-                        );
-                        return state;
-                    }
-
-                    match SignWithECDSAArgs::decode(payload) {
-                        Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
-                        Ok(args) => {
-                            match get_master_ecdsa_public_key(
-                                ecdsa_subnet_public_keys,
-                                self.own_subnet_id,
-                                &args.key_id,
-                            ) {
-                                Err(err) => Some((Err(err), msg.take_cycles())),
-                                Ok(_) => self
-                                    .sign_with_ecdsa(
-                                        (**request).clone(),
-                                        args.message_hash,
-                                        args.derivation_path,
-                                        args.key_id,
-                                        registry_settings.max_ecdsa_queue_size,
-                                        &mut state,
-                                        rng,
-                                        registry_settings.subnet_size,
-                                    )
-                                    .map_or_else(
-                                        |err| Some((Err(err), msg.take_cycles())),
-                                        |()| None,
-                                    ),
-                            }
-                        }
-                    }
-                }
-                RequestOrIngress::Ingress(_) => {
-                    self.reject_unexpected_ingress(Ic00Method::SignWithECDSA)
-                }
-            },
-
             Ok(Ic00Method::ECDSAPublicKey) => {
                 let cycles = msg.take_cycles();
                 match &msg {
@@ -909,7 +912,7 @@ impl ExecutionEnvironment {
         // Note that some branches above like `InstallCode` and `SignWithECDSA`
         // have early returns. If you modify code below, please also update
         // these cases.
-        match result {
+        let state = match result {
             Some((res, refund)) => {
                 self.finish_subnet_message_execution(state, msg, res, refund, timer)
             }
@@ -928,7 +931,8 @@ impl ExecutionEnvironment {
                 // response from consensus is handled separately.
                 state
             }
-        }
+        };
+        (state, NumInstructions::from(0))
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.
@@ -1026,7 +1030,11 @@ impl ExecutionEnvironment {
         time: Time,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
-    ) -> (CanisterState, Result<NumBytes, CanisterHeartbeatError>) {
+    ) -> (
+        CanisterState,
+        NumInstructions,
+        Result<NumBytes, CanisterHeartbeatError>,
+    ) {
         // A heartbeat is expected to finish quickly, so DTS is not supported for it.
         let instruction_limits = InstructionLimits::new(
             FlagStatus::Disabled,
@@ -1035,7 +1043,7 @@ impl ExecutionEnvironment {
         );
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
-        let (canister, result) = execute_heartbeat(
+        let (canister, instructions_used, result) = execute_heartbeat(
             canister,
             network_topology,
             execution_parameters,
@@ -1067,7 +1075,7 @@ impl ExecutionEnvironment {
                     .inc();
             }
         }
-        (canister, result)
+        (canister, instructions_used, result)
     }
 
     /// Returns the maximum amount of memory that can be utilized by a single
@@ -1725,7 +1733,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
-    ) -> ReplicatedState {
+    ) -> (ReplicatedState, NumInstructions) {
         // A helper function to make error handling more compact using `?`.
         fn decode_input_and_take_canister(
             msg: &RequestOrIngress,
@@ -1750,7 +1758,9 @@ impl ExecutionEnvironment {
             Ok(result) => result,
             Err(err) => {
                 let refund = msg.take_cycles();
-                return self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
+                let state =
+                    self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
+                return (state, NumInstructions::from(0));
             }
         };
 
@@ -1812,12 +1822,13 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         dts_result: DtsInstallCodeResult,
         timer: Timer,
-    ) -> ReplicatedState {
+    ) -> (ReplicatedState, NumInstructions) {
         let execution_duration = timer.elapsed();
         match dts_result {
             DtsInstallCodeResult::Finished {
                 canister,
                 mut message,
+                instructions_used,
                 result,
             } => {
                 let canister_id = canister.canister_id();
@@ -1854,7 +1865,9 @@ impl ExecutionEnvironment {
                 };
                 state.put_canister_state(canister);
                 let refund = message.take_cycles();
-                self.finish_subnet_message_execution(state, message, result, refund, timer)
+                let state =
+                    self.finish_subnet_message_execution(state, message, result, refund, timer);
+                (state, instructions_used)
             }
             DtsInstallCodeResult::Paused {
                 mut canister,
@@ -1866,7 +1879,7 @@ impl ExecutionEnvironment {
                     .task_queue
                     .push_front(ExecutionTask::PausedInstallCode(id));
                 state.put_canister_state(canister);
-                state
+                (state, NumInstructions::from(0))
             }
         }
     }
@@ -1887,7 +1900,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
-    ) -> ReplicatedState {
+    ) -> (ReplicatedState, NumInstructions) {
         let task = state
             .canister_state_mut(canister_id)
             .unwrap()
@@ -1999,11 +2012,17 @@ impl ExecutionEnvironment {
     pub fn process_result(
         &self,
         result: ExecuteMessageResult,
-    ) -> (CanisterState, NumBytes, Option<(MessageId, IngressStatus)>) {
+    ) -> (
+        CanisterState,
+        NumInstructions,
+        NumBytes,
+        Option<(MessageId, IngressStatus)>,
+    ) {
         match result {
             ExecuteMessageResult::Finished {
                 mut canister,
                 response,
+                instructions_used,
                 heap_delta,
             } => {
                 let ingress_status = match response {
@@ -2019,7 +2038,7 @@ impl ExecutionEnvironment {
                     }
                     ExecutionResponse::Empty => None,
                 };
-                (canister, heap_delta, ingress_status)
+                (canister, instructions_used, heap_delta, ingress_status)
             }
             ExecuteMessageResult::Paused {
                 mut canister,
@@ -2030,7 +2049,7 @@ impl ExecutionEnvironment {
                     .system_state
                     .task_queue
                     .push_front(ExecutionTask::PausedExecution(id));
-                (canister, NumBytes::from(0), None)
+                (canister, NumInstructions::from(0), NumBytes::from(0), None)
             }
         }
     }
@@ -2118,6 +2137,7 @@ fn get_canister_mut(
 /// The result of `execute_canister()`.
 pub struct ExecuteCanisterResult {
     pub canister: CanisterState,
+    pub instructions_used: NumInstructions,
     pub heap_delta: NumBytes,
     pub ingress_status: Option<(MessageId, IngressStatus)>,
     // The description of the executed task or message.
@@ -2146,9 +2166,10 @@ fn execute_message(
         round_limits,
         subnet_size,
     );
-    let (canister, heap_delta, ingress_status) = exec_env.process_result(result);
+    let (canister, instructions_used, heap_delta, ingress_status) = exec_env.process_result(result);
     ExecuteCanisterResult {
         canister,
+        instructions_used,
         heap_delta,
         ingress_status,
         description: Some(msg_info),
@@ -2170,6 +2191,7 @@ pub fn execute_canister(
         NextExecution::None | NextExecution::ContinueInstallCode => {
             return ExecuteCanisterResult {
                 canister,
+                instructions_used: NumInstructions::from(0),
                 heap_delta: NumBytes::from(0),
                 ingress_status: None,
                 description: None,
@@ -2181,7 +2203,7 @@ pub fn execute_canister(
     match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
             ExecutionTask::Heartbeat => {
-                let (canister, result) = exec_env.execute_canister_heartbeat(
+                let (canister, instructions_used, result) = exec_env.execute_canister_heartbeat(
                     canister,
                     instruction_limits,
                     network_topology,
@@ -2192,6 +2214,7 @@ pub fn execute_canister(
                 let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
                 ExecuteCanisterResult {
                     canister,
+                    instructions_used,
                     heap_delta,
                     ingress_status: None,
                     description: Some("heartbeat".to_string()),
@@ -2207,9 +2230,11 @@ pub fn execute_canister(
                     time,
                 };
                 let result = paused.resume(canister, round_context, round_limits, subnet_size);
-                let (canister, heap_delta, ingress_status) = exec_env.process_result(result);
+                let (canister, instructions_used, heap_delta, ingress_status) =
+                    exec_env.process_result(result);
                 ExecuteCanisterResult {
                     canister,
+                    instructions_used,
                     heap_delta,
                     ingress_status,
                     description: Some("paused execution".to_string()),

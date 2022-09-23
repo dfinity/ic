@@ -205,6 +205,7 @@ impl ResponseHelper {
                 return Err(ExecuteMessageResult::Finished {
                     canister: self.canister,
                     heap_delta: NumBytes::from(0),
+                    instructions_used: NumInstructions::from(0),
                     response: ExecutionResponse::Empty,
                 });
             }
@@ -402,9 +403,16 @@ impl ResponseHelper {
             original.message_instruction_limit,
             original.subnet_size,
         );
+        let instructions_used = NumInstructions::from(
+            original
+                .message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
+            instructions_used,
             heap_delta,
         }
     }
@@ -602,6 +610,7 @@ pub fn execute_response(
                 // callback should always exist.
                 return ExecuteMessageResult::Finished {
                     canister: clean_canister,
+                    instructions_used: NumInstructions::from(0),
                     heap_delta: NumBytes::from(0),
                     response: ExecutionResponse::Empty,
                 };

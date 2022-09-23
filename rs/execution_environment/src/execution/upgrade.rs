@@ -19,6 +19,7 @@ use ic_logger::info;
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types::NumInstructions;
 
 /// Performs a canister upgrade. The algorithm consists of six stages:
 /// - Stage 0: validate input and reserve execution cycles.
@@ -91,6 +92,7 @@ pub(crate) fn execute_upgrade(
         return DtsInstallCodeResult::Finished {
             canister: clean_canister,
             message: original.message,
+            instructions_used: NumInstructions::from(0),
             result: Err(err),
         };
     }
@@ -99,6 +101,7 @@ pub(crate) fn execute_upgrade(
         return DtsInstallCodeResult::Finished {
             canister: clean_canister,
             message: original.message,
+            instructions_used: NumInstructions::from(0),
             result: Err(err),
         };
     }
