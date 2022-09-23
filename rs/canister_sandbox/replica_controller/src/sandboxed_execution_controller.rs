@@ -7,13 +7,11 @@ use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_canister_sandbox_common::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_executor::{
-    get_wasm_reserved_pages, CanisterStateChanges, PausedWasmExecution, SliceExecutionOutput,
+    get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, PausedWasmExecution,
     WasmExecutionResult, WasmExecutor,
 };
 use ic_embedders::{CompilationCache, CompilationResult, WasmExecutionInput};
-use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, InstanceStats, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
@@ -21,7 +19,7 @@ use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
-use ic_types::{CanisterId, NumBytes, NumInstructions};
+use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use std::collections::{HashMap, VecDeque};
@@ -502,25 +500,7 @@ impl WasmExecutor for SandboxedExecutionController {
         ) {
             Ok((wasm_id, compilation_result)) => (wasm_id, compilation_result),
             Err(err) => {
-                return (
-                    None,
-                    WasmExecutionResult::Finished(
-                        SliceExecutionOutput {
-                            executed_instructions: NumInstructions::from(0),
-                        },
-                        WasmExecutionOutput {
-                            wasm_result: Err(err),
-                            num_instructions_left: message_instruction_limit,
-                            allocated_bytes: NumBytes::from(0),
-                            allocated_message_bytes: NumBytes::from(0),
-                            instance_stats: InstanceStats {
-                                accessed_pages: 0,
-                                dirty_pages: 0,
-                            },
-                        },
-                        None,
-                    ),
-                );
+                return (None, wasm_execution_error(err, message_instruction_limit));
             }
         };
 

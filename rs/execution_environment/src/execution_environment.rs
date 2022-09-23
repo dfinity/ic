@@ -103,6 +103,7 @@ pub enum ExecutionResponse {
 
 /// The data structure returned by
 /// `ExecutionEnvironment.execute_canister_message()`.
+#[derive(Debug)]
 pub enum ExecuteMessageResult {
     Finished {
         /// The new state of the canister after execution.
