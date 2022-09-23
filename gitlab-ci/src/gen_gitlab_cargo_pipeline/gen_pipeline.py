@@ -288,6 +288,11 @@ def generate_gitlab_yaml(
         if gitlab_ci_config_changes:
             fout.write("  GITLAB_CI_CONFIG_CHANGED: 'true'\n")
 
+        # if ENABLE_LEGACY_CARGO_TESTS is set to anything, generate legacy cargo tests
+        # ignore this while testing the script itself ~ CI_PIPELINE_ID is removed from environ
+        if not os.getenv("ENABLE_LEGACY_CARGO_TESTS", False) and "CI_PIPELINE_ID" in os.environ:
+            crates = []
+
         for crate in sorted(crates):
             crate = crate_test_name_overrides.get(crate, crate)
 
