@@ -1,9 +1,10 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    # Keep sorted.
+    "//rs/async_utils",
+    "//rs/bitcoin/service",
     "//rs/bitcoin/types/internal",
     "//rs/bitcoin/types/public",
     "//rs/canister_client/sender",
@@ -38,19 +39,19 @@ DEPENDENCIES = [
     "@crate_index//:rand_0_4_6",
     "@crate_index//:slog",
     "@crate_index//:slog-scope",
+    "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tonic",
     "@crate_index//:tower",
     "@wabt_rs//:wabt",
 ]
 
 MACRO_DEPENDENCIES = []
 
-ALIASES = {}
-
 DEV_DEPENDENCIES = [
-    # Keep sorted.
     "//rs/crypto/sha",
     "//rs/rust_canisters/canister_test",
+    "//rs/state_machine_tests",
     "//rs/sys",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
@@ -67,6 +68,8 @@ DEV_DATA = [
     "//rs/canister_sandbox/sandbox_launcher",
 ]
 
+ALIASES = {}
+
 DEV_ENV = {
     # Keep sorted.
     "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
@@ -75,40 +78,30 @@ DEV_ENV = {
 
 rust_library(
     name = "replica_tests",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_replica_tests",
+    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "canister_lifecycle_test",
-    srcs = ["tests/canister_lifecycle.rs"],
-    data = DEV_DATA,
-    env = DEV_ENV,
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES + DEPENDENCIES + [":replica_tests"],
+    name = "replica_tests_test",
+    aliases = ALIASES,
+    crate = ":replica_tests",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
-    name = "funds_test",
-    srcs = ["tests/funds.rs"],
+rust_test_suite(
+    name = "replica_tests_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
     data = DEV_DATA,
+    edition = "2021",
     env = DEV_ENV,
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES + DEPENDENCIES + [":replica_tests"],
-)
-
-rust_test(
-    name = "tests_test",
-    srcs = ["tests/tests.rs"],
-    data = DEV_DATA,
-    env = DEV_ENV,
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES + DEPENDENCIES + [
-        ":replica_tests",
-        "//rs/state_machine_tests",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":replica_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
