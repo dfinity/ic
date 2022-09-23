@@ -10,6 +10,9 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Tokens;
 
+/// The memo to use for balances burned during trimming
+const TRIMMED_MEMO: u64 = u64::MAX;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionInfo<TransactionType> {
     pub block_timestamp: TimeStamp,
@@ -190,7 +193,7 @@ pub fn apply_transaction<L: LedgerData>(
     };
 
     for (balance, account) in to_trim {
-        let burn_tx = L::Transaction::burn(account, balance, Some(now), None);
+        let burn_tx = L::Transaction::burn(account, balance, Some(now), Some(TRIMMED_MEMO));
 
         burn_tx
             .apply(ledger.balances_mut())
