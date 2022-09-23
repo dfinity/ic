@@ -1,10 +1,11 @@
-use ic_error_types::ErrorCode;
-use ic_types::Cycles;
+use ic_error_types::{ErrorCode, UserError};
+use ic_types::{CanisterId, Cycles};
 
-use crate::execution::test_utilities::{check_ingress_status, ExecutionTestBuilder};
-use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Payload};
+use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
+use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_types::ingress::WasmResult;
+use ic_types::messages::MessageId;
 use wabt::wat2wasm_with_features;
 
 const DTS_INSTALL_WAT: &str = r#"
@@ -178,4 +179,118 @@ fn dts_abort_works_in_install_code() {
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+}
+
+fn execute_install_code_message_dts_helper(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    wasm: &str,
+) -> MessageId {
+    let mut features = wabt::Features::new();
+    features.enable_bulk_memory();
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: wat2wasm_with_features(wasm, features).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+    };
+
+    // Send install code message.
+    let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // Start execution of install code.
+    let original_system_state = test.canister_state(canister_id).system_state.clone();
+    test.execute_subnet_message();
+
+    // Execute all slices.
+    for _ in 0..2 {
+        assert_eq!(
+            test.canister_state(canister_id).next_execution(),
+            NextExecution::ContinueInstallCode
+        );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
+        );
+        test.execute_slice(canister_id);
+    }
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    message_id
+}
+
+#[test]
+fn install_code_with_start_with_err() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_install_code_instruction_limit(1_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let wasm: &str = r#"
+    (module
+    
+        (func $start
+            (drop (memory.grow (i32.const 1)))
+            (memory.fill (i32.const 0) (i32.const 13) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 1000))
+             unreachable
+        )
+        (start $start)
+        (memory 0 20)
+    )"#;
+
+    let message_id = execute_install_code_message_dts_helper(&mut test, canister_id, wasm);
+
+    let result = check_ingress_status(test.ingress_status(&message_id));
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterTrapped,
+            format!("Canister {} trapped: unreachable", canister_id)
+        ))
+    );
+}
+
+#[test]
+fn install_code_with_start_with_success() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let wasm: &str = r#"
+    (module
+        (func $start
+            (drop (memory.grow (i32.const 1)))
+            (memory.fill (i32.const 0) (i32.const 13) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 14) (i32.const 1000))
+        )
+        (start $start)
+        (memory 0 20)
+    )"#;
+
+    let message_id = execute_install_code_message_dts_helper(&mut test, canister_id, wasm);
+
+    assert!(check_ingress_status(test.ingress_status(&message_id)).is_ok());
 }
