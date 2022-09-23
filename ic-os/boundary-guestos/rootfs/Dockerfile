@@ -225,12 +225,6 @@ RUN chown root:root /etc/node_exporter \
     chmod 0755 /etc/node_exporter \
                /usr/local/bin/node_exporter
 
-# install nginx_exporter
-RUN addgroup nginx_exporter && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "nginx_exporter" nginx_exporter && \
-    adduser nginx_exporter nginx_exporter && \
-    chown nginx_exporter:nginx_exporter /usr/local/bin/nginx_exporter
-
 # Install IC binaries and other data late -- this means everything above
 # will be cached when only the binaries change.
 COPY opt /opt
