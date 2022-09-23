@@ -69,6 +69,66 @@ fn post_upgrade() {
     })
 }
 
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    w.encode_gauge(
+        "ledger_stable_memory_pages",
+        ic_cdk::api::stable::stable64_size() as f64,
+        "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
+    )?;
+    w.encode_gauge(
+        "ledger_stable_memory_bytes",
+        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
+        "Size of the stable memory allocated by this canister.",
+    )?;
+    Access::with_ledger(|ledger| {
+        w.encode_gauge(
+            "ledger_transactions_by_hash_cache_entries",
+            ledger.transactions_by_hash().len() as f64,
+            "Total number of entries in the transactions_by_hash cache.",
+        )?;
+        w.encode_gauge(
+            "ledger_transactions_by_height_entries",
+            ledger.transactions_by_height().len() as f64,
+            "Total number of entries in the transaction_by_height queue.",
+        )?;
+        w.encode_gauge(
+            "ledger_transactions",
+            ledger.blockchain().blocks.len() as f64,
+            "Total number of transactions stored in the main memory.",
+        )?;
+        w.encode_gauge(
+            "ledger_archived_transactions",
+            ledger.blockchain().num_archived_blocks as f64,
+            "Total number of transactions sent to the archive.",
+        )?;
+        w.encode_gauge(
+            "ledger_balances_token_pool",
+            ledger.balances().token_pool.get_tokens() as f64,
+            "Total number of Tokens in the pool.",
+        )?;
+        w.encode_gauge(
+            "ledger_balance_store_entries",
+            ledger.balances().store.len() as f64,
+            "Total number of accounts in the balance store.",
+        )?;
+        w.encode_gauge(
+            "ledger_most_recent_block_time_seconds",
+            (ledger
+                .blockchain()
+                .last_timestamp
+                .as_nanos_since_unix_epoch()
+                / 1_000_000_000) as f64,
+            "IC timestamp of the most recent block.",
+        )?;
+        Ok(())
+    })
+}
+
+#[export_name = "canister_query http_request"]
+fn http_request() {
+    dfn_http_metrics::serve_metrics(encode_metrics);
+}
+
 #[query]
 #[candid_method(query)]
 fn icrc1_name() -> String {
