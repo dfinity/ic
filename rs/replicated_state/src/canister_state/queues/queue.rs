@@ -334,17 +334,7 @@ pub(crate) struct OutputQueue {
 /// it should be excluded from comparisons.
 impl PartialEq for OutputQueue {
     fn eq(&self, other: &Self) -> bool {
-        // Ensure there are no requests in front of the timeout_index.
-        // If this is the case, timeout_index can be dropped safely here.
-        #[cfg(debug_assertions)]
-        if self.timeout_index > self.index {
-            debug_assert!(self
-                .queue
-                .queue
-                .iter()
-                .take((self.timeout_index - self.index).get() as usize)
-                .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))));
-        }
+        debug_assert!(self.check_invariants());
 
         // Compare everything except timeout_index.
         (self.index == other.index)
@@ -357,17 +347,7 @@ impl PartialEq for OutputQueue {
 /// guarantee queue1 == queue2 -> hash(queue1) == hash(queue2).
 impl Hash for OutputQueue {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        // Ensure there are no requests in front of the timeout_index.
-        // If this is the case, timeout_index can be dropped safely here.
-        #[cfg(debug_assertions)]
-        if self.timeout_index > self.index {
-            debug_assert!(self
-                .queue
-                .queue
-                .iter()
-                .take((self.timeout_index - self.index).get() as usize)
-                .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))));
-        }
+        debug_assert!(self.check_invariants());
 
         // Hash everything except timeout_index.
         self.index.hash(state);
@@ -422,12 +402,9 @@ impl OutputQueue {
                 self.deadline_range_ends.push_back((deadline, back_index));
             }
         }
-        self.num_messages += 1;
 
-        debug_assert_eq!(
-            self.num_messages,
-            self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
-        );
+        self.num_messages += 1;
+        debug_assert!(self.check_invariants());
 
         Ok(())
     }
@@ -436,12 +413,9 @@ impl OutputQueue {
         self.queue
             .push_into_reserved_slot(Some(RequestOrResponse::Response(msg)))
             .unwrap();
-        self.num_messages += 1;
 
-        debug_assert_eq!(
-            self.num_messages,
-            self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
-        );
+        self.num_messages += 1;
+        debug_assert!(self.check_invariants());
     }
 
     pub(super) fn reserve_slot(&mut self) -> Result<(), StateError> {
@@ -462,10 +436,7 @@ impl OutputQueue {
                 self.advance_to_next_message();
 
                 self.num_messages -= 1;
-                debug_assert_eq!(
-                    self.num_messages,
-                    self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
-                );
+                debug_assert!(self.check_invariants());
 
                 Some(msg)
             }
@@ -474,7 +445,7 @@ impl OutputQueue {
 
     /// Consumes any empty slots at the head of the queue and discards consumed deadline ranges.
     fn advance_to_next_message(&mut self) {
-        // Remove None in front.
+        // Remove `None` in front.
         while let Some(None) = self.queue.peek() {
             self.queue.pop();
             self.index.inc_assign();
@@ -488,6 +459,69 @@ impl OutputQueue {
                 break;
             }
         }
+    }
+
+    /// Checks the queue invariants. Should be called within a `debug_assert` in prod code.
+    ///
+    /// # Panics
+    ///
+    /// If an invariant is violated.
+    fn check_invariants(&self) -> bool {
+        // Check there may not be `None` in the front of the queue.
+        if let Some(None) = self.queue.queue.front() {
+            panic!("Found `None` at the front.");
+        }
+
+        // Check deadline invariant, deadlines and indices must be strictly sorted.
+        assert!(
+            self.deadline_range_ends
+                .iter()
+                .zip(self.deadline_range_ends.iter().skip(1))
+                .all(|(a, b)| a.0 < b.0 && a.1 < b.1),
+            "Deadlines not sorted.",
+        );
+
+        // Check deadline invariant, deadline indices must be in
+        // (self.index, self.index + self.queue.queue.len()].
+        if let Some((_, deadline_front_index)) = self.deadline_range_ends.front() {
+            assert!(
+                *deadline_front_index > self.index,
+                "Found Deadline range end before the queue.",
+            );
+        }
+        if let Some((_, deadline_back_index)) = self.deadline_range_ends.back() {
+            assert!(
+                *deadline_back_index <= self.index + (self.queue.queue.len() as u64).into(),
+                "Found Deadline range end after the queue.",
+            );
+        }
+
+        // Check no requests are found before `self.timeout_index`.
+        if self.timeout_index > self.index {
+            assert!(
+                self.queue
+                    .queue
+                    .iter()
+                    .take((self.timeout_index - self.index).get() as usize)
+                    .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))),
+                "Found Request(s) before the `timeout_index`.",
+            );
+        }
+
+        // Check no deadline range ends <= `self.timeout_index` are found.
+        assert!(self
+            .deadline_range_ends
+            .iter()
+            .all(|(_, end)| *end > self.timeout_index));
+
+        // Check `self.num_messages` is tracked properly.
+        assert_eq!(
+            self.num_messages,
+            self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
+            "Number of messages and `num_messages` mismatch."
+        );
+
+        true
     }
 
     /// Returns the message that `pop` would have returned, without removing it
@@ -577,19 +611,8 @@ impl<'a> Iterator for TimedOutRequestsIter<'a> {
                     _ => continue,
                 } {
                     self.q.num_messages -= 1;
-                    debug_assert_eq!(
-                        self.q.num_messages,
-                        self.q.queue.queue.iter().filter(|rr| rr.is_some()).count(),
-                    );
-                    debug_assert!(self
-                        .q
-                        .queue
-                        .queue
-                        .iter()
-                        .take(i + 1)
-                        .all(|rr| !matches!(rr, Some(Request(_)))));
-
                     self.q.advance_to_next_message();
+                    debug_assert!(self.q.check_invariants());
 
                     return Some(request);
                 }
