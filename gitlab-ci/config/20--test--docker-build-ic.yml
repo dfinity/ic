@@ -14,10 +14,8 @@
       VERSION=$(git rev-parse HEAD)
 
       if [ "$CI_JOB_NAME" != "docker-build-ic" ]; then
-          # use ic-admin to get the current "git version" of NNS subnet
-          cd rs
-          NNS_RELEASE_VERSION=$(cargo run -p ic-admin -- --nns-url=https://nns.ic0.app get-subnet 0 | jq -r '.records[0].value.replica_version_id')
-          cd -
+          # read NNS release version from git tree
+          NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
           # we pass nss version info to build-determinism-*-release jobs
           # we put it under /tmp due to git clean -ffdx within docker-build-ic script
           echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > /tmp/nns.release.env
