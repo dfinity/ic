@@ -4,7 +4,7 @@ include:
 .ubuntu-docker-protected:
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:392b3d6501244d8e8fb8e8626894fce0418cc834d505f0571e142d4bbb8dc8c1"
   extends:
     - .ubuntu-nix-docker
   tags:
