@@ -150,7 +150,7 @@ impl InstallCodeHelper {
     }
 
     /// Finishes an `install_code` execution that could have run multiple rounds
-    /// due to determnistic time slicing. It updates the subnet available memory
+    /// due to deterministic time slicing. It updates the subnet available memory
     /// and compute allocation in the given `round_limits`, which may cause the
     /// execution to fail with errors.
     pub fn finish(
