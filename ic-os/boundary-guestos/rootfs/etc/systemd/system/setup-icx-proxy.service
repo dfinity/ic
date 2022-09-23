@@ -1,17 +1,14 @@
 [Unit]
-Description=Set variable files, i.e., nns key, for icx-proxy
-Before=systemd-networkd.target
+Description=Setup environment files for icx-proxy
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Before=systemd-networkd.service
+Before=icx-proxy.service
 
 [Install]
+RequiredBy=icx-proxy.service
 WantedBy=multi-user.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-icx-proxy.sh
-
-[Install]
-WantedBy=multi-user.target

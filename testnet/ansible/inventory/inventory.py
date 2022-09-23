@@ -93,8 +93,14 @@ class IcDeploymentInventory:
 
     def _load_hosts(self):
         # inventory hosts file can be comma separated
-        hosts_ini_filename = os.environ.get("HOSTS_INI_FILENAME", "hosts.ini")
-        inventory_filename = str(BASE_DIR / f"env/{self.deployment_name}/{hosts_ini_filename}")
+        hosts_filename = os.environ.get("HOSTS_INI_FILENAME")
+        if hosts_filename:
+            inventory_filename = str(BASE_DIR / f"env/{self.deployment_name}/{hosts_filename}")
+        else:
+            inventory_filename = str(BASE_DIR / f"env/{self.deployment_name}/hosts.ini")
+            if not os.path.exists(inventory_filename):
+                inventory_filename = str(BASE_DIR / f"env/{self.deployment_name}/hosts.yml")
+
         inventory_dir = os.path.dirname(inventory_filename)
         # Include only the nodes for which certain variables are set, e.g. `nns=parent`
         filter_include = os.environ.get("NODES_FILTER_INCLUDE", "")
@@ -530,16 +536,13 @@ class IcDeploymentInventory:
         }
 
         nodes_vars = self._inventory["nodes"].get("vars", {})
-        journalbeat_hosts = nodes_vars.get("journalbeat_hosts", [])
-        result["journalbeat_hosts"] = journalbeat_hosts
-        journalbeat_index = nodes_vars.get("journalbeat_index", "")
-        result["journalbeat_index"] = journalbeat_index
-        journalbeat_tags = nodes_vars.get("journalbeat_tags", [])
-        result["journalbeat_tags"] = journalbeat_tags
+        result["journalbeat_hosts"] = nodes_vars.get("journalbeat_hosts", [])
+        result["journalbeat_index"] = nodes_vars.get("journalbeat_index", "")
+        result["journalbeat_tags"] = nodes_vars.get("journalbeat_tags", [])
 
-        bn_nodes_vars = self._inventory["boundary"].get("vars", {})
-        domain = bn_nodes_vars.get("domain", "ic0.app")
-        result["domain"] = domain
+        bn_nodes_vars = self._inventory.get("boundary", {}).get("vars", None)
+        if bn_nodes_vars is not None:
+            result["bn_vars"] = bn_nodes_vars
 
         deployment_dcs = set()
         ic_nodes_by_dc = {}
@@ -601,6 +604,8 @@ class IcDeploymentInventory:
                     node_config["host"] = node_vars["ansible_host"]
                 if "batch" in node_vars.keys():
                     node_config["batch"] = node_vars["batch"]
+                if "prober" in node_vars.keys():
+                    node_config["prober"] = node_vars["prober"]
 
                 use_hsm = node_vars.get("use_hsm")
                 if use_hsm:
@@ -646,7 +651,7 @@ class IcDeploymentInventory:
             nodes = {}
             for node in self._all_nodes_hosts:
                 node_vars = self.hostvars(node)
-                nodes[node] = node_vars["ipv6_address"]
+                nodes[str(node)] = str(node_vars["ipv6_address"])
 
             yaml.dump(nodes, f)
             return f.getvalue()
@@ -658,7 +663,7 @@ class IcDeploymentInventory:
             nodes = {}
             for node in self._all_nns_hosts:
                 node_vars = self.hostvars(node)
-                nodes[node] = node_vars["ipv6_address"]
+                nodes[str(node)] = str(node_vars["ipv6_address"])
 
             yaml.dump(nodes, f)
             return f.getvalue()
