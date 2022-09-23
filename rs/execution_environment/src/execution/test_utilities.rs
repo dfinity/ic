@@ -1232,6 +1232,7 @@ pub struct ExecutionTestBuilder {
     allocatable_compute_capacity_in_percent: usize,
     subnet_features: String,
     bitcoin_canisters: Vec<PrincipalId>,
+    bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     cost_to_compile_wasm_instruction: u64,
 }
 
@@ -1271,6 +1272,7 @@ impl Default for ExecutionTestBuilder {
             allocatable_compute_capacity_in_percent: 100,
             subnet_features: String::default(),
             bitcoin_canisters: Vec::default(),
+            bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             cost_to_compile_wasm_instruction: ic_config::execution_environment::Config::default()
                 .cost_to_compile_wasm_instruction
                 .get(),
@@ -1439,6 +1441,16 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_bitcoin_follow_up_responses(
+        mut self,
+        canister: CanisterId,
+        follow_up_responses: Vec<Vec<u8>>,
+    ) -> Self {
+        self.bitcoin_get_successors_follow_up_responses
+            .insert(canister, follow_up_responses);
+        self
+    }
+
     pub fn with_cost_to_compile_wasm_instruction(mut self, cost: u64) -> Self {
         self.cost_to_compile_wasm_instruction = cost;
         self
@@ -1478,6 +1490,8 @@ impl ExecutionTestBuilder {
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.init_allocation_ranges_if_empty().unwrap();
+        state.metadata.bitcoin_get_successors_follow_up_responses =
+            self.bitcoin_get_successors_follow_up_responses;
 
         if self.subnet_features.is_empty() {
             state.metadata.own_subnet_features = SubnetFeatures::default();

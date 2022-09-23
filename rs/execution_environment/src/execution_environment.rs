@@ -879,29 +879,23 @@ impl ExecutionEnvironment {
                 Some(res)
             }
 
-            Ok(Ic00Method::BitcoinGetSuccessors) => {
-                if !self.config.bitcoin_canisters.contains(msg.sender()) {
-                    Some((
-                        Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            String::from("Permission denied."),
-                        )),
-                        Cycles::zero(),
-                    ))
-                } else {
-                    match &msg {
-                        RequestOrIngress::Request(request) => {
-                            match crate::bitcoin::get_successors(request, &mut state) {
-                                Ok(_) => None,
-                                Err(err) => Some((Err(err), Cycles::zero())),
-                            }
-                        }
-                        RequestOrIngress::Ingress(_) => {
-                            self.reject_unexpected_ingress(Ic00Method::BitcoinGetSuccessors)
-                        }
+            Ok(Ic00Method::BitcoinGetSuccessors) => match &msg {
+                RequestOrIngress::Request(request) => {
+                    match crate::bitcoin::get_successors(
+                        &self.config.bitcoin_canisters,
+                        request,
+                        &mut state,
+                    ) {
+                        Ok(Some(payload)) => Some(Ok(payload)),
+                        Ok(None) => None,
+                        Err(err) => Some(Err(err)),
                     }
                 }
+                RequestOrIngress::Ingress(_) => self
+                    .reject_unexpected_ingress(Ic00Method::BitcoinGetSuccessors)
+                    .map(|(payload, _)| payload),
             }
+            .map(|payload| (payload, msg.take_cycles())),
 
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(

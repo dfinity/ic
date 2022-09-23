@@ -4,14 +4,14 @@ use ic_btc_canister::state::State as BitcoinCanisterState;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetSuccessorsArgs,
-    BitcoinGetUtxosArgs, BitcoinNetwork, BitcoinSendTransactionArgs, EmptyBlob,
-    Method as Ic00Method, Payload,
+    BitcoinGetSuccessorsResponse, BitcoinGetUtxosArgs, BitcoinNetwork, BitcoinSendTransactionArgs,
+    EmptyBlob, Method as Ic00Method, Payload,
 };
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext, ReplicatedState,
 };
-use ic_types::{messages::Request, Cycles};
+use ic_types::{messages::Request, Cycles, PrincipalId};
 
 // A number of last transactions in a block chain to calculate fee percentiles.
 // Assumed to be ~10'000 transactions to cover the last ~4-10 blocks.
@@ -187,7 +187,24 @@ pub fn send_transaction(
 
 /// Handles a `bitcoin_get_successors` request.
 /// Returns Ok if the request has been accepted, and an error otherwise.
-pub fn get_successors(request: &Request, state: &mut ReplicatedState) -> Result<(), UserError> {
+pub fn get_successors(
+    bitcoin_canisters: &[PrincipalId],
+    request: &Request,
+    state: &mut ReplicatedState,
+) -> Result<Option<Vec<u8>>, UserError> {
+    if !bitcoin_canisters.contains(&request.sender().get()) {
+        return Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            String::from("Permission denied."),
+        ));
+    }
+
+    // Remove follow-up responses for canisters that are no longer considered "bitcoin canisters".
+    state
+        .metadata
+        .bitcoin_get_successors_follow_up_responses
+        .retain(|sender, _| bitcoin_canisters.contains(&sender.get()));
+
     match BitcoinGetSuccessorsArgs::decode(request.method_payload()) {
         Ok(get_successors_request) => {
             match get_successors_request {
@@ -201,14 +218,31 @@ pub fn get_successors(request: &Request, state: &mut ReplicatedState) -> Result<
                             payload,
                         });
 
-                    Ok(())
+                    Ok(None)
                 }
-                BitcoinGetSuccessorsArgs::FollowUp(_) => {
-                    // TODO(EXC-1237): Support pagination.
-                    Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "Follow up requests are not yet supported",
-                    ))
+                BitcoinGetSuccessorsArgs::FollowUp(follow_up_index) => {
+                    match state
+                        .metadata
+                        .bitcoin_get_successors_follow_up_responses
+                        .get(&request.sender())
+                    {
+                        Some(follow_up_responses) => {
+                            match follow_up_responses.get(follow_up_index as usize) {
+                                Some(payload) => Ok(Some(
+                                    BitcoinGetSuccessorsResponse::FollowUp(payload.to_vec())
+                                        .encode(),
+                                )),
+                                None => Err(UserError::new(
+                                    ErrorCode::CanisterRejectedMessage,
+                                    "Page not found.",
+                                )),
+                            }
+                        }
+                        None => Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            "Follow up request not found",
+                        )),
+                    }
                 }
             }
         }

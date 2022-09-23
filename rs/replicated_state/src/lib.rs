@@ -1,3 +1,4 @@
+mod bitcoin;
 pub mod bitcoin_state;
 pub mod canister_state;
 pub mod metadata_state;

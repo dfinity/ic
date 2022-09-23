@@ -5,6 +5,7 @@ mod tests;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_base_types::CanisterId;
 use ic_btc_types::Network as BitcoinNetwork;
+use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_ic00_types::EcdsaKeyId;
@@ -16,6 +17,7 @@ use ic_protobuf::{
         queues::v1 as pb_queues,
         system_metadata::v1::{self as pb_metadata, TimeOfLastAllocationCharge},
     },
+    types::v1 as pb_types,
 };
 use ic_registry_routing_table::{
     canister_id_into_u64, difference, intersection, CanisterIdRanges, CanisterMigrations,
@@ -147,6 +149,11 @@ pub struct SystemMetadata {
     /// Each time a canister is installed, its WASM is inserted and the set is
     /// cleared at each checkpoint.
     pub expected_compiled_wasms: BTreeSet<WasmHash>,
+
+    /// Responses to `BitcoinGetSuccessors` can be larger than the max inter-canister
+    /// response limit. To work around this limitation, large responses are paginated
+    /// and are stored here temporarily until they're fetched by the calling canister.
+    pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 }
 
 /// Full description of the IC network toplogy.
@@ -453,6 +460,17 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     .as_nanos_since_unix_epoch(),
             }),
             subnet_metrics: Some((&item.subnet_metrics).into()),
+            bitcoin_get_successors_follow_up_responses: item
+                .bitcoin_get_successors_follow_up_responses
+                .clone()
+                .into_iter()
+                .map(
+                    |(sender, payloads)| pb_metadata::BitcoinGetSuccessorsFollowUpResponses {
+                        sender: Some(sender.into()),
+                        payloads,
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -492,6 +510,18 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                     last_generated_canister_id, canister_allocation_ranges
                 ))),
             }
+        }
+
+        let mut bitcoin_get_successors_follow_up_responses = BTreeMap::new();
+        for response in item.bitcoin_get_successors_follow_up_responses {
+            let sender_pb: pb_types::CanisterId = try_from_option_field(
+                response.sender,
+                "BitcoinGetSuccessorsFollowUpResponses::sender",
+            )?;
+
+            let sender = CanisterId::try_from(sender_pb)?;
+
+            bitcoin_get_successors_follow_up_responses.insert(sender, response.payloads);
         }
 
         Ok(Self {
@@ -542,6 +572,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                 None => SubnetMetrics::default(),
             },
             expected_compiled_wasms: BTreeSet::new(),
+            bitcoin_get_successors_follow_up_responses,
         })
     }
 }
@@ -570,6 +601,7 @@ impl SystemMetadata {
             time_of_last_allocation_charge: UNIX_EPOCH,
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
+            bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
         }
     }
 
