@@ -1,14 +1,16 @@
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap};
 
-use candid::{CandidType, Deserialize, Nat};
+use candid::{CandidType, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_icrc1::endpoints::{ArchivedTransactionRange, TransactionRange};
 use ic_icrc1::{
     endpoints::{GetTransactionsRequest, GetTransactionsResponse, Transaction, Transfer},
     Account, Subaccount,
 };
 use num_traits::cast::ToPrimitive;
+use serde::{Deserialize, Serialize};
 use std::ops::Bound::{Included, Unbounded};
 
 // Maximum number of transactions that can be returned
@@ -20,7 +22,9 @@ const MAX_SUBACCOUNTS_PER_RESPONSE: usize = 1000;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
 
-type TxId = Nat;
+type TxId = u64;
+
+#[derive(Serialize, Deserialize, Debug)]
 struct Index {
     // The id of the Ledger canister to index
     pub ledger_id: CanisterId,
@@ -42,7 +46,7 @@ impl Index {
     fn from(init_args: InitArgs) -> Self {
         Self {
             ledger_id: init_args.ledger_id,
-            next_txid: Nat::from(0),
+            next_txid: 0,
             is_heartbeat_running: false,
             account_index: BTreeMap::new(),
             accounts_num: 0,
@@ -62,7 +66,7 @@ fn with_index_mut<R>(f: impl FnOnce(&mut Index) -> R) -> R {
     INDEX.with(|idx| f(idx.borrow_mut().as_mut().expect("Index state is not set!")))
 }
 
-#[derive(CandidType, Debug, Deserialize)]
+#[derive(CandidType, Debug, candid::Deserialize)]
 pub struct InitArgs {
     // The Ledger canister id of the Ledger to index
     pub ledger_id: CanisterId,
@@ -72,31 +76,31 @@ pub fn init(init_args: InitArgs) {
     INDEX.with(|idx| *idx.borrow_mut() = Some(Index::from(init_args)));
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq)]
 pub struct GetAccountTransactionsArgs {
     pub account: Account,
     // The txid of the last transaction seen by the client.
     // If None then the results will start from the most recent
     // txid.
-    pub start: Option<TxId>,
+    pub start: Option<Nat>,
     // Maximum number of transactions to fetch.
     pub max_results: Nat,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq)]
 pub struct TransactionWithId {
-    pub id: TxId,
+    pub id: Nat,
     pub transaction: Transaction,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq)]
 pub struct GetTransactions {
     pub transactions: Vec<TransactionWithId>,
     // The txid of the oldest transaction the account has
     pub oldest_tx_id: Option<TxId>,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq)]
 pub struct GetTransactionsErr {
     pub message: String,
 }
@@ -146,12 +150,12 @@ pub async fn heartbeat() {
 }
 
 async fn get_transactions_from_ledger(
-    start: Nat,
+    start: u64,
     length: usize,
 ) -> Result<GetTransactionsResponse, String> {
     let ledger_id = with_index(|idx| idx.ledger_id);
     let req = GetTransactionsRequest {
-        start,
+        start: Nat::from(start),
         length: Nat::from(length),
     };
     let (res,): (GetTransactionsResponse,) =
@@ -179,24 +183,28 @@ async fn get_transactions_from_archive(
 }
 
 async fn build_index() -> Result<(), String> {
-    let next_txid = with_index(|idx| idx.next_txid.clone());
+    let next_txid = with_index(|idx| idx.next_txid);
     let res = get_transactions_from_ledger(next_txid, MAX_TRANSACTIONS_PER_RESPONSE).await?;
-    let mut idx = res.first_index;
+    let mut idx = res
+        .first_index
+        .0
+        .to_u64()
+        .expect("The Ledger returned an index that is not a valid u64");
     for archived in res.archived_transactions {
         let res = get_transactions_from_archive(&archived).await?;
         for transaction in res.transactions {
-            index_transaction(idx.clone(), transaction)?;
-            idx += 1u32;
+            index_transaction(idx, transaction)?;
+            idx += 1;
         }
     }
     for transaction in res.transactions {
-        index_transaction(idx.clone(), transaction)?;
-        idx += 1u32;
+        index_transaction(idx, transaction)?;
+        idx += 1;
     }
     Ok(())
 }
 
-fn index_transaction(txid: Nat, transaction: Transaction) -> Result<(), String> {
+fn index_transaction(txid: u64, transaction: Transaction) -> Result<(), String> {
     match transaction.kind.as_str() {
         "mint" => {
             add_tx(txid, transaction.mint.unwrap().to);
@@ -208,7 +216,7 @@ fn index_transaction(txid: Nat, transaction: Transaction) -> Result<(), String> 
         }
         "transfer" => {
             let Transfer { from, to, .. } = transaction.transfer.unwrap();
-            add_tx(txid.clone(), from);
+            add_tx(txid, from);
             add_tx(txid, to);
             Ok(())
         }
@@ -216,7 +224,7 @@ fn index_transaction(txid: Nat, transaction: Transaction) -> Result<(), String> 
     }
 }
 
-fn add_tx(txid: Nat, account: Account) {
+fn add_tx(txid: u64, account: Account) {
     with_index_mut(|idx| {
         let account_index = match idx.account_index.entry(account.owner) {
             btree_map::Entry::Vacant(v) => v.insert(BTreeMap::new()),
@@ -225,9 +233,9 @@ fn add_tx(txid: Nat, account: Account) {
         match account_index.entry(*account.effective_subaccount()) {
             btree_map::Entry::Vacant(v) => {
                 idx.accounts_num += 1;
-                let _ = v.insert(vec![txid.clone()]);
+                let _ = v.insert(vec![txid]);
             }
-            btree_map::Entry::Occupied(o) => o.into_mut().push(txid.clone()),
+            btree_map::Entry::Occupied(o) => o.into_mut().push(txid),
         };
         idx.next_txid = txid + 1;
     });
@@ -272,7 +280,7 @@ fn get_account_transactions_ids(args: GetAccountTransactionsArgs) -> Vec<TxId> {
             // of the matching element. ... If the value is not found then Result::Err
             // is returned, containing the index where a matching element could be
             // inserted while maintaining sorted order.
-            Some(start) => match txids.binary_search(start) {
+            Some(start) => match txids.binary_search(&start.0.to_u64().unwrap()) {
                 Ok(i) => i,
                 Err(i) if i > 0 => i - 1,
                 _ => return vec![],
@@ -281,7 +289,7 @@ fn get_account_transactions_ids(args: GetAccountTransactionsArgs) -> Vec<TxId> {
         let end_pos = (start_pos as i64 - max_results as i64 + 1).max(0) as usize;
         (end_pos..=start_pos)
             .rev()
-            .map(|pos| txids.get(pos).unwrap().clone())
+            .map(|pos| *txids.get(pos).unwrap())
             .collect()
     })
 }
@@ -290,17 +298,17 @@ pub async fn get_account_transactions(args: GetAccountTransactionsArgs) -> GetTr
     let txids = get_account_transactions_ids(args);
     let mut txs = vec![];
     for txid in &txids {
-        match get_transactions_from_ledger(txid.clone(), 1).await {
+        match get_transactions_from_ledger(*txid, 1).await {
             Ok(mut res) => {
                 if let Some(tx) = res.transactions.pop() {
                     txs.push(TransactionWithId {
-                        id: txid.clone(),
+                        id: Nat::from(*txid),
                         transaction: tx,
                     })
                 } else if let Some(archive) = res.archived_transactions.get(0) {
                     match get_transactions_from_archive(archive).await {
                         Ok(res) if !res.transactions.is_empty() => txs.push(TransactionWithId {
-                            id: txid.clone(),
+                            id: Nat::from(*txid),
                             transaction: res.transactions.get(0).unwrap().clone(),
                         }),
                         Ok(_) => {
@@ -345,7 +353,7 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
     )?;
     w.encode_gauge(
         "index_number_of_transactions",
-        with_index(|idx| idx.next_txid.0.to_u64().unwrap() as f64),
+        with_index(|idx| idx.next_txid) as f64,
         "Total number of transaction stored in the main memory.",
     )?;
     w.encode_gauge(
@@ -354,6 +362,20 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         "Total number of accounts indexed.",
     )?;
     Ok(())
+}
+
+pub fn pre_upgrade() {
+    with_index(|idx| ciborium::ser::into_writer(idx, StableWriter::default()))
+        .expect("failed to encode index state");
+}
+
+pub fn post_upgrade() {
+    INDEX.with(|idx| {
+        *idx.borrow_mut() = Some(
+            ciborium::de::from_reader(StableReader::default())
+                .expect("failed to decode index state"),
+        )
+    });
 }
 
 #[cfg(test)]
@@ -370,10 +392,6 @@ mod tests {
         add_tx, get_account_transactions_ids, with_index, GetAccountTransactionsArgs, Index, TxId,
         INDEX,
     };
-
-    fn n(i: u64) -> Nat {
-        Nat::from(i)
-    }
 
     fn account(n: u64) -> Account {
         Account {
@@ -398,7 +416,7 @@ mod tests {
             }
             *idx.borrow_mut() = Some(Index {
                 ledger_id: CanisterId::from_u64(42),
-                next_txid: Nat::from(0u16),
+                next_txid: 0,
                 is_heartbeat_running: false,
                 account_index,
                 accounts_num: 0,
@@ -413,10 +431,9 @@ mod tests {
     ) {
         let actual = get_account_transactions_ids(GetAccountTransactionsArgs {
             account: account(1),
-            start: start.map(n),
-            max_results: n(max_results),
+            start: start.map(|s| Nat::from(s)),
+            max_results: Nat::from(max_results),
         });
-        let expected: Vec<Nat> = expected.iter().map(|x| n(*x)).collect();
         assert_eq!(
             actual, expected,
             "start: {:?} max_results: {}",
@@ -434,7 +451,7 @@ mod tests {
 
     #[test]
     fn get_account_transactions_start_none() {
-        init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
+        init_state(vec![(account(1), vec![1, 3, 5, 6, 9])]);
 
         // first element
         check_get_account_transactions_ids(None, 1, vec![9]);
@@ -449,7 +466,7 @@ mod tests {
     proptest! {
         #[test]
         fn get_account_transactions_from_end_fuzzy(max_results in 6u64..) {
-            init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
+            init_state(vec![(account(1), vec![1, 3, 5, 6, 9])]);
 
             // max_results > num transactions
             check_get_account_transactions_ids(None, max_results, vec![9, 6, 5, 3, 1]);
@@ -458,7 +475,7 @@ mod tests {
 
     #[test]
     fn get_account_transactions_start_some() {
-        init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
+        init_state(vec![(account(1), vec![1, 3, 5, 6, 9])]);
 
         // start matches an existing txid, return that tx
         check_get_account_transactions_ids(Some(3), 1, vec![3]);
@@ -485,7 +502,7 @@ mod tests {
     proptest! {
         #[test]
         fn get_account_transactions_start_some_fuzzy(max_results in 5u64..) {
-            init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
+            init_state(vec![(account(1), vec![1, 3, 5, 6, 9])]);
 
             // all results from each existing txid
             check_get_account_transactions_ids(Some(0), max_results, vec![]);
@@ -505,7 +522,7 @@ mod tests {
 
         #[test]
         fn get_account_transactions_start_some_fuzzy_out_of_range(max_results in 0u64..) {
-            init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
+            init_state(vec![(account(1), vec![1, 3, 5, 6, 9])]);
 
             // start = 0 so the results must always be empty
             check_get_account_transactions_ids(Some(0), max_results, vec![]);
@@ -515,12 +532,12 @@ mod tests {
     proptest! {
         #[test]
         fn get_account_transactions_check_panics(start in option::of(0u64..), max_results in u64::MIN..u64::MAX) {
-            init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
+            init_state(vec![(account(1), vec![1, 3, 5, 6, 9])]);
 
             get_account_transactions_ids(GetAccountTransactionsArgs {
                 account: account(1),
-                start: start.map(n),
-                max_results: n(max_results)
+                start: start.map(|x| Nat::from(x)),
+                max_results: Nat::from(max_results),
             });
         }
     }
@@ -529,7 +546,7 @@ mod tests {
     fn account_num() {
         init_state(vec![]);
 
-        let mut next_txid = (0u64..).map(Nat::from);
+        let mut next_txid = 0u64..;
         let mut add_tx_for = |principal: u64, subaccount_number: u64| -> u64 {
             let mut subaccount = [0u8; 32];
             subaccount[0..8].copy_from_slice(&subaccount_number.to_le_bytes());

@@ -1,4 +1,4 @@
-use ic_cdk_macros::{heartbeat, init, query, update};
+use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::Subaccount;
 use ic_icrc1_index::{
     GetAccountTransactionsArgs, GetTransactionsResult, InitArgs, ListSubaccountsArgs,
@@ -29,4 +29,14 @@ fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
 #[export_name = "canister_query http_request"]
 fn http_request() {
     dfn_http_metrics::serve_metrics(ic_icrc1_index::encode_metrics);
+}
+
+#[pre_upgrade]
+fn pre_upgrade() {
+    ic_icrc1_index::pre_upgrade()
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    ic_icrc1_index::post_upgrade()
 }

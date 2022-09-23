@@ -317,3 +317,22 @@ fn test() {
     let subs: Vec<Subaccount> = list_subaccounts(&env, index_id, account(10), Some(sub));
     assert_eq!(500, subs.len());
 }
+
+#[test]
+fn test_upgrade() {
+    let env = StateMachine::new();
+    let ledger_id = install_ledger(&env, vec![]);
+    let index_id = install_index(&env, ledger_id);
+
+    // add some transactions
+    mint(&env, ledger_id, account(1), 100000); // block=0
+    transfer(&env, ledger_id, account(1), account(2), 1); // block=1
+
+    // upgrade the Index
+    env.upgrade_canister(index_id, index_wasm(), vec![])
+        .expect("Failed to upgrade the Index canister");
+
+    let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    check_mint(0, account(1), 100000, txs.get(1).unwrap());
+    check_transfer(1, account(1), account(2), 1, txs.get(0).unwrap());
+}
