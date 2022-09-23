@@ -586,34 +586,6 @@ pub fn canister_allowlist_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    struct TestCase {
-        id: &'static str,
-        allow: bool,
-        deny: bool,
-        want: reqwest::StatusCode,
-    }
-
-    let test_cases = vec![
-        TestCase {
-            id: "denylisted",
-            allow: false,
-            deny: true,
-            want: reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
-        },
-        TestCase {
-            id: "allowlisted",
-            allow: true,
-            deny: false,
-            want: reqwest::StatusCode::OK,
-        },
-        TestCase {
-            id: "allowlisted & denylisted",
-            allow: true,
-            deny: true,
-            want: reqwest::StatusCode::OK,
-        },
-    ];
-
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         info!(&logger, "creating replica agent");
@@ -621,61 +593,117 @@ pub fn canister_allowlist_test(env: TestEnv) {
 
         let http_counter_canister = env.load_wasm("http_counter.wasm");
 
+        info!(&logger, "installing canister");
+        let canister_id = create_canister(&agent, &http_counter_canister, None)
+            .await
+            .expect("Could not create http_counter canister");
 
-        for tc in test_cases {
-            info!(logger, "running testcase: {}", tc.id);
+        // wait for canister to finish installing
+        tokio::time::sleep(Duration::from_secs(5)).await;
 
-            info!(&logger, "installing canister");
-            let canister_id = create_canister(&agent, &http_counter_canister, None)
-                .await
-                .expect("Could not create http_counter canister");
+        info!(&logger, "created canister={canister_id}");
 
-            // wait for canister to finish installing
-            tokio::time::sleep(Duration::from_secs(5)).await;
+        let client = reqwest::ClientBuilder::new()
+            .danger_accept_invalid_certs(true)
+            .resolve(
+                &format!("{}.raw.ic0.app", canister_id),
+                SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0).into(),
+            )
+            .build()
+            .unwrap();
 
-            info!(&logger, "created canister={canister_id}");
+        // Check canister is available
+        let res = client
+            .get(format!("https://{}.raw.ic0.app/", canister_id))
+            .send()
+            .await
+            .expect("Could not perform get request.")
+            .status();
 
-            let denylist_cmd = format!(r#"printf "{} 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map"#, canister_id);
-            let allowlist_cmd = format!(r#"printf "{} 1;\n" | sudo tee /run/ic-node/allowlist_canisters.map && sudo mount -o ro,bind /run/ic-node/allowlist_canisters.map /etc/nginx/allowlist_canisters.map"#, canister_id);
-            let reload_cmd = "sudo service nginx reload";
+        assert_eq!(res, reqwest::StatusCode::OK, "expected OK, got {}", res);
 
-            if tc.deny {
-                let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &denylist_cmd).unwrap();
-                info!(logger, "update denylist {BOUNDARY_NODE_NAME} with {denylist_cmd} to '{}'. Exit status = {}", cmd_output.trim(), exit_status);
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
+        // Update denylist with canister ID
+        let (cmd_output, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            &format!(
+                r#"printf "{} 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map"#,
+                canister_id
+            ),
+        )
+        .unwrap();
 
-            if tc.allow {
-                let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &allowlist_cmd).unwrap();
-                info!(logger, "update allowlist {BOUNDARY_NODE_NAME} with {allowlist_cmd} to '{}'. Exit status = {}", cmd_output.trim(), exit_status);
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
+        info!(
+            logger,
+            "update denylist {BOUNDARY_NODE_NAME}: '{}'. Exit status = {}",
+            cmd_output.trim(),
+            exit_status
+        );
 
-            let (_, exit_status) = exec_ssh_command(&boundary_node_vm, reload_cmd).unwrap();
-            info!(logger, "reloading {BOUNDARY_NODE_NAME} with {reload_cmd}. Exit status = {}", exit_status);
+        // Reload Nginx
+        let (cmd_output, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            "sudo service nginx restart",
+        )
+        .unwrap();
 
-            // Wait a bit for the reload to complete
-            tokio::time::sleep(Duration::from_secs(2)).await;
+        info!(
+            logger,
+            "reload nginx on {BOUNDARY_NODE_NAME}: '{}'. Exit status = {}",
+            cmd_output.trim(),
+            exit_status
+        );
 
-            let client = reqwest::ClientBuilder::new()
-                .danger_accept_invalid_certs(true)
-                .resolve(
-                    &format!("{}.raw.ic0.app", canister_id),
-                    SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0).into(),
-                )
-                .build()
-                .unwrap();
+        tokio::time::sleep(Duration::from_secs(5)).await;
 
-            let res = client
-                .get(format!("https://{}.raw.ic0.app/", canister_id))
-                .send()
-                .await
-                .expect("Could not perform get request.")
-                .status();
+        // Check canister is restricted
+        let res = client
+            .get(format!("https://{}.raw.ic0.app/", canister_id))
+            .send()
+            .await
+            .expect("Could not perform get request.")
+            .status();
 
-            assert_eq!(res, tc.want, "Testcase {} failed.", tc.id);
+        assert_eq!(res, reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS, "expected 451, got {}", res);
 
-        }
+        // Update allowlist with canister ID
+        let (cmd_output, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            &format!(r#"printf "{} 1;\n" | sudo tee /run/ic-node/allowlist_canisters.map && sudo mount -o ro,bind /run/ic-node/allowlist_canisters.map /etc/nginx/allowlist_canisters.map"#, canister_id),
+        )
+        .unwrap();
+
+        info!(
+            logger,
+            "update allowlist {BOUNDARY_NODE_NAME}: '{}'. Exit status = {}",
+            cmd_output.trim(),
+            exit_status
+        );
+
+        // Reload Nginx
+        let (cmd_output, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            "sudo service nginx restart",
+        )
+        .unwrap();
+
+        info!(
+            logger,
+            "reload nginx on {BOUNDARY_NODE_NAME}: '{}'. Exit status = {}",
+            cmd_output.trim(),
+            exit_status
+        );
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        // Check canister is available
+        let res = client
+            .get(format!("https://{}.raw.ic0.app/", canister_id))
+            .send()
+            .await
+            .expect("Could not perform get request.")
+            .status();
+
+        assert_eq!(res, reqwest::StatusCode::OK, "expected OK, got {}", res);
     });
 
     panic_handler.disable();
