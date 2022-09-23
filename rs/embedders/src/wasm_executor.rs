@@ -201,24 +201,7 @@ impl WasmExecutor for WasmExecutorImpl {
             Err(err) => {
                 return (
                     None,
-                    WasmExecutionResult::Finished(
-                        SliceExecutionOutput {
-                            executed_instructions: NumInstructions::from(0),
-                        },
-                        WasmExecutionOutput {
-                            wasm_result: Err(err),
-                            num_instructions_left: execution_parameters
-                                .instruction_limits
-                                .message(),
-                            allocated_bytes: NumBytes::from(0),
-                            allocated_message_bytes: NumBytes::from(0),
-                            instance_stats: InstanceStats {
-                                accessed_pages: 0,
-                                dirty_pages: 0,
-                            },
-                        },
-                        None,
-                    ),
+                    wasm_execution_error(err, execution_parameters.instruction_limits.message()),
                 );
             }
         };
@@ -450,6 +433,29 @@ impl WasmExecutorImpl {
             );
         };
     }
+}
+
+/// A helper function that returns a Wasm execution result with an error.
+pub fn wasm_execution_error(
+    err: HypervisorError,
+    num_instructions_left: NumInstructions,
+) -> WasmExecutionResult {
+    WasmExecutionResult::Finished(
+        SliceExecutionOutput {
+            executed_instructions: NumInstructions::from(0),
+        },
+        WasmExecutionOutput {
+            wasm_result: Err(err),
+            num_instructions_left,
+            allocated_bytes: NumBytes::from(0),
+            allocated_message_bytes: NumBytes::from(0),
+            instance_stats: InstanceStats {
+                accessed_pages: 0,
+                dirty_pages: 0,
+            },
+        },
+        None,
+    )
 }
 
 /// Utility function to compute the page delta. It creates a copy of `Instance`
