@@ -5,7 +5,9 @@ use ic_btc_service::{
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
-use ic_btc_types_internal::CanisterGetSuccessorsResponseComplete;
+use ic_btc_types_internal::{
+    CanisterGetSuccessorsResponseComplete, CanisterGetSuccessorsResponsePartial,
+};
 use ic_ic00_types::{self as ic00, BitcoinGetSuccessorsArgs, Method, Payload};
 use ic_replica_tests as utils;
 use ic_test_utilities::universal_canister::{call_args, wasm};
@@ -66,8 +68,10 @@ fn call_get_successors(
         .unwrap()
 }
 
-#[test]
-fn bitcoin_get_successors() {
+fn bitcoin_test<F: 'static>(adapter_response: BtcServiceGetSuccessorsResponse, test: F)
+where
+    F: FnOnce(utils::LocalTestRuntime),
+{
     let (mut config, _tmpdir) = ic_config::Config::temp_config();
     config.hypervisor.bitcoin_canisters =
         vec![PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap()];
@@ -75,39 +79,123 @@ fn bitcoin_get_successors() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _rt_guard = rt.enter();
     let tmp_uds_dir = Arc::new(tempfile::tempdir().unwrap());
-    let _ma = spawn_mock_bitcoin_adapter(
-        tmp_uds_dir.clone(),
+    let _ma = spawn_mock_bitcoin_adapter(tmp_uds_dir.clone(), adapter_response);
+    config.adapters_config.bitcoin_mainnet_uds_path = Some(tmp_uds_dir.path().join("uds.socket"));
+    config.adapters_config.bitcoin_testnet_uds_path = Some(tmp_uds_dir.path().join("uds.socket"));
+
+    utils::canister_test_with_config(config, test);
+}
+
+#[test]
+fn bitcoin_get_successors() {
+    bitcoin_test(
         BtcServiceGetSuccessorsResponse {
             blocks: vec![],
             next: vec![],
         },
+        |runtime| {
+            let canister_id = runtime.create_universal_canister();
+            let canister = ic_replica_tests::UniversalCanister {
+                runtime,
+                canister_id,
+            };
+
+            let response = call_get_successors(
+                &canister,
+                ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
+                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    anchor: vec![],
+                    processed_block_hashes: vec![],
+                }),
+            );
+
+            // Expect a dummy response.
+            let expected_response = ic00::BitcoinGetSuccessorsResponse::Complete(
+                CanisterGetSuccessorsResponseComplete {
+                    blocks: vec![],
+                    next: vec![],
+                },
+            );
+
+            assert_eq!(response, WasmResult::Reply(expected_response.encode()));
+        },
     );
-    config.adapters_config.bitcoin_mainnet_uds_path = Some(tmp_uds_dir.path().join("uds.socket"));
-    config.adapters_config.bitcoin_testnet_uds_path = Some(tmp_uds_dir.path().join("uds.socket"));
+}
 
-    utils::canister_test_with_config(config, |runtime| {
-        let canister_id = runtime.create_universal_canister();
-        let canister = ic_replica_tests::UniversalCanister {
-            runtime,
-            canister_id,
-        };
+#[test]
+fn bitcoin_get_successors_pagination() {
+    bitcoin_test(
+        // A mock adapter response returning a large payload that doesn't fit.
+        BtcServiceGetSuccessorsResponse {
+            blocks: vec![vec![0; 4_000_000]],
+            next: vec![],
+        },
+        |runtime| {
+            let canister_id = runtime.create_universal_canister();
+            let canister = ic_replica_tests::UniversalCanister {
+                runtime,
+                canister_id,
+            };
 
-        let response = call_get_successors(
-            &canister,
-            ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                network: ic_btc_types::NetworkSnakeCase::Regtest,
-                anchor: vec![],
-                processed_block_hashes: vec![],
-            }),
-        );
+            let response = call_get_successors(
+                &canister,
+                ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
+                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    anchor: vec![],
+                    processed_block_hashes: vec![],
+                }),
+            );
 
-        // Expect a dummy response.
-        let expected_response =
-            ic00::BitcoinGetSuccessorsResponse::Complete(CanisterGetSuccessorsResponseComplete {
-                blocks: vec![],
-                next: vec![],
-            });
+            let expected_response =
+                ic00::BitcoinGetSuccessorsResponse::Partial(CanisterGetSuccessorsResponsePartial {
+                    partial_block: vec![0; 2_000_000],
+                    next: vec![],
+                    remaining_follow_ups: 1,
+                });
 
-        assert_eq!(response, WasmResult::Reply(expected_response.encode()));
-    });
+            assert_eq!(response, WasmResult::Reply(expected_response.encode()));
+
+            let response = call_get_successors(&canister, BitcoinGetSuccessorsArgs::FollowUp(0));
+            let expected_response =
+                ic00::BitcoinGetSuccessorsResponse::FollowUp(vec![0; 2_000_000]);
+            assert_eq!(response, WasmResult::Reply(expected_response.encode()));
+
+            let response = call_get_successors(&canister, BitcoinGetSuccessorsArgs::FollowUp(1));
+            assert_eq!(response, WasmResult::Reject("Page not found.".to_string()));
+        },
+    );
+}
+
+#[test]
+fn bitcoin_get_successors_pagination_invalid_adapter_request() {
+    bitcoin_test(
+        // A mock adapter response returning a large payload that doesn't fit.
+        BtcServiceGetSuccessorsResponse {
+            blocks: vec![vec![0; 4_000_000], vec![0]],
+            next: vec![],
+        },
+        |runtime| {
+            let canister_id = runtime.create_universal_canister();
+            let canister = ic_replica_tests::UniversalCanister {
+                runtime,
+                canister_id,
+            };
+
+            let response = call_get_successors(
+                &canister,
+                ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
+                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    anchor: vec![],
+                    processed_block_hashes: vec![],
+                }),
+            );
+
+            assert_eq!(
+                response,
+                WasmResult::Reject(
+                    "Received invalid response from adapter: NotOneBlock".to_string()
+                )
+            );
+        },
+    );
 }

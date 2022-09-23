@@ -13,18 +13,31 @@ use crate::{
     BlockchainState,
 };
 
-const ONE_MB: usize = 1_024 * 1_024;
+// Max size of the `GetSuccessorsResponse` message.
+// This number is slightly less than the maximum payload size a canister can send (2MiB)
+// to leave a small buffer for the additional space that candid encoding may need.
+//
+// NOTE: Should be = the `MAX_RESPONSE_SIZE` defined in `replicated_state/bitcoin.rs`
+// for pagination on the replica side to work as expected.
+const MAX_RESPONSE_SIZE: usize = 2_000_000;
 
-/// Max size of the `GetSuccessorsResponse` message (2 MiB).
-const MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES: usize = 2 * ONE_MB;
+// Max number of next block hashes that can be returned in the `GetSuccessorsResponse`.
+const MAX_NEXT_BLOCK_HASHES_LENGTH: usize = 100;
 
-/// Max limit of how many headers should be returned in the `GetSuccessorsResponse`.
-const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
+const BLOCK_HASH_SIZE: usize = 32;
 
-/// Max height for sending multiple blocks when connecting the Bitcoin mainnet.
+// The maximum number of bytes the `next` field in a response can take.
+const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HASHES_LENGTH * BLOCK_HASH_SIZE;
+
+// The maximum number of bytes the `blocks` in a response can take.
+// NOTE: This is a soft limit, and is only honored if there's > 1 blocks already in the response.
+// Having this as a soft limit as necessary to prevent large blocks from stalling consensus.
+const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+
+// Max height for sending multiple blocks when connecting the Bitcoin mainnet.
 const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 700_000;
 
-/// Max height for sending multiple blocks when connecting the Bitcoin testnet.
+// Max height for sending multiple blocks when connecting the Bitcoin testnet.
 const TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 2_164_000;
 
 #[derive(Debug)]
@@ -132,9 +145,11 @@ impl GetSuccessorsHandler {
     }
 }
 
-/// Performs a breadth-first search to retrieve blocks from the block cache.
-/// a. A single block will be retrieved if the adapter has reached a particular height.
-/// b. Otherwise, multiple blocks will be returned with a total limit of 2MiB.
+// Performs a breadth-first search to retrieve blocks from the block cache.
+//
+// If blocks are available and `allow_multiple_blocks` is `true`, then as many blocks are returned
+// as possible that fit in the `MAX_BLOCKS_BYTES` limit, with a minimum of one block.  Otherwise, a
+// single block is returned.
 fn get_successor_blocks(
     state: &BlockchainState,
     anchor: &BlockHash,
@@ -162,8 +177,7 @@ fn get_successor_blocks(
                 Some(block) => {
                     let block_size = block.size();
                     if response_block_size == 0
-                        || (response_block_size + block_size
-                            <= MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES
+                        || (response_block_size + block_size <= MAX_BLOCKS_BYTES
                             && allow_multiple_blocks)
                     {
                         successor_blocks.push(block.clone());
@@ -206,7 +220,7 @@ fn get_next_headers(
         .collect();
     let mut next_headers = vec![];
     while let Some(cached_header) = queue.pop_front() {
-        if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
+        if next_headers.len() >= MAX_NEXT_BLOCK_HASHES_LENGTH {
             break;
         }
 
@@ -764,5 +778,10 @@ mod test {
             "Multiple blocks are allowed at {}",
             u32::MAX
         );
+    }
+
+    #[test]
+    fn response_size() {
+        assert_eq!(MAX_NEXT_BYTES + MAX_BLOCKS_BYTES, MAX_RESPONSE_SIZE);
     }
 }

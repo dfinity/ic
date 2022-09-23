@@ -9,18 +9,21 @@ use ic_btc_types::{
     UtxosFilterInRequest,
 };
 use ic_ic00_types::{
-    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
-    BitcoinSendTransactionArgs, EmptyBlob, Method, Payload as Ic00Payload,
+    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetSuccessorsArgs,
+    BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, EmptyBlob, Method, Payload as Ic00Payload,
+    IC_00,
 };
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_replicated_state::bitcoin_state::BitcoinState;
 use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
+use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_types::{
     messages::{Payload, Response},
-    Cycles,
+    CanisterId, Cycles, PrincipalId,
 };
 use lazy_static::lazy_static;
+use std::str::FromStr;
 use std::sync::Arc;
 
 // TODO(EXC-1153): Refactor to avoid copying these constants from bitcoin.rs
@@ -872,4 +875,44 @@ fn send_transaction_succeeds() {
             Payload::Data(EmptyBlob.encode()),
         );
     }
+}
+
+#[test]
+fn clears_state_of_former_bitcoin_canisters() {
+    let bitcoin_canister_id =
+        CanisterId::new(PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap()).unwrap();
+
+    let mut test = ExecutionTestBuilder::new()
+        // Set the bitcoin canister to be the ID of the canister about to be created.
+        .with_bitcoin_canister(bitcoin_canister_id.get())
+        .with_bitcoin_follow_up_responses(bitcoin_canister_id, vec![vec![1], vec![2]])
+        .with_bitcoin_follow_up_responses(canister_test_id(123), vec![vec![1], vec![2], vec![3]])
+        .with_provisional_whitelist_all()
+        .build();
+
+    let uni = test.universal_canister().unwrap();
+    assert_eq!(
+        uni.get_ref(),
+        &bitcoin_canister_id.get(),
+        "id of universal canister doesn't match expected id"
+    );
+
+    let call = wasm()
+        .call_simple(
+            IC_00,
+            Method::BitcoinGetSuccessors,
+            call_args()
+                .other_side(BitcoinGetSuccessorsArgs::FollowUp(3).encode())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    test.ingress(uni, "update", call).unwrap();
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .bitcoin_get_successors_follow_up_responses,
+        maplit::btreemap! { bitcoin_canister_id => vec![vec![1], vec![2]] }
+    );
 }

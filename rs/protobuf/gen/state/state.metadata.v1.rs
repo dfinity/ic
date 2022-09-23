@@ -196,6 +196,13 @@ pub struct SubnetMetrics {
         ::core::option::Option<super::super::super::types::v1::NominalCycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BitcoinGetSuccessorsFollowUpResponses {
+    #[prost(message, optional, tag = "1")]
+    pub sender: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(bytes = "vec", repeated, tag = "2")]
+    pub payloads: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SystemMetadata {
     #[prost(uint64, tag = "1")]
     pub generated_id_counter: u64,
@@ -244,6 +251,9 @@ pub struct SystemMetadata {
     pub time_of_last_allocation_charge_nanos: ::core::option::Option<TimeOfLastAllocationCharge>,
     #[prost(message, optional, tag = "15")]
     pub subnet_metrics: ::core::option::Option<SubnetMetrics>,
+    #[prost(message, repeated, tag = "18")]
+    pub bitcoin_get_successors_follow_up_responses:
+        ::prost::alloc::vec::Vec<BitcoinGetSuccessorsFollowUpResponses>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {
