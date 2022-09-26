@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use candid::{Decode, Encode, Nat};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
-    endpoints::{TransferArg, TransferError, Value},
-    Account, Subaccount,
+    endpoints::{ArchiveInfo, TransferArg, TransferError, Value},
+    Account, Block, Memo, Operation, Subaccount, Transaction,
 };
 use ic_icrc1_index::{
     GetAccountTransactionsArgs, GetTransactionsResult, InitArgs as IndexInitArgs,
@@ -12,14 +12,17 @@ use ic_icrc1_index::{
 };
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::BlockIndex;
+use ic_ledger_core::{
+    block::{BlockIndex, BlockType, EncodedBlock, HashOf},
+    timestamp::TimeStamp,
+};
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use num_traits::cast::ToPrimitive;
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
-// const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+const MINT_BLOCKS_PER_ARCHIVE: usize = 5;
 
 const MINTER: Account = Account {
     owner: PrincipalId::new(0, [0u8; 29]),
@@ -57,7 +60,24 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
+fn mint_block() -> EncodedBlock {
+    Block::from_transaction(
+        Some(HashOf::new([0; 32])),
+        Transaction {
+            operation: Operation::Mint {
+                to: account(0),
+                amount: 1,
+            },
+            created_at_time: Some(1),
+            memo: Some(Memo::from([1; 32])),
+        },
+        TimeStamp::new(3, 4),
+    )
+    .encode()
+}
+
 fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> CanisterId {
+    let node_max_memory_size_bytes = MINT_BLOCKS_PER_ARCHIVE * mint_block().size_bytes();
     let args = LedgerInitArgs {
         minting_account: MINTER.clone(),
         initial_balances,
@@ -73,7 +93,7 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
         archive_options: ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
             num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
-            node_max_memory_size_bytes: None,
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
             cycles_for_archive_creation: None,
@@ -179,6 +199,16 @@ fn burn(env: &StateMachine, ledger: CanisterId, from: Account, amount: u64) -> B
 
 fn mint(env: &StateMachine, ledger: CanisterId, to: Account, amount: u64) -> BlockIndex {
     transfer(env, ledger, MINTER, to, amount)
+}
+
+fn archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
+    Decode!(
+        &env.query(ledger, "archives", Encode!().unwrap())
+            .expect("failed to transfer funds")
+            .bytes(),
+        Vec<ArchiveInfo>
+    )
+    .unwrap()
 }
 
 fn get_account_transactions(
@@ -335,4 +365,32 @@ fn test_upgrade() {
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
     check_mint(0, account(1), 100000, txs.get(1).unwrap());
     check_transfer(1, account(1), account(2), 1, txs.get(0).unwrap());
+}
+
+#[test]
+fn test_index_archived_txs() {
+    let env = StateMachine::new();
+
+    // we want to create two archives. Each archive holds MINT_BLOCKS_PER_ARCHIVE mint blocks
+    // and the trigger threshold is ARCHIVE_TRIGGER_THRESHOLD
+    let num_txs = ARCHIVE_TRIGGER_THRESHOLD as usize + MINT_BLOCKS_PER_ARCHIVE;
+
+    // install the ledger and add enough transactions to create an archive
+    let ledger_id = install_ledger(&env, vec![]);
+    for idx in 0..(num_txs as u64) {
+        mint(&env, ledger_id, account(1), idx);
+    }
+    assert_eq!(2, archives(&env, ledger_id).len());
+
+    // install the index and let it index all the transaction
+    let index_id = install_index(&env, ledger_id);
+    env.run_until_completion(10_000);
+    let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    assert_eq!(num_txs, txs.len());
+    for idx in 0..(num_txs as u64) {
+        assert_eq!(
+            Nat::from(idx),
+            txs.get(num_txs - idx as usize - 1).unwrap().id
+        );
+    }
 }
