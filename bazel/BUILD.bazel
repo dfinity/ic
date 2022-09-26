@@ -1,4 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 
 bool_flag(
     name = "enable_malicious_code",
@@ -15,7 +16,6 @@ config_setting(
 exports_files(
     [
         "artifacts_uploader.bash.template",
-        "buildifier_test.bash.template",
         "prost_generator.sh",
         "urls_test.sh",
         "generic_rust_bench.sh",
@@ -34,4 +34,44 @@ sh_test(
         p,
     ) for p in EXTERNAL_CRATES],
     data = EXTERNAL_CRATES,
+)
+
+BUILDIFIER_EXCLUDES = [
+    "./.git/*",
+    "./gitlab-ci/src/git_changes/test_data/**",
+]
+
+buildifier(
+    name = "buildifier",
+    exclude_patterns = BUILDIFIER_EXCLUDES,
+    lint_mode = "fix",
+    mode = "fix",
+    visibility = ["//visibility:public"],
+)
+
+buildifier(
+    name = "buildifier.check",
+    exclude_patterns = BUILDIFIER_EXCLUDES,
+    lint_mode = "warn",
+    mode = "diff",
+)
+
+py_test(
+    name = "buildifier_test",
+    size = "small",
+    srcs = ["buildifier_test.py"],
+    data = [
+        ":buildifier.check",
+        "//:WORKSPACE.bazel",
+    ],
+    env = {
+        "BUILDIFIER_CHECK_BIN": "$(location :buildifier.check)",
+        "WORKSPACE": "$(location //:WORKSPACE.bazel)",
+    },
+    tags = [
+        "external",  # force test to be unconditionally executed.
+        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
+        "smoke",  # it should be run before committing code changes into the version control system.
+    ],
+    visibility = ["//visibility:public"],
 )
