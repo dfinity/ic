@@ -74,6 +74,7 @@ ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACcQvmo7w4//A5MlJZjKzC/ApDp+bLbL822ifU75vGdQ0P
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP6xu2BDK+oiVUoQAu/aVttXMvSvlAqaJb2qNny7uphc anna.galanou@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILBnVsfpwFDKOV6qC8NH5WNKrXq6CMy4++eKigprSfJK luka.skugor@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEUBHO9ONgpmUidG6ktDBwufNiVP5/sbY10JABlGaqDR eero.kelly@dfinity.org
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG+pnZcxwXhfkkx16e6kOlB+Tofu2CDUGSCf70kCBibm andrew.battat@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINYj7ikRNPYypux+WZjGErTSk5b+/QACRZGK9QhLRK2K arshavir.ter.gabrielyan@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBucBumQE4KS1lYX4P7JJnBbksF1k+0F2j2guUZw6WYO adam.bratschikaye@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKwEzLAC+9OcUr5JrMJHr/lpmr+a/1H8il159j2dZCEY andriy.berestovskyy@dfinity.org
