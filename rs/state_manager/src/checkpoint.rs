@@ -205,6 +205,7 @@ fn serialize_canister_to_tip(
                 memory_allocation: canister_state.system_state.memory_allocation,
                 freeze_threshold: canister_state.system_state.freeze_threshold,
                 cycles_balance: canister_state.system_state.balance(),
+                cycles_debit: canister_state.system_state.cycles_debit(),
                 execution_state_bits,
                 status: canister_state.system_state.status.clone(),
                 scheduled_as_first: canister_state
@@ -578,6 +579,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.certified_data,
         canister_metrics,
         canister_state_bits.cycles_balance,
+        canister_state_bits.cycles_debit,
         canister_state_bits.task_queue.into_iter().collect(),
     );
 

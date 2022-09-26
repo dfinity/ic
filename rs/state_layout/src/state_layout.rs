@@ -112,6 +112,7 @@ pub struct CanisterStateBits {
     pub memory_allocation: MemoryAllocation,
     pub freeze_threshold: NumSeconds,
     pub cycles_balance: Cycles,
+    pub cycles_debit: Cycles,
     pub status: CanisterStatus,
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
@@ -1247,6 +1248,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             memory_allocation: item.memory_allocation.bytes().get(),
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
+            cycles_debit: Some(item.cycles_debit.into()),
             canister_status: Some((&item.status).into()),
             scheduled_as_first: item.scheduled_as_first,
             skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
@@ -1294,6 +1296,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let cycles_balance =
             try_from_option_field(value.cycles_balance, "CanisterStateBits::cycles_balance")?;
 
+        let cycles_debit = value
+            .cycles_debit
+            .map(|c| c.try_into())
+            .transpose()?
+            .unwrap_or_else(Cycles::zero);
+
         let task_queue = value
             .task_queue
             .into_iter()
@@ -1319,6 +1327,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 })?,
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,
+            cycles_debit,
             status: try_from_option_field(
                 value.canister_status,
                 "CanisterStateBits::canister_status",
@@ -1682,6 +1691,7 @@ mod test {
             memory_allocation: MemoryAllocation::default(),
             freeze_threshold: NumSeconds::from(0),
             cycles_balance: Cycles::zero(),
+            cycles_debit: Cycles::zero(),
             status: CanisterStatus::Stopped,
             scheduled_as_first: 0,
             skipped_round_due_to_no_messages: 0,

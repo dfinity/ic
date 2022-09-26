@@ -93,6 +93,15 @@ pub struct SystemState {
     ///     3. reimburse the canister with `cycles_reserved` - `cycles_spent`
     cycles_balance: Cycles,
 
+    /// Pending charges to `cycles_balance` that are not applied yet.
+    ///
+    /// Deterministic time slicing requires that `cycles_balance` remains the
+    /// same throughout a multi-round execution. During that time all charges
+    /// performed outside of execution (e.g. charging for ingress induction) are
+    /// recorded in `cycles_debit`. When the multi-round execution completes,
+    /// it will apply `cycles_debit` to `cycles_balance`.
+    cycles_debit: Cycles,
+
     /// Tasks to execute before processing input messages.
     /// Currently the task queue is empty outside of execution rounds.
     pub task_queue: VecDeque<ExecutionTask>,
@@ -352,6 +361,7 @@ impl SystemState {
             controllers: btreeset! {controller},
             queues: CanisterQueues::default(),
             cycles_balance: initial_cycles,
+            cycles_debit: Cycles::zero(),
             memory_allocation: MemoryAllocation::BestEffort,
             freeze_threshold,
             status,
@@ -388,6 +398,7 @@ impl SystemState {
         certified_data: Vec<u8>,
         canister_metrics: CanisterMetrics,
         cycles_balance: Cycles,
+        cycles_debit: Cycles,
         task_queue: VecDeque<ExecutionTask>,
     ) -> Self {
         Self {
@@ -400,6 +411,7 @@ impl SystemState {
             certified_data,
             canister_metrics,
             cycles_balance,
+            cycles_debit,
             task_queue,
         }
     }
@@ -416,6 +428,35 @@ impl SystemState {
     /// Returns the amount of cycles that the balance holds.
     pub fn balance(&self) -> Cycles {
         self.cycles_balance
+    }
+
+    /// Returns the balance after applying the pending debit.
+    /// Returns 0 if the balance is smaller than the pending debit.
+    pub fn debited_balance(&self) -> Cycles {
+        // We rely on saturating operations of `Cycles` here.
+        self.cycles_balance - self.cycles_debit
+    }
+
+    /// Returns the pending debit.
+    pub fn cycles_debit(&self) -> Cycles {
+        self.cycles_debit
+    }
+
+    /// Records the given amount as debit that will be charged from the balance
+    /// at some point in the future.
+    pub fn add_postponed_charge_to_cycles_debit(&mut self, charge: Cycles) {
+        self.cycles_debit += charge;
+    }
+
+    /// Charges the pending debit from the balance and returns the remaining
+    /// debit (if any).
+    #[must_use]
+    pub fn apply_cycles_debit(&mut self) -> Cycles {
+        // We rely on saturating operations of `Cycles` here.
+        let remaining_debit = self.cycles_debit - self.cycles_balance;
+        self.cycles_balance -= self.cycles_debit;
+        self.cycles_debit = Cycles::zero();
+        remaining_debit
     }
 
     /// This method is used for maintaining the backwards compatibility.
