@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:candid.bzl", "did_git_test")
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -191,6 +192,11 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/ledger_canister",
     },
+)
+
+did_git_test(
+    name = "ledger_did_git_test",
+    did = ":ledger.did",
 )
 
 rust_canister(
