@@ -80,6 +80,7 @@ rust_binary(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = ROSETTA_VERSION,
     deps = DEPENDENCIES + [":rosetta-api"],
 )
 
