@@ -294,6 +294,16 @@ impl NervousSystemParameters {
     /// hosting the SNS.
     pub const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING: u64 = 15;
 
+    /// This is an upper bound for `max_dissolve_delay_bonus_percentage`. High values
+    /// may improve the incentives when voting, but too-high values may also lead
+    /// to an over-concentration of voting power. The value used by the NNS is 100.
+    pub const MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING: u64 = 1000;
+
+    /// This is an upper bound for `max_age_bonus_percentage`. High values
+    /// may improve the incentives when voting, but too-high values may also lead
+    /// to an over-concentration of voting power. The value used by the NNS is 25.
+    pub const MAX_AGE_BONUS_PERCENTAGE_CEILING: u64 = 500;
+
     pub fn with_default_values() -> Self {
         Self {
             reject_cost_e8s: Some(E8S_PER_TOKEN), // 1 governance token
@@ -313,6 +323,8 @@ impl NervousSystemParameters {
             neuron_grantable_permissions: Some(NeuronPermissionList::default()),
             max_number_of_principals_per_neuron: Some(5),
             voting_rewards_parameters: None,
+            max_dissolve_delay_bonus_percentage: Some(100),
+            max_age_bonus_percentage: Some(25),
         }
     }
 
@@ -366,6 +378,12 @@ impl NervousSystemParameters {
         new_params.max_number_of_principals_per_neuron = self
             .max_number_of_principals_per_neuron
             .or(base.max_number_of_principals_per_neuron);
+        new_params.max_dissolve_delay_bonus_percentage = self
+            .max_dissolve_delay_bonus_percentage
+            .or(base.max_dissolve_delay_bonus_percentage);
+        new_params.max_age_bonus_percentage = self
+            .max_age_bonus_percentage
+            .or(base.max_age_bonus_percentage);
         // No need to manipulate voting_rewards_parameters, because the default
         // is None anyway.
 
@@ -391,6 +409,8 @@ impl NervousSystemParameters {
         self.validate_neuron_grantable_permissions()?;
         self.validate_max_number_of_principals_per_neuron()?;
         self.validate_voting_rewards_parameters(mode)?;
+        self.validate_max_dissolve_delay_bonus_percentage()?;
+        self.validate_max_age_bonus_percentage()?;
 
         Ok(())
     }
@@ -687,6 +707,42 @@ impl NervousSystemParameters {
             Err(format!(
                 "NervousSystemParameters.max_number_of_principals_per_neuron must be at most {}",
                 Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Validates that the nervous system parameter max_dissolve_delay_bonus_percentage
+    /// is well-formed.
+    fn validate_max_dissolve_delay_bonus_percentage(&self) -> Result<(), String> {
+        let max_dissolve_delay_bonus_percentage =
+            self.max_dissolve_delay_bonus_percentage.ok_or_else(|| {
+                "NervousSystemParameters.max_dissolve_delay_bonus_percentage must be set"
+                    .to_string()
+            })?;
+
+        if max_dissolve_delay_bonus_percentage > Self::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING {
+            Err(format!(
+                "NervousSystemParameters.max_dissolve_delay_bonus_percentage must be less than {}",
+                Self::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Validates that the nervous system parameter max_age_bonus_percentage
+    /// is well-formed.
+    fn validate_max_age_bonus_percentage(&self) -> Result<(), String> {
+        let max_age_bonus_percentage = self.max_age_bonus_percentage.ok_or_else(|| {
+            "NervousSystemParameters.max_age_bonus_percentage must be set".to_string()
+        })?;
+
+        if max_age_bonus_percentage > Self::MAX_AGE_BONUS_PERCENTAGE_CEILING {
+            Err(format!(
+                "NervousSystemParameters.max_age_bonus_percentage must be less than {}",
+                Self::MAX_AGE_BONUS_PERCENTAGE_CEILING
             ))
         } else {
             Ok(())

@@ -145,9 +145,10 @@ impl Neuron {
     /// The voting power is computed as
     /// the neuron's stake * a dissolve delay bonus * an age bonus * voting power multiplier.
     /// - The dissolve delay bonus depends on the neuron's dissolve delay and is in the range
-    ///   of 0%, for 0 dissolve delay, up to 100%, for a neuron with max_dissolve_delay_seconds.
+    ///   of 0%, for 0 dissolve delay, up to max_dissolve_delay_bonus_percentage, for a neuron
+    ///   with max_dissolve_delay_seconds.
     /// - The age bonus depends on the neuron's age and is in the range of 0%, for 0 age, up
-    ///   to 25%, for a neuron with max_neuron_age_for_age_bonus.
+    ///   to max_age_bonus_percentage, for a neuron with max_neuron_age_for_age_bonus.
     /// - The voting power multiplier depends on the neuron.voting_power_percentage_multiplier,
     ///   and is applied against the total voting power of the neuron. It is represented
     ///   as a percent in the range of 0 and 100 where 0 will result in 0 voting power,
@@ -159,6 +160,8 @@ impl Neuron {
         now_seconds: u64,
         max_dissolve_delay_seconds: u64,
         max_neuron_age_for_age_bonus: u64,
+        max_dissolve_delay_bonus_percentage: u64,
+        max_age_bonus_percentage: u64,
     ) -> u64 {
         // We compute the stake adjustments in u128.
         let stake = self.stake_e8s() as u128;
@@ -169,15 +172,27 @@ impl Neuron {
             max_dissolve_delay_seconds,
         ) as u128;
         // 'd_stake' is the stake with bonus for dissolve delay.
-        let d_stake = stake + ((stake * d) / (max_dissolve_delay_seconds as u128));
+        let d_stake = stake
+            + if max_dissolve_delay_seconds > 0 {
+                (stake * d * max_dissolve_delay_bonus_percentage as u128)
+                    / (100 * max_dissolve_delay_seconds as u128)
+            } else {
+                0
+            };
         // Sanity check.
-        assert!(d_stake <= 2 * stake);
+        assert!(d_stake <= stake + (stake * (max_dissolve_delay_bonus_percentage as u128) / 100));
         // The voting power is also a function of the age of the
-        // neuron, giving a bonus of up to 25% at max_neuron_age_for_age_bonus.
+        // neuron, giving a bonus of up to max_age_bonus_percentage at max_neuron_age_for_age_bonus.
         let a = std::cmp::min(self.age_seconds(now_seconds), max_neuron_age_for_age_bonus) as u128;
-        let ad_stake = d_stake + ((d_stake * a) / (4 * max_neuron_age_for_age_bonus as u128));
-        // Final stake 'ad_stake' is at most 5/4 of the 'd_stake'.
-        assert!(ad_stake <= (5 * d_stake) / 4);
+        let ad_stake = d_stake
+            + if max_neuron_age_for_age_bonus > 0 {
+                (d_stake * a * max_age_bonus_percentage as u128)
+                    / (100 * max_neuron_age_for_age_bonus as u128)
+            } else {
+                0
+            };
+        // Final stake 'ad_stake' has is not more than max_age_bonus_percentage above 'd_stake'.
+        assert!(ad_stake <= d_stake + (d_stake * (max_age_bonus_percentage as u128) / 100));
 
         // Convert the multiplier to u128. The voting_power_percentage_multiplier represents
         // a percent and will always be within the range 0 to 100.
@@ -692,5 +707,240 @@ impl Ord for NeuronId {
 impl PartialOrd for NeuronId {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::proptest;
+
+    #[test]
+    fn test_voting_power_fully_boosted() {
+        let base_stake = 100;
+        let neuron = Neuron {
+            cached_neuron_stake_e8s: base_stake,
+            neuron_fees_e8s: 0,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
+            aging_since_timestamp_seconds: 0,
+            voting_power_percentage_multiplier: 100,
+            ..Neuron::default()
+        };
+
+        assert_eq!(
+            neuron.voting_power(100, 100, 100, 100, 25),
+            base_stake
+            * 2 // dissolve_delay boost
+            * 5 / 4 // voting power boost
+        );
+    }
+
+    #[test]
+    fn test_voting_power_with_bonus_thresholds_zero() {
+        let base_stake = 100;
+        let neuron = Neuron {
+            cached_neuron_stake_e8s: base_stake,
+            neuron_fees_e8s: 0,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
+            aging_since_timestamp_seconds: 0,
+            voting_power_percentage_multiplier: 100,
+            ..Neuron::default()
+        };
+
+        assert_eq!(
+            neuron.voting_power(
+                100, // now_seconds
+                // These are the operative data of this test.
+                // In an earlier implementation, these would have cause divide by zero.
+                0,   // max_dissolve_delay_seconds
+                0,   // max_neuron_age_for_age_bonus
+                100, // max_dissolve_delay_bonus_percentage
+                25   // max_age_bonus_percentage
+            ),
+            base_stake
+        );
+    }
+
+    proptest! {
+        /// Tests that the voting power is increased by max_dissolve_delay_bonus_percentage
+        /// when the neuron's dissolve delay == max_dissolve_delay_seconds.
+        #[test]
+        fn test_voting_power_dissolve_delay_boost(
+            base_stake in 0u64..1_000_000,
+            dissolve_delay_seconds in 1u64..1_000_000,  // Needs to be > 0 due to values of 0 causing the dissolve delay bonus to never apply.
+            max_dissolve_delay_bonus_percentage in 0u64..1_000_000,
+        ) {
+            let neuron = Neuron {
+                cached_neuron_stake_e8s: base_stake,
+                neuron_fees_e8s: 0,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+                aging_since_timestamp_seconds: 0,
+                voting_power_percentage_multiplier: 100,
+                ..Neuron::default()
+            };
+
+            assert_eq!(
+                neuron.voting_power(
+                    0, // now_seconds
+                    dissolve_delay_seconds,
+                    100, // max_neuron_age_for_age_bonus
+                    max_dissolve_delay_bonus_percentage,
+                    25 // max_age_bonus_percentage
+                ),
+                base_stake + (base_stake * max_dissolve_delay_bonus_percentage / 100)
+            );
+        }
+
+        /// Tests that the voting power is increased by max_age_bonus_percentage
+        /// when the neuron's age == max_neuron_age_for_age_bonus.
+        #[test]
+        fn test_voting_power_age_boost(
+            base_stake in 0u64..1_000_000,
+            max_neuron_age_for_age_bonus in 1u64..1_000_000,  // Needs to be > 0 due to values of 0 causing the age bonus to never apply.
+            max_age_bonus_percentage in 0u64..1_000_000,
+        ) {
+            let neuron = Neuron {
+                cached_neuron_stake_e8s: base_stake,
+                neuron_fees_e8s: 0,
+                dissolve_state: None,
+                aging_since_timestamp_seconds: 0,
+                voting_power_percentage_multiplier: 100,
+                ..Neuron::default()
+            };
+
+            assert_eq!(
+                neuron.voting_power(
+                    max_neuron_age_for_age_bonus,
+                    100, // max_dissolve_delay_seconds
+                    max_neuron_age_for_age_bonus,
+                    100, // max_dissolve_delay_bonus_percentage
+                    max_age_bonus_percentage
+                ),
+                base_stake + (base_stake * max_age_bonus_percentage / 100)
+            );
+        }
+
+        /// Tests that the voting power is increased by half of max_dissolve_delay_bonus_percentage
+        /// when the neuron's dissolve delay == max_dissolve_delay_seconds / 2.
+        #[test]
+        fn test_voting_power_dissolve_delay_boost_half(
+            base_stake in 0u64..1_000_000,
+            dissolve_delay_seconds in 0u64..1_000_000,
+            max_dissolve_delay_bonus_percentage in 0u64..1_000_000,
+        ) {
+            let neuron = Neuron {
+                cached_neuron_stake_e8s: base_stake,
+                neuron_fees_e8s: 0,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+                aging_since_timestamp_seconds: 0,
+                voting_power_percentage_multiplier: 100,
+                ..Neuron::default()
+            };
+
+            assert_eq!(
+                neuron.voting_power(
+                    0, // now_seconds
+                    dissolve_delay_seconds * 2,
+                    100, // max_neuron_age_for_age_bonus
+                    max_dissolve_delay_bonus_percentage,
+                    25 // max_age_bonus_percentage
+                ),
+                base_stake + (base_stake * max_dissolve_delay_bonus_percentage / 100 / 2)
+            );
+        }
+
+        /// Tests that the voting power is increased by half of max_age_bonus_percentage
+        /// when the neuron's age == max_neuron_age_for_age_bonus / 2.
+        #[test]
+        fn test_voting_power_age_boost_half(
+            base_stake in 0u64..1_000_000,
+            age in 0u64..1_000_000,
+            max_age_bonus_percentage in 0u64..1_000_000,
+        ) {
+            let neuron = Neuron {
+                cached_neuron_stake_e8s: base_stake,
+                neuron_fees_e8s: 0,
+                dissolve_state: None,
+                aging_since_timestamp_seconds: 0,
+                voting_power_percentage_multiplier: 100,
+                ..Neuron::default()
+            };
+
+            assert_eq!(
+                neuron.voting_power(
+                    age, // now_seconds
+                    100, // max_dissolve_delay_seconds
+                    age * 2, // max_neuron_age_for_age_bonus
+                    100, // max_dissolve_delay_bonus_percentage
+                    max_age_bonus_percentage // max_age_bonus_percentage
+                ),
+                base_stake + (base_stake * max_age_bonus_percentage / 100 / 2)
+            );
+        }
+
+        /// Tests that the voting power is not increased when the neuron meets
+        /// neither bonus criteria (age or disolve delay)
+        #[test]
+        fn test_voting_power_not_eligible_for_boost(
+            base_stake in 0u64..1_000_000,
+            max_dissolve_delay_seconds in 1u64..1_000_000,
+            max_dissolve_delay_bonus_percentage in 1u64..1_000_000,
+            age in 0u64..1_000_000,
+            max_age_bonus_percentage in 1u64..1_000_000,
+        ) {
+            let neuron = Neuron {
+                cached_neuron_stake_e8s: base_stake,
+                neuron_fees_e8s: 0,
+                dissolve_state: None,
+                aging_since_timestamp_seconds: age,
+                voting_power_percentage_multiplier: 100,
+                ..Neuron::default()
+            };
+
+            assert_eq!(
+                neuron.voting_power(
+                    age,
+                    max_dissolve_delay_seconds,
+                    max_age_bonus_percentage,
+                    max_dissolve_delay_bonus_percentage,
+                    max_age_bonus_percentage
+                ),
+                base_stake
+            );
+        }
+
+        /// This makes up random data and puts it into Neuron::voting_power,
+        /// which has asserts internally. This is testing that those asserts do not fire regardless of the inputs.
+        #[test]
+        fn test_no_voting_power_calculation_causes_panic(
+            base_stake in 0u64..1_000_000,
+            neuron_fees_e8s in 0u64..1_000_000,
+            aging_since_timestamp_seconds in 0u64..1_000_000,
+            voting_power_percentage_multiplier in 0u64..1_000_000,
+
+            now_seconds in 0u64..1_000_000,
+            dissolve_delay_seconds in 0u64..1_000_000,
+            max_dissolve_delay_seconds in 0u64..1_000_000,
+            max_neuron_age_for_age_bonus in 0u64..1_000_000,
+            max_dissolve_delay_bonus_percentage in 0u64..1_000_000,
+            max_age_bonus_percentage in 0u64..1_000_000,
+        ) {
+            let neuron = Neuron {
+                cached_neuron_stake_e8s: base_stake,
+                neuron_fees_e8s,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+                aging_since_timestamp_seconds,
+                voting_power_percentage_multiplier,
+                ..Neuron::default()
+            };
+
+            neuron.voting_power(
+                now_seconds,
+                max_dissolve_delay_seconds,
+                max_neuron_age_for_age_bonus,
+                max_dissolve_delay_bonus_percentage,
+                max_age_bonus_percentage
+            );
+        }
     }
 }
