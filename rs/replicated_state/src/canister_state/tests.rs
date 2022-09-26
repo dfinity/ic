@@ -541,3 +541,39 @@ fn wasm_can_be_loaded_from_a_file() {
     assert_eq!(wasm_in_memory, wasm_on_disk);
     assert_eq!(wasm_in_memory, wasm_on_disk_with_hash);
 }
+
+#[test]
+fn canister_state_cycles_debit() {
+    canister_state_test(|mut canister_state| {
+        let system_state = &mut canister_state.system_state;
+        let initial_balance = system_state.balance();
+
+        system_state.add_postponed_charge_to_cycles_debit(Cycles::new(42));
+        assert_eq!(Cycles::new(42), system_state.cycles_debit());
+        assert_eq!(initial_balance, system_state.balance());
+        assert_eq!(
+            initial_balance - Cycles::new(42),
+            system_state.debited_balance()
+        );
+
+        let remaining_debit = system_state.apply_cycles_debit();
+        assert_eq!(Cycles::zero(), remaining_debit);
+        assert_eq!(Cycles::zero(), system_state.cycles_debit());
+        assert_eq!(initial_balance - Cycles::new(42), system_state.balance());
+        assert_eq!(
+            initial_balance - Cycles::new(42),
+            system_state.debited_balance()
+        );
+
+        system_state.add_postponed_charge_to_cycles_debit(initial_balance);
+        assert_eq!(initial_balance, system_state.cycles_debit());
+        assert_eq!(initial_balance - Cycles::new(42), system_state.balance());
+        assert_eq!(Cycles::zero(), system_state.debited_balance());
+
+        let remaining_debit = system_state.apply_cycles_debit();
+        assert_eq!(Cycles::new(42), remaining_debit);
+        assert_eq!(Cycles::zero(), system_state.cycles_debit());
+        assert_eq!(Cycles::zero(), system_state.balance());
+        assert_eq!(Cycles::zero(), system_state.debited_balance());
+    })
+}

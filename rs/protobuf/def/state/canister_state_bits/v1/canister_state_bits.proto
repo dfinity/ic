@@ -64,7 +64,7 @@ message CallContextManager {
 }
 
 message CyclesAccount {
-  // Cycle balance is store as u128::to_bytes_le()
+  // Cycle balance is stored as u128::to_bytes_le()
   bytes cycles_balance = 1;
   reserved 2;
   reserved "max_exec_cycles";
@@ -222,4 +222,6 @@ message CanisterStateBits {
   repeated ExecutionTask task_queue = 30;
   // Time of last charge for resource allocations.
   google.protobuf.UInt64Value time_of_last_allocation_charge_nanos = 31;
+  // Postponed charges that are not applied to `cycles_balance` yet.
+  state.queues.v1.Cycles cycles_debit = 32;
 }
