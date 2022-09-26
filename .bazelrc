@@ -48,6 +48,8 @@ test:alltests --test_tag_filters=""
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
 
+test:precommit --build_tests_only --test_tag_filters="smoke"
+
 # For sandboxed actions, mount an empty, writable directory at this absolute path
 # (if supported by the sandboxing implementation, ignored otherwise).
 test --sandbox_tmpfs_path=/tmp
