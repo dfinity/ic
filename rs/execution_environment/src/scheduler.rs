@@ -443,7 +443,7 @@ impl SchedulerImpl {
                 self.exec_env.subnet_available_memory(&state).into();
             let canisters = state.take_canister_states();
             // Obtain the active canisters and update the collection of heap delta rate-limited canisters.
-            let (rate_limited_canister_ids, active_round_schedule) = round_schedule
+            let (active_round_schedule, rate_limited_canister_ids) = round_schedule
                 .filter_canisters(
                     &canisters,
                     self.config.heap_delta_rate_limit,
