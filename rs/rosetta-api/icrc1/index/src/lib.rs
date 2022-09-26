@@ -185,18 +185,23 @@ async fn get_transactions_from_archive(
 async fn build_index() -> Result<(), String> {
     let next_txid = with_index(|idx| idx.next_txid);
     let res = get_transactions_from_ledger(next_txid, MAX_TRANSACTIONS_PER_RESPONSE).await?;
-    let mut idx = res
-        .first_index
-        .0
-        .to_u64()
-        .expect("The Ledger returned an index that is not a valid u64");
     for archived in res.archived_transactions {
         let res = get_transactions_from_archive(&archived).await?;
+        let mut idx = archived
+            .start
+            .0
+            .to_u64()
+            .expect("The Ledger returned an index that is not a valid u64");
         for transaction in res.transactions {
             index_transaction(idx, transaction)?;
             idx += 1;
         }
     }
+    let mut idx = res
+        .first_index
+        .0
+        .to_u64()
+        .expect("The Ledger returned an index that is not a valid u64");
     for transaction in res.transactions {
         index_transaction(idx, transaction)?;
         idx += 1;
