@@ -739,6 +739,21 @@ message NervousSystemParameters {
   // is set, it probably should not be changed, because the results would
   // probably be pretty confusing.
   VotingRewardsParameters voting_rewards_parameters = 19;
+
+  // E.g. if a large dissolve delay can double the voting power of a neuron,
+  // then this field would have a value of 100, indicating a maximum of
+  // 100% additional voting power.
+  //
+  // For no bonus, this should be set to 0.
+  //
+  // To achieve functionality equivalent to NNS, this should be set to 100.
+  optional uint64 max_dissolve_delay_bonus_percentage = 20;
+
+  // Analogous to the previous field (see the previous comment),
+  // but this one relates to neuron age instead of dissolve delay.
+  //
+  // To achieve functionality equivalent to NNS, this should be set to 25.
+  optional uint64 max_age_bonus_percentage = 21;
 }
 
 message VotingRewardsParameters {

@@ -2369,6 +2369,14 @@ impl Governance {
             .nervous_system_parameters()
             .max_neuron_age_for_age_bonus
             .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
+        let max_dissolve_delay_bonus_percentage = self
+            .nervous_system_parameters()
+            .max_dissolve_delay_bonus_percentage
+            .expect("NervousSystemParameters must have max_dissolve_delay_bonus_percentage");
+        let max_age_bonus_percentage = self
+            .nervous_system_parameters()
+            .max_age_bonus_percentage
+            .expect("NervousSystemParameters must have max_age_bonus_percentage");
         let initial_voting_period_seconds = self.initial_voting_period_seconds();
         let wait_for_quiet_deadline_increase_seconds =
             self.wait_for_quiet_deadline_increase_seconds();
@@ -2380,7 +2388,13 @@ impl Governance {
                 // Not eligible due to dissolve delay.
                 continue;
             }
-            let power = v.voting_power(now_seconds, max_dissolve_delay, max_age_bonus);
+            let power = v.voting_power(
+                now_seconds,
+                max_dissolve_delay,
+                max_age_bonus,
+                max_dissolve_delay_bonus_percentage,
+                max_age_bonus_percentage,
+            );
             total_power += power as u128;
             electoral_roll.insert(
                 k.clone(),

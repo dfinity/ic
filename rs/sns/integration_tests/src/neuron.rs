@@ -891,7 +891,7 @@ async fn zero_total_reward_shares() {
         maturity_e8s_equivalent,
         ..Default::default()
     };
-    let voting_power = depleted_neuron.voting_power(now, 60, 60);
+    let voting_power = depleted_neuron.voting_power(now, 60, 60, 100, 25);
     assert_eq!(voting_power, 0);
 
     // Step 1.2: Craft a ProposalData that is ReadyToSettle.
@@ -1059,6 +1059,8 @@ async fn couple_of_neurons_who_voted_get_rewards() {
                 .max_neuron_age_for_age_bonus
                 .as_ref()
                 .unwrap(),
+            100,
+            25,
         )
     };
 

@@ -801,6 +801,21 @@ pub struct NervousSystemParameters {
     /// probably be pretty confusing.
     #[prost(message, optional, tag = "19")]
     pub voting_rewards_parameters: ::core::option::Option<VotingRewardsParameters>,
+    /// E.g. if a large dissolve delay can double the voting power of a neuron,
+    /// then this field would have a value of 100, indicating a maximum of
+    /// 100% additional voting power.
+    ///
+    /// For no bonus, this should be set to 0.
+    ///
+    /// To achieve functionality equivalent to NNS, this should be set to 100.
+    #[prost(uint64, optional, tag = "20")]
+    pub max_dissolve_delay_bonus_percentage: ::core::option::Option<u64>,
+    /// Analogous to the previous field (see the previous comment),
+    /// but this one relates to neuron age instead of dissolve delay.
+    ///
+    /// To achieve functionality equivalent to NNS, this should be set to 25.
+    #[prost(uint64, optional, tag = "21")]
+    pub max_age_bonus_percentage: ::core::option::Option<u64>,
 }
 #[derive(
     candid::CandidType,
