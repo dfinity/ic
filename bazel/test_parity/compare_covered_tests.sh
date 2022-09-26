@@ -6,6 +6,10 @@ print_blue() {
     echo -e "\033[1;34m$*\033[0m"
 }
 
+print_red() {
+    echo -e "\033[0;31m$*\033[0m"
+}
+
 REPO_DIR="$(git rev-parse --show-toplevel)"
 mkdir -p "${REPO_DIR}/artifacts"
 
@@ -23,8 +27,11 @@ popd
 
 print_blue ":: Bazel Tests ::"
 # `bazel test` gives us all the tests, we only need to build them and not run them
-bazel test --config=ci --build_tests_only --ui_event_filters=-debug --noshow_progress --test_lang_filters=-py \
-    --test_output=all --config=alltests --test_arg=--list //rs/... 2>&1 | tee "${REPO_DIR}/artifacts/bazel.out"
+if ! bazel test --config=ci --config=alltests --test_arg=--list \
+    --build_tests_only --ui_event_filters=-debug --noshow_progress --test_lang_filters=-py \
+    --test_output=all --output_groups=-clippy_checks --keep_going //rs/... 2>&1 | tee "${REPO_DIR}/artifacts/bazel.out"; then
+    print_red "Some tests seemed to fail. We only care about complete list of tests so we assume this is not fatal."
+fi
 
 pushd "${REPO_DIR}/artifacts"
 egrep '^[A-Za-z0-9_:]*: test|Test output for' bazel.out >bazel.tests
