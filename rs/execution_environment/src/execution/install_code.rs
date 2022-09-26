@@ -623,10 +623,7 @@ pub(crate) fn validate_memory_allocation(
         {
             return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
                 requested: memory_allocation.bytes(),
-                available: NumBytes::from(
-                    (available_memory.get_total_memory() - canister_current_allocation.get() as i64)
-                        .max(0) as u64,
-                ),
+                available: NumBytes::from((available_memory.get_total_memory()).max(0) as u64),
             });
         }
     }
