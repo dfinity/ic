@@ -80,7 +80,8 @@ rust_library(
 rust_test(
     name = "consensus_test",
     crate = ":consensus",
-    deps = DEV_DEPENDENCIES,
+    crate_features = ["proptest"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test(
