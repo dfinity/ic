@@ -18,7 +18,7 @@ cd "$folder"
 rm -f SHA256SUMS sign-input.txt sign.sig sign.sig.bin
 (
     GLOBIGNORE="SHA256SUMS"
-    sha256sum -b * | tee SHA256SUMS
+    shasum --algorithm 256 --binary * | tee SHA256SUMS
 )
 
 if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ] && [ ! -e /openssl/private.pem ]; then
