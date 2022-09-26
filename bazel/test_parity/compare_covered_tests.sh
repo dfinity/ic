@@ -27,7 +27,7 @@ popd
 
 print_blue ":: Bazel Tests ::"
 # `bazel test` gives us all the tests, we only need to build them and not run them
-if ! bazel test --config=ci --config=alltests --test_arg=--list \
+if ! bazel test --config=ci --config=alltests --test_arg=--list --test_arg=--include-ignored \
     --build_tests_only --ui_event_filters=-debug --noshow_progress --test_lang_filters=-py \
     --test_output=all --output_groups=-clippy_checks --keep_going //rs/... 2>&1 | tee "${REPO_DIR}/artifacts/bazel.out"; then
     print_red "Some tests seemed to fail. We only care about complete list of tests so we assume this is not fatal."
