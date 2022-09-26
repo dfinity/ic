@@ -203,6 +203,7 @@
 /rs/transport_test_client/              @dfinity-lab/teams/networking-team
 /rs/transport/                          @dfinity-lab/teams/networking-team
 /rs/tree_deserializer/                  @dfinity-lab/teams/message-routing-owners
+/rs/tools/check_did/                    @dfinity-lab/teams/financial-integrations
 /rs/types/                              @dfinity-lab/teams/interface-owners
 /rs/types/ic00_types/                   @dfinity-lab/teams/execution-owners
 /rs/types/types/src/batch.rs            @dfinity-lab/teams/consensus-owners
