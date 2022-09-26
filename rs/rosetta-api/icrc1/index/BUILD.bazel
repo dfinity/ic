@@ -58,6 +58,15 @@ rust_test(
 )
 
 rust_test(
+    name = "index_canister_test",
+    crate = ":_wasm_index_canister_raw",
+    data = [":index.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/index",
+    },
+)
+
+rust_test(
     name = "index_test",
     srcs = ["tests/tests.rs"],
     data = [
