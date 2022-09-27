@@ -2017,23 +2017,8 @@ impl SystemApi for SystemApiImpl {
                 call_context_id,
                 outgoing_request,
                 ..
-            } => {
-                let req_in_prep = outgoing_request.take().ok_or_else(|| {
-                    ContractViolation(
-                        "ic0.call_perform called when no call is under construction.".to_string(),
-                    )
-                })?;
-
-                let req = into_request(
-                    req_in_prep,
-                    *call_context_id,
-                    &mut self.sandbox_safe_system_state,
-                    &self.log,
-                )?;
-
-                self.push_output_request(req)
             }
-            ApiType::NonReplicatedQuery {
+            | ApiType::NonReplicatedQuery {
                 query_kind:
                     NonReplicatedQueryKind::Stateful {
                         call_context_id,
