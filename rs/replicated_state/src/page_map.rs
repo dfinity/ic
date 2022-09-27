@@ -15,7 +15,7 @@ pub use page_allocator::{DefaultPageAllocatorImpl, HeapBasedPageAllocator, PageA
 // NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
 // operation. This allows us to simplify canister state management: we can
 // simply have a copy of the whole PageMap in every canister snapshot.
-use ic_types::Height;
+use ic_types::{Height, NumPages};
 use int_map::IntMap;
 use libc::off_t;
 use page_allocator::{Page, PageAllocator};
@@ -695,8 +695,10 @@ impl Buffer {
 
     /// Overwrites the contents of this buffer at the specified offset with the
     /// contents of the source buffer.
-    pub fn write(&mut self, mut src: &[u8], mut offset: usize) {
+    /// Returns the number of **new** dirty pages created by the write.
+    pub fn write(&mut self, mut src: &[u8], mut offset: usize) -> NumPages {
         let page_size = PAGE_SIZE;
+        let initial_dirty_page_count = self.dirty_pages.len();
 
         while !src.is_empty() {
             let page = PageIndex::new((offset / page_size) as u64);
@@ -706,7 +708,7 @@ impl Buffer {
             let dirty_page = self
                 .dirty_pages
                 .entry(page)
-                .or_insert(*self.page_map.get_page(page));
+                .or_insert_with(|| *self.page_map.get_page(page));
             deterministic_copy_from_slice(
                 &mut dirty_page[offset_into_page..offset_into_page + page_len],
                 &src[0..page_len],
@@ -715,6 +717,8 @@ impl Buffer {
             offset += page_len;
             src = &src[page_len..src.len()];
         }
+
+        NumPages::from((self.dirty_pages.len() - initial_dirty_page_count) as u64)
     }
 
     pub fn dirty_pages(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {

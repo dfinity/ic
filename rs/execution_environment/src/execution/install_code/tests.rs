@@ -96,7 +96,7 @@ fn dts_resume_works_in_install_code() {
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let ingress_id = test.dts_install_code(payload);
-    for _ in 0..4 {
+    for _ in 0..5 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
@@ -156,7 +156,7 @@ fn dts_abort_works_in_install_code() {
 
     test.abort_all_paused_executions();
 
-    for _ in 0..5 {
+    for _ in 0..6 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode

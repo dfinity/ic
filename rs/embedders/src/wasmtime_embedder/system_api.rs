@@ -6,14 +6,14 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions};
+use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, NumPages};
 
 use wasmtime::{AsContextMut, Caller, Global, Linker, Store, Trap, Val};
 
 use std::convert::TryFrom;
 
 fn process_err<S: SystemApi>(
-    mut store: impl AsContextMut<Data = StoreData<S>>,
+    store: &mut impl AsContextMut<Data = StoreData<S>>,
     e: HypervisorError,
 ) -> wasmtime::Trap {
     let t = wasmtime::Trap::new(format! {"{}", e});
@@ -120,6 +120,43 @@ fn charge_for_system_api_call<S: SystemApi>(
     complexity: &ExecutionComplexity,
 ) -> Result<(), Trap> {
     observe_execution_complexity(log, canister_id, caller, complexity)?;
+    let num_instructions = caller
+        .data()
+        .system_api
+        .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64))
+        + system_api_overhead;
+    charge_direct_fee(log, canister_id, caller, num_instructions)
+}
+
+/// Additional charges for newly created stable memory dirty pages. Charging is
+/// skipped for System subnets so that we don't break critical NNS canisters.
+fn charge_for_stable_memory_dirty_pages<S: SystemApi>(
+    log: &ReplicaLogger,
+    canister_id: CanisterId,
+    caller: &mut Caller<'_, StoreData<S>>,
+    dirty_pages: NumPages,
+) -> Result<(), Trap> {
+    match caller.data().system_api.subnet_type() {
+        SubnetType::System => Ok(()),
+        SubnetType::Application | SubnetType::VerifiedApplication => charge_direct_fee(
+            log,
+            canister_id,
+            caller,
+            convert_dirty_pages_to_instructions(dirty_pages),
+        ),
+    }
+}
+
+fn charge_direct_fee<S: SystemApi>(
+    log: &ReplicaLogger,
+    canister_id: CanisterId,
+    caller: &mut Caller<'_, StoreData<S>>,
+    num_instructions: NumInstructions,
+) -> Result<(), Trap> {
+    if num_instructions == NumInstructions::from(0) {
+        return Ok(());
+    }
+
     let num_instructions_global = get_num_instructions_global(caller, log, canister_id)?;
     let mut instruction_counter = load_value(&num_instructions_global, caller, log, canister_id)?;
     // Assert the current instruction counter is sane
@@ -150,10 +187,7 @@ fn charge_for_system_api_call<S: SystemApi>(
     }
 
     // Now we can subtract the fee and store the new instruction counter.
-    let fee = system_api
-        .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64))
-        .get() as i64
-        + system_api_overhead.get() as i64;
+    let fee = num_instructions.get() as i64;
     instruction_counter -= fee;
     store_value(
         &num_instructions_global,
@@ -218,6 +252,12 @@ fn observe_execution_complexity<S: SystemApi>(
     Ok(())
 }
 
+fn convert_dirty_pages_to_instructions(dirty_pages: NumPages) -> NumInstructions {
+    // This is enough to write to all of stable memory.
+    const CONVERSION_RATE: u64 = 1_000;
+    NumInstructions::from((dirty_pages.get()).saturating_mul(CONVERSION_RATE))
+}
+
 /// A helper to pass wasmtime counters to the System API
 fn ic0_performance_counter_helper<S: SystemApi>(
     log: &ReplicaLogger,
@@ -257,7 +297,7 @@ pub(crate) fn syscalls<S: SystemApi>(
     }
 
     fn with_memory_and_system_api<S: SystemApi, T>(
-        mut caller: Caller<'_, StoreData<S>>,
+        mut caller: &mut Caller<'_, StoreData<S>>,
         f: impl Fn(&mut S, &mut [u8]) -> HypervisorResult<T>,
     ) -> Result<T, wasmtime::Trap> {
         let result = caller
@@ -311,7 +351,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_caller_copy(dst as u32, offset as u32, size as u32, memory)
                 })
             }
@@ -322,7 +362,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_caller_size", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_msg_caller_size())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0::msg_caller_size failed: {}", e))
@@ -336,7 +376,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_arg_data_size", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_msg_arg_data_size())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0::msg_arg_data_size failed: {}", e))
@@ -363,7 +403,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, mem| {
+                with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst as u32, offset as u32, size as u32, mem)
                 })
             }
@@ -374,7 +414,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_method_name_size", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_msg_method_name_size())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0::msg_metohd_name_size failed: {}", e))
@@ -401,7 +441,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(
                         dst as u32,
                         offset as u32,
@@ -417,7 +457,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "accept_message", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_accept_message())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -439,7 +479,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: (size as u64).into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src as u32, size as u32, memory)
                 })
             }
@@ -450,7 +490,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_reply", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_msg_reply())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -459,7 +499,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_reject_code", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_msg_reject_code())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -481,7 +521,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: (size as u64).into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src as u32, size as u32, memory)
                 })
             }
@@ -492,7 +532,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_reject_msg_size", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_msg_reject_msg_size())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0_msg_reject_msg_size failed: {}", e))
@@ -519,7 +559,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(
                         dst as u32,
                         offset as u32,
@@ -535,7 +575,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "canister_self_size", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_canister_self_size())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0_canister_self_size failed: {}", e))
@@ -560,7 +600,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_self_copy(
                         dst as u32,
                         offset as u32,
@@ -576,7 +616,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "controller_size", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_controller_size())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0_controller_size failed: {}", e))
@@ -601,7 +641,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_controller_copy(dst as u32, offset as u32, size as u32, memory)
                 })
             }
@@ -635,7 +675,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     // If rate limiting is disabled or the subnet is a system subnet, then
                     // debug print produces output.
                     (_, FlagStatus::Disabled) | (SubnetType::System, FlagStatus::Enabled) => {
-                        with_memory_and_system_api(caller, |system_api, memory| {
+                        with_memory_and_system_api(&mut caller, |system_api, memory| {
                             system_api.ic0_debug_print(offset as u32, length as u32, memory)
                         })
                     }
@@ -661,7 +701,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: (length as u64).into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset as u32, length as u32, memory)
                 })
             }
@@ -696,7 +736,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: (total_len as u64).into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_simple(
                         callee_src as u32,
                         callee_size as u32,
@@ -739,7 +779,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_new(
                         callee_src as u32,
                         callee_size as u32,
@@ -773,7 +813,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: (size as u64).into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src as u32, size as u32, memory)
                 })
             }
@@ -786,7 +826,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                 with_system_api(&mut caller, |s| {
                     s.ic0_call_on_cleanup(fun as u32, env as u32)
                 })
-                .map_err(|e| process_err(caller, e))
+                .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -795,7 +835,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "call_cycles_add", {
             move |mut caller: Caller<'_, StoreData<S>>, amount: i64| {
                 with_system_api(&mut caller, |s| s.ic0_call_cycles_add(amount as u64))
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -809,7 +849,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         amount_low as u64,
                     ))
                 })
-                .map_err(|e| process_err(caller, e))
+                .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -830,7 +870,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     },
                 )?;
                 with_system_api(&mut caller, |s| s.ic0_call_perform())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -839,7 +879,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "stable_size", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_stable_size())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0_stable_size failed: {}", e))
@@ -865,7 +905,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     },
                 )?;
                 with_system_api(&mut caller, |s| s.ic0_stable_grow(additional_pages as u32))
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -887,7 +927,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable_read(dst as u32, offset as u32, size as u32, memory)
                 })
             }
@@ -911,9 +951,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                let dirty_pages = with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable_write(offset as u32, src as u32, size as u32, memory)
-                })
+                })?;
+                charge_for_stable_memory_dirty_pages(&log, canister_id, &mut caller, dirty_pages)
             }
         })
         .unwrap();
@@ -922,7 +963,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "stable64_size", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_stable64_size())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0_stable64_size failed: {}", e))
@@ -950,7 +991,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                 with_system_api(&mut caller, |s| {
                     s.ic0_stable64_grow(additional_pages as u64)
                 })
-                .map_err(|e| process_err(caller, e))
+                .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -972,7 +1013,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable64_read(dst as u64, offset as u64, size as u64, memory)
                 })
             }
@@ -996,9 +1037,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                let dirty_pages = with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable64_write(offset as u64, src as u64, size as u64, memory)
-                })
+                })?;
+                charge_for_stable_memory_dirty_pages(&log, canister_id, &mut caller, dirty_pages)
             }
         })
         .unwrap();
@@ -1007,7 +1049,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "time", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_time())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .map(|s| s.as_nanos_since_unix_epoch())
             }
         })
@@ -1039,7 +1081,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "canister_cycle_balance", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0_canister_cycle_balance failed: {}", e))
@@ -1064,7 +1106,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_cycles_balance128(dst, memory)
                 })
             }
@@ -1075,7 +1117,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_cycles_available", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_msg_cycles_available())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0_msg_cycles_available failed: {}", e))
@@ -1100,7 +1142,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_available128(dst, memory)
                 })
             }
@@ -1111,7 +1153,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_cycles_refunded", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_msg_cycles_refunded())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0_msg_cycles_refunded failed: {}", e))
@@ -1136,7 +1178,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_refunded128(dst, memory)
                 })
             }
@@ -1147,7 +1189,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_cycles_accept", {
             move |mut caller: Caller<'_, StoreData<S>>, amount: i64| {
                 with_system_api(&mut caller, |s| s.ic0_msg_cycles_accept(amount as u64))
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -1170,7 +1212,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_accept128(
                         Cycles::from_parts(amount_high as u64, amount_low as u64),
                         dst,
@@ -1203,7 +1245,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                 with_system_api(&mut caller, |s| {
                     s.update_available_memory(native_memory_grow_res, additional_pages as u32)
                 })
-                .map_err(|e| process_err(caller, e))
+                .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -1212,7 +1254,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "canister_status", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_canister_status())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -1232,7 +1274,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_certified_data_set(src, size, memory)
                 })
             }
@@ -1243,7 +1285,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "data_certificate_present", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_data_certificate_present())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -1252,7 +1294,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "data_certificate_size", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_data_certificate_size())
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -1271,7 +1313,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         network: 0.into(),
                     },
                 )?;
-                with_memory_and_system_api(caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_data_certificate_copy(dst, offset, size, memory)
                 })
             }
@@ -1282,7 +1324,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "mint_cycles", {
             move |mut caller: Caller<'_, StoreData<S>>, amount: i64| {
                 with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount as u64))
-                    .map_err(|e| process_err(caller, e))
+                    .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
                             wasmtime::Trap::new(format!("ic0_mint_cycles failed: {}", e))
