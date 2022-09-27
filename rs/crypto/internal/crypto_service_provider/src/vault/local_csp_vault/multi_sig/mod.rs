@@ -24,13 +24,12 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Mul
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let start_time = self.metrics.now();
+        let maybe_secret_key = self.sks_read_lock().get(&key_id);
         let secret_key: CspSecretKey =
-            self.sks_read_lock()
-                .get(&key_id)
-                .ok_or(CspMultiSignatureError::SecretKeyNotFound {
-                    algorithm: algorithm_id,
-                    key_id,
-                })?;
+            maybe_secret_key.ok_or(CspMultiSignatureError::SecretKeyNotFound {
+                algorithm: algorithm_id,
+                key_id,
+            })?;
 
         let result = match algorithm_id {
             AlgorithmId::MultiBls12_381 => match secret_key {

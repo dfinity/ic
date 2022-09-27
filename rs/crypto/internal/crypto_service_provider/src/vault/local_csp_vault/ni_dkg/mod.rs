@@ -62,11 +62,12 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
 
         // Update state:
         let key_id = forward_secure_key_id(&public_key);
-        if let Err(err) = self.sks_write_lock().insert(
+        let result = self.sks_write_lock().insert(
             key_id,
             CspSecretKey::FsEncryption(key_set),
             Some(NIDKG_FS_SCOPE),
-        ) {
+        );
+        if let Err(err) = result {
             match err {
                 SecretKeyStoreError::DuplicateKeyId(_key_id) =>
                     panic!(
@@ -91,7 +92,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         let updated_key_set = match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 // Retrieve key from key store
-                let key_set = self.sks_read_lock().get(&key_id).ok_or_else(|| {
+                let maybe_key_set = self.sks_read_lock().get(&key_id);
+                let key_set = maybe_key_set.ok_or_else(|| {
                     ni_dkg_errors::CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(
                         ni_dkg_errors::KeyNotFoundError {
                             internal_error: "Cannot update forward secure key if it is missing"
@@ -255,7 +257,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
 
                 // Compute the key
                 let fs_decryption_key = {
-                    let key_set = self.sks_read_lock().get(&fs_key_id).ok_or_else(||
+                    let maybe_key_set = self.sks_read_lock().get(&fs_key_id);
+                    let key_set = maybe_key_set.ok_or_else(||
                         ni_dkg_errors::CspDkgLoadPrivateKeyError::KeyNotFoundError(
                             // TODO (CRP-820): This name is inconsistent with the other error enums,
                             // where this is now called FsKeyNotInSecretKeyStoreError or some
@@ -283,11 +286,12 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
                 )
                 .map(CspSecretKey::ThresBls12_381)?;
 
-                match self.sks_write_lock().insert(
+                let result = self.sks_write_lock().insert(
                     threshold_key_id,
                     csp_secret_key,
                     Some(NIDKG_THRESHOLD_SCOPE),
-                ) {
+                );
+                match result {
                     Ok(()) => Ok(()),
                     Err(SecretKeyStoreError::DuplicateKeyId(_key_id)) => Ok(()),
                 }

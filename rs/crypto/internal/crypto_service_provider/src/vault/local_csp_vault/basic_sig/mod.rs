@@ -24,13 +24,12 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let start_time = self.metrics.now();
+        let maybe_secret_key = self.sks_read_lock().get(&key_id);
         let secret_key: CspSecretKey =
-            self.sks_read_lock()
-                .get(&key_id)
-                .ok_or(CspBasicSignatureError::SecretKeyNotFound {
-                    algorithm: algorithm_id,
-                    key_id,
-                })?;
+            maybe_secret_key.ok_or(CspBasicSignatureError::SecretKeyNotFound {
+                algorithm: algorithm_id,
+                key_id,
+            })?;
         let result = match algorithm_id {
             AlgorithmId::Ed25519 => match &secret_key {
                 CspSecretKey::Ed25519(secret_key) => {
