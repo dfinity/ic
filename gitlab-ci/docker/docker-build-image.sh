@@ -7,6 +7,7 @@ usage() {
     echo " "
     echo "Options:"
     echo "-h, --help   show brief help"
+    echo "-b, --bazel  only build bazel image"
     echo "-n, --nix    also build the nix-supported Docker image"
     exit 0
 }
@@ -17,6 +18,10 @@ while test $# -gt 0; do
         -h | --help) usage ;;
         -n* | --nix*)
             BUILD_NIX=true
+            shift
+            ;;
+        -b* | --bazel*)
+            ONLY_BAZEL=true
             shift
             ;;
     esac
@@ -45,6 +50,20 @@ pushd "$REPO_ROOT/gitlab-ci/docker"
 
 # we can pass '--no-cache' from env
 build_args=("${DOCKER_BUILD_ARGS:---rm=true}")
+
+DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
+    -t ic-build-bazel:"$DOCKER_IMG_TAG" \
+    -t dfinity/ic-build-bazel:"$DOCKER_IMG_TAG" \
+    -t dfinity/ic-build-bazel:"$LATEST" \
+    -t registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:"$DOCKER_IMG_TAG" \
+    --build-arg USER="${USER}" \
+    --build-arg UID="${SET_UID}" \
+    -f Dockerfile.bazel .
+
+if [ "${ONLY_BAZEL:-false}" == "true" ]; then
+    popd
+    exit 0
+fi
 
 # build the dependencies image
 DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
