@@ -763,6 +763,11 @@ fn test_archiving() {
         );
     }
 
+    // Check that requesting non-existing blocks does not crash the ledger.
+    let missing_blocks_reply = get_transactions(&env, canister_id, 100, 5);
+    assert_eq!(0, missing_blocks_reply.transactions.len());
+    assert_eq!(0, missing_blocks_reply.archived_transactions.len());
+
     // Upgrade the archive and check that the data is still available.
 
     env.upgrade_canister(archive_canister_id, archive_wasm(), vec![])
