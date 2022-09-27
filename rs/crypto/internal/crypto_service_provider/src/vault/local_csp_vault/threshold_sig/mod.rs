@@ -77,11 +77,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
                         secret_key_maybe.map(|secret_key| loop {
                             let key_id = KeyId::from(self.rng_write_lock().gen::<[u8; 32]>());
                             let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key);
-                            if self
-                                .sks_write_lock()
-                                .insert(key_id, csp_secret_key, None)
-                                .is_ok()
-                            {
+                            let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
+                            if result.is_ok() {
                                 break key_id;
                             }
                         })
@@ -105,7 +102,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         let start_time = self.metrics.now();
         let result = match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
-                let csp_key = self.sks_read_lock().get(&key_id).ok_or({
+                let maybe_csp_key = self.sks_read_lock().get(&key_id);
+                let csp_key = maybe_csp_key.ok_or({
                     CspThresholdSignError::SecretKeyNotFound {
                         algorithm: AlgorithmId::ThresBls12_381,
                         key_id,

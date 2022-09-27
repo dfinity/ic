@@ -60,10 +60,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
 
     fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
         let start_time = self.metrics.now();
-        let secret_key: CspSecretKey = self
-            .sks_read_lock()
-            .get(key_id)
-            .ok_or(CspTlsSignError::SecretKeyNotFound { key_id: *key_id })?;
+        let maybe_secret_key = self.sks_read_lock().get(key_id);
+        let secret_key: CspSecretKey =
+            maybe_secret_key.ok_or(CspTlsSignError::SecretKeyNotFound { key_id: *key_id })?;
 
         let result = match &secret_key {
             CspSecretKey::TlsEd25519(secret_key_der) => {
