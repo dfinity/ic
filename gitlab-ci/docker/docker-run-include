@@ -8,7 +8,8 @@ REPO_ROOT="$(
     git rev-parse --show-toplevel
 )"
 
-IMAGE_TAG=${IMAGE_TAG:-$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")}
+IMAGE_TAG=${IMAGE_TAG:-$($REPO_ROOT/gitlab-ci/docker/docker-get-image-tag.sh)}
+
 
 USER=$(whoami)
 if [ $USER == ubuntu ]; then
@@ -19,6 +20,7 @@ else
 fi
 
 IMAGE="${IMAGE:-dfinity/ic-build:$PREFIX$IMAGE_TAG}"
+BAZEL_IMAGE="dfinity/ic-build-bazel:$PREFIX$IMAGE_TAG"
 WORKDIR="/ic"
 
 DOCKER_RUN_ARGS=(
