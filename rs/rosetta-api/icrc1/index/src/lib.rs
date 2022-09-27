@@ -66,6 +66,10 @@ fn with_index_mut<R>(f: impl FnOnce(&mut Index) -> R) -> R {
     INDEX.with(|idx| f(idx.borrow_mut().as_mut().expect("Index state is not set!")))
 }
 
+pub fn ledger_id() -> CanisterId {
+    with_index(|idx| idx.ledger_id)
+}
+
 #[derive(CandidType, Debug, candid::Deserialize)]
 pub struct InitArgs {
     // The Ledger canister id of the Ledger to index
@@ -153,7 +157,7 @@ async fn get_transactions_from_ledger(
     start: u64,
     length: usize,
 ) -> Result<GetTransactionsResponse, String> {
-    let ledger_id = with_index(|idx| idx.ledger_id);
+    let ledger_id = ledger_id();
     let req = GetTransactionsRequest {
         start: Nat::from(start),
         length: Nat::from(length),
