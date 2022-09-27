@@ -105,7 +105,12 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
     pub fn block_slice(&self, local_blocks: std::ops::Range<u64>) -> &[EncodedBlock] {
         use crate::range_utils::{is_subrange, offset};
 
-        assert!(is_subrange(&local_blocks, &self.local_block_range()));
+        assert!(
+            is_subrange(&local_blocks, &self.local_block_range()),
+            "requested block range {:?} is not a subrange of local blocks {:?}",
+            local_blocks,
+            self.local_block_range()
+        );
 
         &self.blocks[offset(&local_blocks, self.num_archived_blocks)]
     }

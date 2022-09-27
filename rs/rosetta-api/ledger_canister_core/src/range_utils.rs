@@ -10,12 +10,20 @@ pub fn make_range(start: u64, len: usize) -> Range<u64> {
     }
 }
 
+/// An error indicating that an intersection of two intervals is not a
+/// well-formed interval.
+#[derive(Debug, PartialEq)]
+pub struct NoIntersection;
+
 /// Constructs an intersection of two ranges.
-pub fn intersect(l: &Range<u64>, r: &Range<u64>) -> Range<u64> {
-    Range {
+pub fn intersect(l: &Range<u64>, r: &Range<u64>) -> Result<Range<u64>, NoIntersection> {
+    if l.end < r.start || r.end < l.start {
+        return Err(NoIntersection);
+    }
+    Ok(Range {
         start: l.start.max(r.start),
         end: l.end.min(r.end),
-    }
+    })
 }
 
 /// Returns true iff `r` contains each point of `l`.
