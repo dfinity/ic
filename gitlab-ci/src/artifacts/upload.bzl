@@ -44,8 +44,8 @@ _upload_artifact = rule(
         "input": attr.label(allow_single_file = True),
         "remote_subdir": attr.string(mandatory = True),
         "rclone_config": attr.label(allow_single_file = True, default = "//:.rclone.conf"),
-        "_rclone_upload": attr.label(executable = True, cfg = "exec", default = "//gitlab-ci/src/artifacts:rclone_upload"),
-        "_artifacts_uploader_template": attr.label(allow_single_file = True, default = "//bazel:artifacts_uploader.bash.template"),
+        "_rclone_upload": attr.label(executable = True, cfg = "exec", default = ":rclone_upload"),
+        "_artifacts_uploader_template": attr.label(allow_single_file = True, default = ":upload.bash.template"),
     },
 )
 
@@ -103,7 +103,7 @@ def urls_test(name, inputs, tags = ["system_test"]):
     native.sh_test(
         name = name,
         tags = tags,
-        srcs = ["//bazel:urls_test.sh"],
+        srcs = ["//gitlab-ci/src/artifacts:urls_test.sh"],
         args = ["$(rootpath :{})".format(name + "_wrapped")],
         data = [":" + name + "_wrapped"],
     )
