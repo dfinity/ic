@@ -58,6 +58,9 @@ boundary-os-diskimg:
   needs:
     - job: cargo-build-release-linux-native
       artifacts: false
+    - pipeline: $PARENT_PIPELINE_ID
+      job: boundary-node-service-worker
+      artifacts: false
   variables:
       BUILD_EXTRA_ARGS: ""  # We keep this as a dev image might soon follow, e.g. due to ssh access
       BUILD_EXTRA_SUFFIX: ""
@@ -68,6 +71,10 @@ boundary-os-diskimg:
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
           --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
           --out="artifacts/release"
+
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="$CI_COMMIT_SHA" --remote="service-worker" \
+          --out="artifacts/service-worker"
 
       # artifacts/release dir with binaries come from cargo-build-release-linux-native
       cd "${CI_PROJECT_DIR}"/ic-os/boundary-guestos
@@ -90,7 +97,7 @@ boundary-os-diskimg-dev:
   extends:
     - boundary-os-diskimg
   variables:
-      BUILD_EXTRA_ARGS: "-p root"
+      BUILD_EXTRA_ARGS: "-p root -t dev -w ../../artifacts/service-worker/dfinity-service-worker-*.tgz"
       BUILD_EXTRA_SUFFIX: "-dev"
 
 # Build snp image.
@@ -102,5 +109,5 @@ boundary-os-diskimg-snp-dev:
   extends:
     - boundary-os-diskimg
   variables:
-    BUILD_EXTRA_ARGS: "-p root -s"
+    BUILD_EXTRA_ARGS: "-p root -s -t dev -w ../../artifacts/service-worker/dfinity-service-worker-*.tgz"
     BUILD_EXTRA_SUFFIX: "-snp-dev"
