@@ -23,6 +23,7 @@ function exit_usage() {
         echo >&2 "    --max-ingress-bytes-per-message <dil> Set maximum ingress size in bytes (-1 if not provided explicitly, which means - default will be used)"
         echo >&2 "    --hosts-ini <hosts_override.ini>      Override the default ansible hosts.ini to set different testnet configuration"
         echo >&2 "    --no-boundary-nodes                   Do not deploy boundary nodes even if they are declared in the hosts.ini file"
+        echo >&2 "    --boundary-dev-image		    Use development image of the boundary node VM (includes development service worker"
         echo >&2 "    --with-testnet-keys                   Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys"
         echo >&2 -e "\nTo get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
         echo >&2 -e "Example (deploy latest master to small-a):\n"
@@ -37,6 +38,7 @@ GIT_REVISION="${GIT_REVISION:-}"
 ANSIBLE_ARGS=()
 HOSTS_INI_FILENAME="${HOSTS_INI_FILENAME:-hosts.ini}"
 USE_BOUNDARY_NODES="true"
+BOUNDARY_IMAGE_TYPE=""
 WITH_TESTNET_KEYS=""
 
 while [ $# -gt 0 ]; do
@@ -68,6 +70,9 @@ while [ $# -gt 0 ]; do
             if [[ -z "${2:-}" ]]; then exit_usage; fi
             HOSTS_INI_FILENAME="${2}"
             shift
+            ;;
+        --boundary-dev-image)
+            BOUNDARY_IMAGE_TYPE="-dev"
             ;;
         --no-boundary-nodes)
             USE_BOUNDARY_NODES="false"
@@ -154,7 +159,7 @@ MEDIA_PATH="$REPO_ROOT/artifacts/guestos/${deployment}/${GIT_REVISION}"
 BN_MEDIA_PATH="$REPO_ROOT/artifacts/boundary-guestos/${deployment}/${GIT_REVISION}"
 INVENTORY="$REPO_ROOT/testnet/env/$deployment/hosts"
 
-ANSIBLE="ansible-playbook -i $INVENTORY ${ANSIBLE_ARGS[*]} -e ic_git_revision=$GIT_REVISION -e ic_media_path=\"$MEDIA_PATH\""
+ANSIBLE="ansible-playbook -i $INVENTORY ${ANSIBLE_ARGS[*]} -e bn_image_type=\"$BOUNDARY_IMAGE_TYPE\" -e ic_git_revision=$GIT_REVISION -e ic_media_path=\"$MEDIA_PATH\""
 
 # Check if hosts.ini has boundary nodes
 if "$INVENTORY" --list | jq -e ".boundary.hosts | length == 0" >/dev/null; then

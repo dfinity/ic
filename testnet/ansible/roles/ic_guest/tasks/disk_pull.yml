@@ -10,7 +10,7 @@
     declare -A image_cdn=(
       [replica]="${CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
       [generic]="${CDN_URL}/ic/{{ ic_git_revision }}/generic-guest-os/disk-img"
-      [boundary]="${CDN_URL}/ic/{{ ic_git_revision }}/boundary-os/disk-img"
+      [boundary]="${CDN_URL}/ic/{{ ic_git_revision }}/boundary-os/disk-img{{ bn_image_type }}"
     )
 
     declare -A image_dir=(

@@ -7,7 +7,7 @@ set -eo pipefail
 function usage() {
     cat <<EOF
 Usage:
-  build-disk-image -o outfile [-t dev] [-x execdir] [-s]
+  build-disk-image -o outfile [-t dev] [-x execdir]  [-w sw archiv] [-s]
 
   Build whole disk of Boundary Node guest OS VM image.
 
@@ -19,12 +19,13 @@ Usage:
   -x execdir: Set executable source dir. Will take all required IC executables
      from source directory and install it into the correct location before
      building the image; mandatory
-  -s: Set SNP flag to true in order to build SEV-SNP enabled image; optional
+  -w archiv: e.g. service-worker-*.tgz (production or development version is selected based on -t)
+  -s Set SNP flag to true in order to build SEV-SNP enabled image; optional
 EOF
 }
 
 BUILD_TYPE=prod
-while getopts "o:t:v:p:x:s" OPT; do
+while getopts "o:t:v:p:x:w:s" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
@@ -40,6 +41,9 @@ while getopts "o:t:v:p:x:s" OPT; do
             ;;
         x)
             EXEC_SRCDIR="${OPTARG}"
+            ;;
+        w)
+            SW_ARCHIV="${OPTARG}"
             ;;
         s)
             SNP=true
@@ -67,10 +71,9 @@ if [ "${OUT_FILE}" == "" ]; then
     exit 1
 fi
 
-# For the moment we only support prod but soon also dev!
-if [ "${BUILD_TYPE}" != "prod" ]; then
-    echo "Unknown build type: ${BUILD_TYPE}" >&2
-    exit 1
+if [ "${BUILD_TYPE}" != "prod" ] && [ "${BUILD_TYPE}" != "dev" ]; then
+    echo "Unknown build type: ${BUILD_TYPE}; we set to prod" >&2
+    BUILD_TYPE="prod"
 fi
 
 if [ "${VERSION}" == "" ]; then
@@ -87,7 +90,7 @@ if [ "$SNP" = "true" ]; then
     echo "Build SNP enabled image"
     BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.snp")
 else
-    BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
+    BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.prod")
 fi
 
 # Build sev-tool
@@ -120,12 +123,35 @@ done
 
 INSTALL_EXEC_ARGS+=("${EXTERNAL_DIR}/sev-tool/src/sevtool:/opt/ic/bin/sevtool:0755")
 
+if [ "${SW_ARCHIV}" == "" ]; then
+    echo "We use the service worker provided by NPM" >&2
+else
+    declare -a SW_FILES=(
+        "index.html"
+        "install-script.js"
+        "install-script.js.map"
+        "sw.js"
+        "sw.js.map"
+    )
+    mkdir -p ${TMPDIR}/service-worker
+
+    tar xfvz ${SW_ARCHIV} -C ${TMPDIR}/service-worker
+    for SW_FILE in "${SW_FILES[@]}"; do
+        INSTALL_EXEC_ARGS+=("${TMPDIR}/service-worker/package/dist-${BUILD_TYPE}/${SW_FILE}:/var/www/html/${SW_FILE}:0644")
+    done
+fi
+
 echo "${VERSION}" >"${TMPDIR}/version.txt"
 
 # Build all pieces and assemble the disk image.
 
 "${BASE_DIR}"/../bootloader/build-bootloader-tree.sh -o "${TMPDIR}/boot-tree.tar"
-"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
+if [ "${SW_ARCHIV}" == "" ]; then
+    "${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BUILD_TYPE="${BUILD_TYPE}" --build-arg BASE_IMAGE="${BASE_IMAGE}" --build-arg SW="true" "${BASE_DIR}/rootfs"
+else
+    "${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BUILD_TYPE="${BUILD_TYPE}" --build-arg BASE_IMAGE="${BASE_IMAGE}" --build-arg SW="false" "${BASE_DIR}/rootfs"
+fi
+
 "${TOOL_DIR}"/build_vfat_image.py -o "${TMPDIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMPDIR}/boot-tree.tar"
 "${TOOL_DIR}"/build_vfat_image.py -o "${TMPDIR}/partition-grub.tar" -s 100M -p boot/grub -i "${TMPDIR}/boot-tree.tar" \
     "${BASE_DIR}/../bootloader/grub.cfg:/boot/grub/grub.cfg:644" \

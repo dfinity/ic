@@ -1089,7 +1089,7 @@ pub fn sw_test(env: TestEnv) {
             if !body.contains("Loading The Internet Computer Service Worker...") {
                 bail!("{name} failed: expected Service Worker loading page but got {body}")
             }
-            if !body.contains(r#"<script defer="defer" src="/install-script.js">"#) {
+            if !body.contains(r#"<script defer src="/install-script.js">"#) {
                 bail!("{name} failed: expected Service Worker loading page but got {body}")
             }
 
@@ -1115,7 +1115,7 @@ pub fn sw_test(env: TestEnv) {
             if !body.contains("Loading The Internet Computer Service Worker...") {
                 bail!("{name} failed: expected Service Worker loading page but got {body}")
             }
-            if !body.contains(r#"<script defer="defer" src="/install-script.js">"#) {
+            if !body.contains(r#"<script defer src="/install-script.js">"#) {
                 bail!("{name} failed: expected Service Worker loading page but got {body}")
             }
 
