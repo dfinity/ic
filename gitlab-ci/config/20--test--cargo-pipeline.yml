@@ -16,7 +16,7 @@ gen-cargo-pipeline:
       # slots: zh=48 (22%), sf=64 (29%), ch=108 (49%)
       # this tags are required on ci runners
       DCS=(
-          "zh" "zh" "zh" "zh" "zh"
+          "zh" "zh" "zh"
           "sf" "sf" "sf" "sf" "sf" "sf" "sf" "sf" "sf"
           "ch" "ch" "ch" "ch" "ch" "ch" "ch" "ch" "ch" "ch"
       )
