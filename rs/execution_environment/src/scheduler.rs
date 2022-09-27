@@ -46,6 +46,7 @@ use std::{
 mod scheduler_metrics;
 use scheduler_metrics::*;
 mod round_schedule;
+pub use round_schedule::RoundSchedule;
 use round_schedule::*;
 
 /// Maximum number of allowed bitcoin requests per round. If this number is

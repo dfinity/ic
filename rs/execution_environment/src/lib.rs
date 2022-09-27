@@ -40,6 +40,7 @@ use ic_types::{messages::CallContextId, SubnetId};
 use ingress_filter::IngressFilter;
 use query_handler::HttpQueryHandler;
 pub use query_handler::InternalHttpQueryHandler;
+pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
 use std::sync::{Arc, Mutex};
 use tower::limit::GlobalConcurrencyLimitLayer;
