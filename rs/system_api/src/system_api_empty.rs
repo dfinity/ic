@@ -6,7 +6,7 @@ use ic_interfaces::execution_environment::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::PageIndex;
 use ic_sys::PageBytes;
-use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use ic_types::{Cycles, NumBytes, NumInstructions, NumPages, Time};
 
 const MESSAGE_UNIMPLEMENTED: &str =
     "Empty System API should not be called. Only used by the embedder to create an ExecutionState instance";
@@ -187,7 +187,7 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_stable_read(&self, _: u32, _: u32, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn ic0_stable_write(&mut self, _: u32, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
+    fn ic0_stable_write(&mut self, _: u32, _: u32, _: u32, _: &[u8]) -> HypervisorResult<NumPages> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
@@ -199,7 +199,13 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_stable64_read(&self, _: u64, _: u64, _: u64, _: &mut [u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn ic0_stable64_write(&mut self, _: u64, _: u64, _: u64, _: &[u8]) -> HypervisorResult<()> {
+    fn ic0_stable64_write(
+        &mut self,
+        _: u64,
+        _: u64,
+        _: u64,
+        _: &[u8],
+    ) -> HypervisorResult<NumPages> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_time(&self) -> HypervisorResult<Time> {

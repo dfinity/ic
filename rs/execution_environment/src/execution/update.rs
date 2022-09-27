@@ -21,6 +21,9 @@ use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
 
+#[cfg(test)]
+mod tests;
+
 // Execute an inter-canister request or an ingress update message.
 #[allow(clippy::too_many_arguments)]
 pub fn execute_update(

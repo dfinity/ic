@@ -488,7 +488,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_total_memory(100 * 1024 * 1024)
         .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_slice_instruction_limit(2_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -517,7 +517,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
                         .message_payload()
                         .append_and_reply(),
                 ),
-            (0, 1000),
+            (0, 2000),
         )
         .build();
 

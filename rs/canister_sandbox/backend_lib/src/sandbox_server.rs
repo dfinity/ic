@@ -170,12 +170,14 @@ mod tests {
     use std::sync::{Arc, Condvar, Mutex};
     use wabt::wat2wasm;
 
+    const INSTRUCTION_LIMIT: u64 = 100_000;
+
     fn execution_parameters() -> ExecutionParameters {
         ExecutionParameters {
             instruction_limits: InstructionLimits::new(
                 FlagStatus::Disabled,
-                NumInstructions::new(1000),
-                NumInstructions::new(1000),
+                NumInstructions::new(INSTRUCTION_LIMIT),
+                NumInstructions::new(INSTRUCTION_LIMIT),
             ),
             canister_memory_limit: NumBytes::new(4 << 30),
             compute_allocation: ComputeAllocation::default(),
@@ -589,7 +591,10 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(1000));
+        assert!(
+            result.exec_output.wasm.num_instructions_left
+                < NumInstructions::from(INSTRUCTION_LIMIT)
+        );
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         let globals = result.exec_output.state.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
@@ -610,7 +615,10 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(1000));
+        assert!(
+            result.exec_output.wasm.num_instructions_left
+                < NumInstructions::from(INSTRUCTION_LIMIT)
+        );
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
     }
@@ -811,7 +819,10 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(1000));
+        assert!(
+            result.exec_output.wasm.num_instructions_left
+                < NumInstructions::from(INSTRUCTION_LIMIT)
+        );
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         let globals = result.exec_output.state.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
@@ -848,7 +859,10 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(1000));
+        assert!(
+            result.exec_output.wasm.num_instructions_left
+                < NumInstructions::from(INSTRUCTION_LIMIT)
+        );
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         let globals = result.exec_output.state.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);

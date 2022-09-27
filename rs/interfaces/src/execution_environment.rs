@@ -15,7 +15,7 @@ use ic_types::{
         AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, HttpQueryResponse,
         MessageId, SignedIngressContent, UserQuery,
     },
-    Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -616,13 +616,14 @@ pub trait SystemApi {
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly
     /// memory or offset+size exceeds the size of the stable memory.
+    /// Returns the number of **new** dirty pages created by the write.
     fn ic0_stable_write(
         &mut self,
         offset: u32,
         src: u32,
         size: u32,
         heap: &[u8],
-    ) -> HypervisorResult<()>;
+    ) -> HypervisorResult<NumPages>;
 
     /// Returns the current size of the stable memory in WebAssembly pages.
     ///
@@ -659,13 +660,14 @@ pub trait SystemApi {
     /// memory or offset+size exceeds the size of the stable memory.
     ///
     /// It supports bigger stable memory sizes indexed by 64 bit pointers.
+    /// Returns the number of **new** dirty pages created by the write.
     fn ic0_stable64_write(
         &mut self,
         offset: u64,
         src: u64,
         size: u64,
         heap: &[u8],
-    ) -> HypervisorResult<()>;
+    ) -> HypervisorResult<NumPages>;
 
     fn ic0_time(&self) -> HypervisorResult<Time>;
 

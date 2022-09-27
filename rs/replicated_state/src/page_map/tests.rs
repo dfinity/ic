@@ -4,7 +4,7 @@ use super::{
     Buffer, FileDescriptor, PageAllocator, PageDelta, PageIndex, PageMap, PageMapSerialization,
 };
 use ic_sys::PAGE_SIZE;
-use ic_types::Height;
+use ic_types::{Height, NumPages};
 use nix::unistd::dup;
 use std::fs::OpenOptions;
 
@@ -292,4 +292,40 @@ fn write_amplification_is_calculated_correctly() {
 
     // Maximum gap is respected
     assert_eq!(delta.write_amplification_to_gap(50, 100.0), 50);
+}
+
+/// Complete re-write of first page is dirty, later write doesn't increase
+/// count.
+#[test]
+fn buffer_entire_first_page_write() {
+    let mut buf = Buffer::new(PageMap::new());
+    assert_eq!(NumPages::from(1), buf.write(&[0; PAGE_SIZE], 0));
+    assert_eq!(NumPages::from(0), buf.write(&[0; 1], 1));
+}
+
+/// Single write to first page is dirty, later write doesn't increase count.
+#[test]
+fn buffer_single_byte_first_page_write() {
+    let mut buf = Buffer::new(PageMap::new());
+    assert_eq!(NumPages::from(1), buf.write(&[0; 1], 0));
+    assert_eq!(NumPages::from(0), buf.write(&[0; 1], 1));
+}
+
+#[test]
+fn buffer_write_single_byte_each_page() {
+    let mut buf = Buffer::new(PageMap::new());
+    assert_eq!(NumPages::from(1), buf.write(&[0; 1], 0));
+    assert_eq!(NumPages::from(1), buf.write(&[0; 1], PAGE_SIZE));
+    assert_eq!(NumPages::from(1), buf.write(&[0; 1], 2 * PAGE_SIZE));
+    assert_eq!(NumPages::from(1), buf.write(&[0; 1], 15 * PAGE_SIZE));
+}
+
+#[test]
+fn buffer_write_unaligned_multiple_pages() {
+    const NUM_PAGES: u64 = 3;
+    let mut buf = Buffer::new(PageMap::new());
+    assert_eq!(
+        NumPages::from(NUM_PAGES + 1),
+        buf.write(&[0; (NUM_PAGES as usize) * PAGE_SIZE], 24)
+    );
 }
