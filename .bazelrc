@@ -14,6 +14,7 @@ build --experimental_remote_cache_async
 build --incompatible_remote_build_event_upload_respect_no_cache
 build --noremote_upload_local_results # Whether to upload locally executed action results to the remote cache.
 build --remote_timeout=30s # Defauilt is 60s.
+build:ci --remote_timeout=5m # Defauilt is 60s.
 
 build --execution_log_json_file=bazel-build-log.json
 
