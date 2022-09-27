@@ -9,7 +9,7 @@ use prometheus::{Gauge, Histogram, IntCounter, IntGauge, IntGaugeVec};
 
 use crate::metrics::{
     cycles_histogram, duration_histogram, instructions_histogram, memory_histogram,
-    messages_histogram, ScopedMetrics,
+    messages_histogram, slices_histogram, ScopedMetrics,
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
@@ -260,6 +260,11 @@ impl SchedulerMetrics {
                     "The number of instructions executed in an execution round",
                     metrics_registry,
                 ),
+                slices: slices_histogram(
+                    "execution_round_slices",
+                    "The number of slices executed in an execution round",
+                    metrics_registry,
+                ),
                 messages: messages_histogram(
                     "execution_round_messages",
                     "The number of messages executed in an execution round",
@@ -295,6 +300,12 @@ impl SchedulerMetrics {
                           queue processing in an execution round",
                     metrics_registry,
                 ),
+                slices: slices_histogram(
+                    "execution_round_consensus_queue_slices",
+                    "The number of slices executed during consensus \
+                          queue processing in an execution round",
+                    metrics_registry,
+                ),
                 messages: messages_histogram(
                     "execution_round_consensus_queue_messages",
                     "The number of messages executed during consensus \
@@ -312,6 +323,12 @@ impl SchedulerMetrics {
                 instructions: instructions_histogram(
                     "execution_round_subnet_queue_instructions",
                     "The number of instructions executed during subnet \
+                          queue processing in an execution round",
+                    metrics_registry,
+                ),
+                slices: slices_histogram(
+                    "execution_round_subnet_queue_slices",
+                    "The number of slices executed during subnet \
                           queue processing in an execution round",
                     metrics_registry,
                 ),
@@ -338,6 +355,11 @@ impl SchedulerMetrics {
                     "The number of instructions executed in an inner round",
                     metrics_registry,
                 ),
+                slices: slices_histogram(
+                    "execution_round_inner_slices",
+                    "The number of slices executed in an inner round",
+                    metrics_registry,
+                ),
                 messages: messages_histogram(
                     "execution_round_inner_messages",
                     "The number of messages executed in an inner round",
@@ -358,6 +380,11 @@ impl SchedulerMetrics {
                 instructions: instructions_histogram(
                     "execution_round_inner_iteration_instructions",
                     "The number of instructions executed in an iteration of an inner round",
+                    metrics_registry,
+                ),
+                slices: slices_histogram(
+                    "execution_round_inner_iteration_slices",
+                    "The number of messages executed in an iteration of an inner round",
                     metrics_registry,
                 ),
                 messages: messages_histogram(
@@ -384,6 +411,12 @@ impl SchedulerMetrics {
                           by an iteration of an inner round",
                     metrics_registry,
                 ),
+                slices: slices_histogram(
+                    "execution_round_inner_iteration_thread_slices",
+                    "The number of messages executed in a thread spawned \
+                          by an iteration of an inner round",
+                    metrics_registry,
+                ),
                 messages: messages_histogram(
                     "execution_round_inner_iteration_thread_messages",
                     "The number of messages executed in a thread spawned \
@@ -402,6 +435,12 @@ impl SchedulerMetrics {
                     "execution_round_inner_iteration_thread_message_instructions",
                     "The number of instructions executed in a message \
                           in a thread spawned by an iteration of an inner round",
+                    metrics_registry,
+                ),
+                slices: slices_histogram(
+                    "execution_round_inner_iteration_thread_message_slices",
+                    "The number of slices executed in a message in a \
+                          thread spawned by an iteration of an inner round",
                     metrics_registry,
                 ),
                 messages: messages_histogram(

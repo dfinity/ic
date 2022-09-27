@@ -3814,9 +3814,17 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
         test.scheduler()
             .metrics
             .round_subnet_queue
-            .messages
+            .slices
             .get_sample_sum(),
         1.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_subnet_queue
+            .messages
+            .get_sample_sum(),
+        0.0
     );
 
     // Add a second canister with a long install code message.
@@ -3840,9 +3848,17 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
         test.scheduler()
             .metrics
             .round_subnet_queue
+            .slices
+            .get_sample_sum(),
+        2.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_subnet_queue
             .messages
             .get_sample_sum(),
-        1.0
+        0.0
     );
 
     // Third round: execution for first canister is done.
@@ -3850,6 +3866,14 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert!(!test.canister_state(canister_1).has_paused_install_code());
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_subnet_queue
+            .slices
+            .get_sample_sum(),
+        4.0
+    );
     assert_eq!(
         test.scheduler()
             .metrics

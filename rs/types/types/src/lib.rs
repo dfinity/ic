@@ -185,6 +185,10 @@ pub struct NumMessagesTag;
 /// Represents the number of messages.
 pub type NumMessages = AmountOf<NumMessagesTag, u64>;
 
+pub struct NumSlicesTag;
+/// Represents the number of slices.
+pub type NumSlices = AmountOf<NumSlicesTag, u64>;
+
 pub struct QueueIndexTag;
 /// Index into a queue; used in the context of `InputQueue` / `OutputQueue` to
 /// define message order.

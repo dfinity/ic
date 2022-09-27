@@ -31,7 +31,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{Ingress, MessageId},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode, MemoryAllocation,
-    NumBytes, NumInstructions, Randomness, SubnetId, Time,
+    NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
@@ -292,7 +292,7 @@ impl SchedulerImpl {
                 self.config.max_instructions_per_install_code_slice,
             );
             let instructions_before = round_limits.instructions;
-            let (new_state, _instructions_used) = self.exec_env.resume_install_code(
+            let (new_state, message_instructions) = self.exec_env.resume_install_code(
                 state,
                 canister_id,
                 instruction_limits,
@@ -306,7 +306,9 @@ impl SchedulerImpl {
 
             let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
-            measurement_scope.add(round_instructions_executed, NumMessages::from(0));
+
+            let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
+            measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
 
             // Break when reached the instructions limit or
             // found a canister that has a long install code message in progress.
@@ -361,7 +363,7 @@ impl SchedulerImpl {
                 }
 
                 let instructions_before = round_limits.instructions;
-                let (new_state, _instructions_used) = self.exec_env.execute_subnet_message(
+                let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
                     msg,
                     state,
                     instruction_limits,
@@ -373,7 +375,8 @@ impl SchedulerImpl {
                 state = new_state;
                 let round_instructions_executed =
                     as_num_instructions(instructions_before - round_limits.instructions);
-                measurement_scope.add(round_instructions_executed, NumMessages::from(1));
+                let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
+                measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
                 if round_limits.instructions <= RoundInstructions::from(0) {
                     break;
                 }
@@ -710,7 +713,11 @@ impl SchedulerImpl {
 
             // Propagate the metrics from `execution_round_inner_iteration_thread`
             // to `execution_round_inner_iteration`.
-            measurement_scope.add(instructions_executed, result.messages_executed);
+            measurement_scope.add(
+                instructions_executed,
+                result.slices_executed,
+                result.messages_executed,
+            );
             heap_delta += result.heap_delta;
         }
 
@@ -1213,7 +1220,7 @@ impl Scheduler for SchedulerImpl {
                     self.config.max_instructions_per_slice,
                 );
                 let instructions_before = round_limits.instructions;
-                let (new_state, _instructions_used) = self.exec_env.execute_subnet_message(
+                let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
                     CanisterInputMessage::Response(response.into()),
                     state,
                     instruction_limits,
@@ -1225,7 +1232,8 @@ impl Scheduler for SchedulerImpl {
                 state = new_state;
                 let round_instructions_executed =
                     as_num_instructions(instructions_before - round_limits.instructions);
-                measurement_scope.add(round_instructions_executed, NumMessages::from(1));
+                let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
+                measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
                 if round_limits.instructions <= RoundInstructions::from(0) {
                     break;
                 }
@@ -1476,6 +1484,7 @@ fn observe_instructions_consumed_per_message(
 struct ExecutionThreadResult {
     canisters: Vec<CanisterState>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
+    slices_executed: NumSlices,
     messages_executed: NumMessages,
     heap_delta: NumBytes,
     round_limits: RoundLimits,
@@ -1509,6 +1518,7 @@ fn execute_canisters_on_thread(
     // These variables accumulate the results and will be returned at the end.
     let mut canisters = vec![];
     let mut ingress_results = vec![];
+    let mut total_slices_executed = NumSlices::from(0);
     let mut total_messages_executed = NumMessages::from(0);
     let mut total_heap_delta = NumBytes::from(0);
 
@@ -1574,18 +1584,22 @@ fn execute_canisters_on_thread(
             ingress_results.extend(ingress_status);
             let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
-            measurement_scope.add(round_instructions_executed, NumMessages::from(1));
-            observe_instructions_consumed_per_message(
-                &logger,
-                &metrics,
-                &new_canister,
-                instructions_used,
-                instruction_limits.message(),
-            );
+            let messages = NumMessages::from(instructions_used.map(|_| 1).unwrap_or(0));
+            measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
+            if let Some(instructions_used) = instructions_used {
+                total_messages_executed.inc_assign();
+                observe_instructions_consumed_per_message(
+                    &logger,
+                    &metrics,
+                    &new_canister,
+                    instructions_used,
+                    instruction_limits.message(),
+                );
+            }
+            total_slices_executed.inc_assign();
             canister = new_canister;
             round_limits.instructions -=
                 as_round_instructions(config.instruction_overhead_per_message);
-            total_messages_executed.inc_assign();
             total_heap_delta += heap_delta;
             if rate_limiting_of_heap_delta == FlagStatus::Enabled {
                 canister.scheduler_state.heap_delta_debit += heap_delta;
@@ -1624,6 +1638,7 @@ fn execute_canisters_on_thread(
     ExecutionThreadResult {
         canisters,
         ingress_results,
+        slices_executed: total_slices_executed,
         messages_executed: total_messages_executed,
         heap_delta: total_heap_delta,
         round_limits,
