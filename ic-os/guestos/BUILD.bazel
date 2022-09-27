@@ -1,4 +1,4 @@
-load("//bazel:artifacts.bzl", "upload_artifacts", "urls_test")
+load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts", "urls_test")
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "summary_sha256sum", "tar_extract", "upgrade_image")
 
 docker_tar(
