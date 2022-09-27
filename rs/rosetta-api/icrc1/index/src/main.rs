@@ -1,4 +1,5 @@
 use candid::candid_method;
+use dfn_core::CanisterId;
 use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::Subaccount;
 use ic_icrc1_index::{
@@ -27,6 +28,12 @@ async fn get_account_transactions(args: GetAccountTransactionsArgs) -> GetTransa
 #[candid_method(query)]
 fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     ic_icrc1_index::list_subaccounts(args)
+}
+
+#[query]
+#[candid_method(query)]
+fn ledger_id() -> CanisterId {
+    ic_icrc1_index::ledger_id()
 }
 
 #[export_name = "canister_query http_request"]

@@ -263,6 +263,16 @@ fn list_subaccounts(
     .expect("failed to decode list_subaccounts response")
 }
 
+fn index_ledger_id(env: &StateMachine, index: CanisterId) -> CanisterId {
+    Decode!(
+        &env.query(index, "ledger_id", Encode!().unwrap())
+            .expect("Unable to query ledger_id from index")
+            .bytes(),
+        CanisterId
+    )
+    .expect("failed to decode ledger_id response")
+}
+
 fn account(n: u64) -> Account {
     Account {
         owner: PrincipalId::new_user_test_id(n),
@@ -292,6 +302,8 @@ fn test() {
     let ledger_id = install_ledger(&env, initial_balances);
 
     let index_id = install_index(&env, ledger_id);
+
+    assert_eq!(ledger_id, index_ledger_id(&env, index_id));
 
     env.run_until_completion(10_000);
 
