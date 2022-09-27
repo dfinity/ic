@@ -37,7 +37,7 @@ pub(super) struct SchedulingOrder<P, N, R> {
 /// during the whole current round.
 /// TODO(RUN-320): remove, as it's not required for regular partitioning
 #[derive(Debug, Default)]
-pub(super) struct RoundSchedule {
+pub struct RoundSchedule {
     /// Total number of scheduler cores.
     pub scheduler_cores: usize,
     /// Number of cores dedicated for long executions.
@@ -49,7 +49,7 @@ pub(super) struct RoundSchedule {
 }
 
 impl RoundSchedule {
-    pub(super) fn new(
+    pub fn new(
         scheduler_cores: usize,
         long_execution_cores: usize,
         ordered_new_execution_canister_ids: Vec<CanisterId>,
@@ -102,7 +102,7 @@ impl RoundSchedule {
 
     /// Returns a round schedule covering active canisters only; and the set of
     /// rate limited canisters.
-    pub(super) fn filter_canisters(
+    pub fn filter_canisters(
         &self,
         canisters: &BTreeMap<CanisterId, CanisterState>,
         heap_delta_rate_limit: NumBytes,
