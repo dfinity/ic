@@ -12,7 +12,9 @@ use ic_embedders::wasm_executor::{
 };
 use ic_embedders::{CompilationCache, CompilationResult, WasmExecutionInput};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
-use ic_logger::{error, warn, ReplicaLogger};
+#[cfg(target_os = "linux")]
+use ic_logger::warn;
+use ic_logger::{error, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
@@ -21,8 +23,11 @@ use ic_replicated_state::canister_state::execution_state::{
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+#[cfg(target_os = "linux")]
+use prometheus::IntGauge;
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::collections::{HashMap, VecDeque};
+#[cfg(target_os = "linux")]
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::process::ExitStatus;
@@ -35,6 +40,7 @@ use crate::active_execution_state_registry::{ActiveExecutionStateRegistry, Compl
 use crate::controller_service_impl::ControllerServiceImpl;
 use crate::launch_as_process::{create_sandbox_process, spawn_launcher_process};
 use crate::process_exe_and_args::{create_launcher_argv, create_sandbox_argv};
+#[cfg(target_os = "linux")]
 use crate::process_os_metrics;
 
 const SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION: Duration = Duration::from_secs(60);
@@ -60,10 +66,15 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_sandbox_execute_duration: HistogramVec,
     sandboxed_execution_sandbox_execute_run_duration: HistogramVec,
     sandboxed_execution_spawn_process: Histogram,
+    #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_anon_rss_total: IntGauge,
+    #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_memfd_rss_total: IntGauge,
+    #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_anon_rss: Histogram,
+    #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_memfd_rss: Histogram,
+    #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_rss: Histogram,
     sandboxed_execution_subprocess_active_last_used: Histogram,
     sandboxed_execution_subprocess_evicted_last_used: Histogram,
@@ -122,24 +133,29 @@ impl SandboxedExecutionMetrics {
                 "The time to spawn a sandbox process",
                 decimal_buckets_with_zero(-4, 1),
             ),
+            #[cfg(target_os = "linux")]
             sandboxed_execution_subprocess_anon_rss_total: metrics_registry.int_gauge(
                 "sandboxed_execution_subprocess_anon_rss_total_kib",
                 "The resident anonymous memory for all canister sandbox processes in KiB",
             ),
+            #[cfg(target_os = "linux")]
             sandboxed_execution_subprocess_memfd_rss_total: metrics_registry.int_gauge(
                 "sandboxed_execution_subprocess_memfd_rss_total_kib",
                 "The resident shared memory for all canister sandbox processes in KiB"
             ),
+            #[cfg(target_os = "linux")]
             sandboxed_execution_subprocess_anon_rss: metrics_registry.histogram(
                 "sandboxed_execution_subprocess_anon_rss_kib",
                 "The resident anonymous memory for a canister sandbox process in KiB",
                 decimal_buckets_with_zero(1, 7), // 10KiB - 50GiB.
             ),
+            #[cfg(target_os = "linux")]
             sandboxed_execution_subprocess_memfd_rss: metrics_registry.histogram(
                 "sandboxed_execution_subprocess_memfd_rss_kib",
                 "The resident shared memory for a canister sandbox process in KiB",
                 decimal_buckets_with_zero(1, 7), // 10KiB - 50GiB.
             ),
+            #[cfg(target_os = "linux")]
             sandboxed_execution_subprocess_rss: metrics_registry.histogram(
                 "sandboxed_execution_subprocess_rss_kib",
                 "The resident memory of a canister sandbox process in KiB",
@@ -802,63 +818,90 @@ impl SandboxedExecutionController {
     // - evict inactive processes,
     // - update memory usage metrics.
     fn monitor_and_evict_sandbox_processes(
-        logger: ReplicaLogger,
+        // `logger` isn't used on MacOS.
+        #[allow(unused_variables)] logger: ReplicaLogger,
         backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
         metrics: Arc<SandboxedExecutionMetrics>,
     ) {
         loop {
             let sandbox_processes = scavenge_sandbox_processes(&backends);
 
-            let mut total_anon_rss: u64 = 0;
-            let mut total_memfd_rss: u64 = 0;
+            #[cfg(target_os = "linux")]
+            {
+                let mut total_anon_rss: u64 = 0;
+                let mut total_memfd_rss: u64 = 0;
 
-            // For all processes requested, get their memory usage and report
-            // it keyed by pid. Ignore processes failures to get
-            for (sandbox_process, stats) in &sandbox_processes {
-                let pid = sandbox_process.pid;
-                let mut process_rss = 0;
-                if let Ok(kib) = process_os_metrics::get_anon_rss(pid) {
-                    total_anon_rss += kib;
-                    process_rss += kib;
-                    metrics
-                        .sandboxed_execution_subprocess_anon_rss
-                        .observe(kib as f64);
-                } else {
-                    warn!(logger, "Unable to get anon RSS for pid {}", pid);
-                }
-                if let Ok(kib) = process_os_metrics::get_memfd_rss(pid) {
-                    total_memfd_rss += kib;
-                    process_rss += kib;
-                    metrics
-                        .sandboxed_execution_subprocess_memfd_rss
-                        .observe(kib as f64);
-                } else {
-                    warn!(logger, "Unable to get memfd RSS for pid {}", pid);
-                }
-                metrics
-                    .sandboxed_execution_subprocess_rss
-                    .observe(process_rss as f64);
-                match stats.status {
-                    SandboxProcessStatus::Active => {
+                // For all processes requested, get their memory usage and report
+                // it keyed by pid. Ignore processes failures to get
+                for (sandbox_process, stats) in &sandbox_processes {
+                    let pid = sandbox_process.pid;
+                    let mut process_rss = 0;
+                    if let Ok(kib) = process_os_metrics::get_anon_rss(pid) {
+                        total_anon_rss += kib;
+                        process_rss += kib;
                         metrics
-                            .sandboxed_execution_subprocess_active_last_used
-                            .observe(stats.time_since_last_usage.as_secs_f64());
+                            .sandboxed_execution_subprocess_anon_rss
+                            .observe(kib as f64);
+                    } else {
+                        warn!(logger, "Unable to get anon RSS for pid {}", pid);
                     }
-                    SandboxProcessStatus::Evicted => {
+                    if let Ok(kib) = process_os_metrics::get_memfd_rss(pid) {
+                        total_memfd_rss += kib;
+                        process_rss += kib;
                         metrics
-                            .sandboxed_execution_subprocess_evicted_last_used
-                            .observe(stats.time_since_last_usage.as_secs_f64());
+                            .sandboxed_execution_subprocess_memfd_rss
+                            .observe(kib as f64);
+                    } else {
+                        warn!(logger, "Unable to get memfd RSS for pid {}", pid);
+                    }
+                    metrics
+                        .sandboxed_execution_subprocess_rss
+                        .observe(process_rss as f64);
+                    match stats.status {
+                        SandboxProcessStatus::Active => {
+                            metrics
+                                .sandboxed_execution_subprocess_active_last_used
+                                .observe(stats.time_since_last_usage.as_secs_f64());
+                        }
+                        SandboxProcessStatus::Evicted => {
+                            metrics
+                                .sandboxed_execution_subprocess_evicted_last_used
+                                .observe(stats.time_since_last_usage.as_secs_f64());
+                        }
+                    }
+                }
+
+                metrics
+                    .sandboxed_execution_subprocess_anon_rss_total
+                    .set(total_anon_rss.try_into().unwrap());
+
+                metrics
+                    .sandboxed_execution_subprocess_memfd_rss_total
+                    .set(total_memfd_rss.try_into().unwrap());
+            }
+
+            // We don't need to record memory metrics on non-linux systems.  And
+            // the functions to get memory usage use `proc` so they won't work
+            // on macos anyway.
+            #[cfg(not(target_os = "linux"))]
+            {
+                // For all processes requested, get their memory usage and report
+                // it keyed by pid. Ignore processes failures to get
+                for (_sandbox_process, stats) in &sandbox_processes {
+                    match stats.status {
+                        SandboxProcessStatus::Active => {
+                            metrics
+                                .sandboxed_execution_subprocess_active_last_used
+                                .observe(stats.time_since_last_usage.as_secs_f64());
+                        }
+                        SandboxProcessStatus::Evicted => {
+                            metrics
+                                .sandboxed_execution_subprocess_evicted_last_used
+                                .observe(stats.time_since_last_usage.as_secs_f64());
+                        }
                     }
                 }
             }
-
-            metrics
-                .sandboxed_execution_subprocess_anon_rss_total
-                .set(total_anon_rss.try_into().unwrap());
-
-            metrics
-                .sandboxed_execution_subprocess_memfd_rss_total
-                .set(total_memfd_rss.try_into().unwrap());
 
             // Scavenge and collect metrics sufficiently infrequently that it
             // does not use excessive compute resources. It might be sensible to
