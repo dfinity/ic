@@ -517,12 +517,12 @@ pub fn denylist_test(env: TestEnv) {
         info!(&logger, "created canister={canister_id}");
 
         // Update the denylist and reload nginx
-        let denylist_command = format!(r#"printf "{} 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map && sudo service nginx reload"#, canister_id);
+        let denylist_command = format!(r#"printf "\"~^{} .*$\" \"1\";\n" | sudo tee /var/opt/nginx/denylist/denylist.map && sudo service nginx reload"#, canister_id);
         let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &denylist_command).unwrap();
         info!(
             logger,
-            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command} to '{}'. Exit status = {}",
-            cmd_output.trim(),
+            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command} to \n'{}'\n. Exit status = {}",
+            cmd_output,
             exit_status,
         );
 
@@ -549,6 +549,7 @@ pub fn denylist_test(env: TestEnv) {
             if res != reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
                 bail!(res)
             }
+
 
             Ok(())
         }).await.unwrap();
@@ -626,7 +627,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
         let (cmd_output, exit_status) = exec_ssh_command(
             &boundary_node_vm,
             &format!(
-                r#"printf "{} 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map"#,
+                r#"printf "\"~^{} .*$\" 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map"#,
                 canister_id
             ),
         )
