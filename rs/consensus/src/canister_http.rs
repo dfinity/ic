@@ -376,7 +376,14 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             let response_candidates = response_candidates
                 .iter()
                 // Filter out groups that don't have enough shares to have consensus
-                .filter(|(_, shares)| shares.len() >= threshold)
+                .filter(|(_, shares)| {
+                    shares
+                        .iter()
+                        .map(|share| share.signer)
+                        .collect::<BTreeSet<_>>()
+                        .len()
+                        >= threshold
+                })
                 // Fetch the associated content
                 .filter_map(|(metadata, shares)| {
                     pool_access
@@ -853,6 +860,44 @@ mod tests {
         });
     }
 
+    #[test]
+    fn multiple_share_same_source_test() {
+        test_config_with_http_feature(10, |payload_builder, canister_http_pool| {
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+
+                let (response, metadata) = test_response_and_metadata(1);
+
+                let shares = metadata_to_shares(10, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+
+                // Ensure that multiple shares from a single source does not result in inclusion
+                add_received_shares_to_pool(
+                    pool_access.deref_mut(),
+                    (0..10_u8)
+                        .map(|i| metadata_to_share_with_signature(7, &metadata, vec![i]))
+                        .collect(),
+                );
+            }
+
+            let validation_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: mock_time() + Duration::from_secs(3),
+            };
+
+            // Build a payload
+            let payload = payload_builder.get_canister_http_payload(
+                Height::new(1),
+                &validation_context,
+                &[],
+                NumBytes::new(4 * 1024 * 1024),
+            );
+
+            assert_eq!(payload.num_responses(), 0);
+        });
+    }
+
     /// Submit a very large number of valid resonses, then check that the
     /// payload builder does not all of them but only CANISTER_HTTP_RESPONSES_PER_BLOCK
     #[test]
@@ -1118,10 +1163,18 @@ mod tests {
         from_node: u64,
         metadata: &CanisterHttpResponseMetadata,
     ) -> CanisterHttpResponseShare {
+        metadata_to_share_with_signature(from_node, metadata, vec![])
+    }
+
+    fn metadata_to_share_with_signature(
+        from_node: u64,
+        metadata: &CanisterHttpResponseMetadata,
+        signature: Vec<u8>,
+    ) -> CanisterHttpResponseShare {
         Signed {
             content: metadata.clone(),
             signature: BasicSignature {
-                signature: BasicSigOf::new(BasicSig(vec![])),
+                signature: BasicSigOf::new(BasicSig(signature)),
                 signer: node_test_id(from_node),
             },
         }
