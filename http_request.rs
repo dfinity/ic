@@ -1,8 +1,72 @@
 //! Canister HTTP request.
 
 use crate::api::call::{call_with_payment128, CallResult};
-use candid::{CandidType, Principal};
+use candid::{
+    parser::types::FuncMode,
+    types::{Function, Serializer, Type},
+    CandidType, Principal,
+};
+use core::hash::Hash;
 use serde::{Deserialize, Serialize};
+
+/// "transform" function of type: `func (http_response) -> (http_response) query`
+#[derive(Deserialize, Debug, PartialEq, Clone)]
+pub struct TransformFunc(pub candid::Func);
+
+impl CandidType for TransformFunc {
+    fn _ty() -> Type {
+        Type::Func(Function {
+            modes: vec![FuncMode::Query],
+            args: vec![HttpResponse::ty()],
+            rets: vec![HttpResponse::ty()],
+        })
+    }
+
+    fn idl_serialize<S: Serializer>(&self, serializer: S) -> Result<(), S::Error> {
+        serializer.serialize_function(self.0.principal.as_slice(), &self.0.method)
+    }
+}
+
+/// "transform" reference function type:
+/// `opt variant { function: func (http_response) -> (http_response) query }`
+#[derive(CandidType, Deserialize, Debug, PartialEq, Clone)]
+pub enum TransformType {
+    /// reference function with signature: `func (http_response) -> (http_response) query`
+    #[serde(rename = "function")]
+    Function(TransformFunc),
+}
+
+impl TransformType {
+    /// Construct `TransformType` from a transform function.
+    ///
+    /// # example
+    ///
+    /// ```ignore
+    /// #[ic_cdk_macros::query]
+    /// fn my_transform(arg: HttpResponse) -> HttpResponse {
+    ///     ...
+    /// }
+    ///
+    /// let transform = TransformType::from_transform_function(my_transform);
+    /// ```
+    pub fn from_transform_function<T>(func: T) -> Self
+    where
+        T: Fn(HttpResponse) -> HttpResponse,
+    {
+        Self::Function(TransformFunc(candid::Func {
+            principal: crate::id(),
+            method: get_function_name(func).to_string(),
+        }))
+    }
+}
+
+fn get_function_name<F>(_: F) -> &'static str {
+    let full_name = std::any::type_name::<F>();
+    match full_name.rfind(':') {
+        Some(index) => &full_name[index + 1..],
+        None => full_name,
+    }
+}
 
 /// HTTP header.
 #[derive(
@@ -23,32 +87,31 @@ pub struct HttpHeader {
 )]
 pub enum HttpMethod {
     /// GET
+    #[serde(rename = "get")]
     GET,
     /// POST
+    #[serde(rename = "post")]
     POST,
     /// HEAD
+    #[serde(rename = "head")]
     HEAD,
 }
 
 /// Argument type of [http_request].
-#[derive(
-    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
-)]
+#[derive(CandidType, Deserialize, Debug, PartialEq, Clone)]
 pub struct CanisterHttpRequestArgument {
     /// The requested URL.
     pub url: String,
     /// The maximal size of the response in bytes. If None, 2MiB will be the limit.
     pub max_response_bytes: Option<u64>,
-    // TODO: Different name in the Spec.
     /// The method of HTTP request.
-    pub http_method: HttpMethod,
+    pub method: HttpMethod,
     /// List of HTTP request headers and their corresponding values.
     pub headers: Vec<HttpHeader>,
     /// Optionally provide request body.
     pub body: Option<Vec<u8>>,
-    // TODO: Here is a discrepancy between System API and the implementation.
     /// Name of the transform function which is `func (http_response) -> (http_response) query`.
-    pub transform_method_name: Option<String>,
+    pub transform: Option<TransformType>,
 }
 
 /// The returned HTTP response.
@@ -56,9 +119,8 @@ pub struct CanisterHttpRequestArgument {
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
 )]
 pub struct HttpResponse {
-    // TODO: Different type in the Spec.
     /// The response status (e.g., 200, 404).
-    pub status: u64,
+    pub status: candid::Nat,
     /// List of HTTP response headers and their corresponding values.
     pub headers: Vec<HttpHeader>,
     /// The response’s body.
@@ -103,12 +165,12 @@ mod tests {
         let arg = CanisterHttpRequestArgument {
             url,
             max_response_bytes: Some(3000),
-            http_method: HttpMethod::GET,
+            method: HttpMethod::GET,
             headers: vec![],
             body: None,
-            transform_method_name: None,
+            transform: None,
         };
-        assert_eq!(http_request_required_cycles(&arg), 713100000u128);
+        assert_eq!(http_request_required_cycles(&arg), 716500000u128);
     }
 
     #[test]
@@ -117,11 +179,17 @@ mod tests {
         let arg = CanisterHttpRequestArgument {
             url,
             max_response_bytes: None,
-            http_method: HttpMethod::GET,
+            method: HttpMethod::GET,
             headers: vec![],
             body: None,
-            transform_method_name: None,
+            transform: None,
         };
-        assert_eq!(http_request_required_cycles(&arg), 210127500000u128);
+        assert_eq!(http_request_required_cycles(&arg), 210130900000u128);
+    }
+
+    #[test]
+    fn get_function_name_work() {
+        fn func() {}
+        assert_eq!(get_function_name(func), "func");
     }
 }

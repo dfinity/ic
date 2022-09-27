@@ -45,13 +45,16 @@ pub struct UpdateSettingsArgument {
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy,
 )]
-#[serde(rename_all = "lowercase")]
+// #[serde(rename_all = "lowercase")]
 pub enum CanisterInstallMode {
     /// A fresh install of a new canister.
+    #[serde(rename = "install")]
     Install,
     /// Reinstalling a canister that was already installed.
+    #[serde(rename = "reinstall")]
     Reinstall,
     /// Upgrade an existing canister.
+    #[serde(rename = "upgrade")]
     Upgrade,
 }
 
@@ -86,13 +89,16 @@ pub struct CanisterIdRecord {
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy,
 )]
-#[serde(rename_all = "lowercase")]
+// #[serde(rename_all = "lowercase")]
 pub enum CanisterStatusType {
     /// The canister is running.
+    #[serde(rename = "running")]
     Running,
     /// The canister is stopping.
+    #[serde(rename = "stopping")]
     Stopping,
     /// The canister is stopped.
+    #[serde(rename = "stopped")]
     Stopped,
 }
 

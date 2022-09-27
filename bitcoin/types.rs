@@ -9,13 +9,16 @@ pub type Satoshi = u64;
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy,
 )]
 pub enum BitcoinNetwork {
-    // TODO: The variants are Capitalized while they are lowercase in the spec
     /// Mainnet.
+    #[serde(rename = "mainnet")]
     Mainnet,
     /// Testnet.
+    #[serde(rename = "testnet")]
     Testnet,
-    // TODO: the spec doesn't have this type of network
     /// Regtest.
+    ///
+    /// This is only available when developing with local replica.
+    #[serde(rename = "regtest")]
     Regtest,
 }
 
@@ -63,13 +66,14 @@ pub struct Utxo {
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
 pub enum UtxoFilter {
-    // TODO: In the spec, variants are in snake case
     /// Minimum number of confirmations. There is an upper bound of 144. Typically set to a value around 6 in practice.
+    #[serde(rename = "min_confirmations")]
     MinConfirmations(u32),
     /// Page reference.
     ///
     /// DON'T construct it from scratch.
     /// Only get it from the `next_page` field of [GetUtxosResponse].
+    #[serde(rename = "page")]
     Page(Vec<u8>),
 }
 
