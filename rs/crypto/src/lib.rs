@@ -6,6 +6,9 @@
 //! Please refer to the 'Trait Implementations' section of the
 //! `CryptoComponentFatClient` to get an overview of the functionality offered
 //! by the `CryptoComponent`.
+//!
+//! # Architecture Overview
+//! TODO [CRP-1673](https://dfinity.atlassian.net/browse/CRP-1673)
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 
