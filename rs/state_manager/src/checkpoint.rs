@@ -670,6 +670,7 @@ mod tests {
     use crate::{BitcoinPageMap, NUMBER_OF_CHECKPOINT_THREADS};
     use ic_base_types::NumSeconds;
     use ic_ic00_types::CanisterStatusType;
+    use ic_logger::info;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::execution_state::WasmBinary, canister_state::execution_state::WasmMetadata,
@@ -715,6 +716,16 @@ mod tests {
         let mut page_map = PageMap::new();
         page_map.update(delta);
         Memory::new(page_map, NumWasmPages::from(1))
+    }
+
+    fn log_path_and_metadata(log: &ReplicaLogger, path: &std::path::Path) -> std::io::Result<()> {
+        info!(
+            log,
+            "Setting {} readonly. Metadata: {:?}",
+            path.display(),
+            path.metadata()?
+        );
+        Ok(())
     }
 
     fn mark_readonly(path: &std::path::Path) -> std::io::Result<()> {
@@ -798,7 +809,6 @@ mod tests {
         });
     }
 
-    #[ignore]
     #[test]
     fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
         with_test_replica_logger(|log| {
@@ -821,19 +831,23 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
+            log_path_and_metadata(&log, &checkpoints_dir).unwrap();
             mark_readonly(&checkpoints_dir).unwrap();
 
             // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
             let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
 
-            match make_checkpoint(
+            let replicated_state = make_checkpoint(
                 &state,
                 HEIGHT,
                 &layout,
                 &log,
                 &checkpoint_metrics(),
                 &mut thread_pool(),
-            ) {
+            );
+            log_path_and_metadata(&log, &checkpoints_dir).unwrap();
+
+            match replicated_state {
                 Err(_) => assert!(
                     !expected_scratchpad_dir.exists(),
                     "Expected incomplete scratchpad to be deleted"
@@ -992,17 +1006,18 @@ mod tests {
         });
     }
 
-    #[ignore]
     #[test]
     fn reports_an_error_on_misconfiguration() {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
 
+            log_path_and_metadata(&log, &root).unwrap();
             mark_readonly(&root).unwrap();
 
-            let layout = StateLayout::try_new(log, root);
+            let layout = StateLayout::try_new(log.clone(), root.clone());
 
+            log_path_and_metadata(&log, &root).unwrap();
             assert!(layout.is_err());
             let err_msg = layout.err().unwrap().to_string();
             assert!(
