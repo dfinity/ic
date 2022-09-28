@@ -21,6 +21,9 @@ use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::NumInstructions;
 
+#[cfg(test)]
+mod tests;
+
 /// Performs a canister upgrade. The algorithm consists of six stages:
 /// - Stage 0: validate input and reserve execution cycles.
 /// - Stage 1: invoke `canister_pre_upgrade()` (if present) using the old code.
