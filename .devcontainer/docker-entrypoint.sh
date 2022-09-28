@@ -6,8 +6,10 @@ USER=ubuntu
 
 if [ -S "$DOCKER_SOCKET" ]; then
     DOCKER_GID="$(stat -c '%g' "$DOCKER_SOCKET")"
-    sudo addgroup --gid $DOCKER_GID $DOCKER_GROUP
-    sudo usermod -aG $DOCKER_GROUP $USER
+    if ! getent group "$DOCKER_GID"; then
+        sudo addgroup --gid $DOCKER_GID $DOCKER_GROUP
+    fi
+    sudo usermod -aG $DOCKER_GID $USER
 fi
 
 exec "$@"
