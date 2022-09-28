@@ -1,7 +1,7 @@
 deploy-guest-os-baseimg:
   extends:
     - .ubuntu-docker-protected
-    - .rules-protected-branch-manual
+    - .rules-build-base-images-schedule
   stage: guest-os-build
   needs: []
   script:
