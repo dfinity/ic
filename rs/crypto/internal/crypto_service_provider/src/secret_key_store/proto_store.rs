@@ -35,6 +35,31 @@ fn key_id_from_display_string(s: &str) -> KeyId {
     }
 }
 
+#[cfg(test)]
+mod key_id_generation_stability_tests {
+    use crate::secret_key_store::proto_store::key_id_from_display_string;
+    use crate::KeyId;
+
+    #[test]
+    fn should_key_id_from_display_string_be_stable() {
+        let displayed_key_id =
+            "KeyId(0xd9564f1e7ab210c9f0c95d4627d5266485b4a7724048a36170c8ff5ac2915a48)";
+        let computed_key_id = key_id_from_display_string(displayed_key_id);
+        let expected_key_id = KeyId::from(hex_to_bytes(
+            "d9564f1e7ab210c9f0c95d4627d5266485b4a7724048a36170c8ff5ac2915a48",
+        ));
+
+        assert_eq!(computed_key_id, expected_key_id);
+    }
+
+    fn hex_to_bytes<T: AsRef<[u8]>, const N: usize>(data: T) -> [u8; N] {
+        hex::decode(data)
+            .expect("error decoding hex")
+            .try_into()
+            .expect("wrong size of array")
+    }
+}
+
 fn key_id_to_hex(key_id: &KeyId) -> String {
     hex::encode(key_id.0)
 }
