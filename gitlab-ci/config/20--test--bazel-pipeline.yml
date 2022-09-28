@@ -88,6 +88,7 @@ bazel-cargo-test-parity:
   extends:
     - .ubuntu-docker-k8s
     - .bazel-test-all
+    - .bazel-rules-test-parity
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:7249151494ab726f8e5c049c6d6aac39749f9cb8f277db296f1daf85b07fe7fd"
   artifacts:
