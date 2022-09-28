@@ -2,7 +2,7 @@ deploy-guest-os-baseimg:
   extends:
     - .ubuntu-docker
     - .rules-build-base-images-schedule
-  stage: test
+  stage: guest-os-build
   needs: []
   script:
    - |
