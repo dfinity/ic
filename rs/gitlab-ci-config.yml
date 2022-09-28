@@ -81,8 +81,8 @@ ci_jobs_required:
   - python-tests
   - dependencies-check
   # prod tests
-  - rejoin-nightly
-  - rejoin-test-slo
+  - prod-hourly-pipeline
+  - prod-nightly-pipeline
   # finalize stage
   - notify-gitlab-success
   - notify-gitlab-failure
