@@ -76,8 +76,8 @@ RUN \
 
 # Download and verify vector
 RUN \
-    curl -L -O https://packages.timber.io/vector/0.23.0/vector_0.23.0-1_amd64.deb && \
-    echo "e29180e5575781f299e0ff7b89afe2e582060797e1653e90bb5582404cf6eec3e6b3fa462064f00b9917339847476560fa00f6d8fc83dce171f0ea9be968bd0a  vector_0.23.0-1_amd64.deb" | shasum -c
+    curl -L -O https://packages.timber.io/vector/0.24.1/vector_0.24.1-1_amd64.deb && \
+    echo "605b5bd2a0b3d03a252addfebb24e35af6929523cc9129a468039874806b3492  vector_0.24.1-1_amd64.deb" | shasum -c
 
 # Download and verify node_exporter
 RUN \
@@ -285,9 +285,9 @@ RUN cd /tmp/ && \
     rm /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz
 
 # Install vector
-COPY --from=download /tmp/vector_0.23.0-1_amd64.deb /tmp/vector_0.23.0-1_amd64.deb
-RUN dpkg -i --force-confold /tmp/vector_0.23.0-1_amd64.deb && \
-    rm /tmp/vector_0.23.0-1_amd64.deb
+COPY --from=download /tmp/vector_0.24.1-1_amd64.deb /tmp/vector_0.24.1-1_amd64.deb
+RUN dpkg -i --force-confold /tmp/vector_0.24.1-1_amd64.deb && \
+    rm /tmp/vector_0.24.1-1_amd64.deb
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.3.1.linux-amd64.tar.gz /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
