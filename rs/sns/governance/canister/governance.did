@@ -328,6 +328,7 @@ type Version = record {
   swap_wasm_hash : vec nat8;
   ledger_wasm_hash : vec nat8;
   governance_wasm_hash : vec nat8;
+  index_wasm_hash : vec nat8;
 };
 type VotingRewardsParameters = record {
   start_timestamp_seconds : opt nat64;

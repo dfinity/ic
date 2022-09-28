@@ -160,6 +160,9 @@ pub struct SnsCanisterIds {
     /// PrincipalId of the swap canister.
     #[prost(message, optional, tag = "4")]
     pub swap: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// PrincipalId of the index canister.
+    #[prost(message, optional, tag = "5")]
+    pub index: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 /// Message to list deployed sns instances.
 #[derive(
@@ -211,6 +214,9 @@ pub struct SnsVersion {
     /// The hash of the Ledger Archive canister WASM.
     #[prost(bytes = "vec", tag = "5")]
     pub archive_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    /// The hash of the Index canister WASM.
+    #[prost(bytes = "vec", tag = "6")]
+    pub index_wasm_hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// The request type accepted by the get_next_sns_version canister method.
 #[derive(
@@ -275,4 +281,6 @@ pub enum SnsCanisterType {
     Swap = 4,
     /// The type for the ledger archive canister.
     Archive = 5,
+    /// The type for the index canister.
+    Index = 6,
 }

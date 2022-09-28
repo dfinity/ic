@@ -18,6 +18,8 @@ enum SnsCanisterType {
   SNS_CANISTER_TYPE_SWAP = 4;
   // The type for the ledger archive canister.
   SNS_CANISTER_TYPE_ARCHIVE = 5;
+  // The type for the index canister.
+  SNS_CANISTER_TYPE_INDEX = 6;
 }
 
 // The SNS-WASM canister state that is persisted to stable memory on pre-upgrade and read on
@@ -118,6 +120,8 @@ message SnsCanisterIds {
   ic_base_types.pb.v1.PrincipalId governance = 3;
   // PrincipalId of the swap canister.
   ic_base_types.pb.v1.PrincipalId swap = 4;
+  // PrincipalId of the index canister.
+  ic_base_types.pb.v1.PrincipalId index = 5;
 }
 
 // Message to list deployed sns instances.
@@ -151,6 +155,9 @@ message SnsVersion {
 
   // The hash of the Ledger Archive canister WASM.
   bytes archive_wasm_hash = 5;
+
+  // The hash of the Index canister WASM.
+  bytes index_wasm_hash = 6;
 }
 
 // The request type accepted by the get_next_sns_version canister method.

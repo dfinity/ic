@@ -36,6 +36,7 @@ type SnsCanisterIds = record {
   root : opt principal;
   swap : opt principal;
   ledger : opt principal;
+  index : opt principal;
   governance : opt principal;
 };
 type SnsInitPayload = record {
@@ -59,6 +60,7 @@ type SnsVersion = record {
   swap_wasm_hash : vec nat8;
   ledger_wasm_hash : vec nat8;
   governance_wasm_hash : vec nat8;
+  index_wasm_hash : vec nat8;
 };
 type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
 type SnsWasmCanisterInitPayload = record {

@@ -206,6 +206,7 @@ mod test {
             ledger_wasm_hash: [3u8; 32].to_vec(),
             swap_wasm_hash: [4u8; 32].to_vec(),
             archive_wasm_hash: [5u8; 32].to_vec(),
+            index_wasm_hash: [6u8; 32].to_vec(),
         };
         let sns_version2 = SnsVersion {
             governance_wasm_hash: [6u8; 32].to_vec(),
@@ -213,6 +214,7 @@ mod test {
             ledger_wasm_hash: [8u8; 32].to_vec(),
             swap_wasm_hash: [9u8; 32].to_vec(),
             archive_wasm_hash: [10u8; 32].to_vec(),
+            index_wasm_hash: [6u8; 32].to_vec(),
         };
 
         let upgrade_path = Some(UpgradePath {

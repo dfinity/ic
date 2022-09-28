@@ -36,6 +36,11 @@ message SnsRootCanister {
   // The timestamp of the latest poll for archives of the ledger canister,
   // in seconds since the Unix epoch.
   optional uint64 latest_ledger_archive_poll_timestamp_seconds = 6;
+
+  // Required.
+  //
+  // The SNS Index canister ID
+  ic_base_types.pb.v1.PrincipalId index_canister_id = 7;
 }
 
 message RegisterDappCanisterRequest {
@@ -79,4 +84,5 @@ message ListSnsCanistersResponse {
   ic_base_types.pb.v1.PrincipalId swap = 4;
   repeated ic_base_types.pb.v1.PrincipalId dapps = 5;
   repeated ic_base_types.pb.v1.PrincipalId archives = 6;
+  ic_base_types.pb.v1.PrincipalId index = 7;
 }

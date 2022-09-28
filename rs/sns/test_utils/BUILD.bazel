@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/client",
+    "//rs/rosetta-api/icrc1/index",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",

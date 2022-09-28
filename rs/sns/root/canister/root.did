@@ -39,6 +39,7 @@ type GetSnsCanistersSummaryResponse = record {
   root : opt CanisterSummary;
   swap : opt CanisterSummary;
   ledger : opt CanisterSummary;
+  index : opt CanisterSummary;
   governance : opt CanisterSummary;
   dapps : vec CanisterSummary;
   archives : vec CanisterSummary;
@@ -47,6 +48,7 @@ type ListSnsCanistersResponse = record {
   root : opt principal;
   swap : opt principal;
   ledger : opt principal;
+  index : opt principal;
   governance : opt principal;
   dapps : vec principal;
   archives : vec principal;
@@ -61,6 +63,7 @@ type SnsRootCanister = record {
   latest_ledger_archive_poll_timestamp_seconds : opt nat64;
   archive_canister_ids : vec principal;
   governance_canister_id : opt principal;
+  index_canister_id : opt principal;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
 };

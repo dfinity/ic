@@ -1206,6 +1206,9 @@ pub mod governance {
         /// The hash of the Ledger Archive canister WASM.
         #[prost(bytes = "vec", tag = "5")]
         pub archive_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+        /// The hash of the Index canister WASM.
+        #[prost(bytes = "vec", tag = "6")]
+        pub index_wasm_hash: ::prost::alloc::vec::Vec<u8>,
     }
     /// An upgrade in progress, defined as a version target and a time at which it is considered failed.
     #[derive(

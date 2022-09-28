@@ -1052,6 +1052,8 @@ message Governance {
     bytes swap_wasm_hash = 4;
     // The hash of the Ledger Archive canister WASM.
     bytes archive_wasm_hash = 5;
+    // The hash of the Index canister WASM.
+    bytes index_wasm_hash = 6;
   }
 
   // An upgrade in progress, defined as a version target and a time at which it is considered failed.

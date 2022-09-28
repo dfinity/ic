@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/icrc1/index",
     "//rs/rosetta-api/icrc1/client",
     "//rs/rosetta-api/ledger_canister",
     "//rs/rosetta-api/ledger_core",

@@ -70,7 +70,7 @@ pub fn ledger_id() -> CanisterId {
     with_index(|idx| idx.ledger_id)
 }
 
-#[derive(CandidType, Debug, candid::Deserialize)]
+#[derive(CandidType, Clone, Debug, candid::Deserialize)]
 pub struct InitArgs {
     // The Ledger canister id of the Ledger to index
     pub ledger_id: CanisterId,

@@ -223,6 +223,10 @@ pub fn add_dummy_wasms_to_sns_wasms(machine: &StateMachine) {
     let archive_wasm = test_wasm(SnsCanisterType::Archive);
     let archive_hash = archive_wasm.sha256_hash();
     add_wasm_via_proposal(machine, archive_wasm, &archive_hash);
+
+    let index_wasm = test_wasm(SnsCanisterType::Index);
+    let index_hash = index_wasm.sha256_hash();
+    add_wasm_via_proposal(machine, index_wasm, &index_hash);
 }
 
 /// Adds real SNS wasms to the SNS-WASM canister for more robust tests, and returns
@@ -248,12 +252,17 @@ pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) -> HashMap<SnsCaniste
     let archive_hash = archive_wasm.sha256_hash();
     add_wasm_via_proposal(machine, archive_wasm.clone(), &archive_hash);
 
+    let index_wasm = build_index_sns_wasm();
+    let index_hash = index_wasm.sha256_hash();
+    add_wasm_via_proposal(machine, index_wasm.clone(), &index_hash);
+
     hashmap! {
         SnsCanisterType::Root => root_wasm,
         SnsCanisterType::Governance => gov_wasm,
         SnsCanisterType::Ledger => ledger_wasm,
         SnsCanisterType::Swap => swap_wasm,
-        SnsCanisterType::Archive => archive_wasm
+        SnsCanisterType::Archive => archive_wasm,
+        SnsCanisterType::Index => index_wasm,
     }
 }
 
@@ -299,5 +308,14 @@ pub fn build_archive_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: archive_wasm.bytes(),
         canister_type: SnsCanisterType::Archive.into(),
+    }
+}
+
+/// Builds the SnsWasm for the index canister.
+pub fn build_index_sns_wasm() -> SnsWasm {
+    let index_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-index", &[]);
+    SnsWasm {
+        wasm: index_wasm.bytes(),
+        canister_type: SnsCanisterType::Index.into(),
     }
 }

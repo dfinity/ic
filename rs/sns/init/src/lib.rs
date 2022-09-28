@@ -8,6 +8,7 @@ use crate::pb::v1::{
 use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Account;
+use ic_icrc1_index::InitArgs as IndexInitArgs;
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
@@ -63,6 +64,7 @@ pub struct SnsCanisterIds {
     pub ledger: PrincipalId,
     pub root: PrincipalId,
     pub swap: PrincipalId,
+    pub index: PrincipalId,
 }
 
 /// The Init payloads for all SNS Canisters
@@ -72,6 +74,7 @@ pub struct SnsCanisterInitPayloads {
     pub ledger: LedgerInitArgs,
     pub root: SnsRootCanister,
     pub swap: SwapInit,
+    pub index: IndexInitArgs,
 }
 
 impl SnsInitPayload {
@@ -129,6 +132,7 @@ impl SnsInitPayload {
             ledger: self.ledger_init_args(sns_canister_ids)?,
             root: self.root_init_args(sns_canister_ids),
             swap: self.swap_init_args(sns_canister_ids),
+            index: self.index_init_args(sns_canister_ids),
         })
     }
 
@@ -234,6 +238,13 @@ impl SnsInitPayload {
         Ok(payload)
     }
 
+    /// Construct the params used to initialize a SNS Index canister.
+    fn index_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> IndexInitArgs {
+        IndexInitArgs {
+            ledger_id: CanisterId::new(sns_canister_ids.ledger).unwrap(),
+        }
+    }
+
     /// Construct the params used to initialize a SNS Root canister.
     fn root_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> SnsRootCanister {
         SnsRootCanister {
@@ -243,6 +254,7 @@ impl SnsInitPayload {
             dapp_canister_ids: vec![],
             archive_canister_ids: vec![],
             latest_ledger_archive_poll_timestamp_seconds: None,
+            index_canister_id: Some(sns_canister_ids.index),
         }
     }
 
@@ -616,6 +628,7 @@ mod test {
             ledger: CanisterId::from_u64(2).into(),
             root: CanisterId::from_u64(3).into(),
             swap: CanisterId::from_u64(4).into(),
+            index: CanisterId::from_u64(5).into(),
         }
     }
 
