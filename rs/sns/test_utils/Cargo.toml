@@ -16,6 +16,7 @@ ic-config = { path = "../../config" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-client = { path = "../../rosetta-api/icrc1/client" }
+ic-icrc1-index = { path = "../../rosetta-api/icrc1/index" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }

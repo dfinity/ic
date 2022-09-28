@@ -14,6 +14,7 @@ pub struct RunningSnsCanisters {
     pub swap: Option<PrincipalId>,
     pub dapps: Vec<PrincipalId>,
     pub archives: Vec<PrincipalId>,
+    pub index: Option<PrincipalId>,
 }
 
 /// Upgrade parameters.
@@ -119,6 +120,7 @@ async fn get_canisters_to_upgrade(
                 .collect(),
             "Ledger Archives",
         ),
+        SnsCanisterType::Index => (vec![running_canisters.index], "Index"),
         SnsCanisterType::Unspecified => panic!("SnsCanisterType cannot be unspecified"),
     };
     maybe_principals
@@ -145,8 +147,9 @@ fn canister_type_and_wasm_hash_for_upgrade(
     // This should be impossible due to upstream constraints.
     if differences.is_empty() {
         return Err(
-            "No difference was found between the current SNS version and the next SNS version"
-                .to_string(),
+            format!("No difference was found between the current SNS version {:?} and the next SNS version {:?}",
+                current_version, next_version
+            )
         );
     }
 
@@ -174,6 +177,7 @@ pub(crate) async fn get_running_version(
     let swap = response.swap.unwrap();
     let ledger = response.ledger.unwrap();
     let archives = response.archives;
+    let index = response.index.unwrap();
 
     let get_hash = |canister_status: &CanisterSummary, label: &str| {
         canister_status
@@ -202,6 +206,7 @@ pub(crate) async fn get_running_version(
         ledger_wasm_hash: get_hash(&ledger, "Ledger")?,
         swap_wasm_hash: get_hash(&swap, "Swap")?,
         archive_wasm_hash,
+        index_wasm_hash: get_hash(&index, "Index")?,
     })
 }
 
@@ -275,6 +280,10 @@ pub(crate) async fn get_all_sns_canisters(
         .iter()
         .map(|response| response.canister_id.unwrap())
         .collect();
+    let index = response
+        .index
+        .map(|summary| summary.canister_id)
+        .unwrap_or_default();
 
     Ok(RunningSnsCanisters {
         root,
@@ -283,6 +292,7 @@ pub(crate) async fn get_all_sns_canisters(
         swap,
         dapps,
         archives,
+        index,
     })
 }
 
@@ -317,6 +327,9 @@ impl Version {
                 next_version.archive_wasm_hash.clone(),
             ));
         }
+        if self.index_wasm_hash != next_version.index_wasm_hash {
+            differences.push((SnsCanisterType::Index, next_version.index_wasm_hash.clone()));
+        }
 
         differences
     }
@@ -330,6 +343,7 @@ impl From<Version> for SnsVersion {
             ledger_wasm_hash: version.ledger_wasm_hash,
             swap_wasm_hash: version.swap_wasm_hash,
             archive_wasm_hash: version.archive_wasm_hash,
+            index_wasm_hash: version.index_wasm_hash,
         }
     }
 }
@@ -342,6 +356,7 @@ impl From<SnsVersion> for Version {
             ledger_wasm_hash: version.ledger_wasm_hash,
             swap_wasm_hash: version.swap_wasm_hash,
             archive_wasm_hash: version.archive_wasm_hash,
+            index_wasm_hash: version.index_wasm_hash,
         }
     }
 }
@@ -384,6 +399,9 @@ pub(crate) struct SnsVersion {
     /// The hash of the Ledger Archive canister WASM.
     #[prost(bytes = "vec", tag = "5")]
     pub archive_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    // The hash of the Index canister WASM.
+    #[prost(bytes = "vec", tag = "6")]
+    pub index_wasm_hash: ::prost::alloc::vec::Vec<u8>,
 }
 
 /// Copied from ic-sns-root
@@ -405,6 +423,7 @@ pub(crate) struct GetSnsCanistersSummaryResponse {
     pub swap: Option<CanisterSummary>,
     pub dapps: Vec<CanisterSummary>,
     pub archives: Vec<CanisterSummary>,
+    pub index: Option<CanisterSummary>,
 }
 
 /// Copied from ic-sns-root
@@ -466,4 +485,6 @@ pub(crate) enum SnsCanisterType {
     Swap = 4,
     /// The type for the ledger archive canister
     Archive = 5,
+    /// The type for the ledger index canister
+    Index = 6,
 }

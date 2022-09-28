@@ -37,6 +37,15 @@
       "candid": "../swap/canister/swap.did",
       "wasm": "../../target/wasm32-unknown-unknown/canister-release/sns-swap-canister-opt.wasm",
       "type": "custom"
+    },
+    "sns_index": {
+      "build": [
+        "cargo build --manifest-path ../../Cargo.toml --target wasm32-unknown-unknown --profile canister-release --bin ic-icrc1-index",
+        "ic-cdk-optimizer ../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-index.wasm -o ../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-index-opt.wasm"
+      ],
+      "candid": "../../rosetta-api/icrc1/index/index.did",
+      "wasm": "../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-index-opt.wasm",
+      "type": "custom"
     }
   },
   "networks": {

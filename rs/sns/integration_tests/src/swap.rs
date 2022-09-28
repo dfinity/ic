@@ -189,6 +189,7 @@ impl Scenario {
         let ledger_canister_id = create_canister();
         let swap_canister_id = create_canister();
         let dapp_canister_id = create_canister();
+        let index_canister_id = create_canister();
 
         set_controllers(
             state_machine,
@@ -220,6 +221,12 @@ impl Scenario {
             dapp_canister_id,
             vec![*TEST_USER1_PRINCIPAL],
         );
+        set_controllers(
+            state_machine,
+            PrincipalId::new_anonymous(),
+            index_canister_id,
+            vec![root_canister_id.into()],
+        );
 
         // Construct base configuration.
         let account_identifier = Account {
@@ -234,6 +241,7 @@ impl Scenario {
             governance_canister_id,
             ledger_canister_id,
             swap_canister_id,
+            index_canister_id,
             &mut configuration,
         );
 

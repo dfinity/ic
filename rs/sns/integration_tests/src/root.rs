@@ -26,6 +26,7 @@ fn test_get_status() {
                 dapp_canister_ids: vec![],
                 archive_canister_ids: vec![],
                 latest_ledger_archive_poll_timestamp_seconds: None,
+                index_canister_id: Some(PrincipalId::new_user_test_id(45)),
             },
         )
         .await;

@@ -124,6 +124,17 @@ fn test_canisters_are_created_and_installed() {
 
         nns_canisters.add_wasm(request).await;
 
+        let index_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-index", &[]);
+        let index_hash = Sha256::hash(&index_wasm.clone().bytes()).to_vec();
+        let request = AddWasmRequest {
+            wasm: Some(SnsWasm {
+                wasm: index_wasm.clone().bytes(),
+                canister_type: SnsCanisterType::Index.into(),
+            }),
+            hash: index_hash.clone(),
+        };
+        nns_canisters.add_wasm(request).await;
+
         let wallet_with_unlimited_cycles = set_up_universal_canister(&runtime).await;
 
         let result = try_call_with_cycles_via_universal_canister(
@@ -146,6 +157,7 @@ fn test_canisters_are_created_and_installed() {
         let governance_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
         let ledger_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
         let swap_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+        let index_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6);
 
         assert_eq!(
             response,
@@ -155,7 +167,8 @@ fn test_canisters_are_created_and_installed() {
                     governance: Some(governance_canister_id.get()),
                     root: Some(root_canister_id.get()),
                     ledger: Some(ledger_canister_id.get()),
-                    swap: Some(swap_canister_id.get())
+                    swap: Some(swap_canister_id.get()),
+                    index: Some(index_canister_id.get()),
                 }),
                 error: None
             }
@@ -229,6 +242,21 @@ fn test_canisters_are_created_and_installed() {
             ledger_hash
         );
 
+        let index_canister_summary = response.index_canister_summary();
+        assert_eq!(
+            index_canister_summary.canister_id(),
+            index_canister_id.get()
+        );
+        assert_eq!(index_canister_summary.status().status(), Running);
+        assert_eq!(
+            index_canister_summary.status().controller(),
+            root_canister_id.get()
+        );
+        assert_eq!(
+            index_canister_summary.status().module_hash().unwrap(),
+            index_hash
+        );
+
         let mut swap_canister =
             Canister::new(&runtime, CanisterId::new(swap_canister_principal).unwrap());
         swap_canister.set_wasm(swap_wasm.bytes());
@@ -297,8 +325,8 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         }
     );
 
-    // 2_000_000_000 cycles are burned creating the canisters before the failure
-    assert_eq!(machine.cycle_balance(wallet_canister), 48_000_000_000_000);
+    // 2_500_000_000 cycles are burned creating the canisters before the failure
+    assert_eq!(machine.cycle_balance(wallet_canister), 47_500_000_000_000);
 
     // No canisters should exist above SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 (+1 for the wallet
     // canister) because we deleted those canisters
@@ -306,6 +334,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     assert!(!machine.canister_exists(canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3)));
     assert!(!machine.canister_exists(canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4)));
     assert!(!machine.canister_exists(canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5)));
+    assert!(!machine.canister_exists(canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6)));
 }
 
 #[test]
@@ -334,6 +363,7 @@ fn test_deploy_adds_cycles_to_target_canisters() {
     let governance = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
     let ledger = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
     let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6);
 
     assert_eq!(
         response,
@@ -343,7 +373,8 @@ fn test_deploy_adds_cycles_to_target_canisters() {
                 root: Some(*root.get_ref()),
                 ledger: Some(*ledger.get_ref()),
                 governance: Some(*governance.get_ref()),
-                swap: Some(*swap.get_ref())
+                swap: Some(*swap.get_ref()),
+                index: Some(*index.get_ref()),
             }),
             error: None
         }
@@ -352,8 +383,8 @@ fn test_deploy_adds_cycles_to_target_canisters() {
     // All cycles should have been used and none refunded.
     assert_eq!(machine.cycle_balance(wallet_canister), 0);
 
-    for canister_id in &[root, governance, ledger, swap] {
+    for canister_id in &[root, governance, ledger, swap, index] {
         assert!(machine.canister_exists(*canister_id));
-        assert_eq!(machine.cycle_balance(*canister_id), 12_500_000_000_000)
+        assert_eq!(machine.cycle_balance(*canister_id), 10_000_000_000_000)
     }
 }

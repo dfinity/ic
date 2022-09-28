@@ -39,6 +39,11 @@ pub struct SnsRootCanister {
     /// in seconds since the Unix epoch.
     #[prost(uint64, optional, tag = "6")]
     pub latest_ledger_archive_poll_timestamp_seconds: ::core::option::Option<u64>,
+    /// Required.
+    ///
+    /// The SNS Index canister ID
+    #[prost(message, optional, tag = "7")]
+    pub index_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 #[derive(
     candid::CandidType,
@@ -154,4 +159,6 @@ pub struct ListSnsCanistersResponse {
     pub dapps: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(message, repeated, tag = "6")]
     pub archives: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "7")]
+    pub index: ::core::option::Option<::ic_base_types::PrincipalId>,
 }

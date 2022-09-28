@@ -557,6 +557,7 @@ mod test {
             ledger: PrincipalId::from_str(&CanisterId::from_u64(2).to_string()).unwrap(),
             root: PrincipalId::from_str(&CanisterId::from_u64(3).to_string()).unwrap(),
             swap: PrincipalId::from_str(&CanisterId::from_u64(4).to_string()).unwrap(),
+            index: PrincipalId::from_str(&CanisterId::from_u64(5).to_string()).unwrap(),
         }
     }
 
