@@ -9,11 +9,15 @@ RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /et
     apt -yq update && apt -yqq install  \
     curl build-essential git gnupg \ 
     # GitLab CI \
-    sudo gosu \
+    sudo gosu jq \
     # RUST \
     gcc lld pkg-config libssl-dev libunwind-dev libsqlite3-dev zlib1g-dev libclang-10-dev \
     # IC-OS \
     python3 fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools
+
+ARG buildevents_version=0.6.0
+RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /usr/bin/buildevents && \
+    chmod +x /usr/bin/buildevents
 
 RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
