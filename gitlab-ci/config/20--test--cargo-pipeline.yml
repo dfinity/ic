@@ -13,12 +13,11 @@ gen-cargo-pipeline:
         python gen_pipeline.py ../../../rs/ ../../../ic-os -v --out=../../../child-pipeline.yml
       " ../shell.nix
       cd -
-      # slots: zh=48 (22%), sf=64 (29%), ch=108 (49%)
       # this tags are required on ci runners
+      # ch: 60%, sf: 40%
       DCS=(
-          "zh" "zh" "zh"
-          "sf" "sf" "sf" "sf" "sf" "sf" "sf" "sf" "sf"
-          "ch" "ch" "ch" "ch" "ch" "ch" "ch" "ch" "ch" "ch"
+          "sf" "sf"
+          "ch" "ch" "ch"
       )
       RANDOM=$$$(date +%s)
       DC="${DCS[$RANDOM % ${#DCS[@]} ]}"
