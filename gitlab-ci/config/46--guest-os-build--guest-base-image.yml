@@ -40,6 +40,8 @@ deploy-guest-os-baseimg:
     echo "Use the image with it's SHA256 DIGEST below for BOUNDARY IC-OS Dockerfile (snp version)"
     docker inspect --format='{{index .RepoDigests 0}}' dfinity/boundaryos-base-snp:"$TAG"
 
+    # TODO: create a MR with updated references
+
 build-guest-os-baseimg:
   extends:
     - .ubuntu-nix-docker
