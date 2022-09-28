@@ -112,17 +112,17 @@ pub fn get_canister_id(canister_name: &str, args: &DeployArgs) -> Option<Princip
 pub struct SnsWasmSnsDeployer {
     pub args: DeployArgs,
     pub sns_init_payload: SnsInitPayload,
-    pub sns_wasms_canister_id: PrincipalId,
+    pub sns_wasms_canister: String,
     pub wallet_canister: CanisterId,
 }
 
 impl SnsWasmSnsDeployer {
     pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
-        let sns_wasms_canister_id = args
+        let sns_wasms_canister = args
             .override_sns_wasm_canister_id_for_tests
             .as_ref()
-            .map(|principal| PrincipalId::from_str(principal).unwrap())
-            .unwrap_or_else(|| SNS_WASM_CANISTER_ID.get());
+            .map(|id_or_name| id_or_name.to_string())
+            .unwrap_or_else(|| SNS_WASM_CANISTER_ID.get().to_string());
 
         let wallet_canister = CanisterId::new(get_identity("get-wallet", &args.network))
             .expect("Could not convert wallet identity to CanisterId format");
@@ -130,7 +130,7 @@ impl SnsWasmSnsDeployer {
         Self {
             args,
             sns_init_payload,
-            sns_wasms_canister_id,
+            sns_wasms_canister,
             wallet_canister,
         }
     }
@@ -153,19 +153,29 @@ impl SnsWasmSnsDeployer {
             .expect("Couldn't decode DeployNewSnsRequest")
         );
 
-        let output = call_dfx(&[
-            "canister",
-            "--network",
-            &self.args.network,
-            "--wallet",
-            &format!("{}", self.wallet_canister),
-            "call",
-            "--with-cycles",
-            &SNS_CREATION_FEE.to_string(),
-            &self.sns_wasms_canister_id.to_string(),
-            "deploy_new_sns",
-            &request_idl,
-        ]);
+        let output = {
+            let sns_creation_fee = SNS_CREATION_FEE.to_string();
+            let wallet_canister = format!("{}", self.wallet_canister);
+            let mut args = vec![
+                "canister",
+                "--network",
+                &self.args.network,
+                "--wallet",
+                &wallet_canister,
+                "call",
+                "--with-cycles",
+                &sns_creation_fee,
+                &self.sns_wasms_canister,
+                "deploy_new_sns",
+                &request_idl,
+            ];
+            if let Some(path) = self.args.candid.as_ref() {
+                args.push("--candid");
+                args.push(path);
+            }
+            call_dfx(&args)
+        };
+
         if !output.status.success() {
             panic!("Failed to create SNS");
         }
