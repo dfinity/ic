@@ -50,6 +50,8 @@ rust_library(
 rust_test(
     name = "state_manager_lib_tests",
     crate = ":state_manager",
+    # Tracked in MR-291
+    flaky = True,
     deps = [
         "//rs/bitcoin/types/internal",
         "//rs/bitcoin/types/public",
