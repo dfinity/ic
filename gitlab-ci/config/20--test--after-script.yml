@@ -1,4 +1,4 @@
-after-script-test:
+.after-script-test:
   extends:
     - .ubuntu-nix-docker-k8s
     - .rules-after-script-test
@@ -9,9 +9,25 @@ after-script-test:
       set -eExuo pipefail
       export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
 
-      # Shell check should run in the repo root otherwise it cannot follow shellcheck
-      # source directives
-      cd "${CI_PROJECT_DIR}"
-      shellcheck -x gitlab-ci/src/after_script/*.sh
+      if [[ $DO_SHELLCHECK == "true" ]]; then
+        # Shell check should run in the repo root otherwise it cannot follow shellcheck
+        # source directives
+        cd "${CI_PROJECT_DIR}"
+        shellcheck -x gitlab-ci/src/after_script/*.sh
+      fi
 
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" after-script -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" "$CI_JOB_NAME" -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
+
+after-script-test-monolithic-image:
+  variables:
+    DO_SHELLCHECK: "true"
+  extends:
+    - .after-script-test
+
+after-script-test-bazel-image:
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
+  variables:
+    DO_SHELLCHECK: "false"
+  extends:
+    - .after-script-test
