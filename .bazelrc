@@ -69,3 +69,5 @@ build:dev --compilation_mode=fastbuild
 # Run `bazel build ... --config=local` if you don't have access to the buildfarm infrastructure.
 build:local --remote_cache=
 build:local --bes_backend=
+
+try-import %workspace%/user.bazelrc
