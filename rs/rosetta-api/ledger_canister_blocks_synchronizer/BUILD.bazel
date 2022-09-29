@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,22 +29,6 @@ TEST_DEPENDENCIES = [
     "@crate_index//:actix-web",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
 ]
-
-rust_binary(
-    name = "ledger_canister_blocks_synchronizer",
-    srcs = ["src/main.rs"],
-    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
-    deps = [
-        "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
-        "//rs/rosetta-api/ledger_core",
-        "//rs/types/types",
-        "@crate_index//:clap",
-        "@crate_index//:log",
-        "@crate_index//:log4rs",
-        "@crate_index//:tokio",
-        "@crate_index//:url",
-    ],
-)
 
 rust_library(
     name = "ledger_canister_blocks_synchronizer_lib",

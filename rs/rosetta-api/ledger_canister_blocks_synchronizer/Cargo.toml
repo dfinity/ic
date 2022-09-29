@@ -30,9 +30,5 @@ actix-web = { version = "4.0.1", default_features = false, features = ["macros",
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "test_utils" }
 serde_bytes = "0.11"
 
-[[bin]]
-path = "src/main.rs"
-name = "ledger_blocks_synch"
-
 [lib]
 path = "src/lib.rs"
