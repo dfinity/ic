@@ -87,11 +87,7 @@ class DfinityGitLabConfig:
     def ci_cfg_jobs(self):
         """Return a list of all jobs defined in the CI configuration."""
         if self.ci_cfg_expanded:
-            return [
-                x
-                for x in self._ci_cfg_get_keys(self.ci_cfg_expanded)
-                if "script" in self.ci_cfg_expanded[x] or "trigger" in self.ci_cfg_expanded[x]
-            ]
+            return [x for x in self._ci_cfg_get_keys(self.ci_cfg_expanded) if "script" in self.ci_cfg_expanded[x]]
         return []
 
     def ci_cfg_jobs_in_stage(self, stage: str):

@@ -28,3 +28,4 @@ include:
   - local: /gitlab-ci/config/75--push-branches--push.yml
   - local: /gitlab-ci/config/80--npm-release-boundary-node-service-worker.yml
   - local: /gitlab-ci/config/100--finalize--notify.yml
+  - local: /testnet/tests/pipeline/pipeline.yml
