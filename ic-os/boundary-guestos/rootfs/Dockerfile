@@ -15,8 +15,8 @@ ARG BUILD_TYPE=
 
 # Service worker version and sha256; only if SW is `true` the service worker from npm is used
 ARG SW= 
-ARG sw_version=1.2.10
-ARG sw_sha256=78c45bf30f39287ec1029f68d7b6e4fd4b28455e5971f0660eab2c20f3f56622
+ARG sw_version=1.2.7
+ARG sw_sha256=9aeb3c37742b162804dfb0094a4956a4df173030971cf6e12f376ae80c207b0f
 
 # ICX proxy  version and sha256; Note this version will be *only* used for prod images
 ARG icx_proxy_version=dcaa135
