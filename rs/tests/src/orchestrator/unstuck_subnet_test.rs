@@ -17,7 +17,7 @@ use super::utils::rw_message::install_nns_and_universal_canisters;
 use super::utils::ssh_access::execute_bash_command;
 use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
 use crate::orchestrator::utils::rw_message::{
-    can_install_canister, can_read_msg_with_retries, store_message,
+    can_install_canister, can_read_msg_with_retries, store_message_with_retries,
 };
 use crate::orchestrator::utils::upgrade::UpdateImageType;
 use crate::util::block_on;
@@ -174,7 +174,7 @@ pub fn test(test_env: TestEnv) {
 
     info!(logger, "Write a message to a canister");
     let msg = "Hello world!";
-    let can_id = store_message(&nodes[0].get_public_url(), msg);
+    let can_id = store_message_with_retries(&nodes[0].get_public_url(), msg, &logger);
     info!(logger, "Read it on all other nodes");
     for n in &nodes {
         assert!(

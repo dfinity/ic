@@ -17,6 +17,17 @@ pub(crate) fn store_message(url: &Url, msg: &str) -> Principal {
     })
 }
 
+pub(crate) fn store_message_with_retries(url: &Url, msg: &str, log: &Logger) -> Principal {
+    block_on(async {
+        let bytes = msg.as_bytes();
+        let agent = assert_create_agent(url.as_str()).await;
+        let ucan = UniversalCanister::new_with_retries(&agent, log, secs(300), secs(10)).await;
+        // send an update call to it
+        ucan.store_to_stable(0, bytes).await;
+        ucan.canister_id()
+    })
+}
+
 /// Try to store the given message within the next 30 seconds, return true if successful
 pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
     let bytes = msg.as_bytes();
