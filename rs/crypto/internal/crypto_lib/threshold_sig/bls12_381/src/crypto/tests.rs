@@ -551,7 +551,9 @@ fn resharing_with_encryption_should_preserve_the_threshold_key() {
         let mut hash = ic_crypto_sha::Sha256::new();
         hash.write(&(original_receiver_index as NodeIndex).to_be_bytes()[..]);
         hash.write(&(new_receiver_index as NodeIndex).to_be_bytes()[..]);
-        SecretKey::legacy_hash_to_fr(hash.finish())
+        // This reduces modulo the group order which would introduce a slight bias, which
+        // would be dangerous in production code but is acceptable in a test.
+        SecretKey::deserialize_unchecked(hash.finish())
     }
     let original_threshold = 3;
     let new_threshold = 4;

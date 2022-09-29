@@ -207,8 +207,8 @@ pub fn kgen<R: RngCore + CryptoRng>(
     // let pk = (y, pi_dlog)
     // let dk = (g1^rho, g2^x * f0^rho, f1^rho, ..., f_lambda^rho, h^rho)
     // return (pk, dk)
-    let spec_x = Scalar::miracl_random(rng);
-    let rho = Scalar::miracl_random(rng);
+    let spec_x = Scalar::random(rng);
+    let rho = Scalar::random(rng);
     let a = G1Affine::from(g1 * rho);
     let b = G2Projective::mul2(&g2.into(), &spec_x, &sys.f0.into(), &rho).to_affine();
     let mut d_t = LinkedList::new();
@@ -372,7 +372,7 @@ impl SecretKey {
                 // Save the root of the right subtree for later.
                 let mut tau_1 = tau.clone();
                 tau_1.push(Bit::One);
-                let delta = Scalar::miracl_random(rng);
+                let delta = Scalar::random(rng);
 
                 let a_blind = (g1 * delta) + node.a;
                 let mut b_blind =
@@ -410,7 +410,7 @@ impl SecretKey {
             n += 1;
         }
 
-        let delta = Scalar::miracl_random(rng);
+        let delta = Scalar::random(rng);
         let a = g1 * delta + node.a;
         let e = sys.h * delta + node.e;
         b_acc += f_acc * delta;
@@ -581,12 +581,12 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let mut ss = Vec::with_capacity(chunks);
     for _j in 0..chunks {
         {
-            let tmp = Scalar::miracl_random(rng);
+            let tmp = Scalar::random(rng);
             spec_r.push(tmp);
             rr.push(G1Affine::from(g1 * tmp));
         }
         {
-            let tmp = Scalar::miracl_random(rng);
+            let tmp = Scalar::random(rng);
             s.push(tmp);
             ss.push(G1Affine::from(g1 * tmp));
         }

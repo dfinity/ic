@@ -132,82 +132,11 @@ impl Scalar {
         r
     }
 
-    /// Deterministically hash an input onto a BLS12-381 scalar
-    ///
-    /// The input ``digest`` should be the output of SHA-256
-    pub fn legacy_hash_to_fr(digest: [u8; 32]) -> Self {
-        use rand::SeedableRng;
-
-        let mut rng = rand_chacha::ChaChaRng::from_seed(digest);
-        Self::legacy_random_generation(&mut rng)
-    }
-
-    /// Randomly generate a scalar in a way that is compatible with zkcrypto/pairing 0.4.0
-    ///
-    /// This should not be used for new code but only for compatability in situations where
-    /// Fr::random was previously used
-    pub fn legacy_random_generation<R: RngCore>(rng: &mut R) -> Self {
-        loop {
-            let mut repr = [0u64; 4];
-            for r in repr.iter_mut() {
-                *r = rng.next_u64();
-            }
-
-            /*
-            Since the modulus is 255 bits, we clear out the most significant bit to
-            reduce number of repetitions for the rejection sampling.
-
-            (This also matches the logic used in the old version of zcrypto/pairing,
-            which we are attempting to maintain bit-for-bit compatability with)
-             */
-            repr[3] &= 0xffffffffffffffff >> 1;
-
-            let mut repr8 = [0u8; 32];
-            repr8[..8].copy_from_slice(&repr[0].to_le_bytes());
-            repr8[8..16].copy_from_slice(&repr[1].to_le_bytes());
-            repr8[16..24].copy_from_slice(&repr[2].to_le_bytes());
-            repr8[24..].copy_from_slice(&repr[3].to_le_bytes());
-
-            let scalar = bls12_381::Scalar::from_bytes(&repr8);
-
-            if bool::from(scalar.is_none()) {
-                continue; // out of range
-            }
-
-            let mut scalar = scalar.unwrap();
-
-            /*
-            The purpose of this function is to maintain bit-compatability with old
-            versions of zkcrypto/pairing's Fr::random. That function generates random
-            values by generating a random integer, then treating it as if it was already
-            in Montgomery format; that is, x is stored as xR where R == 2**256, and so
-            the value that Fr::random produces is really z*R^-1 where z is the RNG
-            output.
-
-            To produce this value using the public API we have to first generate the
-            value, then multiply by R^-1 mod p, which is the constant below using
-            little-endian convention, ie the value is really 0x1bbe869...5c040.
-            Here R == 2**256 and p is the order of the BLS12-381 subgroup.
-             */
-            let montgomery_fixup = [
-                0x13f75b69fe75c040,
-                0xab6fca8f09dc705f,
-                0x7204078a4f77266a,
-                0x1bbe869330009d57,
-            ];
-
-            let montgomery_fixup = bls12_381::Scalar::from_raw(montgomery_fixup);
-            scalar *= montgomery_fixup;
-
-            return Self::new(scalar);
-        }
-    }
-
     /// Randomly generate a scalar in a way that is compatible with MIRACL
     ///
     /// This should not be used for new code but only for compatability in
     /// situations where MIRACL's BIG::randomnum was previously used
-    fn miracl_bigrandomnum_impl(bytes: &[u8; 64]) -> Self {
+    pub fn miracl_random<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
         /*
         MIRACL's BIG::randomnum implementation uses an unusually inefficient
         approach to generating a random integer in a prime field. Effectively it
@@ -225,6 +154,16 @@ impl Scalar {
         The final 6 bits are handled by using 6 doublings to shift the Scalar value
         up to provide space, followed by a scalar addition.
         */
+
+        use rand::Rng;
+
+        let mut bytes = [0u8; 64];
+
+        // We can't use fill_bytes here because that results in incompatible output.
+        for i in 0..64 {
+            bytes[i] = rng.gen::<u8>();
+        }
+
         let mut rbuf = [0u8; 64];
         for j in 0..63 {
             rbuf[j] = bytes[62 - j].reverse_bits();
@@ -238,47 +177,6 @@ impl Scalar {
         val += Scalar::from_u32((bytes[63].reverse_bits() >> 2) as u32);
 
         val
-    }
-
-    /// Randomly generate a scalar in a way that is compatible with MIRACL
-    ///
-    /// This should not be used for new code but only for compatability in
-    /// situations where MIRACL's BIG::randomnum was previously used with
-    /// a limited range
-    pub fn miracl_random_within_range<R: RngCore + CryptoRng>(rng: &mut R, n: u64) -> Self {
-        use rand::Rng;
-
-        let n_bits = 64 - n.leading_zeros();
-        let mut d = 0u128;
-        let mut j = 0;
-        let mut r: u8 = 0;
-        for _ in 0..2 * n_bits {
-            r = if j == 0 { rng.gen::<u8>() } else { r >> 1 };
-
-            let b = (r & 1) as u128;
-            d <<= 1;
-            d += b;
-            j = (j + 1) % 8;
-        }
-
-        d %= n as u128; // after this operation, d is < u64::MAX
-        Self::from_u64(d as u64) // so this cast is safe
-    }
-
-    /// Randomly generate a scalar in a way that is compatible with MIRACL
-    ///
-    /// This should not be used for new code but only for compatability in
-    /// situations where MIRACL's BIG::randomnum was previously used
-    pub fn miracl_random<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
-        use rand::Rng;
-
-        let mut bytes = [0u8; 64];
-
-        // We can't use fill_bytes here because that results in incompatible output.
-        for i in 0..64 {
-            bytes[i] = rng.gen::<u8>();
-        }
-        Self::miracl_bigrandomnum_impl(&bytes)
     }
 
     /// Return the scalar 0

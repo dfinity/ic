@@ -110,15 +110,13 @@ mod multi {
         TestVector {
             seed: 42,
             key_id: KeyId::from(hex_to_32_bytes(
-                "f8782b0bc403eb23770b72bebe9f3efbedb98f7a2fdf2c2b7b312e894bd39a44",
+                "6ddef5dfbbd4b641a7cc838ea5d2018c892dd6ef21d641a93f9d3b73b95c6258",
             )),
             public_key: CspPublicKey::MultiBls12_381(PublicKeyBytes(hex_to_96_bytes(
-                "986b177ef16c61c633e13769c42b079791cfa9702decd36eeb347be21bd98e8d1c4\
-                 d9f2a1f16f2e09b995ae7ff856a830d382d0081c6ae253a7d2abf97de945f70a42e\
-                 677ca30b129bcd08c91f78f8573fe2463a86afacf870e9fe4960f5c55f",
+                "b5077d187db1ff824d246bc7c311f909047e20375dc836087da1d7e5c3add0e8fc838af6aaa7373b41824c9bd080f47c0a50e3cdf06bf1cb4061a6cc6ab1802acce096906cece92e7487a29e89a187b618e6af1292515202640795f3359161c2",
             ))),
             proof_of_possession: CspPop::MultiBls12_381(PopBytes(hex_to_48_bytes(
-                "8e1e3a79a9f0bf69b9e256041eedef82db44e7755d9920a17dd07ea9f039a0f0f79013c135678aa355e9695f36886b54",
+                "8c3a46485252433f478d733275ae3d259f6ced963cf496974ea1dc95e6ca3aee588c4a2e12de34f46e7ef0adffe664d7",
             ))),
         }
     }

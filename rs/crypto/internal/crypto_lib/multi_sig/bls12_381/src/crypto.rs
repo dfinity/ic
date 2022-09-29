@@ -53,7 +53,7 @@ pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
 }
 
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
-    let secret_key = Scalar::legacy_random_generation(rng);
+    let secret_key = Scalar::random(rng);
     let public_key = G2Projective::generator() * secret_key;
     (secret_key, public_key)
 }

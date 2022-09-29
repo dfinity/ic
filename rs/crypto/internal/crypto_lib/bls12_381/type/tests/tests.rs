@@ -3,7 +3,6 @@ use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Bytes};
 use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use sha2::Digest;
 
 fn scalar_test_encoding(scalar: Scalar, expected_value: &'static str) {
     assert_eq!(hex::encode(scalar.serialize()), expected_value);
@@ -40,15 +39,6 @@ fn seeded_rng() -> ChaCha20Rng {
 }
 
 #[test]
-fn scalar_legacy_random_generates_expected_values() {
-    let mut rng = ChaCha20Rng::seed_from_u64(42);
-    scalar_test_encoding(
-        Scalar::legacy_random_generation(&mut rng),
-        "54ee2937b4dfc1905ccaf277a60b5e53c7ea791f6b9bdadd7e84e7f458d4d0a4",
-    );
-}
-
-#[test]
 fn scalar_miracl_random_generates_expected_values() {
     let seed = hex::decode("4e42f768bab72a9248a43c439a330b94e3d39595c627eb603fff8ff84b7a9914")
         .expect("valid");
@@ -66,23 +56,6 @@ fn scalar_miracl_random_generates_expected_values() {
     scalar_test_encoding(
         Scalar::miracl_random(&mut rng),
         "583912964c0e5c35604b073bf5fe37c4a17f7dc3cd597481116ff9f4c544b2f3",
-    );
-}
-
-#[test]
-fn scalar_legacy_hash_to_fr_generates_expected_values() {
-    fn sha256(input: &[u8]) -> [u8; 32] {
-        sha2::Sha256::digest(input).into()
-    }
-
-    scalar_test_encoding(
-        Scalar::legacy_hash_to_fr(sha256(b"A test input")),
-        "630fcb163218d5cd34f3ee5dc68bdbeda20975a54e08b130f3457afc6728d1d5",
-    );
-
-    scalar_test_encoding(
-        Scalar::legacy_hash_to_fr(sha256(b"A second unrelated test input")),
-        "699ed6764b14e1ae3ff73686399084f4fbbd51b972f85c49e4ef0954b36921af",
     );
 }
 
