@@ -119,11 +119,9 @@ BN_VARS=$(
 VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
     (.name_servers | join(" ")),
-    (.name_servers_fallback | join(" ")),
-    (.journalbeat_hosts | join(" ")),
-    (.journalbeat_tags | join(" "))
+    (.name_servers_fallback | join(" "))
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS JOURNALBEAT_TAGS < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS NAME_SERVERS_FALLBACK < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
@@ -181,26 +179,6 @@ function create_tarball_structure() {
             local node_idx=${NODE["node_idx"]}
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
             mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/node/replica_config"
-        fi
-    done
-}
-
-function generate_logging_config() {
-    for n in $NODES; do
-        declare -n NODE=$n
-        if [[ "${NODE["type"]}" == "boundary" ]]; then
-            local subnet_idx=${NODE["subnet_idx"]}
-            local node_idx=${NODE["node_idx"]}
-
-            # Define hostname
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-
-            if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
-                echo "journalbeat_hosts=${JOURNALBEAT_HOSTS}" >"${CONFIG_DIR}/${NODE_PREFIX}/journalbeat.conf"
-            fi
-            if [ "${JOURNALBEAT_TAGS}" != "" ]; then
-                echo "journalbeat_tags=${JOURNALBEAT_TAGS}" >>"${CONFIG_DIR}/${NODE_PREFIX}/journalbeat.conf"
-            fi
         fi
     done
 }
@@ -469,7 +447,6 @@ function main() {
     prepare_build_directories
     create_tarball_structure
     generate_boundary_node_config
-    generate_logging_config
     generate_network_config
     generate_prober_config
     copy_ssh_keys

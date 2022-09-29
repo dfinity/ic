@@ -260,16 +260,14 @@ fn create_and_upload_config_disk_image(
     );
 
     let ssh_authorized_pub_keys_dir: PathBuf = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-    let ic_setup = IcSetup::read_attribute(env);
-    let journalbeat_hosts: Vec<String> = ic_setup.journalbeat_hosts;
 
     cmd.arg(img_path.clone())
         .arg("--hostname")
         .arg(boundary_node.name.clone())
         .arg("--accounts_ssh_authorized_keys")
         .arg(ssh_authorized_pub_keys_dir)
-        .arg("--journalbeat_tags")
-        .arg(format!("system_test {}", group_name))
+        .arg("--elasticsearch_tags")
+        .arg(format!("system_test, {}", group_name))
         .arg("--ipv6_replica_ips")
         .arg(&boundary_node.replica_ipv6_rule)
         .arg("--ipv4_http_ips")
@@ -296,11 +294,6 @@ fn create_and_upload_config_disk_image(
 
     if let Some(nns_public_key) = boundary_node.nns_public_key.clone() {
         cmd.arg("--nns_public_key").arg(nns_public_key);
-    }
-
-    if !journalbeat_hosts.is_empty() {
-        cmd.arg("--journalbeat_hosts")
-            .arg(journalbeat_hosts.join(" "));
     }
 
     let output = cmd.output()?;

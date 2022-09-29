@@ -1,5 +1,7 @@
 [Unit]
 Description=Boundary Node Control Plane
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 LogRateLimitIntervalSec=1ms

@@ -58,7 +58,6 @@ customization of the installation using node-specific information. This includes
 
 * network environment: `network.conf` (more details below)
 * essential information about the IC: `nns.conf`
-* configuration related to monitoring: `journalbeat.conf` (more details below)
 
 For all of mentioned parameters, the system expects a file `ic-bootstrap.tar` - either
 already present at `/mnt` or supplied on a removable storage medium (e.g.
@@ -77,12 +76,3 @@ with the following keys supported:
 
 This configuration file is simply copied to the `config` partition and evaluated
 on each boot to set up network.
-
-==== Journalbeat configuration
-
-The Journalbeat configuration is performed using a file `journalbeat.conf` in
-the bootstrap tarball. It must contain lines of "key=value"-statements,
-with the following keys supported:
-
-* `journalbeat_hosts`:    space-separated list of logging hosts
-* `journalbeat_tags`:     space-separated list of tags

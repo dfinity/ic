@@ -40,18 +40,11 @@ options may be specified:
     to quote the argument string so it appears as a single argument to the
     script, e.g. --name_servers "8.8.8.8 1.1.1.1").
 
-  --journalbeat_hosts hosts
-    Logging hosts to use. Can be multiple hosts separated by space (make sure
-    to quote the argument string so it appears as a single argument to the
-    script, e.g. --journalbeat_hosts "h1.domain.tld:9220 h2.domain.tld:9230").
-
-  --journalbeat_tags tags
-    Tags to be used by Journalbeat. Can be multiple tags separated by space
-    (make sure to quote the argument string so it appears as a single argument
-    to the script, e.g. --journalbeat_tags "testnet1 slo")
-
   --elasticsearch_url url
     Logging url to use.
+
+  --elasticsearch_tags tags
+    Tags to apply
 
   --nns_url url
     URL of NNS nodes for sign up or registry access. Can be multiple nodes
@@ -152,8 +145,7 @@ function build_ic_bootstrap_tar() {
     local IPV4_ADDRESS IPV4_GATEWAY
     local NAME_SERVERS HOSTNAME
     local NNS_URL NNS_PUBLIC_KEY
-    local JOURNALBEAT_HOSTS JOURNALBEAT_TAGS
-    local ELASTICSEARCH_URL
+    local ELASTICSEARCH_URL ELASTICSEARCH_TAGS
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
     local IPV6_REPLICA_IPS IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
     while true; do
@@ -179,14 +171,11 @@ function build_ic_bootstrap_tar() {
             --name_servers)
                 NAME_SERVERS="$2"
                 ;;
-            --journalbeat_hosts)
-                JOURNALBEAT_HOSTS="$2"
-                ;;
-            --journalbeat_tags)
-                JOURNALBEAT_TAGS="$2"
-                ;;
             --elasticsearch_url)
                 ELASTICSEARCH_URL="$2"
+                ;;
+            --elasticsearch_tags)
+                ELASTICSEARCH_TAGS="$2"
                 ;;
             --nns_url)
                 NNS_URL="$2"
@@ -243,6 +232,7 @@ function build_ic_bootstrap_tar() {
     DENYLIST="${DENYLIST:=""}"
     PROBER_IDENTITY="${PROBER_IDENTITY:=""}"
     ELASTICSEARCH_URL="${ELASTICSEARCH_URL:="https://elasticsearch.testnet.dfinity.systems"}"
+    ELASTICSEARCH_TAGS="${ELASTICSEARCH_TAGS:-}"
     IPV6_REPLICA_IPS="${IPV6_REPLICA_IPS:="::/128"}"
     IPV4_HTTP_IPS="${IPV4_HTTP_IPS:="103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,104.16.0.0/13,104.24.0.0/14,108.162.192.0/18,131.0.72.0/22,141.101.64.0/18,149.97.209.182/30,149.97.209.186/30,162.158.0.0/15,172.64.0.0/13,173.245.48.0/20,188.114.96.0/20,190.93.240.0/20,192.235.122.32/28,197.234.240.0/22,198.41.128.0/17,212.71.124.192/29,62.209.33.184/29"}"
     IPV6_HTTP_IPS="${IPV6_HTTP_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
@@ -285,13 +275,6 @@ name_servers=$NAME_SERVERS
 hostname=$HOSTNAME
 ipv6_replica_ips=${IPV6_REPLICA_IPS}
 EOF
-    if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
-        echo "journalbeat_hosts=$JOURNALBEAT_HOSTS" >"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
-    fi
-
-    if [ "${JOURNALBEAT_TAGS}" != "" ]; then
-        echo "journalbeat_tags=$JOURNALBEAT_TAGS" >>"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
-    fi
 
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
@@ -321,6 +304,7 @@ EOF
 domain=${DOMAIN}
 denylist_url=${DENYLIST_URL}
 elasticsearch_url=${ELASTICSEARCH_URL}
+elasticsearch_tags=${ELASTICSEARCH_TAGS}
 ipv4_http_ips=${IPV4_HTTP_IPS}
 ipv6_http_ips=${IPV6_HTTP_IPS}
 ipv6_debug_ips=${IPV6_DEBUG_IPS}

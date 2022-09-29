@@ -1,5 +1,7 @@
 [Unit]
 Description=Boundary Node Denylist Updater
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Restart=always

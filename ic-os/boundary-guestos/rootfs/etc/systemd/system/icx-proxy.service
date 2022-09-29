@@ -1,5 +1,7 @@
 [Unit]
 Description=ICX Proxy Service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 User=root

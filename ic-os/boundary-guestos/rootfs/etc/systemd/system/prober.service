@@ -1,6 +1,8 @@
 [Unit]
 Description=Boundary Node Prober
 ConditionPathExists=!/run/ic-node/etc/prober/prober.disabled
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 User=prober
