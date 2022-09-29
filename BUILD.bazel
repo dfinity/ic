@@ -50,7 +50,7 @@ BINARIES = {
     "ic-recovery": "//rs/recovery:ic-recovery",
     "ic-replay": "//rs/replay:ic-replay",
     "ic-regedit": "//rs/registry/regedit:ic-regedit",
-    "ic-registry-replicator": "//rs/orchestrator/registry_replicator:registry_replicator",
+    "ic-registry-replicator": "//rs/orchestrator/registry_replicator:ic-registry-replicator",
     "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
     "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
     "orchestrator": "//rs/orchestrator",
