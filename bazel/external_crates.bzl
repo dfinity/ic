@@ -118,8 +118,6 @@ def external_crates_repository(name, annotations):
                 version = "^1.2.1",
             ),
             "bls12_381": crate.spec(
-                git = "https://github.com/dfinity/bls12_381",
-                rev = "33efe7ff95c912b19533bcc445430e860c782ccd",
                 features = [
                     "alloc",
                     "experimental",

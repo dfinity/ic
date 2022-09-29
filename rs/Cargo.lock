@@ -932,6 +932,20 @@ checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 [[package]]
 name = "bls12_381"
 version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62250ece575fa9b22068b3a8d59586f01d426dd7785522efd97632959e71c986"
+dependencies = [
+ "digest 0.9.0",
+ "ff",
+ "group",
+ "pairing",
+ "rand_core 0.6.3",
+ "subtle",
+]
+
+[[package]]
+name = "bls12_381"
+version = "0.7.0"
 source = "git+https://github.com/dfinity/bls12_381?branch=main#33efe7ff95c912b19533bcc445430e860c782ccd"
 dependencies = [
  "digest 0.9.0",
@@ -991,7 +1005,7 @@ dependencies = [
  "humantime 2.1.0",
  "hyper",
  "ic-agent",
- "ic-utils 0.20.0",
+ "ic-utils 0.20.1",
  "indoc",
  "mockall 0.11.2",
  "opentelemetry 0.17.0",
@@ -1178,9 +1192,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.7.15"
+version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4f5cdd24185c6d6edba09bcfe06cf9c1e7fd579cbe5e4ae2dffba9c474a5a7f"
+checksum = "d510cc32b8b991acc955dd3d5e0cb6f404069d1dccd9203ee90f5865557c9165"
 dependencies = [
  "anyhow",
  "binread",
@@ -1188,7 +1202,7 @@ dependencies = [
  "candid_derive",
  "codespan-reporting",
  "hex",
- "ic-types 0.4.0",
+ "ic-types 0.5.0",
  "lalrpop",
  "lalrpop-util",
  "leb128",
@@ -3301,7 +3315,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-init",
  "ic-types 0.8.0",
- "ic-utils 0.20.0",
+ "ic-utils 0.20.1",
  "on_wire",
  "tokio",
  "url",
@@ -3831,9 +3845,9 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "665da6fb50b32661c306ddc538ee5aa6f6d68f3d54b1649c1595403acaa552cb"
+checksum = "39ad753f11bed278d7d40b551bdb57090eedb301267019db576a168a53d12dd6"
 dependencies = [
  "async-trait",
  "base32",
@@ -3845,7 +3859,8 @@ dependencies = [
  "http",
  "http-body",
  "hyper-rustls",
- "ic-types 0.4.0",
+ "ic-types 0.5.0",
+ "ic-verify-bls-signature",
  "k256",
  "leb128",
  "mime",
@@ -4874,7 +4889,7 @@ dependencies = [
 name = "ic-crypto-internal-bls12-381-type"
 version = "0.1.0"
 dependencies = [
- "bls12_381",
+ "bls12_381 0.7.0 (git+https://github.com/dfinity/bls12_381?branch=main)",
  "criterion",
  "hex",
  "ic-crypto-getrandom-for-wasm",
@@ -5901,9 +5916,9 @@ dependencies = [
 
 [[package]]
 name = "ic-identity-hsm"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8b8c272724cd8b723746b55336a4b2aeba86d20f4d28d7e8ddfb0f975431cd7"
+checksum = "eb04806b1f28e5579d6bcf9b70941b7052160b87fd1cca091cc854828dbc6f2c"
 dependencies = [
  "hex",
  "ic-agent",
@@ -8418,9 +8433,9 @@ dependencies = [
 
 [[package]]
 name = "ic-types"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a67e4edc28c09d29ab97b50410245c91d71756eaf3956212e3488cd6eb75fda4"
+checksum = "79a17269dff0ec6ca4c3d04e18fca97d018ff53d809e6d92348fc22f9588e1a5"
 dependencies = [
  "crc32fast",
  "data-encoding",
@@ -8520,9 +8535,9 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2ff623519da2958ce6c4c8623ef5530db7878ef0082556b3c1cc1cfde7ba9d6"
+checksum = "a4700bacf90be57c3bcd94ecacdc01cedf38e5dad51da42994b8b6989441eff8"
 dependencies = [
  "async-trait",
  "candid",
@@ -8559,6 +8574,18 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "maplit",
+]
+
+[[package]]
+name = "ic-verify-bls-signature"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "583b1c03380cf86059160cc6c91dcbf56c7b5f141bf3a4f06bc79762d775fac4"
+dependencies = [
+ "bls12_381 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static",
+ "pairing",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -10094,6 +10121,7 @@ dependencies = [
  "autocfg 1.1.0",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -13421,7 +13449,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-types-test-utils",
  "ic-universal-canister",
- "ic-utils 0.20.0",
+ "ic-utils 0.20.1",
  "ic-utils 0.8.0",
  "itertools 0.10.3",
  "json5",
