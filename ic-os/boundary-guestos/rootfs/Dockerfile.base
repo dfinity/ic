@@ -84,6 +84,11 @@ RUN \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz && \
     echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" | shasum -c
 
+# Download and verify process-exporter
+RUN \
+    curl -L -O https://github.com/ncabatoff/process-exporter/releases/download/v0.7.10/process-exporter-0.7.10.linux-amd64.tar.gz && \
+    echo "52503649649c0be00e74e8347c504574582b95ad428ff13172d658e82b3da1b5  process-exporter-0.7.10.linux-amd64.tar.gz" | shasum -c
+
 # Download libnginx-mod-http-ndk.deb
 RUN \
    curl -L -O https://github.com/dfinity/nginx-module-cbor-input/releases/download/v0.0.9/libnginx-mod-http-ndk_0.3.1_amd64.deb && \
@@ -295,6 +300,12 @@ RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
+
+# Install process-exporter
+COPY --from=download /tmp/process-exporter-0.7.10.linux-amd64.tar.gz /tmp/process-exporter-0.7.10.linux-amd64.tar.gz
+RUN cd /tmp/ && \
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf process-exporter-0.7.10.linux-amd64.tar.gz process-exporter-0.7.10.linux-amd64/process-exporter && \
+    rm /tmp/process-exporter-0.7.10.linux-amd64.tar.gz
 
 ### Nginx Modules
 
