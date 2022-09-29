@@ -31,19 +31,19 @@ fn setup_sharing_instance_and_witness<R: RngCore + CryptoRng>(
 
     let mut pk = Vec::with_capacity(NODE_COUNT);
     for _ in 0..NODE_COUNT {
-        pk.push(G1Affine::from(g1 * Scalar::miracl_random(rng)));
+        pk.push(G1Affine::from(g1 * Scalar::random(rng)));
     }
 
     let mut a = Vec::new();
     let mut aa = Vec::new();
 
     for _ in 0..THRESHOLD {
-        let apow = Scalar::miracl_random(rng);
+        let apow = Scalar::random(rng);
         a.push(apow);
         aa.push(G2Affine::from(g2 * apow));
     }
 
-    let r = Scalar::miracl_random(rng);
+    let r = Scalar::random(rng);
     let rr = G1Affine::from(g1 * r);
 
     let mut s = Vec::with_capacity(NODE_COUNT);
@@ -103,14 +103,14 @@ fn sharing_nizk_is_stable() {
 
     assert_expected_scalar(
         &r,
-        "4fa6457b6d2e3fb03c251766c0967127b4f9e5ece7d54741187191a88ce0e047",
+        "04c66ff4854bff12d8ce0c2a6aa69791812b5dc2e029040fd3f806936516ece3",
     );
 
     let instance = SharingInstance::new(pk, aa, rr, cc);
 
     assert_expected_scalar(
         &instance.hash_to_scalar(),
-        "63fe81e364eab9c3ceae0c715e31c75e8c4e0dfa96c144f635a2e524326e2ace",
+        "6b0c03602490f5963c08a23f00a06b94640cb57fce6589516a5b9dac74bd45cb",
     );
 
     let witness = SharingWitness::new(r, s);
@@ -118,19 +118,19 @@ fn sharing_nizk_is_stable() {
     let sharing_proof = prove_sharing(&instance, &witness, &mut rng);
 
     assert_expected_g2(&sharing_proof.aa,
-                       "8a64c96d5e3d4292ef6081a1b849ff70cf0dcb374eaf2149c539ff4e438661a73f1c3c08b7797ac5b926bc1d14cbfb3c183403feb57bea05486542e6f9e377b0f1cf3ca23982ad4b455831bc4a89e5301ce48103f2342fe9e7ec15a73e251088");
+                       "b4dfde1eb1c9166296d1786f616fa46f1e8e32db76eb804d90b9d522567ee8b734a0c7a04ac53019804bff12aef185d01939da55ff87aefd873b73bf81a5d31c12d5284e5afaa15be4e7f262d17607380adf692c64e7c6cfbde7868f0346c43f");
 
     assert_expected_g1(&sharing_proof.ff,
-                       "84725ecf07cc1425e3daff4f71612a5cf87e9109499297c8662d322fb51e75090553782927233890bb9de4ce53355845");
+                       "868ba5079bba6ad130defd8b287ddbfd9fb9943a85138d0ac8093772efc0227de1d2970911bf6cc7f104952908f6573c");
     assert_expected_g1(&sharing_proof.yy,
-                       "8d46f294d7b13a5ba6590bd4ea7839b29959d3264bda4b8037758e23ff15cdbc7649426e822437db90e9e98835f7ab6f");
+                       "b6b0563c9dffa9e3972db09b9b5b06fc4a4e81dfc7fa39212cce0258a555fc25ffb6a9821c11b23a448283ac499af52a");
     assert_expected_scalar(
         &sharing_proof.z_alpha,
-        "06ef8486a4c8284201f3c1bfbba5d2b9a0d0132040eb44b954e7278f66d11ac4",
+        "25628b2e64185161dddea213072df9b27676f59cd95eede58d7ee80afc4ba324",
     );
     assert_expected_scalar(
         &sharing_proof.z_r,
-        "13c306c8bf02384c68a78db7ff39069339ef337d0ed146ea791d5cfb46c52cee",
+        "54eb80298bc1d250258153e38a85cc4718e69ccc3e4cb9bfc6540117a036db2d",
     );
 
     assert_eq!(
@@ -221,13 +221,13 @@ fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
 
     let mut y = Vec::with_capacity(NODE_COUNT);
     for _ in 0..NODE_COUNT {
-        y.push(G1Affine::from(g1 * Scalar::miracl_random(rng)));
+        y.push(G1Affine::from(g1 * Scalar::random(rng)));
     }
 
     let mut r = Vec::with_capacity(THRESHOLD);
     let mut rr = Vec::with_capacity(THRESHOLD);
     for _ in 0..THRESHOLD {
-        let r_i = Scalar::miracl_random(rng);
+        let r_i = Scalar::random(rng);
         rr.push(G1Affine::from(g1 * r_i));
         r.push(r_i);
     }
@@ -238,7 +238,7 @@ fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
         let mut s_i = Vec::new();
         let mut chunk_i = Vec::new();
         for r_j in &r {
-            let s_ij = Scalar::miracl_random_within_range(rng, CHUNK_SIZE as u64);
+            let s_ij = Scalar::random_within_range(rng, CHUNK_SIZE as u64);
             chunk_i.push(G1Projective::mul2(&y_i.into(), r_j, &g1.into(), &s_ij).to_affine());
             s_i.push(s_ij);
         }
@@ -283,7 +283,7 @@ fn chunking_nizk_is_stable() {
 
     assert_eq!(
         hex::encode(instance.unique_hash()),
-        "d416b0537ed3ff323d508f87bc5d79475ef850026c0333e5bff4ba80286aa3f6"
+        "6c75186edd23bd24090e76ba0cfcf10f5f01e365810e974590afff6f9cb63623",
     );
 
     let nizk_cbor =
@@ -293,7 +293,7 @@ fn chunking_nizk_is_stable() {
     let sha256_nizk_cbor = ic_crypto_sha::Sha256::hash(&nizk_cbor);
     assert_eq!(
         hex::encode(&sha256_nizk_cbor),
-        "45352f825e1e1f03eee5eae368f6e7ed9e6fad3bb0665c6005a7efdf070ab4f5"
+        "2fb19b0de6e16fcad55be72669d3d4a6ac26b0c024b059c450aa9ad06502200d",
     );
 }
 

@@ -8,7 +8,7 @@ use arrayvec::ArrayVec;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
-use rand::{CryptoRng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 /// Domain separators for the zk proof of chunking
@@ -206,15 +206,16 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     let p_sub_s = Scalar::from_usize(ss).neg();
 
     // y0 <- getRandomG1
+    let y0 = G1Affine::hash(b"ic-crypto-nizk-chunking-proof-y0", &rng.gen::<[u8; 32]>());
+
     let g1 = instance.g1_gen;
-    let y0 = G1Affine::from(g1 * Scalar::miracl_random(rng));
 
     // sigma = replicateM NUM_ZK_REPETITIONS $ getRandom [-S..Z-1]
     // beta = replicateM NUM_ZK_REPETITIONS $ getRandom [0..p-1]
     // bb = map (g1^) beta
     // cc = zipWith (\x pk -> y0^x * g1^pk) beta sigma
     let beta: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
-        .map(|_| Scalar::miracl_random(rng))
+        .map(|_| Scalar::random(rng))
         .collect();
     let bb: Vec<G1Affine> = beta
         .iter()
@@ -223,7 +224,7 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
 
     let (first_move, first_challenge, z_s) = loop {
         let sigma: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
-            .map(|_| Scalar::miracl_random_within_range(rng, range as u64) + p_sub_s)
+            .map(|_| Scalar::random_within_range(rng, range as u64) + p_sub_s)
             .collect();
         let cc: Vec<G1Affine> = beta
             .iter()
@@ -272,7 +273,7 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     let mut dd = Vec::with_capacity(spec_n + 1);
     let mut yy = *G1Projective::identity();
     for i in 0..spec_n + 1 {
-        let delta_i = Scalar::miracl_random(rng);
+        let delta_i = Scalar::random(rng);
         dd.push(G1Affine::from(g1 * delta_i));
         if i == 0 {
             yy = y0 * delta_i;

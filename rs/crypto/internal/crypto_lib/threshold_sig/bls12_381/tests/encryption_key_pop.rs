@@ -7,7 +7,7 @@ fn setup_pop_instance_and_witness<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> (EncryptionKeyInstance, Scalar) {
     let g1 = G1Affine::generator();
-    let witness = Scalar::miracl_random(rng);
+    let witness = Scalar::random(rng);
     let public_key = G1Affine::from(g1 * witness);
     let associated_data = rng.gen::<[u8; 10]>().to_vec();
 
@@ -39,27 +39,27 @@ fn should_encryption_key_pop_be_stable() -> Result<(), EncryptionKeyPopError> {
 
     assert_expected_scalar(
         &witness,
-        "48cf7ef8def6f5e55f41a0b05a80011685f182fdeb87a3cc730633be27e9d0cc",
+        "52443431e6d5c54a2ca4abde6bd8a04f6cf5a0472a16243a2ceb315d64624e69",
     );
 
     assert_expected_g1(&instance.g1_gen,
                        "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
     assert_expected_g1(&instance.public_key,
-                       "afd98a416c76876bed65c80ae7967867532fada48ab842a6dfd002f0696219bc4f198816fdab9978d56c857f32667ea9");
+                       "a1765a77ff5c48777b06690f5d6ab175ca8561c8f74d80b181adba1ae7f96ff6ef01ee22bf9beddf99accb8fb8b58ea2");
 
-    assert_expected_bytestring(&instance.associated_data, "96057d6b28e248fd8160");
+    assert_expected_bytestring(&instance.associated_data, "b591e4441bc6cf4ca031");
 
     let pop = prove_pop(&instance, &witness, &mut rng)?;
 
     assert_expected_g1(&pop.pop_key,
-                       "86fd63a7502eb705e4dfe518cf4c412238cbfbb80835174b5415b6fecaae8db97a16b7e4a0bd5c6091e29f4a40e259e8");
+                       "a915dacc6fdafdd3774d4906354c75c500ad13197852947a1cbe59617b07e450e89c2443b048ec1c52007e051a9eeeff");
     assert_expected_scalar(
         &pop.challenge,
-        "5e1f9c08f910c30104e753d4e2fb91c8d5db9c1999b6281ddea6596d50a520eb",
+        "3432885d429c95abef62b00ff3d2cbce64d4563eb84bac2f5d4c1ed877e9cde0",
     );
     assert_expected_scalar(
         &pop.response,
-        "532a9892e9aeedda3c53c714a51340d26131a75fbd4e2b64fcd7304ccc8afdd7",
+        "24d9d6b15def4195194658df7d1e71e323a8d9463ab2caebcbcd7f43474171e0",
     );
 
     verify_pop(&instance, &pop)?;

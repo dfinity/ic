@@ -15,15 +15,15 @@ mod basic_functionality {
 
         assert_eq!(
             hex::encode(poly.coefficients[0].serialize()),
-            "1610358dd042ebf85b72e7529e97e899f22e8a28c34874baf245ed8b2b86e779"
+            "023f37203a2476c42566a61cc55c3ca875dbb4cc41c0deb789f8e7bf88183638",
         );
         assert_eq!(
             hex::encode(poly.coefficients[1].serialize()),
-            "4427ceb3e6bed8feb9f0d6f1a82838f3b499b63027b9368793ee5e5b494e889e"
+            "1ecc3686b60ee3b84b6c7d321d70d5c06e9dac63a4d0a79d731b17c0d04d030d",
         );
         assert_eq!(
             hex::encode(poly.coefficients[2].serialize()),
-            "5201bc3088e41597c91cfbaf54e2e563b557599884262081520cb6a877fdce27"
+            "01274dd1ee5216c204fb698daea45b52e98b6f0fdd046dcc3a86bb079e36f024",
         );
     }
 

@@ -195,8 +195,8 @@ pub fn prove_sharing<R: RngCore + CryptoRng>(
 
     // First move (prover)
     // alpha, rho <- random Z_p
-    let alpha = Scalar::miracl_random(rng);
-    let rho = Scalar::miracl_random(rng);
+    let alpha = Scalar::random(rng);
+    let rho = Scalar::random(rng);
     // F = g_1^rho
     // A = g_2^alpha
     // Y = product [y_i^x^i | i <- [1..n]]^rho * g_1^alpha
