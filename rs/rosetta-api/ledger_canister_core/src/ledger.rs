@@ -131,30 +131,33 @@ pub fn apply_transaction<L: LedgerData>(
 ) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError> {
     let num_pruned = purge_old_transactions(ledger, now);
 
-    let created_at_time = transaction.created_at_time().unwrap_or(now);
-
-    if created_at_time + ledger.transaction_window() < now {
-        return Err(TransferError::TxTooOld {
-            allowed_window_nanos: ledger.transaction_window().as_nanos() as u64,
-        });
-    }
-
-    if created_at_time > now + ic_constants::PERMITTED_DRIFT {
-        return Err(TransferError::TxCreatedInFuture { ledger_time: now });
-    }
-
     // If we pruned some transactions, let this one through
     // otherwise throttle if there are too many
     if num_pruned == 0 && throttle(ledger, now) {
         return Err(TransferError::TxThrottled);
     }
 
-    let transaction_hash = transaction.hash();
+    let maybe_time_and_hash = transaction
+        .created_at_time()
+        .map(|created_at_time| (created_at_time, transaction.hash()));
 
-    if let Some(block_height) = ledger.transactions_by_hash().get(&transaction_hash) {
-        return Err(TransferError::TxDuplicate {
-            duplicate_of: *block_height,
-        });
+    if let Some((created_at_time, tx_hash)) = maybe_time_and_hash {
+        // The caller requested deduplication.
+        if created_at_time + ledger.transaction_window() < now {
+            return Err(TransferError::TxTooOld {
+                allowed_window_nanos: ledger.transaction_window().as_nanos() as u64,
+            });
+        }
+
+        if created_at_time > now + ic_constants::PERMITTED_DRIFT {
+            return Err(TransferError::TxCreatedInFuture { ledger_time: now });
+        }
+
+        if let Some(block_height) = ledger.transactions_by_hash().get(&tx_hash) {
+            return Err(TransferError::TxDuplicate {
+                duplicate_of: *block_height,
+            });
+        }
     }
 
     transaction
@@ -173,16 +176,18 @@ pub fn apply_transaction<L: LedgerData>(
         .add_block(block)
         .expect("failed to add block");
 
-    ledger
-        .transactions_by_hash_mut()
-        .insert(transaction_hash, height);
+    if let Some((_, tx_hash)) = maybe_time_and_hash {
+        // The caller requested deduplication, so we have to remember this
+        // transaction within the dedup window.
+        ledger.transactions_by_hash_mut().insert(tx_hash, height);
 
-    ledger
-        .transactions_by_height_mut()
-        .push_back(TransactionInfo {
-            block_timestamp,
-            transaction_hash,
-        });
+        ledger
+            .transactions_by_height_mut()
+            .push_back(TransactionInfo {
+                block_timestamp,
+                transaction_hash: tx_hash,
+            });
+    }
 
     let to_trim = if ledger.balances().store.len()
         >= ledger.max_number_of_accounts() + ledger.accounts_overflow_trim_quantity()
