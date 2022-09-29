@@ -84,13 +84,15 @@ impl Drop for PanicHandler {
             .get_snapshot()
             .unwrap();
 
-        let (journalbeat_output, exit_status) =
-            exec_ssh_command(&boundary_node_vm, "systemctl status journalbeat").unwrap();
+        let (list_dependencies, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
+        )
+        .unwrap();
 
         info!(
             logger,
-            "journalbeat status {BOUNDARY_NODE_NAME} = '{journalbeat_output}'. Exit status = {}",
-            exit_status,
+            "systemctl {BOUNDARY_NODE_NAME} = '{list_dependencies}'. Exit status = {}", exit_status,
         );
     }
 }

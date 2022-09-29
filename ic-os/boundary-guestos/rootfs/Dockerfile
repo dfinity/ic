@@ -18,6 +18,7 @@ ARG SW=
 ARG sw_version=1.2.7
 ARG sw_sha256=9aeb3c37742b162804dfb0094a4956a4df173030971cf6e12f376ae80c207b0f
 
+
 # ICX proxy  version and sha256; Note this version will be *only* used for prod images
 ARG icx_proxy_version=dcaa135
 ARG icx_proxy_sha256=e20c7f6dcbe438ef9ec7dbff7d88d88db4099cb2b8d6dc399f47856baf0e568c
@@ -175,12 +176,6 @@ RUN addgroup --system nonconfidential && \
     adduser admin nonconfidential && \
     adduser admin systemd-journal && \
     adduser admin sudo && \
-    # The "journalbeat" account. Used to run journalbeat binary to send logs of the
-    # GuestOS.
-    addgroup journalbeat && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Journalbeat" journalbeat && \
-    adduser journalbeat journalbeat && \
-    adduser journalbeat systemd-journal && \
     # The "vector" account. Used to run vector binary
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Vector" vector && \
     adduser vector vector
@@ -217,16 +212,6 @@ RUN \
     mkdir -p /var/opt/nginx/denylist && \
     chown denylist-updater:denylist-updater /var/opt/nginx/denylist && \
     chmod 644 /var/opt/nginx/denylist
-
-# Install journalbeat
-RUN chown root:root /etc/journalbeat/*.yml \
-                    /usr/local/bin/journalbeat && \
-    chown journalbeat:journalbeat /var/lib/journalbeat \
-                                  /var/log/journalbeat && \
-    chmod 0755 /etc/journalbeat && \
-    chmod 0750 /var/lib/journalbeat \
-               /var/log/journalbeat && \
-    chmod 0644 /etc/journalbeat/*.yml
 
 # Install node_exporter
 RUN chown root:root /etc/node_exporter \

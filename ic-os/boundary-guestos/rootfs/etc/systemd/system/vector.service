@@ -1,5 +1,7 @@
 [Unit]
 Description=Vector
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 User=vector
@@ -11,4 +13,5 @@ EnvironmentFile=/run/ic-node/etc/default/vector
 ExecStart=/usr/bin/vector --config /etc/vector/vector.toml
 
 [Install]
+
 WantedBy=multi-user.target

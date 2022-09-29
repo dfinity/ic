@@ -28,6 +28,7 @@ function read_variables() {
     while IFS="=" read -r key value; do
         case "${key}" in
             "elasticsearch_url") ELASTICSEARCH_URL="${value}" ;;
+            "elasticsearch_tags") ELASTICSEARCH_TAGS="${value}" ;;
         esac
     done <"${BOOT_CONFIG}/bn_vars.conf"
 
@@ -44,7 +45,10 @@ function generate_vector_config() {
     # Move active configuration and prepare it (use `|` in the `sed` command
     # because it's not a valid URL character)
     cp -a "${TMPLT_FILE}" "${RUN_DIR}/vector"
-    sed -i -e "s|{{ELASTICSEARCH_URL}}|${ELASTICSEARCH_URL}|g" "${RUN_DIR}/vector"
+    sed -i \
+        -e "s|{{ELASTICSEARCH_URL}}|${ELASTICSEARCH_URL}|g" \
+        -e "s|{{ELASTICSEARCH_TAGS}}|${ELASTICSEARCH_TAGS:-}|g" \
+        "${RUN_DIR}/vector"
 }
 
 function main() {

@@ -47,6 +47,51 @@ for_each([
 }
 """
 
+# nginx access (elasticsearch)
+
+[transforms.nginx_access_by_status]
+type = "route"
+inputs = [ "nginx_access_json" ]
+
+  [transforms.nginx_access_by_status.route]
+  1xx = '.status >= 100 && .status < 200 ?? false'
+  2xx = '.status >= 200 && .status < 300 ?? false'
+  3xx = '.status >= 300 && .status < 400 ?? false'
+  4xx = '.status >= 400 && .status < 500 ?? false'
+  5xx = '.status >= 500 && .status < 600 ?? false'
+
+[transforms.nginx_access_2xx_sampled]
+type = "sample"
+inputs = [ "nginx_access_by_status.2xx" ]
+rate = 100
+
+[transforms.nginx_access_tag]
+type = "remap"
+inputs = [
+    "nginx_access_by_status.1xx",
+    "nginx_access_2xx_sampled",
+    "nginx_access_by_status.3xx",
+    "nginx_access_by_status.4xx",
+    "nginx_access_by_status.5xx",
+    "nginx_access_by_status._unmatched",
+]
+source = """
+tags = [ string(.tags || "") ?? "", "${ELASTICSEARCH_TAGS}" ]
+tags = filter(tags) -> |_index, value| { value != "" }
+tags, err = join(tags, ", ")
+if err == null && length(tags) != 0 {
+  .tags = tags
+}
+"""
+
+[sinks.elasticsearch_nginx_access]
+type = "elasticsearch"
+inputs = [ "nginx_access_tag" ]
+endpoint = "${ELASTICSEARCH_URL}"
+mode = "bulk"
+bulk.index = "boundary-node-nginx-access-%Y.%m.%d"
+tls.verify_certificate = false
+
 # nginx access (metrics)
 
 [transforms.nginx_access_metrics]
