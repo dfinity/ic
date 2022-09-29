@@ -82,9 +82,11 @@ pub struct DeployArgs {
     #[structopt(long)]
     initial_cycles_per_canister: Option<u64>,
 
-    /// Saves the returned canister IDs in canister_ids.json
+    /// Saves the returned canister IDs in the specified json file.
+    ///
+    /// Default: canister_ids.json
     #[structopt(long)]
-    save: bool,
+    save_to: Option<String>,
 }
 
 /// The arguments used to display the account balance of a user

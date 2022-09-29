@@ -15,9 +15,9 @@ use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads};
 use ic_sns_wasm::pb::v1::DeployNewSnsRequest;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
-use std::fs::OpenOptions;
+use std::fs::{create_dir_all, OpenOptions};
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 #[cfg(test)]
@@ -180,7 +180,7 @@ impl SnsWasmSnsDeployer {
         if !output.status.success() {
             panic!("Failed to create SNS");
         }
-        Self::save_canister_ids(&output.stdout, &self.args.network)
+        self.save_canister_ids(&output.stdout)
             .expect("Failed to save to canister_ids.json");
     }
 
@@ -293,12 +293,33 @@ impl SnsWasmSnsDeployer {
     }
 
     /// Records the created canister IDs in dfx.JSON
-    pub fn save_canister_ids(buffer: &[u8], network: &str) -> anyhow::Result<()> {
+    pub fn save_canister_ids(&self, buffer: &[u8]) -> anyhow::Result<()> {
+        let canisters_file = {
+            let path_str: String = self
+                .args
+                .save_to
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| "canister_ids.json".to_string());
+            let path = PathBuf::from(path_str);
+            if let Some(dir) = path.parent() {
+                create_dir_all(dir)
+                    .map_err(|err| {
+                        format!(
+                            "Failed to create directory for {}: {err}",
+                            path.to_string_lossy()
+                        )
+                    })
+                    .unwrap();
+            }
+            path
+        };
+
         let candid_str = std::str::from_utf8(buffer)?;
         let args: IDLArgs = candid_str.parse()?;
         let canisters_in_idl = Self::get_canisters_record(&args)?;
-        let new_canisters_json = Self::canister_ids_as_json(canisters_in_idl, network);
-        Self::merge_into_json_file("canister_ids.json", &new_canisters_json)
+        let new_canisters_json = Self::canister_ids_as_json(canisters_in_idl, &self.args.network);
+        Self::merge_into_json_file(canisters_file, &new_canisters_json)
     }
 }
 #[test]
@@ -354,8 +375,6 @@ fn should_save_canister_ids() {
     let file_content =
         serde_json::from_reader(&mut BufReader::new(file.reopen().unwrap())).unwrap();
     assert_same_json(&expected_json, &file_content, "Save to file doesn't work");
-
-    //SnsWasmSnsDeployer::save_canister_ids(sample_response.as_bytes(), "foo");
 }
 
 /// Responsible for deploying SNS canisters
