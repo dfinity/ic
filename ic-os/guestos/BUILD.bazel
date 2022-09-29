@@ -249,7 +249,7 @@ genrule(
 py_binary(
     name = "launch_single_vm",
     srcs = [
-        ":scripts/launch_single_vm.py",
+        ":launch_single_vm.py",
         "//ic-os/guestos/tests:ictools.py",
     ],
     data = [
