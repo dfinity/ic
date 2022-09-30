@@ -2,60 +2,19 @@
 
 use super::*;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
+use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_test_utils::empty_fake_registry;
-use ic_crypto_test_utils::files::temp_dir;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::registry::RegistryClient;
 use ic_types_test_utils::ids::node_test_id;
 
-fn store_public_keys(crypto_root: &Path, node_pks: &NodePublicKeys) {
-    public_key_store::store_node_public_keys(crypto_root, node_pks).unwrap();
-}
-
 #[test]
-fn should_generate_all_keys_for_new_node() {
+fn should_have_the_csp_public_keys_that_were_previously_generated() {
     CryptoConfig::run_with_temp_config(|config| {
-        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        assert!(all_node_keys_are_present(&node_pks));
-        assert_eq!(node_pks.version, 1);
-        let result = check_keys_locally(&config, None);
-        assert!(result.is_ok());
-        let maybe_pks = result.unwrap();
-        assert!(maybe_pks.is_some());
-        assert_eq!(maybe_pks.unwrap(), node_pks);
-        let node_signing_pk = node_pks
-            .node_signing_pk
-            .as_ref()
-            .expect("Missing node signing public key");
-        let derived_node_id = derive_node_id(node_signing_pk);
-        assert_eq!(node_id, derived_node_id);
+        let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
+        let csp = csp_for_config(&config, None);
+        assert_eq!(node_pks, csp.node_public_keys());
     })
-}
-
-#[test]
-fn should_generate_all_keys_for_new_node_with_remote_csp_vault() {
-    let tokio_rt = tokio::runtime::Runtime::new().expect("failed to create runtime");
-    let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
-    let temp_dir = temp_dir(); // temp dir with correct permissions
-    let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
-
-    let (node_pks, node_id) =
-        get_node_keys_or_generate_if_missing(&config, Some(tokio_rt.handle().clone()));
-    assert!(all_node_keys_are_present(&node_pks));
-    assert_eq!(node_pks.version, 1);
-    let result = check_keys_locally(&config, Some(tokio_rt.handle().clone()));
-    assert!(result.is_ok());
-    let maybe_pks = result.unwrap();
-    assert!(maybe_pks.is_some());
-    assert_eq!(maybe_pks.unwrap(), node_pks);
-    let node_signing_pk = node_pks
-        .node_signing_pk
-        .as_ref()
-        .expect("Missing node signing public key");
-    let derived_node_id = derive_node_id(node_signing_pk);
-    assert_eq!(node_id, derived_node_id);
 }
 
 #[test]
@@ -64,23 +23,16 @@ fn should_generate_all_keys_for_a_node_without_public_keys() {
         let csp = csp_for_config(&config, None);
         let first_node_signing_pk = generate_node_signing_keys(&csp);
         // first_node_signing_pk NOT saved.
+
         let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        assert!(all_node_keys_are_present(&node_pks));
-        let result = check_keys_locally(&config, None);
-        assert!(result.is_ok());
-        let maybe_pks = result.unwrap();
-        assert!(maybe_pks.is_some());
-        let node_pks = maybe_pks.unwrap();
+        ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
         assert_ne!(
             first_node_signing_pk,
             *node_pks.node_signing_pk.as_ref().unwrap()
         );
-        let node_signing_pk = node_pks
-            .node_signing_pk
-            .as_ref()
-            .expect("Missing node signing public key");
-        let derived_node_id = derive_node_id(node_signing_pk);
-        assert_eq!(node_id, derived_node_id);
+
+        let csp = csp_for_config(&config, None);
+        assert_eq!(node_pks, csp.node_public_keys());
     })
 }
 
@@ -585,12 +537,28 @@ mod tls {
     }
 }
 
+fn ensure_node_keys_are_generated_correctly(node_pks: &NodePublicKeys, node_id: &NodeId) {
+    assert!(all_node_keys_are_present(node_pks));
+    assert_eq!(node_pks.version, 1);
+
+    let node_signing_pk = node_pks
+        .node_signing_pk
+        .as_ref()
+        .expect("Missing node signing public key");
+    let derived_node_id = derive_node_id(node_signing_pk);
+    assert_eq!(*node_id, derived_node_id);
+}
+
 fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
     node_pks.node_signing_pk.is_some()
         && node_pks.committee_signing_pk.is_some()
         && node_pks.tls_certificate.is_some()
         && node_pks.dkg_dealing_encryption_pk.is_some()
         && node_pks.idkg_dealing_encryption_pk.is_some()
+}
+
+fn store_public_keys(crypto_root: &Path, node_pks: &NodePublicKeys) {
+    public_key_store::store_node_public_keys(crypto_root, node_pks).unwrap();
 }
 
 fn crypto_with_node_keys_generation(
