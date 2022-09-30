@@ -47,11 +47,10 @@ deploy-guest-os-baseimg:
         dfinity/boundaryos-base
         dfinity/boundaryos-base-snp
     )
-    for IMAGE in IMAGE_LIST; do
-      OLD_REF="$(rg -IN '$IMAGE@sha256:[0-9a-z]{64}' | head -1)"
-      #NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' ${IMAGE}:${TAG})"
-      NEW_REF="marko"
-      rg -IN "$OLD_REF" --files-with-matches | xargs sed -i 's/$OLD_REF/$NEW_REF/b'
+    for IMAGE in ${IMAGE_LIST[@]}; do
+        OLD_REF="$(rg -IN "${IMAGE}@sha256:[0-9a-z]{64}" | head -1)"
+        NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' ${IMAGE}:${TAG})"
+        rg -IN "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
     done
     git status
     git diff
