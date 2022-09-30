@@ -53,7 +53,7 @@ deploy-guest-os-baseimg:
 
     git config --global user.email "idx@dfinity.org"
     git config --global user.name "IDX GitLab Automation"
-	git checkout -b "base-images-ref-update-${TAG}"
+    git checkout -b "base-images-ref-update-${TAG}"
     git commit -a -m "Updating container base images refs"
     git remote add origin \
         "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" \
