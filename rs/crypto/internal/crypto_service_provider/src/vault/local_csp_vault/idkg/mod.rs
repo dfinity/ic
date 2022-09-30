@@ -5,7 +5,7 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     compute_secret_shares, compute_secret_shares_with_openings,
     create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, open_dealing,
@@ -56,8 +56,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         .map_err(|e| IDkgCreateDealingError::InternalError {
             internal_error: format!("{:?}", e),
         });
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
             "idkg_create_dealing",
             start_time,
         );
@@ -88,8 +89,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
             dealer_index,
             receiver_index,
         )?);
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
             "idkg_verify_dealing_private",
             start_time,
         );
@@ -164,8 +166,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 }
             }
         };
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
             "idkg_load_transcript",
             start_time,
         );
@@ -235,8 +238,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 }
             }
         };
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
             "idkg_load_transcript_with_openings",
             start_time,
         );
@@ -271,8 +275,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
             mega_key_id(&public_key),
         );
 
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
             "idkg_gen_mega_key_pair",
             start_time,
         );
@@ -311,8 +316,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         .map_err(|e| IDkgOpenTranscriptError::InternalError {
             internal_error: format!("{:?}", e),
         });
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
             "idkg_open_dealing",
             start_time,
         );
@@ -329,8 +335,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
             |key_id, _| active_key_ids.contains(key_id),
             IDKG_THRESHOLD_KEYS_SCOPE,
         );
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
             "idkg_retain_threshold_keys_if_present",
             start_time,
         );

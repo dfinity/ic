@@ -1,6 +1,6 @@
 use super::*;
 use async_trait::async_trait;
-use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, TlsClientHandshakeError,
@@ -49,8 +49,9 @@ where
             registry_version,
         )
         .await;
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
+            MetricsScope::Full,
             "perform_tls_server_handshake",
             start_time,
         );
@@ -87,8 +88,9 @@ where
             registry_version,
         )
         .await;
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
+            MetricsScope::Full,
             "perform_tls_server_handshake_without_client_auth",
             start_time,
         );
@@ -127,8 +129,9 @@ where
             registry_version,
         )
         .await;
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
+            MetricsScope::Full,
             "perform_tls_client_handshake",
             start_time,
         );

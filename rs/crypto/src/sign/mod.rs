@@ -50,7 +50,7 @@ pub use canister_threshold_sig::{
 mod tests;
 // TODO: Remove this indirection:
 pub(crate) use ic_crypto_internal_csp::imported_utilities::sign_utils as utils;
-use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_types::signature::BasicSignatureBatch;
 
 impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFatClient<C> {
@@ -80,8 +80,9 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFa
             signer,
             registry_version,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
+            MetricsScope::Full,
             "sign_basic",
             start_time,
         );
@@ -125,8 +126,9 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             signer,
             registry_version,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
+            MetricsScope::Full,
             "verify_basic_sig",
             start_time,
         );
@@ -156,8 +158,9 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         );
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::combine_basic_sig(signatures);
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
+            MetricsScope::Full,
             "combine_basic_sig",
             start_time,
         );
@@ -194,8 +197,9 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             message,
             registry_version,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
+            MetricsScope::Full,
             "verify_basic_sig_batch",
             start_time,
         );
@@ -237,8 +241,9 @@ impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
             signed_bytes,
             public_key,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
+            MetricsScope::Full,
             &metrics_label,
             start_time,
         );
@@ -278,8 +283,9 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentFa
             signer,
             registry_version,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
+            MetricsScope::Full,
             "sign_multi",
             start_time,
         );
@@ -323,8 +329,9 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             signer,
             registry_version,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
+            MetricsScope::Full,
             "verify_multi_sig_individual",
             start_time,
         );
@@ -361,8 +368,9 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             signatures,
             registry_version,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
+            MetricsScope::Full,
             "combine_multi_sig_individuals",
             start_time,
         );
@@ -406,8 +414,9 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             signers,
             registry_version,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
+            MetricsScope::Full,
             "verify_multi_sig_combined",
             start_time,
         );
@@ -442,8 +451,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoCompone
             message,
             dkg_id,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,
+            MetricsScope::Full,
             "sign_threshold",
             start_time,
         );
@@ -489,8 +499,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
             dkg_id,
             signer,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,
+            MetricsScope::Full,
             "verify_threshold_sig_share",
             start_time,
         );
@@ -525,8 +536,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
             shares,
             dkg_id,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,
+            MetricsScope::Full,
             "combine_threshold_sig_shares",
             start_time,
         );
@@ -565,8 +577,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
             message,
             dkg_id,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,
+            MetricsScope::Full,
             "verify_threshold_sig_combined",
             start_time,
         );
@@ -611,8 +624,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
             subnet_id,
             registry_version,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,
+            MetricsScope::Full,
             "verify_combined_threshold_sig_by_public_key",
             start_time,
         );
@@ -654,8 +668,9 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
             public_key,
             registry_version,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::IcCanisterSignature,
+            MetricsScope::Full,
             "verify_canister_sig",
             start_time,
         );
@@ -685,8 +700,9 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentFatClient
         );
         let start_time = self.metrics.now();
         let result = canister_threshold_sig::ecdsa::sign_share(&self.csp, &self.node_id, inputs);
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
+            MetricsScope::Full,
             "sign_share",
             start_time,
         );
@@ -722,8 +738,9 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         let start_time = self.metrics.now();
         let result =
             canister_threshold_sig::ecdsa::verify_sig_share(&self.csp, signer, inputs, share);
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
+            MetricsScope::Full,
             "verify_sig_share",
             start_time,
         );
@@ -753,8 +770,9 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         );
         let start_time = self.metrics.now();
         let result = canister_threshold_sig::ecdsa::combine_sig_shares(&self.csp, inputs, shares);
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
+            MetricsScope::Full,
             "combine_sig_shares",
             start_time,
         );
@@ -786,8 +804,9 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         let start_time = self.metrics.now();
         let result =
             canister_threshold_sig::ecdsa::verify_combined_signature(&self.csp, inputs, signature);
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
+            MetricsScope::Full,
             "verify_combined_sig",
             start_time,
         );

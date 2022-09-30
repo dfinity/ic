@@ -5,7 +5,7 @@ use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
-use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_tls::keygen::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
 use ic_crypto_secrets_containers::{SecretArray, SecretVec};
@@ -50,8 +50,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");
         let key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key);
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
+            MetricsScope::Local,
             "gen_tls_key_pair",
             start_time,
         );
@@ -81,8 +82,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
                 secret_key_variant: secret_key.enum_variant().to_string(),
             }),
         };
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
+            MetricsScope::Local,
             "tls_sign",
             start_time,
         );
