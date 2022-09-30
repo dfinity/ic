@@ -106,6 +106,10 @@ def ic_prep(subnets, version, root_subnet=0):
             node_subnet_index.append(subnet_index)
         subnet_index += 1
 
+    tmpfile = tempfile.NamedTemporaryFile(delete=False)
+    tmpfile.write("{provisional_whitelist: ['*']}".encode())
+    tmpfile.close()
+
     subprocess.run(
         [
             FLAGS.ic_prep_bin,
@@ -114,6 +118,8 @@ def ic_prep(subnets, version, root_subnet=0):
             "--replica-version",
             version,
             "--allow-empty-update-image",
+            "--provisional-whitelist",
+            tmpfile.name,
             "--dkg-interval-length",
             "10",
             "--p2p-flows",
@@ -125,6 +131,8 @@ def ic_prep(subnets, version, root_subnet=0):
         + nodes,
         check=True,
     )
+
+    os.unlink(tmpfile.name)
 
     return ICConfig(workdir, nns_ips, node_subnet_index, root_subnet)
 
@@ -157,11 +165,15 @@ def nns_install(ic_config, ic_url):
     subprocess.run(cmd, check=True)
 
 
-def wait_ic_up(ic_config, timeout=FLAGS.timeout):
+def wait_ic_up(ic_config, timeout=None):
+    if timeout is None:
+        timeout = FLAGS.timeout
     wait_http_up("http://[%s]:8080" % ic_config.nns_ips[0], timeout)
 
 
-def wait_http_up(url, timeout=FLAGS.timeout):
+def wait_http_up(url, timeout=None):
+    if timeout is None:
+        timeout = FLAGS.timeout
     start = time.time()
     now = start
     while now < start + timeout:

@@ -23,7 +23,6 @@ import traceback
 from typing import List
 
 import gflags
-from common import ansible
 from common import flamegraphs
 from common import machine_failure
 from common import misc
@@ -375,12 +374,12 @@ class BaseExperiment:
         return "2001:920:401a:1710:5000:d7ff:fe6f:fde7"
 
     def _get_nns_ip(self):
-        ip = (
-            BaseExperiment.get_mainnet_nns_url()
-            if FLAGS.testnet == "mercury"
-            else ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX, sort=False)[0]
-        )
-        return ip
+        if FLAGS.testnet == "mercury":
+            return BaseExperiment.get_mainnet_nns_url()
+        else:
+            from common import ansible
+
+            return ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX, sort=False)[0]
 
     def _get_nns_url(self):
         """

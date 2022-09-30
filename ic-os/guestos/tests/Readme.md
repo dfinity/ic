@@ -1,3 +1,6 @@
+Informationen in this Readme is mostly outdated. 
+New tests should be implemented with Farm instead of legacy VMs.
+
 Adding new CI tests
 ----------
 
