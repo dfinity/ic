@@ -68,11 +68,9 @@ rust_library(
     ],
 )
 
-# Test is flaky: CRP-1683
 rust_test(
     name = "crypto_service_provider_test",
     crate = ":crypto_service_provider",
-    flaky = True,
     proc_macro_deps = [
         "@crate_index//:proptest-derive",
     ],
