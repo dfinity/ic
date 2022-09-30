@@ -1,4 +1,4 @@
-use crate::execution::test_utilities::{check_ingress_status, ExecutionTestBuilder};
+use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
 use crate::ExecutionResponse;
 use assert_matches::assert_matches;
 use ic_error_types::ErrorCode;
@@ -9,8 +9,8 @@ use ic_replicated_state::CanisterStatus;
 use ic_test_utilities::types::messages::ResponseBuilder;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::CallbackId,
-    Cycles, Time,
+    messages::{CallbackId, MessageId},
+    CanisterId, Cycles, Time,
 };
 use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
 use ic_universal_canister::{call_args, wasm};
@@ -331,6 +331,104 @@ fn execute_response_with_trapping_cleanup() {
             panic!("Wrong execution result.")
         }
     }
+}
+
+#[test]
+fn cycles_correct_if_response_fails() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create three canisters A, B, C.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+
+    // Canister B simply replies with the message that was sent to it.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers cycles.
+    // 2. Traps in the response callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reply(wasm().reply_data_append().trap()),
+            (0, transferred_cycles),
+        )
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+    let execution_cost_before = test.canister_execution_cost(a_id);
+    test.execute_message(a_id);
+    let execution_cost_after = test.canister_execution_cost(a_id);
+    assert!(execution_cost_after > execution_cost_before);
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reply_fee(&b)
+    );
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterCalledTrap);
+}
+
+#[test]
+fn cycles_correct_if_cleanup_fails() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create three canisters A, B, C.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+
+    // Canister B simply replies with the message that was sent to it.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers cycles.
+    // 2. Traps in the response callback.
+    // 3. Traps in the cleanup callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reply(wasm().reply_data_append().trap())
+                .on_cleanup(wasm().trap()),
+            (0, transferred_cycles),
+        )
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+    let execution_cost_before = test.canister_execution_cost(a_id);
+    test.execute_message(a_id);
+    let execution_cost_after = test.canister_execution_cost(a_id);
+    assert!(execution_cost_after > execution_cost_before);
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reply_fee(&b)
+    );
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterCalledTrap);
 }
 
 #[test]
@@ -857,4 +955,258 @@ fn dts_abort_works_in_cleanup_callback() {
     let ingress_status = test.ingress_status(&ingress_id);
     let err = check_ingress_status(ingress_status).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+}
+
+fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let b = wasm()
+        .accept_cycles(1000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reply(
+                    wasm()
+                        .stable_grow(1)
+                        .stable64_write(0, 0, 1000)
+                        .message_payload()
+                        .append_and_reply(),
+                ),
+            (0, 1000),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+    test.execute_message(a_id);
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(b));
+    (a_id, ingress_id)
+}
+
+fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+
+    // Canister B simply replies with the message that was sent to it.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers cycles.
+    // 2. Traps in the response callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reply(
+                    wasm()
+                        .stable_grow(1)
+                        .stable64_write(0, 0, 1000)
+                        .reply_data_append()
+                        .trap(),
+                )
+                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1000)),
+            (0, transferred_cycles),
+        )
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    let execution_cost_before = test.canister_execution_cost(a_id);
+    test.execute_message(a_id);
+    let execution_cost_after = test.canister_execution_cost(a_id);
+    assert!(execution_cost_after > execution_cost_before);
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterCalledTrap);
+
+    (a_id, ingress_id)
+}
+
+fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters A, B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+
+    // Canister B simply replies with the message that was sent to it.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers cycles.
+    // 2. Traps in the response callback.
+    // 3. Traps in the cleanup callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reply(
+                    wasm()
+                        .stable_grow(1)
+                        .stable64_write(0, 0, 1000)
+                        .reply_data_append()
+                        .trap(),
+                )
+                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1000).trap()),
+            (0, transferred_cycles),
+        )
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+    let execution_cost_before = test.canister_execution_cost(a_id);
+    test.execute_message(a_id);
+    let execution_cost_after = test.canister_execution_cost(a_id);
+    assert!(execution_cost_after > execution_cost_before);
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterCalledTrap);
+
+    (a_id, ingress_id)
+}
+
+#[test]
+fn dts_and_nondts_cycles_match_after_response() {
+    let mut test_a = ExecutionTestBuilder::new().with_manual_execution().build();
+    let start_time = test_a.state().time();
+    let (a_id, amsg_id) = successful_response_scenario(&mut test_a);
+
+    let mut test_b = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let (b_id, bmsg_id) = successful_response_scenario(&mut test_b);
+
+    assert_eq!(
+        test_a.canister_state(a_id).system_state.balance(),
+        test_b.canister_state(b_id).system_state.balance(),
+    );
+
+    let status_a = test_a.ingress_status(&amsg_id);
+    let status_b = test_b.ingress_status(&bmsg_id);
+    assert_eq!(status_a, status_b);
+    let time_a = match status_a {
+        IngressStatus::Known {
+            receiver: _,
+            user_id: _,
+            time,
+            state: _,
+        } => time,
+        _ => unreachable!(),
+    };
+    let time_b = match status_b {
+        IngressStatus::Known {
+            receiver: _,
+            user_id: _,
+            time,
+            state: _,
+        } => time,
+        _ => unreachable!(),
+    };
+    assert_eq!(time_a, time_b);
+    assert_eq!(start_time, time_a);
+    assert!(
+        test_a.state().time() < test_b.state().time(),
+        "Time should have progressed further in DTS"
+    );
+}
+
+#[test]
+fn dts_and_nondts_cycles_match_if_response_fails() {
+    let mut test_a = ExecutionTestBuilder::new().with_manual_execution().build();
+    let (a_id, amsg_id) = response_fail_scenario(&mut test_a);
+
+    let mut test_b = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let (b_id, bmsg_id) = response_fail_scenario(&mut test_b);
+
+    assert_eq!(
+        test_a.canister_state(a_id).system_state.balance(),
+        test_b.canister_state(b_id).system_state.balance(),
+    );
+
+    let status_a = test_a.ingress_status(&amsg_id);
+    let status_b = test_b.ingress_status(&bmsg_id);
+    assert_eq!(status_a, status_b);
+    assert!(
+        test_a.state().time() < test_b.state().time(),
+        "Time should have progressed further in DTS"
+    );
+}
+
+#[test]
+fn dts_and_nondts_cycles_match_if_cleanup_fails() {
+    let mut test_a = ExecutionTestBuilder::new().with_manual_execution().build();
+    let (a_id, amsg_id) = cleanup_fail_scenario(&mut test_a);
+
+    let mut test_b = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let (b_id, bmsg_id) = cleanup_fail_scenario(&mut test_b);
+
+    assert_eq!(
+        test_a.canister_state(a_id).system_state.balance(),
+        test_b.canister_state(b_id).system_state.balance(),
+    );
+
+    let status_a = test_a.ingress_status(&amsg_id);
+    let status_b = test_b.ingress_status(&bmsg_id);
+    assert_eq!(status_a, status_b);
+    assert!(
+        test_a.state().time() < test_b.state().time(),
+        "Time should have progressed further in DTS"
+    );
 }

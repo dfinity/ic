@@ -963,11 +963,13 @@ impl ExecutionTest {
         executed_any
     }
 
-    /// Executes a pending message of the given canister.
+    /// Executes a pending message of the given canister and bumps state().time().
     pub fn execute_message(&mut self, canister_id: CanisterId) {
         self.execute_slice(canister_id);
+        self.state.as_mut().unwrap().metadata.batch_time += std::time::Duration::from_secs(1);
         while self.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
             self.execute_slice(canister_id);
+            self.state.as_mut().unwrap().metadata.batch_time += std::time::Duration::from_secs(1);
         }
     }
 
