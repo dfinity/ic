@@ -25,21 +25,38 @@ function exit_usage() {
         echo >&2 "    --no-boundary-nodes                   Do not deploy boundary nodes even if they are declared in the hosts.ini file"
         echo >&2 "    --boundary-dev-image		    Use development image of the boundary node VM (includes development service worker"
         echo >&2 "    --with-testnet-keys                   Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys"
-        echo >&2 -e "\nTo get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
-        echo >&2 -e "Example (deploy latest master to small-a):\n"
-
-        echo >&2 -e "    testnet/tools/icos_deploy.sh small-a --git-revision \$(gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)\n"
+        echo >&2 -e ""
+        echo >&2 -e "To get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
+        echo >&2 -e "Example (deploy latest master to small-a):"
+        echo >&2 -e ""
+        echo >&2 -e "    testnet/tools/icos_deploy.sh small-a --git-revision \$(gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)"
+        echo >&2 -e ""
         exit 1
     fi
 }
 
-deployment=""
-GIT_REVISION="${GIT_REVISION:-}"
+function ansible() {
+    ansible-playbook ${ANSIBLE_ARGS[@]} "$@"
+}
+
+# Helper function to convert times
+function dateFromEpoch() {
+    if [[ "$(uname)" == "Darwin" ]]; then
+        date -j -f '%s' "$1"
+    else
+        date --date="@$1"
+    fi
+}
+
+function disk_image_exists() {
+    curl --output /dev/null --silent --head --fail \
+        "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img/disk-img.tar.gz" \
+        || curl --output /dev/null --silent --head --fail \
+            "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img.tar.gz"
+}
+
 ANSIBLE_ARGS=()
 HOSTS_INI_FILENAME="${HOSTS_INI_FILENAME:-hosts.ini}"
-USE_BOUNDARY_NODES="true"
-BOUNDARY_IMAGE_TYPE=""
-WITH_TESTNET_KEYS=""
 
 while [ $# -gt 0 ]; do
     case "${1}" in
@@ -86,13 +103,13 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-if [[ -z "$GIT_REVISION" ]]; then
+if [[ -z "${GIT_REVISION}" ]]; then
     echo "ERROR: GIT_REVISION not set."
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision <value>"
     exit_usage
 fi
 
-if [[ -z "$deployment" ]]; then
+if [[ -z "${deployment:-}" ]]; then
     echo "ERROR: No deployment specified."
     exit_usage
 fi
@@ -104,41 +121,29 @@ MAX_INGRESS_BYTES_PER_MESSAGE="${MAX_INGRESS_BYTES_PER_MESSAGE:=-1}"
 # This environment variable will be picked up by the Ansible inventory generation script.
 # No further action is required to use the custom HOSTS_INI file.
 export HOSTS_INI_FILENAME
-hosts_ini_file_path="$REPO_ROOT/testnet/env/$deployment/$HOSTS_INI_FILENAME"
-if [[ ! -f $hosts_ini_file_path ]]; then
-    echo >&2 "The Ansible inventory file does not exist, aborting: $hosts_ini_file_path"
+hosts_ini_file_path="${REPO_ROOT}/testnet/env/${deployment}/${HOSTS_INI_FILENAME}"
+if [[ ! -f ${hosts_ini_file_path} ]]; then
+    echo >&2 "The Ansible inventory file does not exist, aborting: ${hosts_ini_file_path}"
     exit 1
 fi
-
-function disk_image_exists() {
-    curl --output /dev/null --silent --head --fail \
-        "https://download.dfinity.systems/ic/$GIT_REVISION/guest-os/disk-img/disk-img.tar.gz" \
-        || curl --output /dev/null --silent --head --fail \
-            "https://download.dfinity.systems/ic/$GIT_REVISION/guest-os/disk-img.tar.gz"
-}
 
 for i in {1..60}; do
     if disk_image_exists; then
-        echo "Disk image found for $GIT_REVISION"
+        echo "Disk image found for ${GIT_REVISION}"
         break
     fi
-    echo "Disk image not available for $GIT_REVISION, waiting 30s for it to be built by the CI ($i/60)"
+    echo "Disk image not available for ${GIT_REVISION}, waiting 30s for it to be built by the CI ($i/60)"
     sleep 30
 done
 if [[ $i -ge 60 ]]; then
-    echo "Disk image not found for $GIT_REVISION, giving up"
+    echo "Disk image not found for ${GIT_REVISION}, giving up"
     exit 1
 fi
 
-echo "Deploying to $deployment from git revision $GIT_REVISION"
-
-# Helper function to convert times
-dateFromEpoch() {
-    date --date="@$1"
-}
+echo "Deploying to ${deployment} from git revision ${GIT_REVISION}"
 
 starttime="$(date '+%s')"
-echo "**** Deployment start time: $(dateFromEpoch "$starttime")"
+echo "**** Deployment start time: $(dateFromEpoch "${starttime}")"
 
 ipv4_info="$(ip -4 address show | grep -vE 'valid_lft')"
 ipv6_info="$(ip -6 address show | grep -vE 'valid_lft|fe80::')"
@@ -155,62 +160,72 @@ ${ipv6_info}
 
 -------------------------------------------------------------------------------"
 
-MEDIA_PATH="$REPO_ROOT/artifacts/guestos/${deployment}/${GIT_REVISION}"
-BN_MEDIA_PATH="$REPO_ROOT/artifacts/boundary-guestos/${deployment}/${GIT_REVISION}"
-INVENTORY="$REPO_ROOT/testnet/env/$deployment/hosts"
-
-ANSIBLE="ansible-playbook -i $INVENTORY ${ANSIBLE_ARGS[*]} -e bn_image_type=\"$BOUNDARY_IMAGE_TYPE\" -e ic_git_revision=$GIT_REVISION -e ic_media_path=\"$MEDIA_PATH\""
+MEDIA_PATH="${REPO_ROOT}/artifacts/guestos/${deployment}/${GIT_REVISION}"
+BN_MEDIA_PATH="${REPO_ROOT}/artifacts/boundary-guestos/${deployment}/${GIT_REVISION}"
+INVENTORY="${REPO_ROOT}/testnet/env/${deployment}/hosts"
+USE_BOUNDARY_NODES="${USE_BOUNDARY_NODES:-true}"
 
 # Check if hosts.ini has boundary nodes
-if "$INVENTORY" --list | jq -e ".boundary.hosts | length == 0" >/dev/null; then
+if "${INVENTORY}" --list | jq -e ".boundary.hosts | length == 0" >/dev/null; then
     USE_BOUNDARY_NODES="false"
 fi
 
 if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
-    ANSIBLE+=" -e bn_media_path=\"$BN_MEDIA_PATH\""
+    ANSIBLE_ARGS+=("-e" "bn_media_path=${BN_MEDIA_PATH}")
 else
-    ANSIBLE+=" --skip-tags boundary_node_vm"
+    ANSIBLE_ARGS+=("--skip-tags" "boundary_node_vm")
 fi
+
+ANSIBLE_ARGS+=(
+    "-i" "${INVENTORY}"
+    "-e" "bn_image_type=${BOUNDARY_IMAGE_TYPE:-}"
+    "-e" "ic_git_revision=${GIT_REVISION}"
+    "-e" "ic_media_path=${MEDIA_PATH}"
+    "-e" "ic_boundary_node_image=boundary"
+)
 
 # Ensure we kill these on CTRL+C or failure
 trap 'echo "EXIT received, killing all jobs"; jobs -p | xargs -rn1 pkill -P >/dev/null 2>&1; exit 1' EXIT
 
-cd "$REPO_ROOT/ic-os/guestos"
+cd "${REPO_ROOT}/ic-os/guestos"
 
 TMPDIR=$(mktemp -d /tmp/icos-deploy.sh.XXXXXX)
 
-pushd "$REPO_ROOT/testnet/ansible" >/dev/null
-DESTROY_OUT="$TMPDIR/destroy.log"
-echo "**** Start destroying old deployment (log $DESTROY_OUT)"
+pushd "${REPO_ROOT}/testnet/ansible" >/dev/null
+DESTROY_OUT="${TMPDIR}/destroy.log"
+echo "**** Start destroying old deployment (log ${DESTROY_OUT})"
 COMMAND=$(
     cat <<EOM
 set -x
-$ANSIBLE icos_network_redeploy.yml -e ic_state=destroy
+$(declare -f ansible)
+$(declare -p ANSIBLE_ARGS)
+
+ansible icos_network_redeploy.yml -e ic_state=destroy
 EOM
 )
-script --quiet --return "$DESTROY_OUT" --command "$COMMAND" >/dev/null 2>&1 &
+script --quiet --return "${DESTROY_OUT}" --command "${COMMAND}" >/dev/null 2>&1 &
 DESTROY_PID=$!
 popd >/dev/null
 
 if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
-    pushd "$REPO_ROOT/ic-os/boundary-guestos" >/dev/null
-    BOUNDARY_OUT="$TMPDIR/build-boundary.log"
+    pushd "${REPO_ROOT}/ic-os/boundary-guestos" >/dev/null
+    BOUNDARY_OUT="${TMPDIR}/build-boundary.log"
     echo "-------------------------------------------------------------------------------"
     echo "**** Build USB sticks for boundary nodes"
 
     COMMAND=$(
         cat <<EOM
 set -x
-rm -rf "$BN_MEDIA_PATH"
-mkdir -p "$BN_MEDIA_PATH"
-"$INVENTORY" --media-json >"$BN_MEDIA_PATH/${deployment}.json"
-"$REPO_ROOT"/ic-os/boundary-guestos/scripts/build-deployment.sh \
-    --input="$BN_MEDIA_PATH/${deployment}.json" \
-    --output="$BN_MEDIA_PATH"
+rm -rf "${BN_MEDIA_PATH}"
+mkdir -p "${BN_MEDIA_PATH}"
+"${INVENTORY}" --media-json >"${BN_MEDIA_PATH}/${deployment}.json"
+"${REPO_ROOT}"/ic-os/boundary-guestos/scripts/build-deployment.sh \
+    --input="${BN_MEDIA_PATH}/${deployment}.json" \
+    --output="${BN_MEDIA_PATH}"
 EOM
     )
 
-    script --quiet --return "$BOUNDARY_OUT" --command "$COMMAND" >/dev/null 2>&1 &
+    script --quiet --return "${BOUNDARY_OUT}" --command "${COMMAND}" >/dev/null 2>&1 &
     BOUNDARY_PID=$!
     echo "-------------------------------------------------------------------------------"
 
@@ -218,69 +233,69 @@ EOM
 fi
 
 echo "**** Build USB sticks for IC nodes"
-rm -rf "$MEDIA_PATH"
-mkdir -p "$MEDIA_PATH"
-"$INVENTORY" --media-json >"$MEDIA_PATH/${deployment}.json"
+rm -rf "${MEDIA_PATH}"
+mkdir -p "${MEDIA_PATH}"
+"${INVENTORY}" --media-json >"${MEDIA_PATH}/${deployment}.json"
 
-"$REPO_ROOT/ic-os/guestos/scripts/build-deployment.sh" \
+"${REPO_ROOT}/ic-os/guestos/scripts/build-deployment.sh" \
     --debug \
-    --input="$MEDIA_PATH/${deployment}.json" \
-    --output="$MEDIA_PATH" \
-    --git-revision=$GIT_REVISION \
-    --whitelist="$REPO_ROOT/testnet/env/${deployment}/provisional_whitelist.json" \
-    --dkg-interval-length=$DKG_INTERVAL_LENGTH \
-    --max-ingress-bytes-per-message=$MAX_INGRESS_BYTES_PER_MESSAGE \
-    $WITH_TESTNET_KEYS
+    --input="${MEDIA_PATH}/${deployment}.json" \
+    --output="${MEDIA_PATH}" \
+    --git-revision="${GIT_REVISION}" \
+    --whitelist="${REPO_ROOT}/testnet/env/${deployment}/provisional_whitelist.json" \
+    --dkg-interval-length=${DKG_INTERVAL_LENGTH} \
+    --max-ingress-bytes-per-message=${MAX_INGRESS_BYTES_PER_MESSAGE} \
+    ${WITH_TESTNET_KEYS:-}
 
 # In case someone wants to deploy with a locally built disk image the following lines contain
 # the necessary commands.
 
 # echo "**** Remove previous disk image"
-# rm -f $HOME/disk.*
+# rm -f ${HOME}/disk.*
 
 # echo "**** Build disk image"
-# ./scripts/build-disk-image.sh -o "$MEDIA_PATH/disk.img"
+# ./scripts/build-disk-image.sh -o "${MEDIA_PATH}/disk.img"
 
-cd "$REPO_ROOT/testnet/ansible"
+cd "${REPO_ROOT}/testnet/ansible"
 
 # Wait on the destroy to finish
 echo "**** Finishing destroy"
 DESTROY_STATUS=0
-wait $DESTROY_PID || DESTROY_STATUS=1
-cat "$DESTROY_OUT" || true
-if [[ $DESTROY_STATUS -ne 0 ]]; then
-    exit $(tail -1 "$DESTROY_OUT" | sed -re "s/.*=\"([0-9]+).*/\1/")
+wait ${DESTROY_PID} || DESTROY_STATUS=1
+cat "${DESTROY_OUT}" || true
+if [[ ${DESTROY_STATUS} -ne 0 ]]; then
+    exit $(tail -1 "${DESTROY_OUT}" | sed -re "s/.*=\"([0-9]+).*/\1/")
 fi
 
 # Wait on the boundary node image to finish
 if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
     echo "**** Finishing boundary image"
     BOUNDARY_STATUS=0
-    wait $BOUNDARY_PID || BOUNDARY_STATUS=1
-    cat "$BOUNDARY_OUT" || true
-    if [[ $BOUNDARY_STATUS -ne 0 ]]; then
-        exit $(tail -1 "$BOUNDARY_OUT" | sed -re "s/.*=\"([0-9]+).*/\1/")
+    wait ${BOUNDARY_PID} || BOUNDARY_STATUS=1
+    cat "${BOUNDARY_OUT}" || true
+    if [[ ${BOUNDARY_STATUS} -ne 0 ]]; then
+        exit $(tail -1 "${BOUNDARY_OUT}" | sed -re "s/.*=\"([0-9]+).*/\1/")
     fi
 fi
-rm -rf "$TMPDIR"
+rm -rf "${TMPDIR}"
 
 echo "**** Create new IC instance"
-$ANSIBLE icos_network_redeploy.yml -e ic_state="create"
+ansible icos_network_redeploy.yml -e ic_state="create"
 
 echo "**** Start VMs"
-$ANSIBLE icos_network_redeploy.yml -e ic_state="start"
+ansible icos_network_redeploy.yml -e ic_state="start"
 
 echo "**** Install NNS canisters"
-$ANSIBLE icos_network_redeploy.yml -e ic_state="install"
+ansible icos_network_redeploy.yml -e ic_state="install"
 
 echo "**** Start monitoring"
-NNS_IP=$("$INVENTORY" --nodes | head -n1 | awk '{print $2}')
-"$MEDIA_PATH/bin/ic-admin" --nns-url "https://[$NNS_IP]:8080" get-subnet-public-key 0 "$MEDIA_PATH/nns-public-key.pem"
-$ANSIBLE ic_p8s_network_update.yml -e yes_i_confirm=yes
-$ANSIBLE ic_p8s_service_discovery_install.yml -e yes_i_confirm=yes -e nns_public_key_path="$MEDIA_PATH/nns-public-key.pem"
+NNS_IP=$("${INVENTORY}" --nodes | head -n1 | awk '{print $2}')
+"${MEDIA_PATH}/bin/ic-admin" --nns-url "https://[${NNS_IP}]:8080" get-subnet-public-key 0 "${MEDIA_PATH}/nns-public-key.pem"
+ansible ic_p8s_network_update.yml -e yes_i_confirm=yes
+ansible ic_p8s_service_discovery_install.yml -e yes_i_confirm=yes -e nns_public_key_path="${MEDIA_PATH}/nns-public-key.pem"
 
 endtime="$(date '+%s')"
-echo "**** Completed deployment at $(dateFromEpoch "$endtime") (start time was $(dateFromEpoch "$starttime"))"
+echo "**** Completed deployment at $(dateFromEpoch "${endtime}") (start time was $(dateFromEpoch "${starttime}"))"
 duration=$((endtime - starttime))
 echo "**** $((duration / 60)) minutes and $((duration % 60)) seconds elapsed."
 
