@@ -114,6 +114,7 @@ declare -a IC_EXECUTABLES=(
     "boundary-node-prober"
     "denylist-updater"
     "ic-balance-exporter"
+    "ic-registry-replicator"
 )
 
 declare -a INSTALL_EXEC_ARGS=()

@@ -19,7 +19,8 @@ generic-guest-os-diskimg:
         boundary-node-control-plane.gz \
         boundary-node-prober.gz \
         denylist-updater.gz \
-        ic-balance-exporter.gz
+        ic-balance-exporter.gz \
+        ic-registry-replicator.gz
       popd
 
       cd ic-os/generic-guestos

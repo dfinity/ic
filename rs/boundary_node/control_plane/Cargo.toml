@@ -14,13 +14,12 @@ futures = "0.3.21"
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-registry-client = { path = "../../registry/client" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
-ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
+ic-registry-local-store = { path = "../../registry/local_store" }
 ic-types = { path = "../../types/types" }
 mockall = "0.11.1"
 opentelemetry = "0.17.0"
 opentelemetry-prometheus = "0.10.0"
 prometheus = "0.13.1"
-rand = "0.8.4"
 reqwest = { version = "0.11.11", features = ["json"] }
 serde = { version = "1.0.139", features = ["serde_derive"] }
 serde_cbor = "0.11.2"
@@ -29,4 +28,3 @@ tempfile = "3.3.0"
 tokio = { version = "1.19.2", features = ["full"] }
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["json"] }
-url = "2.2.2"
