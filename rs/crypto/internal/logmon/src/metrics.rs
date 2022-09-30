@@ -59,44 +59,24 @@ impl CryptoMetrics {
         }
     }
 
-    /// Observes a CSP method duration, measuring the actual local cryptographic
-    /// computation. `method_name` indicates the method's name, such as `BasicSignature::sign`.
-    ///
-    /// It observes the duration only if metrics are enabled, `start_time` is `Some`,
-    /// and the metrics for `domain` are defined.
-    pub fn observe_csp_local_duration_seconds(
-        &self,
-        domain: MetricsDomain,
-        method_name: &str,
-        start_time: Option<Instant>,
-    ) {
-        if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
-            if let Some(domain_metrics) = metrics.crypto_csp_local_duration_seconds.get(&domain) {
-                domain_metrics
-                    .with_label_values(&[&format!("{}::{}", domain, method_name)])
-                    .observe(start_time.elapsed().as_secs_f64());
-            }
-        }
-    }
-
     /// Observes a crypto method duration, measuring the the full duration,
     /// which includes actual cryptographic computation and the potential RPC overhead.
     /// `method_name` indicates the method's name, such as `BasicSignature::sign`.
     ///
     /// It observes the duration only if metrics are enabled, `start_time` is `Some`,
     /// and the metrics for `domain` are defined.
-    pub fn observe_full_duration_seconds(
+    pub fn observe_duration_seconds(
         &self,
         domain: MetricsDomain,
+        scope: MetricsScope,
         method_name: &str,
         start_time: Option<Instant>,
     ) {
         if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
-            if let Some(domain_metrics) = metrics.crypto_full_duration_seconds.get(&domain) {
-                domain_metrics
-                    .with_label_values(&[&format!("{}::{}", domain, method_name)])
-                    .observe(start_time.elapsed().as_secs_f64());
-            }
+            metrics
+                .crypto_duration_seconds
+                .with_label_values(&[method_name, &format!("{}", scope), &format!("{}", domain)])
+                .observe(start_time.elapsed().as_secs_f64());
         }
     }
 
@@ -129,6 +109,12 @@ pub enum MetricsDomain {
     IDkgProtocol,
     ThresholdEcdsa,
     IcCanisterSignature,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+pub enum MetricsScope {
+    Full,
+    Local,
 }
 
 /// Keeps track of the number of node keys. This information is collected and provided to the
@@ -171,17 +157,13 @@ struct Metrics {
     /// 'read' or 'write'.
     pub crypto_lock_acquisition_duration_seconds: HistogramVec,
 
-    /// Histograms of CSP method call times of various functionalities, measuring
-    /// the duration of the actual local crypto computation.
-    ///
-    /// The 'method_name' label indicates the functionality, such as `BasicSignature::sign`.
-    pub crypto_csp_local_duration_seconds: BTreeMap<MetricsDomain, HistogramVec>,
-
     /// Histograms of crypto method call times of various functionalities, measuring the full
     /// duration of the call, i.e. both the local crypto computation, and the
     /// potential RPC overhead.
-    /// The 'method_name' label indicates the functionality, such as `BasicSignature::sign`.
-    pub crypto_full_duration_seconds: BTreeMap<MetricsDomain, HistogramVec>,
+    /// The 'method_name' label indicates the functionality, such as `sign`.
+    /// The 'scope' label indicates the scope of the call, either `Full` or `Local`.
+    /// The 'domain' label indicates the domain, e.g., `MetricsDomain::BasicSignature`.
+    pub crypto_duration_seconds: HistogramVec,
 
     /// Counters for the different types of keys and certificates of a node. The keys and
     /// certificates that are kept track of are:
@@ -217,24 +199,20 @@ impl MetricsDomain {
             MetricsDomain::IcCanisterSignature => "ic_canister_signature",
         }
     }
+}
 
-    fn local_metric_name(&self) -> String {
-        format!("crypto_{}_local_duration_seconds", self)
+impl Display for MetricsScope {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str_snake_case())
     }
+}
 
-    fn local_metric_help(&self) -> String {
-        format!(
-            "Histogram of CSP {} method call durations, measuring the actual crypto computation",
-            self
-        )
-    }
-
-    fn full_metric_name(&self) -> String {
-        format!("crypto_{}_full_duration_seconds", self)
-    }
-
-    fn full_metric_help(&self) -> String {
-        format!("Histogram of {} method call durations, measuring both crypto computation and the potential RPC overhead", self)
+impl MetricsScope {
+    fn as_str_snake_case(&self) -> &str {
+        match self {
+            MetricsScope::Full => "full",
+            MetricsScope::Local => "local",
+        }
     }
 }
 
@@ -264,32 +242,12 @@ impl KeyType {
 
 impl Metrics {
     pub fn new(r: &MetricsRegistry) -> Self {
-        let default_buckets = vec![
-            0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0,
-            5.0, 10.0, 20.0, 50.0,
-        ];
-        let mut local_duration = BTreeMap::new();
-        let mut full_duration = BTreeMap::new();
-        for domain in MetricsDomain::iter() {
-            local_duration.insert(
-                domain,
-                r.histogram_vec(
-                    domain.local_metric_name(),
-                    domain.local_metric_help(),
-                    default_buckets.clone(),
-                    &["method_name"],
-                ),
-            );
-            full_duration.insert(
-                domain,
-                r.histogram_vec(
-                    domain.full_metric_name(),
-                    domain.full_metric_help(),
-                    default_buckets.clone(),
-                    &["method_name"],
-                ),
-            );
-        }
+        let durations = r.histogram_vec(
+            "crypto_duration_seconds",
+            "Histogram of method call durations in seconds",
+            ic_metrics::buckets::decimal_buckets(-4, 1),
+            &["method_name", "scope", "domain"],
+        );
         let mut key_counts = BTreeMap::new();
         for key_type in KeyType::iter() {
             key_counts.insert(
@@ -307,8 +265,7 @@ impl Metrics {
                 vec![0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0],
                 &["name", "access"],
             ),
-            crypto_csp_local_duration_seconds: local_duration,
-            crypto_full_duration_seconds: full_duration,
+            crypto_duration_seconds: durations,
             crypto_key_counts: key_counts,
         }
     }

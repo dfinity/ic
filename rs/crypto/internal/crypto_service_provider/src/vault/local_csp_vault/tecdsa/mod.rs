@@ -3,7 +3,7 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdEcdsaSignerCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
     ThresholdEcdsaSigShareInternal,
@@ -52,8 +52,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         .map_err(|e| ThresholdEcdsaSignShareError::InternalError {
             internal_error: format!("{:?}", e),
         });
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
+            MetricsScope::Local,
             "ecdsa_sign_share",
             start_time,
         );

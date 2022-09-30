@@ -5,7 +5,7 @@ use crate::types::{CspSignature, ThresBls12_381_Signature};
 use crate::vault::api::CspThresholdSignatureKeygenError;
 use crate::vault::api::ThresholdSignatureCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12381_clib;
 use ic_types::crypto::CryptoError;
@@ -120,8 +120,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
                 algorithm: algorithm_id,
             }),
         };
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,
+            MetricsScope::Local,
             "threshold_sign",
             start_time,
         );
