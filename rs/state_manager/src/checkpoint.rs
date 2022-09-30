@@ -82,7 +82,7 @@ pub fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["filter_canisters"])
             .start_timer();
-        tip.filter_canisters(&state.canister_states.keys().collect())?;
+        layout.filter_tip_canisters(height, &state.canister_states.keys().collect())?;
     }
 
     let cp = {
