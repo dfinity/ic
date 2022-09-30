@@ -80,11 +80,13 @@ mod tests {
 
             let rt = tokio::runtime::Runtime::new().unwrap();
 
-            let (connected_1, mut done_1) = channel(1);
-            let event_handler_1 = setup_peer_up_ack_event_handler(rt.handle().clone(), connected_1);
+            let (peer_a_sender, mut peer_a_receiver) = channel(1);
+            let event_handler_1 =
+                setup_peer_up_ack_event_handler(rt.handle().clone(), peer_a_sender);
 
-            let (connected_2, mut done_2) = channel(1);
-            let event_handler_2 = setup_peer_up_ack_event_handler(rt.handle().clone(), connected_2);
+            let (peer_b_sender, mut peer_b_receiver) = channel(1);
+            let event_handler_2 =
+                setup_peer_up_ack_event_handler(rt.handle().clone(), peer_b_sender);
 
             let (_control_plane_1, _control_plane_2) = start_connection_between_two_peers(
                 rt.handle().clone(),
@@ -96,12 +98,8 @@ mod tests {
                 use_h2,
             );
 
-            assert_eq!(done_1.blocking_recv(), Some(true));
-            assert_eq!(done_2.blocking_recv(), Some(true));
-            if use_h2 {
-                assert_eq!(done_1.blocking_recv(), Some(true));
-                assert_eq!(done_2.blocking_recv(), Some(true));
-            }
+            assert_eq!(peer_a_receiver.blocking_recv(), Some(true));
+            assert_eq!(peer_b_receiver.blocking_recv(), Some(true));
         });
     }
 
@@ -335,14 +333,17 @@ mod tests {
         connected: Sender<bool>,
     ) -> TransportEventHandler {
         let (event_handler, mut handle) = create_mock_event_handler();
-
         rt.spawn(async move {
             loop {
-                let (event, rsp) = handle.next_request().await.unwrap();
-                if let TransportEvent::PeerUp(_) = event {
-                    connected.try_send(true).unwrap()
+                if let Some(req) = handle.next_request().await {
+                    let (event, rsp) = req;
+                    if let TransportEvent::PeerUp(_) = event {
+                        connected
+                            .try_send(true)
+                            .expect("Channel capacity should not be reached");
+                    }
+                    rsp.send_response(());
                 }
-                rsp.send_response(());
             }
         });
         event_handler

@@ -197,7 +197,7 @@ impl TransportImplH2 {
                                 // TODO: P2P-516
                                 return;
                             }
-                            let mut event_handler = match arc_self.event_handler.lock().await.as_ref() {
+                            let event_handler = match arc_self.event_handler.lock().await.as_ref() {
                                 Some(event_handler) => event_handler.clone(),
                                 None => return,
                             };
@@ -209,15 +209,11 @@ impl TransportImplH2 {
                                 ConnectionRole::Server,
                                 peer_addr,
                                 tls_stream,
-                                event_handler.clone(),
+                                event_handler,
                                 arc_self.data_plane_metrics.clone(),
                                 arc_self.weak_self.read().unwrap().clone(),
                                 arc_self.rt_handle.clone(),
                             );
-                            event_handler
-                                .call(TransportEvent::PeerUp(peer_id))
-                                .await
-                                .expect("Can't panic on infallible");
                             peer_state.update(ConnectionState::ConnectedH2(connected_state), ConnectionRole::Server);
                             arc_self.control_plane_metrics
                                 .tcp_accept_conn_success
