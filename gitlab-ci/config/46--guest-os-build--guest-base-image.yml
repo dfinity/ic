@@ -37,6 +37,7 @@ deploy-guest-os-baseimg:
     docker build -q -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest \
         --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
     docker push dfinity/boundaryos-base-snp:"$TAG"
+    cd "${CI_PROJECT_DIR}"
 
     IMAGE_LIST=(
         dfinity/guestos-base
