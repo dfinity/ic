@@ -71,8 +71,16 @@ test_report.xml
 # IC-OS disk images
 *-os.iso
 *os.img
+disk.img
 *-img.tar.gz
 *-img.tar.zst
+
+# IC-OS binaries
+infogetty
+infogetty.o
+network_info.o
+prestorecon
+prestorecon.o
 
 # Various build artifacts
 /artifacts/
