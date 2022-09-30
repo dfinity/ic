@@ -4,7 +4,6 @@
   cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
   docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest \
       -f Dockerfile.base .
-  docker push dfinity/guestos-base:"$TAG"
   docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest \
       --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
   # genericos-base
@@ -45,6 +44,7 @@ push-base-images:
 
      # TAG gets defined in *build-base-images
      # guestos-base & guestos-base-dev
+     docker push dfinity/guestos-base:"$TAG"
      docker push dfinity/guestos-base-dev:"$TAG"
      # genericos-base
      docker push dfinity/genericos-base:"$TAG"
