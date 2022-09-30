@@ -120,6 +120,7 @@ boundary:
       - "2a00:fb01:400::/56"  # ZH1
     ipv6_monitoring_ips:
       - "2a05:d01c:e2c:a700::/56" # AWS eu-west-2 London Monitoring VPC
+      - "2a05:d01c:d9:2b00::/56" # prometheus.mainnet.dfinity.network
 
 
 all:
