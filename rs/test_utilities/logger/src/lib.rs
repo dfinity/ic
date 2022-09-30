@@ -37,11 +37,16 @@ where
     let plain = slog_term::PlainDecorator::new(writer);
     let drain = slog_term::FullFormat::new(plain).build();
     let drain = Mutex::new(drain).fuse();
+    // The actual output happens at the exit of the scope at _print.drop();
+    // DO NOT RETURN LOG FROM THE SCOPE
     let log = slog::Logger::root(drain, slog::o!());
     slog_scope::scope(&log, || f(&log))
 }
 
-fn get_test_replica_logger() -> ReplicaLogger {
+pub fn with_test_replica_logger<F, R>(f: F) -> R
+where
+    F: FnOnce(ReplicaLogger) -> R,
+{
     use slog::Drain;
 
     let buf = Arc::new(Mutex::new(vec![]));
@@ -54,12 +59,8 @@ fn get_test_replica_logger() -> ReplicaLogger {
         .filter_level(slog::Level::Info)
         .ignore_res();
     let drain = Mutex::new(drain).fuse();
-    slog::Logger::root(drain, slog::o!()).into()
-}
-
-pub fn with_test_replica_logger<F, R>(f: F) -> R
-where
-    F: FnOnce(ReplicaLogger) -> R,
-{
-    f(get_test_replica_logger())
+    // The actual output happens at the exit of the scope at _print.drop();
+    // DO NOT RETURN LOG FROM THE SCOPE
+    let log = slog::Logger::root(drain, slog::o!());
+    f(log.into())
 }
