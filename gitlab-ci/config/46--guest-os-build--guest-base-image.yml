@@ -28,9 +28,8 @@ build-base-images:
   stage: guest-os-build
   needs: []
   script:
-  - |
-    set -euo pipefail
-    *build-base-images
+  - set -euo pipefail
+  - *build-base-images
 
 push-base-images:
   extends:
@@ -39,43 +38,41 @@ push-base-images:
   stage: guest-os-build
   needs: []
   script:
+   - set -euo pipefail
+   - *build-base-images
    - |
-    set -euo pipefail
+     docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
 
-    *build-base-images
-    # TAG gets defined
+     # TAG gets defined in *build-base-images
+     # guestos-base & guestos-base-dev
+     docker push dfinity/guestos-base-dev:"$TAG"
+     # genericos-base
+     docker push dfinity/genericos-base:"$TAG"
+     # boundaryos-base
+     docker push dfinity/boundaryos-base:"$TAG"
+     # boundaryos-base-snp
+     docker push dfinity/boundaryos-base-snp:"$TAG"
 
-    docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-    # guestos-base & guestos-base-dev
-    docker push dfinity/guestos-base-dev:"$TAG"
-    exit 0
-    # genericos-base
-    docker push dfinity/genericos-base:"$TAG"
-    # boundaryos-base
-    docker push dfinity/boundaryos-base:"$TAG"
-    # boundaryos-base-snp
-    docker push dfinity/boundaryos-base-snp:"$TAG"
+     IMAGE_LIST=(
+         dfinity/guestos-base
+         dfinity/guestos-base-dev
+         dfinity/genericos-base
+         dfinity/boundaryos-base
+         dfinity/boundaryos-base-snp
+     )
+     # search & replace
+     for IMAGE in ${IMAGE_LIST[@]}; do
+         OLD_REF="$(grep -rh -E "${IMAGE}@sha256:[0-9a-z]{64}" * | head -1)"
+         NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' ${IMAGE}:${TAG})"
+         grep -r "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
+     done
 
-    IMAGE_LIST=(
-        dfinity/guestos-base
-        dfinity/guestos-base-dev
-        dfinity/genericos-base
-        dfinity/boundaryos-base
-        dfinity/boundaryos-base-snp
-    )
-    # search & replace
-    for IMAGE in ${IMAGE_LIST[@]}; do
-        OLD_REF="$(grep -rh -E "${IMAGE}@sha256:[0-9a-z]{64}" * | head -1)"
-        NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' ${IMAGE}:${TAG})"
-        grep -r "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
-    done
-
-    # commit, push & create new merge request 
-    git config --global user.email "idx@dfinity.org"
-    git config --global user.name "IDX GitLab Automation"
-    git checkout -b "base-images-ref-update-${TAG}"
-    git commit -a -m "Updating container base images refs"
-    git push \
-        -o merge_request.create \
-        -o merge_request.title="Updating container base images refs [$TAG]"
-        origin "base-images-ref-update-${TAG}"
+     # commit, push & create new merge request 
+     git config --global user.email "idx@dfinity.org"
+     git config --global user.name "IDX GitLab Automation"
+     git checkout -b "base-images-ref-update-${TAG}"
+     git commit -a -m "Updating container base images refs"
+     git push \
+         -o merge_request.create \
+         -o merge_request.title="Updating container base images refs [$TAG]" \
+         origin "base-images-ref-update-${TAG}"
