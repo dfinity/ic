@@ -46,7 +46,7 @@ deploy-guest-os-baseimg:
         dfinity/boundaryos-base-snp
     )
     for IMAGE in ${IMAGE_LIST[@]}; do
-        OLD_REF="$(grep -rh -E "dfinity/guestos-base@sha256:[0-9a-z]{64}" * | head -1)"
+        OLD_REF="$(grep -rh -E "${IMAGE}@sha256:[0-9a-z]{64}" * | head -1)"
         NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' ${IMAGE}:${TAG})"
         grep -r "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
     done
