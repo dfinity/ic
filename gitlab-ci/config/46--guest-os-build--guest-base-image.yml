@@ -40,6 +40,20 @@ deploy-guest-os-baseimg:
     echo "Use the image with it's SHA256 DIGEST below for BOUNDARY IC-OS Dockerfile (snp version)"
     docker inspect --format='{{index .RepoDigests 0}}' dfinity/boundaryos-base-snp:"$TAG"
 
+    IMAGE_LIST=(
+        dfinity/guestos-base
+        dfinity/guestos-base-dev
+        dfinity/genericos-base
+        dfinity/boundaryos-base
+        dfinity/boundaryos-base-snp
+    )
+    for IMAGE in IMAGE_LIST; do
+      OLD_REF="$(rg -IN '${IMAGE}@sha256:[0-9a-z]{64}' | head -1)"
+      NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' ${IMAGE}:${TAG})"
+      rg -IN "$OLD_REF" --files-with-matches | xargs sed -i 's/$OLD_REF/$NEW_REF/b'
+    done
+    git status
+    git diff
     # TODO: create a MR with updated references
 
 build-guest-os-baseimg:
