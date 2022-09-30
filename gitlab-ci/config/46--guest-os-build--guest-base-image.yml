@@ -9,36 +9,34 @@ deploy-guest-os-baseimg:
     set -euo pipefail
 
     TAG=$(date '+%Y-%m-%d-%H%M')
-
     docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+
+	# guestos-base & guestos-base-dev
     cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest -f Dockerfile.base .
+    docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest \
+        -f Dockerfile.base .
     docker push dfinity/guestos-base:"$TAG"
-    docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
+    docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest \
+        --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
     docker push dfinity/guestos-base-dev:"$TAG"
 
+    # genericos-base
     cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
-    docker build -q -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest -f Dockerfile.base .
+    docker build -q -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest \
+        -f Dockerfile.base .
     docker push dfinity/genericos-base:"$TAG"
 
+	# boundaryos-base
     cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    docker build -q -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest -f Dockerfile.base .
+    docker build -q -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest \
+        -f Dockerfile.base .
     docker push dfinity/boundaryos-base:"$TAG"
 
+	# boundaryos-base-snp
     cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    docker build -q -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
+    docker build -q -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest \
+        --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
     docker push dfinity/boundaryos-base-snp:"$TAG"
-
-    echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/guestos-base:"$TAG"
-    echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile (dev version)"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/guestos-base-dev:"$TAG"
-    echo "Use the image with it's SHA256 DIGEST below for GENERIC IC-OS Dockerfile"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/genericos-base:"$TAG"
-    echo "Use the image with it's SHA256 DIGEST below for BOUNDARY IC-OS Dockerfile"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/boundaryos-base:"$TAG"
-    echo "Use the image with it's SHA256 DIGEST below for BOUNDARY IC-OS Dockerfile (snp version)"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/boundaryos-base-snp:"$TAG"
 
     IMAGE_LIST=(
         dfinity/guestos-base
@@ -48,13 +46,22 @@ deploy-guest-os-baseimg:
         dfinity/boundaryos-base-snp
     )
     for IMAGE in ${IMAGE_LIST[@]}; do
-        OLD_REF="$(rg -IN "${IMAGE}@sha256:[0-9a-z]{64}" | head -1)"
+        OLD_REF="$(grep -rh -E "dfinity/guestos-base@sha256:[0-9a-z]{64}" * | head -1)"
         NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' ${IMAGE}:${TAG})"
-        rg -IN "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
+        grep -r "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
     done
-    git status
-    git diff
-    # TODO: create a MR with updated references
+
+    git config --global user.email "idx@dfinity.org"
+    git config --global user.name "IDX GitLab Automation"
+	git checkout -b "base-images-ref-update-${TAG}"
+    git commit -a -m "Updating container base images refs"
+    git remote add origin \
+        "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" \
+        || true
+    git remote set-url origin \
+        "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" \
+        || true
+    git push -o merge_request.create origin "base-images-ref-update-${TAG}"
 
 build-guest-os-baseimg:
   extends:
