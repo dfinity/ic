@@ -11,7 +11,7 @@ deploy-guest-os-baseimg:
     TAG=$(date '+%Y-%m-%d-%H%M')
     docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
 
-	# guestos-base & guestos-base-dev
+    # guestos-base & guestos-base-dev
     cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
     docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest \
         -f Dockerfile.base .
@@ -26,13 +26,13 @@ deploy-guest-os-baseimg:
         -f Dockerfile.base .
     docker push dfinity/genericos-base:"$TAG"
 
-	# boundaryos-base
+    # boundaryos-base
     cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
     docker build -q -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest \
         -f Dockerfile.base .
     docker push dfinity/boundaryos-base:"$TAG"
 
-	# boundaryos-base-snp
+    # boundaryos-base-snp
     cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
     docker build -q -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest \
         --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
