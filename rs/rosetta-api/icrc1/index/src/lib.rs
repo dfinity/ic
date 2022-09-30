@@ -115,7 +115,7 @@ pub type GetTransactionsResult = Result<GetTransactions, GetTransactionsErr>;
 pub struct ListSubaccountsArgs {
     pub owner: PrincipalId,
     // The last subaccount seen by the client for the given principal.
-    // This subaccount is not included in the result.
+    // This subaccount is included in the result.
     // If None then the results will start from the first
     // in natural order.
     pub start: Option<Subaccount>,
