@@ -17,12 +17,6 @@ fi
 # Required by rclone to get credentials from $HOME/.aws/credentials
 export HOME="${BUILD_INFO['HOME']}"
 
-for f in "$@"
-do
-  "@@RCLONE_UPLOAD@@" --config "@@RCLONE_CONFIG@@" --version "${VERSION}" "@@BIN_DIR@@/$f" "@@REMOTE_SUBDIR@@/$(basename $f)"
-done
+"@@RCLONE_UPLOAD@@" --config "@@RCLONE_CONFIG@@" --version "${VERSION}" "$1" "@@REMOTE_SUBDIR@@/$(basename $1)"
 
-for f in "$@"
-do
-  echo "http://download.dfinity.systems/ic/${VERSION}/$f"
-done > "@@URLS_OUTPUT@@"
+echo "http://download.dfinity.systems/ic/${VERSION}/@@REMOTE_SUBDIR@@/$(basename $1)" > "$2"
