@@ -29,6 +29,7 @@ use ic_types::{
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, Cycles, SubnetId, Time,
 };
+use ic_utils::str::StrTruncate;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use rand::{Rng, SeedableRng};
@@ -94,12 +95,15 @@ fn reject_local_request() {
         let mut expected_state = state.clone();
 
         // Reject the message.
-        let reject_message = "Reject response";
+        let reject_message = (0..SYNTHETIC_REJECT_MESSAGE_MAX_LEN + 1)
+            .into_iter()
+            .map(|_| "a")
+            .collect::<String>();
         stream_builder.reject_local_request(
             &mut state,
             &msg,
             RejectCode::SysFatal,
-            reject_message.to_string(),
+            reject_message.clone(),
         );
 
         // Which should result in a reject Response being enqueued onto the input queue.
@@ -112,7 +116,9 @@ fn reject_local_request() {
                     refund: msg.payment,
                     response_payload: Payload::Reject(RejectContext {
                         code: RejectCode::SysFatal,
-                        message: reject_message.to_string(),
+                        message: reject_message
+                            .safe_truncate(SYNTHETIC_REJECT_MESSAGE_MAX_LEN)
+                            .to_string(),
                     }),
                 }
                 .into(),

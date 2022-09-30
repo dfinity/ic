@@ -1,4 +1,4 @@
-use crate::message_routing::LatencyMetrics;
+use crate::message_routing::{LatencyMetrics, SYNTHETIC_REJECT_MESSAGE_MAX_LEN};
 use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
@@ -626,8 +626,7 @@ impl StreamHandlerImpl {
                                     &msg
                                 );
                                 let code = reject_code_for_state_error(&err);
-                                let context = RejectContext::new(code, err.to_string());
-                                stream.push(generate_reject_response(msg, context))
+                                stream.push(generate_reject_response(msg, code, err.to_string()))
                             }
                             RequestOrResponse::Response(response) => {
                                 // Critical error, responses should always be inducted successfully.
@@ -649,16 +648,17 @@ impl StreamHandlerImpl {
 
                     match &msg {
                         RequestOrResponse::Request(_) => {
-                            debug!(self.log, "Canister {} is being migrated, generating reject response for {:?}", msg.receiver(), msg);
-                            let context = RejectContext::new(
-                                RejectCode::SysTransient,
-                                format!(
-                                    "Canister {} is being migrated to/from {}",
-                                    msg.receiver(),
-                                    host_subnet
-                                ),
+                            let reject_message = format!(
+                                "Canister {} is being migrated to/from {}",
+                                msg.receiver(),
+                                host_subnet
                             );
-                            stream.push(generate_reject_response(msg, context));
+                            debug!(self.log, "Canister {} is being migrated, generating reject response for {:?}", msg.receiver(), msg);
+                            stream.push(generate_reject_response(
+                                msg,
+                                RejectCode::SysTransient,
+                                reject_message,
+                            ));
                         }
 
                         RequestOrResponse::Response(_) => {
@@ -838,15 +838,23 @@ impl StreamHandlerImpl {
 }
 
 /// Generates a reject `Response` for a `Request` message with the provided
-/// `RejectContext`.
-fn generate_reject_response(msg: RequestOrResponse, context: RejectContext) -> RequestOrResponse {
+/// `RejectCode` and error message.
+fn generate_reject_response(
+    msg: RequestOrResponse,
+    reject_code: RejectCode,
+    message: String,
+) -> RequestOrResponse {
     if let RequestOrResponse::Request(msg) = msg {
         Response {
             originator: msg.sender,
             respondent: msg.receiver,
             originator_reply_callback: msg.sender_reply_callback,
             refund: msg.payment,
-            response_payload: Payload::Reject(context),
+            response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                reject_code,
+                message,
+                SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+            )),
         }
         .into()
     } else {
