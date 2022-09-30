@@ -102,7 +102,7 @@ def urls_test(name, inputs, tags = ["system_test"]):
     )
     native.sh_test(
         name = name,
-        tags = tags,
+        tags = tags + ["requires-network"],
         srcs = ["//gitlab-ci/src/artifacts:urls_test.sh"],
         args = ["$(rootpath :{})".format(name + "_wrapped")],
         data = [":" + name + "_wrapped"],
