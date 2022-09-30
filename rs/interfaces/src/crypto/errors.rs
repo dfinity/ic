@@ -1,4 +1,4 @@
-use crate::crypto::ErrorReplication;
+use crate::crypto::ErrorReproducibility;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
     IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
@@ -12,8 +12,8 @@ use ic_types::crypto::CryptoError;
 use ic_types::registry::RegistryClientError;
 
 // An implementation for the consensus component.
-impl ErrorReplication for CryptoError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for CryptoError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -64,8 +64,8 @@ impl ErrorReplication for CryptoError {
     }
 }
 
-impl ErrorReplication for DkgVerifyDealingError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for DkgVerifyDealingError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -98,8 +98,8 @@ impl ErrorReplication for DkgVerifyDealingError {
     }
 }
 
-impl ErrorReplication for DkgCreateTranscriptError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for DkgCreateTranscriptError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -116,8 +116,8 @@ impl ErrorReplication for DkgCreateTranscriptError {
     }
 }
 
-impl ErrorReplication for DkgLoadTranscriptError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for DkgLoadTranscriptError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -138,8 +138,8 @@ impl ErrorReplication for DkgLoadTranscriptError {
     }
 }
 
-impl ErrorReplication for DkgKeyRemovalError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for DkgKeyRemovalError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -162,8 +162,8 @@ impl ErrorReplication for DkgKeyRemovalError {
     }
 }
 
-impl ErrorReplication for IDkgVerifyTranscriptError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for IDkgVerifyTranscriptError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -172,7 +172,7 @@ impl ErrorReplication for IDkgVerifyTranscriptError {
             IDkgVerifyTranscriptError::InvalidArgument(_) => true,
             // Whether this is a replicated error depends on the underlying crypto error
             IDkgVerifyTranscriptError::InvalidDealingSignatureBatch { crypto_error, .. } => {
-                crypto_error.is_replicated()
+                crypto_error.is_reproducible()
             }
             // true, as (de)serialization is stable across replicas
             IDkgVerifyTranscriptError::SerializationError(_) => true,
@@ -182,8 +182,8 @@ impl ErrorReplication for IDkgVerifyTranscriptError {
     }
 }
 
-impl ErrorReplication for IDkgVerifyDealingPublicError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for IDkgVerifyDealingPublicError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -195,13 +195,13 @@ impl ErrorReplication for IDkgVerifyDealingPublicError {
             Self::TranscriptIdMismatch => true,
             // The dealing was publically invalid
             Self::InvalidDealing { .. } => true,
-            Self::InvalidSignature { crypto_error, .. } => crypto_error.is_replicated(),
+            Self::InvalidSignature { crypto_error, .. } => crypto_error.is_reproducible(),
         }
     }
 }
 
-impl ErrorReplication for IDkgVerifyInitialDealingsError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for IDkgVerifyInitialDealingsError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -214,13 +214,13 @@ impl ErrorReplication for IDkgVerifyInitialDealingsError {
             Self::PublicVerificationFailure {
                 verify_dealing_public_error,
                 ..
-            } => verify_dealing_public_error.is_replicated(),
+            } => verify_dealing_public_error.is_reproducible(),
         }
     }
 }
 
-impl ErrorReplication for IDkgVerifyComplaintError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for IDkgVerifyComplaintError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -255,8 +255,8 @@ impl ErrorReplication for IDkgVerifyComplaintError {
     }
 }
 
-impl ErrorReplication for IDkgVerifyDealingPrivateError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for IDkgVerifyDealingPrivateError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -287,8 +287,8 @@ impl ErrorReplication for IDkgVerifyDealingPrivateError {
     }
 }
 
-impl ErrorReplication for ThresholdEcdsaVerifySigShareError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for ThresholdEcdsaVerifySigShareError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -308,8 +308,8 @@ impl ErrorReplication for ThresholdEcdsaVerifySigShareError {
     }
 }
 
-impl ErrorReplication for ThresholdEcdsaVerifyCombinedSignatureError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for ThresholdEcdsaVerifyCombinedSignatureError {
+    fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
@@ -328,8 +328,8 @@ impl ErrorReplication for ThresholdEcdsaVerifyCombinedSignatureError {
     }
 }
 
-impl ErrorReplication for IDkgVerifyOpeningError {
-    fn is_replicated(&self) -> bool {
+impl ErrorReproducibility for IDkgVerifyOpeningError {
+    fn is_reproducible(&self) -> bool {
         match self {
             // true, as this is a stable property of the arguments.
             IDkgVerifyOpeningError::TranscriptIdMismatch => true,
