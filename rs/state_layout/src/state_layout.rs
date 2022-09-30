@@ -426,7 +426,7 @@ impl StateLayout {
 
         let cp_name = self.checkpoint_name(height);
         let cp_path = self.checkpoints().join(cp_name);
-        copy_recursively_respecting_tombstones(
+        copy_recursively(
             &self.log,
             &cp_path,
             scratchpad_dir.path(),
@@ -462,7 +462,7 @@ impl StateLayout {
             return Ok(());
         }
 
-        match copy_recursively_respecting_tombstones(
+        match copy_recursively(
             &self.log,
             cp_path.as_path(),
             &tip,
@@ -755,7 +755,7 @@ impl StateLayout {
         }
 
         let copy_atomically = || {
-            copy_recursively_respecting_tombstones(
+            copy_recursively(
                 &self.log,
                 src,
                 scratchpad.as_path(),
@@ -773,6 +773,29 @@ impl StateLayout {
                 Err(err)
             }
         }
+    }
+
+    /// Deletes canisters from tip if they are not in ids.
+    pub fn filter_tip_canisters(
+        &self,
+        height: Height,
+        ids: &BTreeSet<&CanisterId>,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let canisters_on_disk = tip.canister_ids()?;
+        for id in canisters_on_disk {
+            if !ids.contains(&id) {
+                let canister_path = tip.canister(&id)?.raw_path();
+                let tmp_path = self.fs_tmp().join(format!("canister_{}", &id));
+                self.atomically_remove_via_path(&canister_path, &tmp_path)
+                    .map_err(|err| LayoutError::IoError {
+                        path: canister_path,
+                        message: "Cannot atomically remove canister.".to_string(),
+                        io_err: err,
+                    })?;
+            }
+        }
+        Ok(())
     }
 
     /// Atomically removes path by first renaming it into tmp_path, and then
@@ -911,18 +934,6 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         )
     }
 
-    /// Mark any canister as deleted that is not in ids
-    pub fn filter_canisters(&self, ids: &BTreeSet<&CanisterId>) -> Result<(), LayoutError> {
-        let canisters_on_disk = self.canister_ids()?;
-        for id in canisters_on_disk {
-            if !ids.contains(&id) {
-                let canister = self.canister(&id)?;
-                canister.mark_deleted()?;
-            }
-        }
-        Ok(())
-    }
-
     pub fn bitcoin(&self) -> Result<BitcoinStateLayout<Permissions>, LayoutError> {
         // TODO(EXC-1113): Rename this path to "bitcoin", as it stores data for either network.
         BitcoinStateLayout::new(self.root.join("bitcoin").join("testnet"))
@@ -975,27 +986,6 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
 
     pub fn stable_memory_blob(&self) -> PathBuf {
         self.canister_root.join("stable_memory.bin")
-    }
-
-    pub fn tombstone(&self) -> PathBuf {
-        self.canister_root.join("tombstone")
-    }
-
-    /// Marks this canister as deleted by creating a 'tombstone' file in the
-    /// canister directory.  Such directories will be excluded when a checkpoint
-    /// is created.
-    pub fn mark_deleted(&self) -> Result<(), LayoutError> {
-        let path = self.tombstone();
-        let _ = std::fs::File::create(&path).map_err(|err| LayoutError::IoError {
-            path,
-            message: "Failed to create a file".to_string(),
-            io_err: err,
-        })?;
-        Ok(())
-    }
-
-    pub fn is_marked_deleted(&self) -> bool {
-        Path::new(&self.tombstone()).exists()
     }
 }
 
@@ -1526,13 +1516,11 @@ enum FilePermissions {
 }
 
 /// Recursively copies `src` to `dst` using the given permission policy for
-/// files. Directories containing a file called "tombstone" are not copied to
-/// the destination. If a thread-pool is provided then files are copied in
-/// parallel.
+/// files. If a thread-pool is provided then files are copied in parallel.
 ///
 /// NOTE: If the function returns an error, the changes to the file
 /// system applied by this function are not undone.
-fn copy_recursively_respecting_tombstones(
+fn copy_recursively(
     log: &ReplicaLogger,
     root_src: &Path,
     root_dst: &Path,
@@ -1635,18 +1623,11 @@ struct CopyAndSyncFile {
 
 /// Traverse the source file tree and constructs a copy-plan:
 /// a collection of I/O operations that need to be performed to copy the source
-/// to the destination while ignoring directories that have tombstones.
+/// to the destination.
 fn build_copy_plan(src: &Path, dst: &Path, plan: &mut CopyPlan) -> std::io::Result<()> {
     let src_metadata = src.metadata()?;
 
     if src_metadata.is_dir() {
-        if src.join("tombstone").exists() {
-            // The source directory was marked as removed by placing a
-            // 'tombstone' file inside. We don't want this directory in
-            // a checkpoint.
-            return Ok(());
-        }
-
         // First create the target directory.
         plan.create_and_sync_dir.push(CreateAndSyncDir {
             dst: PathBuf::from(dst),
