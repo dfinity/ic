@@ -8,7 +8,7 @@ use crate::consensus::{
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
-use ic_interfaces::crypto::{ErrorReplication, IDkgProtocol};
+use ic_interfaces::crypto::{ErrorReproducibility, IDkgProtocol};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -440,7 +440,7 @@ impl EcdsaComplaintHandlerImpl {
             .crypto
             .verify(signed_complaint, transcript.registry_version)
         {
-            if error.is_replicated() {
+            if error.is_reproducible() {
                 self.metrics
                     .complaint_errors_inc("verify_complaint_signature_permanent");
                 return vec![EcdsaChangeAction::HandleInvalid(
@@ -472,7 +472,7 @@ impl EcdsaComplaintHandlerImpl {
             )
             .map_or_else(
                 |error| {
-                    if error.is_replicated() {
+                    if error.is_reproducible() {
                         self.metrics
                             .complaint_errors_inc("verify_complaint_permanent");
                         vec![EcdsaChangeAction::HandleInvalid(
@@ -571,7 +571,7 @@ impl EcdsaComplaintHandlerImpl {
             .crypto
             .verify(signed_opening, transcript.registry_version)
         {
-            if error.is_replicated() {
+            if error.is_reproducible() {
                 self.metrics
                     .complaint_errors_inc("verify_opening_signature_permanent");
                 return vec![EcdsaChangeAction::HandleInvalid(
@@ -604,7 +604,7 @@ impl EcdsaComplaintHandlerImpl {
             )
             .map_or_else(
                 |error| {
-                    if error.is_replicated() {
+                    if error.is_reproducible() {
                         self.metrics
                             .complaint_errors_inc("verify_opening_permanent");
                         vec![EcdsaChangeAction::HandleInvalid(

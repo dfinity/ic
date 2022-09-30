@@ -100,10 +100,10 @@ pub trait Crypto:
 
 /// A classifier for errors returned by the crypto component. Indicates whether
 /// a given error is permanent and guaranteed to occur in all replicas.
-pub trait ErrorReplication {
+pub trait ErrorReproducibility {
     // If true is returned, retrying the failing call will return the same error,
     // and the same error will be encountered by other replicas.
-    fn is_replicated(&self) -> bool;
+    fn is_reproducible(&self) -> bool;
 }
 
 // Blanket implementation of Crypto for all types that fulfill requirements

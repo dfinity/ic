@@ -8,7 +8,7 @@ use crate::consensus::{
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
 use crate::ecdsa::utils::{load_transcripts, transcript_op_summary, EcdsaBlockReaderImpl};
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
-use ic_interfaces::crypto::{ErrorReplication, IDkgProtocol};
+use ic_interfaces::crypto::{ErrorReproducibility, IDkgProtocol};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -652,7 +652,7 @@ impl EcdsaPreSignerImpl {
         IDkgProtocol::verify_dealing_public(&*self.crypto, transcript_params, signed_dealing)
             .map_or_else(
                 |error| {
-                    if error.is_replicated() {
+                    if error.is_reproducible() {
                         self.metrics.pre_sign_errors_inc("verify_dealing_permanent");
                         vec![EcdsaChangeAction::HandleInvalid(
                             id.clone(),
@@ -739,7 +739,7 @@ impl EcdsaPreSignerImpl {
         if let Err(error) =
             IDkgProtocol::verify_dealing_private(&*self.crypto, transcript_params, signed_dealing)
         {
-            if error.is_replicated() {
+            if error.is_reproducible() {
                 self.metrics
                     .pre_sign_errors_inc("verify_dealing_private_permanent");
                 warn!(
