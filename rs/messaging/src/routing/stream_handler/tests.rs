@@ -54,6 +54,36 @@ lazy_static! {
 }
 
 #[test]
+fn oversized_reject_message_is_truncated() {
+    fn assert_correct_truncation(msg_len: usize, len_after_truncation: usize) {
+        if let RequestOrResponse::Response(response) = generate_reject_response(
+            test_request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER).into(),
+            RejectCode::SysTransient,
+            (0..msg_len).into_iter().map(|_| "a").collect(),
+        ) {
+            if let Payload::Reject(context) = &response.response_payload {
+                assert_eq!(context.message.len(), len_after_truncation);
+                return;
+            }
+        }
+        unreachable!();
+    }
+
+    assert_correct_truncation(
+        SYNTHETIC_REJECT_MESSAGE_MAX_LEN - 1,
+        SYNTHETIC_REJECT_MESSAGE_MAX_LEN - 1,
+    );
+    assert_correct_truncation(
+        SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+    );
+    assert_correct_truncation(
+        SYNTHETIC_REJECT_MESSAGE_MAX_LEN + 1,
+        SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+    );
+}
+
+#[test]
 #[should_panic(
     expected = "Invalid message indices in stream slice from subnet g24bn-xymaa-aaaaa-aaaap-yai: messages begin (21) != stream signals_end (22)"
 )]
@@ -170,11 +200,11 @@ fn induct_loopback_stream_reject_response() {
             reject_signals: None,
         });
         // ...plus a reject response.
-        let context = RejectContext::new(
+        expected_loopback_stream.push(generate_reject_response(
+            msg,
             RejectCode::DestinationInvalid,
             StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
-        );
-        expected_loopback_stream.push(generate_reject_response(msg, context));
+        ));
         expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
         let inducted_state = stream_handler.induct_loopback_stream(initial_state);
@@ -255,14 +285,14 @@ fn induct_loopback_stream_reroute_response() {
             reject_signals: None,
         });
 
-        let context = RejectContext::new(
+        expected_loopback_stream.push(generate_reject_response(
+            rejected_msg,
             RejectCode::SysTransient,
             format!(
                 "Canister {} is being migrated to/from {}",
                 *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
             ),
-        );
-        expected_loopback_stream.push(generate_reject_response(rejected_msg, context));
+        ));
 
         let mut expected_outgoing_stream = generate_stream(
             MessageConfig {
@@ -542,16 +572,16 @@ fn induct_loopback_stream_with_memory_limit_impl(
         reject_signals: None,
     });
     // ...plus a reject response.
-    let context = RejectContext::new(
+    let msg = loopback_stream.messages().iter().nth(1).unwrap().1;
+    expected_loopback_stream.push(generate_reject_response(
+        msg.clone(),
         RejectCode::SysTransient,
         StateError::OutOfMemory {
             requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
             available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
         }
         .to_string(),
-    );
-    let msg = loopback_stream.messages().iter().nth(1).unwrap().1;
-    expected_loopback_stream.push(generate_reject_response(msg.clone(), context));
+    ));
     expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
     let inducted_state = stream_handler.induct_loopback_stream(initial_state);
@@ -1252,7 +1282,8 @@ fn generate_reject_response_queue_full() {
 
     stream.push(generate_reject_response(
         msg_clone.into(),
-        RejectContext::new(RejectCode::SysTransient, err.to_string()),
+        RejectCode::SysTransient,
+        err.to_string(),
     ));
 
     assert_eq!(expected_stream, stream);
@@ -1291,7 +1322,8 @@ fn generate_reject_response_canister_not_found() {
 
     stream.push(generate_reject_response(
         msg_clone.into(),
-        RejectContext::new(RejectCode::DestinationInvalid, err.to_string()),
+        RejectCode::DestinationInvalid,
+        err.to_string(),
     ));
 
     assert_eq!(expected_stream, stream);
@@ -1359,10 +1391,8 @@ fn induct_stream_slices_partial_success() {
         expected_stream.increment_signals_end();
         expected_stream.push(generate_reject_response(
             request_to_missing_canister,
-            RejectContext::new(
-                RejectCode::DestinationInvalid,
-                StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
-            ),
+            RejectCode::DestinationInvalid,
+            StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
         ));
 
         // Push a request from a canister not on the remote subnet.
@@ -1749,14 +1779,14 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
             .get(43.into())
             .unwrap()
             .clone();
-        let context = RejectContext::new(
+        expected_outgoing_stream.push(generate_reject_response(
+            rejected_request,
             RejectCode::SysTransient,
             format!(
                 "Canister {} is being migrated to/from {}",
                 *REMOTE_CANISTER, CANISTER_MIGRATION_SUBNET
             ),
-        );
-        expected_outgoing_stream.push(generate_reject_response(rejected_request, context));
+        ));
 
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
 
@@ -1864,14 +1894,14 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
             .get(43.into())
             .unwrap()
             .clone();
-        let context = RejectContext::new(
+        expected_outgoing_stream.push(generate_reject_response(
+            rejected_request,
             RejectCode::SysTransient,
             format!(
                 "Canister {} is being migrated to/from {}",
                 *LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
             ),
-        );
-        expected_outgoing_stream.push(generate_reject_response(rejected_request, context));
+        ));
 
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
 
@@ -2285,14 +2315,12 @@ fn induct_stream_slices_with_memory_limit_impl(
     expected_stream.increment_signals_end();
     expected_stream.push(generate_reject_response(
         request1,
-        RejectContext::new(
-            RejectCode::SysTransient,
-            StateError::OutOfMemory {
-                requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-                available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
-            }
-            .to_string(),
-        ),
+        RejectCode::SysTransient,
+        StateError::OutOfMemory {
+            requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
+            available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
+        }
+        .to_string(),
     ));
     expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
@@ -2694,16 +2722,13 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             reject_signals: None,
         });
         // ...a reject response for the local request to `OTHER_LOCAL_CANISTER`...
-        let context = RejectContext::new(
+        expected_loopback_stream.push(generate_reject_response(
+            test_request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER).into(),
             RejectCode::SysTransient,
             format!(
                 "Canister {} is being migrated to/from {}",
                 *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
             ),
-        );
-        expected_loopback_stream.push(generate_reject_response(
-            test_request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER).into(),
-            context,
         ));
 
         // ...5 new signals including 2 reject signals...
@@ -2718,20 +2743,19 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
         pruned_stream.push(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
 
         // ...two reject responses for the two remote requests to `OTHER_LOCAL_CANISTER`...
-        let context = RejectContext::new(
-            RejectCode::SysTransient,
-            format!(
-                "Canister {} is being migrated to/from {}",
-                *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
-            ),
+        let reject_msg = format!(
+            "Canister {} is being migrated to/from {}",
+            *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
         );
         pruned_stream.push(generate_reject_response(
             test_request(*OTHER_REMOTE_CANISTER, *OTHER_LOCAL_CANISTER).into(),
-            context.clone(),
+            RejectCode::SysTransient,
+            reject_msg.clone(),
         ));
         pruned_stream.push(generate_reject_response(
             test_request(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER).into(),
-            context,
+            RejectCode::SysTransient,
+            reject_msg,
         ));
 
         // ...and two rerouted responses for the two migrated canisters.

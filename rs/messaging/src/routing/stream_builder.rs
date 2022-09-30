@@ -1,4 +1,4 @@
-use crate::message_routing::LatencyMetrics;
+use crate::message_routing::{LatencyMetrics, SYNTHETIC_REJECT_MESSAGE_MAX_LEN};
 use ic_base_types::NumBytes;
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_error_types::RejectCode;
@@ -188,10 +188,13 @@ impl StreamBuilderImpl {
                     respondent: req.receiver,
                     originator_reply_callback: req.sender_reply_callback,
                     refund: req.payment,
-                    response_payload: Payload::Reject(RejectContext {
-                        code: reject_code,
-                        message: reject_message,
-                    }),
+                    response_payload: Payload::Reject(
+                        RejectContext::new_with_message_length_limit(
+                            reject_code,
+                            reject_message,
+                            SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                        ),
+                    ),
                 }
                 .into(),
                 // Arbitrary large amounts, pushing a response always returns memory.
