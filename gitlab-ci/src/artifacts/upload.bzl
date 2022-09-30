@@ -12,36 +12,45 @@ def _upload_artifact_impl(ctx):
     """
 
     uploader = ctx.actions.declare_file(ctx.label.name + "_uploader")
-    out = ctx.actions.declare_file(ctx.label.name + ".url")
 
     ctx.actions.expand_template(
         template = ctx.file._artifacts_uploader_template,
         output = uploader,
         substitutions = {
-            "@@BIN_DIR@@": ctx.bin_dir.path,
             "@@RCLONE_UPLOAD@@": ctx.executable._rclone_upload.path,
             "@@RCLONE_CONFIG@@": ctx.file.rclone_config.path,
             "@@REMOTE_SUBDIR@@": ctx.attr.remote_subdir,
             "@@VERSION_FILE@@": ctx.version_file.path,
-            "@@URLS_OUTPUT@@": out.path,
         },
         is_executable = True,
     )
 
-    ctx.actions.run(
-        executable = uploader,
-        arguments = [ctx.file.input.short_path],
-        tools = [ctx.executable._rclone_upload],
-        inputs = [ctx.file.input, ctx.version_file],
-        outputs = [out],
+    out = []
+    for f in ctx.files.inputs:
+        url = ctx.actions.declare_file(ctx.label.name + "_" + f.basename + ".url")
+        ctx.actions.run(
+            executable = uploader,
+            arguments = [f.path, url.path],
+            tools = [ctx.executable._rclone_upload],
+            inputs = [f, ctx.version_file],
+            outputs = [url],
+        )
+        out.append(url)
+
+    urls = ctx.actions.declare_file(ctx.label.name + ".urls")
+    ctx.actions.run_shell(
+        command = "cat " + " ".join([url.path for url in out]) + " >" + urls.path,
+        inputs = out,
+        outputs = [urls],
     )
+    out.append(urls)
 
-    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+    return [DefaultInfo(files = depset(out), runfiles = ctx.runfiles(files = out))]
 
-_upload_artifact = rule(
+_upload_artifacts = rule(
     implementation = _upload_artifact_impl,
     attrs = {
-        "input": attr.label(allow_single_file = True),
+        "inputs": attr.label_list(allow_files = True),
         "remote_subdir": attr.string(mandatory = True),
         "rclone_config": attr.label(allow_single_file = True, default = "//:.rclone.conf"),
         "_rclone_upload": attr.label(executable = True, cfg = "exec", default = ":rclone_upload"),
@@ -49,49 +58,22 @@ _upload_artifact = rule(
     },
 )
 
-def upload_artifact(**kwargs):
+def upload_artifacts(**kwargs):
     """
-    Uploads an artifact to the S3 storage.
+    Uploads artifacts to the S3 storage.
 
-    Wrapper around _upload_artifact to always set "requires-network" and "manual" tags.
+    Wrapper around _upload_artifacts to always set required tags.
 
     Args:
       **kwargs: all arguments to pass to _upload_artifacts
     """
 
     tags = kwargs.get("tags", [])
-    for tag in ["requires-network", "manual"]:
+    for tag in ["requires-network", "manual", "local"]:
         if tag not in tags:
             tags.append(tag)
     kwargs["tags"] = tags
-    _upload_artifact(**kwargs)
-
-def upload_artifacts(name, inputs, **kwargs):
-    """
-    Uploads multiple artifacts to the S3 storage.
-
-    Args:
-      name: Name of the rule
-      inputs: list of artifact targets to upload
-      **kwargs: arguments to pass to upload_artifact
-    """
-    labels = []
-    for input in inputs:
-        input_name = name + input.replace(":", "_")
-        labels.append(":" + input_name)
-        upload_artifact(
-            name = input_name,
-            input = input,
-            **kwargs
-        )
-
-    native.genrule(
-        name = name,
-        srcs = labels,
-        outs = [name + ".urls"],
-        cmd = "cat $(SRCS) > $(OUTS)",
-        tags = kwargs.get("tags", []) + ["manual"],
-    )
+    _upload_artifacts(**kwargs)
 
 def urls_test(name, inputs, tags = ["system_test"]):
     # https://github.com/bazelbuild/bazel/issues/6783S
