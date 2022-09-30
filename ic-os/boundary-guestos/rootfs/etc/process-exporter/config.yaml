@@ -1,0 +1,13 @@
+# NOTE: `comm` entries must be limited to 15 chars. See https://github.com/ncabatoff/process-exporter#using-a-config-file-process-selectors.
+
+process_names:
+  - comm:
+      - boundary-node-c
+      - denylist-update
+      - icx-proxy
+      - nginx
+      - node_exporter
+      - prober
+      - ic-balance-expo
+      - process-exporte
+      - vector
