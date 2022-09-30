@@ -3,7 +3,7 @@
 set -euox pipefail
 
 readonly BOOT_CONFIG='/boot/config'
-readonly TMPLT_FILE='/etc/default/control-plane.tmplt'
+readonly TMPLT_FILE='/etc/default/ic-registry-replicator.tmplt'
 readonly RUN_DIR="/run/ic-node/etc/default"
 
 function err() {
@@ -19,7 +19,7 @@ function read_variables() {
         exit 1
     fi
     if [ ! -f "${BOOT_CONFIG}/nns.conf" ]; then
-        err "missing domain configuration: ${BOOT_CONFIG}/nns.conf"
+        err "missing nns configuration: ${BOOT_CONFIG}/nns.conf"
         exit 1
     fi
 
@@ -37,19 +37,21 @@ function read_variables() {
     fi
 }
 
-function generate_control_plane_config() {
+function generate_config() {
     # Create config dir
     mkdir -p "${RUN_DIR}"
 
+    readonly ENV_FILE=$(basename ${TMPLT_FILE} .tmplt)
+
     # Move active configuration and prepare it (use `|` in the `sed` command
     # because it's not a valid URL character)
-    cp -a "${TMPLT_FILE}" "${RUN_DIR}/control-plane"
-    sed -i -e "s|{{NNS_URLS}}|${NNS_URL}|g" "${RUN_DIR}/control-plane"
+    cp -a "${TMPLT_FILE}" "${RUN_DIR}/${ENV_FILE}"
+    sed -i -e "s|{{NNS_URL}}|${NNS_URL}|g" "${RUN_DIR}/${ENV_FILE}"
 }
 
 function main() {
     read_variables
-    generate_control_plane_config
+    generate_config
 }
 
 main "$@"

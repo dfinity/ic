@@ -1,0 +1,18 @@
+[Unit]
+Description=IC Regsitry Replicator
+
+[Service]
+LogRateLimitIntervalSec=1ms
+LogRateLimitBurst=1000
+User=root
+Group=root
+Restart=always
+EnvironmentFile=/run/ic-node/etc/default/ic-registry-replicator
+ExecStart=/opt/ic/bin/ic-registry-replicator       \
+    --local-store-path    "${LOCAL_STORE_PATH}"    \
+    --nns-pub-key-pem     "${NNS_PUB_KEY_PEM}"     \
+    --nns-url             "${NNS_URL}"             \
+    --metrics-listen-addr "${METRICS_LISTEN_ADDR}"
+
+[Install]
+WantedBy=multi-user.target

@@ -970,13 +970,12 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-registry-client",
  "ic-registry-client-helpers",
- "ic-registry-nns-data-provider",
+ "ic-registry-local-store",
  "ic-types 0.8.0",
  "mockall 0.11.2",
  "opentelemetry 0.17.0",
  "opentelemetry-prometheus",
  "prometheus 0.13.1",
- "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -985,7 +984,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.11",
- "url",
 ]
 
 [[package]]

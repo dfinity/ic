@@ -24,11 +24,9 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use opentelemetry::{baggage::BaggageExt, global, sdk::Resource, trace::FutureExt, KeyValue};
 use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::{Encoder, TextEncoder};
-use rand::seq::SliceRandom;
 use registry::{RoutingTable, Subnet};
 use tokio::{sync::Semaphore, task};
 use tracing::info;
-use url::Url;
 
 mod metrics;
 mod registry;
@@ -49,8 +47,8 @@ const MINUTE: Duration = Duration::from_secs(60);
 #[clap(name = SERVICE_NAME)]
 #[clap(author = "Boundary Node Team <boundary-nodes@dfinity.org>")]
 struct Cli {
-    #[clap(long, use_value_delimiter = true)]
-    nns_urls: Vec<Url>,
+    #[clap(long, default_value = "/tmp/store")]
+    local_store: PathBuf,
 
     #[clap(long, default_value = "/tmp/routes")]
     routes_dir: PathBuf,
@@ -62,8 +60,6 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
-
-    let mut rng = rand::thread_rng();
 
     tracing::subscriber::set_global_default(
         tracing_subscriber::fmt()
@@ -84,28 +80,13 @@ async fn main() -> Result<(), Error> {
 
     let routing_table: Arc<Mutex<Option<RoutingTable>>> = Arc::new(Mutex::new(None));
 
-    // Choose a random subset of NNS endpoints
-    // Explanation:
-    //      This is a compromise between the risk of a faulty replica and not querying enough replicas.
-    //      The `nns_data_provider` fails when encountering a bad replica, in which case the control-plane will fail to start.
-    let nns_urls: Vec<Url> = cli
-        .nns_urls
-        .choose_multiple(
-            &mut rng, // rng
-            3,        // amount
-        )
-        .cloned()
-        .collect();
-
-    let registry_data_provider = ic_registry_nns_data_provider::create_nns_data_provider(
-        tokio::runtime::Handle::current(), // rt
-        nns_urls,                          // urls
-        None,
-    );
-
     let http_client = reqwest::Client::builder().timeout(10 * SECOND).build()?;
 
-    let create_registry_client = CreateRegistryClientImpl::new(registry_data_provider);
+    let local_store = Arc::new(ic_registry_local_store::LocalStoreImpl::new(
+        cli.local_store,
+    ));
+
+    let create_registry_client = CreateRegistryClientImpl::new(local_store);
     let create_registry_client = WithMetrics(
         create_registry_client,
         MetricParams::new(&meter, SERVICE_NAME, "create_registry_client"),

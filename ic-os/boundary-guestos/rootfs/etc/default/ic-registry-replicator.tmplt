@@ -1,0 +1,4 @@
+LOCAL_STORE_PATH=/var/opt/registry/store
+NNS_PUB_KEY_PEM=/etc/ic-registry-replicator/ic_public_key.pem
+NNS_URL={{NNS_URL}}
+METRICS_LISTEN_ADDR="[::]:9320"
