@@ -2259,7 +2259,7 @@ impl Governance {
     /// Fails under the following conditions:
     /// - the maximum number of neurons has been reached, or
     /// - the given `neuron_id` already exists in `self.proto.neurons`, or
-    /// - the neuron's controller `PrincipalId` is not self-authenticating.
+    /// - the neuron's controller `PrincipalId` is anonymous.
     fn add_neuron(&mut self, neuron_id: u64, neuron: Neuron) -> Result<(), GovernanceError> {
         if neuron_id == 0 {
             return Err(GovernanceError::new_with_message(
@@ -2299,10 +2299,10 @@ impl Governance {
             ));
         }
 
-        if !neuron.controller.unwrap().is_self_authenticating() {
+        if neuron.controller.unwrap().is_anonymous() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "Cannot add neuron, controller PrincipalId must be self-authenticating".to_string(),
+                "Cannot add neuron, controller PrincipalId must not be anonymous".to_string(),
             ));
         }
 
@@ -3750,10 +3750,10 @@ impl Governance {
             })?
             .clone();
 
-        if !child_controller.is_self_authenticating() {
+        if child_controller.is_anonymous() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
-                "Child neuron controller for disburse neuron must be self-authenticating",
+                "Child neuron controller for disburse neuron must not be anonymous",
             ));
         }
 
