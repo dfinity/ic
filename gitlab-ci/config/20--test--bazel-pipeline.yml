@@ -2,7 +2,7 @@
   extends:
     - .bazel-rules-pipeline
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:7b3c7a5549ae2d13b4f5cadfb5245a4884236debd4078198e540aa05d871ae27"
   stage: test
   needs: []
   artifacts:
@@ -90,7 +90,7 @@ bazel-cargo-test-parity:
     - .bazel-test-all
     - .bazel-rules-test-parity
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:7b3c7a5549ae2d13b4f5cadfb5245a4884236debd4078198e540aa05d871ae27"
   artifacts:
     when: always
     paths:
