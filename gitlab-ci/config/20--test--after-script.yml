@@ -26,7 +26,7 @@ after-script-test-monolithic-image:
 
 after-script-test-bazel-image:
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:7b3c7a5549ae2d13b4f5cadfb5245a4884236debd4078198e540aa05d871ae27"
   variables:
     DO_SHELLCHECK: "false"
   extends:

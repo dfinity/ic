@@ -13,7 +13,9 @@ RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /et
     # RUST \
     gcc lld pkg-config libssl-dev libunwind-dev libsqlite3-dev zlib1g-dev libclang-10-dev \
     # IC-OS \
-    python3 fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools
+    python3 fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools \
+    # bazel rules like upload_artifacts()
+    rclone
 
 ARG buildevents_version=0.6.0
 RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /usr/bin/buildevents && \
