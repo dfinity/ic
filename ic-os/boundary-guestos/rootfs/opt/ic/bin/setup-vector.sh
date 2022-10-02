@@ -2,9 +2,11 @@
 
 set -euox pipefail
 
-readonly BOOT_CONFIG='/boot/config'
-readonly TMPLT_FILE='/etc/default/vector.tmplt'
+readonly BOOT_DIR='/boot/config'
+readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
+
 readonly RUN_DIR='/run/ic-node/etc/default'
+readonly ENV_FILE="${RUN_DIR}/vector"
 
 function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
@@ -14,12 +16,12 @@ function err() {
 # "key=value" for each line with a specific set of keys permissible (see
 # code below).
 function read_variables() {
-    if [[ ! -d "${BOOT_CONFIG}" ]]; then
-        err "missing node configuration directory: ${BOOT_CONFIG}"
+    if [[ ! -d "${BOOT_DIR}" ]]; then
+        err "missing node configuration directory: ${BOOT_DIR}"
         exit 1
     fi
-    if [ ! -f "${BOOT_CONFIG}/bn_vars.conf" ]; then
-        err "missing domain configuration: ${BOOT_CONFIG}/bn_vars.conf"
+    if [ ! -f "${BN_CONFIG}" ]; then
+        err "missing domain configuration: ${BN_CONFIG}"
         exit 1
     fi
 
@@ -30,25 +32,20 @@ function read_variables() {
             "elasticsearch_url") ELASTICSEARCH_URL="${value}" ;;
             "elasticsearch_tags") ELASTICSEARCH_TAGS="${value}" ;;
         esac
-    done <"${BOOT_CONFIG}/bn_vars.conf"
+    done <"${BN_CONFIG}"
 
     if [[ -z "${ELASTICSEARCH_URL:-}" ]]; then
-        err "missing vector configuration value(s): $(cat "${BOOT_CONFIG}/bn_vars.conf")"
+        err "missing vector configuration value(s): $(cat "${BN_CONFIG}")"
         exit 1
     fi
 }
 
 function generate_vector_config() {
-    # Create config dir
     mkdir -p "${RUN_DIR}"
-
-    # Move active configuration and prepare it (use `|` in the `sed` command
-    # because it's not a valid URL character)
-    cp -a "${TMPLT_FILE}" "${RUN_DIR}/vector"
-    sed -i \
-        -e "s|{{ELASTICSEARCH_URL}}|${ELASTICSEARCH_URL}|g" \
-        -e "s|{{ELASTICSEARCH_TAGS}}|${ELASTICSEARCH_TAGS:-}|g" \
-        "${RUN_DIR}/vector"
+    cat >"${ENV_FILE}" <<EOF
+ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+ELASTICSEARCH_TAGS=${ELASTICSEARCH_TAGS:-}
+EOF
 }
 
 function main() {

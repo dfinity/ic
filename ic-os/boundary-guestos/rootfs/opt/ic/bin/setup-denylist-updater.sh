@@ -2,9 +2,11 @@
 
 set -euox pipefail
 
-readonly BOOT_CONFIG='/boot/config'
-readonly TMPLT_FILE='/etc/default/denylist-updater.tmplt'
+readonly BOOT_DIR='/boot/config'
+readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
+
 readonly RUN_DIR='/run/ic-node/etc/default'
+readonly ENV_FILE="${RUN_DIR}/denylist-updater"
 
 function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
@@ -14,12 +16,12 @@ function err() {
 # "key=value" for each line with a specific set of keys permissible (see
 # code below).
 function read_variables() {
-    if [[ ! -d "${BOOT_CONFIG}" ]]; then
-        err "missing node configuration directory: ${BOOT_CONFIG}"
+    if [[ ! -d "${BOOT_DIR}" ]]; then
+        err "missing node configuration directory: ${BOOT_DIR}"
         exit 1
     fi
-    if [ ! -f "${BOOT_CONFIG}/bn_vars.conf" ]; then
-        err "missing domain configuration: ${BOOT_CONFIG}/bn_vars.conf"
+    if [ ! -f "${BN_CONFIG}" ]; then
+        err "missing domain configuration: ${BN_CONFIG}"
         exit 1
     fi
 
@@ -29,22 +31,21 @@ function read_variables() {
         case "${key}" in
             "denylist_url") DENYLIST_URL="${value}" ;;
         esac
-    done <"${BOOT_CONFIG}/bn_vars.conf"
-
-    if [[ -z "${DENYLIST_URL:-}" ]]; then
-        err "missing denylist updater configuration value(s): $(cat "${BOOT_CONFIG}/bn_vars.conf")"
-        exit 1
-    fi
+    done <"${BN_CONFIG}"
 }
 
 function generate_denylist_updater_config() {
-    # Create config dir
     mkdir -p "${RUN_DIR}"
 
-    # Move active configuration and prepare it (use `|` in the `sed` command
-    # because it's not a valid URL character)
-    cp -a "${TMPLT_FILE}" "${RUN_DIR}/denylist-updater"
-    sed -i -e "s|{{DENYLIST_URL}}|${DENYLIST_URL}|g" "${RUN_DIR}/denylist-updater"
+    # skip the ENV_FILE to disable the updater
+    if [[ -z "${DENYLIST_URL:-}" ]]; then
+        echo "denylist url not set, disabling denylist updater"
+        return
+    fi
+
+    cat >"${ENV_FILE}" <<EOF
+DENYLIST_URL=${DENYLIST_URL}
+EOF
 }
 
 function main() {

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
+
+function err() {
+    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
+}
 
 function usage() {
     cat >&2 <<EOF
@@ -71,8 +75,8 @@ options may be specified:
   --prober-identity path
     specify an identity file for the prober
 
-  --domain-name
-    domain name hosted by nginx (e.g. ic0.dev or ic0.app)
+  --domain
+    domain hosted by nginx (e.g. ic0.dev or ic0.app)
 
   --ipv4_http_ips
     the ipv4 blocks (e.g. "1.2.3.4/5") to be whitelisted for inbound http(s)
@@ -123,11 +127,11 @@ function check_ipv6_prefixes() {
     for ipv6_prefix in ${ipv6_prefixes//,/ }; do
         IFS=/ read -r ipv6_address ipv6_length <<<${ipv6_prefix}
         if [[ ! ${ipv6_address} =~ ^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$ ]]; then
-            echo "Incorrectly formatted IPv6 address: ${ipv6_address}"
+            err "Incorrectly formatted IPv6 address: ${ipv6_address}"
             fail=1
         fi
         if [[ ! -z "${ipv6_length:-}" ]] && ((ipv6_length < 0 || ipv6_length > 128)); then
-            echo "IPv6 prefix length out of bounds: ${ipv6_length}"
+            err "IPv6 prefix length out of bounds: ${ipv6_length}"
             fail=1
         fi
     done
@@ -141,65 +145,59 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS IPV6_GATEWAY
-    local IPV4_ADDRESS IPV4_GATEWAY
-    local NAME_SERVERS HOSTNAME
-    local NNS_URL NNS_PUBLIC_KEY
-    local ELASTICSEARCH_URL ELASTICSEARCH_TAGS
-    local ACCOUNTS_SSH_AUTHORIZED_KEYS
-    local IPV6_REPLICA_IPS IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
+    local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
     while true; do
         if [ $# == 0 ]; then
             break
         fi
         case "$1" in
             --ipv6_address)
-                IPV6_ADDRESS="$2"
+                local IPV6_ADDRESS="$2"
                 ;;
             --ipv6_gateway)
-                IPV6_GATEWAY="$2"
+                local IPV6_GATEWAY="$2"
                 ;;
             --ipv4_address)
-                IPV4_ADDRESS="$2"
+                local IPV4_ADDRESS="$2"
                 ;;
             --ipv4_gateway)
-                IPV4_GATEWAY="$2"
+                local IPV4_GATEWAY="$2"
                 ;;
             --hostname)
-                HOSTNAME="$2"
+                local HOSTNAME="$2"
                 ;;
             --name_servers)
-                NAME_SERVERS="$2"
+                local NAME_SERVERS="$2"
                 ;;
             --elasticsearch_url)
-                ELASTICSEARCH_URL="$2"
+                local ELASTICSEARCH_URL="$2"
                 ;;
             --elasticsearch_tags)
-                ELASTICSEARCH_TAGS="$2"
+                local ELASTICSEARCH_TAGS="$2"
                 ;;
             --nns_url)
-                NNS_URL="$2"
+                local NNS_URL="$2"
                 ;;
             --nns_public_key)
-                NNS_PUBLIC_KEY="$2"
+                local NNS_PUBLIC_KEY="$2"
                 ;;
             --accounts_ssh_authorized_keys)
-                ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
+                local ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
                 ;;
             --denylist)
-                DENYLIST="$2"
+                local DENYLIST="$2"
                 ;;
             --denylist_url)
-                DENYLIST_URL="$2"
+                local DENYLIST_URL="$2"
                 ;;
             --prober-identity)
-                PROBER_IDENTITY="$2"
+                local PROBER_IDENTITY="$2"
                 ;;
-            --domain-name)
-                DOMAIN_NAME="$2"
+            --domain)
+                local DOMAIN="$2"
                 ;;
             --ipv6_replica_ips)
-                IPV6_REPLICA_IPS="$2"
+                local IPV6_REPLICA_IPS="$2"
                 ;;
             --ipv4_http_ips)
                 IPV4_HTTP_IPS="$2"
@@ -214,7 +212,7 @@ function build_ic_bootstrap_tar() {
                 IPV6_MONITORING_IPS="$2"
                 ;;
             *)
-                echo "Unrecognized option: $1"
+                err "Unrecognized option: $1"
                 usage
                 exit 1
                 break
@@ -223,75 +221,69 @@ function build_ic_bootstrap_tar() {
         shift 2
     done
 
-    [[ "$HOSTNAME" == "" ]] || [[ "$HOSTNAME" == [a-zA-Z]*([a-zA-Z0-9])*(-+([a-zA-Z0-9])) ]] || {
-        echo "Invalid hostname: '$HOSTNAME'" >&2
-        exit 1
-    }
-
-    DOMAIN="${DOMAIN:="ic0.app"}"
-    DENYLIST="${DENYLIST:=""}"
-    PROBER_IDENTITY="${PROBER_IDENTITY:=""}"
-    ELASTICSEARCH_URL="${ELASTICSEARCH_URL:="https://elasticsearch.testnet.dfinity.systems"}"
-    ELASTICSEARCH_TAGS="${ELASTICSEARCH_TAGS:-}"
-    IPV6_REPLICA_IPS="${IPV6_REPLICA_IPS:="::/128"}"
-    IPV4_HTTP_IPS="${IPV4_HTTP_IPS:="103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,104.16.0.0/13,104.24.0.0/14,108.162.192.0/18,131.0.72.0/22,141.101.64.0/18,149.97.209.182/30,149.97.209.186/30,162.158.0.0/15,172.64.0.0/13,173.245.48.0/20,188.114.96.0/20,190.93.240.0/20,192.235.122.32/28,197.234.240.0/22,198.41.128.0/17,212.71.124.192/29,62.209.33.184/29"}"
-    IPV6_HTTP_IPS="${IPV6_HTTP_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
-    IPV6_DEBUG_IPS="${IPV6_DEBUG_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
-    IPV6_MONITORING_IPS="${IPV6_MONITORING_IPS:="2a05:d01c:e2c:a700::/56"}"
-
     local fail=0
-    if ! check_ipv4_prefixes ${IPV4_HTTP_IPS}; then
+    if [[ -z "${HOSTNAME:-}" ]]; then
+        err "missing hostname"
         fail=1
-    fi
-    if ! check_ipv6_prefixes ${IPV6_REPLICA_IPS}; then
+    elif [[ ! "${HOSTNAME}" =~ ^[a-zA-Z]+([a-zA-Z0-9])*(-+[a-zA-Z0-9]*)*$ ]]; then
+        err "Invalid hostname: '${HOSTNAME}'"
         fail=1
-    fi
-    if ! check_ipv6_prefixes ${IPV6_HTTP_IPS}; then
-        fail=1
-    fi
-    if ! check_ipv6_prefixes ${IPV6_DEBUG_IPS}; then
-        fail=1
-    fi
-    if ! check_ipv6_prefixes ${IPV6_MONITORING_IPS}; then
-        fail=1
-    fi
-    if [[ $fail == 1 ]]; then
-        exit 1
     fi
 
-    if ! echo $DOMAIN | grep -q ".*\..*"; then
-        echo "malformed domain name $DOMAIN"
-        DOMAIN="ic0.app"
+    if [[ -z "${NNS_PUBLIC_KEY:-}" ]]; then
+        err "missing nns_public_key"
+        fail=1
+    fi
+
+    if [[ ! "${DOMAIN:="ic0.app"}" =~ ^.*\..*$ ]]; then
+        err "malformed domain name: '${DOMAIN}'"
+        fail=1
+    fi
+
+    if [[ -z "${ELASTICSEARCH_URL:-}" ]]; then
+        err "missing elasticsearch_url"
+        fail=1
+    fi
+
+    if [ -z "${NNS_URL:-}" ]; then
+        err "missing nns_url"
+        fail=1
+    fi
+
+    check_ipv4_prefixes ${IPV4_HTTP_IPS:=""} || fail=1
+    check_ipv6_prefixes ${IPV6_REPLICA_IPS:=""} || fail=1
+    check_ipv6_prefixes ${IPV6_HTTP_IPS:=""} || fail=1
+    check_ipv6_prefixes ${IPV6_DEBUG_IPS:=""} || fail=1
+    check_ipv6_prefixes ${IPV6_MONITORING_IPS:=""} || fail=1
+
+    if [[ "${fail}" == 1 ]]; then
+        exit 1
     fi
 
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
 
     cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
-ipv6_address=$IPV6_ADDRESS
-ipv6_gateway=$IPV6_GATEWAY
-ipv4_address=$IPV4_ADDRESS
-ipv4_gateway=$IPV4_GATEWAY
-name_servers=$NAME_SERVERS
-hostname=$HOSTNAME
+ipv6_address=${IPV6_ADDRESS:-}
+ipv6_gateway=${IPV6_GATEWAY:-}
+ipv4_address=${IPV4_ADDRESS:-}
+ipv4_gateway=${IPV4_GATEWAY:-}
+name_servers=${NAME_SERVERS:-}
+hostname=${HOSTNAME}
 ipv6_replica_ips=${IPV6_REPLICA_IPS}
 EOF
 
-    if [ "${NNS_PUBLIC_KEY}" != "" ]; then
-        cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
-    fi
+    cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
 
     # list of NNS ipv6 addresses
-    if [ "${NNS_URL}" != "" ]; then
-        echo "nns_url=${NNS_URL}" >"${BOOTSTRAP_TMPDIR}/nns.conf"
-    fi
+    echo "nns_url=${NNS_URL}" >"${BOOTSTRAP_TMPDIR}/nns.conf"
 
     # ssh access
-    if [ "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" != "" ]; then
+    if [ -n "${ACCOUNTS_SSH_AUTHORIZED_KEYS:-}" ]; then
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
 
     # setup the deny list
-    if [[ -f "${DENYLIST}" ]]; then
+    if [[ -n "${DENYLIST:-}" ]]; then
         echo "Using deny list ${DENYLIST}"
         cp "${DENYLIST}" "${BOOTSTRAP_TMPDIR}/denylist.map"
     else
@@ -302,9 +294,9 @@ EOF
     # setup the bn_vars
     cat >"${BOOTSTRAP_TMPDIR}/bn_vars.conf" <<EOF
 domain=${DOMAIN}
-denylist_url=${DENYLIST_URL}
+denylist_url=${DENYLIST_URL:-}
 elasticsearch_url=${ELASTICSEARCH_URL}
-elasticsearch_tags=${ELASTICSEARCH_TAGS}
+elasticsearch_tags=${ELASTICSEARCH_TAGS:-}
 ipv4_http_ips=${IPV4_HTTP_IPS}
 ipv6_http_ips=${IPV6_HTTP_IPS}
 ipv6_debug_ips=${IPV6_DEBUG_IPS}
@@ -313,7 +305,7 @@ EOF
 
     # setup the prober identity
     mkdir -p "${BOOTSTRAP_TMPDIR}/prober"
-    if [[ -f "${PROBER_IDENTITY}" ]]; then
+    if [[ -n "${PROBER_IDENTITY:-}" ]]; then
         echo "Using prober identity ${PROBER_IDENTITY}"
         cp "${PROBER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/prober/identity.pem"
     else
