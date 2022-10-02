@@ -1,6 +1,9 @@
 [Unit]
 Description=Boundary Node Prober Wallets Exporter
+After=network-online.target
+Wants=network-online.target
 After=setup-prober.service
+Wants=setup-prober.service
 ConditionPathExists=!/run/ic-node/etc/prober/prober.disabled
 
 [Service]

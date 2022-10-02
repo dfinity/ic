@@ -192,7 +192,7 @@ function generate_boundary_node_config() {
 
             local ipv6_address=${NODE["ipv6_address"]}
 
-            if [[ "${NODE["type"]}" != "replica" ]] || [[ "${NODE["subnet_type"]}" != "root_subnet" ]]; then
+            if [[ "${NODE["type"]}" != "replica" || "${NODE["subnet_type"]}" != "root_subnet" ]]; then
                 continue
             fi
 
@@ -361,7 +361,7 @@ function copy_deny_list() {
 }
 
 function copy_certs() {
-    if [[ -f "${CERT_DIR}/fullchain.pem" ]] && [[ -f "${CERT_DIR}/privkey.pem" ]] && [[ -f "${CERT_DIR}/chain.pem" ]]; then
+    if [[ -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" && -f "${CERT_DIR}/chain.pem" ]]; then
         echo "Using certificates ${CERT_DIR}/fullchain.pem ${CERT_DIR}/privkey.pem ${CERT_DIR}/chain.pem"
         for n in $NODES; do
             declare -n NODE=$n

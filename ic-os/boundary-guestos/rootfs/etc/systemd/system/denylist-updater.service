@@ -1,5 +1,6 @@
 [Unit]
 Description=Boundary Node Denylist Updater
+ConditionPathExists=/run/ic-node/etc/default/denylist-updater
 After=network-online.target
 Wants=network-online.target
 

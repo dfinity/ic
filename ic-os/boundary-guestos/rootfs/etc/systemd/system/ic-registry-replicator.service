@@ -1,5 +1,7 @@
 [Unit]
 Description=IC Regsitry Replicator
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 LogRateLimitIntervalSec=1ms
@@ -8,11 +10,11 @@ User=root
 Group=root
 Restart=always
 EnvironmentFile=/run/ic-node/etc/default/ic-registry-replicator
-ExecStart=/opt/ic/bin/ic-registry-replicator       \
-    --local-store-path    "${LOCAL_STORE_PATH}"    \
-    --nns-pub-key-pem     "${NNS_PUB_KEY_PEM}"     \
-    --nns-url             "${NNS_URL}"             \
-    --metrics-listen-addr "${METRICS_LISTEN_ADDR}"
+ExecStart=/opt/ic/bin/ic-registry-replicator                            \
+    --local-store-path    "/var/opt/registry/store"                     \
+    --nns-pub-key-pem     "/run/ic-node/etc/default/nns_public_key.pem" \
+    --nns-url             "${NNS_URL}"                                  \
+    --metrics-listen-addr "[::]:9320"
 
 [Install]
 WantedBy=multi-user.target

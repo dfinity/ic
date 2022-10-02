@@ -4,8 +4,12 @@
 
 set -euox pipefail
 
-readonly BOOT_CONFIG='/boot/config'
+readonly BOOT_DIR='/boot/config'
+readonly NETWORK_CONFIG="${BOOT_DIR}/network.conf"
+
 readonly SYSTEMD_NETWORK='/run/systemd/network'
+readonly IPV6_NETWORK="${SYSTEMD_NETWORK}/10-enp1s0.network"
+readonly IPV4_NETWORK="${SYSTEMD_NETWORK}/enp2s0.network"
 
 HAS_IPV6=false
 HAS_IPV4=false
@@ -18,12 +22,12 @@ function err() {
 # "key=value" for each line with a specific set of keys permissible (see code
 # below).
 function read_variables() {
-    if [[ ! -d "${BOOT_CONFIG}" ]]; then
-        err "missing node configuration directory: ${BOOT_CONFIG}"
+    if [[ ! -d "${BOOT_DIR}" ]]; then
+        err "missing node configuration directory: ${BOOT_DIR}"
         exit 1
     fi
-    if [[ ! -f "${BOOT_CONFIG}/network.conf" ]]; then
-        err "missing network configuration: ${BOOT_CONFIG}/network.conf"
+    if [[ ! -f "${NETWORK_CONFIG}" ]]; then
+        err "missing network configuration: ${NETWORK_CONFIG}"
         exit 1
     fi
 
@@ -37,27 +41,27 @@ function read_variables() {
             "ipv4_gateway") ipv4_gateway="${value}" ;;
             "name_servers") name_servers="${value}" ;;
         esac
-    done <"${BOOT_CONFIG}/network.conf"
+    done <"${NETWORK_CONFIG}"
 
     # Check the config
     if [[ -n "${ipv6_address:-}" ]]; then
         if [[ -n "${ipv6_gateway:-}" ]]; then
             HAS_IPV6=true
         else
-            err "ipv6 override failed, ipv6_address='${ipv6_address}' but ipv6_gateway not found in ${BOOT_CONFIG}/network.conf"
+            err "ipv6 override failed, ipv6_address='${ipv6_address}' but ipv6_gateway not found in ${NETWORK_CONFIG}"
         fi
     elif [[ -n "${ipv6_gateway:-}" ]]; then
-        err "ipv6 override failed, ipv6_gateway was '${ipv6_gateway}' but ipv6_address not found in ${BOOT_CONFIG}/network.conf"
+        err "ipv6 override failed, ipv6_gateway was '${ipv6_gateway}' but ipv6_address not found in ${NETWORK_CONFIG}"
     fi
 
     if [[ -n "${ipv4_address:-}" ]]; then
         if [[ -n "${ipv4_gateway:-}" ]]; then
             HAS_IPV4=true
         else
-            err "ipv4 override failed, ipv4_address was '${ipv4_address}' but ipv4_gateway not found in ${BOOT_CONFIG}/network.conf"
+            err "ipv4 override failed, ipv4_address was '${ipv4_address}' but ipv4_gateway not found in ${NETWORK_CONFIG}"
         fi
     elif [[ -n "${ipv4_gateway:-}" ]]; then
-        err "ipv4 override failed, ipv4_gateway was '${ipv4_gateway}' but ipv4_address not found in ${BOOT_CONFIG}/network.conf"
+        err "ipv4 override failed, ipv4_gateway was '${ipv4_gateway}' but ipv4_address not found in ${NETWORK_CONFIG}"
     fi
 }
 
@@ -95,7 +99,7 @@ function generate_network_config() {
     mkdir -p "${SYSTEMD_NETWORK}"
 
     # Handle ipv6
-    cat >"${SYSTEMD_NETWORK}/10-enp1s0.network" <<EOF
+    cat >"${IPV6_NETWORK}" <<EOF
 [Match]
 Name=enp1s0
 Virtualization=!container
@@ -106,7 +110,7 @@ $(generate_name_server_list)
 EOF
 
     # Handle ipv4
-    cat >"${SYSTEMD_NETWORK}/enp2s0.network" <<EOF
+    cat >"${IPV4_NETWORK}" <<EOF
 [Match]
 Name=enp2s0
 
