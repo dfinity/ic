@@ -135,7 +135,7 @@
 
 .rules-build-base-images-schedule:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-deploy-base-images"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"'
     - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_REF_PROTECTED == "true"'
       when: manual
       allow_failure: true

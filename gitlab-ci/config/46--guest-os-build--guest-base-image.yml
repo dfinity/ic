@@ -79,15 +79,13 @@ build-push-base-images:
      git config --global user.name "IDX GitLab Automation"
      git checkout -b "base-image-refs-update-${TAG}"
      git commit -a -m "Updating container base image refs"
-     # XXX(removeme) remove draft
      git push \
          -o merge_request.create \
-         -o merge_request.draft \
          -o merge_request.title="Updating container base images refs [$TAG]" \
          origin "base-image-refs-update-${TAG}" 2>&1 | tee push.info
 
      # request merge request approval
      MR_URL=$(grep -ho -E "https://gitlab.com/.*/merge_requests/[0-9]*" push.info)
      MESSAGE="Hi team! Please approve <$MR_URL|base image refs update>. :pray:"
-     ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#markos-void"
-     ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#markos-void"
+     ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#eng-node"
+     ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#eng-boundary-nodes"
