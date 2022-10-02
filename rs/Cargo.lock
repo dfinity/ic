@@ -2250,7 +2250,6 @@ dependencies = [
  "opentelemetry 0.17.0",
  "opentelemetry-prometheus",
  "prometheus 0.13.1",
- "rand_core 0.6.3",
  "reqwest",
  "rsa 0.6.1",
  "serde",
@@ -3344,7 +3343,7 @@ dependencies = [
  "log",
  "nix 0.23.0",
  "rand 0.8.5",
- "rand_distr 0.4.3",
+ "rand_distr",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -6066,7 +6065,7 @@ dependencies = [
  "log",
  "log4rs",
  "rand 0.8.5",
- "rand_distr 0.4.3",
+ "rand_distr",
  "tempfile",
  "tokio",
 ]
@@ -7367,7 +7366,7 @@ dependencies = [
  "predicates 1.0.4",
  "prometheus 0.12.0",
  "prost",
- "rand 0.4.6",
+ "rand 0.8.5",
  "slog",
  "slog-scope",
  "tempfile",
@@ -7462,8 +7461,8 @@ dependencies = [
  "on_wire",
  "prometheus 0.12.0",
  "rand 0.8.5",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.3",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -7492,7 +7491,7 @@ dependencies = [
  "log",
  "nix 0.23.0",
  "rand 0.8.5",
- "rand_distr 0.4.3",
+ "rand_distr",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -9651,15 +9650,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mersenne_twister"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b85dbb2f68dfc026aac8f4c5196579896b10ee45e8b9a1a3b325fab3043d1cb0"
-dependencies = [
- "rand 0.4.6",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9895,7 +9885,7 @@ dependencies = [
  "num-rational 0.4.0",
  "num-traits",
  "rand 0.8.5",
- "rand_distr 0.4.3",
+ "rand_distr",
  "simba",
  "typenum",
 ]
@@ -11343,19 +11333,6 @@ checksum = "941ba9d78d8e2f7ce474c015eea4d9c6d25b6a3327f9832ee29a4de27f91bbb8"
 
 [[package]]
 name = "rand"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "552840b97013b1a26992c11eac34bdd778e464601a4c2054b5f0bff7c6761293"
-dependencies = [
- "fuchsia-cprng",
- "libc",
- "rand_core 0.3.1",
- "rdrand",
- "winapi 0.3.9",
-]
-
-[[package]]
-name = "rand"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d71dacdc3c88c1fde3885a3be3fbab9f35724e6ce99467f7d9c5026132184ca"
@@ -11384,7 +11361,6 @@ dependencies = [
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "rand_hc 0.2.0",
- "rand_pcg 0.2.1",
 ]
 
 [[package]]
@@ -11463,16 +11439,6 @@ dependencies = [
 
 [[package]]
 name = "rand_distr"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9e9532ada3929fb8b2e9dbe28d1e06c9b2cc65813f074fcb6bd5fbefeff9d56"
-dependencies = [
- "num-traits",
- "rand 0.7.3",
-]
-
-[[package]]
-name = "rand_distr"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
@@ -11541,15 +11507,6 @@ checksum = "abf9b09b01790cfe0364f52bf32995ea3c39f4d2dd011eac241d2914146d0b44"
 dependencies = [
  "autocfg 0.1.7",
  "rand_core 0.4.2",
-]
-
-[[package]]
-name = "rand_pcg"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
-dependencies = [
- "rand_core 0.5.1",
 ]
 
 [[package]]
@@ -11763,9 +11720,8 @@ dependencies = [
  "maplit",
  "on_wire",
  "prost",
- "rand 0.7.3",
- "rand_core 0.5.1",
- "rand_distr 0.3.0",
+ "rand 0.8.5",
+ "rand_distr",
  "registry-canister-protobuf-generator",
  "serde",
  "serde_cbor",
@@ -11993,9 +11949,9 @@ dependencies = [
  "ic-test-identity",
  "ic-test-utilities",
  "ic-types 0.8.0",
- "mersenne_twister",
  "on_wire",
- "rand 0.4.6",
+ "rand 0.8.5",
+ "rand_pcg 0.3.1",
  "serde",
  "serde_json",
 ]
@@ -12253,7 +12209,7 @@ version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97d03ceae636d0fed5bae6a7f4f664354c5f4fcedf6eef053fef17e49f837d0a"
 dependencies = [
- "secp256k1-sys 0.4.1",
+ "secp256k1-sys 0.4.2",
 ]
 
 [[package]]
@@ -12269,9 +12225,9 @@ dependencies = [
 
 [[package]]
 name = "secp256k1-sys"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "827cb7cce42533829c792fc51b82fbf18b125b45a702ef2c8be77fce65463a7b"
+checksum = "957da2573cde917463ece3570eab4a0b3f19de6f1646cde62e6fd3868f566036"
 dependencies = [
  "cc",
 ]
@@ -12920,8 +12876,8 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "lazy_static",
- "mersenne_twister",
- "rand 0.4.6",
+ "rand 0.8.5",
+ "rand_pcg 0.3.1",
  "serde",
  "serde_json",
 ]

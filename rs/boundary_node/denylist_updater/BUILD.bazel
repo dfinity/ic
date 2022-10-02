@@ -16,7 +16,6 @@ DEPENDENCIES = [
     "@crate_index//:opentelemetry",
     "@crate_index//:opentelemetry-prometheus",
     "@crate_index//:prometheus",
-    "@crate_index//:rand_core",
     "@crate_index//:reqwest",
     "@crate_index//:rsa",
     "@crate_index//:serde",
@@ -27,6 +26,24 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
+]
+
+DENYLIST_ENCODER_DEPENDENCIES = [
+    "@crate_index//:anyhow",
+    "@crate_index//:chacha20poly1305",
+    "@crate_index//:clap",
+    "@crate_index//:flate2",
+    "@crate_index//:rsa",
+    "@crate_index//:sha2",
+    "@crate_index//:tar",
+    "@crate_index//:tokio",
+]
+
+GENERATE_KEY_PAIR_DEPENDENCIES = [
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:rsa",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -40,6 +57,22 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "denylist-encoder",
+    srcs = ["src/bin/denylist-encoder.rs"],
+    crate_name = "denylist_encoder",
+    version = "0.1.0",
+    deps = DENYLIST_ENCODER_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "generate-key-pair",
+    srcs = ["src/bin/generate-key-pair.rs"],
+    crate_name = "generate_key_pair",
+    version = "0.1.0",
+    deps = GENERATE_KEY_PAIR_DEPENDENCIES,
 )
 
 rust_test(

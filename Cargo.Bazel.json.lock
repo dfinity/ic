@@ -1,5 +1,5 @@
 {
-  "checksum": "acaee823a8fc77a9acc44bd74d7260707085c99e0a1442fda758aaec035e6b6e",
+  "checksum": "a6c978b3710ffcfc8960acc68304e8eb37991033a5eb25fc4d771a1d0982b964",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11368,10 +11368,6 @@
               "target": "maplit"
             },
             {
-              "id": "mersenne_twister 1.1.1",
-              "target": "mersenne_twister"
-            },
-            {
               "id": "mio 0.7.14",
               "target": "mio"
             },
@@ -11542,23 +11538,9 @@
               "target": "quote"
             },
             {
-              "id": "rand 0.4.6",
-              "target": "rand",
-              "alias": "rand_0_4_6"
-            },
-            {
-              "id": "rand 0.7.3",
-              "target": "rand",
-              "alias": "rand_0_7_3"
-            },
-            {
               "id": "rand 0.8.5",
               "target": "rand",
               "alias": "rand_0_8_4"
-            },
-            {
-              "id": "rand_chacha 0.2.2",
-              "target": "rand_chacha"
             },
             {
               "id": "rand_chacha 0.3.1",
@@ -11566,17 +11548,9 @@
               "alias": "rand_chacha_0_3_1"
             },
             {
-              "id": "rand_core 0.5.1",
-              "target": "rand_core"
-            },
-            {
               "id": "rand_core 0.6.4",
               "target": "rand_core",
               "alias": "rand_core_0_6_1"
-            },
-            {
-              "id": "rand_distr 0.3.0",
-              "target": "rand_distr"
             },
             {
               "id": "rand_distr 0.4.3",
@@ -23211,48 +23185,6 @@
       },
       "license": "MPL-2.0"
     },
-    "mersenne_twister 1.1.1": {
-      "name": "mersenne_twister",
-      "version": "1.1.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/mersenne_twister/1.1.1/download",
-          "sha256": "b85dbb2f68dfc026aac8f4c5196579896b10ee45e8b9a1a3b325fab3043d1cb0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "mersenne_twister",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "mersenne_twister",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand 0.4.6",
-              "target": "rand"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "1.1.1"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "mime 0.3.16": {
       "name": "mime",
       "version": "0.3.16",
@@ -31537,77 +31469,6 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "rand 0.4.6": {
-      "name": "rand",
-      "version": "0.4.6",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/rand/0.4.6/download",
-          "sha256": "552840b97013b1a26992c11eac34bdd778e464601a4c2054b5f0bff7c6761293"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "libc",
-          "std"
-        ],
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(target_env = \"sgx\")": [
-              {
-                "id": "rand_core 0.3.1",
-                "target": "rand_core"
-              },
-              {
-                "id": "rdrand 0.4.0",
-                "target": "rdrand"
-              }
-            ],
-            "cfg(target_os = \"fuchsia\")": [
-              {
-                "id": "fuchsia-cprng 0.1.1",
-                "target": "fuchsia_cprng"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.134",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.4.6"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "rand 0.6.5": {
       "name": "rand",
       "version": "0.6.5",
@@ -31757,12 +31618,9 @@
         ],
         "crate_features": [
           "alloc",
-          "default",
           "getrandom",
           "getrandom_package",
           "libc",
-          "rand_pcg",
-          "small_rng",
           "std"
         ],
         "deps": {
@@ -31775,10 +31633,6 @@
             {
               "id": "rand_core 0.5.1",
               "target": "rand_core"
-            },
-            {
-              "id": "rand_pcg 0.2.1",
-              "target": "rand_pcg"
             }
           ],
           "selects": {
@@ -31971,8 +31825,6 @@
           "**"
         ],
         "crate_features": [
-          "default",
-          "simd",
           "std"
         ],
         "deps": {
@@ -32213,57 +32065,6 @@
         },
         "edition": "2018",
         "version": "0.6.4"
-      },
-      "license": "MIT OR Apache-2.0"
-    },
-    "rand_distr 0.3.0": {
-      "name": "rand_distr",
-      "version": "0.3.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/rand_distr/0.3.0/download",
-          "sha256": "c9e9532ada3929fb8b2e9dbe28d1e06c9b2cc65813f074fcb6bd5fbefeff9d56"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_distr",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_distr",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "alloc",
-          "default",
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "num-traits 0.2.15",
-              "target": "num_traits"
-            },
-            {
-              "id": "rand 0.7.3",
-              "target": "rand"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -32646,48 +32447,6 @@
         }
       },
       "license": "MIT/Apache-2.0"
-    },
-    "rand_pcg 0.2.1": {
-      "name": "rand_pcg",
-      "version": "0.2.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/rand_pcg/0.2.1/download",
-          "sha256": "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_pcg",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_pcg",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.5.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.2.1"
-      },
-      "license": "MIT OR Apache-2.0"
     },
     "rand_pcg 0.3.1": {
       "name": "rand_pcg",
@@ -45223,8 +44982,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -45235,8 +44994,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

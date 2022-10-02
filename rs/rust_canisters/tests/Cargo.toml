@@ -10,8 +10,8 @@ serde_json = "1.0.40"
 dfn_core = { path = "../dfn_core" }
 dfn_macro = { path = "../dfn_macro" }
 dfn_json = { path = "../dfn_json" }
-mersenne_twister = "1.1.1"
-rand = "0.4.6"
+rand = "0.8.4"
+rand_pcg = "0.3.1"
 on_wire = { path = "../on_wire"}
 
 [[bin]]
