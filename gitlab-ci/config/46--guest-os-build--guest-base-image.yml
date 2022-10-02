@@ -44,14 +44,19 @@ build-push-base-images:
 
      # TAG gets defined in *build-base-images
      # guestos-base & guestos-base-dev
-     docker push -a dfinity/guestos-base:"$TAG"
-     docker push -a dfinity/guestos-base-dev:"$TAG"
+     docker push dfinity/guestos-base:"$TAG"
+     docker push dfinity/guestos-base:latest
+     docker push dfinity/guestos-base-dev:"$TAG"
+     docker push dfinity/guestos-base-dev:latest
      # genericos-base
-     docker push -a dfinity/genericos-base:"$TAG"
+     docker push dfinity/genericos-base:"$TAG"
+     docker push dfinity/genericos-base:latest
      # boundaryos-base
-     docker push -a dfinity/boundaryos-base:"$TAG"
+     docker push dfinity/boundaryos-base:"$TAG"
+     docker push dfinity/boundaryos-base:latest
      # boundaryos-base-snp
-     docker push -a dfinity/boundaryos-base-snp:"$TAG"
+     docker push dfinity/boundaryos-base-snp:"$TAG"
+     docker push dfinity/boundaryos-base-snp:latest
 
      IMAGE_LIST=(
          dfinity/guestos-base
