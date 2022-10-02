@@ -55,9 +55,8 @@ ic-registry-proto-data-provider = { path = "../proto_data_provider"}
 ic-test-utilities = { path = "../../test_utilities" }
 lazy_static = "1.4.0"
 maplit = "1.0"
-rand = { version = "0.7.2", features = ["small_rng"]}
-rand_core = "0.5"
-rand_distr = "0.3.0"
+rand = { version = "0.8.4", features = ["small_rng"]}
+rand_distr = "0.4.0"
 
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!

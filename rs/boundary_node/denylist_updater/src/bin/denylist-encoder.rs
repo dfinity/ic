@@ -5,11 +5,17 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Error};
-use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305, XNonce};
+use chacha20poly1305::{
+    aead::{Aead, OsRng as ChaChaOsRng},
+    KeyInit, XChaCha20Poly1305, XNonce,
+};
 use clap::Parser;
 use flate2::{write::GzEncoder, Compression};
-use rand_core::{OsRng, RngCore};
-use rsa::{pkcs8::DecodePublicKey, PaddingScheme, PublicKey, RsaPublicKey};
+use rsa::{
+    pkcs8::DecodePublicKey,
+    rand_core::{OsRng, RngCore},
+    PaddingScheme, PublicKey, RsaPublicKey,
+};
 use sha2::Sha256;
 use tar::{Builder, Header};
 
@@ -42,7 +48,7 @@ async fn main() -> Result<(), Error> {
     let data = v;
 
     // Generate symmetric key
-    let sym_key = XChaCha20Poly1305::generate_key(&mut OsRng);
+    let sym_key = XChaCha20Poly1305::generate_key(&mut ChaChaOsRng);
 
     // Encrypt data
     let cipher = XChaCha20Poly1305::new(&sym_key);

@@ -7,8 +7,8 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/on_wire",
-    "@crate_index//:mersenne_twister",
-    "@crate_index//:rand_0_4_6",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_pcg",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
 ]

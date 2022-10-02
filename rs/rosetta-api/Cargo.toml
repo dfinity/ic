@@ -57,8 +57,8 @@ ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_bl
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-types = { path = "../types/types" }
-rand_chacha = "0.2.2"
-rand_core = "0.5.1"
+rand_chacha = "0.3.1"
+rand_core = "0.6.1"
 futures = "0.3.13"
 
 [[test]]

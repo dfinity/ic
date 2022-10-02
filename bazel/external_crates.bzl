@@ -453,9 +453,6 @@ def external_crates_repository(name, annotations):
             "maplit": crate.spec(
                 version = "^1.0.2",
             ),
-            "mersenne_twister": crate.spec(
-                version = "^1.1.1",
-            ),
             "mio": crate.spec(
                 version = "^0.7",
                 features = [
@@ -628,35 +625,20 @@ def external_crates_repository(name, annotations):
             "quote": crate.spec(
                 version = "^1.0",
             ),
-            "rand-0_4_6": crate.spec(
+            "rand-0_8_4": crate.spec(
                 package = "rand",
-                version = "^0.4.6",
-            ),
-            "rand-0_7_3": crate.spec(
-                package = "rand",
-                version = "^0.7.3",
+                version = "^0.8.4",
                 features = [
                     "small_rng",
                 ],
             ),
-            "rand-0_8_4": crate.spec(
-                package = "rand",
-                version = "^0.8.4",
-            ),
-            "rand_chacha": crate.spec(version = "^0.2.2"),
             "rand_chacha-0_3_1": crate.spec(
                 package = "rand_chacha",
                 version = "^0.3.1",
             ),
-            "rand_core": crate.spec(
-                version = "^0.5.1",
-            ),
             "rand_core-0_6_1": crate.spec(
                 package = "rand_core",
                 version = "^0.6.1",
-            ),
-            "rand_distr": crate.spec(
-                version = "^0.3.0",
             ),
             "rand_distr-0_4": crate.spec(
                 package = "rand_distr",

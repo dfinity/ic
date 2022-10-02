@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Error};
 use clap::Parser;
-use rand_core::OsRng;
 use rsa::{
     pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding},
+    rand_core::OsRng,
     RsaPrivateKey, RsaPublicKey,
 };
 
