@@ -81,8 +81,8 @@ build-push-base-images:
          -o merge_request.title="Updating container base images refs [$TAG]" \
          origin "base-images-ref-update-${TAG}" 2>&1 | tee push.info
 
-    # request merge request approval
-    MR_URL=$(grep -ho -E "https://gitlab.com/.*/merge_requests/[0-9]*" push.info)
-    MESSAGE="Hi team! Please approve <$MR_URL|this change>!"
-    ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#markos-void"
-    ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#markos-void"
+     # request merge request approval
+     MR_URL=$(grep -ho -E "https://gitlab.com/.*/merge_requests/[0-9]*" push.info)
+     MESSAGE="Hi team! Please approve <$MR_URL|this change>!"
+     ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#markos-void"
+     ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#markos-void"
