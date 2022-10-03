@@ -425,7 +425,7 @@ impl StreamBuilderImpl {
                                     context.message = message;
                                 }
                             }
-                            
+
                             streams.push(dst_net_id, msg);
                             // Increase cycle sum
                             // Important: This needs to be done after streams.push, else on the first message,
