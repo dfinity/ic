@@ -19,8 +19,8 @@ use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 // TODO(NNS1-1589): Unhack.
 // use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
 use ic_sns_swap::pb::v1::{
-    GovernanceError, SetDappControllersRequest, SetDappControllersResponse,
-    SettleCommunityFundParticipation,
+    GovernanceError, RestoreDappControllersRequest, RestoreDappControllersResponse,
+    SetDappControllersRequest, SetDappControllersResponse, SettleCommunityFundParticipation,
 };
 
 use ic_sns_swap::pb::v1::{
@@ -354,6 +354,31 @@ fn get_buyers_total() {
 #[candid_method(update, rename = "get_buyers_total")]
 async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalResponse {
     swap().get_buyers_total()
+}
+
+#[export_name = "canister_update restore_dapp_controllers"]
+fn restore_dapp_controllers() {
+    over_async(candid_one, restore_dapp_controllers_)
+}
+
+#[candid_method(update, rename = "restore_dapp_controllers")]
+async fn restore_dapp_controllers_(
+    _request: RestoreDappControllersRequest,
+) -> RestoreDappControllersResponse {
+    println!("{}retore_dapp_controllers", LOG_PREFIX);
+    // Require authorization.
+    let allowed_canister = swap().init().nns_governance();
+    if caller() != PrincipalId::from(allowed_canister) {
+        panic!(
+            "This method can only be called by canister {}",
+            allowed_canister
+        );
+    }
+    let mut sns_root_client = RealSnsRootClient::new(swap().init().sns_root());
+    swap_mut()
+        .restore_dapp_controllers(&mut sns_root_client)
+        .await
+        .into()
 }
 
 // =============================================================================

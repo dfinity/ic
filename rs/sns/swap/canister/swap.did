@@ -125,4 +125,5 @@ service : (Init) -> {
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,
     );
+  restore_dapp_controllers : (record {}) -> (SetDappControllersCallResult);
 }

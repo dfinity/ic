@@ -61,6 +61,7 @@ use dfn_core::api::spawn;
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::ledger;
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_sns_swap::pb::v1::RestoreDappControllersRequest;
 use ledger_canister::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 
@@ -4318,45 +4319,49 @@ impl Governance {
             // for voting rewards, but shall not make it into the
             // tally.
             p.recompute_tally(now_seconds, voting_period_seconds);
-            if p.can_make_decision(now_seconds, voting_period_seconds) {
-                // This marks the proposal as no longer open.
-                p.decided_timestamp_seconds = now_seconds;
-                if p.is_accepted() {
-                    // The proposal was adopted, return the rejection fee for non-ManageNeuron
-                    // proposals.
-                    if !p
-                        .proposal
-                        .as_ref()
-                        .map(|x| x.is_manage_neuron())
-                        .unwrap_or(false)
-                    {
-                        if let Some(nid) = &p.proposer {
-                            if let Some(neuron) = self.proto.neurons.get_mut(&nid.id) {
-                                if neuron.neuron_fees_e8s >= p.reject_cost_e8s {
-                                    neuron.neuron_fees_e8s -= p.reject_cost_e8s;
-                                }
-                            }
+
+            if !p.can_make_decision(now_seconds, voting_period_seconds) {
+                return;
+            }
+            // This marks the proposal as no longer open.
+            p.decided_timestamp_seconds = now_seconds;
+            if !p.is_accepted() {
+                self.start_process_rejected_proposal(pid);
+                return;
+            }
+            // The proposal was adopted, return the rejection fee for non-ManageNeuron
+            // proposals.
+            if !p
+                .proposal
+                .as_ref()
+                .map(|x| x.is_manage_neuron())
+                .unwrap_or(false)
+            {
+                if let Some(nid) = &p.proposer {
+                    if let Some(neuron) = self.proto.neurons.get_mut(&nid.id) {
+                        if neuron.neuron_fees_e8s >= p.reject_cost_e8s {
+                            neuron.neuron_fees_e8s -= p.reject_cost_e8s;
                         }
                     }
-                    let original_total_community_fund_maturity_e8s_equivalent =
-                        p.original_total_community_fund_maturity_e8s_equivalent;
-                    if let Some(action) = p.proposal.as_ref().and_then(|x| x.action.clone()) {
-                        // A yes decision as been made, execute the proposal!
-                        self.start_proposal_execution(
-                            pid,
-                            &action,
-                            original_total_community_fund_maturity_e8s_equivalent,
-                        );
-                    } else {
-                        self.set_proposal_execution_status(
-                            pid,
-                            Err(GovernanceError::new_with_message(
-                                ErrorType::PreconditionFailed,
-                                "Proposal is missing.",
-                            )),
-                        );
-                    }
                 }
+            }
+            let original_total_community_fund_maturity_e8s_equivalent =
+                p.original_total_community_fund_maturity_e8s_equivalent;
+            if let Some(action) = p.proposal.as_ref().and_then(|x| x.action.clone()) {
+                // A yes decision as been made, execute the proposal!
+                self.start_proposal_execution(
+                    pid,
+                    &action,
+                    original_total_community_fund_maturity_e8s_equivalent,
+                );
+            } else {
+                self.set_proposal_execution_status(
+                    pid,
+                    Err(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "Proposal is missing.",
+                    )),
+                );
             }
         }
     }
@@ -4391,6 +4396,66 @@ impl Governance {
             })
             .min()
             .unwrap_or(u64::MAX);
+    }
+
+    fn start_process_rejected_proposal(&mut self, pid: u64) {
+        // Similar method to "start_proposal_execution"
+        // `process_rejected_proposal` is an async method of &mut self.
+        //
+        // Starting it and letting it run in the background requires knowing that
+        // the `self` reference will last until the future has completed.
+        //
+        // The compiler cannot know that, but this is actually true:
+        //
+        // - in unit tests, all futures are immediately ready, because no real async
+        //   call is made. In this case, the transmutation to a static ref is abusive,
+        //   but it's still ok since the future will immediately resolve.
+        //
+        // - in prod, "self" in a reference to the GOVERNANCE static variable, which is
+        //   initialized only once (in canister_init or canister_post_upgrade)
+        let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
+        spawn(governance.process_rejected_proposal(pid));
+    }
+
+    async fn process_rejected_proposal(&mut self, pid: u64) {
+        let proposal_data = match self.proto.proposals.get(&pid) {
+            None => {
+                println!(".");
+                return;
+            }
+            Some(p) => p,
+        };
+
+        if let Some(Action::OpenSnsTokenSwap(ref open_sns_token_swap)) = proposal_data
+            .proposal
+            .as_ref()
+            .and_then(|p| p.action.clone())
+        {
+            self.process_rejected_open_sns_token_swap(open_sns_token_swap)
+                .await
+        }
+    }
+
+    async fn process_rejected_open_sns_token_swap(
+        &mut self,
+        open_sns_token_swap: &OpenSnsTokenSwap,
+    ) {
+        let request = RestoreDappControllersRequest {};
+
+        let target_swap_canister_id = open_sns_token_swap
+            .target_swap_canister_id
+            .expect("No value in the target_swap_canister_id field.")
+            .try_into()
+            .expect("Unable to convert target_swap_canister_id into a CanisterId.");
+
+        let _result = self
+            .env
+            .call_canister_method(
+                target_swap_canister_id,
+                "restore_dapp_controllers",
+                Encode!(&request).expect("Unable to encode RestoreDappControllersRequest."),
+            )
+            .await;
     }
 
     /// Starts execution of the given proposal in the background.
