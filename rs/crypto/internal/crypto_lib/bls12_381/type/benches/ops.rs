@@ -25,12 +25,16 @@ fn random_scalar() -> Scalar {
     Scalar::random(&mut rng)
 }
 
-fn scalar_muln_instance(terms: usize) -> Vec<(Scalar, Scalar)> {
-    let mut r = Vec::with_capacity(terms);
-    for _ in 0..terms {
-        r.push((random_scalar(), random_scalar()));
+fn list_of_random_scalars(size: usize) -> Vec<Scalar> {
+    let mut r = Vec::with_capacity(size);
+    for _ in 0..size {
+        r.push(random_scalar())
     }
     r
+}
+
+fn scalar_muln_instance(terms: usize) -> (Vec<Scalar>, Vec<Scalar>) {
+    (list_of_random_scalars(terms), list_of_random_scalars(terms))
 }
 
 fn g1_muln_instance(terms: usize) -> Vec<(G1Projective, Scalar)> {
@@ -49,10 +53,11 @@ fn g2_muln_instance(terms: usize) -> Vec<(G2Projective, Scalar)> {
     r
 }
 
-fn scalar_multiexp_naive(terms: &[(Scalar, Scalar)]) -> Scalar {
+fn scalar_multiexp_naive(lhs: &[Scalar], rhs: &[Scalar]) -> Scalar {
+    let terms = std::cmp::min(lhs.len(), rhs.len());
     let mut accum = Scalar::zero();
-    for (pt, s) in terms {
-        accum += *pt * s;
+    for i in 0..terms {
+        accum += lhs[i] * rhs[i];
     }
     accum
 }
@@ -103,7 +108,7 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     group.bench_function("multiexp_muln_32", |b| {
         b.iter_batched_ref(
             || scalar_muln_instance(32),
-            |terms| Scalar::muln_vartime(terms),
+            |(lhs, rhs)| Scalar::muln_vartime(lhs, rhs),
             BatchSize::SmallInput,
         )
     });
@@ -111,7 +116,7 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     group.bench_function("multiexp_naive32", |b| {
         b.iter_batched_ref(
             || scalar_muln_instance(32),
-            |terms| scalar_multiexp_naive(terms),
+            |(lhs, rhs)| scalar_multiexp_naive(lhs, rhs),
             BatchSize::SmallInput,
         )
     });

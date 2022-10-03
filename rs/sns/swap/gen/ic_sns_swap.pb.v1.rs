@@ -679,6 +679,52 @@ pub mod set_mode_call_result {
         Err(super::CanisterCallError),
     }
 }
+/// Request struct for the method restore_dapp_controllers.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RestoreDappControllersRequest {}
+/// Response of the method restore_dapp_controllers.
+/// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RestoreDappControllersResponse {
+    #[prost(
+        oneof = "restore_dapp_controllers_response::Possibility",
+        tags = "1, 2"
+    )]
+    pub possibility: ::core::option::Option<restore_dapp_controllers_response::Possibility>,
+}
+/// Nested message and enum types in `RestoreDappControllersResponse`.
+pub mod restore_dapp_controllers_response {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Possibility {
+        /// TODO(NNS1-1589): Uncomment.
+        /// ic_sns_root.pb.v1.
+        #[prost(message, tag = "1")]
+        Ok(super::SetDappControllersResponse),
+        #[prost(message, tag = "2")]
+        Err(super::CanisterCallError),
+    }
+}
 /// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
 #[derive(
     candid::CandidType,
