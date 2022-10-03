@@ -42,5 +42,5 @@ ic-btc-test-utils = { path = "../test-utils" }
 bitcoin = {version = "0.28.1", features = ["rand"]} # needed for generating secp256k1 keys.
 clap = {version = "3.1.9", features = ["derive"]}
 maplit = "1.0.2"
-proptest = "0.9.4"
+proptest = "1.0"
 tempfile = "3.2.0"

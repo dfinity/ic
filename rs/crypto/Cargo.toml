@@ -81,8 +81,8 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 maplit = "1.0.2"
 mockall = "0.8.3"
-proptest = "0.9.4"
-proptest-derive = "0.1.0"
+proptest = "1.0"
+proptest-derive = "0.3.0"
 rsa = "0.6.1"
 slog-async = "2.5.0"
 

@@ -40,7 +40,7 @@ ic-system-api = { path = "../system_api" }
 ic-test-utilities = { path = "../test_utilities" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
-proptest = "0.9.4"
+proptest = "1.0"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 assert_matches = "1.3.0"
 insta = "1.8.0"
