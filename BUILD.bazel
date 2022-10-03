@@ -127,5 +127,14 @@ filegroup(
 upload_artifacts(
     name = "upload_sdk",
     inputs = [":sdk"],
-    remote_subdir = "sdk-release-bazel",
+    # The actual list is on https://github.com/bazelbuild/platforms
+    remote_subdir = "sdk-release-bazel/" + select({
+        "@platforms//cpu:x86_64": "x86_64",
+        "@platforms//cpu:arm64": "arm64",
+        "//conditions:default": "unknown",
+    }) + "-" + select({
+        "@platforms//os:osx": "macos",
+        "@platforms//os:linux": "linux",
+        "//conditions:default": "unknown",
+    }),
 )

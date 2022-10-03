@@ -17,7 +17,7 @@ def _upload_artifact_impl(ctx):
         template = ctx.file._artifacts_uploader_template,
         output = uploader,
         substitutions = {
-            "@@RCLONE_UPLOAD@@": ctx.executable._rclone_upload.path,
+            "@@RCLONE@@": ctx.file._rclone.path,
             "@@RCLONE_CONFIG@@": ctx.file.rclone_config.path,
             "@@REMOTE_SUBDIR@@": ctx.attr.remote_subdir,
             "@@VERSION_FILE@@": ctx.version_file.path,
@@ -31,9 +31,10 @@ def _upload_artifact_impl(ctx):
         ctx.actions.run(
             executable = uploader,
             arguments = [f.path, url.path],
-            tools = [ctx.executable._rclone_upload],
-            inputs = [f, ctx.version_file],
+            inputs = [f, ctx.version_file, ctx.file.rclone_config],
             outputs = [url],
+            tools = [ctx.file._rclone],
+            use_default_shell_env = True,
         )
         out.append(url)
 
@@ -53,7 +54,7 @@ _upload_artifacts = rule(
         "inputs": attr.label_list(allow_files = True),
         "remote_subdir": attr.string(mandatory = True),
         "rclone_config": attr.label(allow_single_file = True, default = "//:.rclone.conf"),
-        "_rclone_upload": attr.label(executable = True, cfg = "exec", default = ":rclone_upload"),
+        "_rclone": attr.label(allow_single_file = True, default = "@rclone//:rclone"),
         "_artifacts_uploader_template": attr.label(allow_single_file = True, default = ":upload.bash.template"),
     },
 )
@@ -69,7 +70,7 @@ def upload_artifacts(**kwargs):
     """
 
     tags = kwargs.get("tags", [])
-    for tag in ["requires-network", "manual", "local"]:
+    for tag in ["requires-network", "manual"]:
         if tag not in tags:
             tags.append(tag)
     kwargs["tags"] = tags
