@@ -1,5 +1,6 @@
 include:
   - local: /gitlab-ci/config/00--common--rules.yml
+  - local: /gitlab-ci/config/00--common--images.yml
 
 stages:             # Files from the given stage should be prefixed with:
   - automation          # temp
@@ -233,18 +234,18 @@ after_script:
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
 
 .ubuntu-docker:
-  extends: .build-env-base
-  image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
+  extends: 
+    - .build-env-base
+    - .ic-build-image
   tags:
     - dfinity
     - docker
     - ubuntu
 
 .ubuntu-docker-k8s:
-  extends: .build-env-base
-  image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
+  extends:
+    - .build-env-base
+    - .ic-build-image
   tags:
     # distribute jobs between docker and k8s runners
     - dfinity
@@ -254,13 +255,12 @@ after_script:
   extends:
     - .nix-build-env-base
     - .ubuntu-docker
+    - .ic-build-nix-image
   # Here is how docker builds work:
   # - The $CI_COMMIT_SHA is checked out at: /builds/dfinity/ic
   # - The repo is built with $BUILD_COMMAND
   # - Build results are stored in non-persisted /cargo_target
   # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
-  image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
   variables:
     SCCACHE_DIR: /cache/sccache
     RUSTC_WRAPPER: "/usr/bin/sccache-run"

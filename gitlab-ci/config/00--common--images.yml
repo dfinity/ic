@@ -1,0 +1,13 @@
+# Container images used by jobs.
+
+.ic-build-image:
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
+
+.ic-build-nix-image:
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
+
+.ic-build-bazel-image:
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:398514097f7f60837a3ed7b5e58ff7053bc91df9fa62b1a2372b873d7faf41b5"
