@@ -25,7 +25,7 @@ use crate::{
     },
 };
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{TlsReadHalf, TlsStream, TlsWriteHalf};
+use ic_crypto_tls_interfaces::{TlsStream, TlsWriteHalf};
 use ic_interfaces_transport::{
     TransportChannelId, TransportEvent, TransportEventHandler, TransportMessage, TransportPayload,
 };
@@ -33,7 +33,7 @@ use ic_logger::warn;
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::Weak;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
 use tower::Service;
@@ -64,9 +64,9 @@ const TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS: u64 = 5000;
 
 /// Error type for read errors
 #[derive(Debug)]
-enum ReadError {
-    SocketReadFailed(std::io::Error),
-    SocketReadTimeOut,
+enum StreamReadError {
+    Failed(std::io::Error),
+    TimeOut,
 }
 
 /// Create header bytes to send with payload.
@@ -128,97 +128,97 @@ fn spawn_write_task(
 ) -> JoinHandle<()> {
     let channel_id_str = channel_id.to_string();
     rt_handle.spawn(async move  {
-            let _ = &data_plane_metrics;
-            let _raii_gauge = IntGaugeResource::new(data_plane_metrics.write_tasks.clone());
-            loop {
-                let loop_start_time = Instant::now();
-                // If the TransportImpl has been deleted, abort.
-                let arc_self = match weak_self.upgrade() {
-                    Some(arc_self) => arc_self,
-                    _ => return,
-                };
-                // Wait for the send requests
-                let dequeued = send_queue_reader
-                    .dequeue(
-                        DEQUEUE_BYTES,
-                        Duration::from_millis(TRANSPORT_HEARTBEAT_SEND_INTERVAL_MS),
-                    )
-                    .await;
+        let _ = &data_plane_metrics;
+        let _raii_gauge = IntGaugeResource::new(data_plane_metrics.write_tasks.clone());
+        loop {
+            let loop_start_time = Instant::now();
+            // If the TransportImpl has been deleted, abort.
+            let arc_self = match weak_self.upgrade() {
+                Some(arc_self) => arc_self,
+                _ => return,
+            };
+            // Wait for the send requests
+            let dequeued = send_queue_reader
+                .dequeue(
+                    DEQUEUE_BYTES,
+                    Duration::from_millis(TRANSPORT_HEARTBEAT_SEND_INTERVAL_MS),
+                )
+                .await;
 
-                let mut to_send = Vec::<u8>::new();
-                if dequeued.is_empty() {
-                    // There is nothing to send, so issue a heartbeat message
-                    to_send.append(&mut pack_header(None, true));
-                    arc_self
-                        .data_plane_metrics
-                        .heart_beats_sent
-                        .with_label_values(&[&peer_label, &channel_id_str])
-                        .inc();
-                } else {
-                    for mut payload in dequeued {
-                        to_send.append(&mut pack_header(
-                            Some(&payload),
-                            false,
-                        ));
-                        to_send.append(&mut payload.0);
-                    }
+            let mut to_send = Vec::<u8>::new();
+            if dequeued.is_empty() {
+                // There is nothing to send, so issue a heartbeat message
+                to_send.append(&mut pack_header(None, true));
+                arc_self
+                    .data_plane_metrics
+                    .heart_beats_sent
+                    .with_label_values(&[&peer_label, &channel_id_str])
+                    .inc();
+            } else {
+                for mut payload in dequeued {
+                    to_send.append(&mut pack_header(
+                        Some(&payload),
+                        false,
+                    ));
+                    to_send.append(&mut payload.0);
                 }
-                arc_self
-                    .data_plane_metrics
-                    .write_task_overhead_time_msec
-                    .with_label_values(&[&peer_label, &channel_id_str])
-                    .observe(loop_start_time.elapsed().as_millis() as f64);
-
-                // Send the payload
-                let start_time = Instant::now();
-                if let Err(e) = writer.write_all(&to_send).await {
-                    warn!(
-                        arc_self.log,
-                        "DataPlane::flow_write_task(): failed to write payload: peer_id: {:?}, channel_id: {:?}, {:?}",
-                        peer_id,
-                        channel_id,
-                        e,
-                    );
-                    arc_self.on_disconnect(peer_id, channel_id).await;
-                    return;
-                }
-                // Flush the write
-                if let Err(e) = writer.flush().await {
-                    warn!(
-                        arc_self.log,
-                        "DataPlane::flow_write_task(): failed to flush: peer_id: {:?}, channel_id: {:?}, {:?}", peer_id, channel_id, e,
-                    );
-                    arc_self.on_disconnect(peer_id, channel_id).await;
-                    return;
-                }
-
-                arc_self
-                    .data_plane_metrics
-                    .socket_write_time_msec
-                    .with_label_values(&[&peer_label, &channel_id_str])
-                    .observe(start_time.elapsed().as_millis() as f64);
-                arc_self
-                    .data_plane_metrics
-                    .socket_write_bytes
-                    .with_label_values(&[&peer_label, &channel_id_str])
-                    .inc_by(to_send.len() as u64);
-                arc_self
-                    .data_plane_metrics
-                    .socket_write_size
-                    .with_label_values(&[&peer_label, &channel_id_str])
-                    .observe(to_send.len() as f64);
             }
-        })
+            arc_self
+                .data_plane_metrics
+                .write_task_overhead_time_msec
+                .with_label_values(&[&peer_label, &channel_id_str])
+                .observe(loop_start_time.elapsed().as_millis() as f64);
+
+            // Send the payload
+            let start_time = Instant::now();
+            if let Err(e) = writer.write_all(&to_send).await {
+                warn!(
+                    arc_self.log,
+                    "DataPlane::flow_write_task(): failed to write payload: peer_id: {:?}, channel_id: {:?}, {:?}",
+                    peer_id,
+                    channel_id,
+                    e,
+                );
+                arc_self.on_disconnect(peer_id, channel_id).await;
+                return;
+            }
+            // Flush the write
+            if let Err(e) = writer.flush().await {
+                warn!(
+                    arc_self.log,
+                    "DataPlane::flow_write_task(): failed to flush: peer_id: {:?}, channel_id: {:?}, {:?}", peer_id, channel_id, e,
+                );
+                arc_self.on_disconnect(peer_id, channel_id).await;
+                return;
+            }
+
+            arc_self
+                .data_plane_metrics
+                .socket_write_time_msec
+                .with_label_values(&[&peer_label, &channel_id_str])
+                .observe(start_time.elapsed().as_millis() as f64);
+            arc_self
+                .data_plane_metrics
+                .socket_write_bytes
+                .with_label_values(&[&peer_label, &channel_id_str])
+                .inc_by(to_send.len() as u64);
+            arc_self
+                .data_plane_metrics
+                .socket_write_size
+                .with_label_values(&[&peer_label, &channel_id_str])
+                .observe(to_send.len() as f64);
+        }
+    })
 }
 
 /// Per-flow receive task. Reads the messages from the socket and passes to
 /// the client.
-fn spawn_read_task(
+fn spawn_read_task<T: AsyncRead + Unpin + Send + 'static>(
     peer_id: NodeId,
     channel_id: TransportChannelId,
     peer_label: String,
     mut event_handler: TransportEventHandler,
-    mut reader: Box<TlsReadHalf>,
+    mut reader: T,
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
@@ -226,38 +226,38 @@ fn spawn_read_task(
     let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
     let channel_id_str = channel_id.to_string();
     rt_handle.spawn(async move {
-            let _ = &data_plane_metrics;
-            let _raii_gauge = IntGaugeResource::new(data_plane_metrics.read_tasks.clone());
-            loop {
-                // If the TransportImpl has been deleted, abort.
-                let arc_self = match weak_self.upgrade() {
-                    Some(arc_self) => arc_self,
-                    _ => return,
-                };
+        let _ = &data_plane_metrics;
+        let _raii_gauge = IntGaugeResource::new(data_plane_metrics.read_tasks.clone());
+        loop {
+            // If the TransportImpl has been deleted, abort.
+            let arc_self = match weak_self.upgrade() {
+                Some(arc_self) => arc_self,
+                _ => return,
+            };
 
-                // Read the next message from the socket
-                let ret = read_one_message(&mut reader, heartbeat_timeout).await;
-                if ret.is_err() {
-                    warn!(
-                        arc_self.log,
-                        "DataPlane::flow_read_task(): failed to receive message: peer_id: {:?}, channel_id: {:?}, {:?}",
-                        peer_id,
-                        channel_id,
-                        ret.as_ref().err(),
-                    );
+            // Read the next message from the socket
+            let ret = read_one_message(&mut reader, heartbeat_timeout).await;
+            if ret.is_err() {
+                warn!(
+                    arc_self.log,
+                    "DataPlane::flow_read_task(): failed to receive message: peer_id: {:?}, channel_id: {:?}, {:?}",
+                    peer_id,
+                    channel_id,
+                    ret.as_ref().err(),
+                );
 
-                    if let Err(ReadError::SocketReadTimeOut) = ret {
-                        arc_self.data_plane_metrics
-                            .socket_heart_beat_timeouts
-                            .with_label_values(&[&peer_label, &channel_id_str])
-                            .inc();
-                    }
-                    arc_self.on_disconnect(peer_id, channel_id).await;
-                    return;
+                if let Err(StreamReadError::TimeOut) = ret {
+                    arc_self.data_plane_metrics
+                        .socket_heart_beat_timeouts
+                        .with_label_values(&[&peer_label, &channel_id_str])
+                        .inc();
                 }
+                arc_self.on_disconnect(peer_id, channel_id).await;
+                return;
+            }
 
-                // Process the received message
-                let (header, payload) = ret.unwrap();
+            // Process the received message
+            let (header, payload) = ret.unwrap();
                 if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
                     // It's an empty heartbeat message -- do nothing
                     arc_self.data_plane_metrics
@@ -294,10 +294,10 @@ fn spawn_read_task(
 /// Reads and returns the next <message hdr, message payload> from the
 /// socket. The timeout is for each socket read (header, payload chunks)
 /// and not the full message.
-async fn read_one_message(
-    reader: &mut Box<TlsReadHalf>,
+async fn read_one_message<T: AsyncRead + Unpin>(
+    reader: &mut T,
     timeout: Duration,
-) -> Result<(TransportHeader, Option<TransportPayload>), ReadError> {
+) -> Result<(TransportHeader, Option<TransportPayload>), StreamReadError> {
     // Read the hdr
     let mut header_buffer = vec![0u8; TRANSPORT_HEADER_SIZE];
     read_from_socket(reader, &mut header_buffer, timeout).await?;
@@ -330,16 +330,16 @@ async fn read_one_message(
 }
 
 /// Reads the requested bytes from the socket with a timeout
-async fn read_from_socket(
-    reader: &mut Box<TlsReadHalf>,
+async fn read_from_socket<T: AsyncRead + Unpin>(
+    reader: &mut T,
     buf: &mut [u8],
     timeout: Duration,
-) -> Result<(), ReadError> {
+) -> Result<(), StreamReadError> {
     let read_future = reader.read_exact(buf);
     match tokio::time::timeout(timeout, read_future).await {
-        Err(_) => Err(ReadError::SocketReadTimeOut),
+        Err(_) => Err(StreamReadError::TimeOut),
         Ok(Ok(_)) => Ok(()),
-        Ok(Err(e)) => Err(ReadError::SocketReadFailed(e)),
+        Ok(Err(e)) => Err(StreamReadError::Failed(e)),
     }
 }
 
