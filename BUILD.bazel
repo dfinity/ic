@@ -88,7 +88,11 @@ CANISTERS = {
     "cycles-minting-canister": "//rs/nns/cmc:cycles-minting-canister",
     "genesis-token-canister": "//rs/nns/gtc:genesis-token-canister",
     "governance-canister": "//rs/nns/governance:governance-canister",
-    "ledger-canister": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "icrc1-archive-canister": "//rs/rosetta-api/icrc1/archive:archive_canister",
+    "icrc1-index-canister": "//rs/rosetta-api/icrc1/index:index_canister",
+    "icrc1-ledger-canister": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "ledger-canister": "//rs/rosetta-api/ledger_canister:ledger_canister",
+    "ledger-canister__notify-method": "//rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method",
     "nns-ui-canister": "//rs/nns/nns-ui:nns-ui-canister",
     "registry-canister": "//rs/registry/canister:registry-canister",
     "root-canister": "//rs/nns/handlers/root:root-canister",
@@ -98,16 +102,13 @@ CANISTERS = {
     "xnet-test-canister": "//rs/rust_canisters/xnet_test:xnet-test-canister",
 }
 
-[[
-    optimized_canister(
-        name = name,
-        wasm = CANISTERS[name],
-    ),
+[
     gzip_compress(
         name = name + ".wasm.gz",
-        srcs = [":" + name + ".wasm"],
-    ),
-] for name in CANISTERS]
+        srcs = [target],
+    )
+    for (name, target) in CANISTERS.items()
+]
 
 filegroup(
     name = "sdk",
