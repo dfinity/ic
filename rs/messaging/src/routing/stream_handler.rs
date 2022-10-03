@@ -1,5 +1,5 @@
 use crate::message_routing::LatencyMetrics;
-use ic_base_types::{CanisterId, NumBytes};
+use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
@@ -56,8 +56,6 @@ struct StreamHandlerMetrics {
     pub inc_cycles: GaugeVec,
     /// Checksum for incoming cycles and stream index, by sending subnet.
     pub inc_cycle_index_checksum: GaugeVec,
-    /// Cycles minted per subnet. This metric will only be exported by the NNS.
-    pub cycles_minted: GaugeVec,
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking the
     /// receival of reject signals for requests.
     pub critical_error_reject_signals_for_request: IntCounter,
@@ -83,8 +81,6 @@ const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
 const METRIC_INC_STREAM_INDEX: &str = "mr_inc_stream_index";
 const METRIC_INC_CYCLES: &str = "mr_inc_cycles";
 const METRIC_INC_CHECKSUM: &str = "mr_inc_cycle_index_checksum";
-
-const METRIC_CYCLES_MINTED: &str = "cycles_minted_per_subnet";
 
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
@@ -145,11 +141,6 @@ impl StreamHandlerMetrics {
             "Checksum for incoming cycles and stream index, by sending subnet",
             &[LABEL_REMOTE],
         );
-        let cycles_minted = metrics_registry.gauge_vec(
-            METRIC_CYCLES_MINTED,
-            "Cycles minted per subnet. This metric will only be exported by the NNS.",
-            &[LABEL_REMOTE],
-        );
         let critical_error_reject_signals_for_request =
             metrics_registry.error_counter(CRITICAL_ERROR_REJECT_SIGNALS_FOR_REQUEST);
         let critical_error_induct_response_failed =
@@ -188,7 +179,6 @@ impl StreamHandlerMetrics {
             inc_stream_index,
             inc_cycles,
             inc_cycle_index_checksum,
-            cycles_minted,
             critical_error_reject_signals_for_request,
             critical_error_induct_response_failed,
             critical_error_sender_subnet_mismatch,
@@ -459,34 +449,7 @@ impl StreamHandlerImpl {
 
         // Remove the consumed messages from our outgoing stream.
         self.observe_gced_messages(stream.messages_begin(), signals_end);
-        // stream.discard_messages_before(signals_end, reject_signals)
-        // #### TODO: REPLACE THIS CODE
-        let cmc_index_in_nns: u64 = 4;
-        let cmc_id: CanisterId = CanisterId::from_u64(cmc_index_in_nns);
-        // ####
-        let (collected_messages, rejected_messages) =
-            stream.discard_messages_before(signals_end, reject_signals);
-
-        for msg in collected_messages {
-            match msg {
-                RequestOrResponse::Request(req)
-                    if (req.sender == cmc_id && req.method_name == "deposit_cycles") =>
-                {
-                    let old_val = self
-                        .metrics
-                        .cycles_minted
-                        .with_label_values(&[&remote_subnet.to_string()])
-                        .get();
-                    self.metrics
-                        .cycles_minted
-                        .with_label_values(&[&remote_subnet.to_string()])
-                        .set(old_val + req.payment.get() as f64);
-                }
-                _ => {}
-            }
-        }
-
-        rejected_messages
+        stream.discard_messages_before(signals_end, reject_signals)
     }
 
     /// Garbage collects the signals of an outgoing `Stream` based on the
@@ -697,6 +660,7 @@ impl StreamHandlerImpl {
                     // Message not inducted.
                     Err((err, msg)) => {
                         self.observe_inducted_message_status(msg_type, err.to_label_value());
+
                         match msg {
                             RequestOrResponse::Request(_) => {
                                 debug!(
@@ -731,6 +695,7 @@ impl StreamHandlerImpl {
                 // Receiver canister is migrating to/from this subnet.
                 Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
                     self.observe_inducted_message_status(msg_type, LABEL_VALUE_CANISTER_MIGRATED);
+
                     match &msg {
                         RequestOrResponse::Request(_) => {
                             debug!(self.log, "Canister {} is being migrated, generating reject response for {:?}", msg.receiver(), msg);
