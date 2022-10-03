@@ -42,22 +42,6 @@ build-push-base-images:
    - |
      docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
 
-     # TAG gets defined in *build-base-images
-     # guestos-base & guestos-base-dev
-     docker push dfinity/guestos-base:"$TAG"
-     docker push dfinity/guestos-base:latest
-     docker push dfinity/guestos-base-dev:"$TAG"
-     docker push dfinity/guestos-base-dev:latest
-     # genericos-base
-     docker push dfinity/genericos-base:"$TAG"
-     docker push dfinity/genericos-base:latest
-     # boundaryos-base
-     docker push dfinity/boundaryos-base:"$TAG"
-     docker push dfinity/boundaryos-base:latest
-     # boundaryos-base-snp
-     docker push dfinity/boundaryos-base-snp:"$TAG"
-     docker push dfinity/boundaryos-base-snp:latest
-
      IMAGE_LIST=(
          dfinity/guestos-base
          dfinity/guestos-base-dev
@@ -65,11 +49,15 @@ build-push-base-images:
          dfinity/boundaryos-base
          dfinity/boundaryos-base-snp
      )
-     # search & replace
+     # search, replace & push
      for IMAGE in "${IMAGE_LIST[@]}"; do
          OLD_REF="$(grep -rho -E "${IMAGE}@sha256:[0-9a-z]{64}" ./* | head -1)"
          NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}":"${TAG}")"
          grep -r "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
+
+         # TAG gets defined in *build-base-images
+         docker push "$IMAGE":"$TAG"
+         docker push "$IMAGE":latest
      done
 
      # commit, push & create new merge request 
