@@ -19,7 +19,6 @@ pub mod ingress_pool;
 pub mod messages;
 pub mod messaging;
 pub mod registry;
-pub mod replica_config;
 pub mod self_validating_payload;
 pub mod time_source;
 pub mod validation;
