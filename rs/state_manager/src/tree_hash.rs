@@ -94,11 +94,7 @@ mod tests {
 
     #[test]
     fn partial_hash_reflects_streams() {
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         let hash_of_empty_state = hash_state(&state);
 
@@ -126,11 +122,7 @@ mod tests {
         use ic_replicated_state::metadata_state::Stream;
         use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         let stream = Stream::new(
             StreamIndexedQueue::with_begin(StreamIndex::from(4)),
@@ -164,11 +156,7 @@ mod tests {
     fn test_backward_compatibility() {
         fn state_fixture(certification_version: CertificationVersion) -> ReplicatedState {
             let subnet_id = subnet_test_id(1);
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_id,
-                SubnetType::Application,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
 
             let canister_id = canister_test_id(2);
             let controller = user_test_id(24);

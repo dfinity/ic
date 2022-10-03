@@ -2900,8 +2900,7 @@ fn new_fixture_with_config(
     log: &ReplicaLogger,
     hypervisor_config: HypervisorConfig,
 ) -> (StreamHandlerImpl, ReplicatedState, MetricsRegistry) {
-    let mut state =
-        ReplicatedState::new_rooted_at(LOCAL_SUBNET, SubnetType::Application, "NOT_USED".into());
+    let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
     let metrics_registry = MetricsRegistry::new();
     let stream_handler = StreamHandlerImpl::new(
         LOCAL_SUBNET,

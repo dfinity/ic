@@ -29,7 +29,6 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Input queue type: local or remote subnet.
@@ -308,7 +307,7 @@ impl std::fmt::Display for StateError {
 // our OP layer.
 // * We don't derive `Hash` because `ingress_history` is a Hashmap that doesn't
 // derive `Hash`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReplicatedState {
     /// States of all canisters, indexed by canister ids.
     pub canister_states: BTreeMap<CanisterId, CanisterState>,
@@ -327,39 +326,13 @@ pub struct ReplicatedState {
     // TODO(EXE-109): Move this queue into `subnet_queues`
     pub consensus_queue: Vec<Response>,
 
-    pub root: PathBuf,
-
     bitcoin: BitcoinState,
-}
-
-// We use custom impl of PartialEq because state root is not part of identity.
-impl PartialEq for ReplicatedState {
-    fn eq(&self, rhs: &Self) -> bool {
-        (
-            &self.bitcoin,
-            &self.canister_states,
-            &self.metadata,
-            &self.subnet_queues,
-            &self.consensus_queue,
-        ) == (
-            &rhs.bitcoin,
-            &rhs.canister_states,
-            &rhs.metadata,
-            &rhs.subnet_queues,
-            &rhs.consensus_queue,
-        )
-    }
 }
 
 impl ReplicatedState {
     /// Creates a new empty node state.
-    pub fn new_rooted_at(
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        root: PathBuf,
-    ) -> ReplicatedState {
+    pub fn new(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> ReplicatedState {
         ReplicatedState {
-            root,
             canister_states: BTreeMap::new(),
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
@@ -374,22 +347,16 @@ impl ReplicatedState {
         subnet_queues: CanisterQueues,
         consensus_queue: Vec<Response>,
         bitcoin: BitcoinState,
-        root: PathBuf,
     ) -> Self {
         let mut res = Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue,
-            root,
             bitcoin,
         };
         res.update_stream_responses_size_bytes();
         res
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.root
     }
 
     pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterState> {

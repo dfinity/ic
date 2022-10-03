@@ -63,7 +63,7 @@ use ic_types::{
 use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
-use std::{collections::BTreeSet, convert::TryFrom, path::Path, sync::Arc};
+use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
 
 use super::InstallCodeResult;
 
@@ -246,15 +246,14 @@ fn canister_manager_config(
     )
 }
 
-fn initial_state(path: &Path, subnet_id: SubnetId) -> ReplicatedState {
+fn initial_state(subnet_id: SubnetId) -> ReplicatedState {
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => subnet_id,
         })
         .unwrap(),
     );
-    let mut state =
-        ReplicatedState::new_rooted_at(subnet_id, SubnetType::Application, path.to_path_buf());
+    let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
     state.metadata.network_topology.routing_table = routing_table;
     state.metadata.network_topology.nns_subnet_id = subnet_id;
     state.metadata.init_allocation_ranges_if_empty().unwrap();
@@ -316,12 +315,7 @@ where
     let canister_manager = CanisterManagerBuilder::default()
         .with_subnet_id(subnet_id)
         .build();
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    f(
-        canister_manager,
-        initial_state(tmpdir.path(), subnet_id),
-        subnet_id,
-    )
+    f(canister_manager, initial_state(subnet_id), subnet_id)
 }
 
 #[test]
@@ -2289,8 +2283,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
         .with_cycles_account_manager(cycles_account_manager)
         .build();
 
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let mut state = initial_state(tmpdir.path(), subnet_id);
+    let mut state = initial_state(subnet_id);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
@@ -2349,8 +2342,7 @@ fn add_cycles_sender_in_whitelist() {
     let canister = get_running_canister(canister_id);
     let sender = canister_test_id(1).get();
 
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let mut state = initial_state(tmpdir.path(), subnet_id);
+    let mut state = initial_state(subnet_id);
     let initial_cycles = canister.system_state.balance();
     state.put_canister_state(canister);
 
@@ -2731,8 +2723,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             .with_cycles_account_manager(cycles_account_manager)
             .build();
 
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = initial_state(tmpdir.path(), subnet_id);
+        let mut state = initial_state(subnet_id);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
                 (*EXECUTION_PARAMETERS).instruction_limits.message(),
@@ -2878,8 +2869,7 @@ fn failed_install_hooks_consume_instructions() {
             .with_cycles_account_manager(cycles_account_manager)
             .build();
 
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = initial_state(tmpdir.path(), subnet_id);
+        let mut state = initial_state(subnet_id);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
                 (*EXECUTION_PARAMETERS).instruction_limits.message(),
@@ -2965,8 +2955,7 @@ fn install_code_respects_instruction_limit() {
         .with_cycles_account_manager(cycles_account_manager)
         .build();
 
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let mut state = initial_state(tmpdir.path(), subnet_id);
+    let mut state = initial_state(subnet_id);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),

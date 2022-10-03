@@ -30,7 +30,7 @@ prop_compose! {
         let begin = stream.messages_begin().get();
         let end = stream.messages_end().get();
 
-        let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), SubnetType::Application, "NOT_USED".into());
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         let subnet = subnet_test_id(42);
         state.modify_streams(|streams| {
             streams.insert(subnet, stream);

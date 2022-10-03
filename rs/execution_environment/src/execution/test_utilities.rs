@@ -1451,8 +1451,6 @@ impl ExecutionTestBuilder {
     }
 
     pub fn build(self) -> ExecutionTest {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
             end: CanisterId::from(2 * CANISTER_IDS_PER_SUBNET - 1),
@@ -1467,11 +1465,7 @@ impl ExecutionTestBuilder {
             }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {} is in the range {:?}", caller_canister, own_range)),
         });
 
-        let mut state = ReplicatedState::new_rooted_at(
-            self.own_subnet_id,
-            self.subnet_type,
-            tmpdir.path().to_path_buf(),
-        );
+        let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
         let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
         subnets.extend(self.caller_subnet_id.iter().copied());
