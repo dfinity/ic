@@ -73,6 +73,7 @@ use candid::Encode;
 use dfn_core::api::{id, spawn, CanisterId};
 use ic_nervous_system_common::{ledger, NervousSystemError};
 use ic_nervous_system_root::ChangeCanisterProposal;
+use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 
 lazy_static! {
     pub static ref NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER: NervousSystemFunction =
@@ -295,7 +296,7 @@ impl GovernanceProto {
     }
 
     pub fn swap_canister_id_or_panic(&self) -> CanisterId {
-        CanisterId::new(self.swap_canister_id.expect("No ledger_canister_id.")).unwrap()
+        CanisterId::new(self.swap_canister_id.expect("No swap_canister_id.")).unwrap()
     }
 
     /// Returns self.mode, but as an enum, not i32.
@@ -650,6 +651,18 @@ impl Governance {
 
     fn is_swap_canister(&self, id: PrincipalId) -> bool {
         self.proto.swap_canister_id == Some(id)
+    }
+
+    // Returns the ids of canisters that cannot be targeted by GenericNervousSystemFunctions.
+    pub fn reserved_canister_targets(&self) -> Vec<CanisterId> {
+        vec![
+            self.env.canister_id(),
+            self.proto.root_canister_id_or_panic(),
+            self.proto.ledger_canister_id_or_panic(),
+            self.proto.swap_canister_id_or_panic(),
+            NNS_LEDGER_CANISTER_ID,
+            CanisterId::ic_00(),
+        ]
     }
 
     /// Initializes the indices.
@@ -1877,6 +1890,29 @@ impl Governance {
             ));
         }
 
+        // This validates that it is well-formed, but not the canister targets.
+        match ValidGenericNervousSystemFunction::try_from(&nervous_system_function) {
+            Ok(valid_function) => {
+                let reserved_canisters = self.reserved_canister_targets();
+                let target_canister_id = valid_function.target_canister_id;
+                let validator_canister_id = valid_function.validator_canister_id;
+
+                if reserved_canisters.contains(&target_canister_id)
+                    || reserved_canisters.contains(&validator_canister_id)
+                {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "Cannot add generic nervous system functions that targets sns core canisters, the NNS ledger, or ic00"));
+                }
+            }
+            Err(msg) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    msg,
+                ))
+            }
+        }
+
         self.proto
             .id_to_nervous_system_functions
             .insert(id, nervous_system_function);
@@ -2238,7 +2274,8 @@ impl Governance {
             self.check_heap_can_grow()?;
         }
 
-        validate_and_render_proposal(proposal, &*self.env, &self.proto)
+        let reserved_canisters = self.reserved_canister_targets();
+        validate_and_render_proposal(proposal, &*self.env, &self.proto, reserved_canisters)
             .await
             .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
     }
@@ -4682,34 +4719,6 @@ mod tests {
         )
     }
 
-    #[test]
-    fn two_sns_version_upgrades_cannot_be_concurrent() {
-        let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
-        test_disallow_concurrent_upgrade_execution((&action).into(), action);
-    }
-
-    #[test]
-    fn two_canister_upgrades_cannot_be_concurrent() {
-        let action = Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default());
-        test_disallow_concurrent_upgrade_execution((&action).into(), action);
-    }
-
-    #[test]
-    fn sns_upgrades_block_concurrent_canister_upgrades() {
-        let executing_action_id =
-            (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into();
-        let action = Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default());
-        test_disallow_concurrent_upgrade_execution(executing_action_id, action);
-    }
-
-    #[test]
-    fn canister_upgrades_block_concurrent_sns_upgrades() {
-        let executing_action_id =
-            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
-        let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
-        test_disallow_concurrent_upgrade_execution(executing_action_id, action);
-    }
-
     #[should_panic]
     #[test]
     fn test_disallow_set_mode_not_normal() {
@@ -4765,7 +4774,7 @@ mod tests {
             }
             .try_into()
             .unwrap(),
-            Box::new(NativeEnvironment::default()),
+            Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
             Box::new(DoNothingLedger {}),
         );
 
@@ -4796,6 +4805,34 @@ mod tests {
         let err = err.error_message.to_lowercase();
         assert!(err.contains("mode"), "{:#?}", err);
         assert!(err.contains("vot"), "{:#?}", err);
+    }
+
+    #[test]
+    fn two_sns_version_upgrades_cannot_be_concurrent() {
+        let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
+        test_disallow_concurrent_upgrade_execution((&action).into(), action);
+    }
+
+    #[test]
+    fn two_canister_upgrades_cannot_be_concurrent() {
+        let action = Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default());
+        test_disallow_concurrent_upgrade_execution((&action).into(), action);
+    }
+
+    #[test]
+    fn sns_upgrades_block_concurrent_canister_upgrades() {
+        let executing_action_id =
+            (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into();
+        let action = Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default());
+        test_disallow_concurrent_upgrade_execution(executing_action_id, action);
+    }
+
+    #[test]
+    fn canister_upgrades_block_concurrent_sns_upgrades() {
+        let executing_action_id =
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+        let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
+        test_disallow_concurrent_upgrade_execution(executing_action_id, action);
     }
 
     /// A test method to allow testing concurrent upgrades for multiple scenarios
@@ -5783,5 +5820,131 @@ mod tests {
                 err,
             ),
         }
+    }
+
+    #[test]
+    fn test_add_generic_nervous_system_function_succeeds() {
+        let root_canister_id = canister_test_id(500);
+        let governance_canister_id = canister_test_id(501);
+        let ledger_canister_id = canister_test_id(502);
+        let swap_canister_id = canister_test_id(503);
+
+        let env = NativeEnvironment::new(Some(governance_canister_id));
+        let mut governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {},
+                root_canister_id: Some(root_canister_id.get()),
+                ledger_canister_id: Some(ledger_canister_id.get()),
+                swap_canister_id: Some(swap_canister_id.get()),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+        );
+
+        let valid = NervousSystemFunction {
+            id: 1000,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(CanisterId::from(200).get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(CanisterId::from(100).get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+        assert_is_ok(governance.perform_add_generic_nervous_system_function(valid));
+    }
+
+    #[test]
+    fn test_add_generic_nervous_system_function_fails_when_restricted() {
+        let root_canister_id = canister_test_id(500);
+        let governance_canister_id = canister_test_id(501);
+        let ledger_canister_id = canister_test_id(502);
+        let swap_canister_id = canister_test_id(503);
+
+        let env = NativeEnvironment::new(Some(governance_canister_id));
+        let mut governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {},
+                root_canister_id: Some(root_canister_id.get()),
+                ledger_canister_id: Some(ledger_canister_id.get()),
+                swap_canister_id: Some(swap_canister_id.get()),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+        );
+
+        let list_that_should_fail = vec![
+            root_canister_id,
+            governance_canister_id,
+            ledger_canister_id,
+            swap_canister_id,
+            CanisterId::ic_00(),
+            NNS_LEDGER_CANISTER_ID,
+        ];
+
+        for canister_id in list_that_should_fail {
+            assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
+                &mut governance,
+                canister_id,
+            );
+        }
+    }
+
+    fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
+        governance: &mut Governance,
+        invalid_canister_target: CanisterId,
+    ) {
+        let nns_function_invalid_validator = NervousSystemFunction {
+            id: 1000,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(invalid_canister_target.get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(CanisterId::from(1).get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+        let result = governance
+            .perform_add_generic_nervous_system_function(nns_function_invalid_validator.clone());
+        assert!(
+            result.is_err(),
+            "function: {:?}\nresult: {:?}",
+            nns_function_invalid_validator,
+            result
+        );
+
+        let nns_function_invalid_target = NervousSystemFunction {
+            id: 1000,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(CanisterId::from(1).get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(invalid_canister_target.get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+        let result = governance
+            .perform_add_generic_nervous_system_function(nns_function_invalid_target.clone());
+        assert!(
+            result.is_err(),
+            "function: {:?}\nresult: {:?}",
+            nns_function_invalid_target,
+            result
+        );
     }
 }

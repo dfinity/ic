@@ -15,7 +15,7 @@ use crate::{validate_chars_count, validate_len, validate_required_field};
 use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::convert::TryFrom;
 
 /// The maximum number of bytes in an SNS proposal's title.
@@ -67,6 +67,7 @@ pub async fn validate_and_render_proposal(
     proposal: &Proposal,
     env: &dyn Environment,
     governance_proto: &Governance,
+    reserved_canister_targets: Vec<CanisterId>,
 ) -> Result<String, String> {
     let mut defects = Vec::new();
 
@@ -99,7 +100,14 @@ pub async fn validate_and_render_proposal(
     ));
 
     // Even if we already found defects, still validate as to return all the errors found.
-    match validate_and_render_action(&proposal.action, env, governance_proto).await {
+    match validate_and_render_action(
+        &proposal.action,
+        env,
+        governance_proto,
+        reserved_canister_targets,
+    )
+    .await
+    {
         Err(err) => {
             defects.push(err);
             Err(format!(
@@ -128,6 +136,7 @@ pub async fn validate_and_render_action(
     action: &Option<proposal::Action>,
     env: &dyn Environment,
     governance_proto: &Governance,
+    reserved_canister_targets: Vec<CanisterId>,
 ) -> Result<String, String> {
     let mode = governance_proto.get_mode();
     let current_parameters = governance_proto
@@ -165,7 +174,11 @@ pub async fn validate_and_render_action(
             .await
         }
         proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
+            let disallowed_target_canister_ids: HashSet<CanisterId> =
+                reserved_canister_targets.clone().drain(..).collect();
+
             validate_and_render_add_generic_nervous_system_function(
+                &disallowed_target_canister_ids,
                 function_to_add,
                 existing_functions,
             )
@@ -471,6 +484,7 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
 
 /// Validates and renders a proposal with action AddNervousSystemFunction.
 pub fn validate_and_render_add_generic_nervous_system_function(
+    disallowed_target_canister_ids: &HashSet<CanisterId>,
     add: &NervousSystemFunction,
     existing_functions: &BTreeMap<u64, NervousSystemFunction>,
 ) -> Result<String, String> {
@@ -480,6 +494,15 @@ pub fn validate_and_render_add_generic_nervous_system_function(
             "There is already a NervousSystemFunction with id: {}",
             validated_function.id
         ));
+    }
+
+    let target_canister_id = validated_function.target_canister_id;
+    let validator_canister_id = validated_function.validator_canister_id;
+
+    if disallowed_target_canister_ids.contains(&target_canister_id)
+        || disallowed_target_canister_ids.contains(&validator_canister_id)
+    {
+        return Err("Function targets a reserved canister.".to_string());
     }
 
     if existing_functions.len() >= MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS {
@@ -904,7 +927,9 @@ mod tests {
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_test_utilities::types::ids::canister_test_id;
     use lazy_static::lazy_static;
+    use maplit::hashset;
     use std::convert::TryFrom;
+    pub const FORBIDDEN_CANISTER: CanisterId = CanisterId::ic_00();
 
     lazy_static! {
         static ref FAKE_ENV: Box<dyn Environment> = Box::new(NativeEnvironment::default());
@@ -937,16 +962,26 @@ mod tests {
 
     fn validate_default_proposal(proposal: &Proposal) -> Result<String, String> {
         let governance_proto = governance_proto_for_proposal_tests(None);
-        validate_and_render_proposal(proposal, &**FAKE_ENV, &governance_proto)
-            .now_or_never()
-            .unwrap()
+        validate_and_render_proposal(
+            proposal,
+            &**FAKE_ENV,
+            &governance_proto,
+            vec![FORBIDDEN_CANISTER],
+        )
+        .now_or_never()
+        .unwrap()
     }
 
     fn validate_default_action(action: &Option<proposal::Action>) -> Result<String, String> {
         let governance_proto = governance_proto_for_proposal_tests(None);
-        validate_and_render_action(action, &**FAKE_ENV, &governance_proto)
-            .now_or_never()
-            .unwrap()
+        validate_and_render_action(
+            action,
+            &**FAKE_ENV,
+            &governance_proto,
+            vec![FORBIDDEN_CANISTER],
+        )
+        .now_or_never()
+        .unwrap()
     }
 
     fn basic_principal_id() -> PrincipalId {
@@ -1165,6 +1200,7 @@ mod tests {
             )),
         };
         assert_is_ok(validate_and_render_add_generic_nervous_system_function(
+            &hashset![FORBIDDEN_CANISTER],
             &nervous_system_function,
             &EMPTY_FUNCTIONS,
         ));
@@ -1189,6 +1225,7 @@ mod tests {
             proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 nervous_system_function.function_type = None;
                 assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    &hashset![FORBIDDEN_CANISTER],
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
@@ -1201,6 +1238,7 @@ mod tests {
             proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 nervous_system_function.id = 100;
                 assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    &hashset![FORBIDDEN_CANISTER],
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
@@ -1213,6 +1251,7 @@ mod tests {
             proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 nervous_system_function.name = "".to_string();
                 assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    &hashset![FORBIDDEN_CANISTER],
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
@@ -1225,6 +1264,7 @@ mod tests {
             proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 nervous_system_function.name = "X".repeat(257);
                 assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    &hashset![FORBIDDEN_CANISTER],
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
@@ -1237,6 +1277,7 @@ mod tests {
             proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 nervous_system_function.description = Some("X".repeat(10010));
                 assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    &hashset![FORBIDDEN_CANISTER],
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
@@ -1258,6 +1299,7 @@ mod tests {
                     _ => panic!("FunctionType is not GenericNervousSystemFunction"),
                 }
                 assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    &hashset![FORBIDDEN_CANISTER],
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
@@ -1279,6 +1321,7 @@ mod tests {
                     _ => panic!("FunctionType is not GenericNervousSystemFunction"),
                 }
                 assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    &hashset![FORBIDDEN_CANISTER],
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
@@ -1301,6 +1344,7 @@ mod tests {
                     _ => panic!("FunctionType is not GenericNervousSystemFunction"),
                 }
                 assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    &hashset![FORBIDDEN_CANISTER],
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
@@ -1323,6 +1367,7 @@ mod tests {
                     _ => panic!("FunctionType is not GenericNervousSystemFunction"),
                 }
                 assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    &hashset![FORBIDDEN_CANISTER],
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
@@ -1349,6 +1394,7 @@ mod tests {
 
         let mut functions_map = BTreeMap::new();
         assert_is_ok(validate_and_render_add_generic_nervous_system_function(
+            &hashset![FORBIDDEN_CANISTER],
             &nervous_system_function,
             &functions_map,
         ));
@@ -1363,6 +1409,7 @@ mod tests {
         functions_map.insert(1000, (*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER).clone());
 
         assert_is_err(validate_and_render_add_generic_nervous_system_function(
+            &hashset![FORBIDDEN_CANISTER],
             &nervous_system_function,
             &functions_map,
         ));
@@ -1406,6 +1453,7 @@ mod tests {
 
         // Attempting to insert another GenericNervousSystemFunction should fail validation
         assert_is_err(validate_and_render_add_generic_nervous_system_function(
+            &hashset![FORBIDDEN_CANISTER],
             &nervous_system_function,
             &functions_map,
         ));
@@ -1578,10 +1626,15 @@ mod tests {
         let (env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
         // Same id as setup_env_for_upgrade_sns_proposals
-        let actual_text = validate_and_render_action(&Some(action), &env, &governance_proto)
-            .now_or_never()
-            .unwrap()
-            .unwrap();
+        let actual_text = validate_and_render_action(
+            &Some(action),
+            &env,
+            &governance_proto,
+            vec![FORBIDDEN_CANISTER],
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
 
         let expected_text = r"# Proposal to upgrade SNS to next version:
 
@@ -1637,10 +1690,15 @@ Version {
             .unwrap(),
             Ok(Encode!(&GetNextSnsVersionResponse { next_version: None }).unwrap()),
         );
-        let err = validate_and_render_action(&Some(action), &env, &governance_proto)
-            .now_or_never()
-            .unwrap()
-            .unwrap_err();
+        let err = validate_and_render_action(
+            &Some(action),
+            &env,
+            &governance_proto,
+            vec![FORBIDDEN_CANISTER],
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap_err();
 
         let target_string = "There is no next version found for the current SNS version: Version {";
         assert!(
@@ -1693,10 +1751,15 @@ Version {
             })
             .unwrap()),
         );
-        let err = validate_and_render_action(&Some(action), &env, &governance_proto)
-            .now_or_never()
-            .unwrap()
-            .unwrap_err();
+        let err = validate_and_render_action(
+            &Some(action),
+            &env,
+            &governance_proto,
+            vec![FORBIDDEN_CANISTER],
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap_err();
 
         assert!(err.contains(
             "There is more than one upgrade possible for UpgradeSnsToNextVersion Action.  \
@@ -1729,10 +1792,15 @@ Version {
             .unwrap(),
             Ok(Encode!(&canisters_summary_response).unwrap()),
         );
-        let err = validate_and_render_action(&Some(action), &env, &governance_proto)
-            .now_or_never()
-            .unwrap()
-            .unwrap_err();
+        let err = validate_and_render_action(
+            &Some(action),
+            &env,
+            &governance_proto,
+            vec![FORBIDDEN_CANISTER],
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap_err();
 
         assert!(err.contains("Did not receive Root CanisterId from list_sns_canisters call"))
     }
@@ -1762,5 +1830,68 @@ Version {
         let err = validate_and_render_manage_sns_metadata(&manage_sns_metadata).unwrap_err();
 
         assert!(err.contains("SnsMetadata.url must be less than"));
+    }
+    #[test]
+    fn add_nervous_system_function_cant_target_disallowed_canisters() {
+        // Ensure that no other reason for failure exists before testing error cases
+        let nervous_system_function_valid = NervousSystemFunction {
+            id: 1000,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(CanisterId::from(2).get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(CanisterId::from(1).get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+
+        let functions_map = BTreeMap::new();
+        assert_is_ok(validate_and_render_add_generic_nervous_system_function(
+            &hashset![FORBIDDEN_CANISTER],
+            &nervous_system_function_valid,
+            &functions_map,
+        ));
+
+        let nervous_system_function_invalid_target = NervousSystemFunction {
+            id: 1000,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(CanisterId::ic_00().get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(CanisterId::from(1).get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+        assert_is_err(validate_and_render_add_generic_nervous_system_function(
+            &hashset![FORBIDDEN_CANISTER],
+            &nervous_system_function_invalid_target,
+            &functions_map,
+        ));
+
+        let nervous_system_function_invalid_validator = NervousSystemFunction {
+            id: 1000,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(CanisterId::from(1).get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(CanisterId::ic_00().get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+
+        assert_is_err(validate_and_render_add_generic_nervous_system_function(
+            &hashset![FORBIDDEN_CANISTER],
+            &nervous_system_function_invalid_validator,
+            &functions_map,
+        ));
     }
 }
