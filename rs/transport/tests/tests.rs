@@ -23,7 +23,7 @@ mod tests {
     use std::str::FromStr;
     use std::sync::Arc;
     use tokio::net::{TcpSocket, TcpStream};
-    use tokio::sync::mpsc::{channel, Sender};
+    use tokio::sync::mpsc::{channel, Receiver, Sender};
     use tokio::sync::Notify;
     use tokio::time::Duration;
     use tower::{util::BoxCloneService, Service, ServiceExt};
@@ -117,59 +117,35 @@ mod tests {
             // Setup registry and crypto component
             let rt = tokio::runtime::Runtime::new().unwrap();
 
-            let (connected_1, _done_1) = channel(5);
-            let event_handler_1 = setup_peer_up_ack_event_handler(rt.handle().clone(), connected_1);
+            let (peer_a_sender, _peer_a_receiver) = channel(5);
+            let event_handler_1 =
+                setup_peer_up_ack_event_handler(rt.handle().clone(), peer_a_sender);
 
-            let (connected_2, mut done_2) = channel(5);
+            let (peer_b_sender, mut peer_b_receiver) = channel(5);
 
             let notify = Arc::new(Notify::new());
             let listener = notify.clone();
 
-            let blocking_msg = TransportPayload(vec![0xa; 1000000]);
-            let normal_msg = TransportPayload(vec![0xb; 1000000]);
-
             // Create event handler that blocks on message
             let hol_event_handler =
-                setup_blocking_event_handler(rt.handle().clone(), connected_2, listener);
+                setup_blocking_event_handler(rt.handle().clone(), peer_b_sender, listener);
 
-            let (client, _server) = start_connection_between_two_peers(
+            let (_peer_a, _peer_b, messages_sent) = trigger_and_test_send_queue_full(
                 rt.handle().clone(),
                 logger,
                 registry_version,
                 1,
                 event_handler_1,
                 hol_event_handler,
+                &mut peer_b_receiver,
                 false,
             );
-
-            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
-
-            // Send message from A -> B
-            let res = client.send(&NODE_ID_2, channel_id, blocking_msg);
-            assert_eq!(res, Ok(()));
-            assert_eq!(done_2.blocking_recv(), Some(true));
-
-            // Send more messages from A->B until TCP Queue is full
-            // Then, A's send queue should be blocked from dequeuing, triggering error
-            let mut messages_sent = 0;
-            loop {
-                let _temp = normal_msg.clone();
-                if let Err(TransportError::SendQueueFull(ref _temp)) =
-                    client.send(&NODE_ID_2, channel_id, normal_msg.clone())
-                {
-                    break;
-                }
-                messages_sent += 1;
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            let res2 = client.send(&NODE_ID_2, channel_id, normal_msg.clone());
-            assert_eq!(res2, Err(TransportError::SendQueueFull(normal_msg)));
 
             // Unblock event handler and confirm in-flight messages are received.
             notify.notify_one();
 
             for _ in 1..=messages_sent {
-                assert_eq!(done_2.blocking_recv(), Some(true));
+                assert_eq!(peer_b_receiver.blocking_recv(), Some(true));
             }
         });
     }
@@ -278,50 +254,88 @@ mod tests {
 
             let listener = Arc::new(Notify::new());
 
-            let blocking_msg = TransportPayload(vec![0xa; 1000000]);
-            let normal_msg = TransportPayload(vec![0xb; 1000000]);
-
             let hol_event_handler =
                 setup_blocking_event_handler(rt.handle().clone(), peer_b_sender, listener);
 
             let queue_size = 10;
 
-            let (peer_a, _peer_b) = start_connection_between_two_peers(
+            let (peer_a, _peer_b, _messages_sent) = trigger_and_test_send_queue_full(
                 rt.handle().clone(),
                 logger,
                 registry_version,
                 queue_size,
                 event_handler_1,
                 hol_event_handler,
+                &mut peer_b_receiver,
                 false,
             );
-
-            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
-
-            // A sends message to B
-            let res = peer_a.send(&NODE_ID_2, channel_id, blocking_msg);
-            assert_eq!(res, Ok(()));
-            assert_eq!(peer_b_receiver.blocking_recv(), Some(true));
-
-            // Send messages from A->B until TCP Queue is full
-            let _temp = normal_msg.clone();
-            loop {
-                if let Err(TransportError::SendQueueFull(ref _temp)) =
-                    peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone())
-                {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            let res2 = peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone());
-            assert_eq!(res2, Err(TransportError::SendQueueFull(normal_msg.clone())));
 
             peer_a.clear_send_queues(&NODE_ID_2);
 
             // Confirm that queue is completely clear by sending messages = queue size
+            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
+            let normal_msg = TransportPayload(vec![0xb; 1000000]);
+
             for _ in 1..queue_size {
                 let res3 = peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone());
                 assert_eq!(res3, Ok(()));
+            }
+        });
+    }
+
+    /*
+    Tests that draining the send queue unblocks queue from receiving more messages.
+    Set Peer B to block event handler so no messages are consumed
+    A sends messages until send queue full, confirm error
+    Call clear send queue
+    A sends another message, confirm queue can accept more messages
+    */
+    #[test]
+    fn test_drain_send_queue() {
+        let registry_version = REG_V1;
+        with_test_replica_logger(|logger| {
+            // Setup registry and crypto component
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let queue_size = 10;
+
+            let (peer_a_sender, _peer_a_receiver) = channel(10);
+            let event_handler_1 =
+                setup_peer_up_ack_event_handler(rt.handle().clone(), peer_a_sender);
+
+            let (peer_b_sender, mut peer_b_receiver) = channel(10);
+
+            let listener = Arc::new(Notify::new());
+            let notify = listener.clone();
+
+            let hol_event_handler =
+                setup_blocking_event_handler(rt.handle().clone(), peer_b_sender, listener);
+
+            let (peer_a, _peer_b, messages_sent) = trigger_and_test_send_queue_full(
+                rt.handle().clone(),
+                logger,
+                registry_version,
+                queue_size,
+                event_handler_1,
+                hol_event_handler,
+                &mut peer_b_receiver,
+                false,
+            );
+
+            // Unblock event handler to drain queue and confirm in-flight messages are received.
+            notify.notify_one();
+
+            for _ in 1..=messages_sent {
+                assert_eq!(peer_b_receiver.blocking_recv(), Some(true));
+            }
+
+            // Confirm that queue is clear by sending messages = queue size
+            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
+            let normal_msg = TransportPayload(vec![0xb; 1000000]);
+
+            for _ in 1..queue_size {
+                let res3 = peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone());
+                assert_eq!(res3, Ok(()));
+                std::thread::sleep(Duration::from_millis(10));
             }
         });
     }
@@ -651,6 +665,53 @@ mod tests {
             .expect("start_connection");
 
         (peer_a, peer_b)
+    }
+
+    fn trigger_and_test_send_queue_full(
+        rt_handle: tokio::runtime::Handle,
+        logger: ReplicaLogger,
+        registry_version: RegistryVersion,
+        send_queue_size: usize,
+        event_handler_a: TransportEventHandler,
+        event_handler_b: TransportEventHandler,
+        peer_b_receiver: &mut Receiver<bool>,
+        use_h2: bool,
+    ) -> (Arc<dyn Transport>, Arc<dyn Transport>, i32) {
+        let (peer_a, _peer_b) = start_connection_between_two_peers(
+            rt_handle,
+            logger,
+            registry_version,
+            send_queue_size,
+            event_handler_a,
+            event_handler_b,
+            use_h2,
+        );
+        let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
+
+        let blocking_msg = TransportPayload(vec![0xa; 1000000]);
+        let normal_msg = TransportPayload(vec![0xb; 1000000]);
+
+        // A sends message to B
+        let res = peer_a.send(&NODE_ID_2, channel_id, blocking_msg);
+        assert_eq!(res, Ok(()));
+        assert_eq!(peer_b_receiver.blocking_recv(), Some(true));
+
+        // Send messages from A->B until TCP Queue is full
+        let _temp = normal_msg.clone();
+        let mut messages_sent = 0;
+        loop {
+            if let Err(TransportError::SendQueueFull(ref _temp)) =
+                peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone())
+            {
+                break;
+            }
+            messages_sent += 1;
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let res2 = peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone());
+        assert_eq!(res2, Err(TransportError::SendQueueFull(normal_msg)));
+
+        (peer_a, _peer_b, messages_sent)
     }
 
     fn create_transport_obj(
