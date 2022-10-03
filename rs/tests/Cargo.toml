@@ -97,7 +97,7 @@ openssh-keys ="0.5.0"
 openssl = "0.10.29"
 pem = "1.0.1"
 phantom_newtype = { path = "../phantom_newtype" }
-proptest = "0.9.4"
+proptest = "1.0"
 prost = "0.10.4"
 quickcheck = "1.0.3"
 rand = "0.8"

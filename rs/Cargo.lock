@@ -3977,7 +3977,7 @@ dependencies = [
  "ic-protobuf",
  "ic-test-utilities-compare-dirs",
  "phantom_newtype",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "prost",
  "serde",
@@ -4071,7 +4071,7 @@ dependencies = [
  "lazy_static",
  "maplit",
  "prometheus 0.12.0",
- "proptest 0.9.6",
+ "proptest",
  "prost",
  "prost-build",
  "serde",
@@ -4388,7 +4388,7 @@ dependencies = [
  "leb128",
  "maplit",
  "phantom_newtype",
- "proptest 0.9.6",
+ "proptest",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -4526,7 +4526,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-types 0.8.0",
  "json5",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "serde",
  "slog",
@@ -4579,7 +4579,7 @@ dependencies = [
  "num-integer",
  "phantom_newtype",
  "prometheus 0.12.0",
- "proptest 1.0.0",
+ "proptest",
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4672,7 +4672,7 @@ dependencies = [
  "openssl",
  "parking_lot 0.12.1",
  "prometheus 0.12.0",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "prost",
  "prost-build",
@@ -4754,7 +4754,7 @@ dependencies = [
  "ic-crypto-secrets-containers",
  "ic-types 0.8.0",
  "openssl",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "regex",
  "serde",
@@ -4777,7 +4777,7 @@ dependencies = [
  "ic-crypto-secrets-containers",
  "ic-types 0.8.0",
  "openssl",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "regex",
  "serde",
@@ -4804,7 +4804,7 @@ dependencies = [
  "ic-protobuf",
  "ic-types 0.8.0",
  "num-bigint 0.4.3",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4916,7 +4916,7 @@ dependencies = [
  "mockall 0.7.2",
  "openssl",
  "parking_lot 0.12.1",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "prost",
  "rand 0.8.5",
@@ -4957,7 +4957,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-types-test-utils",
  "mockall 0.7.2",
- "proptest 0.9.6",
+ "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
@@ -4997,7 +4997,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-protobuf",
  "ic-types 0.8.0",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -5051,7 +5051,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-types 0.8.0",
  "lazy_static",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -5320,7 +5320,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-protobuf",
  "maplit",
- "proptest 0.9.6",
+ "proptest",
  "prost",
  "serde",
  "serde_bytes",
@@ -5515,7 +5515,7 @@ dependencies = [
  "parity-wasm",
  "pretty_assertions 0.6.1",
  "prometheus 0.12.0",
- "proptest 0.9.6",
+ "proptest",
  "rayon",
  "serde",
  "serde_bytes",
@@ -5592,7 +5592,7 @@ dependencies = [
  "num-traits",
  "phantom_newtype",
  "prometheus 0.12.0",
- "proptest 1.0.0",
+ "proptest",
  "rand 0.8.5",
  "scoped_threadpool",
  "serde",
@@ -5704,7 +5704,7 @@ dependencies = [
  "maplit",
  "pretty_assertions 0.7.1",
  "prometheus 0.12.0",
- "proptest 1.0.0",
+ "proptest",
  "prost",
  "rand 0.8.5",
  "serde",
@@ -5839,7 +5839,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "num-traits",
- "proptest 0.9.6",
+ "proptest",
  "serde",
  "serde_json",
 ]
@@ -5867,7 +5867,7 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "leb128",
  "num-traits",
- "proptest 0.9.6",
+ "proptest",
  "serde",
  "serde_bytes",
 ]
@@ -5939,7 +5939,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-validator",
  "prometheus 0.12.0",
- "proptest 1.0.0",
+ "proptest",
  "rand 0.8.5",
  "slog",
  "tokio",
@@ -6341,7 +6341,7 @@ dependencies = [
  "maplit",
  "on_wire",
  "pretty_assertions 1.2.1",
- "proptest 1.0.0",
+ "proptest",
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -6656,7 +6656,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "phantom_newtype",
  "prometheus 0.12.0",
- "proptest 0.9.6",
+ "proptest",
  "rand 0.8.5",
  "serde",
  "slog",
@@ -7410,7 +7410,7 @@ dependencies = [
  "maplit",
  "nix 0.23.0",
  "phantom_newtype",
- "proptest 0.9.6",
+ "proptest",
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -7646,7 +7646,7 @@ dependencies = [
  "maplit",
  "on_wire",
  "pretty_assertions 1.2.1",
- "proptest 1.0.0",
+ "proptest",
  "prost",
  "prost-build",
  "rand 0.8.5",
@@ -7840,7 +7840,7 @@ dependencies = [
  "maplit",
  "on_wire",
  "pretty_assertions 1.2.1",
- "proptest 1.0.0",
+ "proptest",
  "prost",
  "prost-build",
  "registry-canister",
@@ -8097,7 +8097,7 @@ dependencies = [
  "nix 0.23.0",
  "parking_lot 0.12.1",
  "prometheus 0.12.0",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "prost",
  "rand 0.8.5",
@@ -8274,10 +8274,10 @@ dependencies = [
  "mockall 0.7.2",
  "nix 0.23.0",
  "phantom_newtype",
- "proptest 0.9.6",
+ "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rusty-fork 0.3.0",
+ "rusty-fork",
  "serde",
  "serde_cbor",
  "slog",
@@ -8448,11 +8448,11 @@ dependencies = [
  "once_cell",
  "phantom_newtype",
  "pretty_assertions 0.6.1",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "prost",
  "rand 0.8.5",
- "rusty-fork 0.3.0",
+ "rusty-fork",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -8469,7 +8469,7 @@ name = "ic-types-test-utils"
 version = "0.8.0"
 dependencies = [
  "ic-types 0.8.0",
- "proptest 0.9.6",
+ "proptest",
  "strum 0.23.0",
 ]
 
@@ -8689,7 +8689,7 @@ dependencies = [
  "mockall 0.7.2",
  "nix 0.23.0",
  "prometheus 0.12.0",
- "proptest 0.9.6",
+ "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest",
@@ -11139,26 +11139,6 @@ dependencies = [
 
 [[package]]
 name = "proptest"
-version = "0.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01c477819b845fe023d33583ebf10c9f62518c8d79a0960ba5c36d6ac8a55a5b"
-dependencies = [
- "bit-set",
- "bitflags",
- "byteorder",
- "lazy_static",
- "num-traits",
- "quick-error 1.2.3",
- "rand 0.6.5",
- "rand_chacha 0.1.1",
- "rand_xorshift 0.1.1",
- "regex-syntax",
- "rusty-fork 0.2.2",
- "tempfile",
-]
-
-[[package]]
-name = "proptest"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e0d9cc07f18492d879586c92b485def06bc850da3118075cd45d50e9c95b0e5"
@@ -11173,15 +11153,15 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_xorshift 0.3.0",
  "regex-syntax",
- "rusty-fork 0.3.0",
+ "rusty-fork",
  "tempfile",
 ]
 
 [[package]]
 name = "proptest-derive"
-version = "0.1.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d31edb17edac73aeacc947bd61462dda15220584268896a58e12f053d767f15b"
+checksum = "90b46295382dc76166cb7cf2bb4a97952464e4b7ed5a43e6cd34e1fec3349ddc"
 dependencies = [
  "proc-macro2 0.4.30",
  "quote 0.6.13",
@@ -12094,18 +12074,6 @@ dependencies = [
  "proc-macro2 1.0.39",
  "quote 1.0.17",
  "syn 1.0.96",
-]
-
-[[package]]
-name = "rusty-fork"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dd93264e10c577503e926bd1430193eeb5d21b059148910082245309b424fae"
-dependencies = [
- "fnv",
- "quick-error 1.2.3",
- "tempfile",
- "wait-timeout",
 ]
 
 [[package]]
@@ -13390,7 +13358,7 @@ dependencies = [
  "openssl",
  "pem 1.0.1",
  "phantom_newtype",
- "proptest 0.9.6",
+ "proptest",
  "prost",
  "proxy_canister",
  "quickcheck",
@@ -13975,7 +13943,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "leb128",
  "maplit",
- "proptest 0.9.6",
+ "proptest",
  "proptest-derive",
  "serde",
 ]
