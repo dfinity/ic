@@ -146,6 +146,10 @@ function inferCanisterId(r) {
   return extractCanisterIdFromReferer(r);
 }
 
+function isTableEmpty(r) {
+  return !subnet_table["canister_subnets"] ? "1" : "";
+}
+
 function route(r) {
   var canister_id = inferCanisterId(r);
   if (!canister_id) {
@@ -215,4 +219,10 @@ function randomRoute() {
   return `${subnetId},${nodeId}`;
 }
 
-export default { route, randomRoute, hostCanisterId, inferCanisterId };
+export default {
+  hostCanisterId,
+  inferCanisterId,
+  isTableEmpty,
+  randomRoute,
+  route,
+};
