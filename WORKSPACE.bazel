@@ -225,3 +225,8 @@ npm_install(
     package_json = "//typescript/service-worker:package.json",
     package_lock_json = "//typescript/service-worker:package-lock.json",
 )
+
+# rclone binary for upload_artifacts
+load("//bazel:rclone.bzl", "rclone_repository")
+
+rclone_repository(name = "rclone")

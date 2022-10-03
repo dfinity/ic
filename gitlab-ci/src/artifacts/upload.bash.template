@@ -1,22 +1,48 @@
-#! /usr/bin/env bash
+#!/usr/bin/env bash
 
 set -eEuo pipefail
 
-declare -A BUILD_INFO
-while read -r k v 
+while read -r k v
 do
-  BUILD_INFO["$k"]="$v"
+    case "$k" in
+        HOME)
+            # Required by rclone to get credentials from $HOME/.aws/credentials
+            export HOME="$v"
+            ;;
+        COMMIT_SHA)
+            VERSION="$v"
+            ;;
+        GIT_TREE_STATUS)
+            GIT_TREE_STATUS="$v"
+            ;;
+        BUILD_TIMESTAMP)
+            BUILD_TIMESTAMP="$v"
+            ;;
+    esac
 done < "@@VERSION_FILE@@"
 
-VERSION="${BUILD_INFO['COMMIT_SHA']}"
-if [ "${BUILD_INFO['GIT_TREE_STATUS']}" != 'Clean' ]
+# Support builds from repos with local changes.
+if [ "${GIT_TREE_STATUS}" != 'Clean' ]
 then
-  VERSION="${VERSION}-${BUILD_INFO['BUILD_TIMESTAMP']}"
+  VERSION="${VERSION}-${BUILD_TIMESTAMP}"
 fi
 
-# Required by rclone to get credentials from $HOME/.aws/credentials
-export HOME="${BUILD_INFO['HOME']}"
+# rclone reads the $(dirname $f) to get file attribuates.
+# Therefore symlink should be resolved.
+f="$1"
+if [ -L "$f" ];then
+    f=$(readlink "$f")
+fi
 
-"@@RCLONE_UPLOAD@@" --config "@@RCLONE_CONFIG@@" --version "${VERSION}" "$1" "@@REMOTE_SUBDIR@@/$(basename $1)"
+# TODO: copy to blessed/ic when run in protected mode.
+"@@RCLONE@@" \
+    --config="@@RCLONE_CONFIG@@" \
+    --progress \
+    --stats-one-line \
+    --checksum \
+    --immutable \
+    copy \
+    "$f" \
+    "public-s3:dfinity-download-public/ic/${VERSION}/@@REMOTE_SUBDIR@@/"
 
-echo "http://download.dfinity.systems/ic/${VERSION}/@@REMOTE_SUBDIR@@/$(basename $1)" > "$2"
+echo "http://download.dfinity.systems/ic/${VERSION}/@@REMOTE_SUBDIR@@/$(basename $f)" > "$2"
