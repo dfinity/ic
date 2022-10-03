@@ -7,7 +7,7 @@ DEPENDENCIES = [
     "//rs/constants",
     "//rs/crypto",
     "//rs/http_utils",
-    "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/registry/client",

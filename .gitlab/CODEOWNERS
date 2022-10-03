@@ -108,6 +108,7 @@
 /rs/interfaces/bitcoin_adapter_client/  @dfinity-lab/teams/networking-team
 /rs/interfaces/canister_http_adapter_client/    @dfinity-lab/teams/networking-team
 /rs/interfaces/p2p/                     @dfinity-lab/teams/networking-team
+/rs/interfaces/registry/                @dfinity-lab/teams/node-team
 /rs/interfaces/src/artifact_pool.rs     @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/canister_http.rs     @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/consensus_pool.rs    @dfinity-lab/teams/consensus-owners
@@ -117,7 +118,6 @@
 /rs/interfaces/src/dkg.rs               @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/execution_environment.rs    @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/interfaces/src/messaging.rs         @dfinity-lab/teams/message-routing-owners
-/rs/interfaces/src/registry.rs          @dfinity-lab/teams/node-team
 /rs/interfaces/state_manager/           @dfinity-lab/teams/message-routing-owners
 /rs/interfaces/transport/               @dfinity-lab/teams/networking-team
 /rs/log_analyzer/                       @dfinity-lab/teams/ic-testing-verification

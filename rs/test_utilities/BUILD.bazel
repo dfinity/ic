@@ -30,6 +30,7 @@ rust_library(
         "//rs/interfaces",
         "//rs/interfaces/bitcoin_adapter_client",
         "//rs/interfaces/p2p",
+        "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/transport",
         "//rs/monitoring/logger",

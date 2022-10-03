@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
     "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",

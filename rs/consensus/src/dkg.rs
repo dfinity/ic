@@ -12,9 +12,9 @@ use crate::ecdsa::{
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     dkg::{ChangeAction, ChangeSet, Dkg, DkgGossip, DkgPool},
-    registry::RegistryClient,
     validation::{ValidationError, ValidationResult},
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
@@ -1543,8 +1543,8 @@ mod tests {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_interfaces::{
         artifact_pool::UnvalidatedArtifact, consensus_pool::ConsensusPool, dkg::MutableDkgPool,
-        registry::RegistryVersionedRecord,
     };
+    use ic_interfaces_registry::RegistryVersionedRecord;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::{
@@ -3754,7 +3754,7 @@ mod tests {
             &self,
             key: &str,
             version: RegistryVersion,
-        ) -> ic_interfaces::registry::RegistryClientVersionedResult<Vec<u8>> {
+        ) -> ic_interfaces_registry::RegistryClientVersionedResult<Vec<u8>> {
             let value = (self.get_versioned_value_fun)(key, version);
             Ok(RegistryVersionedRecord {
                 key: key.to_string(),

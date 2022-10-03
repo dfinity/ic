@@ -11,9 +11,8 @@ use crate::consensus::{
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_error_types::RejectCode;
 use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
-use ic_interfaces::{
-    consensus_pool::ConsensusBlockChain, ecdsa::EcdsaPool, registry::RegistryClient,
-};
+use ic_interfaces::{consensus_pool::ConsensusBlockChain, ecdsa::EcdsaPool};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;

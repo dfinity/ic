@@ -1,4 +1,4 @@
-use ic_interfaces::registry::{RegistryDataProvider, RegistryTransportRecord};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord};
 
 use crate::registry::RegistryCanister;
 use ic_types::{

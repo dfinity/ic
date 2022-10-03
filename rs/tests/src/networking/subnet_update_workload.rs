@@ -40,7 +40,7 @@ use std::{io::Read, thread::JoinHandle, time::Duration};
 
 use anyhow::{bail, Context, Error};
 use ic_agent::{export::Principal, Agent};
-use ic_interfaces::registry::RegistryValue;
+use ic_interfaces_registry::RegistryValue;
 use ic_prep_lib::subnet_configuration::constants;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;

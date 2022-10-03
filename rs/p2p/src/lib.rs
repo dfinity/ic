@@ -95,10 +95,8 @@
 //! width="540"/> </div> <hr/>
 
 use ic_config::transport::TransportConfig;
-use ic_interfaces::{
-    artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache, registry::RegistryClient,
-};
-
+use ic_interfaces::{artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;

@@ -10,8 +10,8 @@ use ic_interfaces::{
         CanisterHttpTransientValidationError,
     },
     consensus_pool::ConsensusPoolCache,
-    registry::RegistryClient,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};

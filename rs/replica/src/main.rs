@@ -6,7 +6,7 @@ use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_crypto_sha::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::crypto::IngressSigVerifier;
-use ic_interfaces::registry::{LocalStoreCertifiedTimeReader, RegistryClient};
+use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;

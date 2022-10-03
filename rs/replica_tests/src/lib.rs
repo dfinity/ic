@@ -11,8 +11,8 @@ use ic_ic00_types::{
     IC_00,
 };
 use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
-use ic_interfaces::registry::RegistryClient;
 use ic_interfaces_p2p::IngressIngestionService;
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};

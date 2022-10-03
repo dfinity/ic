@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
-    "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance",

@@ -18,6 +18,7 @@ rust_library(
         "//rs/crypto/internal/csp_test_utils",
         "//rs/crypto/tls_interfaces",
         "//rs/interfaces",
+        "//rs/interfaces/registry",
         "//rs/protobuf",
         "//rs/registry/fake",
         "//rs/registry/helpers",

@@ -1,5 +1,5 @@
 use super::*;
-use ic_interfaces::registry::RegistryClientResult;
+use ic_interfaces_registry::RegistryClientResult;
 use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord,
 };

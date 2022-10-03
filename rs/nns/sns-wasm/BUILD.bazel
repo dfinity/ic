@@ -60,7 +60,7 @@ DEV_DEPENDENCIES = [
         "//rs/protobuf",
         "//rs/registry/canister",
         "//rs/registry/keys",
-        "//rs/interfaces",
+        "//rs/interfaces/registry",
     ],
 })
 

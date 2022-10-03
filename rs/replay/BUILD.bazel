@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/execution_environment",
     "//rs/http_handler",
     "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/messaging",
     "//rs/monitoring/logger",

@@ -35,7 +35,7 @@ use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::crypto::{BasicSigner, Crypto, KeyManager, ThresholdSigVerifierByPublicKey};
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;

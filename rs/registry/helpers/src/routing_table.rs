@@ -1,5 +1,5 @@
 use crate::deserialize_registry_value;
-use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
+use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};

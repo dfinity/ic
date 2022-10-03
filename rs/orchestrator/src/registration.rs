@@ -10,7 +10,8 @@ use ic_config::{
     Config,
 };
 use ic_crypto::CryptoComponentForNonReplicaProcess;
-use ic_interfaces::{crypto::PublicKeyRegistrationStatus, registry::RegistryClient};
+use ic_interfaces::crypto::PublicKeyRegistrationStatus;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;

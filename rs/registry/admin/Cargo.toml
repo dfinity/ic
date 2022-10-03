@@ -25,7 +25,7 @@ ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-sha = {path = "../../crypto/sha/" }
 ic-http-utils = { path = "../../http_utils" }
 ic-ic00-types = { path = "../../types/ic00_types" }
-ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
 ic-registry-client-helpers = { path = "../helpers" }

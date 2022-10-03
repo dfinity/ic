@@ -12,9 +12,8 @@ use crate::{
     dkg::create_payload as create_dkg_payload,
     ecdsa,
 };
-use ic_interfaces::{
-    dkg::DkgPool, ecdsa::EcdsaPool, registry::RegistryClient, time_source::TimeSource,
-};
+use ic_interfaces::{dkg::DkgPool, ecdsa::EcdsaPool, time_source::TimeSource};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

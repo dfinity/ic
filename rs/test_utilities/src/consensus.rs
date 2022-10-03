@@ -9,9 +9,9 @@ use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
     consensus::*,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache},
-    registry::RegistryClient,
     validation::*,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::crypto::crypto_hash;
 use ic_types::{

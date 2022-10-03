@@ -1,6 +1,6 @@
 use crate::tls::{node_id_from_cert_subject_common_name, tls_cert_from_registry};
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;

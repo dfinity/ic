@@ -14,8 +14,8 @@ use ic_interfaces::{
     crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader,
     ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
-    registry::RegistryClient,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -210,7 +210,6 @@ pub(crate) mod tests {
             ChangeSet, IngressPool, MutableIngressPool, PoolSection, UnvalidatedIngressArtifact,
             ValidatedIngressArtifact,
         },
-        registry::RegistryClient,
     };
     use ic_metrics::MetricsRegistry;
     use ic_registry_client::client::RegistryClientImpl;

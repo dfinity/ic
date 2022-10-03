@@ -8,7 +8,7 @@ clap = { version = "3.1.6", features = ["derive"] }
 ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
-ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-metrics-exporter = { path = "../../monitoring/metrics_exporter" }

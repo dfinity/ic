@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/elastic_common_schema",
     "//rs/ic_p8s_service_discovery/log",
     "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/monitoring/metrics",
     "//rs/monitoring/metrics_exporter",
     "//rs/protobuf",

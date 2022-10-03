@@ -24,9 +24,9 @@ use ic_interfaces::{
     consensus_pool::*,
     dkg::DkgPool,
     messaging::MessageRouting,
-    registry::RegistryClient,
     validation::{ValidationError, ValidationResult},
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;

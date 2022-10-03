@@ -1,7 +1,7 @@
 use crate::CryptoComponentFatClient;
 use ic_crypto_internal_csp::secret_key_store::SecretKeyStore;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_types_test_utils::ids::node_test_id;
 use rand::SeedableRng;

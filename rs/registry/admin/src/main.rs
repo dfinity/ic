@@ -22,7 +22,7 @@ use ic_types::p2p;
 #[macro_use]
 extern crate ic_admin_derive;
 use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, EcdsaKeyId};
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
     TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,

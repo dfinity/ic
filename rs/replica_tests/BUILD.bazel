@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/execution_environment",
     "//rs/interfaces",
     "//rs/interfaces/p2p",
+    "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

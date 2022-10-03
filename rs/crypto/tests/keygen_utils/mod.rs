@@ -1,7 +1,7 @@
 use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_interfaces::crypto::KeyManager;
-use ic_interfaces::registry::RegistryDataProvider;
+use ic_interfaces_registry::RegistryDataProvider;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;

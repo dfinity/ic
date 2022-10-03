@@ -3,7 +3,7 @@
 //! background when start_polling() is called.
 use crossbeam_channel::{RecvTimeoutError, Sender, TrySendError};
 pub use ic_config::registry_client::DataProviderConfig;
-pub use ic_interfaces::registry::{
+pub use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
     RegistryDataProvider, RegistryTransportRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
 };
@@ -356,7 +356,7 @@ impl RegistryDataProvider for EmptyRegistryDataProvider {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
-    use ic_interfaces::registry::ZERO_REGISTRY_VERSION;
+    use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
     use ic_registry_client_helpers::test_proto::TestProtoHelper;
     use ic_registry_common_proto::pb::test_protos::v1::TestProto;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;

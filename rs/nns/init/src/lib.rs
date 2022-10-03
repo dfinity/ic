@@ -4,7 +4,7 @@
 
 use canister_test::Wasm;
 use ic_canister_client::Sender;
-use ic_interfaces::registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
+use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_nns_constants::NNS_CANISTER_WASMS;
 use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;

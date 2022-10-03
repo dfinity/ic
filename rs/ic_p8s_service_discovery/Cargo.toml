@@ -19,6 +19,7 @@ hyper = { version ="0.14.18", features = ["full"] }
 ic-async-utils = { path = "../async_utils" }
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-p8s-service-discovery-log = { path = "./log" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }

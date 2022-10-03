@@ -5,7 +5,7 @@ use std::time::Duration;
 use url::Url;
 
 use ic_canister_client::{Agent, Sender};
-use ic_interfaces::registry::RegistryTransportRecord;
+use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
     deserialize_atomic_mutate_response, deserialize_get_changes_since_response,
     deserialize_get_value_response, serialize_atomic_mutate_request,

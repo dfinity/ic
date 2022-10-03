@@ -11,10 +11,10 @@ use ic_interfaces::{
     consensus::{PayloadPermanentError, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
-    registry::RegistryClient,
     self_validating_payload::SelfValidatingPayloadBuilder,
     validation::{ValidationError, ValidationResult},
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;

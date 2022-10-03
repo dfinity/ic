@@ -19,6 +19,7 @@ rust_library(
         "//rs/interfaces",
         "//rs/interfaces/canister_http_adapter_client",
         "//rs/interfaces/p2p",
+        "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/transport",
         "//rs/monitoring/logger",

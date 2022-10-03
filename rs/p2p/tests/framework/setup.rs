@@ -1,5 +1,5 @@
 use ic_config::transport::TransportConfig;
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{

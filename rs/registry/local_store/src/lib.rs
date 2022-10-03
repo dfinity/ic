@@ -1,4 +1,4 @@
-use ic_interfaces::registry::{
+use ic_interfaces_registry::{
     LocalStoreCertifiedTimeReader, RegistryDataProvider, RegistryTransportRecord,
 };
 use ic_registry_common_proto::pb::local_store::v1::{

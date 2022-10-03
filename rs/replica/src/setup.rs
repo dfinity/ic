@@ -4,7 +4,7 @@ use ic_config::{
     crypto::CryptoConfig, registry_client::DataProviderConfig, Config, ConfigSource, SAMPLE_CONFIG,
 };
 use ic_crypto::CryptoComponent;
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;

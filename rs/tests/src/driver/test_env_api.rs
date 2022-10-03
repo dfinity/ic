@@ -145,7 +145,7 @@ use ic_canister_client::Agent as InternalAgent;
 use ic_canister_client::Sender;
 use ic_fondue::ic_manager::handle::READY_RESPONSE_TIMEOUT;
 use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
-use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
+use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_nns_init::read_initial_mutations_from_local_store_dir;

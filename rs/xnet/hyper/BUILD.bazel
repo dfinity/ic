@@ -9,7 +9,7 @@ rust_library(
     version = "0.8.0",
     deps = [
         "//rs/crypto/tls_interfaces",
-        "//rs/interfaces",
+        "//rs/interfaces/registry",
         "//rs/xnet/uri",
         "@crate_index//:hyper",
         "@crate_index//:socket2",

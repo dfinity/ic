@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
 use ic_image_upgrader::ImageUpgrader;
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;

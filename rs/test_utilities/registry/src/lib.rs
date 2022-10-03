@@ -1,9 +1,9 @@
 use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
-use ic_interfaces::registry::{
+use ic_interfaces::time_source::TimeSource;
+use ic_interfaces_registry::{
     LocalStoreCertifiedTimeReader, RegistryClient, RegistryClientResult,
     RegistryClientVersionedResult,
 };
-use ic_interfaces::time_source::TimeSource;
 use ic_protobuf::registry::subnet::v1::{
     CatchUpPackageContents, SubnetFeatures, SubnetListRecord, SubnetRecord,
 };

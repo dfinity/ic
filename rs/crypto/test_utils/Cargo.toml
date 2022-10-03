@@ -8,6 +8,7 @@ ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }
 ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
 ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }

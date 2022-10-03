@@ -82,13 +82,11 @@ use crate::{
     P2PError, P2PErrorCode, P2PResult,
 };
 use ic_interfaces::{
+    artifact_manager::{ArtifactManager, OnArtifactError::ArtifactPoolError},
     artifact_pool::ArtifactPoolError::ArtifactReplicaVersionError,
     consensus_pool::ConsensusPoolCache,
-    {
-        artifact_manager::{ArtifactManager, OnArtifactError::ArtifactPoolError},
-        registry::RegistryClient,
-    },
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId, TransportError, TransportPayload};
 use ic_logger::{info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

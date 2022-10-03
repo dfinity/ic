@@ -26,8 +26,8 @@ use crate::consensus::{
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
-    registry::RegistryClient,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::replica_config::ReplicaConfig;
