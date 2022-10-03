@@ -1,4 +1,5 @@
 //! Proofs of correct chunking
+#![allow(clippy::needless_range_loop)]
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::CHUNK_SIZE;
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{
@@ -271,19 +272,20 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     // Y = product [y_i^delta_i | i <- [0..n]]
     let mut delta = Vec::with_capacity(spec_n + 1);
     let mut dd = Vec::with_capacity(spec_n + 1);
-    let mut yy = *G1Projective::identity();
-    for i in 0..spec_n + 1 {
+    for _ in 0..spec_n + 1 {
         let delta_i = Scalar::random(rng);
         dd.push(G1Affine::from(g1 * delta_i));
-        if i == 0 {
-            yy = y0 * delta_i;
-        } else {
-            yy += instance.public_keys[i - 1] * delta_i;
-        }
         delta.push(delta_i);
     }
 
-    let yy = G1Affine::from(yy);
+    let yy = {
+        let y0_and_pk = [y0]
+            .iter()
+            .chain(&instance.public_keys)
+            .cloned()
+            .collect::<Vec<_>>();
+        G1Projective::muln_affine_vartime(&y0_and_pk, &delta).to_affine()
+    };
 
     let second_move = SecondMoveChunking::from(&z_s, &dd, &yy);
 
@@ -291,33 +293,29 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     // x = oracle(e, z_s, dd, yy)
     let second_challenge = chunking_proof_challenge_oracle(&first_challenge, &second_move);
 
-    let mut z_r = Vec::new();
+    let xpowers = Scalar::xpowers(&second_challenge, NUM_ZK_REPETITIONS);
+
+    let mut z_r = Vec::with_capacity(first_challenge.len());
     let mut delta_idx = 1;
+
     for e_i in first_challenge.iter() {
-        let mut z_rk = delta[delta_idx];
-        delta_idx += 1;
-        e_i.iter()
-            .zip(witness.scalars_r.iter())
-            .for_each(|(e_ij, r_j)| {
-                let mut xpow = second_challenge;
-                e_ij.iter().for_each(|e_ijk| {
-                    z_rk += Scalar::from_usize(*e_ijk) * r_j * xpow;
-                    xpow *= second_challenge;
-                })
-            });
+        let mut xpow_e_ij = Vec::with_capacity(e_i.len());
+        for j in 0..e_i.len() {
+            xpow_e_ij.push(Scalar::muln_usize_vartime(&xpowers, &e_i[j]));
+        }
+
+        let z_rk = delta[delta_idx] + Scalar::muln_vartime(&witness.scalars_r, &xpow_e_ij);
+
         z_r.push(z_rk);
+
+        delta_idx += 1;
     }
 
-    let mut xpow = second_challenge;
-    let mut z_beta = delta[0];
-    beta.iter().for_each(|beta_k| {
-        z_beta += *beta_k * xpow;
-        xpow *= second_challenge;
-    });
+    let z_beta = delta[0] + Scalar::muln_vartime(&beta, &xpowers);
 
     ProofChunking {
-        y0: first_move.y0,
-        bb: first_move.bb,
+        y0,
+        bb,
         cc: first_move.cc,
         dd,
         yy,
@@ -374,14 +372,7 @@ pub fn verify_chunking(
 
         let e_ijk_polynomials: Vec<_> = e_i
             .iter()
-            .map(|e_ij| {
-                let mut acc = Scalar::zero();
-                e_ij.iter().enumerate().for_each(|(k, e_ijk)| {
-                    acc += Scalar::from_usize(*e_ijk) * xpowers[k];
-                });
-
-                acc
-            })
+            .map(|e_ij| Scalar::muln_usize_vartime(&xpowers, e_ij))
             .collect();
 
         let lhs = G1Projective::muln_affine_vartime(&instance.randomizers_r, &e_ijk_polynomials)
@@ -435,7 +426,7 @@ pub fn verify_chunking(
 
     let lhs = G1Projective::muln_vartime(&cij_to_eijks_terms) + nizk.yy;
 
-    let acc = Scalar::muln_vartime(&nizk.z_s.iter().cloned().zip(xpowers).collect::<Vec<_>>());
+    let acc = Scalar::muln_vartime(&nizk.z_s, &xpowers);
 
     let rhs = G1Projective::muln_affine_vartime(&instance.public_keys, &nizk.z_r)
         + G1Projective::mul2(&nizk.y0.into(), &nizk.z_beta, &g1.into(), &acc);

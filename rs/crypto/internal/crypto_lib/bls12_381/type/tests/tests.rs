@@ -932,21 +932,23 @@ fn test_g2_mul2() {
 fn test_scalar_muln() {
     let mut rng = seeded_rng();
 
-    assert_eq!(Scalar::muln_vartime(&[]), Scalar::zero());
+    assert_eq!(Scalar::muln_vartime(&[], &[]), Scalar::zero());
 
     for t in 1..100 {
-        let mut terms = Vec::with_capacity(t);
+        let mut lhs = Vec::with_capacity(t);
+        let mut rhs = Vec::with_capacity(t);
 
         for _ in 0..t {
-            terms.push((biased_scalar(&mut rng), biased_scalar(&mut rng)));
+            lhs.push(biased_scalar(&mut rng));
+            rhs.push(biased_scalar(&mut rng));
         }
 
         let mut reference_val = Scalar::zero();
-        for (p, s) in &terms {
-            reference_val += *p * *s;
+        for i in 0..t {
+            reference_val += lhs[i] * rhs[i];
         }
 
-        let computed = Scalar::muln_vartime(&terms);
+        let computed = Scalar::muln_vartime(&lhs, &rhs);
 
         assert_eq!(computed, reference_val);
     }

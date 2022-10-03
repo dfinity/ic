@@ -221,13 +221,7 @@ pub fn prove_sharing<R: RngCore + CryptoRng>(
     // z_alpha = x' * sum [s_i*x^i | i <- [1..n]] + alpha mod p
     let z_r = witness.scalar_r * x_challenge + rho;
 
-    let terms = witness
-        .scalars_s
-        .iter()
-        .cloned()
-        .zip(xpow)
-        .collect::<Vec<_>>();
-    let z_alpha = Scalar::muln_vartime(&terms) * x_challenge + alpha;
+    let z_alpha = Scalar::muln_vartime(&witness.scalars_s, &xpow) * x_challenge + alpha;
 
     ProofSharing {
         ff,
@@ -269,18 +263,15 @@ pub fn verify_sharing(
 
     let xpow = Scalar::xpowers(&x, instance.public_keys.len());
 
-    let mut xpow_ik = Vec::with_capacity(instance.public_keys.len());
-    for i in 1..=instance.public_keys.len() {
-        xpow_ik.push((xpow[i - 1], Scalar::one()));
-    }
+    let mut ik = vec![Scalar::one(); instance.public_keys.len()];
 
     let mut terms = Vec::with_capacity(instance.public_coefficients.len());
     for pc in &instance.public_coefficients {
-        let acc = Scalar::muln_vartime(&xpow_ik);
+        let acc = Scalar::muln_vartime(&ik, &xpow);
         terms.push((pc.into(), acc));
 
-        for i in 0..xpow_ik.len() {
-            xpow_ik[i].1 *= Scalar::from_u64((i + 1) as u64);
+        for i in 0..ik.len() {
+            ik[i] *= Scalar::from_u64((i + 1) as u64);
         }
     }
     let lhs = G2Projective::muln_vartime(&terms) * x_challenge + nizk.aa;

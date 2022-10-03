@@ -326,11 +326,41 @@ impl Scalar {
     /// the tuple may be a secret, while the values of the second element
     /// of the tuple could leak to an attacker.
     ///
+    /// Warning: if lhs.len() != rhs.len() this function ignores trailing elements
+    /// of the longer slice.
+    ///
     /// Currently only a naive version is implemented.
-    pub fn muln_vartime(terms: &[(Self, Scalar)]) -> Self {
+    pub fn muln_vartime(lhs: &[Self], rhs: &[Self]) -> Self {
+        let terms = std::cmp::min(lhs.len(), rhs.len());
         let mut accum = Self::zero();
-        for term in terms {
-            accum += term.0 * term.1;
+        for i in 0..terms {
+            accum += lhs[i] * rhs[i];
+        }
+        accum
+    }
+
+    /// Multiscalar multiplication with usize multiplicands
+    ///
+    /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn
+    ///
+    /// Returns zero if terms is empty
+    ///
+    /// Warning: this function may leak information about the usize values via
+    /// memory-based side channels. Do not use this function with secret usize
+    /// arguments.
+    ///
+    /// Warning: if lhs.len() != rhs.len() this function ignores trailing elements
+    /// of the longer slice.
+    ///
+    /// Currently only a naive version is implemented.
+    ///
+    /// This function could take advantage of the fact that rhs is known to be
+    /// at most 64 bits, limiting the number of doublings.
+    pub fn muln_usize_vartime(lhs: &[Self], rhs: &[usize]) -> Self {
+        let terms = std::cmp::min(lhs.len(), rhs.len());
+        let mut accum = Self::zero();
+        for i in 0..terms {
+            accum += lhs[i] * Scalar::from_usize(rhs[i]);
         }
         accum
     }
