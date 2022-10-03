@@ -737,7 +737,7 @@ impl<'a> QueryContext<'a> {
                         EnqueueRequestsResult::NoMessages => {
                             let error_msg = format!("Canister {} did not reply", request.receiver);
                             let payload = Payload::Reject(RejectContext::new(
-                                RejectCode::CanisterReject,
+                                RejectCode::CanisterError,
                                 error_msg,
                             ));
                             self.outstanding_response = Some(generate_response(request, payload));
@@ -905,7 +905,7 @@ impl<'a> QueryContext<'a> {
                     );
                 }
                 enqueue_response(Payload::Reject(RejectContext::new(
-                    RejectCode::CanisterReject,
+                    RejectCode::CanisterError,
                     "Canister did not reply".to_string(),
                 )));
                 None
