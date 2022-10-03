@@ -440,12 +440,6 @@ impl MixedHashTree {
             Self::Empty => SearchStatus::Absent,
             Self::Leaf(_) => SearchStatus::Absent,
             Self::Fork(fork) => match fork.0.search_label(label) {
-                SearchStatus::Lt => {
-                    // The label is less than all the labels in the left
-                    // subtree.  All labels in the right tree are even greater,
-                    // so we don't have to search there.
-                    SearchStatus::Absent
-                }
                 SearchStatus::Unknown => {
                     // The left tree is probably pruned, let's look at the right tree.
                     match fork.1.search_label(label) {
@@ -454,7 +448,6 @@ impl MixedHashTree {
                             // tree and we don't know what's in the left tree.
                             SearchStatus::Unknown
                         }
-                        SearchStatus::Gt => SearchStatus::Absent,
                         other => other,
                     }
                 }
@@ -462,7 +455,7 @@ impl MixedHashTree {
                     // The label is greater than all the labels in the left
                     // subtree, let's search the right subtree.
                     match fork.1.search_label(label) {
-                        SearchStatus::Lt | SearchStatus::Gt => SearchStatus::Absent,
+                        SearchStatus::Lt => SearchStatus::Absent,
                         other => other,
                     }
                 }
