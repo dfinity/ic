@@ -20,7 +20,7 @@ use serde_json::Value;
 use thiserror::Error;
 use url::Url;
 
-use ic_interfaces::registry::{
+use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
 use ic_protobuf::registry::{

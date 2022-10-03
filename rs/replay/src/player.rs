@@ -25,8 +25,8 @@ use ic_interfaces::{
     certification::CertificationPool,
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::{MessageRouting, MessageRoutingError},
-    registry::{RegistryClient, RegistryDataProvider, RegistryTransportRecord},
 };
+use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, RegistryTransportRecord};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };

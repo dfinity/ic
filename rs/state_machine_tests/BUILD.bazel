@@ -16,6 +16,7 @@ rust_library(
         "//rs/cycles_account_manager",
         "//rs/execution_environment",
         "//rs/interfaces",
+        "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/messaging",
         "//rs/monitoring/logger",

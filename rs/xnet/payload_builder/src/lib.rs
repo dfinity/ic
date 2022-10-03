@@ -23,9 +23,9 @@ use ic_interfaces::{
         InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
         XNetTransientValidationError,
     },
-    registry::RegistryClient,
     validation::ValidationError,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{info, log, warn, ReplicaLogger};
 use ic_metrics::{

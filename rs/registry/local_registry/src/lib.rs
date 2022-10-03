@@ -17,7 +17,7 @@ use std::{
     time::Duration,
 };
 
-use ic_interfaces::registry::{RegistryClient, RegistryClientResult, ZERO_REGISTRY_VERSION};
+use ic_interfaces_registry::{RegistryClient, RegistryClientResult, ZERO_REGISTRY_VERSION};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint as PbConnectionEndpoint;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_local_store::{
@@ -263,7 +263,7 @@ impl RegistryClient for LocalRegistry {
         &self,
         key: &str,
         version: RegistryVersion,
-    ) -> ic_interfaces::registry::RegistryClientVersionedResult<Vec<u8>> {
+    ) -> ic_interfaces_registry::RegistryClientVersionedResult<Vec<u8>> {
         self.registry_cache.get_versioned_value(key, version)
     }
 

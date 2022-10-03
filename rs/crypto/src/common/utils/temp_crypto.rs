@@ -22,7 +22,7 @@ use ic_interfaces::crypto::{
     PublicKeyRegistrationStatus, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
     ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::crypto::v1::NodePublicKeys;

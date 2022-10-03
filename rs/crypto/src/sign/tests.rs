@@ -168,7 +168,7 @@ pub fn registry_returning_none() -> Arc<dyn RegistryClient> {
     registry
         .expect_get_versioned_value()
         .returning(|key, version| {
-            Ok(ic_interfaces::registry::RegistryVersionedRecord {
+            Ok(ic_interfaces_registry::RegistryVersionedRecord {
                 key: key.to_string(),
                 version,
                 value: None,

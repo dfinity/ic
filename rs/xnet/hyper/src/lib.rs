@@ -12,7 +12,7 @@ use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsServerHandshakeError,
     TlsStream,
 };
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_xnet_uri::XNetAuthority;
 use std::convert::TryFrom;
 use std::future::Future;

@@ -59,7 +59,7 @@ use crate::{
     P2PError, P2PErrorCode, P2PResult,
 };
 use ic_interfaces::artifact_manager::ArtifactManager;
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::{info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;

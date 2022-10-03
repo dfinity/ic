@@ -19,9 +19,9 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::MessageRouting,
-    registry::RegistryClient,
     validation::ValidationResult,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_messaging::MessageRoutingImpl;

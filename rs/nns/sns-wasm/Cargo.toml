@@ -38,7 +38,7 @@ prost = "0.10.4"
 ic-protobuf = { path = "../../protobuf" }
 registry-canister = { path = "../../registry/canister" }
 ic-registry-keys = { path = "../../registry/keys" }
-ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 
 [dev-dependencies]
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }

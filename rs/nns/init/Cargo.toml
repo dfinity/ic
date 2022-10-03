@@ -9,7 +9,7 @@ canister-test = {path="../../rust_canisters/canister_test"}
 clap = { version = "3.1.6", features = ["derive"] }
 ic-base-types = {path="../../types/base_types"}
 ic-canister-client = { path = "../../canister_client" }
-ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-local-store = { path = "../../registry/local_store" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-registry-transport = { path="../../registry/transport" }

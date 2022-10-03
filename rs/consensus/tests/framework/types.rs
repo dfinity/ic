@@ -11,10 +11,10 @@ use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    registry::RegistryClient,
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

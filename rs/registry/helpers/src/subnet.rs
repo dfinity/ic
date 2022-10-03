@@ -1,5 +1,5 @@
 use crate::deserialize_registry_value;
-use ic_interfaces::registry::{
+use ic_interfaces_registry::{
     RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
 use ic_protobuf::registry::{

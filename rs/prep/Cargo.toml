@@ -14,7 +14,7 @@ ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-http-utils = { path = "../http_utils" }
-ic-interfaces = { path = "../interfaces" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }

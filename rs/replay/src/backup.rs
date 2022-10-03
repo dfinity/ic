@@ -6,9 +6,9 @@ use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus_pool::{ChangeAction, MutableConsensusPool},
     crypto::MultiSigVerifier,
-    registry::RegistryClient,
     time_source::SysTimeSource,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{

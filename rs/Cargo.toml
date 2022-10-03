@@ -99,6 +99,7 @@ members = [
   "interfaces/canister_http_adapter_client",
   "interfaces/state_manager",
   "interfaces/p2p",
+  "interfaces/registry",
   "interfaces/transport",
   "interfaces/transport/mocks",
   "memory_tracker",

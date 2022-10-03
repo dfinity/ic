@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/consensus/message",
     "//rs/crypto",
     "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

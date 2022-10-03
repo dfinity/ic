@@ -9,7 +9,8 @@ use crate::{
 };
 use futures_util::FutureExt;
 use hyper::{Body, Response, StatusCode};
-use ic_interfaces::{execution_environment::QueryExecutionService, registry::RegistryClient};
+use ic_interfaces::execution_environment::QueryExecutionService;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{trace, ReplicaLogger};
 use ic_types::{
     malicious_flags::MaliciousFlags,

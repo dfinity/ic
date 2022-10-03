@@ -2,9 +2,8 @@
 use crate::consensus::{membership::Membership, pool_reader::PoolReader, prelude::*};
 use ic_interfaces::consensus::{PayloadTransientError, PayloadValidationError};
 use ic_interfaces::validation::ValidationError;
-use ic_interfaces::{
-    consensus_pool::ConsensusPoolCache, registry::RegistryClient, time_source::TimeSource,
-};
+use ic_interfaces::{consensus_pool::ConsensusPoolCache, time_source::TimeSource};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;

@@ -1,6 +1,6 @@
 use crate::deserialize_registry_value;
 use crate::node::NodeRecord;
-use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
+use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::firewall::v1::FirewallConfig;
 use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
 use ic_protobuf::registry::node::v1::ConnectionEndpoint;

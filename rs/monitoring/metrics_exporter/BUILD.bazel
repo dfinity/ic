@@ -10,7 +10,7 @@ rust_library(
     deps = [
         "//rs/config",
         "//rs/crypto/tls_interfaces",
-        "//rs/interfaces",
+        "//rs/interfaces/registry",
         "//rs/monitoring/metrics",
         "//rs/types/types",
         "@crate_index//:hyper",

@@ -32,7 +32,7 @@ use canister_test::Runtime;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use registry_canister::mutations::common::decode_registry_value;

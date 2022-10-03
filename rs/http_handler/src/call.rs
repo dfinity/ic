@@ -8,8 +8,8 @@ use crate::{
     EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
-use ic_interfaces::registry::RegistryClient;
 use ic_interfaces_p2p::{IngressError, IngressIngestionService};
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,

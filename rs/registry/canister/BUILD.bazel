@@ -57,7 +57,7 @@ DEV_DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto",
     "//rs/crypto/tree_hash",
-    "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/test_utils",
     "//rs/replica_tests",

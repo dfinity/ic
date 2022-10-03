@@ -8,7 +8,7 @@ rust_library(
     crate_name = "ic_registry_local_store",
     version = "0.8.0",
     deps = [
-        "//rs/interfaces",
+        "//rs/interfaces/registry",
         "//rs/registry/proto",
         "//rs/registry/transport",
         "//rs/types/types",

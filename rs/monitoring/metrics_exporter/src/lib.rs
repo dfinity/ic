@@ -1,7 +1,7 @@
 use hyper::{server::conn::Http, service::service_fn, Body, Response};
 use ic_config::metrics::{Config, Exporter};
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_metrics::registry::MetricsRegistry;
 use prometheus::{Encoder, TextEncoder};
 use slog::{error, trace, warn};

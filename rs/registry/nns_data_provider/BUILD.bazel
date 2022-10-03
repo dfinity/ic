@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/certification",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig",
-    "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/proto",

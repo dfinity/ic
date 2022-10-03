@@ -5,14 +5,15 @@ use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
-use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     consensus_pool::ConsensusPoolCache,
-    execution_environment::{IngressFilterService, QueryExecutionService, QueryHandler},
-    registry::{LocalStoreCertifiedTimeReader, RegistryClient},
+    execution_environment::{
+        AnonymousQueryService, IngressFilterService, QueryExecutionService, QueryHandler,
+    },
 };
 use ic_interfaces_p2p::IngressIngestionService;
+use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_p2p::P2PThreadJoiner;

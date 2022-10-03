@@ -30,10 +30,8 @@ use crate::ecdsa::payload_builder::{
     block_chain_cache, create_data_payload_helper, create_summary_payload,
     get_ecdsa_config_if_enabled,
 };
-use ic_interfaces::{
-    registry::RegistryClient,
-    validation::{ValidationError, ValidationResult},
-};
+use ic_interfaces::validation::{ValidationError, ValidationResult};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_replicated_state::ReplicatedState;
 use ic_types::crypto::canister_threshold_sig::idkg::SignedIDkgDealing;

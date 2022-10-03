@@ -7,7 +7,7 @@ edition = "2021"
 anyhow = "1.0.31"
 crossbeam-channel = "0.5.5"
 ic-config = { path = "../../config" }
-ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-common-proto = { path = "../proto" }

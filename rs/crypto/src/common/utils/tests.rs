@@ -5,7 +5,7 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_test_utils::empty_fake_registry;
 use ic_interfaces::crypto::KeyManager;
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_types_test_utils::ids::node_test_id;
 
 #[test]

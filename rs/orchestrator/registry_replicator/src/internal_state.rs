@@ -1,4 +1,4 @@
-use ic_interfaces::registry::{RegistryClient, ZERO_REGISTRY_VERSION};
+use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
 use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::{
     registry::{

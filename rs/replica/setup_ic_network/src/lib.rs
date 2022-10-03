@@ -28,11 +28,11 @@ use ic_interfaces::{
     crypto::{Crypto, IngressSigVerifier},
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    registry::{LocalStoreCertifiedTimeReader, RegistryClient},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::SysTimeSource,
 };
 use ic_interfaces_p2p::IngressIngestionService;
+use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_interfaces_state_manager::StateManager;
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};

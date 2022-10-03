@@ -13,9 +13,9 @@ use ic_interfaces::{
         ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool, MutableConsensusPool,
     },
     messaging::MessageRouting,
-    registry::RegistryClient,
     time_source::{SysTimeSource, TimeSource},
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;

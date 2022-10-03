@@ -9,7 +9,7 @@ use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
 };
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
 use tokio::net::TcpStream;

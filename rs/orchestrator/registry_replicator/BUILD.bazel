@@ -6,7 +6,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto",
     "//rs/crypto/utils/threshold_sig_der",
-    "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/monitoring/metrics_exporter",

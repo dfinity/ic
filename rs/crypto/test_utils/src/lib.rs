@@ -5,7 +5,7 @@ pub mod tls;
 
 use ic_types::NodeId;
 
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use std::collections::{BTreeMap, BTreeSet};

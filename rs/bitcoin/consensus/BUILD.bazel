@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/bitcoin/types/internal",
     "//rs/bitcoin/types/public",
     "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/interfaces/bitcoin_adapter_client",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",

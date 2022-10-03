@@ -17,7 +17,7 @@ use crate::driver::{
 use std::io::Read;
 
 use anyhow::{Context, Error};
-use ic_interfaces::registry::RegistryValue;
+use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;

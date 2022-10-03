@@ -61,10 +61,10 @@ use ic_interfaces::{
     ecdsa::EcdsaPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    registry::{self, LocalStoreCertifiedTimeReader, RegistryClient},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
+use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient, POLLING_PERIOD};
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -648,7 +648,7 @@ pub fn setup(
     // stable.
 
     let stable_registry_version_age =
-        registry::POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
+        POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
     (
         ConsensusImpl::new(
             replica_config,

@@ -5,7 +5,7 @@ use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
 use crate::tls::{tls_cert_from_registry, TlsCertFromRegistryError};
 use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsClientHandshakeError, TlsStream};
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
 use tokio::net::TcpStream;

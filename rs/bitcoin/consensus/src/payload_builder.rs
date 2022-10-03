@@ -3,14 +3,12 @@ use ic_btc_types::{Network, NetworkSnakeCase};
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
 };
-use ic_interfaces::{
-    registry::RegistryClient,
-    self_validating_payload::{
-        InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
-        SelfValidatingPayloadValidationError, SelfValidatingTransientValidationError,
-    },
+use ic_interfaces::self_validating_payload::{
+    InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
+    SelfValidatingPayloadValidationError, SelfValidatingTransientValidationError,
 };
 use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{log, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};

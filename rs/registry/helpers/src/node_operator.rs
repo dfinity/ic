@@ -1,5 +1,5 @@
 use crate::deserialize_registry_value;
-use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
+use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 pub use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
 pub use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;

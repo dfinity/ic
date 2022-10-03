@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-common-proto = { path = "../proto" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }

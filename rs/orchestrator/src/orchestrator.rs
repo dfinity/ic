@@ -13,7 +13,7 @@ use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto::{CryptoComponent, CryptoComponentForNonReplicaProcess};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_image_upgrader::ImageUpgrader;
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;

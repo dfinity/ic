@@ -1,6 +1,6 @@
 use crate::error::{OrchestratorError, OrchestratorResult};
 use ic_consensus::dkg::make_registry_cup;
-use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;

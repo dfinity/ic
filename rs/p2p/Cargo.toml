@@ -12,6 +12,7 @@ ic-artifact-manager = { path = "../artifact_manager" }
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-p2p = { path = "../interfaces/p2p" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-types = { path = "../types/types" }
 ic-protobuf = { path = "../protobuf" }

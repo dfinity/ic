@@ -11,9 +11,9 @@ use ic_interfaces::{
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
-    registry::RegistryClient,
     time_source::TimeSource,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::ReplicatedState;

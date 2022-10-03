@@ -4,7 +4,7 @@ use ic_crypto_tree_hash::{
     flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
     WitnessGenerator,
 };
-use ic_interfaces::registry::RegistryTransportRecord;
+use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
     delete,
     pb::v1::{CertifiedResponse, RegistryAtomicMutateRequest, RegistryMutation},

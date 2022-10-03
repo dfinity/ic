@@ -2,7 +2,7 @@ pub mod certification;
 pub mod data_provider;
 pub mod registry;
 
-use ic_interfaces::registry::RegistryDataProvider;
+use ic_interfaces_registry::RegistryDataProvider;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use std::sync::Arc;
 use url::Url;

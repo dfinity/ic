@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
 use ic_crypto_tree_hash::{flatmap, lookup_path, Label, LabeledTree, MixedHashTree};
-use ic_interfaces::registry::RegistryTransportRecord;
+use ic_interfaces_registry::RegistryTransportRecord;
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{

@@ -13,7 +13,7 @@ pub mod routing_table;
 pub mod subnet;
 pub mod test_proto;
 pub mod unassigned_nodes;
-use ic_interfaces::registry::{RegistryClientResult, RegistryValue};
+use ic_interfaces_registry::{RegistryClientResult, RegistryValue};
 
 /// Utility function to deserialize the bytes returned from the RegistryClient
 /// into a protobuf type.

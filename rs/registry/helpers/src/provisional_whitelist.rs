@@ -1,5 +1,5 @@
 use crate::deserialize_registry_value;
-use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
+use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::provisional_whitelist::v1 as pb;
 use ic_registry_keys::make_provisional_whitelist_record_key;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
