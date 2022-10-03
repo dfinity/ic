@@ -1,63 +1,79 @@
-deploy-guest-os-baseimg:
+.build-base-images: &build-base-images |
+  TAG=$(date '+%Y-%m-%d-%H%M')
+  # guestos-base & guestos-base-dev
+  cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
+  docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest \
+      -f Dockerfile.base .
+  docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest \
+      --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
+  # genericos-base
+  cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
+  docker build -q -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest \
+      -f Dockerfile.base .
+  # boundaryos-base
+  cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
+  docker build -q -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest \
+      -f Dockerfile.base .
+  # boundaryos-base-snp
+  cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
+  docker build -q -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest \
+      --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
+  cd "${CI_PROJECT_DIR}"
+
+build-base-images:
   extends:
-    - .ubuntu-docker-protected
-    - .rules-protected-branch-manual
-  stage: guest-os-build
-  needs: []
-  script:
-   - |
-    set -euo pipefail
-
-    TAG=$(date '+%Y-%m-%d-%H%M')
-
-    docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-    cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest -f Dockerfile.base .
-    docker push dfinity/guestos-base:"$TAG"
-    docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
-    docker push dfinity/guestos-base-dev:"$TAG"
-
-    cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
-    docker build -q -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest -f Dockerfile.base .
-    docker push dfinity/genericos-base:"$TAG"
-
-    cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    docker build -q -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest -f Dockerfile.base .
-    docker push dfinity/boundaryos-base:"$TAG"
-
-    cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    docker build -q -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
-    docker push dfinity/boundaryos-base-snp:"$TAG"
-
-    echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/guestos-base:"$TAG"
-    echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile (dev version)"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/guestos-base-dev:"$TAG"
-    echo "Use the image with it's SHA256 DIGEST below for GENERIC IC-OS Dockerfile"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/genericos-base:"$TAG"
-    echo "Use the image with it's SHA256 DIGEST below for BOUNDARY IC-OS Dockerfile"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/boundaryos-base:"$TAG"
-    echo "Use the image with it's SHA256 DIGEST below for BOUNDARY IC-OS Dockerfile (snp version)"
-    docker inspect --format='{{index .RepoDigests 0}}' dfinity/boundaryos-base-snp:"$TAG"
-
-build-guest-os-baseimg:
-  extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-docker-k8s
     - .rules-dockerfile-base-changes
   stage: guest-os-build
   needs: []
   script:
-  - |
-    set -euo pipefail
+  - set -euo pipefail
+  - *build-base-images
 
-    TAG=$(date '+%Y-%m-%d-%H%M')
-    cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    docker build -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest -f Dockerfile.base .
-    docker build -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
+build-push-base-images:
+  extends:
+    - .ubuntu-docker-k8s
+    - .rules-build-base-images-schedule
+  stage: guest-os-build
+  needs: []
+  script:
+   - set -euo pipefail
+   - *build-base-images
+   - |
+     docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
 
-    cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
-    docker build -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest -f Dockerfile.base .
+     IMAGE_LIST=(
+         dfinity/guestos-base
+         dfinity/guestos-base-dev
+         dfinity/genericos-base
+         dfinity/boundaryos-base
+         dfinity/boundaryos-base-snp
+     )
+     # search, replace & push
+     for IMAGE in "${IMAGE_LIST[@]}"; do
+         OLD_REF="$(grep -rho -E "${IMAGE}@sha256:[0-9a-z]{64}" ./* | head -1)"
+         NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}":"${TAG}")"
+         grep -r "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
 
-    cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    docker build -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest -f Dockerfile.base .
-    docker build -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
+         # TAG gets defined in *build-base-images
+         docker push "$IMAGE":"$TAG"
+         docker push "$IMAGE":latest
+     done
+
+     # commit, push & create new merge request 
+     git remote set-url origin \
+         "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+     git config --global user.email "idx@dfinity.org"
+     git config --global user.name "IDX GitLab Automation"
+     git checkout -b "base-image-refs-update-${TAG}"
+     git commit -a -m "Updating container base image refs"
+     git push \
+         -o merge_request.create \
+         -o merge_request.title="Updating container base images refs [$TAG]" \
+         origin "base-image-refs-update-${TAG}" 2>&1 | tee push.info
+
+     # request merge request approval
+     MR_URL=$(grep -ho -E "https://gitlab.com/.*/merge_requests/[0-9]*" push.info)
+     MESSAGE="Hi team! Please approve <$MR_URL|base image refs update>. :pray:"
+     ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#eng-node"
+     ./gitlab-ci/src/notify_slack/notify_slack.py "$MESSAGE" --channel "#eng-boundary-nodes"
