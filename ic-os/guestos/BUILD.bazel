@@ -254,7 +254,7 @@ py_binary(
     ],
     data = [
         ":disk.img.tar.zstd.sha256.wrapped",
-        ":upload_guestos_disk.img.tar.zstd",
+        ":upload_guestos",
         ":version.txt.wrapped",
         "//rs/prep:ic-prep",
     ],
