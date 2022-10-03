@@ -56,7 +56,7 @@ if [ ! -e /.dockerenv ] && [[ "$IMAGE" != "ic-build-bd:"* ]]; then
         # [e.g. proto gen rules] need to write into the repo source directory.
         --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
 
-        --mount type=bind,source="${HOME}/.cache/bazel",target="${HOME}/.cache/bazel"
+        --mount type=bind,source="${HOME}/.cache",target="${HOME}/.cache"
         --mount type=bind,source="${HOME}/.ssh",target="${HOME}/.ssh"
         --mount type=bind,source="${HOME}/.aws",target="${HOME}/.aws"
 
