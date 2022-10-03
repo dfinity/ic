@@ -1,11 +1,11 @@
 use crate::pb::v1::{
-    set_dapp_controllers_call_result, set_mode_call_result,
+    restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
     settle_community_fund_participation_result, sns_neuron_recipe::Investor, BuyerState,
     CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState, DirectInvestment,
     FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse,
     Init, Lifecycle, OpenRequest, OpenResponse, Params, RefreshBuyerTokensResponse,
-    SetDappControllersCallResult, SetModeCallResult, SettleCommunityFundParticipationResult,
-    SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
+    RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
+    SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
 };
 // TODO(NNS1-1589): Get these from authoritative source.
 use crate::pb::v1::GovernanceError;
@@ -72,6 +72,20 @@ impl From<Result<SetModeResponse, CanisterCallError>> for SetModeCallResult {
 impl From<Result<SetDappControllersResponse, CanisterCallError>> for SetDappControllersCallResult {
     fn from(native_result: Result<SetDappControllersResponse, CanisterCallError>) -> Self {
         use set_dapp_controllers_call_result::Possibility as P;
+        let possibility = Some(match native_result {
+            Ok(response) => P::Ok(response),
+            Err(err) => P::Err(err),
+        });
+
+        Self { possibility }
+    }
+}
+
+impl From<Result<SetDappControllersResponse, CanisterCallError>>
+    for RestoreDappControllersResponse
+{
+    fn from(native_result: Result<SetDappControllersResponse, CanisterCallError>) -> Self {
+        use restore_dapp_controllers_response::Possibility as P;
         let possibility = Some(match native_result {
             Ok(response) => P::Ok(response),
             Err(err) => P::Err(err),
@@ -561,19 +575,7 @@ impl Swap {
 
         if !swap_is_committed {
             // Restore controllers of dapp canisters to their original owners (i.e. self.init.fallback_controller_principal_ids).
-            let set_dapp_controllers_result = sns_root_client.set_dapp_controllers(
-                SetDappControllersRequest {
-                    controller_principal_ids: self
-                        .init()
-                        .fallback_controller_principal_ids
-                        .iter()
-                        .map(|s| PrincipalId::from_str(s)
-                             .expect("Unable to parse element in fallback_controller_principal_ids as a PrincipalId.")
-                        )
-                        .collect(),
-                }
-            )
-            .await;
+            let set_dapp_controllers_result = self.restore_dapp_controllers(sns_root_client).await;
 
             return FinalizeSwapResponse {
                 sweep_icp: Some(sweep_icp),
@@ -606,6 +608,26 @@ impl Swap {
             set_dapp_controllers_result: None,
             settle_community_fund_participation_result,
         }
+    }
+
+    /// Restore control over the dapp to the fallback controllers.
+    pub async fn restore_dapp_controllers(
+        &mut self,
+        sns_root_client: &mut impl SnsRootClient,
+    ) -> Result<SetDappControllersResponse, CanisterCallError> {
+        self.set_lifecycle(Lifecycle::Aborted);
+        sns_root_client.set_dapp_controllers(
+            SetDappControllersRequest {
+                controller_principal_ids: self
+                    .init()
+                    .fallback_controller_principal_ids
+                    .iter()
+                    .map(|s| PrincipalId::from_str(s)
+                        .expect("Unable to parse element in fallback_controller_principal_ids as a PrincipalId.")
+                    )
+                    .collect(),
+            }
+        ).await
     }
 
     async fn claim_neurons(

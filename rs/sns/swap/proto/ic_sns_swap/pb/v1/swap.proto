@@ -449,6 +449,21 @@ message SetModeCallResult {
   }
 }
 
+// Request struct for the method restore_dapp_controllers.
+message RestoreDappControllersRequest {}
+
+// Response of the method restore_dapp_controllers.
+// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+message RestoreDappControllersResponse {
+  oneof possibility {
+    // TODO(NNS1-1589): Uncomment.
+    // ic_sns_root.pb.v1.
+    SetDappControllersResponse ok = 1;
+    CanisterCallError err = 2;
+  }
+}
+
+
 // Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
 message SetDappControllersCallResult {
   oneof possibility {
