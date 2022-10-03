@@ -36,6 +36,11 @@ if .@timestamp == 0 {
     .@timestamp = null
 }
 
+status, err = to_int(.status)
+if err == null {
+    .status = status
+}
+
 for_each([
     "ic_subnet_id",
     "ic_node_id",
