@@ -8,7 +8,9 @@ use crate::consensus::{
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
 use crate::ecdsa::utils::{load_transcripts, EcdsaBlockReaderImpl};
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
-use ic_interfaces::crypto::{ErrorReplication, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
+use ic_interfaces::crypto::{
+    ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -281,7 +283,7 @@ impl EcdsaSignerImpl {
 
         ret.map_or_else(
             |error| {
-                if error.is_replicated() {
+                if error.is_reproducible() {
                     self.metrics.sign_errors_inc("verify_sig_share_permanent");
                     vec![EcdsaChangeAction::HandleInvalid(
                         id.clone(),

@@ -26,7 +26,7 @@ impl Polynomial {
     /// Creates a random polynomial.
     pub fn random<R: RngCore + CryptoRng>(number_of_coefficients: usize, rng: &mut R) -> Self {
         let coefficients: Vec<Scalar> = iter::repeat(())
-            .map(|()| Scalar::legacy_random_generation(rng))
+            .map(|()| Scalar::random(rng))
             .take(number_of_coefficients)
             .collect();
         Polynomial::from(coefficients)

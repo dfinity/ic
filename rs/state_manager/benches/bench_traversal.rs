@@ -32,7 +32,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     const NUM_STATUSES: u64 = 30_000;
 
     let subnet_type = SubnetType::Application;
-    let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), subnet_type, "TEST".into());
+    let mut state = ReplicatedState::new(subnet_test_id(1), subnet_type);
 
     state.modify_streams(|streams| {
         for remote_subnet in 2..10 {

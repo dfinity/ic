@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.53"
 candid = "0.7.10"
+ciborium = "0.2"
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 ic-base-types = { path = "../../../types/base_types" }
@@ -29,7 +30,8 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 num-traits = "0.2.14"
-proptest = "0.9.4"
+proptest = "1.0"
+serde_json = "1.0.54"
 
 [[bin]]
 name = "ic-icrc1-index"

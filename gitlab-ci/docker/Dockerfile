@@ -64,6 +64,9 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup target add wasm32-unknown-unknown && \
     chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
 
+# cargo-nextest
+RUN curl -LsSf https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.36/cargo-nextest-0.9.36-x86_64-unknown-linux-gnu.tar.gz | tar zxf - -C /opt/cargo/bin
+
 ARG nvm_version=v0.39.1
 ARG node_version=17
 ENV NVM_DIR=/opt/nvm

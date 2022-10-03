@@ -59,16 +59,10 @@ function process_bootstrap() {
 
     # stash a couple of things away to config store
     FILES=(
-        denylist.map
-        deployment_type
-        journalbeat.conf
-        network.conf
-        nginxdomain.conf
-        nns_public_key.pem
-        nns.conf
+        bn_vars.conf network.conf nns.conf
+        nns_public_key.pem denylist.map
     )
-
-    for FILE in "${FILES[@]}"; do
+    for FILE in ${FILES[@]}; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"

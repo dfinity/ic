@@ -1,20 +1,21 @@
 [Unit]
 Description=Boundary Node Prober
-After=setup-prober.service
-ConditionPathExists=!/etc/prober/prober.disabled
+ConditionPathExists=!/run/ic-node/etc/prober/prober.disabled
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 User=prober
 Group=prober
 Restart=always
-ExecStart=/opt/ic/bin/boundary-node-prober \
-    --routes-dir "${ROUTES_DIR}" \
-    --wallets-path "${WALLETS_PATH}" \
-    --identity-path "${IDENTITY_PATH}" \
-    --root-key-path "${ROOT_KEY_PATH}" \
-    --canister-ttl "${CANISTER_TTL}" \
-    --probe-interval "${PROBE_INTERVAL}" \
-    --metrics-addr "${METRICS_ADDR}"
+ExecStart=/opt/ic/bin/boundary-node-prober                 \
+    --routes-dir "/var/cache/ic_routes"                    \
+    --wallets-path "/etc/prober/wallets.json"              \
+    --identity-path "/run/ic-node/etc/prober/identity.pem" \
+    --root-key-path "/run/ic-node/etc/prober/root_key.der" \
+    --canister-ttl "24h"                                   \
+    --probe-interval "1m"                                  \
+    --metrics-addr "[::]:9313"
 
 [Install]
 WantedBy=multi-user.target

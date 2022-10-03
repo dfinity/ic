@@ -16,7 +16,7 @@ use ic_interfaces::{
 };
 use ic_logger::{error, fatal, warn};
 use ic_replicated_state::{CanisterState, ExecutionState};
-use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
+use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
 use ic_types::{ComputeAllocation, Height, MemoryAllocation, NumInstructions, Time};
@@ -43,6 +43,7 @@ pub(crate) enum StableMemoryHandling {
 /// The main steps of `install_code` execution that may fail with an error or
 /// change the canister state.
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum InstallCodeStep {
     ValidateInput,
     ReserveExecutionCycles,
@@ -150,7 +151,7 @@ impl InstallCodeHelper {
     }
 
     /// Finishes an `install_code` execution that could have run multiple rounds
-    /// due to determnistic time slicing. It updates the subnet available memory
+    /// due to deterministic time slicing. It updates the subnet available memory
     /// and compute allocation in the given `round_limits`, which may cause the
     /// execution to fail with errors.
     pub fn finish(
@@ -234,11 +235,18 @@ impl InstallCodeHelper {
             self.canister.scheduler_state.install_code_debit += self.instructions_consumed();
         }
 
+        let instructions_used = NumInstructions::from(
+            message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
+
         let old_wasm_hash = get_wasm_hash(&clean_canister);
         let new_wasm_hash = get_wasm_hash(&self.canister);
         DtsInstallCodeResult::Finished {
             canister: self.canister,
             message: original.message,
+            instructions_used,
             result: Ok(InstallCodeResult {
                 heap_delta: self.total_heap_delta,
                 old_wasm_hash,
@@ -615,10 +623,7 @@ pub(crate) fn validate_memory_allocation(
         {
             return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
                 requested: memory_allocation.bytes(),
-                available: NumBytes::from(
-                    (available_memory.get_total_memory() - canister_current_allocation.get() as i64)
-                        .max(0) as u64,
-                ),
+                available: NumBytes::from((available_memory.get_total_memory()).max(0) as u64),
             });
         }
     }
@@ -636,8 +641,10 @@ pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {
 pub(crate) fn canister_layout(
     state_path: &Path,
     canister_id: &CanisterId,
-) -> CanisterLayout<RwPolicy> {
-    CheckpointLayout::<RwPolicy>::new(state_path.into(), Height::from(0))
+) -> CanisterLayout<ReadOnly> {
+    // We use ReadOnly, as CheckpointLayouts with write permissions have side effects
+    // of creating directories
+    CheckpointLayout::<ReadOnly>::new(state_path.into(), Height::from(0))
         .and_then(|layout| layout.canister(canister_id))
         .expect("failed to obtain canister layout")
 }
@@ -674,10 +681,16 @@ pub(crate) fn finish_err(
         // This can only fail with deterministic time slicing if the balance of
         // the canister has changed while the long-execution was in progress.
         .map_err(CanisterManagerError::InstallCodeNotEnoughCycles);
+    let instructions_used = NumInstructions::from(
+        message_instruction_limit
+            .get()
+            .saturating_sub(instructions_left.get()),
+    );
     if let Err(err) = result {
         return DtsInstallCodeResult::Finished {
             canister: new_canister,
             message: original.message,
+            instructions_used,
             result: Err(err),
         };
     }
@@ -689,13 +702,13 @@ pub(crate) fn finish_err(
     );
 
     if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
-        let instructions_consumed = message_instruction_limit - instructions_left;
-        new_canister.scheduler_state.install_code_debit += instructions_consumed;
+        new_canister.scheduler_state.install_code_debit += instructions_used;
     }
 
     DtsInstallCodeResult::Finished {
         canister: new_canister,
         message: original.message,
+        instructions_used,
         result: Err(err),
     }
 }

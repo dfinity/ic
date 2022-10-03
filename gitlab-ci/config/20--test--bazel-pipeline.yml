@@ -1,6 +1,7 @@
 .bazel-test-all:
   extends:
     - .bazel-rules-pipeline
+    - .ic-build-bazel-image
   stage: test
   needs: []
   artifacts:
@@ -12,14 +13,14 @@
   variables:
     BAZEL_STARTUP_ARGS: ""
     BAZEL_COMMAND: "test"
-    BAZEL_TARGETS: "//..."
+    BAZEL_TARGETS: "//... //:upload_sdk"
     BAZEL_EXTRA_ARGS: ""
   script:
     - set -eufo pipefail
     - bazel version
     - AWS_CREDS="${HOME}/.aws/credentials"
     - mkdir -p "$(dirname "${AWS_CREDS}")"
-    - test -f "${AWS_CREDS}" || ln -s "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
+    - ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
     - "# shellcheck disable=SC2086 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
     - >
       bazel
@@ -79,5 +80,27 @@ bazel-test-all-macos:
   variables:
     BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
     BAZEL_COMMAND: "build"
-    BAZEL_TARGETS: "//rs/... //:sdk"
+    BAZEL_TARGETS: "//rs/... //:upload_sdk"
     BAZEL_EXTRA_ARGS: "--config dev"
+
+bazel-cargo-test-parity:
+  extends:
+    - .ubuntu-docker-k8s
+    - .bazel-test-all
+    - .bazel-rules-test-parity
+    - .ic-build-image
+  artifacts:
+    when: always
+    paths:
+      - artifacts/*
+  tags:
+    - dfinity
+    - ubuntu
+    # Run in ZH since BuildFarm is in ZH
+    - zh
+  script:
+    - |
+      set -eufo pipefail
+      echo "Checking bazel vs cargo test parity"
+
+      ./bazel/test_parity/compare_covered_tests.sh

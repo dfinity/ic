@@ -21,8 +21,8 @@ fn gen_mul_n_instance(num_terms: usize, curve_type: EccCurveType) -> Vec<(EccPoi
 
 fn mul_n_naive(terms: &[(EccPoint, EccScalar)]) -> EccPoint {
     let mut accum = EccPoint::identity(terms[0].0.curve_type());
-    for &(p, s) in terms {
-        accum = accum.add_points(&p.scalar_mul(&s).unwrap()).unwrap();
+    for (p, s) in terms {
+        accum = accum.add_points(&p.scalar_mul(s).unwrap()).unwrap();
     }
     accum
 }
@@ -77,22 +77,14 @@ fn multiexp_total(c: &mut Criterion) {
                             || gen_mul_n_instance(*size, curve_type),
                             |terms| {
                                 // create "deep" refs of pairs
-                                let mut prec_points =
-                                    Vec::<EccPointWithLut>::with_capacity(terms.len());
-
-                                for (p, _s) in terms.iter() {
-                                    prec_points.push(EccPointWithLut::new(p, window_size)?);
+                                for (p, _s) in terms.iter_mut() {
+                                    p.precompute(window_size).unwrap();
                                 }
-
                                 // create refs of pairs
-                                let mut refs_of_pairs =
-                                    Vec::<(&EccPointWithLut, &EccScalar)>::with_capacity(
-                                        terms.len(),
-                                    );
-                                for i in 0..terms.len() {
-                                    refs_of_pairs.push((&prec_points[i], &terms[i].1));
-                                }
-                                EccPointWithLut::mul_n_points_vartime_naf(&refs_of_pairs)
+                                let refs_of_pairs: Vec<_> =
+                                    terms.iter().map(|(p, s)| (p, s)).collect();
+
+                                EccPoint::mul_n_points_vartime(&refs_of_pairs)
                             },
                             BatchSize::SmallInput,
                         )
@@ -154,23 +146,18 @@ fn multiexp_online(c: &mut Criterion) {
                     |b, &size| {
                         b.iter_batched_ref(
                             || {
-                                let terms = gen_mul_n_instance(*size, curve_type);
-                                let prec_points_scalars: Vec<(EccPointWithLut, EccScalar)> = terms
-                                    .iter()
-                                    .map(|(p, s)| {
-                                        (
-                                            EccPointWithLut::new(p, window_size).unwrap(),
-                                            s.to_owned(),
-                                        )
-                                    })
-                                    .collect();
-                                prec_points_scalars
+                                let mut terms = gen_mul_n_instance(*size, curve_type);
+                                // create "deep" refs of pairs
+                                for (p, _s) in terms.iter_mut() {
+                                    p.precompute(window_size).unwrap();
+                                }
+                                terms
                             },
                             |terms| {
                                 // create refs of pairs
-                                let refs_of_pairs: Vec<(&EccPointWithLut, &EccScalar)> =
-                                    terms.iter().map(|pair| (&pair.0, &pair.1)).collect();
-                                EccPointWithLut::mul_n_points_vartime_naf(&refs_of_pairs)
+                                let refs_of_pairs: Vec<_> =
+                                    terms.iter().map(|(p, s)| (p, s)).collect();
+                                EccPoint::mul_n_points_vartime(&refs_of_pairs)
                             },
                             BatchSize::SmallInput,
                         )

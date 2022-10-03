@@ -405,6 +405,78 @@ impl IcNodeSnapshot {
             })
         })
     }
+
+    /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
+    /// install it on the target node.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the canister `name` could not be loaded, is not
+    /// a wasm module or the installation fails.
+    pub fn create_and_install_canister_with_arg(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+    ) -> Principal {
+        use ic_registry_client_helpers::{
+            routing_table::RoutingTableRegistry,
+            subnet::{SubnetListRegistry, SubnetRegistry},
+        };
+        let canister_bytes = self.test_env().load_wasm(name);
+        let registry_version = self.local_registry.get_latest_version();
+        let subnet_id: Option<SubnetId> = self
+            .local_registry
+            .get_subnet_ids(registry_version)
+            .unwrap_result()
+            .into_iter()
+            .find(|subnet_id| {
+                self.local_registry
+                    .get_node_ids_on_subnet(*subnet_id, registry_version)
+                    .unwrap_result()
+                    .contains(&self.node_id)
+            });
+        let routing_table = self
+            .local_registry
+            .get_routing_table(registry_version)
+            .unwrap()
+            .unwrap();
+        let effective_canister_id = match subnet_id {
+            Some(subnet_id) => {
+                match routing_table
+                    .iter()
+                    .find(|(_, sub_id)| sub_id.get() == subnet_id.get())
+                {
+                    Some((range, _)) => range.start.get().into(),
+                    None => Principal::management_canister(),
+                }
+            }
+            None => Principal::management_canister(),
+        };
+
+        self.with_default_agent(move |agent| async move {
+            // Create a canister.
+            let mgr = ManagementCanister::create(&agent);
+            let canister_id = mgr
+                .create_canister()
+                .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(effective_canister_id)
+                .call_and_wait(delay())
+                .await
+                .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
+                .0;
+
+            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+            if let Some(arg) = arg {
+                install_code = install_code.with_raw_arg(arg)
+            }
+            install_code
+                .call_and_wait(delay())
+                .await
+                .map_err(|err| format!("Couldn't install canister: {}", err))?;
+            Ok::<_, String>(canister_id)
+        })
+        .expect("Could not install canister")
+    }
 }
 
 pub trait HasTopologySnapshot {
@@ -792,40 +864,6 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
                 Ok(_) => Err(anyhow!("Status is still available")),
             },
         )
-    }
-
-    /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
-    /// install it on the target node.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the canister `name` could not be loaded, is not
-    /// a wasm module or the installation fails.
-    fn create_and_install_canister_with_arg(&self, name: &str, arg: Option<Vec<u8>>) -> Principal {
-        let canister_bytes = self.test_env().load_wasm(name);
-
-        self.with_default_agent(|agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(None)
-                .call_and_wait(delay())
-                .await
-                .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
-                .0;
-
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait(delay())
-                .await
-                .map_err(|err| format!("Couldn't install canister: {}", err))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister")
     }
 
     fn build_default_agent(&self) -> Agent {

@@ -154,6 +154,14 @@ impl RejectContext {
         Self { code, message }
     }
 
+    pub fn new_with_message_length_limit(
+        code: RejectCode,
+        message: String,
+        max_msg_len: usize,
+    ) -> Self {
+        Self::new(code, message.safe_truncate(max_msg_len).to_string())
+    }
+
     pub fn code(&self) -> RejectCode {
         self.code
     }

@@ -59,7 +59,7 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V9;
+pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V10;
 
 /// Maximum supported certification version.
 ///

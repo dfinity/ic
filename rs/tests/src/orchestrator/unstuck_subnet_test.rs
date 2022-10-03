@@ -16,7 +16,9 @@ end::catalog[] */
 use super::utils::rw_message::install_nns_and_universal_canisters;
 use super::utils::ssh_access::execute_bash_command;
 use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
-use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
+use crate::orchestrator::utils::rw_message::{
+    can_install_canister, can_read_msg_with_retries, store_message_with_retries,
+};
 use crate::orchestrator::utils::upgrade::UpdateImageType;
 use crate::util::block_on;
 use crate::{
@@ -36,6 +38,7 @@ use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
+const NUM_READ_RETRIES: usize = 10;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
@@ -171,10 +174,14 @@ pub fn test(test_env: TestEnv) {
 
     info!(logger, "Write a message to a canister");
     let msg = "Hello world!";
-    let can_id = store_message(&nodes[0].get_public_url(), msg);
-    // read it on all other nodes
+    let can_id = store_message_with_retries(&nodes[0].get_public_url(), msg, &logger);
+    info!(logger, "Read it on all other nodes");
     for n in &nodes {
-        assert!(can_read_msg(&logger, &n.get_public_url(), can_id, msg));
+        assert!(
+            can_read_msg_with_retries(&logger, &n.get_public_url(), can_id, msg, NUM_READ_RETRIES),
+            "Failed to read message on {}",
+            n.get_ip_addr()
+        );
     }
     info!(logger, "Could store and read message!");
 }

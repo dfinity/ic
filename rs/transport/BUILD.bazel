@@ -48,8 +48,10 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
+# Test is flaky. Tracked in NET-1207.
 rust_test_suite(
     name = "transport_integration_tests",
     srcs = glob(["tests/**/*.rs"]),
+    flaky = True,
     deps = [":transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

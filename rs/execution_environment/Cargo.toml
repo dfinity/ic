@@ -95,3 +95,7 @@ harness = false
 [[bench]]
 name = "execute_update"
 harness = false
+
+[[bench]]
+name = "scheduler"
+harness = false

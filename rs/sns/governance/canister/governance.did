@@ -215,6 +215,7 @@ type NervousSystemFunction = record {
 type NervousSystemParameters = record {
   default_followees : opt DefaultFollowees;
   max_dissolve_delay_seconds : opt nat64;
+  max_dissolve_delay_bonus_percentage : opt nat64;
   max_followees_per_function : opt nat64;
   neuron_claimer_permissions : opt NeuronPermissionList;
   neuron_minimum_stake_e8s : opt nat64;
@@ -227,6 +228,7 @@ type NervousSystemParameters = record {
   max_number_of_neurons : opt nat64;
   transaction_fee_e8s : opt nat64;
   max_number_of_proposals_with_ballots : opt nat64;
+  max_age_bonus_percentage : opt nat64;
   neuron_grantable_permissions : opt NeuronPermissionList;
   voting_rewards_parameters : opt VotingRewardsParameters;
   max_number_of_principals_per_neuron : opt nat64;
@@ -326,6 +328,7 @@ type Version = record {
   swap_wasm_hash : vec nat8;
   ledger_wasm_hash : vec nat8;
   governance_wasm_hash : vec nat8;
+  index_wasm_hash : vec nat8;
 };
 type VotingRewardsParameters = record {
   start_timestamp_seconds : opt nat64;

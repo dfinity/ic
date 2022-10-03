@@ -69,25 +69,20 @@ RUN curl -L -O https://github.com/dfinity/AMDSEV/releases/download/${snp_tag}/${
 RUN curl -L -O https://github.com/dfinity/AMDSEV/releases/download/${snp_tag}/${snp_kernel_libc_host} && \
     echo "${snp_libc_host_sha}  ${snp_kernel_libc_host}" | shasum -c
 
-# Download and verify journalbeat
-RUN \
-    curl -L -O https://artifacts.elastic.co/downloads/beats/journalbeat/journalbeat-oss-7.14.0-linux-x86_64.tar.gz && \
-    echo "3c97e8706bd0d2e30678beee7537b6fe6807cf858a0dd2e7cfce5beccb621eb0fefe6871027bc7b55e2ea98d7fe2ca03d4d92a7b264abbb0d6d54ecfa6f6a305  journalbeat-oss-7.14.0-linux-x86_64.tar.gz" | shasum -c
-
 # Download and verify vector
 RUN \
-    curl -L -O https://packages.timber.io/vector/0.23.0/vector_0.23.0-1_amd64.deb && \
-    echo "e29180e5575781f299e0ff7b89afe2e582060797e1653e90bb5582404cf6eec3e6b3fa462064f00b9917339847476560fa00f6d8fc83dce171f0ea9be968bd0a  vector_0.23.0-1_amd64.deb" | shasum -c
+    curl -L -O https://packages.timber.io/vector/0.24.1/vector_0.24.1-1_amd64.deb && \
+    echo "605b5bd2a0b3d03a252addfebb24e35af6929523cc9129a468039874806b3492  vector_0.24.1-1_amd64.deb" | shasum -c
 
 # Download and verify node_exporter
 RUN \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz && \
     echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" | shasum -c
 
-# Download and verify nginx_exporter
+# Download and verify process-exporter
 RUN \
-    curl -L -O https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v0.10.0/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz && \
-    echo "30e664006dbc2d1185d3a5445942cd8158d1bb58  nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz" | shasum -c
+    curl -L -O https://github.com/ncabatoff/process-exporter/releases/download/v0.7.10/process-exporter-0.7.10.linux-amd64.tar.gz && \
+    echo "52503649649c0be00e74e8347c504574582b95ad428ff13172d658e82b3da1b5  process-exporter-0.7.10.linux-amd64.tar.gz" | shasum -c
 
 # Download libnginx-mod-http-ndk.deb
 RUN \
@@ -278,21 +273,10 @@ RUN \
 # Cleanup
 RUN rm /tmp/${snp_kernel_pkg}
 
-# Install journalbeat
-COPY --from=download /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz
-RUN cd /tmp/ && \
-    mkdir -p /etc/journalbeat \
-             /var/lib/journalbeat \
-             /var/log/journalbeat && \
-    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/fields.yml && \
-    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/journalbeat.reference.yml && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/journalbeat && \
-    rm /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz
-
 # Install vector
-COPY --from=download /tmp/vector_0.23.0-1_amd64.deb /tmp/vector_0.23.0-1_amd64.deb
-RUN dpkg -i --force-confold /tmp/vector_0.23.0-1_amd64.deb && \
-    rm /tmp/vector_0.23.0-1_amd64.deb
+COPY --from=download /tmp/vector_0.24.1-1_amd64.deb /tmp/vector_0.24.1-1_amd64.deb
+RUN dpkg -i --force-confold /tmp/vector_0.24.1-1_amd64.deb && \
+    rm /tmp/vector_0.24.1-1_amd64.deb
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.3.1.linux-amd64.tar.gz /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
@@ -301,16 +285,11 @@ RUN cd /tmp/ && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
 
-COPY --from=download /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz
-RUN \
-    tar \
-        -C /usr/local/bin \
-        -zvxf /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz \
-        nginx-prometheus-exporter && \
-    mv \
-        /usr/local/bin/nginx-prometheus-exporter \
-        /usr/local/bin/nginx_exporter && \
-    rm /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz
+# Install process-exporter
+COPY --from=download /tmp/process-exporter-0.7.10.linux-amd64.tar.gz /tmp/process-exporter-0.7.10.linux-amd64.tar.gz
+RUN cd /tmp/ && \
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf process-exporter-0.7.10.linux-amd64.tar.gz process-exporter-0.7.10.linux-amd64/process-exporter && \
+    rm /tmp/process-exporter-0.7.10.linux-amd64.tar.gz
 
 ### Nginx Modules
 

@@ -395,27 +395,32 @@ impl StateMachine {
         }
     }
 
-    /// Emulates a node restart, including checkpoint recovery.
-    pub fn restart_node(self) -> Self {
-        Self::setup_from_dir(
+    fn into_components(self) -> (TempDir, u64, Time, bool) {
+        (
             self.state_dir,
             self.nonce.get(),
             self.time.get(),
-            None,
             self.checkpoints_enabled.get(),
         )
+    }
+
+    /// Emulates a node restart, including checkpoint recovery.
+    pub fn restart_node(self) -> Self {
+        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
+        // to the same root.
+        let (state_dir, nonce, time, checkpoints_enabled) = self.into_components();
+
+        Self::setup_from_dir(state_dir, nonce, time, None, checkpoints_enabled)
     }
 
     /// Same as [restart_node], but the subnet will have the specified `config`
     /// after the restart.
     pub fn restart_node_with_config(self, config: StateMachineConfig) -> Self {
-        Self::setup_from_dir(
-            self.state_dir,
-            self.nonce.get(),
-            self.time.get(),
-            Some(config),
-            self.checkpoints_enabled.get(),
-        )
+        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
+        // to the same root.
+        let (state_dir, nonce, time, checkpoints_enabled) = self.into_components();
+
+        Self::setup_from_dir(state_dir, nonce, time, Some(config), checkpoints_enabled)
     }
 
     /// If the argument is true, the state machine will create an on-disk

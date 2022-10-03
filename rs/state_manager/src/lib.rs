@@ -1370,11 +1370,7 @@ impl StateManagerImpl {
             }
             None => (
                 Self::INITIAL_STATE_HEIGHT,
-                ReplicatedState::new_rooted_at(
-                    own_subnet_id,
-                    own_subnet_type,
-                    state_layout.tip_path(),
-                ),
+                ReplicatedState::new(own_subnet_id, own_subnet_type),
             ),
         };
 
@@ -2237,7 +2233,7 @@ impl StateManagerImpl {
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {
     Labeled::new(
         StateManagerImpl::INITIAL_STATE_HEIGHT,
-        ReplicatedState::new_rooted_at(own_subnet_id, own_subnet_type, "Initial".into()),
+        ReplicatedState::new(own_subnet_id, own_subnet_type),
     )
 }
 

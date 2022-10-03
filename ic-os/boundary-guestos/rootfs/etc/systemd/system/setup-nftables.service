@@ -1,0 +1,14 @@
+[Unit]
+Description=Setup variable files for nftables
+DefaultDependencies=no
+After=bootstrap-ic-node.service
+Before=nftables.service
+
+[Install]
+RequiredBy=nftables.service
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-nftables.sh

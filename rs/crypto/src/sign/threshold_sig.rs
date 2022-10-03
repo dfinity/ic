@@ -45,22 +45,22 @@ fn pub_coeffs_from_store(
     dkg_id: DkgId,
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
 ) -> Result<CspPublicCoefficients, ThresholdSigDataNotFoundError> {
-    lockable_threshold_sig_data_store
+    let maybe_coeffs = lockable_threshold_sig_data_store
         .read()
         .transcript_data(dkg_id)
-        .map(|data| data.public_coefficients().clone())
-        .ok_or(ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id })
+        .map(|data| data.public_coefficients().clone());
+    maybe_coeffs.ok_or(ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id })
 }
 
 fn transcript_data_from_store(
     dkg_id: DkgId,
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
 ) -> Result<TranscriptData, ThresholdSigDataNotFoundError> {
-    lockable_threshold_sig_data_store
+    let maybe_transcript_data = lockable_threshold_sig_data_store
         .read()
         .transcript_data(dkg_id)
-        .cloned()
-        .ok_or_else(|| sig_data_not_found_error(dkg_id))
+        .cloned();
+    maybe_transcript_data.ok_or_else(|| sig_data_not_found_error(dkg_id))
 }
 
 fn sig_data_not_found_error(dkg_id: DkgId) -> ThresholdSigDataNotFoundError {

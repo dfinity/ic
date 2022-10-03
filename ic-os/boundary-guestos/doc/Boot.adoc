@@ -28,8 +28,6 @@ service are started in the IC-OS boot sequence:
 
 - IPv6 address monitor / retry
 
-- Start journalbeat
-
 - Start node exporter
 
 - Start nginx
@@ -125,15 +123,6 @@ interface and issues `networkctl reconfigure` as needed. The reason is that
 `systemd-networkd` gives up on trying SLAAC autoconfiguration after a while,
 so systems will fail to receive network configuration under certain conditions
 if the router in their network is down at boot.
-
-== Start journalbeat
-
-Service: `journalbeat.service`. Pre-exec script `/opt/ic/bin/generate-journalbeat-config.sh`.
-Depends on `bootstrap-ic-node.service`.
-
-This launches journalbeat (if requested so by injected configuration). The configuration
-for the binary itself is generated dynamically from the configuration pieces held
-in the `config` partition.
 
 == Start node_exporter
 

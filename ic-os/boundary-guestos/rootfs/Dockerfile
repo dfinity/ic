@@ -1,19 +1,25 @@
 # BoundarGuestOS - Main Docker Image
 #
-# Build steps:
-# - `docker build --pull -t dfinity/boundaryos-main -f Dockerfile .`
+# Build step for exmaple:
+# - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev --build-arg SW=true \ `
+#   `--build-arg BASE_IMAGE=dfinity/boundaryos-base@sha256:37dae959bc674bd1087de219073c4307487e65e1b3928dcff2ffa44e56c222a9 -f Dockerfile .`
+# 
 #
 # The base images are defined in docker-base.prod and docker-base.dev. Update
 # the references there when a new base image has been built. Note that this
 # argument MUST be given by the build script, otherwise build will fail.
 ARG BASE_IMAGE=
 
+# We support prod and dev images
+ARG BUILD_TYPE=
 
-# Service worker version and sha256
-ARG sw_version=1.2.10
-ARG sw_sha256=78c45bf30f39287ec1029f68d7b6e4fd4b28455e5971f0660eab2c20f3f56622
+# Service worker version and sha256; only if SW is `true` the service worker from npm is used
+ARG SW= 
+ARG sw_version=1.2.7
+ARG sw_sha256=9aeb3c37742b162804dfb0094a4956a4df173030971cf6e12f376ae80c207b0f
 
-# ICX proxy  version and sha256
+
+# ICX proxy  version and sha256; Note this version will be *only* used for prod images
 ARG icx_proxy_version=dcaa135
 ARG icx_proxy_sha256=e20c7f6dcbe438ef9ec7dbff7d88d88db4099cb2b8d6dc399f47856baf0e568c
 
@@ -32,12 +38,13 @@ RUN \
     curl -L -O https://github.com/dfinity/icx-proxy/releases/download/rev-${icx_proxy_version}/icx-proxy.deb && \
     echo "${icx_proxy_sha256}  icx-proxy.deb" | shasum -c
 
-# Download and check service worker
+# Download and check service worker production version 
+# from: https://registry.npmjs.org/@dfinity/service-worker/-/
 ARG sw_version
 ARG sw_sha256
 RUN \
-   curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
-   echo "${sw_sha256}  service-worker-${sw_version}.tgz" | shasum -c
+   curl -L  https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz -o service-worker.tgz && \
+   echo "${sw_sha256}  service-worker.tgz" | shasum -c
 
 # Download Nginx NJS Plugins
 ARG NGINX_NJS_PLUGINS_PROJECT_ID=38466408
@@ -61,13 +68,16 @@ COPY --from=download /tmp/icx-proxy.deb /tmp/icx-proxy.deb
 RUN dpkg -i /tmp/icx-proxy.deb &&\
     rm /tmp/icx-proxy.deb
 
-# Install ic service worker production version from: https://registry.npmjs.org/@dfinity/service-worker/-/
-ARG sw_version
-COPY --from=download /tmp/service-worker-${sw_version}.tgz /tmp/service-worker-${sw_version}.tgz
-RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz && \
+# Fetch and install npm ic service worker for production 
+COPY --from=download /tmp/service-worker.tgz /tmp/service-worker.tgz
+
+ARG SW=
+ARG BUILD_TYPE=
+RUN if [ "$SW" = "true" ] ; then cd /tmp && tar xfvz service-worker.tgz &&\
     mkdir -p /var/www/html/ &&\
-    cp -rf /tmp/package/dist-prod/* /var/www/html/ &&\
-    rm -rf /tmp/package /tmp/service-worker-${sw_version}.tgz
+    cp -rf /tmp/package/dist-"$BUILD_TYPE"/* /var/www/html/ ; fi
+
+RUN rm -rf /tmp/package /tmp/service-worker.tgz
 
 RUN mkdir -p /boot/config \
              /boot/efi \
@@ -166,12 +176,6 @@ RUN addgroup --system nonconfidential && \
     adduser admin nonconfidential && \
     adduser admin systemd-journal && \
     adduser admin sudo && \
-    # The "journalbeat" account. Used to run journalbeat binary to send logs of the
-    # GuestOS.
-    addgroup journalbeat && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Journalbeat" journalbeat && \
-    adduser journalbeat journalbeat && \
-    adduser journalbeat systemd-journal && \
     # The "vector" account. Used to run vector binary
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Vector" vector && \
     adduser vector vector
@@ -209,27 +213,11 @@ RUN \
     chown denylist-updater:denylist-updater /var/opt/nginx/denylist && \
     chmod 644 /var/opt/nginx/denylist
 
-# Install journalbeat
-RUN chown root:root /etc/journalbeat/*.yml \
-                    /usr/local/bin/journalbeat && \
-    chown journalbeat:journalbeat /var/lib/journalbeat \
-                                  /var/log/journalbeat && \
-    chmod 0755 /etc/journalbeat && \
-    chmod 0750 /var/lib/journalbeat \
-               /var/log/journalbeat && \
-    chmod 0644 /etc/journalbeat/*.yml
-
 # Install node_exporter
 RUN chown root:root /etc/node_exporter \
                     /usr/local/bin/node_exporter && \
     chmod 0755 /etc/node_exporter \
                /usr/local/bin/node_exporter
-
-# install nginx_exporter
-RUN addgroup nginx_exporter && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "nginx_exporter" nginx_exporter && \
-    adduser nginx_exporter nginx_exporter && \
-    chown nginx_exporter:nginx_exporter /usr/local/bin/nginx_exporter
 
 # Install IC binaries and other data late -- this means everything above
 # will be cached when only the binaries change.
@@ -238,11 +226,13 @@ COPY opt /opt
 RUN rm -rf /etc/nginx/sites-enabled/nginx.conf
 
 # Install ic service worker production version from: https://registry.npmjs.org/@dfinity/service-worker/-/
-RUN chown www-data:www-data /var/www/html && \
-    chmod 0755 /var/www/html/*
+RUN mkdir -p /var/www/html && chown www-data:www-data /var/www/html 
+
 # Install other files (e.g. the uninstall-script)
 COPY var/www/html /var/www/html
 
+RUN chmod 0644 /var/www/html/*
+ 
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
     rm -rf \
@@ -266,37 +256,15 @@ COPY boot /boot
 # Update POSIX permissions in /boot/
 RUN chmod 0644 /boot/extra_boot_args
 
-# CERTIFICATES
-# Default image has
-# 1. fullchain.pem: self signed certificates from the ssl-cert package.
-# 2. privkey.pem: key for the self signed certificate.
-# 3. chain.pem: Dummy certficate of the issuer for OCSP stapling to work.
-#    This cert is irrelevant because the certificate is self signed.
-#
-# Prod image
-#
-# Has the above 3 certificates in /boot/config/cert. The setup-nginx service
-# copies over the certificates in the correct location to match the nginx conf
-# file
-#
-# The naming convetion is the same a certificates generated by certbot renew
-RUN mkdir -p /etc/nginx/certs && \
-    mkdir -p /etc/nginx/keys && \
-    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/nginx/certs/fullchain.pem && \
-    cp /etc/ssl/private/ssl-cert-snakeoil.key /etc/nginx/keys/privkey.pem && \
-    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/nginx/certs/chain.pem
-
-
 # trusted_cert.pem contains all certificates for the upstream replica. This file
 # is periodically updated by the proxy+watcher service. To bootstrap the process
 # we initially place a dummy trusted cert. This dummy is the copy of the
 # snakeoil cert. This allows the nginx service to start, but upstream routing
 # will only happen once the control plane pulls the initial set of routes
 #
-RUN cp /etc/nginx/certs/fullchain.pem /etc/nginx/ic/trusted_certs.pem && \
+RUN cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/nginx/ic/trusted_certs.pem && \
     # Take care of nginx files
     chmod 0755 /etc/nginx/* && \
-    chmod 0644 /etc/nginx/ic_public_key.pem && \
     chmod 0644 /etc/nginx/nginx.conf && \
     chmod 0644 /etc/nginx/modules-enabled/ngx_http_cbor_input_module.conf && \
     chmod 0644 /etc/nginx/modules-enabled/ngx_http_js_module.conf && \

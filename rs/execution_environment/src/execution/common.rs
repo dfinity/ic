@@ -18,7 +18,7 @@ use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{CallContextId, CallbackId, MessageId, Payload, RejectContext, Response};
 use ic_types::methods::{Callback, WasmMethod};
-use ic_types::{Cycles, MemoryAllocation, Time, UserId};
+use ic_types::{Cycles, MemoryAllocation, NumInstructions, Time, UserId};
 
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, ExecuteMessageResult, RoundLimits};
@@ -497,6 +497,7 @@ pub(crate) fn finish_call_with_error(
     ExecuteMessageResult::Finished {
         canister,
         response: result,
+        instructions_used: NumInstructions::from(0),
         heap_delta: NumBytes::from(0),
     }
 }

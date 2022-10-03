@@ -20,8 +20,7 @@ use crate::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
-        pot_dsl::get_ic_handle_and_ctx,
-        test_env::{HasIcPrepDir, TestEnv},
+        test_env::TestEnv,
         test_env_api::{
             retry_async, HasArtifacts, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
@@ -85,13 +84,15 @@ impl Drop for PanicHandler {
             .get_snapshot()
             .unwrap();
 
-        let (journalbeat_output, exit_status) =
-            exec_ssh_command(&boundary_node_vm, "systemctl status journalbeat").unwrap();
+        let (list_dependencies, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
+        )
+        .unwrap();
 
         info!(
             logger,
-            "journalbeat status {BOUNDARY_NODE_NAME} = '{journalbeat_output}'. Exit status = {}",
-            exit_status,
+            "systemctl {BOUNDARY_NODE_NAME} = '{list_dependencies}'. Exit status = {}", exit_status,
         );
     }
 }
@@ -159,8 +160,6 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    let (handle, _ctx) = get_ic_handle_and_ctx(env.clone());
-
     env.topology_snapshot()
         .root_subnet()
         .nodes()
@@ -169,18 +168,8 @@ pub fn config(env: TestEnv) {
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
 
-    let nns_urls: Vec<_> = handle
-        .public_api_endpoints
-        .iter()
-        .filter(|ep| ep.is_root_subnet)
-        .map(|ep| ep.url.clone())
-        .collect();
-
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .with_nns_urls(nns_urls.clone())
-        .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
+    let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME)).for_ic(&env, "");
+    bn.start(&env).expect("failed to setup BoundaryNode VM");
 
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");
@@ -194,7 +183,7 @@ pub fn config(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     info!(&logger, "Polling registry");
-    let registry = RegistryCanister::new(nns_urls);
+    let registry = RegistryCanister::new(bn.nns_node_urls);
     let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
         let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
             .context("Failed to `get_value` from registry")?;
@@ -216,9 +205,13 @@ pub fn config(env: TestEnv) {
 
     info!(
         &logger,
-        "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?} and IPv6 {:?}",
-        boundary_node_vm.block_on_ipv4().unwrap(),
+        "Boundary node {BOUNDARY_NODE_NAME} has IPv6 {:?}",
         boundary_node_vm.ipv6()
+    );
+    info!(
+        &logger,
+        "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?}",
+        boundary_node_vm.block_on_ipv4().unwrap()
     );
 
     info!(&logger, "Waiting for routes file");
@@ -526,12 +519,12 @@ pub fn denylist_test(env: TestEnv) {
         info!(&logger, "created canister={canister_id}");
 
         // Update the denylist and reload nginx
-        let denylist_command = format!(r#"printf "{} 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map && sudo service nginx reload"#, canister_id);
+        let denylist_command = format!(r#"printf "\"~^{} .*$\" \"1\";\n" | sudo tee /var/opt/nginx/denylist/denylist.map && sudo service nginx reload"#, canister_id);
         let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &denylist_command).unwrap();
         info!(
             logger,
-            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command} to '{}'. Exit status = {}",
-            cmd_output.trim(),
+            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command} to \n'{}'\n. Exit status = {}",
+            cmd_output,
             exit_status,
         );
 
@@ -559,8 +552,161 @@ pub fn denylist_test(env: TestEnv) {
                 bail!(res)
             }
 
+
             Ok(())
         }).await.unwrap();
+    });
+
+    panic_handler.disable();
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes canister-allowlist blocking test
+
+Goal:: Ensure that the canister-allowlist overrides the denylist
+
+Success::
+    A canister being present in the Allowlist overrides the restriction
+    due to that canister being present in the denylist.
+
+end::catalog[] */
+
+pub fn canister_allowlist_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let mut install_url = None;
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            install_url = Some(node.get_public_url());
+        }
+    }
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    rt.block_on(async move {
+        info!(&logger, "creating replica agent");
+        let agent = assert_create_agent(install_url.unwrap().as_str()).await;
+
+        let http_counter_canister = env.load_wasm("http_counter.wasm");
+
+        info!(&logger, "installing canister");
+        let canister_id = create_canister(&agent, &http_counter_canister, None)
+            .await
+            .expect("Could not create http_counter canister");
+
+        // wait for canister to finish installing
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        info!(&logger, "created canister={canister_id}");
+
+        let client = reqwest::ClientBuilder::new()
+            .danger_accept_invalid_certs(true)
+            .resolve(
+                &format!("{}.raw.ic0.app", canister_id),
+                SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0).into(),
+            )
+            .build()
+            .unwrap();
+
+        // Check canister is available
+        let res = client
+            .get(format!("https://{}.raw.ic0.app/", canister_id))
+            .send()
+            .await
+            .expect("Could not perform get request.")
+            .status();
+
+        assert_eq!(res, reqwest::StatusCode::OK, "expected OK, got {}", res);
+
+        // Update denylist with canister ID
+        let (cmd_output, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            &format!(
+                r#"printf "\"~^{} .*$\" 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map"#,
+                canister_id
+            ),
+        )
+        .unwrap();
+
+        info!(
+            logger,
+            "update denylist {BOUNDARY_NODE_NAME}: '{}'. Exit status = {}",
+            cmd_output.trim(),
+            exit_status
+        );
+
+        // Reload Nginx
+        let (cmd_output, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            "sudo service nginx restart",
+        )
+        .unwrap();
+
+        info!(
+            logger,
+            "reload nginx on {BOUNDARY_NODE_NAME}: '{}'. Exit status = {}",
+            cmd_output.trim(),
+            exit_status
+        );
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        // Check canister is restricted
+        let res = client
+            .get(format!("https://{}.raw.ic0.app/", canister_id))
+            .send()
+            .await
+            .expect("Could not perform get request.")
+            .status();
+
+        assert_eq!(res, reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS, "expected 451, got {}", res);
+
+        // Update allowlist with canister ID
+        let (cmd_output, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            &format!(r#"printf "{} 1;\n" | sudo tee /run/ic-node/allowlist_canisters.map && sudo mount -o ro,bind /run/ic-node/allowlist_canisters.map /etc/nginx/allowlist_canisters.map"#, canister_id),
+        )
+        .unwrap();
+
+        info!(
+            logger,
+            "update allowlist {BOUNDARY_NODE_NAME}: '{}'. Exit status = {}",
+            cmd_output.trim(),
+            exit_status
+        );
+
+        // Reload Nginx
+        let (cmd_output, exit_status) = exec_ssh_command(
+            &boundary_node_vm,
+            "sudo service nginx restart",
+        )
+        .unwrap();
+
+        info!(
+            logger,
+            "reload nginx on {BOUNDARY_NODE_NAME}: '{}'. Exit status = {}",
+            cmd_output.trim(),
+            exit_status
+        );
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        // Check canister is available
+        let res = client
+            .get(format!("https://{}.raw.ic0.app/", canister_id))
+            .send()
+            .await
+            .expect("Could not perform get request.")
+            .status();
+
+        assert_eq!(res, reqwest::StatusCode::OK, "expected OK, got {}", res);
     });
 
     panic_handler.disable();
@@ -1095,7 +1241,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
         .resolve("cid.ic0.app", vm_addr.into())
-        .resolve("CID.raw.ic0.app", vm_addr.into())
+        .resolve("cid.raw.ic0.app", vm_addr.into())
         .build()
         .unwrap();
 
@@ -1132,7 +1278,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://CID.raw.ic0.app/").send().await?;
+            let res = client.get("https://cid.raw.ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::BAD_REQUEST {
                 bail!("{name} failed: {}", res.status())

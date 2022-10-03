@@ -432,11 +432,7 @@ mod test {
         let controller = user_test_id(24);
         let non_controller = user_test_id(20);
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "Initial".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         insert_dummy_canister(&mut state, canister_id, controller.get());
 
         let public_name = "dummy";
@@ -461,11 +457,7 @@ mod test {
         let controller = user_test_id(24);
         let non_controller = user_test_id(20);
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "Initial".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         insert_dummy_canister(&mut state, canister_id, controller.get());
 
         // Non-controller cannot read private custom section named `candid`.
@@ -505,7 +497,6 @@ mod test {
                         CanisterQueues::default(),
                         Vec::new(),
                         BitcoinState::default(),
-                        std::path::PathBuf::new(),
                     )),
                 )
             });

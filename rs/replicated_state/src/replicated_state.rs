@@ -10,11 +10,8 @@ use crate::{
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
-use ic_btc_types_internal::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-};
+use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponse};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{BitcoinGetSuccessorsResponse, Payload as _};
 use ic_interfaces::{
     execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
 };
@@ -24,7 +21,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::Ingress;
 use ic_types::{
     ingress::IngressStatus,
-    messages::{CallbackId, MessageId, Payload, RequestOrResponse, Response},
+    messages::{CallbackId, MessageId, RequestOrResponse, Response},
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
@@ -32,7 +29,6 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Input queue type: local or remote subnet.
@@ -311,7 +307,7 @@ impl std::fmt::Display for StateError {
 // our OP layer.
 // * We don't derive `Hash` because `ingress_history` is a Hashmap that doesn't
 // derive `Hash`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReplicatedState {
     /// States of all canisters, indexed by canister ids.
     pub canister_states: BTreeMap<CanisterId, CanisterState>,
@@ -330,39 +326,13 @@ pub struct ReplicatedState {
     // TODO(EXE-109): Move this queue into `subnet_queues`
     pub consensus_queue: Vec<Response>,
 
-    pub root: PathBuf,
-
     bitcoin: BitcoinState,
-}
-
-// We use custom impl of PartialEq because state root is not part of identity.
-impl PartialEq for ReplicatedState {
-    fn eq(&self, rhs: &Self) -> bool {
-        (
-            &self.bitcoin,
-            &self.canister_states,
-            &self.metadata,
-            &self.subnet_queues,
-            &self.consensus_queue,
-        ) == (
-            &rhs.bitcoin,
-            &rhs.canister_states,
-            &rhs.metadata,
-            &rhs.subnet_queues,
-            &rhs.consensus_queue,
-        )
-    }
 }
 
 impl ReplicatedState {
     /// Creates a new empty node state.
-    pub fn new_rooted_at(
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        root: PathBuf,
-    ) -> ReplicatedState {
+    pub fn new(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> ReplicatedState {
         ReplicatedState {
-            root,
             canister_states: BTreeMap::new(),
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
@@ -377,22 +347,16 @@ impl ReplicatedState {
         subnet_queues: CanisterQueues,
         consensus_queue: Vec<Response>,
         bitcoin: BitcoinState,
-        root: PathBuf,
     ) -> Self {
         let mut res = Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue,
-            root,
             bitcoin,
         };
         res.update_stream_responses_size_bytes();
         res
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.root
     }
 
     pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterState> {
@@ -809,53 +773,7 @@ impl ReplicatedState {
         &mut self,
         response: BitcoinAdapterResponse,
     ) -> Result<(), StateError> {
-        match response.response {
-            BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r) => {
-                // Received a response to a request from the bitcoin wasm canister.
-                // Retrieve the associated request.
-                let callback_id = CallbackId::from(response.callback_id);
-                let context = self
-                    .metadata
-                    .subnet_call_context_manager
-                    .bitcoin_get_successors_contexts
-                    .get_mut(&callback_id)
-                    .ok_or_else(|| {
-                        StateError::BitcoinStateError(BitcoinStateError::NonMatchingResponse {
-                            callback_id: callback_id.get(),
-                        })
-                    })?;
-
-                // Encode the response and insert it into the consensus queue.
-                let response = Response {
-                    originator: context.request.sender(),
-                    respondent: CanisterId::ic_00(),
-                    originator_reply_callback: callback_id,
-                    refund: context.request.take_cycles(),
-                    response_payload: Payload::Data(
-                        BitcoinGetSuccessorsResponse::Complete(r).encode(),
-                    ),
-                };
-
-                // Add response to the consensus queue.
-                self.consensus_queue.push(response);
-
-                Ok(())
-            }
-            BitcoinAdapterResponseWrapper::GetSuccessorsResponse(_)
-            | BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
-                match self.metadata.own_subnet_features.bitcoin().status {
-                    BitcoinFeatureStatus::Enabled
-                    | BitcoinFeatureStatus::Syncing
-                    | BitcoinFeatureStatus::Paused => self
-                        .bitcoin
-                        .push_response(response)
-                        .map_err(StateError::BitcoinStateError),
-                    BitcoinFeatureStatus::Disabled => Err(StateError::BitcoinStateError(
-                        BitcoinStateError::FeatureNotEnabled,
-                    )),
-                }
-            }
-        }
+        crate::bitcoin::push_response(self, response)
     }
 
     pub fn take_bitcoin_state(&mut self) -> BitcoinState {

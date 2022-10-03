@@ -2,7 +2,7 @@
 
 use super::*;
 use ic_crypto_internal_csp::CryptoServiceProvider;
-use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
@@ -37,8 +37,9 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         let start_time = self.metrics.now();
         let result =
             dealing::create_dealing(&self.node_id, &self.csp, &self.registry_client, config);
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
+            MetricsScope::Full,
             "create_dealing",
             start_time,
         );
@@ -72,8 +73,9 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         let start_time = self.metrics.now();
         let result =
             dealing::verify_dealing(&self.csp, &self.registry_client, config, &dealer, dealing);
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
+            MetricsScope::Full,
             "verify_dealing",
             start_time,
         );
@@ -108,8 +110,9 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         );
         let start_time = self.metrics.now();
         let result = transcript::create_transcript(&self.csp, config, verified_dealings);
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
+            MetricsScope::Full,
             "create_transcript",
             start_time,
         );
@@ -144,8 +147,9 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             transcript,
             &logger,
         );
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
+            MetricsScope::Full,
             "load_transcript",
             start_time,
         );
@@ -176,8 +180,9 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         );
         let start_time = self.metrics.now();
         let result = retain_active_keys::retain_only_active_keys(&self.csp, transcripts);
-        self.metrics.observe_full_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
+            MetricsScope::Full,
             "retain_only_active_keys",
             start_time,
         );

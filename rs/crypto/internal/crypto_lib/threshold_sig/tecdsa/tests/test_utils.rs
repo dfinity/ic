@@ -93,7 +93,7 @@ impl ProtocolSetup {
     pub fn receiver_info(&self) -> Vec<(MEGaPrivateKey, MEGaPublicKey, NodeIndex)> {
         let mut info = Vec::with_capacity(self.receivers);
         for i in 0..self.receivers {
-            info.push((self.sk[i].clone(), self.pk[i], i as NodeIndex));
+            info.push((self.sk[i].clone(), self.pk[i].clone(), i as NodeIndex));
         }
         info
     }

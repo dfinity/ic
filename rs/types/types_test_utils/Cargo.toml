@@ -6,5 +6,5 @@ edition = "2021"
 
 [dependencies]
 ic-types = { path = "../types" }
-proptest = "0.9.4"
+proptest = "1.0"
 strum = "0.23.0"

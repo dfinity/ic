@@ -571,7 +571,7 @@ impl BitcoinAdapterResponse {
 }
 
 // A blob representing a block in the standard bitcoin format.
-type BlockBlob = Vec<u8>;
+pub type BlockBlob = Vec<u8>;
 
 // A blob representing a block header in the standard bitcoin format.
 type BlockHeaderBlob = Vec<u8>;
@@ -656,7 +656,7 @@ impl TryFrom<v1::CanisterGetSuccessorsRequestInitial> for CanisterGetSuccessorsR
 ///   partial : record {
 ///     partial_block: blob;
 ///     next: vec blob;
-///     num_pages: nat8;
+///     remaining_follow_ups: nat8;
 ///   };
 ///
 ///   follow_up : blob;
@@ -686,8 +686,15 @@ pub struct CanisterGetSuccessorsResponseComplete {
 impl CanisterGetSuccessorsResponseComplete {
     /// Returns the size of this `SendTransactionResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
+        self.count_blocks_bytes() + self.count_next_bytes()
+    }
+
+    pub fn count_blocks_bytes(&self) -> usize {
         self.blocks.iter().map(|b| b.len()).sum::<usize>()
-            + self.next.iter().map(|n| n.len()).sum::<usize>()
+    }
+
+    pub fn count_next_bytes(&self) -> usize {
+        self.next.iter().map(|n| n.len()).sum::<usize>()
     }
 }
 
@@ -718,9 +725,9 @@ pub struct CanisterGetSuccessorsResponsePartial {
     /// Hashes of next block headers.
     pub next: Vec<BlockHeaderBlob>,
 
-    /// The number of pages in this response. The remaining pages need to be retrieved
-    /// via `FollowUp` requests/responses.
-    pub num_pages: u8,
+    /// The remaining number of follow ups to this response, which can retrieved
+    /// via `FollowUp` requests.
+    pub remaining_follow_ups: u8,
 }
 
 #[cfg(test)]

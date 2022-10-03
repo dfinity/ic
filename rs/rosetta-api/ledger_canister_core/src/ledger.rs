@@ -10,6 +10,9 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Tokens;
 
+/// The memo to use for balances burned during trimming
+const TRIMMED_MEMO: u64 = u64::MAX;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionInfo<TransactionType> {
     pub block_timestamp: TimeStamp,
@@ -128,30 +131,33 @@ pub fn apply_transaction<L: LedgerData>(
 ) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError> {
     let num_pruned = purge_old_transactions(ledger, now);
 
-    let created_at_time = transaction.created_at_time().unwrap_or(now);
-
-    if created_at_time + ledger.transaction_window() < now {
-        return Err(TransferError::TxTooOld {
-            allowed_window_nanos: ledger.transaction_window().as_nanos() as u64,
-        });
-    }
-
-    if created_at_time > now + ic_constants::PERMITTED_DRIFT {
-        return Err(TransferError::TxCreatedInFuture { ledger_time: now });
-    }
-
     // If we pruned some transactions, let this one through
     // otherwise throttle if there are too many
     if num_pruned == 0 && throttle(ledger, now) {
         return Err(TransferError::TxThrottled);
     }
 
-    let transaction_hash = transaction.hash();
+    let maybe_time_and_hash = transaction
+        .created_at_time()
+        .map(|created_at_time| (created_at_time, transaction.hash()));
 
-    if let Some(block_height) = ledger.transactions_by_hash().get(&transaction_hash) {
-        return Err(TransferError::TxDuplicate {
-            duplicate_of: *block_height,
-        });
+    if let Some((created_at_time, tx_hash)) = maybe_time_and_hash {
+        // The caller requested deduplication.
+        if created_at_time + ledger.transaction_window() < now {
+            return Err(TransferError::TxTooOld {
+                allowed_window_nanos: ledger.transaction_window().as_nanos() as u64,
+            });
+        }
+
+        if created_at_time > now + ic_constants::PERMITTED_DRIFT {
+            return Err(TransferError::TxCreatedInFuture { ledger_time: now });
+        }
+
+        if let Some(block_height) = ledger.transactions_by_hash().get(&tx_hash) {
+            return Err(TransferError::TxDuplicate {
+                duplicate_of: *block_height,
+            });
+        }
     }
 
     transaction
@@ -170,16 +176,18 @@ pub fn apply_transaction<L: LedgerData>(
         .add_block(block)
         .expect("failed to add block");
 
-    ledger
-        .transactions_by_hash_mut()
-        .insert(transaction_hash, height);
+    if let Some((_, tx_hash)) = maybe_time_and_hash {
+        // The caller requested deduplication, so we have to remember this
+        // transaction within the dedup window.
+        ledger.transactions_by_hash_mut().insert(tx_hash, height);
 
-    ledger
-        .transactions_by_height_mut()
-        .push_back(TransactionInfo {
-            block_timestamp,
-            transaction_hash,
-        });
+        ledger
+            .transactions_by_height_mut()
+            .push_back(TransactionInfo {
+                block_timestamp,
+                transaction_hash: tx_hash,
+            });
+    }
 
     let to_trim = if ledger.balances().store.len()
         >= ledger.max_number_of_accounts() + ledger.accounts_overflow_trim_quantity()
@@ -190,7 +198,7 @@ pub fn apply_transaction<L: LedgerData>(
     };
 
     for (balance, account) in to_trim {
-        let burn_tx = L::Transaction::burn(account, balance, Some(now), None);
+        let burn_tx = L::Transaction::burn(account, balance, Some(now), Some(TRIMMED_MEMO));
 
         burn_tx
             .apply(ledger.balances_mut())
@@ -402,7 +410,8 @@ pub struct BlockLocations {
 pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> BlockLocations {
     let requested_range = range_utils::make_range(start, length);
     let local_range = ledger.blockchain().local_block_range();
-    let local_blocks = range_utils::intersect(&requested_range, &local_range);
+    let local_blocks = range_utils::intersect(&requested_range, &local_range)
+        .unwrap_or_else(|_| range_utils::make_range(local_range.start, 0));
 
     let archive = ledger.blockchain().archive.read().unwrap();
 
@@ -410,7 +419,7 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
         .iter()
         .flat_map(|archive| archive.index().into_iter())
         .filter_map(|((from, to), canister_id)| {
-            let slice = range_utils::intersect(&(from..to + 1), &requested_range);
+            let slice = range_utils::intersect(&(from..to + 1), &requested_range).ok()?;
             (!slice.is_empty()).then(|| (canister_id, slice))
         })
         .collect();

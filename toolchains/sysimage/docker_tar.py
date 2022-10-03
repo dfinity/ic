@@ -11,6 +11,7 @@
 #   docker_tar dockerdir --build-arg foo=bar > tree.tar
 #
 import argparse
+import atexit
 import io
 import json
 import os
@@ -18,6 +19,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 image_hash_re = re.compile("((Successfully built )|(.*writing image sha256:))([0-9a-f]+).*")
 
@@ -233,7 +235,8 @@ def docker_extract_fs(image_hash):
     Flatten all the layers and build a temporary in-memory
     filesystem representation of the image.
     """
-    tar_name = f"img{os.getpid()}.tar"
+    tar_name = tempfile.mktemp(suffix=".tar")
+    atexit.register(lambda: os.remove(tar_name))
     with subprocess.Popen(["docker", "save", image_hash, "-o", tar_name], stdout=subprocess.PIPE) as proc:
         proc.wait()
         if proc.returncode != 0:

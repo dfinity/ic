@@ -5,7 +5,7 @@ use ic_interfaces::execution_environment::{
     TrapCode::{HeapOutOfBounds, StableMemoryOutOfBounds, StableMemoryTooBigFor32Bit},
 };
 use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, page_map, NumWasmPages};
-use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
+use ic_types::{NumPages, MAX_STABLE_MEMORY_IN_BYTES};
 
 const MAX_64_BIT_STABLE_MEMORY_IN_PAGES: usize =
     (MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64) as usize;
@@ -83,13 +83,14 @@ impl StableMemory {
     }
 
     /// Writes from heap to stable memory.
+    /// Returns the number of **new** dirty pages created by the write.
     pub(super) fn stable_write(
         &mut self,
         offset: u32,
         src: u32,
         size: u32,
         heap: &[u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<NumPages> {
         let (src, offset, size) = (src as usize, offset as usize, size as usize);
 
         if offset + size > (self.stable_size()? as usize * WASM_PAGE_SIZE_IN_BYTES as usize) {
@@ -100,9 +101,9 @@ impl StableMemory {
             return Err(HypervisorError::Trapped(HeapOutOfBounds));
         }
 
-        self.stable_memory_buffer
-            .write(&heap[src..src + size], offset);
-        Ok(())
+        Ok(self
+            .stable_memory_buffer
+            .write(&heap[src..src + size], offset))
     }
 
     /// Determines size of stable memory in Web assembly pages.
@@ -161,13 +162,14 @@ impl StableMemory {
     /// Writes from heap to stable memory.
     ///
     /// Supports bigger stable memory indexed by 64 bit pointers.
+    /// Returns the number of **new** dirty pages created by the write.
     pub(super) fn stable64_write(
         &mut self,
         offset: u64,
         src: u64,
         size: u64,
         heap: &[u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<NumPages> {
         let (src, offset, size) = (src as usize, offset as usize, size as usize);
 
         let (stable_memory_size_in_bytes, overflow) = self
@@ -187,8 +189,9 @@ impl StableMemory {
             return Err(HypervisorError::Trapped(HeapOutOfBounds));
         }
 
-        self.stable_memory_buffer
+        let dirty_pages = self
+            .stable_memory_buffer
             .write(&heap[src..heap_end], offset);
-        Ok(())
+        Ok(dirty_pages)
     }
 }

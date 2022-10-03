@@ -7,7 +7,7 @@ use crate::vault::api::{
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
-use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_types::crypto::{AlgorithmId, KeyId};
 use rand::{CryptoRng, Rng};
 
@@ -24,13 +24,12 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let start_time = self.metrics.now();
+        let maybe_secret_key = self.sks_read_lock().get(&key_id);
         let secret_key: CspSecretKey =
-            self.sks_read_lock()
-                .get(&key_id)
-                .ok_or(CspBasicSignatureError::SecretKeyNotFound {
-                    algorithm: algorithm_id,
-                    key_id,
-                })?;
+            maybe_secret_key.ok_or(CspBasicSignatureError::SecretKeyNotFound {
+                algorithm: algorithm_id,
+                key_id,
+            })?;
         let result = match algorithm_id {
             AlgorithmId::Ed25519 => match &secret_key {
                 CspSecretKey::Ed25519(secret_key) => {
@@ -50,8 +49,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
                 algorithm: algorithm_id,
             }),
         };
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
+            MetricsScope::Local,
             "sign",
             start_time,
         );
@@ -76,8 +76,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
         }?;
         let sk_id = public_key_hash_as_key_id(&pk);
         self.store_secret_key_or_panic(sk, sk_id);
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
+            MetricsScope::Local,
             "gen_key_pair",
             start_time,
         );

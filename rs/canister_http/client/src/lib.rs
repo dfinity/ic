@@ -1,4 +1,5 @@
 mod client;
+mod metrics;
 
 pub use crate::client::BrokenCanisterHttpClient;
 use crate::client::CanisterHttpAdapterClientImpl;
@@ -62,6 +63,7 @@ pub fn setup_canister_http_client(
                         channel,
                         anononymous_query_handler,
                         CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY,
+                        metrics_registry.clone(),
                     ))
                 }
                 Err(e) => {

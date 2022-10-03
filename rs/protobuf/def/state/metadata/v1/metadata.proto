@@ -152,6 +152,11 @@ message SubnetMetrics {
     types.v1.NominalCycles consumed_cycles_by_deleted_canisters = 1;
 }
 
+message BitcoinGetSuccessorsFollowUpResponses {
+  types.v1.CanisterId sender = 1;
+  repeated bytes payloads = 2;
+}
+
 message SystemMetadata {
     uint64 generated_id_counter = 1;
     google.protobuf.BytesValue prev_state_hash = 2;
@@ -189,6 +194,8 @@ message SystemMetadata {
     // TODO(EXC-1214): This field is deprecated.
     TimeOfLastAllocationCharge time_of_last_allocation_charge_nanos = 14;
     SubnetMetrics subnet_metrics = 15;
+
+    repeated BitcoinGetSuccessorsFollowUpResponses bitcoin_get_successors_follow_up_responses = 18;
 }
 
 message StableMemory { bytes memory = 1; }

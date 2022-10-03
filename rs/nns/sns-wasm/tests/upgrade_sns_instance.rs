@@ -130,6 +130,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         ledger: _,
         governance,
         swap: _,
+        index: _,
     } = response.canisters.unwrap();
 
     let root = CanisterId::new(root.unwrap()).unwrap();
@@ -235,6 +236,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         SnsCanisterType::Ledger => next_version.ledger_wasm_hash = new_hash_vec,
         SnsCanisterType::Swap => panic!("Not supported"),
         SnsCanisterType::Archive => panic!("Not supported (tested in different test)"),
+        SnsCanisterType::Index => panic!("Not supported"),
     }
 
     assert_ne!(old_version, next_version);
@@ -332,6 +334,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
     let ledger = machine.create_canister_with_cycles(Cycles::new(10 * 1000000000000), None);
     let governance = machine.create_canister(None);
     let swap = machine.create_canister(None);
+    let index = machine.create_canister(None);
 
     let old_version = wasm_map_to_version(&wasm_map);
     let mut init_payloads = payload
@@ -341,6 +344,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
                 ledger: Some(ledger.get()),
                 governance: Some(governance.get()),
                 swap: Some(swap.get()),
+                index: Some(index.get()),
             }
             .try_into()
             .unwrap(),
@@ -387,6 +391,11 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         wasm_for_type(&SnsCanisterType::Swap),
         Encode!(&init_payloads.swap).unwrap(),
     );
+    install_code(
+        index,
+        wasm_for_type(&SnsCanisterType::Index),
+        Encode!(&init_payloads.index).unwrap(),
+    );
 
     machine.tick();
 
@@ -414,6 +423,12 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         PrincipalId::new_anonymous(),
         swap,
         vec![swap.get()],
+    );
+    set_controllers(
+        &machine,
+        PrincipalId::new_anonymous(),
+        index,
+        vec![root.get()],
     );
 
     // We need a ledger archive, so we need to do a transaction to trigger that.
@@ -675,7 +690,6 @@ fn sns_wait_for_upgrade_finished(
     let statuses = loop {
         attempt_count += 1;
         machine.tick();
-
         let statuses = get_canister_statuses(canister_type, machine, root);
 
         // Stop waiting once it dapp has reached the Running state.
@@ -721,6 +735,7 @@ fn get_canister_statuses(
             .map(|summary| summary.status.unwrap())
             .collect(),
         SnsCanisterType::Swap => panic!("Swap can't be upgraded by SNS"),
+        SnsCanisterType::Index => vec![status_summary.index.unwrap().status.unwrap()],
     }
 }
 
@@ -796,5 +811,6 @@ fn wasm_map_to_version(wasm_map: &HashMap<SnsCanisterType, SnsWasm>) -> Version 
         ledger_wasm_hash: version_hash_from_map(SnsCanisterType::Ledger),
         swap_wasm_hash: version_hash_from_map(SnsCanisterType::Swap),
         archive_wasm_hash: version_hash_from_map(SnsCanisterType::Archive),
+        index_wasm_hash: version_hash_from_map(SnsCanisterType::Index),
     }
 }

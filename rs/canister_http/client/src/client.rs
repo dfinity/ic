@@ -1,3 +1,4 @@
+use crate::metrics::Metrics;
 use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_canister_http_service::{
@@ -7,6 +8,7 @@ use ic_canister_http_service::{
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
+use ic_metrics::MetricsRegistry;
 use ic_types::{
     batch::MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     canister_http::{
@@ -16,6 +18,7 @@ use ic_types::{
     messages::{AnonymousQuery, AnonymousQueryResponse, Request},
     CanisterId, NumBytes,
 };
+use std::time::Instant;
 use tokio::{
     runtime::Handle,
     sync::mpsc::{
@@ -56,6 +59,7 @@ pub struct CanisterHttpAdapterClientImpl {
     tx: Sender<CanisterHttpResponse>,
     rx: Receiver<CanisterHttpResponse>,
     anonymous_query_service: AnonymousQueryService,
+    metrics: Metrics,
 }
 
 impl CanisterHttpAdapterClientImpl {
@@ -64,14 +68,17 @@ impl CanisterHttpAdapterClientImpl {
         grpc_channel: Channel,
         anonymous_query_service: AnonymousQueryService,
         inflight_requests: usize,
+        metrics_registry: MetricsRegistry,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
+        let metrics = Metrics::new(&metrics_registry);
         Self {
             rt_handle,
             grpc_channel,
             tx,
             rx,
             anonymous_query_service,
+            metrics,
         }
     }
 }
@@ -104,6 +111,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         // https://docs.rs/tonic/latest/tonic/transport/struct.Channel.html
         let mut http_adapter_client = CanisterHttpServiceClient::new(self.grpc_channel.clone());
         let anonymous_query_handler = self.anonymous_query_service.clone();
+        let metrics = self.metrics.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receving the response from the adapter an option transform is applied by doing an upcall to execution.
@@ -130,6 +138,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     },
             } = canister_http_request;
 
+            let adapter_req_timer = Instant::now();
             // Build future that sends and transforms request.
             let adapter_canister_http_response = http_adapter_client
                 .canister_http_send(CanisterHttpSendRequest {
@@ -156,8 +165,14 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     )
                 })
                 .and_then(|adapter_response| async move {
+
                     let adapter_response = adapter_response.into_inner();
+                    metrics.http_request_duration
+                        .with_label_values(&[&adapter_response.status.to_string()])
+                        .observe(adapter_req_timer.elapsed().as_secs_f64());
+
                     // Only apply the transform if a function name is specified
+                    let transform_timer = metrics.transform_execution_duration.start_timer();
                     let transform_response = match &request_transform_method {
                         Some(transform_method) => {
                             transform_adapter_response(
@@ -190,6 +205,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         })?,
                     };
 
+                    transform_timer.observe_duration();
                     if transform_response.len() > CANISTER_HTTP_RESPONSE_LIMIT {
                         let err_msg = match request_transform_method{
                             Some(_) => format!(
@@ -216,11 +232,16 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 timeout: request_timeout,
                 canister_id: request_sender,
                 content: match adapter_canister_http_response.await {
-                    Ok(resp) => CanisterHttpResponseContent::Success(resp),
-                    Err((reject_code, message)) => CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                    Ok(resp) => {
+                        metrics.request_total.with_label_values(&["success"]).inc();
+                        CanisterHttpResponseContent::Success(resp)
+                    },
+                    Err((reject_code, message)) => {
+                        metrics.request_total.with_label_values(&[&reject_code.to_string()]).inc();
+                        CanisterHttpResponseContent::Reject(CanisterHttpReject {
                         reject_code,
                         message,
-                    }),
+                    })},
                 }
             });
         });
@@ -518,6 +539,7 @@ mod tests {
             mock_grpc_channel,
             svc,
             100,
+            MetricsRegistry::default(),
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
@@ -571,6 +593,7 @@ mod tests {
             mock_grpc_channel,
             svc,
             100,
+            MetricsRegistry::default(),
         );
 
         assert_eq!(
@@ -625,6 +648,7 @@ mod tests {
             mock_grpc_channel,
             svc,
             100,
+            MetricsRegistry::default(),
         );
 
         assert_eq!(
@@ -684,6 +708,7 @@ mod tests {
             mock_grpc_channel,
             svc,
             100,
+            MetricsRegistry::default(),
         );
 
         assert_eq!(
@@ -766,6 +791,7 @@ mod tests {
             mock_grpc_channel,
             svc,
             100,
+            MetricsRegistry::default(),
         );
 
         // Specify a transform_method name such that the client calls the anonymous query handler.
@@ -839,6 +865,7 @@ mod tests {
             mock_grpc_channel,
             svc,
             100,
+            MetricsRegistry::default(),
         );
 
         // Specify a transform_method name such that the client calls the anonymous query handler.
@@ -894,6 +921,7 @@ mod tests {
             mock_grpc_channel,
             svc,
             2,
+            MetricsRegistry::default(),
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));

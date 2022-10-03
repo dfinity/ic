@@ -197,10 +197,13 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
     }
 
     let requested_range = range_utils::make_range(start, length);
-    let effective_range = range_utils::intersect(
+    let effective_range = match range_utils::intersect(
         &block_range,
         &range_utils::take(&requested_range, MAX_BLOCKS_PER_REQUEST),
-    );
+    ) {
+        Ok(range) => range,
+        Err(range_utils::NoIntersection) => return Ok(BlockRange { blocks: vec![] }),
+    };
 
     let mut candid_blocks: Vec<CandidBlock> =
         Vec::with_capacity(range_utils::range_len(&effective_range) as usize);

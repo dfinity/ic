@@ -23,7 +23,8 @@ gunzip \
     boundary-node-control-plane.gz \
     boundary-node-prober.gz \
     denylist-updater.gz \
-    ic-balance-exporter.gz
+    ic-balance-exporter.gz \
+    ic-registry-replicator.gz
 popd
 
 cd "$ROOT_DIR"/ic-os/boundary-guestos || exit 1

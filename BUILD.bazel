@@ -1,8 +1,7 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:canisters.bzl", "optimized_canister")
 load("//bazel:transitions.bzl", "malicious_binary", "opt_debug_binary")
-load("@buildifier_prebuilt//:rules.bzl", "buildifier")
-load("//bazel:buildifier.bzl", "buildifier_test")
+load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -10,43 +9,17 @@ exports_files([
     ".rclone.conf",
     "clippy.toml",
     "rustfmt.toml",
+    "WORKSPACE.bazel",
 ])
 
-BUILDIFIER_EXCLUDES = [
-    "./.git/*",
-    "./gitlab-ci/src/git_changes/test_data/**",
-]
-
-buildifier(
+alias(
     name = "buildifier",
-    exclude_patterns = BUILDIFIER_EXCLUDES,
-    lint_mode = "fix",
-    mode = "fix",
-)
-
-# buildifier.check rule is used by buildifier_test
-buildifier(
-    name = "buildifier.check",
-    exclude_patterns = BUILDIFIER_EXCLUDES,
-    lint_mode = "warn",
-    mode = "diff",
-)
-
-buildifier_test(
-    name = "buildifier_test",
-    tags = [
-        "external",
-        "local",
-        "no-sandbox",
-        "precommit",
-        "small",
-        "smoke",
-    ],
+    actual = "//bazel:buildifier",
 )
 
 test_suite(
     name = "precommit",
-    tags = ["precommit"],
+    tests = ["//bazel:buildifier_test"],
 )
 
 alias(
@@ -78,7 +51,7 @@ BINARIES = {
     "ic-recovery": "//rs/recovery:ic-recovery",
     "ic-replay": "//rs/replay:ic-replay",
     "ic-regedit": "//rs/registry/regedit:ic-regedit",
-    "ic-registry-replicator": "//rs/orchestrator/registry_replicator:registry_replicator",
+    "ic-registry-replicator": "//rs/orchestrator/registry_replicator:ic-registry-replicator",
     "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
     "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
     "orchestrator": "//rs/orchestrator",
@@ -146,4 +119,22 @@ filegroup(
         "//rs/replica",
         "//rs/starter:ic-starter",
     ],
+)
+
+# TODO(levsha):
+# - strip, compress, checksum and sign before uploading
+# - upload to OS-specific subdir.
+upload_artifacts(
+    name = "upload_sdk",
+    inputs = [":sdk"],
+    # The actual list is on https://github.com/bazelbuild/platforms
+    remote_subdir = "sdk-release-bazel/" + select({
+        "@platforms//cpu:x86_64": "x86_64",
+        "@platforms//cpu:arm64": "arm64",
+        "//conditions:default": "unknown",
+    }) + "-" + select({
+        "@platforms//os:osx": "macos",
+        "@platforms//os:linux": "linux",
+        "//conditions:default": "unknown",
+    }),
 )

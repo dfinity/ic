@@ -1732,11 +1732,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
 
 #[test]
 fn replicated_state_metrics_nothing_exported() {
-    let state = ReplicatedState::new_rooted_at(
-        subnet_test_id(1),
-        SubnetType::Application,
-        "NOT_USED".into(),
-    );
+    let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
@@ -2015,11 +2011,7 @@ fn execution_round_does_not_end_too_early() {
 
 #[test]
 fn replicated_state_metrics_running_canister() {
-    let mut state = ReplicatedState::new_rooted_at(
-        subnet_test_id(1),
-        SubnetType::Application,
-        "NOT_USED".into(),
-    );
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
     state.put_canister_state(get_running_canister(canister_test_id(0)));
 
@@ -2045,11 +2037,7 @@ fn replicated_state_metrics_running_canister() {
 
 #[test]
 fn replicated_state_metrics_different_canister_statuses() {
-    let mut state = ReplicatedState::new_rooted_at(
-        subnet_test_id(1),
-        SubnetType::Application,
-        "NOT_USED".into(),
-    );
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
     state.put_canister_state(get_running_canister(canister_test_id(0)));
     state.put_canister_state(get_stopped_canister(canister_test_id(2)));
@@ -2078,11 +2066,7 @@ fn replicated_state_metrics_different_canister_statuses() {
 
 #[test]
 fn replicated_state_metrics_all_canisters_in_routing_table() {
-    let mut state = ReplicatedState::new_rooted_at(
-        subnet_test_id(1),
-        SubnetType::Application,
-        "NOT_USED".into(),
-    );
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
     state.put_canister_state(get_running_canister(canister_test_id(1)));
     state.put_canister_state(get_running_canister(canister_test_id(2)));
@@ -2116,11 +2100,7 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
 
 #[test]
 fn replicated_state_metrics_some_canisters_not_in_routing_table() {
-    let mut state = ReplicatedState::new_rooted_at(
-        subnet_test_id(1),
-        SubnetType::Application,
-        "NOT_USED".into(),
-    );
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
     state.put_canister_state(get_running_canister(canister_test_id(2)));
     state.put_canister_state(get_running_canister(canister_test_id(100)));
@@ -3814,9 +3794,17 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
         test.scheduler()
             .metrics
             .round_subnet_queue
-            .messages
+            .slices
             .get_sample_sum(),
         1.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_subnet_queue
+            .messages
+            .get_sample_sum(),
+        0.0
     );
 
     // Add a second canister with a long install code message.
@@ -3840,9 +3828,17 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
         test.scheduler()
             .metrics
             .round_subnet_queue
+            .slices
+            .get_sample_sum(),
+        2.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_subnet_queue
             .messages
             .get_sample_sum(),
-        1.0
+        0.0
     );
 
     // Third round: execution for first canister is done.
@@ -3850,6 +3846,14 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert!(!test.canister_state(canister_1).has_paused_install_code());
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_subnet_queue
+            .slices
+            .get_sample_sum(),
+        4.0
+    );
     assert_eq!(
         test.scheduler()
             .metrics

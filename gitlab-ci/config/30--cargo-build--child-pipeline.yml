@@ -1,14 +1,3 @@
-cargo-clippy-linux:
-  extends: .cargo-build-docker
-  variables:
-    BUILD_COMMAND: "$CI_PROJECT_DIR/gitlab-ci/src/rust_lint/lint.sh"
-
-cargo-clippy-darwin:
-  extends:
-    - .cargo-build-macos
-  variables:
-    BUILD_COMMAND: "$CI_PROJECT_DIR/gitlab-ci/src/rust_lint/lint.sh"
-
 cargo-build-debug-linux:
   extends: .cargo-build-docker
   variables:
@@ -38,9 +27,7 @@ cargo-build-release-linux-native:
   extends:
     - .cargo-build-docker-protected
     - .rules-parent-pipeline-autorun-on-trigger
-  image:
-    # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
+    - .ic-build-image
   variables:
     ARTIFACT_EXT: ""
   artifacts:
@@ -65,11 +52,9 @@ cargo-build-canisters:
   extends:
     - .cargo-build-docker-protected
     - .rules-parent-pipeline-autorun-on-trigger
+    - .ic-build-image
   variables:
     ARTIFACT_EXT: ""
-  image:
-    # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
   artifacts:
     paths:
       - "artifacts/canisters${ARTIFACT_EXT}/*"
@@ -94,12 +79,10 @@ dfx-build-release-linux:
   extends:
     - .cargo-build-docker-protected
     - .rules-parent-pipeline-autorun-on-trigger
+    - .ic-build-image
   artifacts:
     paths:
       - artifacts/sdk-release/*
-  image:
-    # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
   variables:
     BUILD_COMMAND: ""
     CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu

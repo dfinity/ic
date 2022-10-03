@@ -136,7 +136,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     }
 
     fn store_secret_key_or_panic(&self, csp_secret_key: CspSecretKey, key_id: KeyId) {
-        match &self.sks_write_lock().insert(key_id, csp_secret_key, None) {
+        let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
+        match &result {
             Ok(()) => {}
             Err(SecretKeyStoreError::DuplicateKeyId(key_id)) => {
                 panic!("A key with ID {} has already been inserted", key_id);

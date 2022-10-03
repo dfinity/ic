@@ -113,10 +113,11 @@ pub struct Summary {
     pub next_transcripts: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
     #[prost(message, repeated, tag = "7")]
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
-    #[prost(message, repeated, tag = "8")]
-    pub transcripts_for_new_subnets: ::prost::alloc::vec::Vec<IdedNiDkgTranscript>,
     #[prost(message, repeated, tag = "9")]
     pub initial_dkg_attempts: ::prost::alloc::vec::Vec<InitialDkgAttemptCount>,
+    #[prost(message, repeated, tag = "10")]
+    pub transcripts_for_new_subnets_with_callback_ids:
+        ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct TaggedNiDkgTranscript {
@@ -126,11 +127,13 @@ pub struct TaggedNiDkgTranscript {
     pub tag: i32,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct IdedNiDkgTranscript {
+pub struct CallbackIdedNiDkgTranscript {
     #[prost(message, optional, tag = "1")]
     pub dkg_id: ::core::option::Option<NiDkgId>,
     #[prost(message, optional, tag = "2")]
     pub transcript_result: ::core::option::Option<NiDkgTranscriptResult>,
+    #[prost(uint64, tag = "3")]
+    pub callback_id: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct NiDkgTranscriptResult {

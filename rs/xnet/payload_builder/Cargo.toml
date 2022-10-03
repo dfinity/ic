@@ -41,7 +41,7 @@ ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 maplit = "1.0.2"
 mockall = "0.7.2"
 nix = "0.23.0"
-proptest = "0.9.4"
+proptest = "1.0"
 reqwest = "0.11.1"
 tempfile = "3.1.0"
 tiny_http = "0.10.0"

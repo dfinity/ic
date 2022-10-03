@@ -60,6 +60,7 @@ struct SnsWasmsForDeploy {
     governance: Vec<u8>,
     ledger: Vec<u8>,
     swap: Vec<u8>,
+    index: Vec<u8>,
 }
 
 /// Helper function to create a DeployError::Validation(ValidationDeployError {})
@@ -281,12 +282,13 @@ where
     ///
     /// Main actions that this performs:
     ///   1. Creates the canisters.
-    ///   2. Installs SNS root, SNS governance, and SNS ledger WASMs onto the created canisters.
+    ///   2. Installs SNS root, SNS governance, SNS ledger and SNS index WASMs onto the created canisters.
     ///   3. Fund canisters with cycles
     ///   4. Sets the canisters' controllers:
     ///     a. Root is controlled only by Governance.
     ///     b. Governance is controlled only by Root.
     ///     c. Ledger is controlled only by Root.
+    ///     d. Index is controlled only by Root.
     ///
     /// Step 2 requires installation parameters which come from the SnsInitPayload object
     /// included in DeployNewSnsRequest. This adds the created canister IDs to the payloads
@@ -364,6 +366,7 @@ where
                     ledger_wasm_hash: latest_version.ledger_wasm_hash,
                     swap_wasm_hash: latest_version.swap_wasm_hash,
                     archive_wasm_hash: latest_version.archive_wasm_hash,
+                    index_wasm_hash: latest_version.index_wasm_hash,
                 }),
             )
             // NOTE: This error path is not under test, because validate(), called above, should
@@ -418,13 +421,13 @@ where
     ) -> Result<(), String> {
         // Accept the remaining cycles in the request we need to fund the canisters
         let remaining_unaccepted_cycles = canister_api.accept_message_cycles(None).unwrap();
-        let quarter_unused = remaining_unaccepted_cycles / 4;
+        let cycles_per_canister = remaining_unaccepted_cycles / 5;
 
         let results =
             futures::future::join_all(canisters.clone().into_named_tuples().into_iter().map(
                 |(label, canister_id)| async move {
                     canister_api
-                        .send_cycles_to_canister(canister_id, quarter_unused)
+                        .send_cycles_to_canister(canister_id, cycles_per_canister)
                         .await
                         .map_err(|e| format!("Could not fund {} canister: {}", label, e))
                 },
@@ -464,6 +467,14 @@ where
                 )
                 .await
                 .map_err(|e| format!("Unable to set Root as Ledger canister controller: {}", e)),
+            // Set root as controller of Index.
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.index.unwrap()).unwrap(),
+                    vec![this_canister_id, canisters.root.unwrap()],
+                )
+                .await
+                .map_err(|e| format!("Unable to set Root as Index canister controller: {}", e)),
             // Set Governance as controller of Root.
             canister_api
                 .set_controllers(
@@ -539,6 +550,14 @@ where
                 )
                 .await
                 .map_err(|e| format!("Unable to remove SNS-WASM as Swap's controller: {}", e)),
+            // Removing self, leaving root.
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.index.unwrap()).unwrap(),
+                    vec![canisters.root.unwrap()],
+                )
+                .await
+                .map_err(|e| format!("Unable to remove SNS-WASM as Ledger's controller: {}", e)),
         ];
 
         join_errors_or_ok(set_controllers_results)
@@ -570,6 +589,11 @@ where
                     Encode!(&init_payloads.ledger).unwrap(),
                 ),
                 canister_api.install_wasm(
+                    CanisterId::new(canisters.index.unwrap()).unwrap(),
+                    latest_wasms.index,
+                    Encode!(&init_payloads.index).unwrap(),
+                ),
+                canister_api.install_wasm(
                     CanisterId::new(canisters.swap.unwrap()).unwrap(),
                     latest_wasms.swap,
                     Encode!(&init_payloads.swap).unwrap(),
@@ -594,7 +618,7 @@ where
     ) -> Result<SnsCanisterIds, DeployError> {
         // Accept enough cycles to simply create the canisters.
         canister_api
-            .accept_message_cycles(Some(initial_cycles_per_canister.saturating_mul(4)))
+            .accept_message_cycles(Some(initial_cycles_per_canister.saturating_mul(5)))
             .map_err(|e| {
                 DeployError::Reversible(RerversibleDeployError {
                     message: format!(
@@ -617,6 +641,7 @@ where
 
         // Create these in order instead of join_all to get deterministic ordering for tests
         let canisters_attempted = vec![
+            new_canister().await,
             new_canister().await,
             new_canister().await,
             new_canister().await,
@@ -644,10 +669,11 @@ where
                 governance: next(&mut canisters_created),
                 ledger: next(&mut canisters_created),
                 swap: next(&mut canisters_created),
+                index: next(&mut canisters_created),
             };
             return Err(DeployError::Reversible(RerversibleDeployError {
                 message: format!(
-                    "Could not create needed canisters.  Only created {} but 4 needed.",
+                    "Could not create needed canisters.  Only created {} but 5 needed.",
                     canisters_created_count
                 ),
                 canisters_to_delete: Some(canisters_to_delete),
@@ -660,6 +686,7 @@ where
             governance: Some(canisters_created.remove(0).get()),
             ledger: Some(canisters_created.remove(0).get()),
             swap: Some(canisters_created.remove(0).get()),
+            index: Some(canisters_created.remove(0).get()),
         })
     }
 
@@ -796,6 +823,14 @@ where
             .ok_or_else(|| "Swap wasm for this version not found in storage.".to_string())?
             .wasm;
 
+        let index = self
+            .read_wasm(
+                &vec_to_hash(version.index_wasm_hash.clone())
+                    .map_err(|_| "No index wasm set for this version.".to_string())?,
+            )
+            .ok_or_else(|| "Index wasm for this version not found in storage.".to_string())?
+            .wasm;
+
         // We do not need this to be set to install, but no upgrade path will be found by the installed
         // SNS if we do not have this as part of the version.
         self.read_wasm(
@@ -809,6 +844,7 @@ where
             governance,
             ledger,
             swap,
+            index,
         })
     }
 
@@ -900,6 +936,7 @@ impl UpgradePath {
             SnsCanisterType::Ledger => new_latest_version.ledger_wasm_hash = wasm_hash.to_vec(),
             SnsCanisterType::Swap => new_latest_version.swap_wasm_hash = wasm_hash.to_vec(),
             SnsCanisterType::Archive => new_latest_version.archive_wasm_hash = wasm_hash.to_vec(),
+            SnsCanisterType::Index => new_latest_version.index_wasm_hash = wasm_hash.to_vec(),
         }
 
         self.upgrade_path
@@ -924,7 +961,7 @@ mod test {
     use std::sync::{Arc, Mutex};
     use std::vec;
 
-    const CANISTER_CREATION_CYCLES: u64 = INITIAL_CANISTER_CREATION_CYCLES * 4;
+    const CANISTER_CREATION_CYCLES: u64 = INITIAL_CANISTER_CREATION_CYCLES * 5;
 
     struct TestCanisterApi {
         canisters_created: Arc<Mutex<u64>>,
@@ -1143,12 +1180,22 @@ mod test {
             wasm: Some(archive),
             hash: archive_wasm_hash.clone(),
         });
+        let index = SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 5],
+            canister_type: i32::from(SnsCanisterType::Index),
+        };
+        let index_wasm_hash = index.sha256_hash().to_vec();
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(index),
+            hash: index_wasm_hash.clone(),
+        });
         SnsVersion {
             root_wasm_hash,
             governance_wasm_hash,
             ledger_wasm_hash,
             swap_wasm_hash,
             archive_wasm_hash,
+            index_wasm_hash,
         }
     }
 
@@ -1371,6 +1418,14 @@ mod test {
         wasm.canister_type = i32::from(SnsCanisterType::Archive);
 
         canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: valid_hash.to_vec(),
+        });
+
+        // Add an Index WASM
+        wasm.canister_type = i32::from(SnsCanisterType::Index);
+
+        canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm),
             hash: valid_hash.to_vec(),
         });
@@ -1408,6 +1463,16 @@ mod test {
             ledger_wasm_hash: valid_hash.to_vec(),
             swap_wasm_hash: valid_hash.to_vec(),
             archive_wasm_hash: valid_hash.to_vec(),
+            ..Default::default()
+        };
+
+        let expected_next_sns_version6 = SnsVersion {
+            governance_wasm_hash: valid_hash.to_vec(),
+            root_wasm_hash: valid_hash.to_vec(),
+            ledger_wasm_hash: valid_hash.to_vec(),
+            swap_wasm_hash: valid_hash.to_vec(),
+            archive_wasm_hash: valid_hash.to_vec(),
+            index_wasm_hash: valid_hash.to_vec(),
         };
 
         assert_eq!(
@@ -1431,7 +1496,11 @@ mod test {
         );
         assert_eq!(
             canister.get_next_sns_version(expected_next_sns_version4.into()),
-            expected_next_sns_version5.into()
+            expected_next_sns_version5.clone().into()
+        );
+        assert_eq!(
+            canister.get_next_sns_version(expected_next_sns_version5.into()),
+            expected_next_sns_version6.into()
         );
     }
 
@@ -1570,6 +1639,7 @@ mod test {
         let root_id = canister_test_id(1);
         let governance_id = canister_test_id(2);
         let ledger_id = canister_test_id(3);
+        let index_id = canister_test_id(4);
 
         test_deploy_new_sns_request(
             Some(SnsInitPayload::with_valid_values_for_testing()),
@@ -1578,13 +1648,13 @@ mod test {
             true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
-            vec![root_id, governance_id, ledger_id],
+            vec![root_id, governance_id, ledger_id, index_id],
             vec![],
             DeployNewSnsResponse {
                 canisters: None,
                 subnet_id: None,
                 error: Some(SnsWasmError {
-                    message: "Could not create needed canisters.  Only created 3 but 4 needed."
+                    message: "Could not create needed canisters.  Only created 4 but 5 needed."
                         .to_string(),
                 }),
             },
@@ -1616,6 +1686,7 @@ mod test {
         let governance_id = canister_test_id(2);
         let ledger_id = canister_test_id(3);
         let swap_id = canister_test_id(4);
+        let index_id = canister_test_id(5);
 
         test_deploy_new_sns_request(
             Some(SnsInitPayload::with_valid_values_for_testing()),
@@ -1624,7 +1695,7 @@ mod test {
             true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
-            vec![root_id, governance_id, ledger_id, swap_id],
+            vec![root_id, governance_id, ledger_id, swap_id, index_id],
             vec![],
             DeployNewSnsResponse {
                 subnet_id: None,
@@ -1657,6 +1728,7 @@ mod test {
         let governance_id = canister_test_id(2);
         let ledger_id = canister_test_id(3);
         let swap_id = canister_test_id(4);
+        let index_id = canister_test_id(5);
 
         test_deploy_new_sns_request(
             Some(SnsInitPayload::with_valid_values_for_testing()),
@@ -1665,10 +1737,11 @@ mod test {
             true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
-            vec![root_id, governance_id, ledger_id, swap_id],
+            vec![root_id, governance_id, ledger_id, swap_id, index_id],
             vec![
                 (governance_id, vec![this_id.get(), root_id.get()]),
                 (ledger_id, vec![this_id.get(), root_id.get()]),
+                (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
@@ -1711,8 +1784,9 @@ mod test {
         let governance_id = canister_test_id(2);
         let ledger_id = canister_test_id(3);
         let swap_id = canister_test_id(4);
+        let index_id = canister_test_id(5);
 
-        let sent_cycles = (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES) / 4;
+        let sent_cycles = (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES) / 5;
 
         test_deploy_new_sns_request(
             Some(SnsInitPayload::with_valid_values_for_testing()),
@@ -1728,11 +1802,13 @@ mod test {
                 (governance_id, sent_cycles),
                 (ledger_id, sent_cycles),
                 (swap_id, sent_cycles),
+                (index_id, sent_cycles),
             ],
             vec![],
             vec![
                 (governance_id, vec![this_id.get(), root_id.get()]),
                 (ledger_id, vec![this_id.get(), root_id.get()]),
+                (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
@@ -1742,6 +1818,7 @@ mod test {
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
                 (swap_id, vec![swap_id.get(), ROOT_CANISTER_ID.get()]),
+                (index_id, vec![root_id.get()]),
             ],
             DeployNewSnsResponse {
                 subnet_id: Some(subnet_test_id(1).get()),
@@ -1750,11 +1827,12 @@ mod test {
                     ledger: Some(ledger_id.get()),
                     governance: Some(governance_id.get()),
                     swap: Some(swap_id.get()),
+                    index: Some(index_id.get()),
                 }),
 
                 error: Some(SnsWasmError {
                     message:
-                        "Unable to remove SNS-WASM as Ledger's controller: Set controller fail"
+                        "Unable to remove SNS-WASM as Governance's controller: Set controller fail"
                             .to_string(),
                 }),
             },
@@ -1793,6 +1871,7 @@ mod test {
         let governance_id = canister_test_id(2);
         let ledger_id = canister_test_id(3);
         let swap_id = canister_test_id(4);
+        let index_id = canister_test_id(5);
 
         test_deploy_new_sns_request(
             Some(SnsInitPayload::with_valid_values_for_testing()),
@@ -1801,7 +1880,7 @@ mod test {
             true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
-            vec![root_id, governance_id, ledger_id, swap_id],
+            vec![root_id, governance_id, ledger_id, swap_id, index_id],
             vec![],
             DeployNewSnsResponse {
                 subnet_id: Some(subnet_test_id(1).get()),
@@ -1810,6 +1889,7 @@ mod test {
                     ledger: Some(ledger_id.get()),
                     governance: Some(governance_id.get()),
                     swap: Some(swap_id.get()),
+                    index: Some(index_id.get()),
                 }),
                 error: Some(SnsWasmError {
                     message: "Failure deploying, and could not finish cleanup.  Some canisters may not have been deleted. Deployment failure was caused by: 'Error installing Governance WASM: Install WASM fail' \n Cleanup failure was caused by: 'Could not delete Root canister: Test Failure 1\nCould not delete Governance canister: Test Failure 2'".to_string()
@@ -1897,6 +1977,7 @@ mod test {
         let governance_id = canister_test_id(2);
         let ledger_id = canister_test_id(3);
         let swap_id = canister_test_id(4);
+        let index_id = canister_test_id(5);
 
         assert_eq!(
             response,
@@ -1906,7 +1987,8 @@ mod test {
                     root: Some(root_id.get()),
                     governance: Some(governance_id.get()),
                     ledger: Some(ledger_id.get()),
-                    swap: Some(swap_id.get())
+                    swap: Some(swap_id.get()),
+                    index: Some(index_id.get()),
                 }),
                 error: None
             }
@@ -1921,6 +2003,7 @@ mod test {
                     governance: Some(governance_id.get()),
                     ledger: Some(ledger_id.get()),
                     swap: Some(swap_id.get()),
+                    index: Some(index_id.get()),
                 }
                 .try_into()
                 .unwrap(),
@@ -1930,6 +2013,7 @@ mod test {
                     ledger_wasm_hash: deployed_version.ledger_wasm_hash,
                     swap_wasm_hash: deployed_version.swap_wasm_hash,
                     archive_wasm_hash: deployed_version.archive_wasm_hash,
+                    index_wasm_hash: deployed_version.index_wasm_hash,
                 }),
             )
             .unwrap();
@@ -1945,14 +2029,15 @@ mod test {
         );
 
         // We subtract our initial creation fee sent, then send the remainder here
-        let fourth_remaining = (SNS_CREATION_FEE + 100 - CANISTER_CREATION_CYCLES) / 4;
+        let fifth_remaining = (SNS_CREATION_FEE + 100 - CANISTER_CREATION_CYCLES) / 5;
         let cycles_sent = &*canister_api.cycles_sent.lock().unwrap();
         assert_eq!(
             &vec![
-                (root_id, fourth_remaining),
-                (governance_id, fourth_remaining),
-                (ledger_id, fourth_remaining),
-                (swap_id, fourth_remaining)
+                (root_id, fifth_remaining),
+                (governance_id, fifth_remaining),
+                (ledger_id, fifth_remaining),
+                (swap_id, fifth_remaining),
+                (index_id, fifth_remaining),
             ],
             cycles_sent
         );
@@ -2001,6 +2086,7 @@ mod test {
             &vec![
                 (governance_id, vec![this_id.get(), root_id.get()]),
                 (ledger_id, vec![this_id.get(), root_id.get()]),
+                (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
@@ -2009,7 +2095,8 @@ mod test {
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![swap_id.get(), ROOT_CANISTER_ID.get()])
+                (swap_id, vec![swap_id.get(), ROOT_CANISTER_ID.get()]),
+                (index_id, vec![root_id.get()]),
             ],
             set_controllers_calls
         );

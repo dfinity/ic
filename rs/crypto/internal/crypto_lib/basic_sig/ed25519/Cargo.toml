@@ -23,8 +23,8 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 num-bigint = "0.4.3"
-proptest = "0.9.4"
-proptest-derive = "0.1.0"
+proptest = "1.0"
+proptest-derive = "0.3.0"
 serde_cbor = "0.11.1"
 strum = "0.23.0"
 wycheproof = "0.4"

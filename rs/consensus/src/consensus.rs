@@ -194,7 +194,6 @@ impl ConsensusImpl {
                 crypto.clone(),
                 message_routing.clone(),
                 ingress_selector,
-                state_manager.clone(),
                 logger.clone(),
                 metrics_registry.clone(),
             ),

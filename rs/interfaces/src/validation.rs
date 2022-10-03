@@ -1,6 +1,6 @@
 //! Validation related types.
 
-use crate::crypto::ErrorReplication;
+use crate::crypto::ErrorReproducibility;
 
 /// Validation errors can be either permanent (invalid) or transient.
 #[derive(Debug)]
@@ -27,13 +27,14 @@ impl<P, T> ValidationError<P, T> {
 /// [ValidationError] as the `Error` type.
 pub type ValidationResult<Error> = Result<(), Error>;
 
-/// An error that implements [ErrorReplication] trait can be casted to either
-/// permanent [ValidationError] if it is "replicated", or transient otherwise.
-impl<Error: ErrorReplication, P: From<Error>, T: From<Error>> From<Error>
+/// An error that implements the [`ErrorReproducibility`] trait can either be
+/// cast to a permanent [ValidationError] if it is "reproducible"; or to a
+/// transient one otherwise.
+impl<Error: ErrorReproducibility, P: From<Error>, T: From<Error>> From<Error>
     for ValidationError<P, T>
 {
     fn from(err: Error) -> ValidationError<P, T> {
-        if err.is_replicated() {
+        if err.is_reproducible() {
             // If an error was returned, which is not a transient one, we consider the
             // validation as failed. There is no reason to retry such a
             // validation.

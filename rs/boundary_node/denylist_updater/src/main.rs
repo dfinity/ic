@@ -183,13 +183,10 @@ async fn metrics_handler(
         .unwrap()
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Clone)]
 struct Entry {
     id: String,
-    #[allow(dead_code)]
-    code: String,
-    #[allow(dead_code)]
-    reason: String,
+    localities: Vec<String>,
 }
 
 #[automock]
@@ -221,11 +218,23 @@ impl List for LocalLister {
         let mut entries = vec![];
 
         while let Some(line) = lines.next_line().await? {
-            if let Some(id) = line.split_whitespace().next() {
+            let line = line
+                .trim_start_matches("\"~^")
+                .trim_end_matches("$\" \"1\";");
+            let mut line = line.split_whitespace();
+            if let Some(id) = line.next() {
+                let localities = match line.next() {
+                    Some("1;") => Vec::default(),
+                    Some(".*") => Vec::default(),
+                    Some(locs) => {
+                        let locs = locs.trim_start_matches('(').trim_end_matches(')');
+                        locs.split('|').map(str::to_string).collect()
+                    }
+                    None => anyhow::bail!("Invalid format."),
+                };
                 entries.push(Entry {
                     id: id.to_string(),
-                    code: "N/A".to_string(),
-                    reason: "N/A".to_string(),
+                    localities,
                 });
             }
         }
@@ -282,7 +291,9 @@ impl List for RemoteLister {
             .context("failed to decode response")?;
 
         #[derive(Deserialize)]
-        struct Canister {}
+        struct Canister {
+            localities: Option<Vec<String>>,
+        }
 
         #[derive(Deserialize)]
         struct Response {
@@ -296,10 +307,9 @@ impl List for RemoteLister {
         let mut entries: Vec<Entry> = entries
             .canisters
             .into_iter()
-            .map(|(k, _)| Entry {
-                id: k,
-                code: "N/A".into(),
-                reason: "N/A".into(),
+            .map(|(id, canister)| Entry {
+                id,
+                localities: canister.localities.unwrap_or_default(),
             })
             .collect();
 
@@ -333,12 +343,22 @@ impl Update for Updater {
             .context("failed to create file")?;
 
         for entry in entries {
-            let line = format!("{} 1;\n", entry.id);
+            let line = if entry.localities.is_empty() {
+                format!("\"~^{} .*$\" \"1\";\n", entry.id)
+            } else {
+                format!(
+                    "\"~^{} ({})$\" \"1\";\n",
+                    entry.id,
+                    entry.localities.join("|")
+                )
+            };
 
             f.write(line.as_bytes())
                 .await
                 .context("failed to write entry")?;
         }
+
+        f.flush().await?;
 
         Ok(())
     }
@@ -422,7 +442,7 @@ impl<RL: List, LL: List, U: Update> Run for Runner<RL, LL, U> {
             .await
             .context("failed to list local entrie")?;
 
-        if !eq(&remote_entries, &local_entries) {
+        if remote_entries != local_entries {
             self.updater
                 .update(remote_entries)
                 .await
@@ -431,21 +451,6 @@ impl<RL: List, LL: List, U: Update> Run for Runner<RL, LL, U> {
 
         Ok(())
     }
-}
-
-fn eq(a: &[Entry], b: &[Entry]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-
-    let (mut a, mut b) = (a.iter(), b.iter());
-    while let (Some(a), Some(b)) = (a.next(), b.next()) {
-        if a.id != b.id {
-            return false;
-        }
-    }
-
-    true
 }
 
 struct ThrottleParams {
@@ -535,33 +540,59 @@ mod tests {
         use tempfile::tempdir;
 
         // Create route files
-        let local_dir = tempdir()?;
 
-        let (name, content) = &("denylist.map", "ID_1 1;\nID_2 1;");
+        struct TestCase {
+            name: &'static str,
+            denylist_map: &'static str,
+            want: Vec<Entry>,
+        }
 
-        let file_path = local_dir.path().join(name);
-        let mut file = File::create(file_path.clone())?;
-        writeln!(file, "{}", content)?;
+        let test_cases = vec![
+            TestCase {
+                name: "legacy",
+                denylist_map: "ID_1 1;\nID_2 1;\n",
+                want: vec![
+                    Entry {
+                        id: "ID_1".to_string(),
+                        localities: Vec::default(),
+                    },
+                    Entry {
+                        id: "ID_2".to_string(),
+                        localities: Vec::default(),
+                    },
+                ],
+            },
+            TestCase {
+                name: "geoblocking",
+                denylist_map: "\"~^ID_1 (CH|US)$\" \"1\";\n\"~^ID_2 .*$\" \"1\";",
+                want: vec![
+                    Entry {
+                        id: "ID_1".to_string(),
+                        localities: vec!["CH".to_string(), "US".to_string()],
+                    },
+                    Entry {
+                        id: "ID_2".to_string(),
+                        localities: Vec::default(),
+                    },
+                ],
+            },
+        ];
 
-        // Create local lister
-        let lister = LocalLister::new(file_path.clone());
+        for tc in test_cases {
+            let local_dir = tempdir()?;
 
-        let out = lister.list().await?;
-        assert_eq!(
-            out,
-            vec![
-                Entry {
-                    id: "ID_1".to_string(),
-                    code: "N/A".to_string(),
-                    reason: "N/A".to_string(),
-                },
-                Entry {
-                    id: "ID_2".to_string(),
-                    code: "N/A".to_string(),
-                    reason: "N/A".to_string(),
-                }
-            ]
-        );
+            let (name, content) = &("denylist.map", tc.denylist_map);
+
+            let file_path = local_dir.path().join(name);
+            let mut file = File::create(file_path.clone())?;
+            writeln!(file, "{}", content)?;
+
+            // Create local lister
+            let lister = LocalLister::new(file_path.clone());
+
+            let was = lister.list().await?;
+            assert_eq!(was, tc.want, "Test case '{}' failed.\n", tc.name);
+        }
 
         Ok(())
     }
@@ -571,95 +602,195 @@ mod tests {
         use httptest::{matchers::*, responders::*, Expectation, Server};
         use serde_json::json;
 
-        let server = Server::run();
+        struct TestCase {
+            name: &'static str,
+            denylist_json: json::Value,
+            want: Vec<Entry>,
+        }
 
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/denylist.json")).respond_with(
-                json_encoded(json!({
+        let test_cases = vec![
+            TestCase {
+                name: "legacy",
+                denylist_json: json!({
                   "$schema": "./schema.json",
                   "version": "1",
                   "canisters": {
                     "ID_1": {},
                     "ID_2": {}
                   }
-                })),
-            ),
-        );
+                }),
+                want: vec![
+                    Entry {
+                        id: "ID_1".to_string(),
+                        localities: Vec::default(),
+                    },
+                    Entry {
+                        id: "ID_2".to_string(),
+                        localities: Vec::default(),
+                    },
+                ],
+            },
+            TestCase {
+                name: "geo_blocking",
+                denylist_json: json!({
+                  "$schema": "./schema.json",
+                  "version": "1",
+                  "canisters": {
+                    "ID_1": {"localities": ["CH", "US"]},
+                    "ID_2": {"localities": []},
+                    "ID_3": {},
+                  }
+                }),
+                want: vec![
+                    Entry {
+                        id: "ID_1".to_string(),
+                        localities: vec!["CH".to_string(), "US".to_string()],
+                    },
+                    Entry {
+                        id: "ID_2".to_string(),
+                        localities: Vec::default(),
+                    },
+                    Entry {
+                        id: "ID_3".to_string(),
+                        localities: Vec::default(),
+                    },
+                ],
+            },
+        ];
 
-        // Create remote lister
-        let lister = RemoteLister::new(
-            reqwest::Client::builder().build()?, // http_client
-            Arc::new(NopDecoder),                // decoder
-            server.url_str("/denylist.json"),    // remote_url
-        );
+        for tc in test_cases {
+            let server = Server::run();
+            server.expect(
+                Expectation::matching(request::method_path("GET", "/denylist.json"))
+                    .respond_with(json_encoded(tc.denylist_json)),
+            );
 
-        let out = lister.list().await?;
-        assert_eq!(
-            out,
-            vec![
-                Entry {
+            // Create remote lister
+            let lister = RemoteLister::new(
+                reqwest::Client::builder().build()?, // http_client
+                Arc::new(NopDecoder),                // decoder
+                server.url_str("/denylist.json"),    // remote_url
+            );
+
+            let was = lister.list().await?;
+            assert_eq!(was, tc.want, "Test case '{}' failed.\n", tc.name);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_updates() -> Result<(), Error> {
+        use tempfile::tempdir;
+
+        struct TestCase {
+            name: &'static str,
+            entries: Vec<Entry>,
+            want: &'static str,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                name: "US",
+                entries: vec![Entry {
                     id: "ID_1".to_string(),
-                    code: "N/A".to_string(),
-                    reason: "N/A".to_string(),
-                },
-                Entry {
-                    id: "ID_2".to_string(),
-                    code: "N/A".to_string(),
-                    reason: "N/A".to_string(),
-                }
-            ]
-        );
+                    localities: vec!["US".to_string()],
+                }],
+                want: "\"~^ID_1 (US)$\" \"1\";\n",
+            },
+            TestCase {
+                name: "CH US",
+                entries: vec![Entry {
+                    id: "ID_1".to_string(),
+                    localities: vec!["CH".to_string(), "US".to_string()],
+                }],
+                want: "\"~^ID_1 (CH|US)$\" \"1\";\n",
+            },
+            TestCase {
+                name: "global",
+                entries: vec![Entry {
+                    id: "ID_1".to_string(),
+                    localities: Vec::default(),
+                }],
+                want: "\"~^ID_1 .*$\" \"1\";\n",
+            },
+        ];
+        for tc in test_cases {
+            let local_dir = tempdir()?;
+            let file_path = local_dir.path().join("denylist.map");
 
+            // Create local lister
+            let updater = Updater::new(file_path.clone());
+            updater.update(tc.entries).await?;
+
+            let was = fs::read_to_string(file_path).await?;
+
+            assert_eq!(was, tc.want, "Test case '{}' failed.\n", tc.name);
+        }
         Ok(())
     }
 
     #[tokio::test]
-    async fn it_runs_eq_empty() -> Result<(), Error> {
-        let mut remote_lister = MockList::new();
-        remote_lister
-            .expect_list()
-            .times(1)
-            .returning(|| Ok(vec![]));
+    async fn it_runs_eq() -> Result<(), Error> {
+        struct TestCase {
+            local: Vec<Entry>,
+            remote: Vec<Entry>,
+        }
 
-        let mut local_lister = MockList::new();
-        local_lister.expect_list().times(1).returning(|| Ok(vec![]));
+        let test_cases = vec![
+            TestCase {
+                local: vec![],
+                remote: vec![],
+            },
+            TestCase {
+                local: vec![Entry {
+                    id: "ID_1".to_string(),
+                    localities: Vec::from(["CH".to_string(), "US".to_string()]),
+                }],
+                remote: vec![Entry {
+                    id: "ID_1".to_string(),
+                    localities: Vec::from(["CH".to_string(), "US".to_string()]),
+                }],
+            },
+        ];
 
-        let mut updater = MockUpdate::new();
-        updater.expect_update().times(0);
+        for tc in test_cases {
+            let mut remote_lister = MockList::new();
+            remote_lister
+                .expect_list()
+                .times(1)
+                .returning(move || Ok(tc.local.clone()));
 
-        let mut runner = Runner::new(remote_lister, local_lister, updater);
-        runner.run().await?;
+            let mut local_lister = MockList::new();
+            local_lister
+                .expect_list()
+                .times(1)
+                .returning(move || Ok(tc.remote.clone()));
+
+            let mut updater = MockUpdate::new();
+            updater.expect_update().times(0);
+
+            let mut runner = Runner::new(remote_lister, local_lister, updater);
+            let was = runner.run().await;
+            was?
+        }
 
         Ok(())
     }
 
-    #[tokio::test]
-    async fn it_runs_eq_non_empty() -> Result<(), Error> {
-        let mut remote_lister = MockList::new();
-        remote_lister.expect_list().times(1).returning(|| {
-            Ok(vec![Entry {
-                id: "ID_1".to_string(),
-                code: "CODE_1".to_string(),
-                reason: "REASON_1".to_string(),
-            }])
-        });
+    fn eq(a: &[Entry], b: &[Entry]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
 
-        let mut local_lister = MockList::new();
-        local_lister.expect_list().times(1).returning(|| {
-            Ok(vec![Entry {
-                id: "ID_1".to_string(),
-                code: "CODE_1".to_string(),
-                reason: "REASON_1".to_string(),
-            }])
-        });
+        let (mut a, mut b) = (a.iter(), b.iter());
+        while let (Some(a), Some(b)) = (a.next(), b.next()) {
+            if a.id != b.id {
+                return false;
+            }
+        }
 
-        let mut updater = MockUpdate::new();
-        updater.expect_update().times(0);
-
-        let mut runner = Runner::new(remote_lister, local_lister, updater);
-        runner.run().await?;
-
-        Ok(())
+        true
     }
 
     #[tokio::test]
@@ -668,8 +799,7 @@ mod tests {
         remote_lister.expect_list().times(1).returning(|| {
             Ok(vec![Entry {
                 id: "ID_1".to_string(),
-                code: "CODE_1".to_string(),
-                reason: "REASON_1".to_string(),
+                localities: Vec::from(["CODE_1".to_string()]),
             }])
         });
 
@@ -685,8 +815,7 @@ mod tests {
                     entries,
                     &[Entry {
                         id: "ID_1".to_string(),
-                        code: "CODE_1".to_string(),
-                        reason: "REASON_1".to_string(),
+                        localities: Vec::from(["CODE_1".to_string()]),
                     }],
                 )
             }))

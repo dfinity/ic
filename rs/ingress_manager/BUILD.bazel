@@ -57,6 +57,7 @@ rust_test(
     name = "ingress_manager_test",
     aliases = ALIASES,
     crate = ":ingress_manager",
+    crate_features = ["proptest"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -73,9 +73,7 @@ pub fn prove_pop<R: RngCore + CryptoRng>(
     let pop_base = random_oracle_to_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
     let pop_key = G1Affine::from(pop_base * witness);
 
-    // This is not a random oracle and could be changed to using Scalar::random
-    // aside from the fact that this would break the stability test.
-    let mut random_scalar = Scalar::miracl_random(rng);
+    let mut random_scalar = Scalar::random(rng);
 
     let blinder_public_key = G1Affine::from(instance.g1_gen * random_scalar);
     let blinder_pop_key = G1Affine::from(pop_base * random_scalar);

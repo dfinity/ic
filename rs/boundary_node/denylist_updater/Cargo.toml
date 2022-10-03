@@ -18,7 +18,6 @@ nix = { version = "0.24.2", features = ["signal"] }
 opentelemetry = "0.17.0"
 opentelemetry-prometheus = "0.10.0"
 prometheus = "0.13.1"
-rand_core = "0.6.3"
 reqwest = { version = "0.11.11", features = ["json"] }
 rsa = "0.6.1"
 serde = { version = "1.0.139", features = ["serde_derive"] }

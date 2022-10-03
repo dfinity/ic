@@ -87,9 +87,9 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
         .unwrap()
 }
 
-fn balance_of(env: &StateMachine, ledger: CanisterId, acc: Account) -> u64 {
+fn balance_of(env: &StateMachine, ledger: CanisterId, acc: impl Into<Account>) -> u64 {
     Decode!(
-        &env.query(ledger, "icrc1_balance_of", Encode!(&acc).unwrap())
+        &env.query(ledger, "icrc1_balance_of", Encode!(&acc.into()).unwrap())
             .expect("failed to query balance")
             .bytes(),
         Nat
@@ -160,17 +160,18 @@ fn send_transfer(
 fn transfer(
     env: &StateMachine,
     ledger: CanisterId,
-    from: Account,
-    to: Account,
+    from: impl Into<Account>,
+    to: impl Into<Account>,
     amount: u64,
 ) -> Result<BlockIndex, TransferError> {
+    let from = from.into();
     send_transfer(
         env,
         ledger,
         from.owner,
         &TransferArg {
             from_subaccount: from.subaccount,
-            to,
+            to: to.into(),
             fee: None,
             created_at_time: None,
             amount: Nat::from(amount),
@@ -338,25 +339,37 @@ fn test_tx_deduplication() {
     let p2 = PrincipalId::new_user_test_id(2);
     let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
 
-    let block_idx =
-        transfer(&env, canister_id, p1.into(), p2.into(), 1_000_000).expect("transfer failed");
+    // No created_at_time => no deduplication
+    let block_id = transfer(&env, canister_id, p1, p2, 10_000).expect("transfer failed");
+    assert!(transfer(&env, canister_id, p1, p2, 10_000).expect("transfer failed") > block_id);
+
+    let now = system_time_to_nanos(env.time());
+
+    let transfer_args = TransferArg {
+        from_subaccount: None,
+        to: p2.into(),
+        fee: None,
+        amount: Nat::from(1_000_000),
+        created_at_time: Some(now),
+        memo: None,
+    };
+
+    let block_idx = send_transfer(&env, canister_id, p1, &transfer_args).expect("transfer failed");
 
     assert_eq!(
-        transfer(&env, canister_id, p1.into(), p2.into(), 1_000_000),
+        send_transfer(&env, canister_id, p1, &transfer_args),
         Err(TransferError::Duplicate {
             duplicate_of: Nat::from(block_idx)
         })
     );
 
     env.advance_time(TX_WINDOW + Duration::from_secs(5 * 60));
-
-    // Check that we can send the same transaction after the deduplication window.
-    assert!(
-        transfer(&env, canister_id, p1.into(), p2.into(), 1_000_000).expect("transfer failed")
-            > block_idx
-    );
-
     let now = system_time_to_nanos(env.time());
+
+    assert_eq!(
+        send_transfer(&env, canister_id, p1, &transfer_args,),
+        Err(TransferError::TooOld),
+    );
 
     // Same transaction, but `created_at_time` specified explicitly.
     // The ledger should not deduplicate this request.
@@ -441,19 +454,19 @@ fn test_mint_burn() {
     let canister_id = install_ledger(&env, vec![]);
 
     assert_eq!(0, total_supply(&env, canister_id));
-    assert_eq!(0, balance_of(&env, canister_id, p1.into()));
+    assert_eq!(0, balance_of(&env, canister_id, p1));
     assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
 
-    transfer(&env, canister_id, MINTER.clone(), p1.into(), 10_000_000).expect("mint failed");
+    transfer(&env, canister_id, MINTER.clone(), p1, 10_000_000).expect("mint failed");
 
     assert_eq!(10_000_000, total_supply(&env, canister_id));
-    assert_eq!(10_000_000, balance_of(&env, canister_id, p1.into()));
+    assert_eq!(10_000_000, balance_of(&env, canister_id, p1));
     assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
 
-    transfer(&env, canister_id, p1.into(), MINTER.clone(), 1_000_000).expect("burn failed");
+    transfer(&env, canister_id, p1, MINTER.clone(), 1_000_000).expect("burn failed");
 
     assert_eq!(9_000_000, total_supply(&env, canister_id));
-    assert_eq!(9_000_000, balance_of(&env, canister_id, p1.into()));
+    assert_eq!(9_000_000, balance_of(&env, canister_id, p1));
     assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
 
     // You have at least FEE, you can burn at least FEE
@@ -461,30 +474,30 @@ fn test_mint_burn() {
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE)
         }),
-        transfer(&env, canister_id, p1.into(), MINTER.clone(), FEE / 2),
+        transfer(&env, canister_id, p1, MINTER.clone(), FEE / 2),
     );
 
-    transfer(&env, canister_id, p1.into(), p2.into(), FEE / 2).expect("transfer failed");
+    transfer(&env, canister_id, p1, p2, FEE / 2).expect("transfer failed");
 
-    assert_eq!(FEE / 2, balance_of(&env, canister_id, p2.into()));
+    assert_eq!(FEE / 2, balance_of(&env, canister_id, p2));
 
     // If you have less than FEE, you can burn only the whole amount.
     assert_eq!(
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE / 2)
         }),
-        transfer(&env, canister_id, p2.into(), MINTER.clone(), FEE / 4),
+        transfer(&env, canister_id, p2, MINTER.clone(), FEE / 4),
     );
-    transfer(&env, canister_id, p2.into(), MINTER.clone(), FEE / 2).expect("burn failed");
+    transfer(&env, canister_id, p2, MINTER.clone(), FEE / 2).expect("burn failed");
 
-    assert_eq!(0, balance_of(&env, canister_id, p2.into()));
+    assert_eq!(0, balance_of(&env, canister_id, p2));
 
     // You cannot burn zero tokens, no matter what your balance is.
     assert_eq!(
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE)
         }),
-        transfer(&env, canister_id, p2.into(), MINTER.clone(), 0),
+        transfer(&env, canister_id, p2, MINTER.clone(), 0),
     );
 }
 
@@ -502,14 +515,14 @@ fn test_single_transfer() {
     );
 
     assert_eq!(15_000_000, total_supply(&env, canister_id));
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.into()));
-    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2.into()));
+    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1));
+    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2));
 
-    transfer(&env, canister_id, p1.into(), p2.into(), 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p1, p2, 1_000_000).expect("transfer failed");
 
     assert_eq!(15_000_000 - FEE, total_supply(&env, canister_id));
-    assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1.into()));
-    assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2.into()));
+    assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1));
+    assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2));
 }
 
 #[test]
@@ -551,7 +564,7 @@ fn test_account_canonicalization() {
     transfer(
         &env,
         canister_id,
-        p1.into(),
+        p1,
         Account {
             owner: p2,
             subaccount: Some([0; 32]),
@@ -699,8 +712,8 @@ fn test_tx_time_bounds() {
         )
     );
 
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.into()));
-    assert_eq!(0u64, balance_of(&env, canister_id, p2.into()));
+    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1));
+    assert_eq!(0u64, balance_of(&env, canister_id, p2));
 }
 
 #[test]
@@ -712,7 +725,7 @@ fn test_archiving() {
     let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
 
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
-        transfer(&env, canister_id, p1.into(), p2.into(), 10_000 + i).expect("transfer failed");
+        transfer(&env, canister_id, p1, p2, 10_000 + i).expect("transfer failed");
     }
 
     env.run_until_completion(/*max_ticks=*/ 10);
@@ -763,6 +776,11 @@ fn test_archiving() {
         );
     }
 
+    // Check that requesting non-existing blocks does not crash the ledger.
+    let missing_blocks_reply = get_transactions(&env, canister_id, 100, 5);
+    assert_eq!(0, missing_blocks_reply.transactions.len());
+    assert_eq!(0, missing_blocks_reply.archived_transactions.len());
+
     // Upgrade the archive and check that the data is still available.
 
     env.upgrade_canister(archive_canister_id, archive_wasm(), vec![])
@@ -786,7 +804,7 @@ fn test_archiving() {
 
     // Check that we can append more blocks after the upgrade.
     for i in 0..(ARCHIVE_TRIGGER_THRESHOLD - NUM_BLOCKS_TO_ARCHIVE) {
-        transfer(&env, canister_id, p1.into(), p2.into(), 20_000 + i).expect("transfer failed");
+        transfer(&env, canister_id, p1, p2, 20_000 + i).expect("transfer failed");
     }
 
     let archive_info = list_archives(&env, canister_id);

@@ -5,6 +5,10 @@ set -euox pipefail
 readonly RUN_NODE_DIR='/run/ic-node'
 readonly DBS_SRC_DIR='/boot/config/geolite2_dbs'
 readonly DBS_DST_DIR='/etc/nginx/geoip'
+readonly DB_NAMES=(
+    GeoLite2-Country.mmdb
+    GeoLite2-City.mmdb
+)
 
 err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
@@ -28,11 +32,6 @@ function main() {
         "${DBS_DST_DIR}"
 
     # Copy databases
-    DB_NAMES=(
-        GeoLite2-Country.mmdb
-        GeoLite2-City.mmdb
-    )
-
     for DB_NAME in "${DB_NAMES[@]}"; do
         if [[ ! -f "${DBS_SRC_DIR}/${DB_NAME}" ]]; then
             err "missing geolite2 db: ${DBS_SRC_DIR}/${DB_NAME}"

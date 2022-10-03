@@ -7,6 +7,7 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
 use ic_crypto_sha::Sha256;
 use ic_icrc1::{endpoints::TransferArg, Account, Subaccount};
+use ic_icrc1_index::InitArgs as IndexInitArgs;
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
@@ -110,6 +111,7 @@ pub struct SnsTestsInitPayloadBuilder {
     pub ledger: LedgerInitArgs,
     pub root: SnsRootCanister,
     pub swap: SwapInit,
+    pub index: IndexInitArgs,
 }
 
 #[allow(clippy::new_without_default)]
@@ -144,11 +146,16 @@ impl SnsTestsInitPayloadBuilder {
             ..Default::default()
         };
 
+        let index = IndexInitArgs {
+            ledger_id: CanisterId::from_u64(0),
+        };
+
         SnsTestsInitPayloadBuilder {
             root: SnsRootCanister::default(),
             governance: GovernanceCanisterInitPayloadBuilder::new(),
             ledger,
             swap,
+            index,
         }
     }
 
@@ -206,6 +213,7 @@ impl SnsTestsInitPayloadBuilder {
             ledger: self.ledger.clone(),
             root: self.root.clone(),
             swap: self.swap.clone(),
+            index: self.index.clone(),
         }
     }
 }
@@ -215,12 +223,14 @@ pub fn populate_canister_ids(
     governance_canister_id: CanisterId,
     ledger_canister_id: CanisterId,
     swap_canister_id: CanisterId,
+    index_canister_id: CanisterId,
     sns_canister_init_payloads: &mut SnsCanisterInitPayloads,
 ) {
     let root_canister_id = Some(PrincipalId::from(root_canister_id));
     let governance_canister_id = Some(PrincipalId::from(governance_canister_id));
     let ledger_canister_id = Some(PrincipalId::from(ledger_canister_id));
     let swap_canister_id = Some(PrincipalId::from(swap_canister_id));
+    let index_canister_id = Some(PrincipalId::from(index_canister_id));
 
     // Root.
     {
@@ -233,6 +243,9 @@ pub fn populate_canister_ids(
         }
         if root.swap_canister_id.is_none() {
             root.swap_canister_id = swap_canister_id;
+        }
+        if root.index_canister_id.is_none() {
+            root.index_canister_id = index_canister_id;
         }
     }
 
@@ -273,6 +286,7 @@ pub struct SnsCanisters<'a> {
     pub governance: Canister<'a>,
     pub ledger: Canister<'a>,
     pub swap: Canister<'a>,
+    pub index: Canister<'a>,
 }
 
 impl SnsCanisters<'_> {
@@ -306,16 +320,23 @@ impl SnsCanisters<'_> {
             .await
             .expect("Couldn't create Ledger canister");
 
+        let mut index = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Index canister");
+
         let root_canister_id = root.canister_id();
         let governance_canister_id = governance.canister_id();
         let ledger_canister_id = ledger.canister_id();
         let swap_canister_id = swap.canister_id();
+        let index_canister_id = index.canister_id();
 
         populate_canister_ids(
             root_canister_id,
             governance_canister_id,
             ledger_canister_id,
             swap_canister_id,
+            index_canister_id,
             &mut init_payloads,
         );
 
@@ -346,6 +367,7 @@ impl SnsCanisters<'_> {
             install_ledger_canister(&mut ledger, init_payloads.ledger),
             install_root_canister(&mut root, init_payloads.root),
             install_swap_canister(&mut swap, init_payloads.swap),
+            install_index_canister(&mut index, init_payloads.index),
         );
 
         eprintln!("SNS canisters installed after {:.1} s", since_start_secs());
@@ -356,6 +378,7 @@ impl SnsCanisters<'_> {
             root.set_controller_with_retries(governance_canister_id.get()),
             governance.set_controller_with_retries(root_canister_id.get()),
             ledger.set_controller_with_retries(root_canister_id.get()),
+            index.set_controller_with_retries(root_canister_id.get()),
             // Swap Canister is controlled by NNS Root and Swap itself. For the integration tests
             // add the swap canister as its own controller, and leave the Runtime in control
             // as well for some amount of control
@@ -370,6 +393,7 @@ impl SnsCanisters<'_> {
             governance,
             ledger,
             swap,
+            index,
         }
     }
 
@@ -1253,6 +1277,21 @@ pub async fn set_up_ledger_canister(runtime: &'_ Runtime, args: LedgerInitArgs) 
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_ledger_canister(&mut canister, args).await;
     canister
+}
+
+/// Compiles the ledger index canister, builds it's initial payload and installs it
+pub async fn install_index_canister<'runtime, 'a>(
+    canister: &mut Canister<'runtime>,
+    args: IndexInitArgs,
+) {
+    install_rust_canister_with_memory_allocation(
+        canister,
+        "ic-icrc1-index",
+        &[],
+        Some(CandidOne(args).into_bytes().unwrap()),
+        SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
+    )
+    .await
 }
 
 /// Builds the root canister wasm binary, serializes canister_init args for it, and installs it.

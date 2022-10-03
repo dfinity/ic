@@ -15,9 +15,9 @@ use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads};
 use ic_sns_wasm::pb::v1::DeployNewSnsRequest;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
-use std::fs::OpenOptions;
+use std::fs::{create_dir_all, OpenOptions};
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 #[cfg(test)]
@@ -57,6 +57,7 @@ fn lookup(args: &DeployArgs) -> Option<SnsCanisterIds> {
         ledger: get_canister_id("sns_ledger", args)?,
         root: get_canister_id("sns_root", args)?,
         swap: get_canister_id("sns_swap", args)?,
+        index: get_canister_id("sns_index", args)?,
     })
 }
 
@@ -112,17 +113,17 @@ pub fn get_canister_id(canister_name: &str, args: &DeployArgs) -> Option<Princip
 pub struct SnsWasmSnsDeployer {
     pub args: DeployArgs,
     pub sns_init_payload: SnsInitPayload,
-    pub sns_wasms_canister_id: PrincipalId,
+    pub sns_wasms_canister: String,
     pub wallet_canister: CanisterId,
 }
 
 impl SnsWasmSnsDeployer {
     pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
-        let sns_wasms_canister_id = args
+        let sns_wasms_canister = args
             .override_sns_wasm_canister_id_for_tests
             .as_ref()
-            .map(|principal| PrincipalId::from_str(principal).unwrap())
-            .unwrap_or_else(|| SNS_WASM_CANISTER_ID.get());
+            .map(|id_or_name| id_or_name.to_string())
+            .unwrap_or_else(|| SNS_WASM_CANISTER_ID.get().to_string());
 
         let wallet_canister = CanisterId::new(get_identity("get-wallet", &args.network))
             .expect("Could not convert wallet identity to CanisterId format");
@@ -130,7 +131,7 @@ impl SnsWasmSnsDeployer {
         Self {
             args,
             sns_init_payload,
-            sns_wasms_canister_id,
+            sns_wasms_canister,
             wallet_canister,
         }
     }
@@ -153,23 +154,33 @@ impl SnsWasmSnsDeployer {
             .expect("Couldn't decode DeployNewSnsRequest")
         );
 
-        let output = call_dfx(&[
-            "canister",
-            "--network",
-            &self.args.network,
-            "--wallet",
-            &format!("{}", self.wallet_canister),
-            "call",
-            "--with-cycles",
-            &SNS_CREATION_FEE.to_string(),
-            &self.sns_wasms_canister_id.to_string(),
-            "deploy_new_sns",
-            &request_idl,
-        ]);
+        let output = {
+            let sns_creation_fee = SNS_CREATION_FEE.to_string();
+            let wallet_canister = format!("{}", self.wallet_canister);
+            let mut args = vec![
+                "canister",
+                "--network",
+                &self.args.network,
+                "--wallet",
+                &wallet_canister,
+                "call",
+                "--with-cycles",
+                &sns_creation_fee,
+                &self.sns_wasms_canister,
+                "deploy_new_sns",
+                &request_idl,
+            ];
+            if let Some(path) = self.args.candid.as_ref() {
+                args.push("--candid");
+                args.push(path);
+            }
+            call_dfx(&args)
+        };
+
         if !output.status.success() {
             panic!("Failed to create SNS");
         }
-        Self::save_canister_ids(&output.stdout, &self.args.network)
+        self.save_canister_ids(&output.stdout)
             .expect("Failed to save to canister_ids.json");
     }
 
@@ -282,12 +293,33 @@ impl SnsWasmSnsDeployer {
     }
 
     /// Records the created canister IDs in dfx.JSON
-    pub fn save_canister_ids(buffer: &[u8], network: &str) -> anyhow::Result<()> {
+    pub fn save_canister_ids(&self, buffer: &[u8]) -> anyhow::Result<()> {
+        let canisters_file = {
+            let path_str: String = self
+                .args
+                .save_to
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| "canister_ids.json".to_string());
+            let path = PathBuf::from(path_str);
+            if let Some(dir) = path.parent() {
+                create_dir_all(dir)
+                    .map_err(|err| {
+                        format!(
+                            "Failed to create directory for {}: {err}",
+                            path.to_string_lossy()
+                        )
+                    })
+                    .unwrap();
+            }
+            path
+        };
+
         let candid_str = std::str::from_utf8(buffer)?;
         let args: IDLArgs = candid_str.parse()?;
         let canisters_in_idl = Self::get_canisters_record(&args)?;
-        let new_canisters_json = Self::canister_ids_as_json(canisters_in_idl, network);
-        Self::merge_into_json_file("canister_ids.json", &new_canisters_json)
+        let new_canisters_json = Self::canister_ids_as_json(canisters_in_idl, &self.args.network);
+        Self::merge_into_json_file(canisters_file, &new_canisters_json)
     }
 }
 #[test]
@@ -302,6 +334,7 @@ fn should_save_canister_ids() {
 							swap = opt principal "si2b5-pyaaa-aaaaa-aaaja-cai";
 							ledger = opt principal "sbzkb-zqaaa-aaaaa-aaaiq-cai";
 							governance = opt principal "sgymv-uiaaa-aaaaa-aaaia-cai";
+							index = opt principal "q4eej-kyaaa-aaaaa-aaaha-cai";
 						};
 					},
 				)
@@ -312,6 +345,7 @@ fn should_save_canister_ids() {
       , "sns_swap": { "foo": "si2b5-pyaaa-aaaaa-aaaja-cai" }
       , "sns_ledger": { "foo": "sbzkb-zqaaa-aaaaa-aaaiq-cai" }
       , "sns_governance": { "foo": "sgymv-uiaaa-aaaaa-aaaia-cai" }
+      , "sns_index": { "foo": "q4eej-kyaaa-aaaaa-aaaha-cai" }
       }
     "#;
     let expected_json = serde_json::from_str(expected_json_str).unwrap();
@@ -341,8 +375,6 @@ fn should_save_canister_ids() {
     let file_content =
         serde_json::from_reader(&mut BufReader::new(file.reopen().unwrap())).unwrap();
     assert_same_json(&expected_json, &file_content, "Save to file doesn't work");
-
-    //SnsWasmSnsDeployer::save_canister_ids(sample_response.as_bytes(), "foo");
 }
 
 /// Responsible for deploying SNS canisters
@@ -468,8 +500,17 @@ impl DirectSnsDeployerForTests {
         self.add_controller(NNS_ROOT_CANISTER_ID.get(), "sns_swap");
         self.add_controller(self.sns_canisters.swap, "sns_swap");
 
+        // Index must be controlled by only Root
+        self.add_controller(self.sns_canisters.root, "sns_index");
+
         // Remove default controllers from SNS canisters
-        for sns_canister in ["sns_governance", "sns_root", "sns_ledger", "sns_swap"] {
+        for sns_canister in [
+            "sns_governance",
+            "sns_root",
+            "sns_ledger",
+            "sns_swap",
+            "sns_index",
+        ] {
             self.remove_controller(self.wallet_canister, sns_canister);
             self.remove_controller(self.dfx_identity, sns_canister);
         }
@@ -515,6 +556,7 @@ impl DirectSnsDeployerForTests {
         self.install_ledger();
         self.install_root();
         self.install_swap();
+        self.install_index();
     }
 
     /// Install and initialize Governance
@@ -540,6 +582,13 @@ impl DirectSnsDeployerForTests {
         let init_args = hex_encode_candid(&self.sns_canister_payloads.swap);
         self.install_canister("sns_swap", &init_args);
     }
+
+    /// Install and initialize Index
+    fn install_index(&self) {
+        let init_args = hex_encode_candid(&self.sns_canister_payloads.index);
+        self.install_canister("sns_index", &init_args);
+    }
+
     /// Install the given canister
     fn install_canister(&self, sns_canister_name: &str, init_args: &str) {
         call_dfx(&[

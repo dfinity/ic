@@ -2,7 +2,6 @@ mod execution_tests {
     use std::path::PathBuf;
 
     use crate::execution::test_utilities::{wat_compilation_cost, ExecutionTestBuilder};
-    use crate::CompilationCostHandling;
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
@@ -242,14 +241,9 @@ mod execution_tests {
             test.canister_executed_instructions(canister_id1),
             wat_compilation_cost(WAT_EMPTY)
         );
-        let compilation_cost_handling =
-            match EmbeddersConfig::default().feature_flags.module_sharing {
-                FlagStatus::Enabled => CompilationCostHandling::CountReducedAmount,
-                FlagStatus::Disabled => CompilationCostHandling::CountFullAmount,
-            };
         assert_eq!(
             test.canister_executed_instructions(canister_id2),
-            compilation_cost_handling.adjusted_compilation_cost(wat_compilation_cost(WAT_EMPTY))
+            wat_compilation_cost(WAT_EMPTY)
         );
         // Even though we didn't need to recompile, the canister should still be
         // charged for it.

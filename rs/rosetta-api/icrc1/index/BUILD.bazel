@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/types/base_types",
     "@crate_index//:candid",
+    "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
@@ -52,7 +53,17 @@ rust_test(
     crate = ":index",
     deps = DEPENDENCIES + [
         "@crate_index//:proptest",
+        "@crate_index//:serde_json",
     ],
+)
+
+rust_test(
+    name = "index_canister_test",
+    crate = ":_wasm_index_canister_raw",
+    data = [":index.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/index",
+    },
 )
 
 rust_test(

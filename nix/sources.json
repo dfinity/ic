@@ -211,19 +211,19 @@
     },
     "rosetta-cli-x86_64-darwin": {
         "builtin": false,
-        "sha256": "0478rqi4iydbf4ad5v740vhnfmyhc5xd7rdp306qn3ync5rj4m2m",
+        "sha256": "0yfy5b0bnxjhcnv00jf4zx9rbf9swvwnxb8aqgd4rp1b24qx9d5s",
         "type": "file",
-        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.6.7/rosetta-cli-0.6.7-darwin-amd64.tar.gz",
+        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.9.0/rosetta-cli-0.9.0-darwin-amd64.tar.gz",
         "url_template": "https://github.com/coinbase/rosetta-cli/releases/download/v<version>/rosetta-cli-<version>-darwin-amd64.tar.gz",
-        "version": "0.6.7"
+        "version": "0.9.0"
     },
     "rosetta-cli-x86_64-linux": {
         "builtin": false,
-        "sha256": "0pv4nvg2mg41pzhh91davwb2rsadhf5p4xd05z73qjzh117ns70i",
+        "sha256": "1w7g515mfiwmyzdq1y4f4i261hxdxz5qpxxdsb7f2ls04is6l88k",
         "type": "file",
-        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.6.7/rosetta-cli-0.6.7-linux-amd64.tar.gz",
+        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.9.0/rosetta-cli-0.9.0-linux-amd64.tar.gz",
         "url_template": "https://github.com/coinbase/rosetta-cli/releases/download/v<version>/rosetta-cli-<version>-linux-amd64.tar.gz",
-        "version": "0.6.7"
+        "version": "0.9.0"
     },
     "tarpaulin": {
         "branch": "0.17.0",

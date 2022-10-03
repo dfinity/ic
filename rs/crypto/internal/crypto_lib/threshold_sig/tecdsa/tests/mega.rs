@@ -94,7 +94,7 @@ fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
     let ctext = MEGaCiphertextSingle::encrypt(
         seed,
         &[ptext_for_a, ptext_for_b],
-        &[a_pk, b_pk],
+        &[a_pk.clone(), b_pk.clone()],
         dealer_index,
         associated_data,
     )?;
@@ -146,7 +146,7 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
     let ctext = MEGaCiphertextPair::encrypt(
         seed,
         &[ptext_for_a, ptext_for_b],
-        &[a_pk, b_pk],
+        &[a_pk.clone(), b_pk.clone()],
         dealer_index,
         associated_data,
     )?;
@@ -184,7 +184,7 @@ fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
     let ctext = MEGaCiphertextSingle::encrypt(
         seed,
         &[ptext_for_a, ptext_for_b],
-        &[a_pk, b_pk],
+        &[a_pk, b_pk.clone()],
         dealer_index,
         ad,
     )?;
@@ -196,7 +196,7 @@ fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
     );
 
     let mut bad_pop_pk = ctext.clone();
-    bad_pop_pk.pop_public_key = ctext.ephemeral_key;
+    bad_pop_pk.pop_public_key = ctext.ephemeral_key.clone();
     assert_eq!(
         bad_pop_pk.decrypt(ad, dealer_index, 1, &b_sk, &b_pk),
         Err(ThresholdEcdsaError::InvalidProof)

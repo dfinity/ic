@@ -475,8 +475,7 @@ fn pb_encode(msg: &impl prost::Message) -> Vec<u8> {
 mod tests {
     use super::*;
     use ic_registry_transport::{delete, insert, update, upsert};
-    use rand::Rng;
-    use rand_core::SeedableRng;
+    use rand::{Rng, SeedableRng};
     use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
 
     /// Simulate a round-trip through stable memory, which is an essential part
@@ -931,7 +930,7 @@ mod tests {
     struct RandomByteVectorGenerator {
         mean_length: f32,
     }
-    impl rand_distr::Distribution<Vec<u8>> for RandomByteVectorGenerator {
+    impl Distribution<Vec<u8>> for RandomByteVectorGenerator {
         fn sample<R>(&self, rng: &mut R) -> Vec<u8>
         where
             R: Rng + ?Sized,
@@ -970,17 +969,15 @@ mod tests {
 
     #[test]
     fn test_icsup_2589() {
-        use rand_core::RngCore;
-
         let mut rng = rand::rngs::SmallRng::from_entropy();
         let registry = initialize_random_registry(3, 1000, 13.0, 150);
 
         let mut serializable_form = registry.serializable_form_at(ReprVersion::Version1);
         // Remove half of the entries, but retain the first and the last entry.
         let initial_len = registry.changelog().iter().count();
-        serializable_form.changelog.retain(|entry| {
-            entry.version == 1 || rng.next_u32() % 2 == 0 || entry.version == initial_len as u64
-        });
+        serializable_form
+            .changelog
+            .retain(|entry| entry.version == 1 || rng.gen() || entry.version == initial_len as u64);
         let len_after_random_trim = serializable_form.changelog.len();
         assert!(len_after_random_trim < initial_len);
 

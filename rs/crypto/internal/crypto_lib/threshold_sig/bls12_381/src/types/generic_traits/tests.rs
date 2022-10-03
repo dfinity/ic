@@ -13,13 +13,13 @@ proptest! {
         })]
 
     #[test]
-    fn debug_trait_on_public_key_bytes_works(public_key_bytes in threshold_sig_public_key_bytes()) { format!("{:?}", public_key_bytes) }
+    fn debug_trait_on_public_key_bytes_works(public_key_bytes in threshold_sig_public_key_bytes()) { format!("{:?}", public_key_bytes); }
 
     #[test]
-    fn debug_trait_on_individual_signature_bytes_works(individual_signature_bytes: IndividualSignatureBytes) {  format!("{:?}", individual_signature_bytes) }
+    fn debug_trait_on_individual_signature_bytes_works(individual_signature_bytes: IndividualSignatureBytes) { format!("{:?}", individual_signature_bytes); }
 
     #[test]
-    fn debug_trait_on_combined_signature_bytes_works(combined_signature_bytes: CombinedSignatureBytes) {  format!("{:?}", combined_signature_bytes) }
+    fn debug_trait_on_combined_signature_bytes_works(combined_signature_bytes: CombinedSignatureBytes) { format!("{:?}", combined_signature_bytes); }
 
     #[test]
     fn debug_should_redact_secretkey_bytes(secret_key_bytes: SecretKeyBytes) {

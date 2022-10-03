@@ -114,6 +114,11 @@ impl SnsCanisterIds {
     pub fn swap(&self) -> CanisterId {
         CanisterId::new(self.swap.unwrap()).unwrap()
     }
+
+    /// Get Index CanisterId
+    pub fn index(&self) -> CanisterId {
+        CanisterId::new(self.index.unwrap()).unwrap()
+    }
 }
 
 impl TryFrom<SnsCanisterIds> for ic_sns_init::SnsCanisterIds {
@@ -127,6 +132,7 @@ impl TryFrom<SnsCanisterIds> for ic_sns_init::SnsCanisterIds {
                 .ok_or_else(|| "Governance missing".to_string())?,
             ledger: ids.ledger.ok_or_else(|| "Ledger missing".to_string())?,
             swap: ids.swap.ok_or_else(|| "Swap missing".to_string())?,
+            index: ids.index.ok_or_else(|| "Index missing".to_string())?,
         })
     }
 }
@@ -230,6 +236,7 @@ impl SnsCanisterIds {
             ("Governance".to_string(), self.governance),
             ("Ledger".to_string(), self.ledger),
             ("Swap".to_string(), self.swap),
+            ("Index".to_string(), self.index),
         ]
         .into_iter()
         .flat_map(|(label, principal_id)| {

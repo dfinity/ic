@@ -1,18 +1,21 @@
 [Unit]
 Description=Boundary Node Prober Wallets Exporter
+After=network-online.target
+Wants=network-online.target
 After=setup-prober.service
-ConditionPathExists=!/etc/prober/prober.disabled
+Wants=setup-prober.service
+ConditionPathExists=!/run/ic-node/etc/prober/prober.disabled
 
 [Service]
 User=prober
 Group=prober
 Restart=always
 ExecStart=/opt/ic/bin/ic-balance-exporter \
-    --wallets-path "${WALLETS_PATH}" \
-    --identity-path "${IDENTITY_PATH}" \
-    --root-key-path "${ROOT_KEY_PATH}" \
-    --scrape-interval "${SCRAPE_INTERVAL}" \
-    --metrics-addr "${METRICS_ADDR}"
+    --wallets-path "/etc/prober-wallets-exporter/wallets.json" \
+    --identity-path "/run/ic-node/etc/prober/identity.pem" \
+    --root-key-path "/run/ic-node/etc/prober/root_key.der" \
+    --scrape-interval "1m" \
+    --metrics-addr "[::]:9315"
 
 [Install]
 WantedBy=multi-user.target

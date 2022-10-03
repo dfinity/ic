@@ -12,7 +12,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::{execution_environment::HypervisorError, messages::RequestOrIngress};
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
-use ic_types::{CanisterId, NumBytes, Time};
+use ic_types::{CanisterId, NumBytes, NumInstructions, Time};
 
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -93,9 +93,16 @@ pub fn execute_replicated_query(
         subnet_size,
     );
 
+    let instructions_used = NumInstructions::from(
+        instruction_limit
+            .get()
+            .saturating_sub(output.num_instructions_left.get()),
+    );
+
     ExecuteMessageResult::Finished {
         canister,
         response,
+        instructions_used,
         heap_delta: NumBytes::from(0),
     }
 }

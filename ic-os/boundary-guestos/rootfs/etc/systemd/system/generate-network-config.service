@@ -10,4 +10,4 @@ WantedBy=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/generate-network-config.sh /boot/config/network.conf /run/systemd/network
+ExecStart=/opt/ic/bin/generate-network-config.sh

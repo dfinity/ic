@@ -108,9 +108,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         .map(|key| key.key_value)
         .collect();
 
-    let polynomial: Vec<_> = (0..threshold)
-        .map(|_| Scalar::miracl_random(&mut rng))
-        .collect();
+    let polynomial: Vec<_> = (0..threshold).map(|_| Scalar::random(&mut rng)).collect();
     let polynomial_exp: Vec<_> = polynomial
         .iter()
         .map(|term| G2Affine::from(g2 * term))

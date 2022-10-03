@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
@@ -37,7 +37,7 @@ pub(super) struct SchedulingOrder<P, N, R> {
 /// during the whole current round.
 /// TODO(RUN-320): remove, as it's not required for regular partitioning
 #[derive(Debug, Default)]
-pub(super) struct RoundSchedule {
+pub struct RoundSchedule {
     /// Total number of scheduler cores.
     pub scheduler_cores: usize,
     /// Number of cores dedicated for long executions.
@@ -49,7 +49,7 @@ pub(super) struct RoundSchedule {
 }
 
 impl RoundSchedule {
-    pub(super) fn new(
+    pub fn new(
         scheduler_cores: usize,
         long_execution_cores: usize,
         ordered_new_execution_canister_ids: Vec<CanisterId>,
@@ -100,91 +100,84 @@ impl RoundSchedule {
         }
     }
 
-    /// Separates the ordered canisters into a list of active executable canisters and a set
-    /// of canisters that are either idle or were rate limited.
-    ///
-    /// Returns the filtered canisters and the updated round schedule with active canisters.
-    pub(super) fn filter_canisters(
+    /// Returns a round schedule covering active canisters only; and the set of
+    /// rate limited canisters.
+    pub fn filter_canisters(
         &self,
         canisters: &BTreeMap<CanisterId, CanisterState>,
         heap_delta_rate_limit: NumBytes,
         rate_limiting_of_heap_delta: FlagStatus,
-    ) -> (Vec<CanisterId>, Self) {
-        enum ExpectedExecution {
-            New,
-            Long,
-        }
-        fn filter(
-            ordered_canister_ids: &[CanisterId],
-            canisters: &BTreeMap<CanisterId, CanisterState>,
-            rate_limited_canister_ids: &mut Vec<CanisterId>,
-            heap_delta_rate_limit: NumBytes,
-            rate_limiting_of_heap_delta: FlagStatus,
-            expected_execution: ExpectedExecution,
-        ) -> Vec<CanisterId> {
-            ordered_canister_ids
-                .iter()
-                .filter(|canister_id| {
-                    let canister = canisters.get(canister_id).unwrap();
-                    let is_under_limit = canister.scheduler_state.heap_delta_debit
-                        < heap_delta_rate_limit
-                        || rate_limiting_of_heap_delta == FlagStatus::Disabled;
-                    if !is_under_limit {
-                        rate_limited_canister_ids.push(**canister_id);
-                        return false;
-                    }
-                    match canister.next_execution() {
-                        NextExecution::None | NextExecution::ContinueInstallCode => false,
-                        NextExecution::StartNew => {
-                            match expected_execution {
-                                ExpectedExecution::New => true,
-                                // We expect long execution, but there is none,
-                                // so the long execution was finished in the
-                                // previous inner round.
-                                //
-                                // We should avoid scheduling this canister to:
-                                // 1. Avoid the canister to bypass the logic in
-                                //    `apply_scheduling_strategy()`.
-                                // 2. Charge canister for resources at the end
-                                //    of the round.
-                                ExpectedExecution::Long => false,
-                            }
-                        }
-                        NextExecution::ContinueLong => true,
-                    }
-                })
-                .cloned()
-                .collect()
-        }
-
+    ) -> (Self, Vec<CanisterId>) {
         let mut rate_limited_canister_ids = vec![];
 
-        let ordered_new_execution_canister_ids = filter(
-            &self.ordered_new_execution_canister_ids,
-            canisters,
-            &mut rate_limited_canister_ids,
-            heap_delta_rate_limit,
-            rate_limiting_of_heap_delta,
-            ExpectedExecution::New,
-        );
+        // Collect all active canisters and their next executions.
+        //
+        // It is safe to use a `HashMap`, as we'll only be doing lookups.
+        let canister_next_executions: HashMap<_, _> = canisters
+            .iter()
+            .filter_map(|(canister_id, canister)| {
+                if rate_limiting_of_heap_delta == FlagStatus::Enabled
+                    && canister.scheduler_state.heap_delta_debit >= heap_delta_rate_limit
+                {
+                    // Record and filter out rate limited canisters.
+                    rate_limited_canister_ids.push(*canister_id);
+                    return None;
+                }
 
-        let ordered_long_execution_canister_ids = filter(
-            &self.ordered_long_execution_canister_ids,
-            canisters,
-            &mut rate_limited_canister_ids,
-            heap_delta_rate_limit,
-            rate_limiting_of_heap_delta,
-            ExpectedExecution::Long,
-        );
+                let next_execution = canister.next_execution();
+                match next_execution {
+                    // Filter out canisters with no messages or with paused installations.
+                    NextExecution::None | NextExecution::ContinueInstallCode => None,
+
+                    NextExecution::StartNew | NextExecution::ContinueLong => {
+                        Some((canister_id, next_execution))
+                    }
+                }
+            })
+            .collect();
+
+        let ordered_new_execution_canister_ids = self
+            .ordered_new_execution_canister_ids
+            .iter()
+            .filter(|canister_id| canister_next_executions.contains_key(canister_id))
+            .cloned()
+            .collect();
+
+        let ordered_long_execution_canister_ids = self
+            .ordered_long_execution_canister_ids
+            .iter()
+            .filter(
+                |canister_id| match canister_next_executions.get(canister_id) {
+                    Some(NextExecution::ContinueLong) => true,
+
+                    // We expect long execution, but there is none,
+                    // so the long execution was finished in the
+                    // previous inner round.
+                    //
+                    // We should avoid scheduling this canister to:
+                    // 1. Avoid the canister to bypass the logic in
+                    //    `apply_scheduling_strategy()`.
+                    // 2. Charge canister for resources at the end
+                    //    of the round.
+                    Some(NextExecution::StartNew) => false,
+
+                    None // No such canister. Should not happen.
+                        | Some(NextExecution::None) // Idle canister.
+                        | Some(NextExecution::ContinueInstallCode) // Subnet message.
+                         => false,
+                },
+            )
+            .cloned()
+            .collect();
 
         (
-            rate_limited_canister_ids,
             RoundSchedule::new(
                 self.scheduler_cores,
                 self.long_execution_cores,
                 ordered_new_execution_canister_ids,
                 ordered_long_execution_canister_ids,
             ),
+            rate_limited_canister_ids,
         )
     }
 

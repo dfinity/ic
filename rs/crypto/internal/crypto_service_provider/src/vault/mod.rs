@@ -8,7 +8,7 @@ pub mod api;
 pub mod local_csp_vault;
 pub mod remote_csp_vault;
 #[cfg(test)]
-mod test_utils;
+pub mod test_utils;
 
 impl From<CspBasicSignatureError> for CryptoError {
     fn from(e: CspBasicSignatureError) -> CryptoError {

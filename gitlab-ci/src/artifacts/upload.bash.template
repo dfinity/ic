@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+set -eEuo pipefail
+
+while read -r k v
+do
+    case "$k" in
+        HOME)
+            # Required by rclone to get credentials from $HOME/.aws/credentials
+            export HOME="$v"
+            ;;
+        COMMIT_SHA)
+            VERSION="$v"
+            ;;
+        GIT_TREE_STATUS)
+            GIT_TREE_STATUS="$v"
+            ;;
+        BUILD_TIMESTAMP)
+            BUILD_TIMESTAMP="$v"
+            ;;
+    esac
+done < "@@VERSION_FILE@@"
+
+# Support builds from repos with local changes.
+if [ "${GIT_TREE_STATUS}" != 'Clean' ]
+then
+  VERSION="${VERSION}-${BUILD_TIMESTAMP}"
+fi
+
+# rclone reads the $(dirname $f) to get file attribuates.
+# Therefore symlink should be resolved.
+f="$1"
+if [ -L "$f" ];then
+    f=$(readlink "$f")
+fi
+
+# TODO: copy to blessed/ic when run in protected mode.
+"@@RCLONE@@" \
+    --config="@@RCLONE_CONFIG@@" \
+    --progress \
+    --stats-one-line \
+    --checksum \
+    --immutable \
+    copy \
+    "$f" \
+    "public-s3:dfinity-download-public/ic/${VERSION}/@@REMOTE_SUBDIR@@/"
+
+echo "http://download.dfinity.systems/ic/${VERSION}/@@REMOTE_SUBDIR@@/$(basename $f)" > "$2"

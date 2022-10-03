@@ -15,11 +15,14 @@ use ic_interfaces::messages::CanisterInputMessage;
 use ic_interfaces::messages::RequestOrIngress;
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::CallContextId;
-use ic_types::{Cycles, NumBytes, Time};
+use ic_types::{Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
+
+#[cfg(test)]
+mod tests;
 
 // Execute an inter-canister request or an ingress update message.
 #[allow(clippy::too_many_arguments)]
@@ -280,9 +283,18 @@ impl UpdateHelper {
             original.execution_parameters.instruction_limits.message(),
             original.subnet_size,
         );
+        let instructions_used = NumInstructions::from(
+            original
+                .execution_parameters
+                .instruction_limits
+                .message()
+                .get()
+                .saturating_sub(output.num_instructions_left.get()),
+        );
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
+            instructions_used,
             heap_delta,
         }
     }
@@ -315,7 +327,10 @@ impl PausedExecution for PausedCallExecution {
             match UpdateHelper::resume(&clean_canister, &self.original, &round, self.paused_helper)
             {
                 Ok(helper) => helper,
-                Err(err) => return finish_err(clean_canister, err, self.original, round),
+                Err(err) => {
+                    self.paused_wasm_execution.abort();
+                    return finish_err(clean_canister, err, self.original, round);
+                }
             };
 
         let execution_state = helper.canister().execution_state.as_ref().unwrap();

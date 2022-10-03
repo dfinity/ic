@@ -1451,12 +1451,14 @@ mod tests {
         let ledger_canister_id = canister_test_id(502);
         let swap_canister_id = canister_test_id(503);
         let ledger_archive_ids = vec![canister_test_id(504)];
+        let index_canister_id = canister_test_id(505);
 
         let root_hash = Sha256::hash(&[1]).to_vec();
         let governance_hash = Sha256::hash(&[2]).to_vec();
         let ledger_hash = Sha256::hash(&[3]).to_vec();
         let swap_hash = Sha256::hash(&[4]).to_vec();
         let archive_hash = Sha256::hash(&[5]).to_vec();
+        let index_hash = Sha256::hash(&[7]).to_vec();
 
         let next_sns_version = SnsVersion {
             root_wasm_hash: Sha256::hash(&[6]).to_vec(),
@@ -1464,6 +1466,7 @@ mod tests {
             ledger_wasm_hash: ledger_hash.clone(),
             swap_wasm_hash: swap_hash.clone(),
             archive_wasm_hash: archive_hash.clone(),
+            index_wasm_hash: index_hash.clone(),
         };
 
         let current_governance_proto_version = Version {
@@ -1472,6 +1475,7 @@ mod tests {
             ledger_wasm_hash: ledger_hash.clone(),
             swap_wasm_hash: swap_hash.clone(),
             archive_wasm_hash: archive_hash.clone(),
+            index_wasm_hash: index_hash.clone(),
         };
 
         let mut env = NativeEnvironment::new(Some(governance_canister_id));
@@ -1523,7 +1527,14 @@ mod tests {
                         )),
                         canister_id: Some(canister_id.get())
                     })
-                    .collect()
+                    .collect(),
+                index: Some(CanisterSummary {
+                    status: Some(canister_status_for_test(
+                        index_hash,
+                        CanisterStatusType::Running
+                    )),
+                    canister_id: Some(index_canister_id.get())
+                }),
             })
             .unwrap()),
         );
@@ -1608,6 +1619,7 @@ Version {
         let ledger_hash = Sha256::hash(&[3]).to_vec();
         let swap_hash = Sha256::hash(&[4]).to_vec();
         let archive_hash = Sha256::hash(&[5]).to_vec();
+        let index_hash = Sha256::hash(&[7]).to_vec();
 
         env.set_call_canister_response(
             SNS_WASM_CANISTER_ID,
@@ -1618,7 +1630,8 @@ Version {
                     governance_wasm_hash: governance_hash,
                     ledger_wasm_hash: ledger_hash,
                     swap_wasm_hash: swap_hash,
-                    archive_wasm_hash: archive_hash
+                    archive_wasm_hash: archive_hash,
+                    index_wasm_hash: index_hash,
                 })
             })
             .unwrap(),
@@ -1649,6 +1662,7 @@ Version {
         let ledger_hash = Sha256::hash(&[3]).to_vec();
         let swap_hash = Sha256::hash(&[4]).to_vec();
         let archive_hash = Sha256::hash(&[5]).to_vec();
+        let index_hash = Sha256::hash(&[7]).to_vec();
 
         let current_version = SnsVersion {
             root_wasm_hash: root_hash.clone(),
@@ -1656,6 +1670,7 @@ Version {
             ledger_wasm_hash: ledger_hash,
             swap_wasm_hash: swap_hash,
             archive_wasm_hash: archive_hash.clone(),
+            index_wasm_hash: index_hash.clone(),
         };
         let next_version = SnsVersion {
             root_wasm_hash: root_hash,
@@ -1663,6 +1678,7 @@ Version {
             ledger_wasm_hash: Sha256::hash(&[5]).to_vec(),
             swap_wasm_hash: Sha256::hash(&[6]).to_vec(),
             archive_wasm_hash: archive_hash,
+            index_wasm_hash: index_hash,
         };
 
         env.set_call_canister_response(
@@ -1701,6 +1717,7 @@ Version {
             swap: None,
             dapps: vec![],
             archives: vec![],
+            index: None,
         };
 
         env.set_call_canister_response(

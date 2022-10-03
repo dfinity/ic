@@ -97,7 +97,7 @@ openssh-keys ="0.5.0"
 openssl = "0.10.29"
 pem = "1.0.1"
 phantom_newtype = { path = "../phantom_newtype" }
-proptest = "0.9.4"
+proptest = "1.0"
 prost = "0.10.4"
 quickcheck = "1.0.3"
 rand = "0.8"
@@ -128,8 +128,8 @@ utils = { path = "../utils", package ="ic-utils" }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
-ic-agent = "=0.20.0"
-ic-utils = "=0.20.0"
+ic-agent = "=0.20.1"
+ic-utils = "=0.20.1"
 
 [[bin]]
 name = "system-tests"
@@ -142,3 +142,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "prod-test-driver"
 path = "bin/prod_test_driver.rs"
+
+[[bin]]
+name = "ic-systest-basic-health"
+path = "bin/basic_health.rs"

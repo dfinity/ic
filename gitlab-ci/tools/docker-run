@@ -7,6 +7,16 @@
 
 set -eEuo pipefail
 
+while test $# -gt 0; do
+    case "$1" in
+        -b* | --bazel*)
+            BAZEL_MODE=true
+            shift
+            ;;
+        *) break ;;
+    esac
+done
+
 if [ -n "${DEBUG:-}" ]; then
     set -x
 fi
@@ -17,10 +27,18 @@ REPO_ROOT="$(
 )"
 
 if [ -z "${IMAGE:-}" ]; then
-    "$REPO_ROOT"/gitlab-ci/docker/docker-build-image.sh
+    if [ "${BAZEL_MODE:-false}" == "true" ]; then
+        "$REPO_ROOT"/gitlab-ci/docker/docker-build-image.sh --bazel
+    else
+        "$REPO_ROOT"/gitlab-ci/docker/docker-build-image.sh
+    fi
 fi
 
 source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"
+
+if [ "${BAZEL_MODE:-false}" == "true" ]; then
+    IMAGE="$BAZEL_IMAGE"
+fi
 
 wdir="/ic/$(git rev-parse --show-prefix)"
 if [[ -z "${@:-}" ]]; then

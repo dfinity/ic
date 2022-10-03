@@ -185,6 +185,10 @@ pub struct NumMessagesTag;
 /// Represents the number of messages.
 pub type NumMessages = AmountOf<NumMessagesTag, u64>;
 
+pub struct NumSlicesTag;
+/// Represents the number of slices.
+pub type NumSlices = AmountOf<NumSlicesTag, u64>;
+
 pub struct QueueIndexTag;
 /// Index into a queue; used in the context of `InputQueue` / `OutputQueue` to
 /// define message order.
@@ -208,6 +212,10 @@ pub type CryptoHashOfPartialState = crypto::CryptoHashOf<CanonicalPartialStateTa
 pub enum CanonicalStateTag {}
 /// A cryptographic hash of a full canonical replicated state at some height.
 pub type CryptoHashOfState = crypto::CryptoHashOf<CanonicalStateTag>;
+
+pub enum NumPagesTag {}
+/// A number of OS-sized pages.
+pub type NumPages = Id<NumPagesTag, u64>;
 
 /// `AccumulatedPriority` is a part of the SchedulerState. It is the value by
 /// which we prioritize canisters for execution. It is reset to 0 in the round

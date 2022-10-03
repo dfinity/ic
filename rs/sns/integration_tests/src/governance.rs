@@ -46,6 +46,7 @@ fn test_get_init_config_file() {
                     ledger: PrincipalId::new_user_test_id(2),
                     root: PrincipalId::new_user_test_id(3),
                     swap: PrincipalId::new_user_test_id(4),
+                    index: PrincipalId::new_user_test_id(5),
                 },
                 None,
             )

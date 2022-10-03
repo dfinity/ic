@@ -1,16 +1,18 @@
 [Unit]
 Description=Boundary Node Control Plane
-After=setup-control-plane.service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
+LogRateLimitIntervalSec=1ms
+LogRateLimitBurst=1000
 User=root
 Group=root
 Restart=always
-ExecStartPre=/bin/bash -c '/bin/systemctl set-environment NNS_URLS="$(cat ${NNS_URLS_PATH})"'
 ExecStart=/opt/ic/bin/boundary-node-control-plane \
-    --nns-urls ${NNS_URLS} \
-    --routes-dir "${ROUTES_DIR}" \
-    --metrics-addr "${METRICS_ADDR}"
+    --local-store  "/var/opt/registry/store"      \
+    --routes-dir   "/var/cache/ic_routes"         \
+    --metrics-addr "[::]:9312"
 
 [Install]
 WantedBy=multi-user.target

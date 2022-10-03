@@ -31,6 +31,7 @@ use ic_replicated_state::{
 use ic_system_api::ExecutionParameters;
 use ic_types::messages::SignedIngressContent;
 use ic_types::nominal_cycles::NominalCycles;
+use ic_types::NumInstructions;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{Payload, RejectContext, Response as CanisterResponse, StopCanisterContext},
@@ -64,6 +65,7 @@ pub(crate) enum DtsInstallCodeResult {
     Finished {
         canister: CanisterState,
         message: RequestOrIngress,
+        instructions_used: NumInstructions,
         result: Result<InstallCodeResult, CanisterManagerError>,
     },
     Paused {
@@ -597,16 +599,17 @@ impl CanisterManager {
         subnet_size: usize,
     ) -> (
         Result<InstallCodeResult, CanisterManagerError>,
+        NumInstructions,
         Option<CanisterState>,
     ) {
         let time = state.time();
-        let canister_layout_path = state.path().to_path_buf();
         let network_topology = state.metadata.network_topology.clone();
 
         let old_canister = match state.take_canister_state(&context.canister_id) {
             None => {
                 return (
                     Err(CanisterManagerError::CanisterNotFound(context.canister_id)),
+                    NumInstructions::from(0),
                     None,
                 );
             }
@@ -622,7 +625,7 @@ impl CanisterManager {
             message,
             old_canister,
             time,
-            canister_layout_path,
+            "NOT_USED".into(),
             &network_topology,
             execution_parameters,
             round_limits,
@@ -633,8 +636,9 @@ impl CanisterManager {
             DtsInstallCodeResult::Finished {
                 canister,
                 message: _,
+                instructions_used,
                 result,
-            } => (result, Some(canister)),
+            } => (result, instructions_used, Some(canister)),
             DtsInstallCodeResult::Paused {
                 canister: _,
                 paused_execution,

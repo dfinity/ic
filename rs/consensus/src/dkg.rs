@@ -45,6 +45,7 @@ use ic_types::{
         },
         CryptoError, Signed,
     },
+    messages::CallbackId,
     registry::RegistryClientError,
     signature::ThresholdSignature,
     Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId, Time,
@@ -639,7 +640,11 @@ fn create_summary_payload(
         state_manager,
         validation_context,
         transcripts_for_new_subnets,
-        last_summary.transcripts_for_new_subnets(),
+        &last_summary
+            .transcripts_for_new_subnets_with_callback_ids
+            .iter()
+            .map(|(id, _, result)| (*id, result.clone()))
+            .collect(),
         &last_summary.initial_dkg_attempts,
         &logger,
     )?;
@@ -873,16 +878,19 @@ fn compute_remote_dkg_data(
 ) -> Result<
     (
         Vec<NiDkgConfig>,
-        BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+        Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
         BTreeMap<NiDkgTargetId, u32>,
     ),
     TransientError,
 > {
+    let state = state_manager
+        .get_state_at(validation_context.certified_height)
+        .map_err(TransientError::StateManagerError)?;
     let (context_configs, errors, valid_target_ids) = process_subnet_call_context(
         subnet_id,
         height,
         registry_client,
-        state_manager,
+        state.get_ref(),
         validation_context,
         logger,
     )?;
@@ -984,7 +992,47 @@ fn compute_remote_dkg_data(
         new_transcripts.insert(dkg_id, Err(err_str));
     }
 
-    Ok((configs, new_transcripts, attempts))
+    let new_transcripts_vec =
+        add_callback_ids_to_transcript_results(new_transcripts, state.get_ref(), logger);
+
+    Ok((configs, new_transcripts_vec, attempts))
+}
+
+fn add_callback_ids_to_transcript_results(
+    new_transcripts: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+    state: &ReplicatedState,
+    log: &ReplicaLogger,
+) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
+    let setup_initial_dkg_contexts = &state
+        .metadata
+        .subnet_call_context_manager
+        .setup_initial_dkg_contexts;
+
+    new_transcripts
+        .into_iter()
+        .filter_map(|(id, result)| {
+            if let Some(callback_id) = setup_initial_dkg_contexts
+                .iter()
+                .filter_map(|(callback_id, context)| {
+                    if NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet {
+                        Some(*callback_id)
+                    } else {
+                        None
+                    }
+                })
+                .last()
+            {
+                Some((id, callback_id, result))
+            } else {
+                error!(
+                    log,
+                    "Unable to find callback id associated with remote dkg id {}, this should not happen",
+                    id
+                );
+                None
+            }
+        })
+        .collect()
 }
 
 // Reads the SubnetCallContext and attempts to create DKG configs for new
@@ -996,7 +1044,7 @@ fn process_subnet_call_context(
     this_subnet_id: SubnetId,
     start_block_height: Height,
     registry_client: &dyn RegistryClient,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state: &ReplicatedState,
     validation_context: &ValidationContext,
     logger: &ReplicaLogger,
 ) -> Result<
@@ -1010,11 +1058,7 @@ fn process_subnet_call_context(
     let mut new_configs = Vec::new();
     let mut errors = Vec::new();
     let mut valid_target_ids = Vec::new();
-    let state = state_manager
-        .get_state_at(validation_context.certified_height)
-        .map_err(TransientError::StateManagerError)?;
     let contexts = &state
-        .get_ref()
         .metadata
         .subnet_call_context_manager
         .setup_initial_dkg_contexts;
@@ -1336,7 +1380,7 @@ fn get_dkg_summary_from_cup_contents(
         configs,
         transcripts,
         BTreeMap::new(), // next transcripts
-        BTreeMap::new(), // transcripts for other subnets
+        Vec::new(),      // transcripts for other subnets
         // If we are in a NNS subnet recovery with failover nodes, we use the registry version of
         // the recovered NNS as a DKG summary version which is used as the CUP version.
         registry_version_of_original_registry.unwrap_or(registry_version),
@@ -2323,8 +2367,18 @@ mod tests {
                 for (dkg_id, _) in summary.dkg.configs.iter() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
-                assert_eq!(summary.dkg.transcripts_for_new_subnets().len(), 2);
-                for (dkg_id, result) in summary.dkg.transcripts_for_new_subnets().iter() {
+                assert_eq!(
+                    summary
+                        .dkg
+                        .transcripts_for_new_subnets_with_callback_ids
+                        .len(),
+                    2
+                );
+                for (dkg_id, _, result) in summary
+                    .dkg
+                    .transcripts_for_new_subnets_with_callback_ids
+                    .iter()
+                {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
                     assert!(result.is_err());
                 }
@@ -2978,7 +3032,9 @@ mod tests {
                         .count(),
                     2
                 );
-                assert!(dkg_summary.transcripts_for_new_subnets().is_empty());
+                assert!(dkg_summary
+                    .transcripts_for_new_subnets_with_callback_ids
+                    .is_empty());
             } else {
                 panic!(
                     "block at height {} is not a summary block",
@@ -3009,9 +3065,11 @@ mod tests {
                 );
                 assert_eq!(
                     dkg_summary
-                        .transcripts_for_new_subnets()
-                        .keys()
-                        .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
+                        .transcripts_for_new_subnets_with_callback_ids
+                        .iter()
+                        .filter(
+                            |(id, _, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id)
+                        )
                         .count(),
                     2
                 );
@@ -3062,6 +3120,9 @@ mod tests {
                     state_manager.clone(),
                     registry.get_latest_version(),
                     vec![10, 11, 12],
+                    // XXX: This is a very brittle way to set up this test since
+                    // it will cause issues if we access the state manager more
+                    // than once in any call.
                     Some(2),
                     Some(target_id),
                 );
@@ -3138,13 +3199,14 @@ mod tests {
                         .count(),
                     0
                 );
+
                 // We rather respond with errors for this target.
                 assert_eq!(
                     transcripts_for_new_subnets
                         .iter()
-                        .filter(|(dkg_id, result)| dkg_id.target_subnet
+                        .filter(|(dkg_id, _, result)| dkg_id.target_subnet
                             == NiDkgTargetSubnet::Remote(target_id)
-                            && **result == Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()))
+                            && *result == Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()))
                         .count(),
                     2
                 );

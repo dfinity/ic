@@ -50,8 +50,8 @@ rust_library(
 rust_test(
     name = "state_manager_lib_tests",
     crate = ":state_manager",
+    # Tracked in MR-291
     flaky = True,
-    tags = ["exclusive"],
     deps = [
         "//rs/bitcoin/types/internal",
         "//rs/bitcoin/types/public",
@@ -97,25 +97,6 @@ rust_test(
         "@crate_index//:assert_matches",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
-        "@crate_index//:scoped_threadpool",
-        "@crate_index//:tempfile",
-    ],
-)
-
-rust_bench(
-    name = "checkpoint_bench",
-    srcs = ["benches/checkpoint.rs"],
-    deps = [
-        ":state_manager",
-        "//rs/monitoring/metrics",
-        "//rs/registry/subnet_type",
-        "//rs/replicated_state",
-        "//rs/state_layout",
-        "//rs/test_utilities",
-        "//rs/test_utilities/tmpdir",
-        "//rs/types/base_types",
-        "//rs/types/types",
-        "@crate_index//:criterion",
         "@crate_index//:scoped_threadpool",
         "@crate_index//:tempfile",
     ],

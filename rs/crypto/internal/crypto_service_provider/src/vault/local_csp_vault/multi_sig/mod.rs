@@ -6,7 +6,7 @@ use crate::vault::api::{
     CspMultiSignatureError, CspMultiSignatureKeygenError, MultiSignatureCspVault,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_internal_multi_sig_bls12381 as multi_bls12381;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
 use rand::{CryptoRng, Rng};
@@ -24,13 +24,12 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Mul
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let start_time = self.metrics.now();
+        let maybe_secret_key = self.sks_read_lock().get(&key_id);
         let secret_key: CspSecretKey =
-            self.sks_read_lock()
-                .get(&key_id)
-                .ok_or(CspMultiSignatureError::SecretKeyNotFound {
-                    algorithm: algorithm_id,
-                    key_id,
-                })?;
+            maybe_secret_key.ok_or(CspMultiSignatureError::SecretKeyNotFound {
+                algorithm: algorithm_id,
+                key_id,
+            })?;
 
         let result = match algorithm_id {
             AlgorithmId::MultiBls12_381 => match secret_key {
@@ -49,8 +48,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Mul
                 algorithm: algorithm_id,
             }),
         };
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
+            MetricsScope::Local,
             "multi_sign",
             start_time,
         );
@@ -79,8 +79,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Mul
         }?;
         let sk_id = public_key_hash_as_key_id(&pk);
         self.store_secret_key_or_panic(sk, sk_id);
-        self.metrics.observe_csp_local_duration_seconds(
+        self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
+            MetricsScope::Local,
             "gen_key_pair_with_pop",
             start_time,
         );

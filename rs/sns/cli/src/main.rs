@@ -64,20 +64,29 @@ pub struct DeployArgs {
     /// See command "init-config-file"
     #[clap(long, parse(from_os_str))]
     pub init_config_file: PathBuf,
-    /// The canister ID of SNS-WASMS to use instead of the default
+
+    /// The canister ID or name (via dfx.json) of SNS-WASMS to use instead of the default
     ///
     /// This is useful for testing CLI commands against local replicas without fully deployed NNS
     #[clap(long)]
     pub override_sns_wasm_canister_id_for_tests: Option<String>,
+
+    /// The SNS-WASMS canister candid, used to parse canister IDs from the response.
+    ///
+    /// Corresponds to the dfx canister call --candid flag.
+    #[clap(long)]
+    pub candid: Option<String>,
 
     /// The amount of cycles to initialize each SNS canister with. This can be omitted when
     /// deploying locally.
     #[structopt(long)]
     initial_cycles_per_canister: Option<u64>,
 
-    /// Saves the returned canister IDs in canister_ids.json
+    /// Saves the returned canister IDs in the specified json file.
+    ///
+    /// Default: canister_ids.json
     #[structopt(long)]
-    save: bool,
+    save_to: Option<String>,
 }
 
 /// The arguments used to display the account balance of a user

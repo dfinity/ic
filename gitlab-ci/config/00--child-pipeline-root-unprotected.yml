@@ -2,15 +2,11 @@ include:
 - local: /gitlab-ci/config/00--child-pipeline-root.yml
 
 .ubuntu-docker-protected:
-  image:
-    # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
   extends:
     - .ubuntu-nix-docker-pinned-dc
+    - .ic-build-image
 
 .ubuntu-docker-k8s-protected:
-  image:
-    # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
   extends:
     - .ubuntu-nix-docker-k8s-pinned-dc
+    - .ic-build-image

@@ -1,6 +1,8 @@
-type TxId = nat64;
+type TxId = nat;
 
 type Account = record { owner : principal; subaccount : opt blob };
+
+type SubAccount = blob;
 
 type Transaction = record {
      kind : text;
@@ -33,12 +35,12 @@ type GetAccountTransactionsArgs = record {
     // txid.
     start : opt TxId;
     // Maximum number of transactions to fetch.
-    max_results : nat,
+    max_results : nat;
 };
 
 type TransactionWithId = record {
   id : TxId;
-  transaction : Transaction,
+  transaction : Transaction;
 };
 
 type GetTransactions = record {
@@ -56,6 +58,18 @@ type GetTransactionsResult = variant {
   Err : GetTransactionsErr;
 };
 
-service : {
+type ListSubaccountsArgs = record {
+    owner: principal;
+    start: opt SubAccount;
+};
+
+// The initialization parameters of the Index canister.
+type InitArgs = record {
+    ledger_id : principal;
+};
+
+service : (InitArgs) -> {
   get_account_transactions : (GetAccountTransactionsArgs) -> (GetTransactionsResult);
+  ledger_id : () -> (principal) query;
+  list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
 };

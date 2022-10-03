@@ -18,5 +18,5 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
-proptest = "0.9.4"
-proptest-derive = "0.1.0"
+proptest = "1.0"
+proptest-derive = "0.3.0"

@@ -15,7 +15,7 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 proptest! {
     #[test]
     fn stream_encode_decode_roundtrip(stream in arb_stream(0, 10, 0, 10)) {
-        let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), SubnetType::Application, "NOT_USED".into());
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         let subnet = subnet_test_id(42);
         let stream_slice: StreamSlice = stream.clone().into();
@@ -40,7 +40,7 @@ proptest! {
 
     #[test]
     fn stream_encode_with_size_limit(stream in arb_stream(0, 10, 0, 10), size_limit in 0..1000usize) {
-        let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), SubnetType::Application, "NOT_USED".into());
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         let subnet = subnet_test_id(42);
         let stream_slice: StreamSlice = stream.clone().into();

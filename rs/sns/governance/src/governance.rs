@@ -2369,6 +2369,14 @@ impl Governance {
             .nervous_system_parameters()
             .max_neuron_age_for_age_bonus
             .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
+        let max_dissolve_delay_bonus_percentage = self
+            .nervous_system_parameters()
+            .max_dissolve_delay_bonus_percentage
+            .expect("NervousSystemParameters must have max_dissolve_delay_bonus_percentage");
+        let max_age_bonus_percentage = self
+            .nervous_system_parameters()
+            .max_age_bonus_percentage
+            .expect("NervousSystemParameters must have max_age_bonus_percentage");
         let initial_voting_period_seconds = self.initial_voting_period_seconds();
         let wait_for_quiet_deadline_increase_seconds =
             self.wait_for_quiet_deadline_increase_seconds();
@@ -2380,7 +2388,13 @@ impl Governance {
                 // Not eligible due to dissolve delay.
                 continue;
             }
-            let power = v.voting_power(now_seconds, max_dissolve_delay, max_age_bonus);
+            let power = v.voting_power(
+                now_seconds,
+                max_dissolve_delay,
+                max_age_bonus,
+                max_dissolve_delay_bonus_percentage,
+                max_age_bonus_percentage,
+            );
             total_power += power as u128;
             electoral_roll.insert(
                 k.clone(),
@@ -4907,6 +4921,7 @@ mod tests {
             ledger_wasm_hash: vec![3, 4, 5],
             swap_wasm_hash: vec![4, 5, 6],
             archive_wasm_hash: vec![5, 6, 7],
+            index_wasm_hash: vec![6, 7, 8],
         };
         test_upgrade_sns_to_next_version_upgrades_correct_canister(
             next_version,
@@ -4923,6 +4938,7 @@ mod tests {
             ledger_wasm_hash: vec![3, 4, 5],
             swap_wasm_hash: vec![4, 5, 6],
             archive_wasm_hash: vec![5, 6, 7],
+            index_wasm_hash: vec![6, 7, 8],
         };
         test_upgrade_sns_to_next_version_upgrades_correct_canister(
             next_version,
@@ -4939,6 +4955,7 @@ mod tests {
             ledger_wasm_hash: vec![3, 4, 5, 6],
             swap_wasm_hash: vec![4, 5, 6],
             archive_wasm_hash: vec![5, 6, 7],
+            index_wasm_hash: vec![6, 7, 8],
         };
         test_upgrade_sns_to_next_version_upgrades_correct_canister(
             next_version,
@@ -4956,10 +4973,29 @@ mod tests {
             ledger_wasm_hash: vec![3, 4, 5],
             swap_wasm_hash: vec![4, 5, 6],
             archive_wasm_hash: vec![5, 6, 7, 8],
+            index_wasm_hash: vec![6, 7, 8],
         };
         test_upgrade_sns_to_next_version_upgrades_correct_canister(
             next_version,
             vec![5, 6, 7, 8],
+            expected_canister_to_upgrade,
+        );
+    }
+
+    #[test]
+    fn test_upgrade_sns_to_next_version_for_index() {
+        let expected_canister_to_upgrade = SnsCanisterType::Index;
+        let next_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3],
+            governance_wasm_hash: vec![2, 3, 4],
+            ledger_wasm_hash: vec![3, 4, 5],
+            swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7],
+            index_wasm_hash: vec![6, 7, 8, 9],
+        };
+        test_upgrade_sns_to_next_version_upgrades_correct_canister(
+            next_version,
+            vec![6, 7, 8, 9],
             expected_canister_to_upgrade,
         );
     }
@@ -5010,6 +5046,7 @@ mod tests {
         let governance_canister_id = canister_test_id(501);
         let ledger_canister_id = canister_test_id(502);
         let ledger_archive_ids = vec![canister_test_id(504), canister_test_id(505)];
+        let index_canister_id = canister_test_id(506);
 
         let current_version = SnsVersion {
             root_wasm_hash: vec![1, 2, 3],
@@ -5017,6 +5054,7 @@ mod tests {
             ledger_wasm_hash: vec![3, 4, 5],
             swap_wasm_hash: vec![4, 5, 6],
             archive_wasm_hash: vec![5, 6, 7],
+            index_wasm_hash: vec![6, 7, 8],
         };
 
         let mut env = NativeEnvironment::new(Some(governance_canister_id));
@@ -5071,6 +5109,7 @@ mod tests {
             SnsCanisterType::Swap => {
                 panic!("Swap upgrade not supported via SNS (ownership)")
             }
+            SnsCanisterType::Index => vec![index_canister_id],
         };
 
         assert!(!canisters_to_be_upgraded.is_empty());
@@ -5181,6 +5220,7 @@ mod tests {
         let ledger_canister_id = canister_test_id(502);
         let swap_canister_id = canister_test_id(503);
         let ledger_archive_ids = vec![canister_test_id(504), canister_test_id(505)];
+        let index_canister_id = canister_test_id(506);
         let dapp_canisters = vec![canister_test_id(600)];
 
         GetSnsCanistersSummaryResponse {
@@ -5232,6 +5272,13 @@ mod tests {
                     canister_id: Some(id.get()),
                 })
                 .collect(),
+            index: Some(CanisterSummary {
+                status: Some(canister_status_for_test(
+                    vec![6, 7, 8],
+                    CanisterStatusType::Running,
+                )),
+                canister_id: Some(index_canister_id.get()),
+            }),
         }
     }
 
@@ -5245,6 +5292,7 @@ mod tests {
             ledger_wasm_hash: vec![3, 4, 5],
             swap_wasm_hash: vec![4, 5, 6],
             archive_wasm_hash: vec![5, 6, 7],
+            index_wasm_hash: vec![6, 7, 8],
         };
 
         let mut env = NativeEnvironment::new(Some(governance_canister_id));
@@ -5326,6 +5374,7 @@ mod tests {
             ledger_wasm_hash: vec![3, 4, 5],
             swap_wasm_hash: vec![4, 5, 6],
             archive_wasm_hash: vec![5, 6, 7],
+            index_wasm_hash: vec![6, 7, 8],
         };
 
         let mut env = NativeEnvironment::new(Some(governance_canister_id));
@@ -5399,6 +5448,7 @@ mod tests {
             ledger_wasm_hash: vec![3, 4, 5],
             swap_wasm_hash: vec![4, 5, 6],
             archive_wasm_hash: vec![5, 6, 7],
+            index_wasm_hash: vec![6, 7, 8],
         };
 
         let mut env = NativeEnvironment::new(Some(governance_canister_id));

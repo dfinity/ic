@@ -94,7 +94,7 @@ pub struct CallContextManager {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CyclesAccount {
-    /// Cycle balance is store as u128::to_bytes_le()
+    /// Cycle balance is stored as u128::to_bytes_le()
     #[prost(bytes = "vec", tag = "1")]
     pub cycles_balance: ::prost::alloc::vec::Vec<u8>,
 }
@@ -320,6 +320,9 @@ pub struct CanisterStateBits {
     /// Time of last charge for resource allocations.
     #[prost(message, optional, tag = "31")]
     pub time_of_last_allocation_charge_nanos: ::core::option::Option<u64>,
+    /// Postponed charges that are not applied to `cycles_balance` yet.
+    #[prost(message, optional, tag = "32")]
+    pub cycles_debit: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

@@ -5,7 +5,6 @@ use crate::{
     types::IndividualSignature, types::PublicKey, types::SecretKey,
 };
 use ic_crypto_internal_bls12_381_type::G1Projective;
-use ic_crypto_internal_test_vectors::unhex::hex_to_48_bytes;
 
 fn check_single_point_signature_verifies(
     secret_key: SecretKey,
@@ -55,10 +54,8 @@ mod stability {
     #[test]
     fn message_to_g1() {
         assert_eq!(
-            multi_crypto::hash_message_to_g1(b"abc").serialize(),
-            hex_to_48_bytes(
-                "a13964470939e806ca5ca96b348ab13af3f06a7d9dc4e8a0cf20d8a81a6d8f5a692c67424228d45d749e7832d27cea79"
-            )[..]
+            hex::encode(multi_crypto::hash_message_to_g1(b"abc").serialize()),
+            "a13964470939e806ca5ca96b348ab13af3f06a7d9dc4e8a0cf20d8a81a6d8f5a692c67424228d45d749e7832d27cea79"
         );
     }
     #[test]
@@ -67,10 +64,8 @@ mod stability {
         let (_secret_key, public_key) = multi_crypto::keypair_from_rng(&mut csprng);
         let public_key_bytes = PublicKeyBytes::from(public_key);
         assert_eq!(
-            multi_crypto::hash_public_key_to_g1(&public_key_bytes.0[..]).serialize(),
-            hex_to_48_bytes(
-                "8b6db127df1bdc6e0a78c7b1e9539d9c7720cf10f07c5f408d06ad8000538f556f546949c94329a0164fbdc5d8eb1d33"
-            )[..]
+            hex::encode(multi_crypto::hash_public_key_to_g1(&public_key_bytes.0[..]).serialize()),
+            "b02fd0d54faab7498924d7e230f84b00519ea7f3846cd30f82b149c1f172ad79ee68adb2ea2fc8a2d40ffdf3fd5df02a"
         );
     }
 }

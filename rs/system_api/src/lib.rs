@@ -22,7 +22,8 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{Callback, WasmClosure},
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, NumPages, PrincipalId,
+    SubnetId, Time,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
@@ -2017,23 +2018,8 @@ impl SystemApi for SystemApiImpl {
                 call_context_id,
                 outgoing_request,
                 ..
-            } => {
-                let req_in_prep = outgoing_request.take().ok_or_else(|| {
-                    ContractViolation(
-                        "ic0.call_perform called when no call is under construction.".to_string(),
-                    )
-                })?;
-
-                let req = into_request(
-                    req_in_prep,
-                    *call_context_id,
-                    &mut self.sandbox_safe_system_state,
-                    &self.log,
-                )?;
-
-                self.push_output_request(req)
             }
-            ApiType::NonReplicatedQuery {
+            | ApiType::NonReplicatedQuery {
                 query_kind:
                     NonReplicatedQueryKind::Stateful {
                         call_context_id,
@@ -2151,7 +2137,7 @@ impl SystemApi for SystemApiImpl {
         src: u32,
         size: u32,
         heap: &[u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<NumPages> {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_write")),
             ApiType::Init { .. }
@@ -2269,7 +2255,7 @@ impl SystemApi for SystemApiImpl {
         src: u64,
         size: u64,
         heap: &[u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<NumPages> {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_write")),
             ApiType::Init { .. }

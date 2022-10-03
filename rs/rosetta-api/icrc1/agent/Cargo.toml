@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 candid = "0.7.10"
 garcon = { version = "0.2", features = ["async"] }
-ic-agent = "=0.20.0"
+ic-agent = "=0.20.1"
 ic-icrc1 = { path = "../" }
 ic-ledger-core = { path = "../../ledger_core" }
 num-traits = "0.2.14"

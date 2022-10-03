@@ -39,24 +39,24 @@ fn new_tokio_runtime() -> tokio::runtime::Runtime {
 
 mod timeout {
     use super::*;
-    use crate::vault::api::CspBasicSignatureKeygenError;
+    use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateFsKeyError;
     use ic_types::crypto::AlgorithmId;
+    use ic_types::NodeId;
+    use ic_types::PrincipalId;
 
     #[test]
     fn should_fail_with_deadline_exceeded() {
         let tokio_rt = new_tokio_runtime();
         let csp_vault =
             new_csp_vault_for_test_with_timeout(Duration::from_millis(1), tokio_rt.handle());
-        let gen_key_result = csp_vault.gen_key_pair(AlgorithmId::Ed25519);
-        assert!(
-            matches!(
-                gen_key_result.clone(),
-                Err(CspBasicSignatureKeygenError::InternalError { internal_error })
-                if internal_error.contains("the request exceeded its deadline")
-            ),
-            "Unexpected gen_key_result: {:?}",
-            gen_key_result
-        );
+        let node_id = NodeId::from(PrincipalId::new_node_test_id(1u64));
+        let gen_key_result =
+            csp_vault.gen_forward_secure_key_pair(node_id, AlgorithmId::NiDkg_Groth20_Bls12_381);
+
+        assert!(matches!(gen_key_result,
+            Err(CspDkgCreateFsKeyError::InternalError ( internal_error ))
+            if internal_error.internal_error.contains("the request exceeded its deadline")
+        ));
     }
 }
 

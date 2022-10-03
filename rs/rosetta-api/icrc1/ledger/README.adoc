@@ -1,0 +1,141 @@
+= ICRC-1 Ledger on a Local Replica
+
+This guide will show you how to setup a local replica with a running Ledger that implements the  https://github.com/dfinity/icrc-1[ICRC-1 Fungible Token Standard].
+
+== Step 0: Preparations
+
+Before you start, make sure you have DFX. If you don’t have DFX installed, follow instructions on https://smartcontracts.org/[smartcontracts.org] to install it. While not necessary, you should work in an empty directory. Use the following commands to work in an empty repository: 
+
+[,console]
+----
+$ mkdir icrc1_ledger_test
+$ cd icrc1_ledger_test
+----
+
+== Step 1: Download the Ledger
+
+​The DFINITY Foundation publishes both the source code and the artefacts of its ICRC-1 Ledger. For this guide we are going to use the Ledger published with following commit of the Internet Computer repository. Note that the IC_VERSION used here is only examplatory, developers are encouraged to use the latest version built. 
+
+[,console]
+----
+$ export IC_VERSION=b43543ce7365acd1720294e701e8e8361fa30c8f
+----
+
+Download the ledger wasm and its candid file and unzip the ledger wasm
+
+[,console]
+----
+$ curl -o ic-icrc1-ledger.wasm.gz https://download.dfinity.systems/ic/${IC_VERSION}/canisters/ic-icrc1-ledger.wasm.gz
+$ curl -o icrc1.did https://raw.githubusercontent.com/dfinity/ic/${IC_VERSION}/rs/rosetta-api/icrc1/ledger/icrc1.did
+$ gunzip ic-icrc1-ledger.wasm.gz
+----
+
+The directory you are currently in should now look like something like the following. 
+Note that your specific data size may vary depending on the IC_VERSION you are using. 
+
+[,console]
+----
+$ ls -sh1 *       
+
+1.4M ic-icrc1-ledger.wasm
+3.5K icrc1.did
+----
+
+== Step 2: Start the replica
+
+​Create the file *​dfx.json*​ ,
+
+[,console]
+----
+$ touch dfx.json
+$ nano dfx.json
+----
+
+insert the following information.
+
+[,json]
+----
+{
+    "canisters": {
+      "icrc1-ledger": {
+        "type": "custom",
+        "wasm": "ic-icrc1-ledger.wasm",
+        "candid": "icrc1.did"
+      }
+    },
+    "networks": {
+        "local": {
+        "bind": "127.0.0.1:8003"
+      }
+  }
+  }
+----
+
+Save and exit *dfx.json*.
+
+​Then start the replica
+
+[,console]
+----
+$ dfx start --background
+----
+
+Make sure the port specified in *dfx.json* under _"networks":..._ is available. Otherwise, you may want to change the port in *dfx.json* or free up the port on your machine. 
+
+Before we can deploy the Ledger we need to get the principal that will be used as both minting account and controller of the archive canisters. For a local setup we are going to use the principal of the current identity.
+Store the principal of the current identity inside an environment variable
+
+[,console]
+----
+$ export PRINCIPAL=$(dfx identity get-principal)
+----
+
+​Now you can deploy the Ledger
+
+
+[,console]
+----
+$ dfx deploy icrc1-ledger --argument "(record {
+  token_symbol = \"TEX\";
+  token_name = \"Token example\";
+  minting_account = record { owner = principal \"$PRINCIPAL\"  };
+  transfer_fee = 10_000;
+  metadata = vec {};
+  initial_balances = vec {};
+  archive_options = record {
+    num_blocks_to_archive = 2000;
+    trigger_threshold = 1000;
+    controller_id = principal \"$PRINCIPAL\";
+  };
+},)"
+----
+
+
+== ​Step 3: Mint some tokens
+
+It's finally time to mint some tokens! Let's mint 1_000_000 tokens to the principal akllx-q5q7v-sgdck-cjd7y-izqql-ck5rp-ee3c7-kzrea-k3fnf-pcuaw-pqe. 
+
+[,console]
+----
+$ dfx canister call icrc1-ledger icrc1_transfer '(record {
+  to = record {owner = principal "akllx-q5q7v-sgdck-cjd7y-izqql-ck5rp-ee3c7-kzrea-k3fnf-pcuaw-pqe"};
+  amount=1_000_000
+},)'
+----
+
+and check the balance
+
+[,console]
+----
+$ dfx canister call icrc1-ledger icrc1_balance_of '(record { owner=principal "akllx-q5q7v-sgdck-cjd7y-izqql-ck5rp-ee3c7-kzrea-k3fnf-pcuaw-pqe" },)'
+
+(1_000_000 : nat64)
+----
+
+== Conclusion 
+
+In this guide we have seen how to setup a local replica with an ICRC-1 Ledger installed and ready to be used.
+
+​Feel free to drop feedback on the https://forum.dfinity.org/:[forum] or on https://discord.com/invite/YAAVYjAV[discord].
+
+​Happy coding!

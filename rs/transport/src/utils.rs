@@ -10,7 +10,10 @@ use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpSocket};
 use tokio::sync::mpsc::{channel, error::TrySendError, Receiver, Sender};
 use tokio::time::Duration;
-use tokio::time::{timeout_at, Instant};
+use tokio::{
+    net::TcpStream,
+    time::{timeout_at, Instant},
+};
 
 // High level design of the send queue flow:
 // - tokio::mpsc::channel is used as the send queue. This acts as a single
@@ -294,4 +297,20 @@ pub(crate) fn start_listener(local_addr: SocketAddr) -> std::io::Result<TcpListe
     socket.set_reuseport(true)?;
     socket.bind(local_addr)?;
     socket.listen(128)
+}
+
+/// Set up the client socket, and connect to the specified server peer
+pub(crate) async fn connect_to_server(
+    local_addr: SocketAddr,
+    peer_addr: SocketAddr,
+) -> std::io::Result<TcpStream> {
+    let socket = if local_addr.is_ipv6() {
+        TcpSocket::new_v6()?
+    } else {
+        TcpSocket::new_v4()?
+    };
+    socket.bind(local_addr)?;
+    let stream = socket.connect(peer_addr).await?;
+    stream.set_nodelay(true)?;
+    Ok(stream)
 }

@@ -82,7 +82,7 @@ pub fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["filter_canisters"])
             .start_timer();
-        tip.filter_canisters(&state.canister_states.keys().collect())?;
+        layout.filter_tip_canisters(height, &state.canister_states.keys().collect())?;
     }
 
     let cp = {
@@ -205,6 +205,7 @@ fn serialize_canister_to_tip(
                 memory_allocation: canister_state.system_state.memory_allocation,
                 freeze_threshold: canister_state.system_state.freeze_threshold,
                 cycles_balance: canister_state.system_state.balance(),
+                cycles_debit: canister_state.system_state.cycles_debit(),
                 execution_state_bits,
                 status: canister_state.system_state.status.clone(),
                 scheduled_as_first: canister_state
@@ -461,7 +462,6 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         // Consensus queue needs to be empty at the end of every round.
         Vec::new(),
         bitcoin,
-        checkpoint_layout.raw_path().into(),
     );
 
     Ok(state)
@@ -578,6 +578,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.certified_data,
         canister_metrics,
         canister_state_bits.cycles_balance,
+        canister_state_bits.cycles_debit,
         canister_state_bits.task_queue.into_iter().collect(),
     );
 
@@ -668,6 +669,7 @@ mod tests {
     use crate::{BitcoinPageMap, NUMBER_OF_CHECKPOINT_THREADS};
     use ic_base_types::NumSeconds;
     use ic_ic00_types::CanisterStatusType;
+    use ic_logger::info;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::execution_state::WasmBinary, canister_state::execution_state::WasmMetadata,
@@ -715,6 +717,16 @@ mod tests {
         Memory::new(page_map, NumWasmPages::from(1))
     }
 
+    fn log_path_and_metadata(log: &ReplicaLogger, path: &std::path::Path) -> std::io::Result<()> {
+        info!(
+            log,
+            "Setting {} readonly. Metadata: {:?}",
+            path.display(),
+            path.metadata()?
+        );
+        Ok(())
+    }
+
     fn mark_readonly(path: &std::path::Path) -> std::io::Result<()> {
         let mut permissions = path.metadata()?.permissions();
         permissions.set_readonly(true);
@@ -748,11 +760,7 @@ mod tests {
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
 
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                SubnetType::Application,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
             state.put_canister_state(new_canister_state(
                 canister_id,
                 user_test_id(24).get(),
@@ -796,7 +804,6 @@ mod tests {
         });
     }
 
-    #[ignore]
     #[test]
     fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
         with_test_replica_logger(|log| {
@@ -807,11 +814,7 @@ mod tests {
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                SubnetType::Application,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
             state.put_canister_state(new_canister_state(
                 canister_id,
                 user_test_id(24).get(),
@@ -819,19 +822,23 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
+            log_path_and_metadata(&log, &checkpoints_dir).unwrap();
             mark_readonly(&checkpoints_dir).unwrap();
 
             // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
             let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
 
-            match make_checkpoint(
+            let replicated_state = make_checkpoint(
                 &state,
                 HEIGHT,
                 &layout,
                 &log,
                 &checkpoint_metrics(),
                 &mut thread_pool(),
-            ) {
+            );
+            log_path_and_metadata(&log, &checkpoints_dir).unwrap();
+
+            match replicated_state {
                 Err(_) => assert!(
                     !expected_scratchpad_dir.exists(),
                     "Expected incomplete scratchpad to be deleted"
@@ -846,7 +853,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -863,7 +870,7 @@ mod tests {
             let page_map = PageMap::from(&[1, 2, 3, 4][..]);
             let stable_memory = Memory::new(page_map, NumWasmPages::new(1));
             let execution_state = ExecutionState {
-                canister_root: root.clone(),
+                canister_root: "NOT_USED".into(),
                 session_nonce: None,
                 wasm_binary: WasmBinary::new(wasm.clone()),
                 wasm_memory: wasm_memory.clone(),
@@ -876,8 +883,7 @@ mod tests {
             canister_state.execution_state = Some(execution_state);
 
             let own_subnet_type = SubnetType::Application;
-            let mut state =
-                ReplicatedState::new_rooted_at(subnet_test_id(1), own_subnet_type, root);
+            let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
@@ -944,11 +950,7 @@ mod tests {
 
             let _state = make_checkpoint_and_get_state(
                 &log,
-                &ReplicatedState::new_rooted_at(
-                    subnet_test_id(1),
-                    own_subnet_type,
-                    "NOT_USED".into(),
-                ),
+                &ReplicatedState::new(subnet_test_id(1), own_subnet_type),
                 HEIGHT,
                 &layout,
             );
@@ -990,17 +992,18 @@ mod tests {
         });
     }
 
-    #[ignore]
     #[test]
     fn reports_an_error_on_misconfiguration() {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
 
+            log_path_and_metadata(&log, &root).unwrap();
             mark_readonly(&root).unwrap();
 
-            let layout = StateLayout::try_new(log, root);
+            let layout = StateLayout::try_new(log.clone(), root.clone());
 
+            log_path_and_metadata(&log, &root).unwrap();
             assert!(layout.is_err());
             let err_msg = layout.err().unwrap().to_string();
             assert!(
@@ -1042,11 +1045,7 @@ mod tests {
                 .add_stop_context(stop_context.clone());
 
             let own_subnet_type = SubnetType::Application;
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                own_subnet_type,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
@@ -1094,11 +1093,7 @@ mod tests {
             };
 
             let own_subnet_type = SubnetType::Application;
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                own_subnet_type,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
@@ -1140,11 +1135,7 @@ mod tests {
             };
 
             let own_subnet_type = SubnetType::Application;
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                own_subnet_type,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
@@ -1175,8 +1166,7 @@ mod tests {
             let own_subnet_type = SubnetType::Application;
             let subnet_id = subnet_test_id(1);
             let subnet_id_as_canister_id = CanisterId::from(subnet_id);
-            let mut state =
-                ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
+            let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
 
             // Add an ingress message to the subnet queues to later verify
             // it gets recovered.
@@ -1219,8 +1209,7 @@ mod tests {
 
             let own_subnet_type = SubnetType::Application;
             let subnet_id = subnet_test_id(1);
-            let mut state =
-                ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
+            let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
 
             // Enable the bitcoin feature to be able to mutate its state.
             state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
@@ -1264,8 +1253,7 @@ mod tests {
 
             let own_subnet_type = SubnetType::Application;
             let subnet_id = subnet_test_id(1);
-            let mut state =
-                ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
+            let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
 
             // Make some change in the Bitcoin page maps to later verify they get recovered.
             state.bitcoin_mut().utxo_set.utxos_small = PageMap::from(&[1, 2, 3, 4][..]);

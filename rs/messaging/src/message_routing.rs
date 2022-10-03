@@ -50,6 +50,10 @@ use std::thread::sleep;
 // incoming batches.
 const BATCH_QUEUE_BUFFER_SIZE: usize = 16;
 
+/// Maximum message length of a synthetic reject response produced by message
+/// routing.
+pub(crate) const SYNTHETIC_REJECT_MESSAGE_MAX_LEN: usize = 255;
+
 const METRIC_DELIVER_BATCH_COUNT: &str = "mr_deliver_batch_count";
 const METRIC_EXPECTED_BATCH_HEIGHT: &str = "mr_expected_batch_height";
 const METRIC_REGISTRY_VERSION: &str = "mr_registry_version";

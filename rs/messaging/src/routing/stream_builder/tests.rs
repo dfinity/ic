@@ -29,6 +29,7 @@ use ic_types::{
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, Cycles, SubnetId, Time,
 };
+use ic_utils::str::StrTruncate;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use rand::{Rng, SeedableRng};
@@ -94,12 +95,15 @@ fn reject_local_request() {
         let mut expected_state = state.clone();
 
         // Reject the message.
-        let reject_message = "Reject response";
+        let reject_message = (0..SYNTHETIC_REJECT_MESSAGE_MAX_LEN + 1)
+            .into_iter()
+            .map(|_| "a")
+            .collect::<String>();
         stream_builder.reject_local_request(
             &mut state,
             &msg,
             RejectCode::SysFatal,
-            reject_message.to_string(),
+            reject_message.clone(),
         );
 
         // Which should result in a reject Response being enqueued onto the input queue.
@@ -112,7 +116,9 @@ fn reject_local_request() {
                     refund: msg.payment,
                     response_payload: Payload::Reject(RejectContext {
                         code: RejectCode::SysFatal,
-                        message: reject_message.to_string(),
+                        message: reject_message
+                            .safe_truncate(SYNTHETIC_REJECT_MESSAGE_MAX_LEN)
+                            .to_string(),
                     }),
                 }
                 .into(),
@@ -870,8 +876,7 @@ fn build_streams_with_oversized_payloads() {
 /// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
 /// be used by a test.
 fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
-    let mut state =
-        ReplicatedState::new_rooted_at(LOCAL_SUBNET, SubnetType::Application, "NOT_USED".into());
+    let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
     state.metadata.batch_time = Time::from_nanos_since_unix_epoch(5);
     let metrics_registry = MetricsRegistry::new();
     let stream_handler = StreamBuilderImpl::new(

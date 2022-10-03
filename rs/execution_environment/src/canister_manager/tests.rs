@@ -63,7 +63,7 @@ use ic_types::{
 use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
-use std::{collections::BTreeSet, convert::TryFrom, path::Path, sync::Arc};
+use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
 
 use super::InstallCodeResult;
 
@@ -246,15 +246,14 @@ fn canister_manager_config(
     )
 }
 
-fn initial_state(path: &Path, subnet_id: SubnetId) -> ReplicatedState {
+fn initial_state(subnet_id: SubnetId) -> ReplicatedState {
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => subnet_id,
         })
         .unwrap(),
     );
-    let mut state =
-        ReplicatedState::new_rooted_at(subnet_id, SubnetType::Application, path.to_path_buf());
+    let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
     state.metadata.network_topology.routing_table = routing_table;
     state.metadata.network_topology.nns_subnet_id = subnet_id;
     state.metadata.init_allocation_ranges_if_empty().unwrap();
@@ -296,8 +295,7 @@ fn install_code(
         .method_name(Method::InstallCode)
         .method_payload(args.encode())
         .build();
-    let instructions_before = round_limits.instructions;
-    let (result, canister) = canister_manager.install_code(
+    let (result, instructions_used, canister) = canister_manager.install_code(
         context,
         RequestOrIngress::Ingress(Arc::new(ingress)),
         state,
@@ -305,9 +303,7 @@ fn install_code(
         round_limits,
         SMALL_APP_SUBNET_MAX_SIZE,
     );
-    let instructions_after = round_limits.instructions;
-    let instructions_left = instruction_limit
-        - as_num_instructions(instructions_before - instructions_after).min(instruction_limit);
+    let instructions_left = instruction_limit - instructions_used.min(instruction_limit);
     (instructions_left, result, canister)
 }
 
@@ -319,12 +315,7 @@ where
     let canister_manager = CanisterManagerBuilder::default()
         .with_subnet_id(subnet_id)
         .build();
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    f(
-        canister_manager,
-        initial_state(tmpdir.path(), subnet_id),
-        subnet_id,
-    )
+    f(canister_manager, initial_state(subnet_id), subnet_id)
 }
 
 #[test]
@@ -779,7 +770,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     // Try installing without any memory allocation.
     let execution_cost_before = test.canister_execution_cost(canister2);
     let err = test
-        .install_canister_with_allocation(canister2, wasm.clone(), None, None)
+        .install_canister_with_allocation(canister2, wasm, None, None)
         .unwrap_err();
     let execution_cost_after = test.canister_execution_cost(canister2);
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
@@ -787,9 +778,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
-        initial_cycles
-            - (execution_cost_after - execution_cost_before)
-            - test.reduced_wasm_compilation_fee(&wasm)
+        initial_cycles - (execution_cost_after - execution_cost_before)
     );
 }
 
@@ -2294,8 +2283,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
         .with_cycles_account_manager(cycles_account_manager)
         .build();
 
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let mut state = initial_state(tmpdir.path(), subnet_id);
+    let mut state = initial_state(subnet_id);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
@@ -2354,8 +2342,7 @@ fn add_cycles_sender_in_whitelist() {
     let canister = get_running_canister(canister_id);
     let sender = canister_test_id(1).get();
 
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let mut state = initial_state(tmpdir.path(), subnet_id);
+    let mut state = initial_state(subnet_id);
     let initial_cycles = canister.system_state.balance();
     state.put_canister_state(canister);
 
@@ -2610,7 +2597,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
     // Try upgrading without any memory allocation.
     let execution_cost_before = test.canister_execution_cost(canister2);
     let err = test
-        .upgrade_canister_with_allocation(canister2, wasm.clone(), None, None)
+        .upgrade_canister_with_allocation(canister2, wasm, None, None)
         .unwrap_err();
     let execution_cost_after = test.canister_execution_cost(canister2);
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
@@ -2618,9 +2605,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
-        cycles_before
-            - (execution_cost_after - execution_cost_before)
-            - test.reduced_wasm_compilation_fee(&wasm)
+        cycles_before - (execution_cost_after - execution_cost_before)
     );
 }
 
@@ -2738,8 +2723,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             .with_cycles_account_manager(cycles_account_manager)
             .build();
 
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = initial_state(tmpdir.path(), subnet_id);
+        let mut state = initial_state(subnet_id);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
                 (*EXECUTION_PARAMETERS).instruction_limits.message(),
@@ -2885,8 +2869,7 @@ fn failed_install_hooks_consume_instructions() {
             .with_cycles_account_manager(cycles_account_manager)
             .build();
 
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = initial_state(tmpdir.path(), subnet_id);
+        let mut state = initial_state(subnet_id);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
                 (*EXECUTION_PARAMETERS).instruction_limits.message(),
@@ -2972,8 +2955,7 @@ fn install_code_respects_instruction_limit() {
         .with_cycles_account_manager(cycles_account_manager)
         .build();
 
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let mut state = initial_state(tmpdir.path(), subnet_id);
+    let mut state = initial_state(subnet_id);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
@@ -4581,14 +4563,14 @@ fn cycles_correct_if_upgrade_succeeds() {
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
         test.canister_state(id).system_state.balance(),
-        cycles_before - execution_cost - test.reduced_wasm_compilation_fee(&wasm),
+        cycles_before - execution_cost,
     );
     assert_eq!(
         execution_cost,
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(18 + 24) + wasm_compilation_cost(&wasm),
             test.subnet_size()
-        ) - test.reduced_wasm_compilation_fee(&wasm)
+        )
     );
 }
 
