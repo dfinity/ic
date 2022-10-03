@@ -16,7 +16,7 @@ docker-autobuild-protected:
 
       # image used in this revision
       cd gitlab-ci/config
-      CI_IMAGE=$(grep registry.gitlab.com 00--common.yml | awk '{ print $2 }' | tr -d '"')
+      CI_IMAGE=$(grep registry.gitlab.com 00--common--images.yml | awk '{ print $2 }' | tr -d '"')
       CI_IMAGE_NAME=$(echo "$CI_IMAGE" | cut -d':' -f1)
       CI_IMAGE_TAG=$(echo "$CI_IMAGE" | cut -d':' -f2)
       cd -
