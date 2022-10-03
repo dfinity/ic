@@ -51,13 +51,13 @@ build-push-base-images:
      )
      # search, replace & push
      for IMAGE in "${IMAGE_LIST[@]}"; do
-         OLD_REF="$(grep -rho -E "${IMAGE}@sha256:[0-9a-z]{64}" ./* | head -1)"
-         NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}":"${TAG}")"
-         grep -r "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
-
          # TAG gets defined in *build-base-images
          docker push "$IMAGE":"$TAG"
          docker push "$IMAGE":latest
+
+         OLD_REF="$(grep -rho -E "${IMAGE}@sha256:[0-9a-z]{64}" ./* | head -1)"
+         NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}":"${TAG}")"
+         grep -r "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
      done
 
      # commit, push & create new merge request 
