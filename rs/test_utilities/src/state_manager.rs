@@ -136,11 +136,7 @@ impl FakeStateManager {
             states: Arc::new(RwLock::new(vec![snapshot])),
             tip: Arc::new(RwLock::new(Some((
                 height,
-                ReplicatedState::new_rooted_at(
-                    subnet_test_id(1),
-                    SubnetType::Application,
-                    tmpdir.path().into(),
-                ),
+                ReplicatedState::new(subnet_test_id(1), SubnetType::Application),
             )))),
             _tempdir: Arc::new(tmpdir),
             encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
@@ -151,10 +147,9 @@ impl FakeStateManager {
 fn initial_state() -> Labeled<Arc<ReplicatedState>> {
     Labeled::new(
         Height::new(0),
-        Arc::new(ReplicatedState::new_rooted_at(
+        Arc::new(ReplicatedState::new(
             subnet_test_id(1),
             SubnetType::Application,
-            "Initial".into(),
         )),
     )
 }

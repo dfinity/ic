@@ -16,7 +16,7 @@ use ic_interfaces::{
 };
 use ic_logger::{error, fatal, warn};
 use ic_replicated_state::{CanisterState, ExecutionState};
-use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
+use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
 use ic_types::{ComputeAllocation, Height, MemoryAllocation, NumInstructions, Time};
@@ -641,8 +641,10 @@ pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {
 pub(crate) fn canister_layout(
     state_path: &Path,
     canister_id: &CanisterId,
-) -> CanisterLayout<RwPolicy> {
-    CheckpointLayout::<RwPolicy>::new(state_path.into(), Height::from(0))
+) -> CanisterLayout<ReadOnly> {
+    // We use ReadOnly, as CheckpointLayouts with write permissions have side effects
+    // of creating directories
+    CheckpointLayout::<ReadOnly>::new(state_path.into(), Height::from(0))
         .and_then(|layout| layout.canister(canister_id))
         .expect("failed to obtain canister layout")
 }

@@ -461,7 +461,6 @@ pub mod test {
     use mockall::predicate::*;
     use mockall::*;
     use std::collections::BTreeMap;
-    use std::path::PathBuf;
 
     mock! {
         pub NonBlockingChannel<Request: 'static> {
@@ -479,11 +478,7 @@ pub mod test {
         http_calls: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     ) -> ReplicatedState {
         // Add some pending http calls
-        let mut replicated_state = ReplicatedState::new_rooted_at(
-            subnet_test_id(0),
-            SubnetType::System,
-            PathBuf::from("/tmp"),
-        );
+        let mut replicated_state = ReplicatedState::new(subnet_test_id(0), SubnetType::System);
         replicated_state
             .metadata
             .subnet_call_context_manager

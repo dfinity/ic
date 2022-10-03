@@ -92,12 +92,7 @@ mod tests {
 
     #[test]
     fn test_traverse_empty_state() {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            tmpdir.path().into(),
-        );
+        let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -142,12 +137,7 @@ mod tests {
             INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            tmpdir.path().into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);
 
         let visitor = TracingVisitor::new(NoopVisitor);
@@ -234,7 +224,6 @@ mod tests {
             INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
         let wasm_binary_hash = wasm_binary.binary.module_hash();
         let wasm_memory = Memory::new(PageMap::default(), NumWasmPages::from(2));
@@ -267,11 +256,7 @@ mod tests {
         };
         canister_state.execution_state = Some(execution_state);
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            tmpdir.path().into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);
 
         let visitor = TracingVisitor::new(NoopVisitor);
@@ -416,12 +401,7 @@ mod tests {
             StreamIndex::new(11),
         );
 
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            tmpdir.path().into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.modify_streams(move |streams| {
             streams.insert(subnet_test_id(5), stream);
         });
@@ -476,11 +456,7 @@ mod tests {
         let user_id = user_test_id(1);
         let canister_id = canister_test_id(1);
         let time = mock_time();
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "/test".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.set_ingress_status(
             message_test_id(1),
             IngressStatus::Unknown,
@@ -603,12 +579,7 @@ mod tests {
 
     #[test]
     fn test_traverse_time() {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            tmpdir.path().into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         state.metadata.batch_time += Duration::new(1, 123456789);
 
@@ -643,12 +614,7 @@ mod tests {
 
     #[test]
     fn test_traverse_subnet() {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            tmpdir.path().into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         state.metadata.network_topology.subnets = btreemap! {
             subnet_test_id(0) => SubnetTopology {

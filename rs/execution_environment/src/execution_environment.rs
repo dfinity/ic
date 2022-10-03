@@ -1800,7 +1800,7 @@ impl ExecutionEnvironment {
             msg,
             old_canister,
             state.time(),
-            state.path().to_path_buf(),
+            "NOT_USED".into(),
             &state.metadata.network_topology,
             execution_parameters,
             round_limits,

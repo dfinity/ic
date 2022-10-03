@@ -462,7 +462,6 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         // Consensus queue needs to be empty at the end of every round.
         Vec::new(),
         bitcoin,
-        checkpoint_layout.raw_path().into(),
     );
 
     Ok(state)
@@ -761,11 +760,7 @@ mod tests {
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
 
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                SubnetType::Application,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
             state.put_canister_state(new_canister_state(
                 canister_id,
                 user_test_id(24).get(),
@@ -819,11 +814,7 @@ mod tests {
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                SubnetType::Application,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
             state.put_canister_state(new_canister_state(
                 canister_id,
                 user_test_id(24).get(),
@@ -862,7 +853,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -879,7 +870,7 @@ mod tests {
             let page_map = PageMap::from(&[1, 2, 3, 4][..]);
             let stable_memory = Memory::new(page_map, NumWasmPages::new(1));
             let execution_state = ExecutionState {
-                canister_root: root.clone(),
+                canister_root: "NOT_USED".into(),
                 session_nonce: None,
                 wasm_binary: WasmBinary::new(wasm.clone()),
                 wasm_memory: wasm_memory.clone(),
@@ -892,8 +883,7 @@ mod tests {
             canister_state.execution_state = Some(execution_state);
 
             let own_subnet_type = SubnetType::Application;
-            let mut state =
-                ReplicatedState::new_rooted_at(subnet_test_id(1), own_subnet_type, root);
+            let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
@@ -960,11 +950,7 @@ mod tests {
 
             let _state = make_checkpoint_and_get_state(
                 &log,
-                &ReplicatedState::new_rooted_at(
-                    subnet_test_id(1),
-                    own_subnet_type,
-                    "NOT_USED".into(),
-                ),
+                &ReplicatedState::new(subnet_test_id(1), own_subnet_type),
                 HEIGHT,
                 &layout,
             );
@@ -1059,11 +1045,7 @@ mod tests {
                 .add_stop_context(stop_context.clone());
 
             let own_subnet_type = SubnetType::Application;
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                own_subnet_type,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
@@ -1111,11 +1093,7 @@ mod tests {
             };
 
             let own_subnet_type = SubnetType::Application;
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                own_subnet_type,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
@@ -1157,11 +1135,7 @@ mod tests {
             };
 
             let own_subnet_type = SubnetType::Application;
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                own_subnet_type,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
             let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
@@ -1192,8 +1166,7 @@ mod tests {
             let own_subnet_type = SubnetType::Application;
             let subnet_id = subnet_test_id(1);
             let subnet_id_as_canister_id = CanisterId::from(subnet_id);
-            let mut state =
-                ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
+            let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
 
             // Add an ingress message to the subnet queues to later verify
             // it gets recovered.
@@ -1236,8 +1209,7 @@ mod tests {
 
             let own_subnet_type = SubnetType::Application;
             let subnet_id = subnet_test_id(1);
-            let mut state =
-                ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
+            let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
 
             // Enable the bitcoin feature to be able to mutate its state.
             state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
@@ -1281,8 +1253,7 @@ mod tests {
 
             let own_subnet_type = SubnetType::Application;
             let subnet_id = subnet_test_id(1);
-            let mut state =
-                ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
+            let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
 
             // Make some change in the Bitcoin page maps to later verify they get recovered.
             state.bitcoin_mut().utxo_set.utxos_small = PageMap::from(&[1, 2, 3, 4][..]);

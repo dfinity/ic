@@ -102,11 +102,7 @@ async fn validate_signals() {
         };
 
         // Empty state (no stream for `SUBNET_1`).
-        let empty_state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let empty_state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         // With no stream present, only default signals are valid.
         assert_eq!(Valid, validate_signals(0, 0, &empty_state));
@@ -114,11 +110,7 @@ async fn validate_signals() {
         assert_eq!(Invalid, validate_signals(1, 0, &empty_state));
 
         // State with `messages.end() == 7` for `SUBNET_1`.
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: 4,
@@ -149,11 +141,7 @@ async fn validate_signals_expected_before_messages_begin() {
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
 
         // State with `messages.end() == 7` for `SUBNET_1`.
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: 4,
@@ -183,11 +171,7 @@ async fn validate_signals_expected_after_messages_begin() {
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
 
         // Empty state (no stream for `SUBNET_1`).
-        let state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         // Valid `signals_end`.
         let signals_end = StreamIndex::new(0);
 
@@ -226,11 +210,7 @@ async fn validate_signals_invalid_reject_signals() {
         };
 
         // State with `messages.end() == 77` for `SUBNET_1`.
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: 4,
@@ -291,11 +271,7 @@ async fn validate_slice() {
         };
 
         // State with stream for `SUBNET_1`.
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: MESSAGE_BEGIN.get(),
@@ -403,11 +379,7 @@ async fn validate_slice_invalid_signature() {
         );
 
         // A valid combination of state, certified slice and expected indices.
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: 3,
@@ -464,11 +436,7 @@ async fn validate_slice_above_msg_limit() {
         };
 
         // State of a `System` subnet with a stream for `SUBNET_1`.
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::System,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::System);
         state.with_streams(btreemap! {
             SUBNET_1 => generate_stream(&StreamConfig {
                 message_begin: MESSAGE_BEGIN,

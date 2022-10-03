@@ -618,7 +618,6 @@ impl SchedulerTestBuilder {
     }
 
     pub fn build(self) -> SchedulerTest {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let first_xnet_canister = u64::MAX / 2;
         let routing_table = Arc::new(
             RoutingTable::try_from(btreemap! {
@@ -626,11 +625,7 @@ impl SchedulerTestBuilder {
             }).unwrap()
         );
 
-        let mut state = ReplicatedState::new_rooted_at(
-            self.own_subnet_id,
-            self.subnet_type,
-            tmpdir.path().to_path_buf(),
-        );
+        let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
         state.metadata.network_topology.subnets = generate_subnets(
             vec![self.own_subnet_id, self.nns_subnet_id],

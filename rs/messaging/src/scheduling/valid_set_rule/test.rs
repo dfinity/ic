@@ -136,8 +136,7 @@ fn induct_message_with_successful_history_update() {
             log,
         );
 
-        let mut state =
-            ReplicatedState::new_rooted_at(subnet_test_id(1), subnet_type, "NOT_USED".into());
+        let mut state = ReplicatedState::new(subnet_test_id(1), subnet_type);
         insert_canister(&mut state, canister_id);
 
         valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
@@ -196,11 +195,7 @@ fn induct_message_fails_for_stopping_canister() {
             log,
         );
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(get_stopping_canister(canister_id));
 
         valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
@@ -257,11 +252,7 @@ fn induct_message_fails_for_stopped_canister() {
             log,
         );
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(get_stopped_canister(canister_id));
 
         valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
@@ -303,11 +294,7 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
             log,
         );
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         insert_canister(&mut state, canister_id);
 
         let status = IngressStatus::Known {
@@ -361,11 +348,7 @@ fn update_history_if_induction_failed() {
             log,
         );
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         // The induction is expected to fail because there is no canister 0 in the
         // ReplicatedState.
         valid_set_rule.induct_message(&mut state, msg.clone(), SMALL_APP_SUBNET_MAX_SIZE);
@@ -435,11 +418,7 @@ fn dont_induct_duplicate_messages() {
             log,
         );
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.set_ingress_status(
             message_test_id(1),
             IngressStatus::Known {
@@ -675,11 +654,7 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             log,
         );
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         let canister_id = canister_test_id(0);
         let canister = get_running_canister(canister_id);
         let balance_before = canister.system_state.balance();
@@ -724,11 +699,7 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
             log,
         );
 
-        let mut state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::System,
-            "NOT_USED".into(),
-        );
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::System);
         let canister_id = canister_test_id(0);
         let canister = get_running_canister(canister_id);
         let balance_before = canister.system_state.balance();

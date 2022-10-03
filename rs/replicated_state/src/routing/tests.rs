@@ -12,7 +12,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 fn make_state(subnet_id: SubnetId) -> ReplicatedState {
-    ReplicatedState::new_rooted_at(subnet_id, SubnetType::System, "NOT_USED".into())
+    ReplicatedState::new(subnet_id, SubnetType::System)
 }
 
 fn add_canister(state: &mut ReplicatedState, canister_id: CanisterId) {

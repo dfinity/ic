@@ -603,7 +603,6 @@ impl CanisterManager {
         Option<CanisterState>,
     ) {
         let time = state.time();
-        let canister_layout_path = state.path().to_path_buf();
         let network_topology = state.metadata.network_topology.clone();
 
         let old_canister = match state.take_canister_state(&context.canister_id) {
@@ -626,7 +625,7 @@ impl CanisterManager {
             message,
             old_canister,
             time,
-            canister_layout_path,
+            "NOT_USED".into(),
             &network_topology,
             execution_parameters,
             round_limits,

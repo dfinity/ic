@@ -27,10 +27,9 @@ fn get_status_for_non_existing_message_id() {
         .returning(|| {
             Labeled::new(
                 Height::new(0),
-                std::sync::Arc::new(ReplicatedState::new_rooted_at(
+                std::sync::Arc::new(ReplicatedState::new(
                     subnet_test_id(1),
                     SubnetType::Application,
-                    "NOT_USED".into(),
                 )),
             )
         });
@@ -93,11 +92,7 @@ fn valid_transitions() -> Vec<(IngressStatus, Vec<IngressStatus>)> {
 #[test]
 fn test_valid_transitions() {
     with_test_replica_logger(|log| {
-        let state = ReplicatedState::new_rooted_at(
-            subnet_test_id(1),
-            SubnetType::Application,
-            "NOT_USED".into(),
-        );
+        let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         let ingress_history_writer =
             IngressHistoryWriterImpl::new(Config::default(), log, &MetricsRegistry::new());
         let message_id = message_test_id(1);
@@ -154,11 +149,7 @@ fn test_invalid_transitions() {
             // unwind-safe. It doesn't matter for the purposes of this test.
             let ingress_history_writer = std::panic::AssertUnwindSafe(&ingress_history_writer);
             let result = std::panic::catch_unwind(|| {
-                let mut state = ReplicatedState::new_rooted_at(
-                    subnet_test_id(1),
-                    SubnetType::Application,
-                    "NOT_USED".into(),
-                );
+                let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
                 ingress_history_writer.set_status(
                     &mut state,
                     message_id.clone(),

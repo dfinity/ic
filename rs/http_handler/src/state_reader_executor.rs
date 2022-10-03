@@ -101,7 +101,6 @@ mod tests {
                         CanisterQueues::default(),
                         Vec::new(),
                         BitcoinState::default(),
-                        std::path::PathBuf::new(),
                     )),
                 )
             });

@@ -105,8 +105,7 @@ impl ReplicatedStateBuilder {
     }
 
     pub fn build(self) -> ReplicatedState {
-        let mut state =
-            ReplicatedState::new_rooted_at(self.subnet_id, self.subnet_type, "Initial".into());
+        let mut state = ReplicatedState::new(self.subnet_id, self.subnet_type);
 
         for canister in self.canisters {
             state.put_canister_state(canister);
@@ -615,8 +614,7 @@ pub fn get_initial_state_with_balance(
     initial_cycles: Cycles,
     own_subnet_type: SubnetType,
 ) -> ReplicatedState {
-    let mut state =
-        ReplicatedState::new_rooted_at(subnet_test_id(1), own_subnet_type, "Initial".into());
+    let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
 
     for canister_id in 0..canister_num {
         let mut canister_state_builder = CanisterStateBuilder::new()

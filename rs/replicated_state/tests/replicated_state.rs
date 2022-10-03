@@ -53,8 +53,7 @@ where
         NumSeconds::from(100_000),
     );
     let canister_state = CanisterState::new(system_state, None, scheduler_state);
-    let mut state =
-        ReplicatedState::new_rooted_at(SUBNET_ID, SubnetType::Application, "unused".into());
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
     state.put_canister_state(canister_state);
 
     f(state)
@@ -422,8 +421,7 @@ fn push_input_queues_respects_local_remote_subnet() {
         NumSeconds::from(100_000),
     );
     let canister_state = CanisterState::new(system_state, None, scheduler_state);
-    let mut state =
-        ReplicatedState::new_rooted_at(local_subnet_id, SubnetType::Application, "unused".into());
+    let mut state = ReplicatedState::new(local_subnet_id, SubnetType::Application);
     state.put_canister_state(canister_state);
 
     // Assert the queues are empty.
@@ -657,8 +655,7 @@ fn validate_responses_against_callback_details() {
 
 #[test]
 fn push_request_bitcoin_respects_bitcoin_feature_flag() {
-    let mut state =
-        ReplicatedState::new_rooted_at(SUBNET_ID, SubnetType::Application, "unused".into());
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
     let request = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequest {
         processed_block_hashes: vec![vec![10; 32]],
@@ -690,8 +687,7 @@ fn push_request_bitcoin_respects_bitcoin_feature_flag() {
 
 #[test]
 fn push_response_bitcoin_respects_bitcoin_feature_flag() {
-    let mut state =
-        ReplicatedState::new_rooted_at(SUBNET_ID, SubnetType::Application, "unused".into());
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
     let response = BitcoinAdapterResponse {
         response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
@@ -745,8 +741,7 @@ fn push_response_bitcoin_respects_bitcoin_feature_flag() {
 
 #[test]
 fn state_equality_with_bitcoin() {
-    let mut state =
-        ReplicatedState::new_rooted_at(SUBNET_ID, SubnetType::Application, "unused".into());
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
     // Enable bitcoin feature.
     state.metadata.own_subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
@@ -768,8 +763,7 @@ fn state_equality_with_bitcoin() {
 
 #[test]
 fn insert_bitcoin_response_non_matching() {
-    let mut state =
-        ReplicatedState::new_rooted_at(SUBNET_ID, SubnetType::Application, "unused".into());
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
     assert_eq!(
         state.push_response_bitcoin(BitcoinAdapterResponse {
@@ -789,8 +783,7 @@ fn insert_bitcoin_response_non_matching() {
 
 #[test]
 fn insert_bitcoin_response() {
-    let mut state =
-        ReplicatedState::new_rooted_at(SUBNET_ID, SubnetType::Application, "unused".into());
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
     state
         .metadata
