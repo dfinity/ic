@@ -671,7 +671,8 @@ impl StreamHandlerImpl {
                                 );
                                 let code = reject_code_for_state_error(&err);
                                 // Count response as outgoing cycles. This does not change metric of stream_builder!
-                                let reject_rep = generate_reject_response(msg, code, err.to_string());
+                                let reject_rep =
+                                    generate_reject_response(msg, code, err.to_string());
                                 stream.set_sum_cycles_out(
                                     stream.sum_cycles_out().add(reject_rep.cycles()),
                                 );
