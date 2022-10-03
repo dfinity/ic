@@ -207,14 +207,14 @@ pub fn verify_initial_dealings<C: CspIDkgProtocol + CspSigner>(
     params: &IDkgTranscriptParams,
     initial_dealings: &InitialIDkgDealings,
 ) -> Result<(), IDkgVerifyInitialDealingsError> {
-    if params != &initial_dealings.params() {
+    if params != initial_dealings.params() {
         return Err(IDkgVerifyInitialDealingsError::MismatchingTranscriptParams);
     };
     for (i, signed_dealing) in initial_dealings.dealings().iter().enumerate() {
         verify_dealing_public(
             csp_client,
             registry,
-            &initial_dealings.params(),
+            initial_dealings.params(),
             signed_dealing,
         )
         .map_err(|verify_dealing_public_error| {

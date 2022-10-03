@@ -602,11 +602,11 @@ impl InitialIDkgDealings {
         }
     }
 
-    pub fn params(&self) -> IDkgTranscriptParams {
-        self.params.clone()
+    pub fn params(&self) -> &IDkgTranscriptParams {
+        &self.params
     }
-    pub fn dealings(&self) -> Vec<SignedIDkgDealing> {
-        self.dealings.clone()
+    pub fn dealings(&self) -> &Vec<SignedIDkgDealing> {
+        &self.dealings
     }
 }
 
