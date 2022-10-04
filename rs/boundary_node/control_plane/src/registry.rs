@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{Context, Error};
+use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use ic_crypto_utils_basic_sig::conversions::pem::der_to_pem;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl, RegistryDataProvider};
@@ -186,6 +186,25 @@ impl<T: RegistryClient> Snapshot for Snapshotter<T> {
             canister_routes: canister_ranges,
             subnets,
         })
+    }
+}
+
+pub struct WithMinimumVersion<T>(pub T, pub u64);
+
+#[async_trait]
+impl<T: Snapshot> Snapshot for WithMinimumVersion<T> {
+    async fn snapshot(&mut self) -> Result<RoutingTable, Error> {
+        let rt = self.0.snapshot().await?;
+
+        if rt.registry_version < self.1 {
+            return Err(anyhow!(
+                "registry version {} below minimum allowed version {}",
+                rt.registry_version,
+                self.1,
+            ));
+        }
+
+        Ok(rt)
     }
 }
 
