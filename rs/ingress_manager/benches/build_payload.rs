@@ -17,9 +17,9 @@ use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     ingress_manager::IngressSelector,
     ingress_pool::{ChangeAction, ChangeSet, IngressPool, MutableIngressPool},
-    registry::RegistryClient,
     time_source::TimeSource,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;

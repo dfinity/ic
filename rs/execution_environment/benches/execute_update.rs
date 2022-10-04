@@ -387,6 +387,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
                 canister_state,
                 execution_parameters.instruction_limits,
                 ingress,
+                None,
                 time,
                 network_topology,
                 &mut round_limits,
