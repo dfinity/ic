@@ -68,7 +68,7 @@ impl From<&InitialIDkgDealings> for InitialIDkgDealingsProto {
             .collect();
         InitialIDkgDealingsProto {
             version: CURRENT_INITIAL_IDKG_DEALINGS_VERSION,
-            params: Some(idkg_transcript_params_proto(&initial_dealings.params())),
+            params: Some(idkg_transcript_params_proto(initial_dealings.params())),
             signed_dealings,
         }
     }

@@ -169,7 +169,7 @@ pub fn make_bootstrap_summary(
 
     // Update the next_in_creation if boot strapping from initial dealings
     if let Some(dealings) = initial_dealings {
-        match ecdsa::unpack_reshare_of_unmasked_params(height, &dealings.params()) {
+        match ecdsa::unpack_reshare_of_unmasked_params(height, dealings.params()) {
             Some((params, transcript)) => {
                 summary_payload
                     .idkg_transcripts

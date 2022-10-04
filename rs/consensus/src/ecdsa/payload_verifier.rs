@@ -486,7 +486,7 @@ fn validate_reshare_dealings(
                     crypto
                         .verify_initial_dealings(&param, &initial_dealings)
                         .map_err(PermanentError::from)?;
-                    new_dealings.insert(transcript_id, initial_dealings.dealings());
+                    new_dealings.insert(transcript_id, initial_dealings.dealings().clone());
                 }
             } else {
                 return Err(XNetReshareRequestDisappeared(request.clone()).into());
