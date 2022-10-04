@@ -53,6 +53,10 @@ use round_schedule::*;
 /// reached we stop executing more bitcoin requests for this round.
 const MAX_BITCOIN_REQUESTS_PER_ROUND: usize = 5;
 
+/// Only log potentially spammy messages this often (in rounds). With a block
+/// rate around 1.0, this will result in logging about once every 10 minutes.
+const SPAMMY_LOG_INTERVAL_ROUNDS: u64 = 10 * 60;
+
 #[cfg(test)]
 pub(crate) mod test_utilities;
 #[cfg(test)]
@@ -1116,7 +1120,13 @@ impl Scheduler for SchedulerImpl {
                 state.metadata.heap_delta_estimate,
             );
             self.metrics.execute_round_called.inc();
-            observe_replicated_state_metrics(self.own_subnet_id, &state, &self.metrics, &round_log);
+            observe_replicated_state_metrics(
+                self.own_subnet_id,
+                &state,
+                current_round,
+                &self.metrics,
+                &round_log,
+            );
             long_running_canister_ids = match self.deterministic_time_slicing {
                 FlagStatus::Enabled => state
                     .canister_states
@@ -1645,9 +1655,12 @@ fn execute_canisters_on_thread(
     }
 }
 
+/// Updates end-of-round replicated state metrics (canisters, queues, cycles,
+/// etc.).
 fn observe_replicated_state_metrics(
     own_subnet_id: SubnetId,
     state: &ReplicatedState,
+    current_round: ExecutionRound,
     metrics: &SchedulerMetrics,
     logger: &ReplicaLogger,
 ) {
@@ -1693,17 +1706,20 @@ fn observe_replicated_state_metrics(
         if let Some(manager) = canister.system_state.call_context_manager() {
             let old_call_contexts =
                 manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF_ONE_DAY);
-            for (origin, origin_time) in &old_call_contexts {
-                error!(
-                    logger,
-                    "Call context has been open for {:?}: origin: {:?}, respondent: {}",
-                    state.time() - *origin_time,
-                    origin,
-                    canister.canister_id()
-                );
+            // Log all old call contexts, but not (nearly) every round.
+            if current_round.get() % SPAMMY_LOG_INTERVAL_ROUNDS == 0 {
+                for (origin, origin_time) in &old_call_contexts {
+                    error!(
+                        logger,
+                        "Call context has been open for {:?}: origin: {:?}, respondent: {}",
+                        state.time() - *origin_time,
+                        origin,
+                        canister.canister_id()
+                    );
+                }
             }
-            old_call_contexts_count += old_call_contexts.len();
             if !old_call_contexts.is_empty() {
+                old_call_contexts_count += old_call_contexts.len();
                 canisters_with_old_open_call_contexts += 1;
             }
         }

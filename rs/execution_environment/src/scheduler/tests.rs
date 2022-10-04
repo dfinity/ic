@@ -1740,6 +1740,7 @@ fn replicated_state_metrics_nothing_exported() {
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
+        0.into(),
         &scheduler_metrics,
         &no_op_logger(),
     );
@@ -2021,6 +2022,7 @@ fn replicated_state_metrics_running_canister() {
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
+        0.into(),
         &scheduler_metrics,
         &no_op_logger(),
     );
@@ -2050,6 +2052,7 @@ fn replicated_state_metrics_different_canister_statuses() {
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
+        0.into(),
         &scheduler_metrics,
         &no_op_logger(),
     );
@@ -2088,6 +2091,7 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
+        0.into(),
         &scheduler_metrics,
         &no_op_logger(),
     );
@@ -2122,6 +2126,7 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
+        0.into(),
         &scheduler_metrics,
         &no_op_logger(),
     );
