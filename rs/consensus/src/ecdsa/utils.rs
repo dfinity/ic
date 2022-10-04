@@ -968,12 +968,11 @@ pub(crate) mod test_utils {
     pub(crate) fn create_opening_with_nonce(
         transcript_id: IDkgTranscriptId,
         dealer_id: NodeId,
-        complainer_id: NodeId,
+        _complainer_id: NodeId,
         opener_id: NodeId,
         nonce: u8,
     ) -> EcdsaOpening {
         let content = EcdsaOpeningContent {
-            complainer_id,
             idkg_opening: IDkgOpening {
                 transcript_id,
                 dealer_id,
@@ -1066,7 +1065,6 @@ pub(crate) mod test_utils {
         change_set: &[EcdsaChangeAction],
         transcript_id: &IDkgTranscriptId,
         dealer_id: &NodeId,
-        complainer_id: &NodeId,
         opener_id: &NodeId,
     ) -> bool {
         for action in change_set {
@@ -1076,7 +1074,6 @@ pub(crate) mod test_utils {
                 let opening = signed_opening.get();
                 if opening.idkg_opening.transcript_id == *transcript_id
                     && opening.idkg_opening.dealer_id == *dealer_id
-                    && opening.complainer_id == *complainer_id
                     && signed_opening.signature.signer == *opener_id
                 {
                     return true;

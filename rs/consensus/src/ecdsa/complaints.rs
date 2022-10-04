@@ -55,7 +55,6 @@ impl From<&EcdsaComplaint> for ComplaintKey {
 struct OpeningKey {
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
-    complainer_id: NodeId,
     opener_id: NodeId,
 }
 
@@ -64,7 +63,6 @@ impl From<&EcdsaOpening> for OpeningKey {
         Self {
             transcript_id: ecdsa_opening.content.idkg_opening.transcript_id,
             dealer_id: ecdsa_opening.content.idkg_opening.dealer_id,
-            complainer_id: ecdsa_opening.content.complainer_id,
             opener_id: ecdsa_opening.signature.signer,
         }
     }
@@ -198,7 +196,6 @@ impl EcdsaComplaintHandlerImpl {
                     ecdsa_pool,
                     &complaint.idkg_complaint.transcript_id,
                     &complaint.idkg_complaint.dealer_id,
-                    &signed_complaint.signature.signer,
                     &self.node_id,
                 )
             })
@@ -267,7 +264,6 @@ impl EcdsaComplaintHandlerImpl {
                         ecdsa_pool,
                         &opening.idkg_opening.transcript_id,
                         &opening.idkg_opening.dealer_id,
-                        &opening.complainer_id,
                         &signed_opening.signature.signer,
                     ) {
                         self.metrics.complaint_errors_inc("duplicate_opening");
@@ -529,10 +525,7 @@ impl EcdsaComplaintHandlerImpl {
         };
 
         // Sign the opening
-        let content = EcdsaOpeningContent {
-            complainer_id: signed_complaint.signature.signer,
-            idkg_opening,
-        };
+        let content = EcdsaOpeningContent { idkg_opening };
         match self
             .crypto
             .sign(&content, self.node_id, transcript.registry_version)
@@ -669,31 +662,28 @@ impl EcdsaComplaintHandlerImpl {
             .complaints()
             .find(|(_, signed_complaint)| {
                 let complaint = signed_complaint.get();
-                signed_complaint.signature.signer == opening.complainer_id
-                    && complaint.idkg_complaint.transcript_id == opening.idkg_opening.transcript_id
+                complaint.idkg_complaint.transcript_id == opening.idkg_opening.transcript_id
                     && complaint.idkg_complaint.dealer_id == opening.idkg_opening.dealer_id
             })
             .map(|(_, signed_complaint)| signed_complaint)
     }
 
     /// Checks if the node has issued an opening for the complaint
-    /// <complainer Id, transcript Id, dealer Id>
+    /// <transcript Id, dealer Id, opener Id>
     fn has_node_issued_opening(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
         transcript_id: &IDkgTranscriptId,
         dealer_id: &NodeId,
-        complainer_id: &NodeId,
         opener_id: &NodeId,
     ) -> bool {
-        let prefix = opening_prefix(transcript_id, dealer_id, complainer_id, opener_id);
+        let prefix = opening_prefix(transcript_id, dealer_id, opener_id);
         ecdsa_pool
             .validated()
             .openings_by_prefix(prefix)
             .any(|(_, signed_opening)| {
                 let opening = signed_opening.get();
-                opening.complainer_id == *complainer_id
-                    && opening.idkg_opening.transcript_id == *transcript_id
+                opening.idkg_opening.transcript_id == *transcript_id
                     && opening.idkg_opening.dealer_id == *dealer_id
                     && signed_opening.signature.signer == *opener_id
             })
@@ -1210,7 +1200,6 @@ mod tests {
                     &change_set,
                     &id_1,
                     &NODE_2,
-                    &NODE_3,
                     &NODE_1
                 ));
             })
