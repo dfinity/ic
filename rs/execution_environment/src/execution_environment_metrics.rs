@@ -63,11 +63,11 @@ impl ExecutionEnvironmentMetrics {
     ///     "outcome": "error",
     ///     "status": "CanisterMethodNotFound",
     /// })
-    pub fn observe_subnet_message(
+    pub fn observe_subnet_message<T>(
         &self,
         method_name: &str,
-        timer: Timer,
-        res: &Result<Vec<u8>, UserError>,
+        timer: &Timer,
+        res: &Result<T, UserError>,
     ) {
         let method_name_label = if let Ok(method_name) = ic00::Method::from_str(method_name) {
             format!("ic00_{}", method_name)
