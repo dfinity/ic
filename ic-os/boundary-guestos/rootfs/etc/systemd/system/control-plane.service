@@ -9,10 +9,12 @@ LogRateLimitBurst=1000
 User=root
 Group=root
 Restart=always
-ExecStart=/opt/ic/bin/boundary-node-control-plane \
-    --local-store  "/var/opt/registry/store"      \
-    --routes-dir   "/var/cache/ic_routes"         \
-    --metrics-addr "[::]:9312"
+EnvironmentFile=/run/ic-node/etc/default/control-plane
+ExecStart=/opt/ic/bin/boundary-node-control-plane    \
+    --local-store          "/var/opt/registry/store" \
+    --min-registry-version "${MIN_REGISTRY_VERSION}" \
+    --routes-dir           "/var/cache/ic_routes"    \
+    --metrics-addr         "[::]:9312"
 
 [Install]
 WantedBy=multi-user.target

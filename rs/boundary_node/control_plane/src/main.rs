@@ -34,7 +34,9 @@ mod retry;
 
 use crate::{
     metrics::{MetricParams, WithMetrics},
-    registry::{CreateRegistryClient, CreateRegistryClientImpl, Snapshot, Snapshotter},
+    registry::{
+        CreateRegistryClient, CreateRegistryClientImpl, Snapshot, Snapshotter, WithMinimumVersion,
+    },
     retry::WithRetry,
 };
 
@@ -49,6 +51,9 @@ const MINUTE: Duration = Duration::from_secs(60);
 struct Cli {
     #[clap(long, default_value = "/tmp/store")]
     local_store: PathBuf,
+
+    #[clap(long, default_value = "0")]
+    min_registry_version: u64,
 
     #[clap(long, default_value = "/tmp/routes")]
     routes_dir: PathBuf,
@@ -104,6 +109,7 @@ async fn main() -> Result<(), Error> {
         .context("failed to create registry client")?;
 
     let snapshotter = Snapshotter::new(registry_client);
+    let snapshotter = WithMinimumVersion(snapshotter, cli.min_registry_version);
     let snapshotter = WithMetrics(
         snapshotter,
         MetricParams::new(&meter, SERVICE_NAME, "snapshot"),

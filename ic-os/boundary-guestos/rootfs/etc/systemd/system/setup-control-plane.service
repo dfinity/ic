@@ -1,0 +1,14 @@
+[Unit]
+Description=Setup control-plane
+DefaultDependencies=no
+After=bootstrap-ic-node.service
+Before=control-plane.service
+
+[Install]
+RequiredBy=control-plane.service
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-control-plane.sh
