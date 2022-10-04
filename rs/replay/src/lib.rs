@@ -81,7 +81,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 println!("CUP signature verification failed: {}", err);
                 std::process::exit(1);
             } else {
-                println!("CUP signature verification succeeded");
+                println!("CUP signature verification succeeded!");
                 return;
             }
         }
@@ -321,6 +321,28 @@ fn verify_cup_signature(cup_file: &Path, public_key_file: &Path) -> Result<(), B
     let cup: ic_types::consensus::CatchUpPackage =
         (&ic_protobuf::types::v1::CatchUpPackage::decode(buffer.as_slice())?).try_into()?;
     let pk = ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(public_key_file)?;
+
+    use ic_types::consensus::HasHeight;
+    if let Some((_, transcript)) = &cup
+        .content
+        .block
+        .as_ref()
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .current_transcripts()
+        .iter()
+        .next()
+    {
+        println!("Dealer subnet: {}", transcript.dkg_id.dealer_subnet);
+    }
+    println!("CUP height: {}", &cup.content.height());
+    println!(
+        "State hash: {}",
+        hex::encode(&cup.content.clone().state_hash.get().0)
+    );
+    println!();
 
     ic_crypto_utils_threshold_sig::verify_combined(&cup.content, &cup.signature.signature, &pk)?;
 
