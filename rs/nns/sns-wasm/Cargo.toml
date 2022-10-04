@@ -59,3 +59,6 @@ ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 pretty_assertions = "1.2.1"
 on_wire = { path = "../../rust_canisters/on_wire" }
 walrus = "0.19.0"
+
+[features]
+test = ["ic-sns-init/test"]
