@@ -49,7 +49,7 @@ use registry_canister::mutations::do_create_subnet::{
     CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest,
 };
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use secp256k1::{Message, PublicKey, Secp256k1, Signature};
+use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
 use slog::{debug, info, Logger};
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
@@ -363,7 +363,7 @@ pub(crate) fn verify_signature(message_hash: &[u8], public_key: &PublicKey, sign
     // Verify the signature:
     let secp = Secp256k1::new();
     let message = Message::from_slice(message_hash).expect("32 bytes");
-    assert!(secp.verify(&message, signature, public_key).is_ok());
+    assert!(secp.verify_ecdsa(&message, signature, public_key).is_ok());
 }
 
 pub(crate) async fn enable_ecdsa_signing(
