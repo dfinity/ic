@@ -87,13 +87,21 @@ impl TestEnv {
         self.inner.logger.clone()
     }
 
-    pub fn fork<P: AsRef<Path>>(&self, logger: Logger, dir: P) -> Result<TestEnv> {
+    pub fn fork_from<P: AsRef<Path>>(
+        source_dir: P,
+        target_dir: P,
+        logger: Logger,
+    ) -> Result<TestEnv> {
         let mut options = fs_extra::dir::CopyOptions::new();
         options.copy_inside = true;
         options.content_only = true;
-        fs_extra::dir::copy(self.base_path(), &dir, &options)?;
-        sync_path(&dir)?;
-        TestEnv::new(dir, logger)
+        fs_extra::dir::copy(source_dir, &target_dir, &options)?;
+        sync_path(&target_dir)?;
+        TestEnv::new(target_dir, logger)
+    }
+
+    pub fn fork<P: AsRef<Path>>(&self, logger: Logger, dir: P) -> Result<TestEnv> {
+        Self::fork_from(self.base_path().as_path(), dir.as_ref(), logger)
     }
 
     pub fn get_json_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {

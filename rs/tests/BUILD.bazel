@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load(":system_tests.bzl", "system_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -171,15 +172,6 @@ rust_binary(
     deps = DEPENDENCIES + [":tests"],
 )
 
-rust_binary(
-    name = "systest_basic_health",
-    srcs = ["bin/basic_health.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    deps = DEPENDENCIES + [":tests"],
-)
-
 rust_test(
     name = "tests_test",
     aliases = ALIASES,
@@ -187,4 +179,12 @@ rust_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES,
+)
+
+system_test(
+    name = "basic_health_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "short",
+    deps = DEPENDENCIES + [":tests"],
 )
