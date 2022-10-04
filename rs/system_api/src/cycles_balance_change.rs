@@ -52,6 +52,14 @@ impl CyclesBalanceChange {
         }
     }
 
+    /// Returns the number of removed cycles or zero.
+    pub fn get_removed_cycles(&self) -> Cycles {
+        match self {
+            Self::Added(_) => Cycles::zero(),
+            Self::Removed(removed) => *removed,
+        }
+    }
+
     // Replaces `Removed(0)` with `Added(0)` to avoid -0.
     fn canonical(&self) -> Self {
         match self {

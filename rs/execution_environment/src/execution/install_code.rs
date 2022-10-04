@@ -162,6 +162,19 @@ impl InstallCodeHelper {
     ) -> DtsInstallCodeResult {
         let message_instruction_limit = original.execution_parameters.instruction_limits.message();
         let instructions_left = self.instructions_left();
+
+        // The balance should not change because `install_code` cannot accept or
+        // send cycles. The execution cycles have already been accounted for in
+        // the clean canister state.
+        assert_eq!(
+            clean_canister.system_state.balance(),
+            self.canister.system_state.balance()
+        );
+
+        self.canister
+            .system_state
+            .apply_cycles_debit(self.canister.canister_id(), round.log);
+
         let mut subnet_available_memory = round_limits.subnet_available_memory.clone();
         subnet_available_memory.increment(self.deallocated_bytes, NumBytes::from(0));
         if let Err(err) = subnet_available_memory
@@ -634,6 +647,10 @@ pub(crate) fn finish_err(
     err: CanisterManagerError,
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
+
+    new_canister
+        .system_state
+        .apply_cycles_debit(new_canister.canister_id(), round.log);
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(

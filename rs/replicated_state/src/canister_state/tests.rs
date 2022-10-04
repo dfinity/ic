@@ -2,6 +2,7 @@ use super::*;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::CallOrigin;
 use ic_base_types::NumSeconds;
+use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     ids::user_test_id,
@@ -556,24 +557,12 @@ fn canister_state_cycles_debit() {
             system_state.debited_balance()
         );
 
-        let remaining_debit = system_state.apply_cycles_debit();
-        assert_eq!(Cycles::zero(), remaining_debit);
+        system_state.apply_cycles_debit(system_state.canister_id(), &no_op_logger());
         assert_eq!(Cycles::zero(), system_state.cycles_debit());
         assert_eq!(initial_balance - Cycles::new(42), system_state.balance());
         assert_eq!(
             initial_balance - Cycles::new(42),
             system_state.debited_balance()
         );
-
-        system_state.add_postponed_charge_to_cycles_debit(initial_balance);
-        assert_eq!(initial_balance, system_state.cycles_debit());
-        assert_eq!(initial_balance - Cycles::new(42), system_state.balance());
-        assert_eq!(Cycles::zero(), system_state.debited_balance());
-
-        let remaining_debit = system_state.apply_cycles_debit();
-        assert_eq!(Cycles::new(42), remaining_debit);
-        assert_eq!(Cycles::zero(), system_state.cycles_debit());
-        assert_eq!(Cycles::zero(), system_state.balance());
-        assert_eq!(Cycles::zero(), system_state.debited_balance());
     })
 }

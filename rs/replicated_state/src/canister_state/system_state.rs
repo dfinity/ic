@@ -7,6 +7,7 @@ use crate::{CanisterQueues, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_interfaces::messages::{CanisterInputMessage, RequestOrIngress};
+use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
@@ -478,19 +479,42 @@ impl SystemState {
 
     /// Records the given amount as debit that will be charged from the balance
     /// at some point in the future.
+    ///
+    /// Precondition:
+    /// - `charge <= self.debited_balance()`.
     pub fn add_postponed_charge_to_cycles_debit(&mut self, charge: Cycles) {
+        assert!(
+            charge <= self.debited_balance(),
+            "Insufficient cycles for a postponed charge: {} vs {}",
+            charge,
+            self.debited_balance()
+        );
         self.cycles_debit += charge;
     }
 
-    /// Charges the pending debit from the balance and returns the remaining
-    /// debit (if any).
-    #[must_use]
-    pub fn apply_cycles_debit(&mut self) -> Cycles {
+    /// Charges the pending debit from the balance.
+    ///
+    /// Precondition:
+    /// - The balance is large enough to cover the debit.
+    pub fn apply_cycles_debit(&mut self, canister_id: CanisterId, log: &ReplicaLogger) {
         // We rely on saturating operations of `Cycles` here.
         let remaining_debit = self.cycles_debit - self.cycles_balance;
+        debug_assert_eq!(remaining_debit.get(), 0);
+        if remaining_debit.get() > 0 {
+            // This case is unreachable and may happen only due to a bug: if the
+            // caller has reduced the cycles balance below the cycles debit.
+            // TODO(RUN-299): Increment a critical error counter here.
+            error!(
+                log,
+                "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {} in install_code",
+                canister_id,
+                remaining_debit,
+            );
+            // Continue the execution by dropping the remaining debit, which makes
+            // some of the postponed charges free.
+        }
         self.cycles_balance -= self.cycles_debit;
         self.cycles_debit = Cycles::zero();
-        remaining_debit
     }
 
     /// This method is used for maintaining the backwards compatibility.

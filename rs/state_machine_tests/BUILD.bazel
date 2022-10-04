@@ -64,6 +64,7 @@ rust_test(
         "//rs/config",
         "//rs/crypto/sha",
         "//rs/registry/subnet_type",
+        "//rs/types/ic00_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:candid",

@@ -100,6 +100,11 @@ impl SystemStateChanges {
         }
     }
 
+    /// Returns number of removed cycles in the state changes.
+    pub fn removed_cycles(&self) -> Cycles {
+        self.cycles_balance_change.get_removed_cycles()
+    }
+
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
     pub fn apply_changes(

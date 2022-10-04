@@ -277,6 +277,48 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Charges the canister for ingress induction cost.
+    ///
+    /// Note that this method reports the cycles withdrawn as consumed (i.e.
+    /// burnt).
+    ///
+    /// # Errors
+    ///
+    /// Returns a `CanisterOutOfCyclesError` if the
+    /// requested amount is greater than the currently available.
+    pub fn charge_ingress_induction_cost(
+        &self,
+        canister: &mut CanisterState,
+        canister_current_memory_usage: NumBytes,
+        canister_compute_allocation: ComputeAllocation,
+        cycles: Cycles,
+        subnet_size: usize,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let threshold = self.freeze_threshold_cycles(
+            canister.system_state.freeze_threshold,
+            canister.system_state.memory_allocation,
+            canister_current_memory_usage,
+            canister_compute_allocation,
+            subnet_size,
+        );
+        if canister.has_paused_execution() || canister.has_paused_install_code() {
+            if canister.system_state.debited_balance() < cycles + threshold {
+                return Err(CanisterOutOfCyclesError {
+                    canister_id: canister.canister_id(),
+                    available: canister.system_state.debited_balance(),
+                    requested: cycles,
+                    threshold,
+                });
+            }
+            canister
+                .system_state
+                .add_postponed_charge_to_cycles_debit(cycles);
+            Ok(())
+        } else {
+            self.consume_with_threshold(&mut canister.system_state, cycles, threshold)
+        }
+    }
+
     /// Withdraws and consumes cycles from the canister's balance.
     ///
     /// NOTE: This method reports the cycles withdrawn as consumed (i.e. burnt).
