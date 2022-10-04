@@ -738,13 +738,11 @@ pub fn complaint_prefix(
 pub fn opening_prefix(
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
-    complainer_id: &NodeId,
     opener_id: &NodeId,
 ) -> EcdsaPrefixOf<EcdsaOpening> {
-    // Group_tag: transcript Id, Meta info: <dealer_id + complainer_id + opener_id>
+    // Group_tag: transcript Id, Meta info: <dealer_id + opener_id>
     let mut hasher = DefaultHasher::new();
     dealer_id.hash(&mut hasher);
-    complainer_id.hash(&mut hasher);
     opener_id.hash(&mut hasher);
 
     EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
@@ -933,9 +931,6 @@ impl SignedBytesWithoutDomainSeparator for EcdsaComplaint {
 /// Opening related defines
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct EcdsaOpeningContent {
-    /// Complainer Id. This is the signer Id in the complaint message
-    pub complainer_id: NodeId,
-
     /// The opening
     pub idkg_opening: IDkgOpening,
 }
@@ -951,10 +946,9 @@ impl Display for EcdsaOpening {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Opening[transcript = {:?}, dealer = {:?}, complainer = {:?}, opener = {:?}]",
+            "Opening[transcript = {:?}, dealer = {:?}, opener = {:?}]",
             self.content.idkg_opening.transcript_id,
             self.content.idkg_opening.dealer_id,
-            self.content.complainer_id,
             self.signature.signer
         )
     }

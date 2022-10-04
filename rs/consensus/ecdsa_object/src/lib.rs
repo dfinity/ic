@@ -68,7 +68,6 @@ impl EcdsaObject for EcdsaOpening {
         opening_prefix(
             &self.content.idkg_opening.transcript_id,
             &self.content.idkg_opening.dealer_id,
-            &self.content.complainer_id,
             &self.signature.signer,
         )
     }
