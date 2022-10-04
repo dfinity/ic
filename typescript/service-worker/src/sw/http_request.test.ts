@@ -98,6 +98,7 @@ it.each([
   `https://${CANISTER_ID}.ic0.app/api/foo`,
   `https://ic0.app/api/${CANISTER_ID}/foo`,
   `https://dscvr.one/api/foo`,
+  `https://boundary.ic0.app/api/${CANISTER_ID}/foo`,
 ])(
   'should set content-type: application/cbor and x-content-type-options: nosniff on ic calls to %s',
   async (url) => {
@@ -109,6 +110,34 @@ it.each([
     expect(response.headers.get('content-type')).toEqual('application/cbor');
     expect(await response.text()).toEqual('test response');
     expect(response.status).toEqual(200);
+  }
+);
+
+it.each([
+  {
+    requestUrl: `https://boundary.ic0.app/api/${CANISTER_ID}/foo`,
+    responseUrl: `https://ic0.app/api/${CANISTER_ID}/foo`,
+  },
+  {
+    requestUrl: `https://mainnet.ic0.app/api/${CANISTER_ID}/foo`,
+    responseUrl: `https://ic0.app/api/${CANISTER_ID}/foo`,
+  },
+])(
+  'should set content-type: application/cbor and x-content-type-options: nosniff and strip legacy subdomains on ic calls to $requestUrl',
+  async ({ requestUrl, responseUrl }) => {
+    fetch.mockResponse('test response');
+
+    const response = await handleRequest(new Request(requestUrl));
+
+    expect(response.headers.get('x-content-type-options')).toEqual('nosniff');
+    expect(response.headers.get('content-type')).toEqual('application/cbor');
+    expect(await response.text()).toEqual('test response');
+    expect(response.status).toEqual(200);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: responseUrl,
+      })
+    );
   }
 );
 

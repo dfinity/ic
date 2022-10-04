@@ -210,6 +210,77 @@ async function createAgentAndActor(
   return [agent, actor];
 }
 
+function detectRequestStreamsSupport(): boolean {
+  let duplexAccessed = false;
+
+  const hasContentType =
+    window.ReadableStream &&
+    new Request('', {
+      body: new ReadableStream(),
+      method: 'POST',
+      get duplex() {
+        duplexAccessed = true;
+        return 'half';
+      },
+    } as unknown).headers.has('Content-Type');
+
+  return duplexAccessed && !hasContentType;
+}
+const supportsRequestStreams = detectRequestStreamsSupport();
+
+/**
+ * Removes legacy sub domains from the URL of the request.
+ * Request objects cannot be mutated, so we have to clone them and
+ * object spread does not work so we have to manually deconstruct the request.
+ * If we create a new Request using the original one then the duplex property is not copied over, so we have to set it manually.
+ * The duplex property also does not exist in the Typescript definitions so we need to cast to unknown.
+ * Safari does not support creating a Request with a readable stream as a body, so we have to read the stream and set the body
+ * as the UIntArray that is read.
+ */
+async function removeLegacySubDomains(
+  originalRequest: Request
+): Promise<Request> {
+  const url = new URL(originalRequest.url);
+  const urlWithoutLegacySubdomain = `${url.protocol}//${swDomains}${url.pathname}`;
+
+  const {
+    body,
+    cache,
+    credentials,
+    headers,
+    integrity,
+    keepalive,
+    method,
+    mode,
+    redirect,
+    referrer,
+    referrerPolicy,
+    signal,
+  } = originalRequest.clone();
+
+  const requestBody = supportsRequestStreams
+    ? body
+    : (await body?.getReader().read())?.value;
+
+  const requestInit = {
+    body: requestBody,
+    cache,
+    credentials,
+    headers,
+    integrity,
+    keepalive,
+    method,
+    mode,
+    redirect,
+    referrer,
+    referrerPolicy,
+    signal,
+    duplex: 'half',
+  };
+
+  return new Request(urlWithoutLegacySubdomain, requestInit as unknown);
+}
+
 /**
  * Box a request, send it to the canister, and handle its response, creating a Response
  * object.
@@ -241,9 +312,10 @@ export async function handleRequest(request: Request): Promise<Response> {
    */
   if (
     url.pathname.startsWith('/api/') &&
-    (maybeCanisterId || swDomains === url.hostname)
+    (maybeCanisterId || url.hostname.endsWith(swDomains))
   ) {
-    const response = await fetch(request);
+    const cleanedRequest = await removeLegacySubDomains(request);
+    const response = await fetch(cleanedRequest);
     // force the content-type to be cbor as /api/ is exclusively used for canister calls
     const sanitizedHeaders = new Headers(response.headers);
     sanitizedHeaders.set('X-Content-Type-Options', 'nosniff');
