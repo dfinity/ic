@@ -56,7 +56,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:rand_core_0_6_1",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

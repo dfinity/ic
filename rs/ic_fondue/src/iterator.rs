@@ -1,7 +1,7 @@
 use rand::seq::SliceRandom;
 use rand::Rng;
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
-use rand_core::SeedableRng;
 use std::iter::FromIterator;
 
 /// Implements an iterator over a permutation of a vector.
