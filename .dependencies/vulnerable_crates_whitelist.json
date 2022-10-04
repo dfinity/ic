@@ -3,21 +3,21 @@
         "name": "time",
         "version": "0.1.43",
         "date_added": "13/06/2022",
-        "date_updated": "04/08/2022",
-        "expiry_days": 60
+        "date_updated": "04/10/2022",
+        "expiry_days": 120
     },
     {
         "name": "rocksdb",
         "version": "0.15.0",
         "date_added": "11/08/2022",
-        "date_updated": "08/09/2022",
-        "expiry_days": 30
+        "date_updated": "04/10/2022",
+        "expiry_days": 60
     },
     {
         "name": "chrono",
         "version": "0.4.19",
         "date_added": "04/08/2022",
-        "date_updated": "04/08/2022",
-        "expiry_days": 60
+        "date_updated": "04/10/2022",
+        "expiry_days": 120
     }
 ]
