@@ -688,6 +688,7 @@ mod tests {
     use ic_test_utilities_tmpdir::tmpdir;
     use ic_types::messages::StopCanisterContext;
     use ic_types::{CanisterId, Cycles, ExecutionRound, Height};
+    use ic_utils::fs::sync_path;
     use ic_wasm_types::CanisterModule;
     use std::collections::BTreeSet;
 
@@ -720,7 +721,7 @@ mod tests {
     fn log_path_and_metadata(log: &ReplicaLogger, path: &std::path::Path) -> std::io::Result<()> {
         info!(
             log,
-            "Setting {} readonly. Metadata: {:?}",
+            "Path: {} Metadata: {:?}",
             path.display(),
             path.metadata()?
         );
@@ -730,7 +731,8 @@ mod tests {
     fn mark_readonly(path: &std::path::Path) -> std::io::Result<()> {
         let mut permissions = path.metadata()?.permissions();
         permissions.set_readonly(true);
-        std::fs::set_permissions(path, permissions)
+        std::fs::set_permissions(path, permissions)?;
+        sync_path(path)
     }
 
     fn make_checkpoint_and_get_state(
@@ -804,6 +806,7 @@ mod tests {
         });
     }
 
+    #[ignore]
     #[test]
     fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
         with_test_replica_logger(|log| {
@@ -824,6 +827,7 @@ mod tests {
 
             log_path_and_metadata(&log, &checkpoints_dir).unwrap();
             mark_readonly(&checkpoints_dir).unwrap();
+            log_path_and_metadata(&log, &checkpoints_dir).unwrap();
 
             // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
             let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
@@ -995,15 +999,40 @@ mod tests {
     #[test]
     fn reports_an_error_on_misconfiguration() {
         with_test_replica_logger(|log| {
-            let tmp = tmpdir("checkpoint");
+            let tmp = tmpdir("checkpoint_reports_an_error_on_misconfiguration");
             let root = tmp.path().to_path_buf();
 
             log_path_and_metadata(&log, &root).unwrap();
             mark_readonly(&root).unwrap();
+            log_path_and_metadata(&log, &root).unwrap();
+            info!(
+                &log,
+                "ls before StateLayout::try_new: {}",
+                String::from_utf8(
+                    std::process::Command::new("ls")
+                        .args(["-l", "-a", root.to_str().unwrap()])
+                        .output()
+                        .unwrap()
+                        .stdout
+                )
+                .unwrap()
+            );
 
             let layout = StateLayout::try_new(log.clone(), root.clone());
 
             log_path_and_metadata(&log, &root).unwrap();
+            info!(
+                &log,
+                "ls after StateLayout::try_new: {}",
+                String::from_utf8(
+                    std::process::Command::new("ls")
+                        .args(["-l", "-a", root.to_str().unwrap()])
+                        .output()
+                        .unwrap()
+                        .stdout
+                )
+                .unwrap()
+            );
             assert!(layout.is_err());
             let err_msg = layout.err().unwrap().to_string();
             assert!(
