@@ -19,9 +19,9 @@ ARG sw_version=1.2.7
 ARG sw_sha256=9aeb3c37742b162804dfb0094a4956a4df173030971cf6e12f376ae80c207b0f
 
 
-# ICX proxy  version and sha256; Note this version will be *only* used for prod images
-ARG icx_proxy_version=dcaa135
-ARG icx_proxy_sha256=e20c7f6dcbe438ef9ec7dbff7d88d88db4099cb2b8d6dc399f47856baf0e568c
+# ICX proxy version and sha256; Note this version will be *only* used for prod images
+ARG icx_proxy_version=4f73294
+ARG icx_proxy_sha256=f978b06ae20be0ef3737c53ae5e18f234d414ca76a02fee6230d1d5bde5f272e
 
 #
 # First build stage: download software (service worker and icx procxy) that frequently changes, build and verify it (such that it
