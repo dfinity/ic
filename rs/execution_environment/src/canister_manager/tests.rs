@@ -2314,14 +2314,14 @@ fn can_get_canister_balance() {
     with_setup(|canister_manager, mut state, _| {
         let canister_id = canister_test_id(0);
         let sender = canister_test_id(1).get();
-        let gas = Cycles::new(100);
-        let canister = get_running_canister_with_args(canister_id, sender, gas);
+        let cycles = Cycles::new(100);
+        let canister = get_running_canister_with_args(canister_id, sender, cycles);
         state.put_canister_state(canister);
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         assert_matches!(
             canister_manager.get_canister_status( sender, canister, SMALL_APP_SUBNET_MAX_SIZE),
-            Ok(res) if res.cycles() == gas.get()
+            Ok(res) if res.cycles() == cycles.get()
         );
     });
 }
