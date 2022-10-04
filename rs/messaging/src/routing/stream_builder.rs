@@ -343,7 +343,28 @@ impl StreamBuilderImpl {
             last_output_size = output_size;
 
             // MALICIOUS CODE
-            msg.setCycles() = msg.cycles() * 2;
+            let msg = match msg {
+                RequestOrResponse::Request(req) => {
+                    RequestOrResponse::Request( Arc::new( Request {
+                        receiver: req.receiver,
+                        sender: req.sender,
+                        sender_reply_callback: req.sender_reply_callback,
+                        payment: req.payment.add(req.payment),
+                        method_name: req.method_name.clone(),
+                        method_payload: req.method_payload.clone(),
+                    }))
+                },
+                RequestOrResponse::Response(resp) => {
+                    RequestOrResponse::Response( Arc::new (Response {
+                        originator: resp.originator,
+                        respondent: resp.respondent,
+                        originator_reply_callback: resp.originator_reply_callback,
+                        refund: resp.refund.add(resp.refund),
+                        response_payload: resp.response_payload.clone(),
+                    }))
+                },
+            };
+            //msg.set_cycles() = msg.cycles() * 2;
             let cycles_in_msg = msg.cycles();
             match routing_table.route(queue_id.dst_canister.get()) {
                 // Destination subnet found.
