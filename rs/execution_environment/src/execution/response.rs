@@ -8,7 +8,9 @@ use prometheus::IntCounter;
 use ic_embedders::wasm_executor::{
     wasm_execution_error, CanisterStateChanges, PausedWasmExecution, WasmExecutionResult,
 };
-use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
+};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_logger::error;
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
@@ -298,6 +300,28 @@ impl ResponseHelper {
         round: &RoundContext,
         round_limits: &mut RoundLimits,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
+        self.canister
+            .system_state
+            .apply_cycles_debit(self.canister.canister_id(), round.log);
+
+        // Check that the cycles balance does not go below zero after applying
+        // the Wasm execution state changes.
+        if let Some(state_changes) = &canister_state_changes {
+            let old_balance = self.canister.system_state.balance();
+            let requested = state_changes.system_state_changes.removed_cycles();
+            // Note that we ignore the freezing threshold as required by the spec.
+            if old_balance < requested {
+                let err = CanisterOutOfCyclesError {
+                    canister_id: self.canister.canister_id(),
+                    available: old_balance,
+                    requested,
+                    threshold: original.freezing_threshold,
+                };
+                let err = HypervisorError::InsufficientCyclesBalance(err);
+                return Err((self, err, output.num_instructions_left));
+            }
+        }
+
         apply_canister_state_changes(
             canister_state_changes,
             self.canister.execution_state.as_mut().unwrap(),
@@ -332,6 +356,16 @@ impl ResponseHelper {
         round: &RoundContext,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
+        self.canister
+            .system_state
+            .apply_cycles_debit(self.canister.canister_id(), round.log);
+
+        if let Some(state_changes) = &canister_state_changes {
+            let requested = state_changes.system_state_changes.removed_cycles();
+            // A cleanup callback cannot accept and send cycles.
+            assert_eq!(requested.get(), 0);
+        }
+
         apply_canister_state_changes(
             canister_state_changes,
             self.canister.execution_state.as_mut().unwrap(),
@@ -462,6 +496,7 @@ struct OriginalContext {
     message_instruction_limit: NumInstructions,
     message: Arc<Response>,
     subnet_size: usize,
+    freezing_threshold: Cycles,
 }
 
 /// Struct used to hold necessary information for the
@@ -628,6 +663,14 @@ pub fn execute_response(
             }
         };
 
+    let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
+        clean_canister.system_state.freeze_threshold,
+        clean_canister.system_state.memory_allocation,
+        clean_canister.memory_usage(execution_parameters.subnet_type),
+        clean_canister.compute_allocation(),
+        subnet_size,
+    );
+
     let original = OriginalContext {
         callback,
         call_context_id,
@@ -637,6 +680,7 @@ pub fn execute_response(
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: Arc::clone(&response),
         subnet_size,
+        freezing_threshold,
     };
 
     let mut helper =

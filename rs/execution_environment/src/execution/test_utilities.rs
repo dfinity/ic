@@ -36,6 +36,7 @@ use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, InputQueueType, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
+use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::{
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -229,6 +230,21 @@ impl ExecutionTest {
         )
     }
 
+    pub fn freezing_threshold(&self, canister_id: CanisterId) -> Cycles {
+        let canister = self.canister_state(canister_id);
+        let memory_usage = canister.memory_usage(self.state().metadata.own_subnet_type);
+        let memory_allocation = canister.system_state.memory_allocation;
+        let compute_allocation = canister.scheduler_state.compute_allocation;
+        let freeze_threshold = canister.system_state.freeze_threshold;
+        self.cycles_account_manager.freeze_threshold_cycles(
+            freeze_threshold,
+            memory_allocation,
+            memory_usage,
+            compute_allocation,
+            self.subnet_size(),
+        )
+    }
+
     pub fn call_fee<S: ToString>(&self, method_name: S, payload: &[u8]) -> Cycles {
         self.cycles_account_manager
             .xnet_call_performed_fee(self.subnet_size())
@@ -236,6 +252,13 @@ impl ExecutionTest {
                 NumBytes::from((payload.len() + method_name.to_string().len()) as u64),
                 self.subnet_size(),
             )
+    }
+
+    pub fn max_response_fee(&self) -> Cycles {
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            self.subnet_size(),
+        )
     }
 
     pub fn reply_fee(&self, payload: &[u8]) -> Cycles {

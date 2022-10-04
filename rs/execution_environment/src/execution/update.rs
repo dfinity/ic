@@ -10,7 +10,9 @@ use crate::execution_environment::{
 };
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
+};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_interfaces::messages::RequestOrIngress;
 use ic_replicated_state::{CallOrigin, CanisterState};
@@ -51,13 +53,26 @@ pub fn execute_update(
                 ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
-                        let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
-                        return finish_call_with_error(err, canister, message, round.time);
+                        return finish_call_with_error(
+                            UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                            canister,
+                            message,
+                            NumInstructions::from(0),
+                            round.time,
+                        );
                     }
                 };
             (canister, prepaid_execution_cycles)
         }
     };
+
+    let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
+        clean_canister.system_state.freeze_threshold,
+        clean_canister.system_state.memory_allocation,
+        clean_canister.memory_usage(execution_parameters.subnet_type),
+        clean_canister.compute_allocation(),
+        subnet_size,
+    );
 
     let original = OriginalContext {
         call_origin: CallOrigin::from(&message),
@@ -67,11 +82,20 @@ pub fn execute_update(
         execution_parameters,
         subnet_size,
         time,
+        freezing_threshold,
     };
 
     let helper = match UpdateHelper::new(&clean_canister, &original, &round) {
         Ok(helper) => helper,
-        Err(err) => return finish_err(clean_canister, err, original, round),
+        Err(err) => {
+            return finish_err(
+                clean_canister,
+                original.execution_parameters.instruction_limits.message(),
+                err,
+                original,
+                round,
+            )
+        }
     };
 
     let api_type = ApiType::update(
@@ -110,7 +134,14 @@ pub fn execute_update(
         }
         WasmExecutionResult::Finished(slice, output, state_changes) => {
             update_round_limits(round_limits, &slice);
-            helper.finish(output, state_changes, original, round, round_limits)
+            helper.finish(
+                output,
+                clean_canister,
+                state_changes,
+                original,
+                round,
+                round_limits,
+            )
         }
     }
 }
@@ -120,20 +151,33 @@ pub fn execute_update(
 /// execution cycles.
 fn finish_err(
     clean_canister: CanisterState,
+    instructions_left: NumInstructions,
     err: UserError,
     original: OriginalContext,
     round: RoundContext,
 ) -> ExecuteMessageResult {
     let mut canister = clean_canister;
+
+    canister
+        .system_state
+        .apply_cycles_debit(canister.canister_id(), round.log);
+
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
-        instruction_limit,
+        instructions_left,
         instruction_limit,
         original.prepaid_execution_cycles,
         original.subnet_size,
     );
-    finish_call_with_error(err, canister, original.message, round.time)
+    let instructions_used = instruction_limit - instructions_left;
+    finish_call_with_error(
+        err,
+        canister,
+        original.message,
+        instructions_used,
+        round.time,
+    )
 }
 
 /// Context variables that remain the same throughout the entire deterministic
@@ -147,6 +191,7 @@ struct OriginalContext {
     execution_parameters: ExecutionParameters,
     subnet_size: usize,
     time: Time,
+    freezing_threshold: Cycles,
 }
 
 /// Contains fields of `UpdateHelper` that are necessary for resuming an update
@@ -238,11 +283,39 @@ impl UpdateHelper {
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
+        clean_canister: CanisterState,
         canister_state_changes: Option<CanisterStateChanges>,
         original: OriginalContext,
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
+        self.canister
+            .system_state
+            .apply_cycles_debit(self.canister.canister_id(), round.log);
+
+        // Check that the cycles balance does not go below the freezing
+        // threshold after applying the Wasm execution state changes.
+        if let Some(state_changes) = &canister_state_changes {
+            let old_balance = self.canister.system_state.balance();
+            let requested = state_changes.system_state_changes.removed_cycles();
+            if old_balance < requested + original.freezing_threshold {
+                let err = CanisterOutOfCyclesError {
+                    canister_id: self.canister.canister_id(),
+                    available: old_balance,
+                    requested,
+                    threshold: original.freezing_threshold,
+                };
+                let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
+                return finish_err(
+                    clean_canister,
+                    output.num_instructions_left,
+                    err,
+                    original,
+                    round,
+                );
+            }
+        }
+
         apply_canister_state_changes(
             canister_state_changes,
             self.canister.execution_state.as_mut().unwrap(),
@@ -327,7 +400,16 @@ impl PausedExecution for PausedCallExecution {
                 Ok(helper) => helper,
                 Err(err) => {
                     self.paused_wasm_execution.abort();
-                    return finish_err(clean_canister, err, self.original, round);
+                    return finish_err(
+                        clean_canister,
+                        self.original
+                            .execution_parameters
+                            .instruction_limits
+                            .message(),
+                        err,
+                        self.original,
+                        round,
+                    );
                 }
             };
 
@@ -348,7 +430,14 @@ impl PausedExecution for PausedCallExecution {
             }
             WasmExecutionResult::Finished(slice, output, state_changes) => {
                 update_round_limits(round_limits, &slice);
-                helper.finish(output, state_changes, self.original, round, round_limits)
+                helper.finish(
+                    output,
+                    clean_canister,
+                    state_changes,
+                    self.original,
+                    round,
+                    round_limits,
+                )
             }
         }
     }

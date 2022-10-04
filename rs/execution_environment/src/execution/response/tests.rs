@@ -1,11 +1,12 @@
 use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
 use crate::ExecutionResponse;
 use assert_matches::assert_matches;
+use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_replicated_state::canister_state::NextExecution;
-use ic_replicated_state::CanisterStatus;
+use ic_replicated_state::{CanisterStatus, NumWasmPages};
 use ic_test_utilities::types::messages::ResponseBuilder;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -1209,4 +1210,450 @@ fn dts_and_nondts_cycles_match_if_cleanup_fails() {
         test_a.state().time() < test_b.state().time(),
         "Time should have progressed further in DTS"
     );
+}
+
+#[test]
+fn dts_response_concurrent_cycles_change_succeeds() {
+    // Test steps:
+    // 1. Canister A calls canister B.
+    // 2. Canister B replies to canister A.
+    // 3. The response callback of canister A runs in multiple slices.
+    // 4. While canister A is paused, we emulate a postponed charge
+    //    of 1000 cycles (i.e. add 1000 to `cycles_debit`).
+    // 5. The response callback resumes and calls B transferring 1000 cycles.
+    // 6. The response callback succeeds because there are enough cycles
+    //    in the canister balance to cover both the call and cycles debit.
+
+    let instruction_limit = 1_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(10_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let transferred_cycles = Cycles::new(1000);
+
+    let b = wasm()
+        .accept_cycles128(transferred_cycles.into_parts())
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .call_simple(
+            b_id.get(),
+            "update",
+            call_args().other_side(b.clone()).on_reply(
+                wasm()
+                    .stable64_grow(1)
+                    .stable64_write(0, 0, 10_000)
+                    .call_with_cycles(
+                        b_id.get(),
+                        "update",
+                        call_args().other_side(b.clone()),
+                        transferred_cycles.into_parts(),
+                    ),
+            ),
+        )
+        .build();
+
+    test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    test.canister_update_allocations_settings(a_id, Some(1), None)
+        .unwrap();
+    test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+
+    // The test setup is done by this point.
+    // Now we start testing the response callback.
+    let freezing_threshold = test.freezing_threshold(a_id);
+
+    // The memory usage of the canister increases during the message execution.
+    // `ic0.call_perform()` used the current freezing threshold. This value is
+    // an upper bound on the additional freezing threshold.
+    let additional_freezing_threshold = Cycles::new(500);
+
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+
+    let call_charge = test.call_fee("update", &b)
+        + max_execution_cost
+        + test.max_response_fee()
+        + transferred_cycles;
+
+    let refund = test.max_response_fee() - test.reply_fee(&b);
+
+    // Reset the cycles balance of canister A to simplify cycles bookkeeping.
+    let initial_cycles = freezing_threshold + additional_freezing_threshold + call_charge - refund;
+    let initial_execution_cost = test.canister_execution_cost(a_id);
+    *test.canister_state_mut(a_id).system_state.balance_mut() = initial_cycles;
+
+    // Execute one slice of the response callback.
+    test.execute_slice(a_id);
+
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles,
+    );
+
+    // Emulate a postponed charge.
+    let cycles_debit = Cycles::new(1000);
+    test.canister_state_mut(a_id)
+        .system_state
+        .add_postponed_charge_to_cycles_debit(cycles_debit);
+
+    // Complete the response callback execution.
+    test.execute_message(a_id);
+
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles + refund - call_charge - cycles_debit
+            + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
+    );
+}
+
+#[test]
+fn dts_response_concurrent_cycles_change_fails() {
+    // Test steps:
+    // 1. Canister A calls canister B.
+    // 2. Canister B replies to canister A.
+    // 3. The response callback of canister A runs in multiple slices.
+    // 4. While canister A is paused, we emulate a postponed charge
+    //    of the entire cycles balance of canister A.
+    // 5. The response callback resumes and calls B transferring 1000 cycles.
+    // 6. The response callback fails because there are not enough cycles
+    //    in the canister balance to cover both the call and cycles debit.
+    let instruction_limit = 1_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(10_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let transferred_cycles = Cycles::new(1000);
+
+    let b = wasm()
+        .accept_cycles128(transferred_cycles.into_parts())
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .call_simple(
+            b_id.get(),
+            "update",
+            call_args().other_side(b.clone()).on_reply(
+                wasm()
+                    .stable64_grow(1)
+                    .stable64_write(0, 0, 10_000)
+                    .call_with_cycles(
+                        b_id.get(),
+                        "update",
+                        call_args().other_side(b.clone()),
+                        transferred_cycles.into_parts(),
+                    ),
+            ),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    test.canister_update_allocations_settings(a_id, Some(1), None)
+        .unwrap();
+    test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+
+    // The test setup is done by this point.
+    // Now we start testing the response callback.
+    let freezing_threshold = test.freezing_threshold(a_id);
+
+    // The memory usage of the canister increases during the message execution.
+    // `ic0.call_perform()` used the current freezing threshold. This value is
+    // an upper bound on the additional freezing threshold.
+    let additional_freezing_threshold = Cycles::new(500);
+
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+
+    let call_charge = test.call_fee("update", &b)
+        + max_execution_cost
+        + test.max_response_fee()
+        + transferred_cycles;
+
+    let refund = test.max_response_fee() - test.reply_fee(&b);
+
+    // Reset the cycles balance of canister A to simplify cycles bookkeeping.
+    let initial_cycles = freezing_threshold + additional_freezing_threshold + call_charge - refund;
+    let initial_execution_cost = test.canister_execution_cost(a_id);
+    *test.canister_state_mut(a_id).system_state.balance_mut() = initial_cycles;
+
+    // Execute one slice of the response callback.
+    test.execute_slice(a_id);
+
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles,
+    );
+
+    // Emulate a postponed charge.
+    let cycles_debit = test.canister_state(a_id).system_state.balance();
+    test.canister_state_mut(a_id)
+        .system_state
+        .add_postponed_charge_to_cycles_debit(cycles_debit);
+
+    test.execute_message(a_id);
+
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+
+    assert_eq!(
+        err.description(),
+        format!(
+            "Canister {} is out of cycles: \
+             requested {} cycles but the available balance \
+             is {} cycles and the freezing threshold {} cycles",
+            a_id,
+            call_charge,
+            initial_cycles + refund - cycles_debit,
+            freezing_threshold
+        )
+    );
+
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles + refund - cycles_debit
+            + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
+    );
+}
+
+#[test]
+fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
+    // Test steps:
+    // 1. Canister A calls canister B.
+    // 2. Canister B replies to canister A.
+    // 3. The response callback of canister A runs in multiple slices.
+    // 4. While canister A is paused, we emulate a postponed charge
+    //    of almost entire cycles balance of canister A.
+    // 5. The response callback resumes and calls B transferring 1000 cycles.
+    // 6. The response callback fails because there are not enough cycles
+    //    in the canister balance to cover both the call and cycles debit.
+    // 7. The cleanup callback of canister A runs in multiple slices.
+    // 8. While canister A is paused, we emulate more postponed charges.
+    // 9. The cleanup callback resumes and succeeds because it cannot change the
+    //    cycles balance of the canister.
+    let instruction_limit = 1_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(10_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let transferred_cycles = Cycles::new(1000);
+
+    let b = wasm()
+        .accept_cycles128(transferred_cycles.into_parts())
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .call_simple(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reply(
+                    wasm()
+                        .stable64_grow(1)
+                        .stable64_write(0, 0, 10_000)
+                        .call_with_cycles(
+                            b_id.get(),
+                            "update",
+                            call_args().other_side(b.clone()),
+                            transferred_cycles.into_parts(),
+                        ),
+                )
+                .on_cleanup(wasm().stable64_grow(2).stable64_write(0, 0, 10_000)),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    test.canister_update_allocations_settings(a_id, Some(1), None)
+        .unwrap();
+    test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+
+    // The test setup is done by this point.
+    // Now we start testing the response callback.
+    let freezing_threshold = test.freezing_threshold(a_id);
+
+    // The memory usage of the canister increases during the message execution.
+    // `ic0.call_perform()` used the current freezing threshold. This value is
+    // an upper bound on the additional freezing threshold.
+    let additional_freezing_threshold = Cycles::new(500);
+
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+
+    let call_charge = test.call_fee("update", &b)
+        + max_execution_cost
+        + test.max_response_fee()
+        + transferred_cycles;
+
+    let refund = test.max_response_fee() - test.reply_fee(&b);
+
+    // Reset the cycles balance of canister A to simplify cycles bookkeeping.
+    let initial_cycles = freezing_threshold + additional_freezing_threshold + call_charge - refund;
+    let initial_execution_cost = test.canister_execution_cost(a_id);
+    *test.canister_state_mut(a_id).system_state.balance_mut() = initial_cycles;
+
+    // Execute one slice of the response callback.
+    test.execute_slice(a_id);
+
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles,
+    );
+
+    // Emulate a postponed charge.
+    let mut cycles_debit = test.canister_state(a_id).system_state.balance() - Cycles::new(1000);
+    test.canister_state_mut(a_id)
+        .system_state
+        .add_postponed_charge_to_cycles_debit(cycles_debit);
+
+    // We don't know when the response callback finishes and the cleanup
+    // callback starts running, so we execute each slice one by one and
+    // add 1 cycle to `cycles_debit`.
+    test.execute_slice(a_id);
+    while test.canister_state(a_id).next_execution() != NextExecution::None {
+        test.canister_state_mut(a_id)
+            .system_state
+            .add_postponed_charge_to_cycles_debit(Cycles::new(1));
+        cycles_debit += Cycles::new(1);
+        test.execute_slice(a_id);
+    }
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles + refund - cycles_debit
+            + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
+    );
+
+    // Check that the cleanup callback did run.
+    assert_eq!(
+        test.execution_state(a_id).stable_memory.size,
+        NumWasmPages::from(2)
+    );
+}
+
+#[test]
+fn cleanup_callback_cannot_accept_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let a = wasm()
+        .call_simple(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reply(wasm().trap())
+                .on_cleanup(wasm().accept_cycles(0)),
+        )
+        .build();
+    let err = test.ingress(a_id, "update", a).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    // DTS of response execution relies on the fact that the cleanup callback
+    // cannot accept cycles.
+    assert!(err
+        .description()
+        .contains("\"ic0_msg_cycles_accept\" cannot be executed in cleanup mode"));
+}
+
+#[test]
+fn cleanup_callback_cannot_make_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let a = wasm()
+        .call_simple(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reply(wasm().trap())
+                .on_cleanup(wasm().call_simple(b_id.get(), "update", call_args().other_side(b))),
+        )
+        .build();
+    let err = test.ingress(a_id, "update", a).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    // DTS of response execution relies on the fact that the cleanup callback
+    // cannot make calls and send cycles.
+    assert!(err
+        .description()
+        .contains("\"ic0_call_new\" cannot be executed in cleanup mode"));
 }
