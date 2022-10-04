@@ -19,7 +19,7 @@ use ic_replicated_state::{CanisterState, ExecutionState};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
-use ic_types::{ComputeAllocation, Height, MemoryAllocation, NumInstructions, Time};
+use ic_types::{funds::Cycles, ComputeAllocation, Height, MemoryAllocation, NumInstructions, Time};
 
 use crate::{
     canister_manager::{
@@ -46,7 +46,6 @@ pub(crate) enum StableMemoryHandling {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum InstallCodeStep {
     ValidateInput,
-    ReserveExecutionCycles,
     ReplaceExecutionStateAndAllocations {
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
@@ -224,10 +223,11 @@ impl InstallCodeHelper {
 
         round_limits.subnet_available_memory = subnet_available_memory;
 
-        round.cycles_account_manager.refund_execution_cycles(
+        round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
             message_instruction_limit,
+            original.prepaid_execution_cycles,
             original.subnet_size,
         );
 
@@ -297,30 +297,6 @@ impl InstallCodeHelper {
             return Err(CanisterManagerError::InstallCodeRateLimited(id));
         }
 
-        Ok(())
-    }
-
-    /// Reserves cycles to pay for the maximum allowed number of instructions
-    /// for a `install_code` message.
-    pub fn reserve_execution_cycles(
-        &mut self,
-        original: &OriginalContext,
-        round: &RoundContext,
-    ) -> Result<(), CanisterManagerError> {
-        self.steps.push(InstallCodeStep::ReserveExecutionCycles);
-
-        let subnet_type = original.execution_parameters.subnet_type;
-        let memory_usage = self.canister.memory_usage(subnet_type);
-        round
-            .cycles_account_manager
-            .withdraw_execution_cycles(
-                &mut self.canister.system_state,
-                memory_usage,
-                original.execution_parameters.compute_allocation,
-                original.execution_parameters.instruction_limits.message(),
-                original.subnet_size,
-            )
-            .map_err(CanisterManagerError::InstallCodeNotEnoughCycles)?;
         Ok(())
     }
 
@@ -509,9 +485,6 @@ impl InstallCodeHelper {
     ) -> Result<(), CanisterManagerError> {
         match step {
             InstallCodeStep::ValidateInput => self.validate_input(original, round_limits),
-            InstallCodeStep::ReserveExecutionCycles => {
-                self.reserve_execution_cycles(original, round)
-            }
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 instructions_from_compilation,
                 maybe_execution_state,
@@ -539,6 +512,7 @@ pub(crate) struct OriginalContext {
     pub canister_layout_path: PathBuf,
     pub config: CanisterMgrConfig,
     pub message: RequestOrIngress,
+    pub prepaid_execution_cycles: Cycles,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
     pub subnet_size: usize,
@@ -650,8 +624,8 @@ pub(crate) fn canister_layout(
 }
 
 /// Finishes an `install_code` execution early due to an error. The only state
-/// changes that are applied to the clean canister state are charging for and
-/// accounting the executed instructions.
+/// change that is applied to the clean canister state is refunding the prepaid
+/// execution cycles.
 pub(crate) fn finish_err(
     clean_canister: CanisterState,
     instructions_left: NumInstructions,
@@ -659,46 +633,21 @@ pub(crate) fn finish_err(
     round: RoundContext,
     err: CanisterManagerError,
 ) -> DtsInstallCodeResult {
-    let message_instruction_limit = original.execution_parameters.instruction_limits.message();
-    let subnet_type = original.execution_parameters.subnet_type;
-
     let mut new_canister = clean_canister;
-    let memory_usage = new_canister.memory_usage(subnet_type);
 
-    // Note that at this point we know exactly how many instructions were
-    // executed and could withdraw the fee for that directly, but we do that in
-    // two steps (reserve and refund) to be consistent in rounding when
-    // converting instructions to cycles.
-    let result = round
-        .cycles_account_manager
-        .withdraw_execution_cycles(
-            &mut new_canister.system_state,
-            memory_usage,
-            original.execution_parameters.compute_allocation,
-            message_instruction_limit,
-            original.subnet_size,
-        )
-        // This can only fail with deterministic time slicing if the balance of
-        // the canister has changed while the long-execution was in progress.
-        .map_err(CanisterManagerError::InstallCodeNotEnoughCycles);
+    let message_instruction_limit = original.execution_parameters.instruction_limits.message();
+    round.cycles_account_manager.refund_unused_execution_cycles(
+        &mut new_canister.system_state,
+        instructions_left,
+        message_instruction_limit,
+        original.prepaid_execution_cycles,
+        original.subnet_size,
+    );
+
     let instructions_used = NumInstructions::from(
         message_instruction_limit
             .get()
             .saturating_sub(instructions_left.get()),
-    );
-    if let Err(err) = result {
-        return DtsInstallCodeResult::Finished {
-            canister: new_canister,
-            message: original.message,
-            instructions_used,
-            result: Err(err),
-        };
-    }
-    round.cycles_account_manager.refund_execution_cycles(
-        &mut new_canister.system_state,
-        instructions_left,
-        message_instruction_limit,
-        original.subnet_size,
     );
 
     if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {

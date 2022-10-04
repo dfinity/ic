@@ -623,6 +623,7 @@ impl CanisterManager {
         let dts_result = self.install_code_dts(
             context,
             message,
+            None,
             old_canister,
             time,
             "NOT_USED".into(),
@@ -676,7 +677,8 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         message: RequestOrIngress,
-        canister: CanisterState,
+        prepaid_execution_cycles: Option<Cycles>,
+        mut canister: CanisterState,
         time: Time,
         canister_layout_path: PathBuf,
         network_topology: &NetworkTopology,
@@ -685,12 +687,46 @@ impl CanisterManager {
         compilation_cost_handling: CompilationCostHandling,
         subnet_size: usize,
     ) -> DtsInstallCodeResult {
+        if let Err(err) = validate_controller(&canister, &context.sender) {
+            return DtsInstallCodeResult::Finished {
+                canister,
+                message,
+                instructions_used: NumInstructions::from(0),
+                result: Err(err),
+            };
+        }
+
+        let prepaid_execution_cycles = match prepaid_execution_cycles {
+            Some(prepaid_execution_cycles) => prepaid_execution_cycles,
+            None => {
+                let memory_usage = canister.memory_usage(execution_parameters.subnet_type);
+                match self.cycles_account_manager.prepay_execution_cycles(
+                    &mut canister.system_state,
+                    memory_usage,
+                    execution_parameters.compute_allocation,
+                    execution_parameters.instruction_limits.message(),
+                    subnet_size,
+                ) {
+                    Ok(cycles) => cycles,
+                    Err(err) => {
+                        return DtsInstallCodeResult::Finished {
+                            canister,
+                            message,
+                            instructions_used: NumInstructions::from(0),
+                            result: Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
+                        };
+                    }
+                }
+            }
+        };
+
         let original = OriginalContext {
             execution_parameters,
             mode: context.mode,
             canister_layout_path,
             config: self.config.clone(),
             message,
+            prepaid_execution_cycles,
             time,
             compilation_cost_handling,
             subnet_size,
@@ -1529,7 +1565,9 @@ pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
         round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult;
 
-    fn abort(self: Box<Self>) -> RequestOrIngress;
+    /// Aborts the paused execution.
+    /// Returns the original message and the cycles prepaid for execution.
+    fn abort(self: Box<Self>) -> (RequestOrIngress, Cycles);
 }
 
 #[cfg(test)]

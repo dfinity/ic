@@ -18,14 +18,14 @@ use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::info;
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_system_api::ApiType;
+use ic_types::funds::Cycles;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::NumInstructions;
 
 #[cfg(test)]
 mod tests;
 
 /// Performs a canister upgrade. The algorithm consists of six stages:
-/// - Stage 0: validate input and reserve execution cycles.
+/// - Stage 0: validate input.
 /// - Stage 1: invoke `canister_pre_upgrade()` (if present) using the old code.
 /// - Stage 2: create a new execution state based on the new Wasm code.
 /// - Stage 3: invoke the `start()` method (if present).
@@ -39,7 +39,7 @@ mod tests;
 /// [begin]
 ///   │
 ///   ▼
-/// [validate input and reserve execution cycles]
+/// [validate input]
 ///   │
 ///   │                                   exceeded slice
 ///   ▼                                 instruction limit
@@ -89,24 +89,15 @@ pub(crate) fn execute_upgrade(
 ) -> DtsInstallCodeResult {
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
-    // Stage 0: validate input and reserve execution cycles.
-
+    // Stage 0: validate input.
     if let Err(err) = helper.validate_input(&original, round_limits) {
-        return DtsInstallCodeResult::Finished {
-            canister: clean_canister,
-            message: original.message,
-            instructions_used: NumInstructions::from(0),
-            result: Err(err),
-        };
-    }
-
-    if let Err(err) = helper.reserve_execution_cycles(&original, &round) {
-        return DtsInstallCodeResult::Finished {
-            canister: clean_canister,
-            message: original.message,
-            instructions_used: NumInstructions::from(0),
-            result: Err(err),
-        };
+        return finish_err(
+            clean_canister,
+            helper.instructions_left(),
+            original,
+            round,
+            err,
+        );
     }
 
     // Stage 1: invoke `canister_pre_upgrade()` (if present) using the old code.
@@ -497,9 +488,12 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         }
     }
 
-    fn abort(self: Box<Self>) -> RequestOrIngress {
+    fn abort(self: Box<Self>) -> (RequestOrIngress, Cycles) {
         self.paused_wasm_execution.abort();
-        self.original.message
+        (
+            self.original.message,
+            self.original.prepaid_execution_cycles,
+        )
     }
 }
 
@@ -567,9 +561,12 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         }
     }
 
-    fn abort(self: Box<Self>) -> RequestOrIngress {
+    fn abort(self: Box<Self>) -> (RequestOrIngress, Cycles) {
         self.paused_wasm_execution.abort();
-        self.original.message
+        (
+            self.original.message,
+            self.original.prepaid_execution_cycles,
+        )
     }
 }
 
@@ -633,8 +630,8 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         }
     }
 
-    fn abort(self: Box<Self>) -> RequestOrIngress {
+    fn abort(self: Box<Self>) -> (RequestOrIngress, Cycles) {
         self.paused_wasm_execution.abort();
-        self.original.message
+        (self.original.message, Cycles::zero())
     }
 }

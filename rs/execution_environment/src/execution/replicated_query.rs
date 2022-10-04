@@ -33,24 +33,29 @@ pub fn execute_replicated_query(
     let subnet_type = round.hypervisor.subnet_type();
     let memory_usage = canister.memory_usage(subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
-    if let Err(err) = round.cycles_account_manager.withdraw_execution_cycles(
+
+    let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,
         memory_usage,
         compute_allocation,
         instruction_limit,
         subnet_size,
     ) {
-        let user_error = UserError::new(ErrorCode::CanisterOutOfCycles, err);
-        return finish_call_with_error(user_error, canister, req, time);
-    }
+        Ok(cycles) => cycles,
+        Err(err) => {
+            let user_error = UserError::new(ErrorCode::CanisterOutOfCycles, err);
+            return finish_call_with_error(user_error, canister, req, time);
+        }
+    };
 
     let method = WasmMethod::Query(req.method_name().to_string());
 
     if let Err(user_error) = validate_message(&canister, &req, &method, time, round.log) {
-        round.cycles_account_manager.refund_execution_cycles(
+        round.cycles_account_manager.refund_unused_execution_cycles(
             &mut canister.system_state,
             instruction_limit,
             instruction_limit,
+            prepaid_execution_cycles,
             subnet_size,
         );
         return finish_call_with_error(user_error, canister, req, time);
@@ -86,10 +91,11 @@ pub fn execute_replicated_query(
         result.map_err(|err| log_and_transform_to_user_error(log, err, &canister.canister_id()));
     let response = wasm_result_to_query_response(result, &canister, time, call_origin, log);
 
-    round.cycles_account_manager.refund_execution_cycles(
+    round.cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
         output.num_instructions_left,
         instruction_limit,
+        prepaid_execution_cycles,
         subnet_size,
     );
 

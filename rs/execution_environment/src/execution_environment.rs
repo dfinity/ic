@@ -222,8 +222,9 @@ pub trait PausedExecution: std::fmt::Debug + Send {
         subnet_size: usize,
     ) -> ExecuteMessageResult;
 
-    /// Aborts the paused execution and returns the original message.
-    fn abort(self: Box<Self>) -> CanisterInputMessage;
+    /// Aborts the paused execution.
+    /// Returns the original message and the cycles prepaid for execution.
+    fn abort(self: Box<Self>) -> (CanisterInputMessage, Cycles);
 }
 
 /// Stores all paused executions keyed by their ids.
@@ -413,6 +414,7 @@ impl ExecutionEnvironment {
                 // properly handle the case of a paused execution.
                 return self.execute_install_code(
                     msg,
+                    None,
                     state,
                     instruction_limits,
                     round_limits,
@@ -958,6 +960,7 @@ impl ExecutionEnvironment {
         canister: CanisterState,
         instruction_limits: InstructionLimits,
         msg: CanisterInputMessage,
+        prepaid_execution_cycles: Option<Cycles>,
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
@@ -1012,6 +1015,7 @@ impl ExecutionEnvironment {
             execute_update(
                 canister,
                 req,
+                prepaid_execution_cycles,
                 execution_parameters,
                 time,
                 round,
@@ -1729,6 +1733,7 @@ impl ExecutionEnvironment {
     pub fn execute_install_code(
         &self,
         mut msg: RequestOrIngress,
+        prepaid_execution_cycles: Option<Cycles>,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
@@ -1798,6 +1803,7 @@ impl ExecutionEnvironment {
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
             msg,
+            prepaid_execution_cycles,
             old_canister,
             state.time(),
             "NOT_USED".into(),
@@ -1911,7 +1917,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::PausedExecution(_)
-            | ExecutionTask::AbortedExecution(_) => {
+            | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
                     "Unexpected task {:?} in `resume_install_code` (broken precondition).",
                     task
@@ -1931,9 +1937,17 @@ impl ExecutionEnvironment {
                 let dts_result = paused.resume(canister, round, round_limits);
                 self.process_install_code_result(state, dts_result, timer)
             }
-            ExecutionTask::AbortedInstallCode(msg) => {
-                self.execute_install_code(msg, state, instruction_limits, round_limits, subnet_size)
-            }
+            ExecutionTask::AbortedInstallCode {
+                message,
+                prepaid_execution_cycles,
+            } => self.execute_install_code(
+                message,
+                Some(prepaid_execution_cycles),
+                state,
+                instruction_limits,
+                round_limits,
+                subnet_size,
+            ),
         }
     }
 
@@ -1981,18 +1995,24 @@ impl ExecutionEnvironment {
             canister.system_state.task_queue = task_queue
                 .into_iter()
                 .map(|task| match task {
-                    ExecutionTask::AbortedExecution(..)
-                    | ExecutionTask::AbortedInstallCode(..)
+                    ExecutionTask::AbortedExecution { .. }
+                    | ExecutionTask::AbortedInstallCode { .. }
                     | ExecutionTask::Heartbeat => task,
                     ExecutionTask::PausedExecution(id) => {
                         let paused = self.take_paused_execution(id).unwrap();
-                        let message = paused.abort();
-                        ExecutionTask::AbortedExecution(message)
+                        let (message, prepaid_execution_cycles) = paused.abort();
+                        ExecutionTask::AbortedExecution {
+                            message,
+                            prepaid_execution_cycles,
+                        }
                     }
                     ExecutionTask::PausedInstallCode(id) => {
                         let paused = self.take_paused_install_code(id).unwrap();
-                        let message = paused.abort();
-                        ExecutionTask::AbortedInstallCode(message)
+                        let (message, prepaid_execution_cycles) = paused.abort();
+                        ExecutionTask::AbortedInstallCode {
+                            message,
+                            prepaid_execution_cycles,
+                        }
                     }
                 })
                 .collect();
@@ -2153,6 +2173,7 @@ pub struct ExecuteCanisterResult {
 /// This is a helper for `execute_canister()`.
 fn execute_message(
     message: CanisterInputMessage,
+    prepaid_execution_cycles: Option<Cycles>,
     exec_env: &ExecutionEnvironment,
     canister: CanisterState,
     instruction_limits: InstructionLimits,
@@ -2166,6 +2187,7 @@ fn execute_message(
         canister,
         instruction_limits,
         message,
+        prepaid_execution_cycles,
         time,
         network_topology,
         round_limits,
@@ -2245,8 +2267,12 @@ pub fn execute_canister(
                     description: Some("paused execution".to_string()),
                 }
             }
-            ExecutionTask::AbortedExecution(message) => execute_message(
+            ExecutionTask::AbortedExecution {
                 message,
+                prepaid_execution_cycles,
+            } => execute_message(
+                message,
+                Some(prepaid_execution_cycles),
                 exec_env,
                 canister,
                 instruction_limits,
@@ -2255,7 +2281,7 @@ pub fn execute_canister(
                 round_limits,
                 subnet_size,
             ),
-            ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode(..) => {
+            ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. } => {
                 unreachable!("The guard at the beginning filters these cases out")
             }
         },
@@ -2263,6 +2289,7 @@ pub fn execute_canister(
             let message = canister.pop_input().unwrap();
             execute_message(
                 message,
+                None,
                 exec_env,
                 canister,
                 instruction_limits,

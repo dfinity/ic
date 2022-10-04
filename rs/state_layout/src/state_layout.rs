@@ -1731,11 +1731,26 @@ mod test {
                 .build(),
         );
         let task_queue = vec![
-            ExecutionTask::AbortedInstallCode(RequestOrIngress::Ingress(Arc::clone(&ingress))),
-            ExecutionTask::AbortedExecution(CanisterInputMessage::Request(Arc::clone(&request))),
-            ExecutionTask::AbortedInstallCode(RequestOrIngress::Request(request)),
-            ExecutionTask::AbortedExecution(CanisterInputMessage::Response(response)),
-            ExecutionTask::AbortedExecution(CanisterInputMessage::Ingress(ingress)),
+            ExecutionTask::AbortedInstallCode {
+                message: RequestOrIngress::Ingress(Arc::clone(&ingress)),
+                prepaid_execution_cycles: Cycles::new(1),
+            },
+            ExecutionTask::AbortedExecution {
+                message: CanisterInputMessage::Request(Arc::clone(&request)),
+                prepaid_execution_cycles: Cycles::new(2),
+            },
+            ExecutionTask::AbortedInstallCode {
+                message: RequestOrIngress::Request(Arc::clone(&request)),
+                prepaid_execution_cycles: Cycles::new(3),
+            },
+            ExecutionTask::AbortedExecution {
+                message: CanisterInputMessage::Response(Arc::clone(&response)),
+                prepaid_execution_cycles: Cycles::new(4),
+            },
+            ExecutionTask::AbortedExecution {
+                message: CanisterInputMessage::Ingress(Arc::clone(&ingress)),
+                prepaid_execution_cycles: Cycles::new(5),
+            },
         ];
         let canister_state_bits = CanisterStateBits {
             task_queue: task_queue.clone(),

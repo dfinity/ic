@@ -124,13 +124,14 @@ impl ResponseHelper {
         // the request. Otherwise, there might be potentially malicious faults.
         let refund_for_sent_cycles = if response.refund > original.callback.cycles_sent {
             error!(
-            round.log,
-            "[EXC-BUG] Canister got a response with too many cycles.  originator {} respondent {} max cycles expected {} got {}.",
-            response.originator,
-            response.respondent,
-            original.callback.cycles_sent,
-            response.refund,
-        );
+                round.log,
+                "[EXC-BUG] Canister got a response with too many cycles. \
+                 Originator {} respondent {} max cycles expected {} got {}.",
+                response.originator,
+                response.respondent,
+                original.callback.cycles_sent,
+                response.refund,
+            );
             original.callback.cycles_sent
         } else {
             response.refund
@@ -396,11 +397,17 @@ impl ResponseHelper {
             round.time,
             round.log,
         );
-        // Refund the canister with any cycles left after message execution.
-        round.cycles_account_manager.refund_execution_cycles(
+
+        // TODO(RUN-374): Save the prepaid execution cycles in the response
+        // callback instead of recomputing here.
+        let prepaid_execution_cycles = round
+            .cycles_account_manager
+            .execution_cost(original.message_instruction_limit, original.subnet_size);
+        round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
             original.message_instruction_limit,
+            prepaid_execution_cycles,
             original.subnet_size,
         );
         let instructions_used = NumInstructions::from(
@@ -514,9 +521,11 @@ impl PausedExecution for PausedResponseExecution {
         )
     }
 
-    fn abort(self: Box<Self>) -> CanisterInputMessage {
+    fn abort(self: Box<Self>) -> (CanisterInputMessage, Cycles) {
         self.paused_wasm_execution.abort();
-        CanisterInputMessage::Response(self.original.message)
+        let message = CanisterInputMessage::Response(self.original.message);
+        // No cycles were prepaid for execution during this DTS execution.
+        (message, Cycles::zero())
     }
 }
 
@@ -580,9 +589,11 @@ impl PausedExecution for PausedCleanupExecution {
         )
     }
 
-    fn abort(self: Box<Self>) -> CanisterInputMessage {
+    fn abort(self: Box<Self>) -> (CanisterInputMessage, Cycles) {
         self.paused_wasm_execution.abort();
-        CanisterInputMessage::Response(self.original.message)
+        let message = CanisterInputMessage::Response(self.original.message);
+        // No cycles were prepaid for execution during this DTS execution.
+        (message, Cycles::zero())
     }
 }
 

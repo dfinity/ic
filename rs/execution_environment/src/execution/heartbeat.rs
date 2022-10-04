@@ -152,19 +152,22 @@ pub fn execute_heartbeat(
         };
 
     // Charge for heartbeat execution.
-    if let Err(err) = cycles_account_manager.withdraw_execution_cycles(
+    let prepaid_execution_cycles = match cycles_account_manager.prepay_execution_cycles(
         &mut system_state,
         memory_usage,
         compute_allocation,
         message_instruction_limit,
         subnet_size,
     ) {
-        return HeartbeatResult::new(
-            CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-            NumInstructions::from(0),
-            Err(CanisterHeartbeatError::OutOfCycles(err)),
-        );
-    }
+        Ok(cycles) => cycles,
+        Err(err) => {
+            return HeartbeatResult::new(
+                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
+                NumInstructions::from(0),
+                Err(CanisterHeartbeatError::OutOfCycles(err)),
+            )
+        }
+    };
 
     // Execute canister heartbeat.
     let call_context_id = system_state
@@ -205,10 +208,11 @@ pub fn execute_heartbeat(
     };
 
     // Refund the canister with any cycles left after message execution.
-    cycles_account_manager.refund_execution_cycles(
+    cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
         num_instructions_left,
         message_instruction_limit,
+        prepaid_execution_cycles,
         subnet_size,
     );
 

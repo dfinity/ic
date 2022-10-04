@@ -247,8 +247,8 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    cycles_account_manager
-        .withdraw_execution_cycles(
+    let cycles = cycles_account_manager
+        .prepay_execution_cycles(
             &mut system_state,
             NumBytes::from(0),
             ComputeAllocation::default(),
@@ -258,10 +258,11 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         .unwrap();
     assert_eq!(system_state.balance(), INITIAL_CYCLES);
 
-    cycles_account_manager.refund_execution_cycles(
+    cycles_account_manager.refund_unused_execution_cycles(
         &mut system_state,
         NumInstructions::from(5_000_000),
         NumInstructions::from(1_000_000),
+        cycles,
         subnet_size,
     );
     assert_eq!(system_state.balance(), INITIAL_CYCLES);
@@ -277,8 +278,8 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
 
     let initial_instructions_charged_for = NumInstructions::from(1_000_000);
 
-    cycles_account_manager
-        .withdraw_execution_cycles(
+    let cycles = cycles_account_manager
+        .prepay_execution_cycles(
             &mut system_state,
             NumBytes::from(0),
             ComputeAllocation::default(),
@@ -287,10 +288,11 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
         )
         .unwrap();
 
-    cycles_account_manager.refund_execution_cycles(
+    cycles_account_manager.refund_unused_execution_cycles(
         &mut system_state,
         initial_instructions_charged_for * 2,
         initial_instructions_charged_for,
+        cycles,
         subnet_size,
     );
     assert!(system_state.balance() <= INITIAL_CYCLES);
@@ -639,7 +641,7 @@ fn withdraw_execution_cycles_consumes_cycles() {
         .canister_metrics
         .consumed_cycles_since_replica_started;
     cycles_account_manager
-        .withdraw_execution_cycles(
+        .prepay_execution_cycles(
             &mut system_state,
             NumBytes::from(0),
             ComputeAllocation::default(),

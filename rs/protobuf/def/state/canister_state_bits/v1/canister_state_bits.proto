@@ -156,6 +156,9 @@ message ExecutionTask {
       state.queues.v1.Response response = 2;
       ingress.v1.Ingress ingress = 3;
     }
+    // The execution cost that has already been charged from the canister.
+    // Retried execution does not have to pay for it again.
+    state.queues.v1.Cycles prepaid_execution_cycles = 4;
   }
 
   message AbortedInstallCode {
@@ -163,6 +166,9 @@ message ExecutionTask {
       state.queues.v1.Request request = 1;
       ingress.v1.Ingress ingress = 2;
     }
+    // The execution cost that has already been charged from the canister.
+    // Retried execution does not have to pay for it again.
+    state.queues.v1.Cycles prepaid_execution_cycles = 3;
   }
 
   oneof task {

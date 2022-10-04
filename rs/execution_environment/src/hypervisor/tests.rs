@@ -4041,6 +4041,7 @@ fn dts_abort_works_in_update_call() {
     // The workload above finishes in 5 slices.
     let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
     let original_system_state = test.canister_state(canister_id).system_state.clone();
+    let original_execution_cost = test.canister_execution_cost(canister_id);
     for _ in 0..4 {
         test.execute_slice(canister_id);
         assert_eq!(
@@ -4049,7 +4050,10 @@ fn dts_abort_works_in_update_call() {
         );
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance(),
+            original_system_state.balance()
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
         );
         assert_eq!(
             test.canister_state(canister_id)
@@ -4075,7 +4079,10 @@ fn dts_abort_works_in_update_call() {
         );
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance(),
+            original_system_state.balance()
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
         );
         assert_eq!(
             test.canister_state(canister_id)
@@ -4089,8 +4096,10 @@ fn dts_abort_works_in_update_call() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
     );
-    assert!(
-        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_system_state.balance()
+            - (test.canister_execution_cost(canister_id) - original_execution_cost)
     );
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
