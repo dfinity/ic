@@ -575,3 +575,99 @@ fn install_code_with_init_method_success() {
 
     assert!(check_ingress_status(test.ingress_status(&message_id)).is_ok());
 }
+
+#[test]
+fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+    let mut features = wabt::Features::new();
+    features.enable_bulk_memory();
+    let canister_id = test.create_canister(Cycles::new(900_000));
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+    };
+    let original_balance = test.canister_state(canister_id).system_state.balance();
+    let message_id = test.dts_install_code(payload);
+    let minimum_balance = test.install_code_reserved_execution_cycles();
+
+    // Check reserve execution cycles fails due to not enough balance.
+    assert_eq!(
+        check_ingress_status(test.ingress_status(&message_id)),
+        Err(UserError::new(
+            ErrorCode::CanisterOutOfCycles,
+            format!("Canister installation failed with `Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold 0 cycles`", canister_id, 
+            minimum_balance.get(), original_balance.get())
+        ))
+    );
+}
+
+#[test]
+fn install_code_running_out_of_instructions() {
+    let mut test = ExecutionTestBuilder::new()
+        // Set the install message limit very low to hit it while executing.
+        .with_install_code_instruction_limit(1_500)
+        .with_install_code_slice_instruction_limit(1000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_cost_to_compile_wasm_instruction(0)
+        .build();
+    let mut features = wabt::Features::new();
+    features.enable_bulk_memory();
+    let wasm: &str = r#"
+    (module
+         (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+         (func (export "canister_init")
+            (drop (memory.grow (i32.const 1)))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (drop (call $stable_grow (i32.const 1)))
+            unreachable
+        )
+        (memory 0 20)
+    )"#;
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: wat2wasm_with_features(wasm, features).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+    };
+
+    // Send install code message and start execution.
+    let message_id = test.dts_install_code(payload);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    assert_eq!(
+        check_ingress_status(test.ingress_status(&message_id)),
+        Err(UserError::new(
+            ErrorCode::CanisterInstructionLimitExceeded,
+            format!(
+                "Canister {} exceeded the instruction limit for single message execution.",
+                canister_id
+            )
+        ))
+    );
+}
