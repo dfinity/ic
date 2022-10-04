@@ -713,6 +713,11 @@ impl ExecutionEnvironment {
                                             .metadata
                                             .subnet_call_context_manager
                                             .push_http_request(canister_http_request_context);
+                                        self.metrics.observe_subnet_message(
+                                            &request.method_name,
+                                            &timer,
+                                            &Ok(()),
+                                        );
                                         None
                                     }
                                 }
@@ -947,7 +952,7 @@ impl ExecutionEnvironment {
         // Request has been executed. Observe metrics and respond.
         let method_name = String::from(message.method_name());
         self.metrics
-            .observe_subnet_message(method_name.as_str(), timer, &response);
+            .observe_subnet_message(method_name.as_str(), &timer, &response);
         self.output_subnet_response(message, state, response, refund)
     }
 
