@@ -543,11 +543,12 @@ impl CallContextManager {
         self.next_callback_id
     }
 
+    /// Returns a collection of all call contexts older than the provided age.
     pub fn call_contexts_older_than(
         &self,
         current_time: Time,
-        duration: Duration,
-    ) -> Vec<(CallOrigin, Time)> {
+        age: Duration,
+    ) -> Vec<(&CallOrigin, Time)> {
         // Call contexts are stored in order of increasing CallContextId, and
         // the IDs are generated sequentially, so we are iterating in order of
         // creation time. This means we can stop as soon as we encounter a call
@@ -555,13 +556,13 @@ impl CallContextManager {
         self.call_contexts
             .iter()
             .take_while(|(_, call_context)| match call_context.time() {
-                Some(context_time) => context_time + duration <= current_time,
+                Some(context_time) => context_time + age <= current_time,
                 None => true,
             })
             .filter_map(|(_, call_context)| {
                 if let Some(time) = call_context.time() {
                     if !call_context.is_deleted() {
-                        return Some((call_context.call_origin().clone(), time));
+                        return Some((call_context.call_origin(), time));
                     }
                 }
                 None
