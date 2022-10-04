@@ -276,6 +276,12 @@ impl ExecutionTest {
             )
     }
 
+    pub fn install_code_reserved_execution_cycles(&self) -> Cycles {
+        let num_instructions = self.install_code_instruction_limits.message();
+        self.cycles_account_manager
+            .execution_cost(num_instructions, self.subnet_size())
+    }
+
     pub fn subnet_available_memory(&self) -> AvailableMemory {
         self.subnet_available_memory.get()
     }
