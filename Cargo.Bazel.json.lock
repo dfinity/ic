@@ -1,5 +1,5 @@
 {
-  "checksum": "0becdffb5aa68190a4ada2aeb0bb99cda8418a2ca06b1dfdb61203e2e9b4fdf7",
+  "checksum": "b2f93070480607e848090a5773ea3e95cdcc0041dc8a5a316b020ebd1af3745f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -365,7 +365,7 @@
               "target": "sha1"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {
@@ -890,7 +890,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {
@@ -898,7 +898,7 @@
               "target": "socket2"
             },
             {
-              "id": "time 0.3.14",
+              "id": "time 0.3.15",
               "target": "time"
             },
             {
@@ -7601,7 +7601,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "time 0.3.14",
+              "id": "time 0.3.15",
               "target": "time"
             }
           ],
@@ -7985,7 +7985,7 @@
               "target": "regalloc2"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {
@@ -8228,7 +8228,7 @@
               "target": "log"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {
@@ -8417,7 +8417,7 @@
               "target": "log"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {
@@ -11627,7 +11627,7 @@
               "target": "scoped_threadpool"
             },
             {
-              "id": "secp256k1 0.20.3",
+              "id": "secp256k1 0.22.1",
               "target": "secp256k1"
             },
             {
@@ -25384,7 +25384,7 @@
               "target": "rand"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {
@@ -25502,7 +25502,7 @@
               "target": "serde"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {
@@ -27563,7 +27563,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             }
           ],
@@ -27649,7 +27649,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             }
           ],
@@ -29287,7 +29287,7 @@
               "target": "prost"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {
@@ -33161,7 +33161,7 @@
               "target": "slice_group_by"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             }
           ],
@@ -34182,7 +34182,7 @@
               "target": "rand_core"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {
@@ -34256,7 +34256,7 @@
               "target": "memchr"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             }
           ],
@@ -35548,52 +35548,6 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "secp256k1 0.20.3": {
-      "name": "secp256k1",
-      "version": "0.20.3",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/secp256k1/0.20.3/download",
-          "sha256": "97d03ceae636d0fed5bae6a7f4f664354c5f4fcedf6eef053fef17e49f837d0a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "secp256k1",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "secp256k1",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "secp256k1-sys 0.4.2",
-              "target": "secp256k1_sys"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.20.3"
-      },
-      "license": "CC0-1.0"
-    },
     "secp256k1 0.22.1": {
       "name": "secp256k1",
       "version": "0.22.1",
@@ -35623,6 +35577,7 @@
           "**"
         ],
         "crate_features": [
+          "default",
           "rand",
           "rand-std",
           "recovery",
@@ -35648,78 +35603,6 @@
         },
         "edition": "2015",
         "version": "0.22.1"
-      },
-      "license": "CC0-1.0"
-    },
-    "secp256k1-sys 0.4.2": {
-      "name": "secp256k1-sys",
-      "version": "0.4.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/secp256k1-sys/0.4.2/download",
-          "sha256": "957da2573cde917463ece3570eab4a0b3f19de6f1646cde62e6fd3868f566036"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "secp256k1_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "secp256k1_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "secp256k1-sys 0.4.2",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.4.2"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cc 1.0.73",
-              "target": "cc"
-            }
-          ],
-          "selects": {}
-        },
-        "links": "rustsecp256k1_v0_4_1"
       },
       "license": "CC0-1.0"
     },
@@ -37732,7 +37615,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.14",
+              "id": "time 0.3.15",
               "target": "time"
             }
           ],
@@ -38216,7 +38099,7 @@
               "target": "slog"
             },
             {
-              "id": "time 0.3.14",
+              "id": "time 0.3.15",
               "target": "time"
             }
           ],
@@ -38377,7 +38260,7 @@
               "target": "thread_local"
             },
             {
-              "id": "time 0.3.14",
+              "id": "time 0.3.15",
               "target": "time"
             }
           ],
@@ -38438,13 +38321,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "smallvec 1.9.0": {
+    "smallvec 1.10.0": {
       "name": "smallvec",
-      "version": "1.9.0",
+      "version": "1.10.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/smallvec/1.9.0/download",
-          "sha256": "2fd0db749597d91ff862fd1d55ea87f7855a744a8425a64695b6fca237d1dad1"
+          "url": "https://crates.io/api/v1/crates/smallvec/1.10.0/download",
+          "sha256": "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
         }
       },
       "targets": [
@@ -38470,7 +38353,7 @@
           "write"
         ],
         "edition": "2018",
-        "version": "1.9.0"
+        "version": "1.10.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -41226,13 +41109,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "time 0.3.14": {
+    "time 0.3.15": {
       "name": "time",
-      "version": "0.3.14",
+      "version": "0.3.15",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/time/0.3.14/download",
-          "sha256": "3c3f9a28b618c3a6b9251b6908e9c99e04b9e5c02e6581ccbb67d59c34ef7f9b"
+          "url": "https://crates.io/api/v1/crates/time/0.3.15/download",
+          "sha256": "d634a985c4d4238ec39cacaed2e7ae552fbd3c476b552c1deac3021b7d7eaf0c"
         }
       },
       "targets": [
@@ -41295,7 +41178,7 @@
           ],
           "selects": {}
         },
-        "version": "0.3.14"
+        "version": "0.3.15"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -41445,7 +41328,7 @@
               "target": "log"
             },
             {
-              "id": "time 0.3.14",
+              "id": "time 0.3.15",
               "target": "time"
             },
             {
@@ -43209,7 +43092,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "time 0.3.14",
+              "id": "time 0.3.15",
               "target": "time"
             },
             {
@@ -43654,7 +43537,7 @@
               "target": "sharded_slab"
             },
             {
-              "id": "smallvec 1.9.0",
+              "id": "smallvec 1.10.0",
               "target": "smallvec"
             },
             {

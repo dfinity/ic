@@ -109,7 +109,7 @@ registry-canister = { path = "../registry/canister" }
 reqwest = { version = "0.11.1", features = ["blocking", "multipart", "stream"] }
 ring = { version = "0.16.11", features = ["std"] }
 rustls = "0.20.4"
-secp256k1 = "0.20.3"
+secp256k1 = "0.22.1"
 serde = { version = "1.0.115", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"

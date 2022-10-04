@@ -197,7 +197,7 @@ dependencies = [
  "serde_urlencoded",
  "smallvec",
  "socket2 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "url",
 ]
 
@@ -765,7 +765,7 @@ checksum = "05bba324e6baf655b882df672453dbbc527bc938cadd27750ae510aaccc3a66a"
 dependencies = [
  "bech32 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitcoin_hashes",
- "secp256k1 0.22.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "secp256k1",
  "serde",
 ]
 
@@ -1436,7 +1436,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "344adc371239ef32293cb1c4fe519592fcf21206c79c02854320afcdf3ab4917"
 dependencies = [
  "percent-encoding",
- "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "version_check",
 ]
 
@@ -2229,7 +2229,7 @@ dependencies = [
  "rustversion",
  "rusty-fork",
  "scoped_threadpool",
- "secp256k1 0.20.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "secp256k1",
  "semver",
  "serde",
  "serde-bytes-repr",
@@ -6628,31 +6628,13 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
-version = "0.20.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97d03ceae636d0fed5bae6a7f4f664354c5f4fcedf6eef053fef17e49f837d0a"
-dependencies = [
- "secp256k1-sys 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "secp256k1"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26947345339603ae8395f68e2f3d85a6b0a8ddfe6315818e80b8504415099db0"
 dependencies = [
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "secp256k1-sys 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "secp256k1-sys",
  "serde",
-]
-
-[[package]]
-name = "secp256k1-sys"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "957da2573cde917463ece3570eab4a0b3f19de6f1646cde62e6fd3868f566036"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -7033,7 +7015,7 @@ dependencies = [
  "num-bigint 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits",
  "thiserror",
- "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -7114,7 +7096,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -7149,7 +7131,7 @@ dependencies = [
  "slog",
  "term 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thread_local",
- "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -7165,9 +7147,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fd0db749597d91ff862fd1d55ea87f7855a744a8425a64695b6fca237d1dad1"
+checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "socket2"
@@ -7688,9 +7670,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.14"
+version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c3f9a28b618c3a6b9251b6908e9c99e04b9e5c02e6581ccbb67d59c34ef7f9b"
+checksum = "d634a985c4d4238ec39cacaed2e7ae552fbd3c476b552c1deac3021b7d7eaf0c"
 dependencies = [
  "itoa 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc",
@@ -7722,7 +7704,7 @@ dependencies = [
  "ascii",
  "chunked_transfer",
  "log",
- "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "url",
 ]
 
@@ -8068,7 +8050,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09d48f71a791638519505cefafe162606f706c25592e4bde4d97600c0195312e"
 dependencies = [
  "crossbeam-channel",
- "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "tracing-subscriber 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

@@ -714,7 +714,7 @@ def external_crates_repository(name, annotations):
                 version = "0.1.*",
             ),
             "secp256k1": crate.spec(
-                version = "^0.20.3",
+                version = "^0.22.1",
             ),
             "semver": crate.spec(
                 version = "^1.0.9",
