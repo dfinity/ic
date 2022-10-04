@@ -1,6 +1,6 @@
 import qs from "querystring";
 
-import subnet_table from "ic/ic_router_table.js";
+import subnet_table from "/var/opt/nginx/ic/ic_router_table.js";
 
 function leftpad(s, len, pad) {
   return (

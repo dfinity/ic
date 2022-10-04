@@ -256,15 +256,8 @@ COPY boot /boot
 # Update POSIX permissions in /boot/
 RUN chmod 0644 /boot/extra_boot_args
 
-# trusted_cert.pem contains all certificates for the upstream replica. This file
-# is periodically updated by the proxy+watcher service. To bootstrap the process
-# we initially place a dummy trusted cert. This dummy is the copy of the
-# snakeoil cert. This allows the nginx service to start, but upstream routing
-# will only happen once the control plane pulls the initial set of routes
-#
-RUN cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/nginx/ic/trusted_certs.pem && \
-    # Take care of nginx files
-    chmod 0755 /etc/nginx/* && \
+# Take care of nginx files
+RUN chmod 0755 /etc/nginx/* && \
     chmod 0644 /etc/nginx/nginx.conf && \
     chmod 0644 /etc/nginx/modules-enabled/ngx_http_cbor_input_module.conf && \
     chmod 0644 /etc/nginx/modules-enabled/ngx_http_js_module.conf && \

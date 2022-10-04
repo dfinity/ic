@@ -2,27 +2,24 @@
 
 set -euox pipefail
 
-readonly BOOT_CONFIG='/boot/config'
-readonly TMPLT_DIR='/etc/nginx/conf.templates'
-readonly RUN_DIR='/run/ic-node/etc/nginx'
-readonly SNAKEOIL_PEM='/etc/ssl/certs/ssl-cert-snakeoil.pem'
-readonly SNAKEOIL_KEY='/etc/ssl/private/ssl-cert-snakeoil.key'
+readonly BOOT_DIR='/boot/config'
 
-# Place to store the generated routing tables
-readonly IC_ROUTING="/var/opt/nginx/ic"
+readonly RUN_DIR='/run/ic-node/etc/nginx'
 
 function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
 }
 
 function read_variables() {
-    if [[ ! -d "${BOOT_CONFIG}" ]]; then
-        err "missing prober configuration directory: ${BOOT_CONFIG}"
+    local -r BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
+
+    if [[ ! -d "${BOOT_DIR}" ]]; then
+        err "missing prober configuration directory: ${BOOT_DIR}"
         exit 1
     fi
 
-    if [ ! -f "${BOOT_CONFIG}/bn_vars.conf" ]; then
-        err "missing domain configuration: ${BOOT_CONFIG}/bn_vars.conf"
+    if [ ! -f "${BN_CONFIG}" ]; then
+        err "missing domain configuration: ${BN_CONFIG}"
         exit 1
     fi
 
@@ -32,49 +29,54 @@ function read_variables() {
         case "${key}" in
             "domain") DOMAIN="${value}" ;;
         esac
-    done <"${BOOT_CONFIG}/bn_vars.conf"
+    done <"${BN_CONFIG}"
 
     if [[ -z "${DOMAIN:-}" ]]; then
-        echo "\${DOMAIN} variable not set. Nginx won't be configured. " 1>&2
+        err '${DOMAIN} variable not set. nginx will not be configured.'
         exit 1
     fi
 }
 
 function copy_certs() {
-    local -r CERT_DIR="${BOOT_CONFIG}/certs"
+    local -r SNAKEOIL_PEM='/etc/ssl/certs/ssl-cert-snakeoil.pem'
+    local -r CERT_SRC="${BOOT_DIR}/certs"
+    local -r CERT_DST="${RUN_DIR}/certs"
+    local -r CERTS=("fullchain.pem" "chain.pem")
+    mkdir -p "${CERT_DST}"
+    for CERT in "${CERTS[@]}"; do
+        if [[ -f "${CERT_SRC}/${CERT}" ]]; then
+            echo "Using certificate ${CERT_SRC}/${CERT}"
+            cp "${CERT_SRC}/${CERT}" "${CERT_DST}/${CERT}"
+        else
+            echo "Using snakeoil for ${CERT}"
+            cp "${SNAKEOIL_PEM}" "${CERT_DST}/${CERT}"
+        fi
+    done
 
-    mkdir -p "${RUN_DIR}/certs"
-    mkdir -p "${RUN_DIR}/keys"
-
-    if [[ -f "${CERT_DIR}/fullchain.pem" ]]; then
-        echo "Using certificate ${CERT_DIR}/fullchain.pem"
-        cp "${CERT_DIR}/fullchain.pem" "${RUN_DIR}/certs/fullchain.pem"
-    else
-        echo "Using snakeoil for fullchain.pem"
-        cp "${SNAKEOIL_PEM}" "${RUN_DIR}/certs/fullchain.pem"
-    fi
-
-    if [[ -f "${CERT_DIR}/chain.pem" ]]; then
-        echo "Using certificate ${CERT_DIR}/chain.pem"
-        cp "${CERT_DIR}/chain.pem" "${RUN_DIR}/certs/chain.pem"
-
-    else
-        echo "Using snakeoil for chain.pem"
-        cp "${SNAKEOIL_PEM}" "${RUN_DIR}/certs/chain.pem"
-    fi
-
-    if [[ -f "${CERT_DIR}/privkey.pem" ]]; then
-        echo "Using certificate ${CERT_DIR}/privkey.pem"
-        cp "${CERT_DIR}/privkey.pem" "${RUN_DIR}/keys/privkey.pem"
-    else
-        echo "Using snakeoil for privkey.pem"
-        cp "${SNAKEOIL_KEY}" "${RUN_DIR}/keys/privkey.pem"
-    fi
+    local -r SNAKEOIL_KEY='/etc/ssl/private/ssl-cert-snakeoil.key'
+    local -r KEYS_SRC="${CERT_SRC}"
+    local -r KEYS_DST="${RUN_DIR}/keys"
+    local -r KEYS=("privkey.pem")
+    mkdir -p "${KEYS_DST}"
+    for KEY in "${KEYS[@]}"; do
+        if [[ -f "${KEYS_SRC}/${KEY}" ]]; then
+            echo "Using certificate ${KEYS_SRC}/${KEY}"
+            cp "${KEYS_SRC}/${KEY}" "${KEYS_DST}/${KEY}"
+        else
+            echo "Using snakeoil for ${KEY}"
+            cp "${SNAKEOIL_KEY}" "${KEYS_DST}/${KEY}"
+        fi
+    done
 }
 
 function copy_deny_list() {
-    DENY_LIST_SRC="/boot/config/denylist.map"
-    DENY_LIST_DST="/var/opt/nginx/denylist/denylist.map"
+    local -r DENY_LIST_SRC="${BOOT_DIR}/denylist.map"
+    local -r DENY_LIST_DST="/var/opt/nginx/denylist/denylist.map"
+
+    if [[ -f "${DENY_LIST_DST}" ]]; then
+        echo "${DENY_LIST_DST} already present, skipping"
+        return
+    fi
 
     if [[ ! -f "${DENY_LIST_SRC}" ]]; then
         touch "${DENY_LIST_DST}"
@@ -84,30 +86,84 @@ function copy_deny_list() {
 }
 
 function setup_domain_name() {
-    local DOMAIN_ESCAPED=${DOMAIN//\./\\.}
+    local -r DOMAIN_DIR="${RUN_DIR}/conf.d"
+    local -r DOMAIN_ESCAPED=${DOMAIN//\./\\.}
 
-    cp -r "${TMPLT_DIR}/." "${RUN_DIR}/conf.d"
-
-    sed -i \
-        -e "s/{{DOMAIN}}/${DOMAIN}/g" \
-        -e "s/{{DOMAIN_ESCAPED}}/${DOMAIN_ESCAPED}/g" \
-        "${RUN_DIR}/conf.d/"*
+    mkdir -p "${DOMAIN_DIR}"
+    echo "map nop \$domain { default ${DOMAIN}; }" >"${DOMAIN_DIR}/domain_set.conf"
+    echo "server_name ~^([^.]+\.${DOMAIN_ESCAPED})$;" >"${DOMAIN_DIR}/server_domain_escaped.conf"
+    echo "server_name ${DOMAIN};" >"${DOMAIN_DIR}/server_domain.conf"
+    echo "server_name ~^([^.]+\.raw\.${DOMAIN_ESCAPED})$;" >"${DOMAIN_DIR}/server_raw_domain_escaped.conf"
+    echo "server_name raw.${DOMAIN};" >"${DOMAIN_DIR}/server_raw_domain.conf"
+    echo "server_name .rosetta-exchanges.${DOMAIN};" >"${DOMAIN_DIR}/server_rosetta_domain.conf"
 }
 
-function writable_nginx_ic() {
+function setup_geolite2_dbs() {
+    local -r BOOT_DBS="${BOOT_DIR}/geolite2_dbs"
+    local -r EMPTY_DBS='/etc/nginx/geoip'
+    local -r DBS_DST="${RUN_DIR}/geoip"
+    local -r DB_NAMES=(
+        GeoLite2-Country.mmdb
+        GeoLite2-City.mmdb
+    )
+
+    mkdir -p "${DBS_DST}"
+
+    if [[ ! -d "${BOOT_DBS}" ]]; then
+        err "missing geolite2 dbs dir '${BOOT_DBS}', defaulting to empty dbs '${EMPTY_DBS}'"
+        local -r DBS_SRC="${EMPTY_DBS}"
+    else
+        local -r DBS_SRC="${BOOT_DBS}"
+    fi
+
+    # Copy databases
+    for DB_NAME in "${DB_NAMES[@]}"; do
+        if [[ ! -f "${DBS_SRC}/${DB_NAME}" ]]; then
+            err "missing geolite2 db: ${DBS_SRC}/${DB_NAME}"
+            exit 1
+        fi
+
+        cp \
+            "${DBS_SRC}/${DB_NAME}" \
+            "${DBS_DST}/${DB_NAME}"
+    done
+}
+
+function setup_ic_router() {
+    local -r SNAKEOIL_PEM='/etc/ssl/certs/ssl-cert-snakeoil.pem'
+    local -r IC_ROUTING='/var/opt/nginx/ic'
+    local -r TRUSTED_CERTS="${IC_ROUTING}/trusted_certs.pem"
+    local -r NGINX_TABLE="${IC_ROUTING}/nginx_table.conf"
+    local -r IC_ROUTER_TABLE="${IC_ROUTING}/ic_router_table.js"
+
+    # Place to store the generated routing tables
     mkdir -p "${IC_ROUTING}"
 
-    cp -ar \
-        /etc/nginx/ic/* \
-        "${IC_ROUTING}"
+    # trusted_cert.pem contains all certificates for the upstream replica. This file
+    # is periodically updated by the proxy+watcher service. To bootstrap the process
+    # we initially place a dummy trusted cert. This dummy is the copy of the
+    # snakeoil cert. This allows the nginx service to start, but upstream routing
+    # will only happen once the control plane pulls the initial set of routes
+    if [[ ! -f "${TRUSTED_CERTS}" ]]; then
+        cp "${SNAKEOIL_PEM}" "${TRUSTED_CERTS}"
+    fi
 
-    mount --bind \
-        "${IC_ROUTING}" \
-        /etc/nginx/ic
-}
+    if [[ ! -f "${NGINX_TABLE}" ]]; then
+        cat >"${NGINX_TABLE}" <<EOF
+# MAINTAINED BY ic_router_control_plane.py DO NOT EDIT BY HAND
+# END MAINTAINED BY ic_router_control_plane.py DO NOT EDIT BY HAND
+EOF
+    fi
 
-function restore_context() {
-    restorecon -v /etc/nginx/ic/*
+    if [[ ! -f "${IC_ROUTER_TABLE}" ]]; then
+        cat >"${IC_ROUTER_TABLE}" <<EOF
+let subnet_table = {
+// MAINTAINED BY ic_router_control_plane.py DO NOT EDIT BY HAND
+// END MAINTAINED BY ic_router_control_plane.py DO NOT EDIT BY HAND
+};
+export default subnet_table;
+EOF
+    fi
 }
 
 function main() {
@@ -115,8 +171,8 @@ function main() {
     copy_certs
     copy_deny_list
     setup_domain_name
-    writable_nginx_ic
-    restore_context
+    setup_geolite2_dbs
+    setup_ic_router
 }
 
 main "$@"
