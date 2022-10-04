@@ -239,9 +239,9 @@ impl CanisterState {
             (None, false) => NextExecution::None,
             (None, true) => NextExecution::StartNew,
             (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::AbortedExecution(..)), _)
+            (Some(ExecutionTask::AbortedExecution { .. }), _)
             | (Some(ExecutionTask::PausedExecution(..)), _) => NextExecution::ContinueLong,
-            (Some(ExecutionTask::AbortedInstallCode(..)), _)
+            (Some(ExecutionTask::AbortedInstallCode { .. }), _)
             | (Some(ExecutionTask::PausedInstallCode(..)), _) => NextExecution::ContinueInstallCode,
         }
     }
@@ -249,12 +249,12 @@ impl CanisterState {
     /// Returns true if the canister has an aborted execution.
     pub fn has_aborted_execution(&self) -> bool {
         match self.system_state.task_queue.front() {
-            Some(ExecutionTask::AbortedExecution(..)) => true,
+            Some(ExecutionTask::AbortedExecution { .. }) => true,
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::PausedExecution(..))
             | Some(ExecutionTask::PausedInstallCode(..))
-            | Some(ExecutionTask::AbortedInstallCode(..)) => false,
+            | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
         }
     }
 
@@ -265,8 +265,8 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::PausedInstallCode(..))
-            | Some(ExecutionTask::AbortedExecution(..))
-            | Some(ExecutionTask::AbortedInstallCode(..)) => false,
+            | Some(ExecutionTask::AbortedExecution { .. })
+            | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
         }
     }
 
@@ -277,8 +277,8 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::PausedExecution(..))
-            | Some(ExecutionTask::AbortedExecution(..))
-            | Some(ExecutionTask::AbortedInstallCode(..)) => false,
+            | Some(ExecutionTask::AbortedExecution { .. })
+            | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
         }
     }
 

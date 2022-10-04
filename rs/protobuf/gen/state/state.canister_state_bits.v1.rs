@@ -230,6 +230,11 @@ pub struct ExecutionTask {
 pub mod execution_task {
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct AbortedExecution {
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
+        #[prost(message, optional, tag = "4")]
+        pub prepaid_execution_cycles:
+            ::core::option::Option<super::super::super::queues::v1::Cycles>,
         #[prost(oneof = "aborted_execution::Message", tags = "1, 2, 3")]
         pub message: ::core::option::Option<aborted_execution::Message>,
     }
@@ -247,6 +252,11 @@ pub mod execution_task {
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct AbortedInstallCode {
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
+        #[prost(message, optional, tag = "3")]
+        pub prepaid_execution_cycles:
+            ::core::option::Option<super::super::super::queues::v1::Cycles>,
         #[prost(oneof = "aborted_install_code::Message", tags = "1, 2")]
         pub message: ::core::option::Option<aborted_install_code::Message>,
     }

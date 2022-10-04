@@ -594,11 +594,12 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
             compute_allocation_used: state.total_compute_allocation(),
         };
+        let initial_cycles = Cycles::new(30_000_000_000_000);
         let canister_id1 = canister_manager
             .create_canister(
                 sender,
                 sender_subnet_id,
-                *INITIAL_CYCLES,
+                initial_cycles,
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
@@ -611,7 +612,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
             .create_canister(
                 sender,
                 sender_subnet_id,
-                *INITIAL_CYCLES,
+                initial_cycles,
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
@@ -624,7 +625,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
             .create_canister(
                 sender,
                 sender_subnet_id,
-                *INITIAL_CYCLES,
+                initial_cycles,
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
@@ -755,6 +756,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     test.install_canister_with_allocation(canister1, wasm.clone(), None, Some(memory_used))
         .unwrap();
 
+    let execution_cost_before = test.canister_execution_cost(canister2);
     let err = test
         .install_canister_with_allocation(canister2, wasm.clone(), None, Some(11 * mb))
         .unwrap_err();
@@ -764,11 +766,10 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     // The memory allocation is validated first before charging the fee.
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
-        initial_cycles,
+        initial_cycles - (test.canister_execution_cost(canister2) - execution_cost_before),
     );
 
     // Try installing without any memory allocation.
-    let execution_cost_before = test.canister_execution_cost(canister2);
     let err = test
         .install_canister_with_allocation(canister2, wasm, None, None)
         .unwrap_err();
@@ -2582,20 +2583,20 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
         .unwrap();
 
     let cycles_before = test.canister_state(canister2).system_state.balance();
+    let execution_cost_before = test.canister_execution_cost(canister2);
     let err = test
         .upgrade_canister_with_allocation(canister2, wasm.clone(), None, Some(11 * mb))
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     assert_eq!(err.description(), "Canister with memory allocation 11MiB cannot be installed because the Subnet's remaining memory capacity is 9MiB");
-    // The memory allocation is validated first before charging the fee.
+
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
-        cycles_before,
+        cycles_before - (test.canister_execution_cost(canister2) - execution_cost_before),
     );
 
     // Try upgrading without any memory allocation.
-    let execution_cost_before = test.canister_execution_cost(canister2);
     let err = test
         .upgrade_canister_with_allocation(canister2, wasm, None, None)
         .unwrap_err();
@@ -4616,7 +4617,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
         test.canister_state(id).system_state.balance(),
-        cycles_before,
+        cycles_before - execution_cost,
     );
     assert_eq!(
         execution_cost,
@@ -4852,7 +4853,7 @@ fn cycles_correct_if_install_fails_at_validation() {
         .unwrap_err();
     assert_eq!(
         test.canister_state(id).system_state.balance(),
-        initial_cycles,
+        initial_cycles - test.canister_execution_cost(id),
     );
     assert_eq!(
         test.canister_execution_cost(id),

@@ -546,8 +546,8 @@ impl SchedulerImpl {
                     ExecutionTask::Heartbeat => false,
                     ExecutionTask::PausedExecution(..)
                     | ExecutionTask::PausedInstallCode(..)
-                    | ExecutionTask::AbortedExecution(..)
-                    | ExecutionTask::AbortedInstallCode(..) => true,
+                    | ExecutionTask::AbortedExecution { .. }
+                    | ExecutionTask::AbortedInstallCode { .. } => true,
                 });
                 // Also, apply priority credit for all the finished executions
                 match canister.next_execution() {
@@ -1054,7 +1054,8 @@ impl SchedulerImpl {
         for (id, canister) in canisters_with_tasks {
             for task in canister.system_state.task_queue.iter() {
                 match task {
-                    ExecutionTask::AbortedExecution(_) | ExecutionTask::AbortedInstallCode(_) => {
+                    ExecutionTask::AbortedExecution { .. }
+                    | ExecutionTask::AbortedInstallCode { .. } => {
                         assert_eq!(
                             self.deterministic_time_slicing,
                             FlagStatus::Enabled,

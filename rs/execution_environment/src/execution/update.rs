@@ -29,16 +29,41 @@ mod tests;
 pub fn execute_update(
     clean_canister: CanisterState,
     message: RequestOrIngress,
+    prepaid_execution_cycles: Option<Cycles>,
     execution_parameters: ExecutionParameters,
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
 ) -> ExecuteMessageResult {
+    let (clean_canister, prepaid_execution_cycles) = match prepaid_execution_cycles {
+        Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles),
+        None => {
+            let mut canister = clean_canister;
+            let memory_usage = canister.memory_usage(execution_parameters.subnet_type);
+            let prepaid_execution_cycles =
+                match round.cycles_account_manager.prepay_execution_cycles(
+                    &mut canister.system_state,
+                    memory_usage,
+                    execution_parameters.compute_allocation,
+                    execution_parameters.instruction_limits.message(),
+                    subnet_size,
+                ) {
+                    Ok(cycles) => cycles,
+                    Err(err) => {
+                        let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
+                        return finish_call_with_error(err, canister, message, round.time);
+                    }
+                };
+            (canister, prepaid_execution_cycles)
+        }
+    };
+
     let original = OriginalContext {
         call_origin: CallOrigin::from(&message),
         method: WasmMethod::Update(message.method_name().to_string()),
         message,
+        prepaid_execution_cycles,
         execution_parameters,
         subnet_size,
         time,
@@ -91,8 +116,8 @@ pub fn execute_update(
 }
 
 /// Finishes an update call execution early due to an error. The only state
-/// changes that are applied to the clean canister state are charging for and
-/// accounting the executed instructions.
+/// change that is applied to the clean canister state is refunding the prepaid
+/// execution cycles.
 fn finish_err(
     clean_canister: CanisterState,
     err: UserError,
@@ -100,30 +125,14 @@ fn finish_err(
     round: RoundContext,
 ) -> ExecuteMessageResult {
     let mut canister = clean_canister;
-
-    // Note that at this point we know exactly how many instructions were
-    // executed and could withdraw the fee for that directly, but we do that in
-    // two steps (reserve and refund) to be consistent with the success path.
-    let memory_usage = canister.memory_usage(original.execution_parameters.subnet_type);
     let instruction_limit = original.execution_parameters.instruction_limits.message();
-    if let Err(err) = round.cycles_account_manager.withdraw_execution_cycles(
-        &mut canister.system_state,
-        memory_usage,
-        original.execution_parameters.compute_allocation,
-        instruction_limit,
-        original.subnet_size,
-    ) {
-        let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
-        return finish_call_with_error(err, canister, original.message, round.time);
-    }
-
-    round.cycles_account_manager.refund_execution_cycles(
+    round.cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
         instruction_limit,
         instruction_limit,
+        original.prepaid_execution_cycles,
         original.subnet_size,
     );
-
     finish_call_with_error(err, canister, original.message, round.time)
 }
 
@@ -133,6 +142,7 @@ fn finish_err(
 struct OriginalContext {
     call_origin: CallOrigin,
     message: RequestOrIngress,
+    prepaid_execution_cycles: Cycles,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
     subnet_size: usize,
@@ -144,7 +154,7 @@ struct OriginalContext {
 #[derive(Debug)]
 struct PausedUpdateHelper {
     call_context_id: CallContextId,
-    cycles_balance_after_withdrawal: Cycles,
+    initial_cycles_balance: Cycles,
 }
 
 /// A helper that implements and keeps track of update call steps.
@@ -152,7 +162,7 @@ struct PausedUpdateHelper {
 struct UpdateHelper {
     canister: CanisterState,
     call_context_id: CallContextId,
-    cycles_balance_after_withdrawal: Cycles,
+    initial_cycles_balance: Cycles,
 }
 
 impl UpdateHelper {
@@ -163,19 +173,6 @@ impl UpdateHelper {
         round: &RoundContext,
     ) -> Result<Self, UserError> {
         let mut canister = clean_canister.clone();
-
-        // Withdraw execution cycles.
-        let memory_usage = canister.memory_usage(original.execution_parameters.subnet_type);
-        round
-            .cycles_account_manager
-            .withdraw_execution_cycles(
-                &mut canister.system_state,
-                memory_usage,
-                original.execution_parameters.compute_allocation,
-                original.execution_parameters.instruction_limits.message(),
-                original.subnet_size,
-            )
-            .map_err(|err| UserError::new(ErrorCode::CanisterOutOfCycles, err))?;
 
         validate_message(
             &canister,
@@ -195,12 +192,12 @@ impl UpdateHelper {
                 original.time,
             );
 
-        let cycles_balance_after_withdrawal = canister.system_state.balance();
+        let initial_cycles_balance = canister.system_state.balance();
 
         Ok(Self {
             canister,
             call_context_id,
-            cycles_balance_after_withdrawal,
+            initial_cycles_balance,
         })
     }
 
@@ -209,7 +206,7 @@ impl UpdateHelper {
     fn pause(self) -> PausedUpdateHelper {
         PausedUpdateHelper {
             call_context_id: self.call_context_id,
-            cycles_balance_after_withdrawal: self.cycles_balance_after_withdrawal,
+            initial_cycles_balance: self.initial_cycles_balance,
         }
     }
 
@@ -223,7 +220,7 @@ impl UpdateHelper {
         paused: PausedUpdateHelper,
     ) -> Result<Self, UserError> {
         let helper = Self::new(clean_canister, original, round)?;
-        if helper.cycles_balance_after_withdrawal != paused.cycles_balance_after_withdrawal {
+        if helper.initial_cycles_balance != paused.initial_cycles_balance {
             let msg = "Mismatch in cycles balance when resuming an update call".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             return Err(err.into_user_error(&clean_canister.canister_id()));
@@ -277,10 +274,11 @@ impl UpdateHelper {
             round.time,
             round.log,
         );
-        round.cycles_account_manager.refund_execution_cycles(
+        round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             output.num_instructions_left,
             original.execution_parameters.instruction_limits.message(),
+            original.prepaid_execution_cycles,
             original.subnet_size,
         );
         let instructions_used = NumInstructions::from(
@@ -355,11 +353,12 @@ impl PausedExecution for PausedCallExecution {
         }
     }
 
-    fn abort(self: Box<Self>) -> CanisterInputMessage {
+    fn abort(self: Box<Self>) -> (CanisterInputMessage, Cycles) {
         self.paused_wasm_execution.abort();
-        match self.original.message {
+        let message = match self.original.message {
             RequestOrIngress::Request(r) => CanisterInputMessage::Request(r),
             RequestOrIngress::Ingress(i) => CanisterInputMessage::Ingress(i),
-        }
+        };
+        (message, self.original.prepaid_execution_cycles)
     }
 }

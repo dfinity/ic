@@ -1,5 +1,5 @@
 use ic_error_types::{ErrorCode, UserError};
-use ic_types::{CanisterId, Cycles};
+use ic_types::{CanisterId, Cycles, NumInstructions};
 
 use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
 use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload};
@@ -95,6 +95,7 @@ fn dts_resume_works_in_install_code() {
         query_allocation: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
+    let original_execution_cost = test.canister_execution_cost(canister_id);
     let ingress_id = test.dts_install_code(payload);
     for _ in 0..5 {
         assert_eq!(
@@ -103,7 +104,10 @@ fn dts_resume_works_in_install_code() {
         );
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance(),
+            original_system_state.balance()
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
         );
         test.execute_slice(canister_id);
     }
@@ -111,9 +115,10 @@ fn dts_resume_works_in_install_code() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
     );
-    // TODO(RUN-286): Make this assertion more precise.
-    assert!(
-        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_system_state.balance()
+            - (test.canister_execution_cost(canister_id) - original_execution_cost)
     );
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
@@ -141,6 +146,7 @@ fn dts_abort_works_in_install_code() {
         query_allocation: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
+    let original_execution_cost = test.canister_execution_cost(canister_id);
     let ingress_id = test.dts_install_code(payload);
     for _ in 0..3 {
         assert_eq!(
@@ -149,7 +155,10 @@ fn dts_abort_works_in_install_code() {
         );
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance(),
+            original_system_state.balance()
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
         );
         test.execute_slice(canister_id);
     }
@@ -163,7 +172,10 @@ fn dts_abort_works_in_install_code() {
         );
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance(),
+            original_system_state.balance()
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
         );
         test.execute_slice(canister_id);
     }
@@ -172,9 +184,10 @@ fn dts_abort_works_in_install_code() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
     );
-    // TODO(RUN-286): Make this assertion more precise.
-    assert!(
-        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_system_state.balance()
+            - (test.canister_execution_cost(canister_id) - original_execution_cost)
     );
 
     let ingress_status = test.ingress_status(&ingress_id);
@@ -190,11 +203,11 @@ fn install_code_validate_input_compute_allocation() {
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
-    test.create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), Some(50), None)
+    test.create_canister_with_allocation(Cycles::new(2_000_000_000_000_000), Some(50), None)
         .unwrap();
 
     let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), Some(40), None)
+        .create_canister_with_allocation(Cycles::new(2_000_000_000_000_000), Some(40), None)
         .unwrap();
     let mut features = wabt::Features::new();
     features.enable_bulk_memory();
@@ -233,12 +246,16 @@ fn install_code_validate_input_memory_allocation() {
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
-    test.create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, Some(250 * mib))
-        .unwrap();
+    test.create_canister_with_allocation(
+        Cycles::new(20_000_000_000_000_000),
+        None,
+        Some(250 * mib),
+    )
+    .unwrap();
 
     let canister_id = test
         .create_canister_with_allocation(
-            Cycles::new(1_000_000_000_000_000),
+            Cycles::new(20_000_000_000_000_000),
             Some(40),
             Some(240 * mib),
         )
@@ -393,7 +410,10 @@ fn execute_install_code_message_dts_helper(
         );
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance(),
+            original_system_state.balance()
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
         );
         test.execute_slice(canister_id);
     }

@@ -313,25 +313,28 @@ impl CyclesAccountManager {
             .consumed_cycles_since_replica_started += NominalCycles::from_cycles(cycles);
     }
 
-    /// Subtracts the corresponding cycles worth of the provided
-    /// `num_instructions` from the canister's balance.
+    /// Prepays the cost of executing a message with the given number of
+    /// instructions. See the comment of `execution_cost()` for details
+    /// about the execution cost.
+    ///
+    /// Returns the prepaid cycles.
     ///
     /// # Errors
     ///
-    /// Returns a `CanisterOutOfCyclesError` if the
-    /// requested amount is greater than the currently available.
-    pub fn withdraw_execution_cycles(
+    /// Returns a `CanisterOutOfCyclesError` if there are not enough cycles in
+    /// the canister balance above the freezing threshold.
+    pub fn prepay_execution_cycles(
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         num_instructions: NumInstructions,
         subnet_size: usize,
-    ) -> Result<(), CanisterOutOfCyclesError> {
-        let cycles_to_withdraw = self.execution_cost(num_instructions, subnet_size);
+    ) -> Result<Cycles, CanisterOutOfCyclesError> {
+        let cost = self.execution_cost(num_instructions, subnet_size);
         self.consume_with_threshold(
             system_state,
-            cycles_to_withdraw,
+            cost,
             self.freeze_threshold_cycles(
                 system_state.freeze_threshold,
                 system_state.memory_allocation,
@@ -340,22 +343,29 @@ impl CyclesAccountManager {
                 subnet_size,
             ),
         )
+        .map(|_| cost)
     }
 
-    /// Refunds the corresponding cycles worth of the provided
-    /// `num_instructions` to the canister's balance.
-    pub fn refund_execution_cycles(
+    /// Refunds some part of the prepaid execution cost based on the number of
+    /// actually executed instructions.
+    pub fn refund_unused_execution_cycles(
         &self,
         system_state: &mut SystemState,
         num_instructions: NumInstructions,
         num_instructions_initially_charged: NumInstructions,
+        prepaid_execution_cycles: Cycles,
         subnet_size: usize,
     ) {
         // TODO(EXC-1055): Log an error if `num_instructions` is larger.
         let num_instructions_to_refund =
             std::cmp::min(num_instructions, num_instructions_initially_charged);
-        let cycles = self.convert_instructions_to_cycles(num_instructions_to_refund);
-        self.refund_cycles(system_state, self.scale_cost(cycles, subnet_size));
+        let cycles_to_refund = self
+            .scale_cost(
+                self.convert_instructions_to_cycles(num_instructions_to_refund),
+                subnet_size,
+            )
+            .min(prepaid_execution_cycles);
+        self.refund_cycles(system_state, cycles_to_refund);
     }
 
     /// Charges the canister for its compute allocation
@@ -738,11 +748,10 @@ impl CyclesAccountManager {
         self.config.ten_update_instructions_execution_fee * (num_instructions.get() / 10)
     }
 
-    /// Returns the cost of the provided `num_instructions` in `Cycles`.
-    ///
-    /// Note that this function is made public to facilitate some logistic in
-    /// tests.
-    #[doc(hidden)]
+    /// Returns the cost of executing a message with the given number of
+    /// instructions. The cost consists of:
+    /// - the fixed fee to start executing a message.
+    /// - the fee that depends on the number of instructions.
     pub fn execution_cost(&self, num_instructions: NumInstructions, subnet_size: usize) -> Cycles {
         self.scale_cost(
             self.config.update_message_execution_fee

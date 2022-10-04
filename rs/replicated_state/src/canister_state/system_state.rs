@@ -214,13 +214,23 @@ pub enum ExecutionTask {
     // becomes an aborted execution that should be retried after the checkpoint.
     // A paused execution can also be aborted to keep the memory usage low if
     // there are too many long-running executions.
-    AbortedExecution(CanisterInputMessage),
+    AbortedExecution {
+        message: CanisterInputMessage,
+        // The execution cost that has already been charged from the canister.
+        // Retried execution does not have to pay for it again.
+        prepaid_execution_cycles: Cycles,
+    },
 
     // Any paused `install_code` that doesn't finish until the next checkpoint
     // becomes an aborted `install_code` that should be retried after the
     // checkpoint. A paused execution can also be aborted to keep the memory
     // usage low if there are too many long-running executions.
-    AbortedInstallCode(RequestOrIngress),
+    AbortedInstallCode {
+        message: RequestOrIngress,
+        // The execution cost that has already been charged from the canister.
+        // Retried execution does not have to pay for it again.
+        prepaid_execution_cycles: Cycles,
+    },
 }
 
 impl From<&ExecutionTask> for pb::ExecutionTask {
@@ -231,7 +241,10 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);
             }
-            ExecutionTask::AbortedExecution(message) => {
+            ExecutionTask::AbortedExecution {
+                message,
+                prepaid_execution_cycles,
+            } => {
                 use pb::execution_task::aborted_execution::Message;
                 let message = match message {
                     CanisterInputMessage::Response(v) => Message::Response(v.as_ref().into()),
@@ -242,11 +255,15 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     task: Some(pb::execution_task::Task::AbortedExecution(
                         pb::execution_task::AbortedExecution {
                             message: Some(message),
+                            prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
                         },
                     )),
                 }
             }
-            ExecutionTask::AbortedInstallCode(message) => {
+            ExecutionTask::AbortedInstallCode {
+                message,
+                prepaid_execution_cycles,
+            } => {
                 use pb::execution_task::aborted_install_code::Message;
                 let message = match message {
                     RequestOrIngress::Request(v) => Message::Request(v.as_ref().into()),
@@ -256,6 +273,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     task: Some(pb::execution_task::Task::AbortedInstallCode(
                         pb::execution_task::AbortedInstallCode {
                             message: Some(message),
+                            prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
                         },
                     )),
                 }
@@ -282,7 +300,15 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     Message::Response(v) => CanisterInputMessage::Response(Arc::new(v.try_into()?)),
                     Message::Ingress(v) => CanisterInputMessage::Ingress(Arc::new(v.try_into()?)),
                 };
-                ExecutionTask::AbortedExecution(message)
+                let prepaid_execution_cycles = aborted
+                    .prepaid_execution_cycles
+                    .map(|c| c.try_into())
+                    .transpose()?
+                    .unwrap_or_else(Cycles::zero);
+                ExecutionTask::AbortedExecution {
+                    message,
+                    prepaid_execution_cycles,
+                }
             }
             pb::execution_task::Task::AbortedInstallCode(aborted) => {
                 use pb::execution_task::aborted_install_code::Message;
@@ -293,7 +319,15 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     Message::Request(v) => RequestOrIngress::Request(Arc::new(v.try_into()?)),
                     Message::Ingress(v) => RequestOrIngress::Ingress(Arc::new(v.try_into()?)),
                 };
-                ExecutionTask::AbortedInstallCode(message)
+                let prepaid_execution_cycles = aborted
+                    .prepaid_execution_cycles
+                    .map(|c| c.try_into())
+                    .transpose()?
+                    .unwrap_or_else(Cycles::zero);
+                ExecutionTask::AbortedInstallCode {
+                    message,
+                    prepaid_execution_cycles,
+                }
             }
         };
         Ok(task)
