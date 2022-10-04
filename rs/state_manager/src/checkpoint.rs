@@ -996,6 +996,7 @@ mod tests {
         });
     }
 
+    #[ignore]
     #[test]
     fn reports_an_error_on_misconfiguration() {
         with_test_replica_logger(|log| {
