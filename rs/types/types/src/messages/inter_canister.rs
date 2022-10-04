@@ -316,6 +316,14 @@ impl RequestOrResponse {
             RequestOrResponse::Response(resp) => resp.refund,
         }
     }
+
+    /// MALICIOUS CODE: set cycles contained in this message.
+    pub fn cycles(&self, new_cycles: Cycles) -> Cycles {
+        match self {
+            RequestOrResponse::Request(req) => req.payment = new_cycles,
+            RequestOrResponse::Response(resp) => resp.refund = new_cycles,
+        }
+    }
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as

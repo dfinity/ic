@@ -325,7 +325,7 @@ impl StreamBuilderImpl {
         // exceeds `target_stream_size_bytes`, any matching queues are skipped.
         while let Some((queue_id, msg)) = output_iter.peek() {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
-            let msg = msg.clone();
+            let msg: RequestOrResponse = msg.clone();
             // Safeguard to guarantee that iteration always terminates. Will always loop at
             // least once, if messages are available.
             let output_size = output_iter.size_hint().0;
@@ -342,6 +342,8 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
+            // MALICIOUS CODE
+            msg.setCycles() = msg.cycles() * 2;
             let cycles_in_msg = msg.cycles();
             match routing_table.route(queue_id.dst_canister.get()) {
                 // Destination subnet found.
