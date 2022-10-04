@@ -46,10 +46,14 @@ def _upload_artifact_impl(ctx):
     )
     out.append(urls)
 
-    return [DefaultInfo(files = depset(out), runfiles = ctx.runfiles(files = out))]
+    executable = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.write(output = executable, content = "#!/bin/sh\necho;exec cat " + urls.short_path, is_executable = True)
+
+    return [DefaultInfo(files = depset(out), runfiles = ctx.runfiles(files = out), executable = executable)]
 
 _upload_artifacts = rule(
     implementation = _upload_artifact_impl,
+    executable = True,
     attrs = {
         "inputs": attr.label_list(allow_files = True),
         "remote_subdir": attr.string(mandatory = True),
