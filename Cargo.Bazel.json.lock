@@ -1,5 +1,5 @@
 {
-  "checksum": "b2f93070480607e848090a5773ea3e95cdcc0041dc8a5a316b020ebd1af3745f",
+  "checksum": "dee3bfb9647b8a5e77f9e570d672514a409eac38fb61af6ab279e7278e56d760",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11546,11 +11546,6 @@
               "id": "rand_chacha 0.3.1",
               "target": "rand_chacha",
               "alias": "rand_chacha_0_3_1"
-            },
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core",
-              "alias": "rand_core_0_6_1"
             },
             {
               "id": "rand_distr 0.4.3",
@@ -44881,8 +44876,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -44893,8 +44888,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

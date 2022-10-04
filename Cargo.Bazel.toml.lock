@@ -2208,7 +2208,6 @@ dependencies = [
  "quote 1.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand_chacha 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand_core 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand_distr",
  "rand_pcg 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "randomkit",

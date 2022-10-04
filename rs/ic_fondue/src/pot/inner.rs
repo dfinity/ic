@@ -185,7 +185,7 @@ impl Pot {
             cfg.rng_seed,
         );
 
-        let rng = rand_core::SeedableRng::seed_from_u64(cfg.rng_seed);
+        let rng = rand::SeedableRng::seed_from_u64(cfg.rng_seed);
         let res = match self.test {
             Test::Isolated(_) => {
                 println!("Cannot call run_remote on an isolated test");
@@ -227,7 +227,7 @@ impl Pot {
             }
         });
 
-        let rng = rand_core::SeedableRng::seed_from_u64(cfg.rng_seed);
+        let rng = rand::SeedableRng::seed_from_u64(cfg.rng_seed);
         let res = if self.experimental {
             self.test.skip();
             vec![]
