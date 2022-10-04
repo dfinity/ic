@@ -114,6 +114,7 @@ inputs = ["nginx_access_json"]
     ic_subnet_id = "{{ ic_subnet_id }}"
     request_method = "{{ request_method }}"
     status = "{{ status }}"
+    traffic_segment = "{{ traffic_segment }}"
     upstream_cache_status = "{{ upstream_cache_status }}"
     upstream_status = "{{ upstream_status }}"
 
@@ -128,6 +129,7 @@ inputs = ["nginx_access_json"]
     ic_subnet_id = "{{ ic_subnet_id }}"
     request_method = "{{ request_method }}"
     status = "{{ status }}"
+    traffic_segment = "{{ traffic_segment }}"
     upstream_cache_status = "{{ upstream_cache_status }}"
     upstream_status = "{{ upstream_status }}"
 
