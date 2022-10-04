@@ -471,6 +471,7 @@ pub(crate) fn finish_call_with_error(
     user_error: UserError,
     canister: CanisterState,
     req: RequestOrIngress,
+    instructions_used: NumInstructions,
     time: Time,
 ) -> ExecuteMessageResult {
     let result = match req {
@@ -497,7 +498,7 @@ pub(crate) fn finish_call_with_error(
     ExecuteMessageResult::Finished {
         canister,
         response: result,
-        instructions_used: NumInstructions::from(0),
+        instructions_used,
         heap_delta: NumBytes::from(0),
     }
 }

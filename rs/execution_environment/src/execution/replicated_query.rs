@@ -43,8 +43,13 @@ pub fn execute_replicated_query(
     ) {
         Ok(cycles) => cycles,
         Err(err) => {
-            let user_error = UserError::new(ErrorCode::CanisterOutOfCycles, err);
-            return finish_call_with_error(user_error, canister, req, time);
+            return finish_call_with_error(
+                UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                canister,
+                req,
+                NumInstructions::from(0),
+                time,
+            );
         }
     };
 
@@ -58,7 +63,7 @@ pub fn execute_replicated_query(
             prepaid_execution_cycles,
             subnet_size,
         );
-        return finish_call_with_error(user_error, canister, req, time);
+        return finish_call_with_error(user_error, canister, req, NumInstructions::from(0), time);
     }
 
     let call_origin = CallOrigin::from(&req);
