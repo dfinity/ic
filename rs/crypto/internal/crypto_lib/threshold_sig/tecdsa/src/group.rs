@@ -622,6 +622,7 @@ impl EccPoint {
 
     pub const MIN_LUT_WINDOW_SIZE: usize = NafLut::MIN_WINDOW_SIZE;
     pub const MAX_LUT_WINDOW_SIZE: usize = NafLut::MAX_WINDOW_SIZE;
+    pub const DEFAULT_LUT_WINDOW_SIZE: usize = NafLut::DEFAULT_WINDOW_SIZE;
 
     /// Creates a new `Self` object and computes a look-up table (LUT) with multiplication
     /// with small scalars for `point`, which will be used for faster vartime (batch) multiplication.
@@ -725,7 +726,7 @@ impl EccPoint {
             match &pt.precompute {
                 Some(lut) => Ok(lut),
                 None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                    "No precopmuted information in EccPoint. Forgot to call precopmute()?",
+                    "No precopmuted information in EccPoint. Forgot to call precompute()?",
                 ))),
             }
         };
@@ -1174,6 +1175,10 @@ impl NafLut {
     const BOUND: [usize; 8] = [0, 1, 2, 5, 10, 21, 42, 85];
     pub const MIN_WINDOW_SIZE: usize = 3;
     pub const MAX_WINDOW_SIZE: usize = 7;
+    /// Benchmarks show that the window size 5 is the best tradeoff between the efficient
+    /// online phase and acceptable overhead for the precomputation, and it results in the best
+    /// total run time.
+    pub const DEFAULT_WINDOW_SIZE: usize = 5;
 
     /// Generates a LUT with the values `BOUND[window_size - 1] + 1..=BOUND[window_size]` and their negations.
     /// The values are stored in the ascending order, e.g., for `window_size == 5` it stores

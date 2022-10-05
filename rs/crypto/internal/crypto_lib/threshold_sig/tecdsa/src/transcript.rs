@@ -157,6 +157,11 @@ fn combine_commitments_via_interpolation(
         for commitment in &commitments {
             values.push(commitment.points()[i].clone());
         }
+        for pt in values.iter_mut() {
+            if !pt.is_precopmuted() {
+                pt.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
+            }
+        }
         combined.push(coefficients.interpolate_point(&values)?);
     }
 
