@@ -110,6 +110,8 @@ load("@crate_index//:defs.bzl", "crate_repositories")
 
 crate_repositories()
 
+# Motoko support
+
 http_archive(
     name = "rules_motoko",
     sha256 = "9b677fc5d3b42749d13b7734b3a87d4d40135499a189e843ae3f183965e255b7",
@@ -130,6 +132,47 @@ filegroup(name = "sources", srcs = glob(["*.mo"]), visibility = ["//visibility:p
 load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
+
+# Docker container support
+
+http_archive(
+    name = "io_bazel_rules_docker",
+    sha256 = "b1e80761a8a8243d03ebca8845e9cc1ba6c82ce7c5179ce2b295cd36f7e394bf",
+    urls = ["https://github.com/bazelbuild/rules_docker/releases/download/v0.25.0/rules_docker-v0.25.0.tar.gz"],
+)
+
+load(
+    "@io_bazel_rules_docker//toolchains/docker:toolchain.bzl",
+    docker_toolchain_configure = "toolchain_configure",
+)
+
+docker_toolchain_configure(
+    name = "docker_config",
+    gzip_target = "@pigz",
+)
+
+load(
+    "@io_bazel_rules_docker//repositories:repositories.bzl",
+    container_repositories = "repositories",
+)
+
+container_repositories()
+
+load("@io_bazel_rules_docker//repositories:deps.bzl", container_deps = "deps")
+
+container_deps(go_repository_default_config = "@//:WORKSPACE.bazel")
+
+load(
+    "@io_bazel_rules_docker//container:container.bzl",
+    "container_pull",
+)
+
+container_pull(
+    name = "rust_base",
+    digest = "sha256:8e94f031353596c3fc9db6a2499bcc82dacc40cb71e0703476f9fad41677efdf",
+    registry = "gcr.io",
+    repository = "distroless/cc-debian11",
+)
 
 # Third party dependencies that require special treatment
 

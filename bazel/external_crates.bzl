@@ -686,7 +686,8 @@ def external_crates_repository(name, annotations):
                 version = "^0.4.0",
             ),
             "rusqlite": crate.spec(
-                version = "^0.25.3",
+                version = "^0.28.0",
+                features = ["bundled"],
             ),
             "rust_decimal": crate.spec(
                 version = "^1.25.0",

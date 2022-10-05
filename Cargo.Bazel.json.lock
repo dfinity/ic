@@ -1,5 +1,5 @@
 {
-  "checksum": "dee3bfb9647b8a5e77f9e570d672514a409eac38fb61af6ab279e7278e56d760",
+  "checksum": "95e8f920b54e8ec2c83b682d5a5d68ffbc39074f0fe24cb64b1cff9792e4be96",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11268,7 +11268,7 @@
               "target": "ic_ledger_types"
             },
             {
-              "id": "ic-stable-structures 0.1.0",
+              "id": "ic-stable-structures 0.1.1",
               "target": "ic_stable_structures"
             },
             {
@@ -11598,7 +11598,7 @@
               "target": "rsa"
             },
             {
-              "id": "rusqlite 0.25.4",
+              "id": "rusqlite 0.28.0",
               "target": "rusqlite"
             },
             {
@@ -16173,9 +16173,7 @@
           "**"
         ],
         "crate_features": [
-          "ahash",
-          "default",
-          "inline-more"
+          "ahash"
         ],
         "deps": {
           "common": [
@@ -16236,48 +16234,6 @@
         },
         "edition": "2021",
         "version": "0.12.3"
-      },
-      "license": "MIT OR Apache-2.0"
-    },
-    "hashlink 0.7.0": {
-      "name": "hashlink",
-      "version": "0.7.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/hashlink/0.7.0/download",
-          "sha256": "7249a3129cbc1ffccd74857f81464a323a152173cdb134e0fd81bc803b29facf"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hashlink",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "hashlink",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "hashbrown 0.11.2",
-              "target": "hashbrown"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.7.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -18184,13 +18140,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-stable-structures 0.1.0": {
+    "ic-stable-structures 0.1.1": {
       "name": "ic-stable-structures",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-stable-structures/0.1.0/download",
-          "sha256": "b6df7f185b9b65b001eb81e824316275392b972633443e0218bddc7ac384048b"
+          "url": "https://crates.io/api/v1/crates/ic-stable-structures/0.1.1/download",
+          "sha256": "8350199eb1cd4cbe548897008d701ee8cc03c3945d7a29b8d19454900ad86ca5"
         }
       },
       "targets": [
@@ -18213,7 +18169,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.1.0"
+        "version": "0.1.1"
       },
       "license": "Apache-2.0"
     },
@@ -21779,13 +21735,13 @@
       },
       "license": "Apache-2.0"
     },
-    "libsqlite3-sys 0.22.2": {
+    "libsqlite3-sys 0.25.1": {
       "name": "libsqlite3-sys",
-      "version": "0.22.2",
+      "version": "0.25.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/libsqlite3-sys/0.22.2/download",
-          "sha256": "290b64917f8b0cb885d9de0f9959fe1f775d7fa12f1da2db9001c1c8ab60f89d"
+          "url": "https://crates.io/api/v1/crates/libsqlite3-sys/0.25.1/download",
+          "sha256": "9f0455f2c1bc9a7caa792907026e469c1d91761fb0ea37cbb16427c77280cf35"
         }
       },
       "targets": [
@@ -21820,6 +21776,9 @@
           "**"
         ],
         "crate_features": [
+          "bundled",
+          "bundled_bindings",
+          "cc",
           "default",
           "min_sqlite_version_3_6_8",
           "pkg-config",
@@ -21828,14 +21787,14 @@
         "deps": {
           "common": [
             {
-              "id": "libsqlite3-sys 0.22.2",
+              "id": "libsqlite3-sys 0.25.1",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.22.2"
+        "version": "0.25.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -21844,18 +21803,19 @@
         "deps": {
           "common": [
             {
+              "id": "cc 1.0.73",
+              "target": "cc"
+            },
+            {
               "id": "pkg-config 0.3.25",
               "target": "pkg_config"
+            },
+            {
+              "id": "vcpkg 0.2.15",
+              "target": "vcpkg"
             }
           ],
-          "selects": {
-            "cfg(target_env = \"msvc\")": [
-              {
-                "id": "vcpkg 0.2.15",
-                "target": "vcpkg"
-              }
-            ]
-          }
+          "selects": {}
         },
         "links": "sqlite3"
       },
@@ -34196,13 +34156,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "rusqlite 0.25.4": {
+    "rusqlite 0.28.0": {
       "name": "rusqlite",
-      "version": "0.25.4",
+      "version": "0.28.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rusqlite/0.25.4/download",
-          "sha256": "5c4b1eaf239b47034fb450ee9cdedd7d0226571689d8823030c4b6c2cb407152"
+          "url": "https://crates.io/api/v1/crates/rusqlite/0.28.0/download",
+          "sha256": "01e213bc3ecb39ac32e81e51ebe31fd888a940515173e3a18a35f8c6e896422a"
         }
       },
       "targets": [
@@ -34224,6 +34184,10 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": [
+          "bundled",
+          "modern_sqlite"
+        ],
         "deps": {
           "common": [
             {
@@ -34239,16 +34203,12 @@
               "target": "fallible_streaming_iterator"
             },
             {
-              "id": "hashlink 0.7.0",
+              "id": "hashlink 0.8.1",
               "target": "hashlink"
             },
             {
-              "id": "libsqlite3-sys 0.22.2",
+              "id": "libsqlite3-sys 0.25.1",
               "target": "libsqlite3_sys"
-            },
-            {
-              "id": "memchr 2.5.0",
-              "target": "memchr"
             },
             {
               "id": "smallvec 1.10.0",
@@ -34258,7 +34218,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.25.4"
+        "version": "0.28.0"
       },
       "license": "MIT"
     },
@@ -44876,18 +44836,6 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -44902,6 +44850,18 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
