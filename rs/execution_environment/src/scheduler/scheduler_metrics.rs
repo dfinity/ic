@@ -8,8 +8,8 @@ use ic_types::nominal_cycles::NominalCycles;
 use prometheus::{Gauge, Histogram, IntCounter, IntGauge, IntGaugeVec};
 
 use crate::metrics::{
-    cycles_histogram, duration_histogram, instructions_histogram, memory_histogram,
-    messages_histogram, slices_histogram, ScopedMetrics,
+    cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
+    memory_histogram, messages_histogram, slices_histogram, ScopedMetrics,
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
@@ -76,6 +76,10 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_invariants: IntCounter,
     pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) total_canister_balance: Gauge,
+    pub(super) canister_paused_execution: Histogram,
+    pub(super) canister_aborted_execution: Histogram,
+    pub(super) canister_paused_install_code: Histogram,
+    pub(super) canister_aborted_install_code: Histogram,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -522,6 +526,26 @@ impl SchedulerMetrics {
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",
                 "Total canister balance in Cycles.",
+            ),
+            canister_paused_execution: dts_pause_or_abort_histogram(
+                "scheduler_canister_paused_execution",
+                "Number of canisters that have a paused execution.",
+                metrics_registry,
+            ),
+            canister_aborted_execution: dts_pause_or_abort_histogram(
+                "scheduler_canister_aborted_execution",
+                "Number of canisters that have an aborted execution.",
+                metrics_registry,
+            ),
+            canister_paused_install_code: dts_pause_or_abort_histogram(
+                "scheduler_canister_paused_install_code",
+                "Number of canisters that have a paused install code.",
+                metrics_registry,
+            ),
+            canister_aborted_install_code: dts_pause_or_abort_histogram(
+                "scheduler_canister_aborted_install_code",
+                "Number of canisters that have an aborted install code.",
+                metrics_registry,
             ),
         }
     }
