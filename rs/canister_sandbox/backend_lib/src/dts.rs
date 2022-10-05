@@ -162,15 +162,18 @@ impl DeterministicTimeSlicing {
             return Err(HypervisorError::InstructionLimitExceeded);
         }
 
+        let newly_executed = state.newly_executed(instruction_counter);
         if state.next_slice_instruction_limit(instruction_counter) == 0 {
             // If the next slice doesn't have any instructions left, then
             // execution will fail anyway, so we can return the error now.
-            return Err(HypervisorError::InstructionLimitExceeded);
+            return Err(HypervisorError::SliceOverrun {
+                instructions: NumInstructions::from(newly_executed as u64),
+                limit: NumInstructions::from(state.max_slice_instruction_limit as u64),
+            });
         }
 
         // At this pont we know that the next slice will be able to run, so we
         // can commit the state changes and pause now.
-        let newly_executed = state.newly_executed(instruction_counter);
         state.update(instruction_counter);
         state.execution_status = ExecutionStatus::Paused;
         Ok(SliceExecutionOutput {

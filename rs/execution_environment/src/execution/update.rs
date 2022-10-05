@@ -15,6 +15,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_interfaces::messages::RequestOrIngress;
+use ic_logger::info;
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::CallContextId;
 use ic_types::{Cycles, NumBytes, NumInstructions, Time};
@@ -121,6 +122,13 @@ pub fn execute_update(
     );
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+            info!(
+                round.log,
+                "[DTS] Pausing {:?} execution of canister {} after {} instructions.",
+                original.method,
+                clean_canister.canister_id(),
+                slice.executed_instructions,
+            );
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedCallExecution {
                 paused_wasm_execution,
@@ -306,6 +314,13 @@ impl UpdateHelper {
                     threshold: original.freezing_threshold,
                 };
                 let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
+                info!(
+                    round.log,
+                    "[DTS] Failed {:?} execution of canister {} due to concurrent cycle change: {:?}.",
+                    original.method,
+                    clean_canister.canister_id(),
+                    err,
+                );
                 return finish_err(
                     clean_canister,
                     output.num_instructions_left,
@@ -394,11 +409,24 @@ impl PausedExecution for PausedCallExecution {
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
     ) -> ExecuteMessageResult {
+        info!(
+            round.log,
+            "[DTS] Resuming {:?} execution of canister {}.",
+            self.original.method,
+            clean_canister.canister_id(),
+        );
         let helper =
             match UpdateHelper::resume(&clean_canister, &self.original, &round, self.paused_helper)
             {
                 Ok(helper) => helper,
                 Err(err) => {
+                    info!(
+                        round.log,
+                        "[DTS] Failed to resume {:?} execution of canister {}: {:?}.",
+                        self.original.method,
+                        clean_canister.canister_id(),
+                        err,
+                    );
                     self.paused_wasm_execution.abort();
                     return finish_err(
                         clean_canister,
@@ -417,6 +445,13 @@ impl PausedExecution for PausedCallExecution {
         let result = self.paused_wasm_execution.resume(execution_state);
         match result {
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                info!(
+                    round.log,
+                    "[DTS] Pausing {:?} execution of canister {} after {} instructions.",
+                    self.original.method,
+                    clean_canister.canister_id(),
+                    slice.executed_instructions,
+                );
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedCallExecution {
                     paused_wasm_execution,
@@ -429,6 +464,18 @@ impl PausedExecution for PausedCallExecution {
                 }
             }
             WasmExecutionResult::Finished(slice, output, state_changes) => {
+                info!(
+                    round.log,
+                    "[DTS] Finished {:?} execution of canister {} after {} / {} instructions.",
+                    self.original.method,
+                    clean_canister.canister_id(),
+                    slice.executed_instructions,
+                    self.original
+                        .execution_parameters
+                        .instruction_limits
+                        .message()
+                        - output.num_instructions_left,
+                );
                 update_round_limits(round_limits, &slice);
                 helper.finish(
                     output,
