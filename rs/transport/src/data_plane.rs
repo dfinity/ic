@@ -29,10 +29,11 @@ use ic_crypto_tls_interfaces::{TlsStream, TlsWriteHalf};
 use ic_interfaces_transport::{
     TransportChannelId, TransportEvent, TransportEventHandler, TransportMessage, TransportPayload,
 };
-use ic_logger::warn;
+use ic_logger::{info, warn};
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::Weak;
+use strum::IntoStaticStr;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
@@ -63,7 +64,8 @@ const TRANSPORT_HEARTBEAT_SEND_INTERVAL_MS: u64 = 200;
 const TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS: u64 = 5000;
 
 /// Error type for read errors
-#[derive(Debug)]
+#[derive(Debug, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 enum StreamReadError {
     Failed(std::io::Error),
     TimeOut,
@@ -223,11 +225,11 @@ fn spawn_read_task<T: AsyncRead + Unpin + Send + 'static>(
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
 ) -> JoinHandle<()> {
-    let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
-    let channel_id_str = channel_id.to_string();
     rt_handle.spawn(async move {
         let _ = &data_plane_metrics;
         let _raii_gauge = IntGaugeResource::new(data_plane_metrics.read_tasks.clone());
+        let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
+        let channel_id_str = channel_id.to_string();
         loop {
             // If the TransportImpl has been deleted, abort.
             let arc_self = match weak_self.upgrade() {
@@ -236,59 +238,56 @@ fn spawn_read_task<T: AsyncRead + Unpin + Send + 'static>(
             };
 
             // Read the next message from the socket
-            let ret = read_one_message(&mut reader, heartbeat_timeout).await;
-            if ret.is_err() {
-                warn!(
-                    arc_self.log,
-                    "DataPlane::flow_read_task(): failed to receive message: peer_id: {:?}, channel_id: {:?}, {:?}",
-                    peer_id,
-                    channel_id,
-                    ret.as_ref().err(),
-                );
-
-                if let Err(StreamReadError::TimeOut) = ret {
-                    arc_self.data_plane_metrics
-                        .socket_heart_beat_timeouts
-                        .with_label_values(&[&peer_label, &channel_id_str])
-                        .inc();
-                }
-                arc_self.on_disconnect(peer_id, channel_id).await;
-                return;
-            }
-
-            // Process the received message
-            let (header, payload) = ret.unwrap();
-                if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
-                    // It's an empty heartbeat message -- do nothing
-                    arc_self.data_plane_metrics
-                        .heart_beats_received
-                        .with_label_values(&[&peer_label, &channel_id_str])
-                        .inc();
-                    continue;
-                }
-
-                // Pass up the received message
-                // Errors out for unsolicited messages, decoding errors and p2p
-                // shutdowns.
-                let payload = payload.unwrap();
-                arc_self.data_plane_metrics
-                    .socket_read_bytes
-                    .with_label_values(&[&peer_label, &channel_id_str])
-                    .inc_by(payload.0.len() as u64);
-                let start_time = Instant::now();
-                event_handler
-                    .call(TransportEvent::Message(TransportMessage {
+            match read_one_message(&mut reader, heartbeat_timeout).await {
+                Err(err) => {
+                    info!(
+                        arc_self.log,
+                        "DataPlane::spawn_read_task(): failed to receive a single message: peer_id = {:?}, channel_id = {:?}, error = {:?}",
                         peer_id,
-                        payload,
-                    }))
-                    .await
-                    .expect("Can't panic on infallible");
-                arc_self.data_plane_metrics
-                    .client_send_time_msec
-                    .with_label_values(&[&peer_label, &channel_id_str])
-                    .observe(start_time.elapsed().as_millis() as f64);
+                        channel_id,
+                        err,
+                    );
+
+                    arc_self.data_plane_metrics
+                        .message_read_errors_total
+                        .with_label_values(&[&channel_id_str, err.into()])
+                        .inc();
+                    arc_self.on_disconnect(peer_id, channel_id).await;
+                    return;
+                },
+                Ok((header, payload)) => {
+                    if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
+                        // It's an empty heartbeat message -- do nothing
+                        arc_self.data_plane_metrics
+                            .heart_beats_received
+                            .with_label_values(&[&peer_label, &channel_id_str])
+                            .inc();
+                        continue;
+                    }
+
+                    // Pass up the received message
+                    // Errors out for unsolicited messages, decoding errors and p2p
+                    // shutdowns.
+                    arc_self.data_plane_metrics
+                        .socket_read_bytes
+                        .with_label_values(&[&peer_label, &channel_id_str])
+                        .inc_by(payload.0.len() as u64);
+                    let start_time = Instant::now();
+                    event_handler
+                        .call(TransportEvent::Message(TransportMessage {
+                            peer_id,
+                            payload,
+                        }))
+                        .await
+                        .expect("Can't panic on infallible");
+                    arc_self.data_plane_metrics
+                        .client_send_time_msec
+                        .with_label_values(&[&peer_label, &channel_id_str])
+                        .observe(start_time.elapsed().as_millis() as f64);
+                }
             }
-        })
+        }
+    })
 }
 
 /// Reads and returns the next <message hdr, message payload> from the
@@ -297,14 +296,14 @@ fn spawn_read_task<T: AsyncRead + Unpin + Send + 'static>(
 async fn read_one_message<T: AsyncRead + Unpin>(
     reader: &mut T,
     timeout: Duration,
-) -> Result<(TransportHeader, Option<TransportPayload>), StreamReadError> {
+) -> Result<(TransportHeader, TransportPayload), StreamReadError> {
     // Read the hdr
     let mut header_buffer = vec![0u8; TRANSPORT_HEADER_SIZE];
     read_from_socket(reader, &mut header_buffer, timeout).await?;
 
     let header = unpack_header(header_buffer);
     if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
-        return Ok((header, None));
+        return Ok((header, TransportPayload::default()));
     }
 
     // Read the payload in chunks
@@ -326,7 +325,7 @@ async fn read_one_message<T: AsyncRead + Unpin>(
     }
 
     let payload = TransportPayload(payload_buffer);
-    Ok((header, Some(payload)))
+    Ok((header, payload))
 }
 
 /// Reads the requested bytes from the socket with a timeout

@@ -5,6 +5,8 @@ use prometheus::{HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeV
 
 pub(crate) const STATUS_SUCCESS: &str = "success";
 pub(crate) const STATUS_ERROR: &str = "error";
+pub(crate) const LABEL_DETAIL: &str = "detail";
+pub(crate) const LABEL_CHANNEL_ID: &str = "channel_id";
 
 /// This is intended to be used as RAII type that will increment the gauge
 /// at construction and decrease the gauge on Drop.
@@ -89,7 +91,7 @@ pub(crate) struct DataPlaneMetrics {
     pub(crate) socket_write_size: HistogramVec,
     pub(crate) socket_write_time_msec: HistogramVec,
     pub(crate) socket_read_bytes: IntCounterVec,
-    pub(crate) socket_heart_beat_timeouts: IntCounterVec,
+    pub(crate) message_read_errors_total: IntCounterVec,
     pub(crate) heart_beats_sent: IntCounterVec,
     pub(crate) heart_beats_received: IntCounterVec,
     pub(crate) write_tasks: IntGauge,
@@ -149,10 +151,10 @@ impl DataPlaneMetrics {
                 "Bytes read from sockets",
                 &["flow_peer_id", "flow_tag"],
             ),
-            socket_heart_beat_timeouts: metrics_registry.int_counter_vec(
-                "transport_heart_beat_timeouts",
-                "Number of times the heart beat timed out.",
-                &["flow_peer_id", "flow_tag"],
+            message_read_errors_total: metrics_registry.int_counter_vec(
+                "transport_message_read_errors_total",
+                "Number of times reading a single message failed.",
+                &[LABEL_CHANNEL_ID, LABEL_DETAIL],
             ),
             heart_beats_received: metrics_registry.int_counter_vec(
                 "transport_heart_beats_received",

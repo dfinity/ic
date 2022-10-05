@@ -79,7 +79,7 @@ pub struct TransportChannel;
 pub type TransportChannelId = Id<TransportChannel, u32>;
 
 /// The payload for the transport layer.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub struct TransportPayload(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 #[derive(Debug)]
