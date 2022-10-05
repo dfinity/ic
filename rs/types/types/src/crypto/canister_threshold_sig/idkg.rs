@@ -746,7 +746,6 @@ impl IDkgTranscript {
     /// transcript and the `params`:
     /// * the transcript IDs match
     /// * the receivers match
-    /// * the dealers match
     /// * the registry versions match
     /// * the algorithm IDs match
     /// * the transcript's type matches the transcript type derived from

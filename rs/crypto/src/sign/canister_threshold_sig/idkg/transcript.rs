@@ -20,7 +20,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptType,
 };
 use ic_types::crypto::CryptoError;
-use ic_types::{NodeId, NodeIndex, RegistryVersion};
+use ic_types::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -35,14 +35,16 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     ensure_sufficient_dealings_collected(params, dealings)?;
     ensure_dealers_allowed_by_params(params, dealings)?;
     ensure_signers_allowed_by_params(params, dealings)?;
-    ensure_sufficient_signatures_collected(params, dealings)?;
-    for dealing in dealings.values() {
+
+    for (dealer, dealing) in dealings {
         verify_signature_batch(
             csp_client,
             &Arc::clone(registry),
             dealing,
+            params.verification_threshold(),
             params.registry_version(),
-        )?;
+        )
+        .map_err(signature_batch_err_to_create_transcript_err(*dealer))?;
     }
 
     let signed_dealings_by_index = dealings_by_index_from_dealings(dealings, params)?;
@@ -98,22 +100,15 @@ pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
         })?;
 
     for (dealer_index, signed_dealing) in &transcript.verified_dealings {
-        let signers_count = signed_dealing.signers_count();
-        if signers_count < transcript.verification_threshold().get() as usize {
-            return Err(IDkgVerifyTranscriptError::InvalidArgument(format!(
-                "insufficient number of signers ({}<{}) for dealing of dealer with index {}",
-                signers_count,
-                transcript.verification_threshold(),
-                dealer_index
-            )));
-        }
         // Note that signer eligibility is checked in `transcript.verify_consistency_with_params`
         verify_signature_batch(
             csp_client,
             &Arc::clone(registry),
             signed_dealing,
+            transcript.verification_threshold(),
             params.registry_version(),
-        )?;
+        )
+        .map_err(signature_batch_err_to_verify_transcript_err(*dealer_index))?;
     }
 
     let internal_transcript_operation =
@@ -376,26 +371,6 @@ fn ensure_signers_allowed_by_params(
     Ok(())
 }
 
-fn ensure_sufficient_signatures_collected(
-    params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
-) -> Result<(), IDkgCreateTranscriptError> {
-    for (dealer, dealing) in dealings {
-        let signers_count = dealing.signers_count();
-        if signers_count < params.verification_threshold().get() as usize {
-            return Err(
-                IDkgCreateTranscriptError::UnsatisfiedVerificationThreshold {
-                    threshold: params.verification_threshold().get(),
-                    signature_count: signers_count,
-                    dealer_id: *dealer,
-                },
-            );
-        }
-    }
-
-    Ok(())
-}
-
 /// Convert values in the dealings map from IDkgDealings to IDkgDealingInternals
 fn internal_dealings_from_signed_dealings(
     dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
@@ -558,29 +533,48 @@ pub enum VerifySignatureBatchError {
         error: String,
         crypto_error: CryptoError,
     },
+    UnsatisfiedVerificationThreshold {
+        threshold: u32,
+        signature_count: usize,
+    },
 }
 
-impl From<VerifySignatureBatchError> for IDkgVerifyTranscriptError {
-    fn from(verify_signature_batch_error: VerifySignatureBatchError) -> Self {
-        match verify_signature_batch_error {
-            VerifySignatureBatchError::InvalidSignatureBatch {
-                error,
-                crypto_error,
-            } => IDkgVerifyTranscriptError::InvalidDealingSignatureBatch {
-                error,
-                crypto_error,
-            },
+fn signature_batch_err_to_create_transcript_err(
+    dealer: NodeId,
+) -> impl FnOnce(VerifySignatureBatchError) -> IDkgCreateTranscriptError {
+    move |err| match err {
+        VerifySignatureBatchError::InvalidSignatureBatch { crypto_error, .. } => {
+            IDkgCreateTranscriptError::InvalidSignatureBatch { crypto_error }
         }
+        VerifySignatureBatchError::UnsatisfiedVerificationThreshold {
+            threshold,
+            signature_count,
+        } => IDkgCreateTranscriptError::UnsatisfiedVerificationThreshold {
+            threshold,
+            signature_count,
+            dealer_id: dealer,
+        },
     }
 }
 
-impl From<VerifySignatureBatchError> for IDkgCreateTranscriptError {
-    fn from(verify_signature_batch_error: VerifySignatureBatchError) -> Self {
-        match verify_signature_batch_error {
-            VerifySignatureBatchError::InvalidSignatureBatch { crypto_error, .. } => {
-                IDkgCreateTranscriptError::InvalidSignatureBatch { crypto_error }
-            }
-        }
+fn signature_batch_err_to_verify_transcript_err(
+    dealer_index: NodeIndex,
+) -> impl FnOnce(VerifySignatureBatchError) -> IDkgVerifyTranscriptError {
+    move |err| match err {
+        VerifySignatureBatchError::InvalidSignatureBatch {
+            error,
+            crypto_error,
+        } => IDkgVerifyTranscriptError::InvalidDealingSignatureBatch {
+            error,
+            crypto_error,
+        },
+        VerifySignatureBatchError::UnsatisfiedVerificationThreshold {
+            threshold,
+            signature_count,
+        } => IDkgVerifyTranscriptError::InvalidArgument(format!(
+            "insufficient number of signers ({signature_count}<{threshold}) \
+            for dealing of dealer with index {dealer_index}",
+        )),
     }
 }
 
@@ -588,8 +582,18 @@ fn verify_signature_batch<C: CspSigner>(
     csp_client: &C,
     registry: &Arc<dyn RegistryClient>,
     dealing: &BatchSignedIDkgDealing,
+    verification_threshold: NumberOfNodes,
     registry_version: RegistryVersion,
 ) -> Result<(), VerifySignatureBatchError> {
+    let signers_count = dealing.signers_count();
+    if signers_count < verification_threshold.get() as usize {
+        return Err(
+            VerifySignatureBatchError::UnsatisfiedVerificationThreshold {
+                threshold: verification_threshold.get(),
+                signature_count: signers_count,
+            },
+        );
+    }
     for (signer, signature) in dealing.signature.signatures_map.iter() {
         BasicSigVerifierInternal::verify_basic_sig(
             csp_client,
