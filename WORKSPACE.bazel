@@ -230,3 +230,14 @@ npm_install(
 load("//bazel:rclone.bzl", "rclone_repository")
 
 rclone_repository(name = "rclone")
+
+http_archive(
+    name = "aspect_bazel_lib",
+    sha256 = "79381b0975ba7d2d5653239e5bab12cf54d89b10217fe771b8edd95047a2e44b",
+    strip_prefix = "bazel-lib-1.12.1",
+    url = "https://github.com/aspect-build/bazel-lib/archive/refs/tags/v1.12.1.tar.gz",
+)
+
+load("@aspect_bazel_lib//lib:repositories.bzl", "aspect_bazel_lib_dependencies")
+
+aspect_bazel_lib_dependencies()
