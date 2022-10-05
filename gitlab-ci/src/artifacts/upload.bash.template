@@ -10,7 +10,7 @@ do
             export HOME="$v"
             ;;
         COMMIT_SHA)
-            VERSION="$v"
+            TREE_VERSION="$v"
             ;;
         GIT_TREE_STATUS)
             GIT_TREE_STATUS="$v"
@@ -24,8 +24,10 @@ done < "@@VERSION_FILE@@"
 # Support builds from repos with local changes.
 if [ "${GIT_TREE_STATUS}" != 'Clean' ]
 then
-  VERSION="${VERSION}-${BUILD_TIMESTAMP}"
+  TREE_VERSION="${TREE_VERSION}-${BUILD_TIMESTAMP}"
 fi
+
+: ${VERSION:="${TREE_VERSION}"}
 
 # rclone reads the $(dirname $f) to get file attribuates.
 # Therefore symlink should be resolved.

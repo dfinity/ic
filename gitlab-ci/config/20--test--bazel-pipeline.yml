@@ -28,6 +28,7 @@
       ${BAZEL_COMMAND}
       --config ci
       --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})"
+      --ic_version="${CI_COMMIT_SHA}"
       ${BAZEL_EXTRA_ARGS}
       ${BAZEL_TARGETS}
       2>&1 |

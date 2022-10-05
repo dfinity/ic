@@ -1,6 +1,7 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:canisters.bzl", "optimized_canister")
 load("//bazel:transitions.bzl", "malicious_binary", "opt_debug_binary")
+load("//gitlab-ci/src/artifacts:collect.bzl", "collect_artifacts")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 package(default_visibility = ["//visibility:public"])
@@ -122,12 +123,14 @@ filegroup(
     ],
 )
 
-# TODO(levsha):
-# - strip, compress, checksum and sign before uploading
-# - upload to OS-specific subdir.
+collect_artifacts(
+    name = "collect_sdk",
+    srcs = [":sdk"],
+)
+
 upload_artifacts(
     name = "upload_sdk",
-    inputs = [":sdk"],
+    inputs = [":collect_sdk"],
     # The actual list is on https://github.com/bazelbuild/platforms
     remote_subdir = "sdk-release-bazel/" + select({
         "@platforms//cpu:x86_64": "x86_64",
