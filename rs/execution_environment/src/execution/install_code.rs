@@ -14,7 +14,7 @@ use ic_interfaces::{
     },
     messages::RequestOrIngress,
 };
-use ic_logger::{error, fatal, warn};
+use ic_logger::{error, fatal, info, warn};
 use ic_replicated_state::{CanisterState, ExecutionState};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
@@ -429,6 +429,19 @@ impl InstallCodeHelper {
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
             Err(err) => {
+                if let HypervisorError::SliceOverrun {
+                    instructions,
+                    limit,
+                } = &err
+                {
+                    info!(
+                        round.log,
+                        "Canister {} overrun a slice in install_code: {} / {}",
+                        self.canister.canister_id(),
+                        instructions,
+                        limit
+                    );
+                }
                 return Err((self.canister().canister_id(), err).into());
             }
         };

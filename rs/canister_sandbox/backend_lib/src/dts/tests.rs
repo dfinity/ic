@@ -4,6 +4,7 @@ use std::{
 };
 
 use ic_interfaces::execution_environment::{HypervisorError, OutOfInstructionsHandler};
+use ic_types::NumInstructions;
 
 use super::{DeterministicTimeSlicingHandler, PausedExecution};
 
@@ -102,7 +103,13 @@ fn early_exit_if_slice_does_not_any_instructions_left() {
     // Slice 2: executes 1500 instructions before calling `out_of_instructions()`
     // and fails because the next slice wouldn't have any slice instructions left.
     let error = dts.out_of_instructions(-1000);
-    assert_eq!(error, Err(HypervisorError::InstructionLimitExceeded));
+    assert_eq!(
+        error,
+        Err(HypervisorError::SliceOverrun {
+            instructions: NumInstructions::from(1500),
+            limit: NumInstructions::from(1000)
+        })
+    );
     drop(dts);
     control_thread.join().unwrap();
 }
@@ -128,7 +135,13 @@ fn invalid_instructions() {
     assert_eq!(1000, new_instructions);
     // Slice 3: executes more than i64::MAX instructions before calling `out_of_instructions()`.
     let error = dts.out_of_instructions(i64::MIN);
-    assert_eq!(error, Err(HypervisorError::InstructionLimitExceeded));
+    assert_eq!(
+        error,
+        Err(HypervisorError::SliceOverrun {
+            instructions: NumInstructions::from(9223372036854775807),
+            limit: NumInstructions::from(1000)
+        })
+    );
     drop(dts);
     control_thread.join().unwrap();
 }

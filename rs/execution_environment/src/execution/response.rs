@@ -12,7 +12,7 @@ use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_interfaces::messages::CanisterInputMessage;
-use ic_logger::error;
+use ic_logger::{error, info};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, ExecutionParameters};
@@ -317,6 +317,12 @@ impl ResponseHelper {
                     requested,
                     threshold: original.freezing_threshold,
                 };
+                info!(
+                    round.log,
+                    "[DTS] Failed response callback execution of canister {} due to concurrent cycle change: {:?}.",
+                    self.canister.canister_id(),
+                    err,
+                );
                 let err = HypervisorError::InsufficientCyclesBalance(err);
                 return Err((self, err, output.num_instructions_left));
             }
@@ -526,8 +532,13 @@ impl PausedExecution for PausedResponseExecution {
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
     ) -> ExecuteMessageResult {
+        info!(
+            round.log,
+            "[DTS] Resuming paused response callback of canister {}.",
+            clean_canister.canister_id(),
+        );
         // The height of the `clean_canister` state increases with every call of
-        // `resume()`. We re-create the helper based on `clean_state` so that
+        // `resume()`. We re-create the helper based on `clean_canister` so that
         // the Wasm state changes are applied to the up-to-date state.
         let (helper, result) =
             match ResponseHelper::resume(self.helper, &clean_canister, &self.original, &round) {
@@ -537,6 +548,12 @@ impl PausedExecution for PausedResponseExecution {
                     (helper, result)
                 }
                 Err((helper, err)) => {
+                    info!(
+                        round.log,
+                        "[DTS] Failed to resume paused response callback of canister {}: {:?}.",
+                        clean_canister.canister_id(),
+                        err,
+                    );
                     self.paused_wasm_execution.abort();
                     let result = wasm_execution_error(
                         err,
@@ -590,6 +607,11 @@ impl PausedExecution for PausedCleanupExecution {
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
     ) -> ExecuteMessageResult {
+        info!(
+            round.log,
+            "[DTS] Resuming paused cleanup callback of canister {}.",
+            clean_canister.canister_id(),
+        );
         // The height of the `clean_canister` state increases with every call of
         // `resume()`. We re-create the helper based on `clean_state` so that
         // the Wasm state changes are applied to the up-to-date state.
@@ -604,6 +626,12 @@ impl PausedExecution for PausedCleanupExecution {
                     (helper, result)
                 }
                 Err((helper, err)) => {
+                    info!(
+                        round.log,
+                        "[DTS] Failed to resume paused cleanup callback of canister {}: {:?}.",
+                        clean_canister.canister_id(),
+                        err,
+                    );
                     self.paused_wasm_execution.abort();
                     let result = wasm_execution_error(
                         err,
@@ -813,6 +841,12 @@ fn process_response_result(
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+            info!(
+                round.log,
+                "[DTS] Pausing response callback of canister {} after {} instructions.",
+                clean_canister.canister_id(),
+                slice.executed_instructions,
+            );
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedResponseExecution {
                 paused_wasm_execution,
@@ -826,6 +860,17 @@ fn process_response_result(
             }
         }
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+            let instructions_used =
+                original.message_instruction_limit - output.num_instructions_left;
+            if instructions_used >= execution_parameters.instruction_limits.slice() {
+                info!(
+                    round.log,
+                    "[DTS] Finished response callback of canister {} after {} / {} instructions.",
+                    clean_canister.canister_id(),
+                    slice.executed_instructions,
+                    instructions_used,
+                );
+            }
             update_round_limits(round_limits, &slice);
             match helper.handle_wasm_execution_of_response_callback(
                 output,
@@ -880,6 +925,12 @@ fn process_cleanup_result(
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+            info!(
+                round.log,
+                "[DTS] Pausing cleanup callback of canister {} after {} instructions.",
+                clean_canister.canister_id(),
+                slice.executed_instructions,
+            );
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedCleanupExecution {
                 paused_wasm_execution,
@@ -894,6 +945,17 @@ fn process_cleanup_result(
             }
         }
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+            let instructions_used =
+                original.message_instruction_limit - output.num_instructions_left;
+            if instructions_used >= execution_parameters.instruction_limits.slice() {
+                info!(
+                    round.log,
+                    "[DTS] Finished cleanup callback of canister {} after {} / {} instructions.",
+                    clean_canister.canister_id(),
+                    slice.executed_instructions,
+                    instructions_used,
+                );
+            }
             update_round_limits(round_limits, &slice);
             helper.handle_wasm_execution_of_cleanup_callback(
                 output,

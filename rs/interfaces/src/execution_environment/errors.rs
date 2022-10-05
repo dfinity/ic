@@ -1,6 +1,6 @@
 use ic_base_types::{CanisterIdError, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
-use ic_types::{methods::WasmMethod, CanisterId, Cycles};
+use ic_types::{methods::WasmMethod, CanisterId, Cycles, NumInstructions};
 use ic_wasm_types::{WasmEngineError, WasmInstrumentationError, WasmValidationError};
 use serde::{Deserialize, Serialize};
 
@@ -125,6 +125,12 @@ pub enum HypervisorError {
     /// not observable by the user and should be processed before leaving Wasm
     /// execution.
     Aborted,
+    /// A single operation like `stable_write()` exceeded the slice instruction
+    /// limit and caused the Wasm execution to fail.
+    SliceOverrun {
+        instructions: NumInstructions,
+        limit: NumInstructions,
+    },
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -288,6 +294,12 @@ impl HypervisorError {
             Self::Aborted => {
                 unreachable!("Aborted execution should not be visible to the user.");
             }
+            Self::SliceOverrun {instructions, limit} => UserError::new(
+                E::CanisterInstructionLimitExceeded,
+                format!("Canister {} attempted to perform \
+                a large memory operation that used {} instructions and \
+                exceeded the slice limit {}.", canister_id, instructions, limit),
+            ),
         }
     }
 
@@ -315,6 +327,7 @@ impl HypervisorError {
             HypervisorError::WasmEngineError(_) => "WasmEngineError",
             HypervisorError::WasmReservedPages => "WasmReservedPages",
             HypervisorError::Aborted => "Aborted",
+            HypervisorError::SliceOverrun { .. } => "SliceOverrun",
         }
     }
 
@@ -324,7 +337,8 @@ impl HypervisorError {
         match self {
             HypervisorError::InstrumentationFailed(_)
             | HypervisorError::WasmEngineError(_)
-            | HypervisorError::Aborted => true,
+            | HypervisorError::Aborted
+            | HypervisorError::SliceOverrun { .. } => true,
             HypervisorError::Cleanup {
                 callback_err,
                 cleanup_err,
@@ -339,10 +353,7 @@ impl HypervisorError {
             | HypervisorError::WasmModuleNotFound
             | HypervisorError::OutOfMemory
             | HypervisorError::CanisterStopped
-            | HypervisorError::InsufficientCyclesInCall {
-                available: _,
-                requested: _,
-            }
+            | HypervisorError::InsufficientCyclesInCall { .. }
             | HypervisorError::InvalidPrincipalId(_)
             | HypervisorError::InvalidCanisterId(_)
             | HypervisorError::MessageRejected

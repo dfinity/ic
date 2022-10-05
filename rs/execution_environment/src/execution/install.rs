@@ -14,7 +14,7 @@ use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
 use ic_interfaces::messages::RequestOrIngress;
-use ic_logger::info;
+use ic_logger::{info, warn};
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
@@ -147,6 +147,12 @@ pub(crate) fn execute_install(
                 )
             }
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                info!(
+                    round.log,
+                    "[DTS] Pausing (start) execution of canister {} after {} instructions.",
+                    clean_canister.canister_id(),
+                    slice.executed_instructions,
+                );
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
@@ -247,6 +253,12 @@ fn install_stage_2b_continue_install_after_start(
         }
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
             update_round_limits(round_limits, &slice);
+            info!(
+                round.log,
+                "[DTS] Pausing (canister_init) execution of canister {} after {} instructions.",
+                clean_canister.canister_id(),
+                slice.executed_instructions,
+            );
             let paused_execution = Box::new(PausedInitExecution {
                 paused_helper: helper.pause(),
                 paused_wasm_execution,
@@ -301,6 +313,11 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
+        info!(
+            round.log,
+            "[DTS] Resuming (canister_init) execution of canister {}.",
+            clean_canister.canister_id(),
+        );
         let helper = match InstallCodeHelper::resume(
             &clean_canister,
             self.paused_helper,
@@ -310,6 +327,12 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left)) => {
+                warn!(
+                    round.log,
+                    "[DTS] Canister {} failed to resume paused (canister_init) execution: {:?}.",
+                    clean_canister.canister_id(),
+                    err
+                );
                 self.paused_wasm_execution.abort();
                 return finish_err(clean_canister, instructions_left, self.original, round, err);
             }
@@ -331,6 +354,12 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                 )
             }
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                info!(
+                    round.log,
+                    "[DTS] Pausing (canister_init) execution of canister {} after {} instructions.",
+                    clean_canister.canister_id(),
+                    slice.executed_instructions,
+                );
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedInitExecution {
                     paused_wasm_execution,
@@ -372,6 +401,11 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
+        info!(
+            round.log,
+            "[DTS] Resuming (start) execution of canister {}",
+            clean_canister.canister_id(),
+        );
         let helper = match InstallCodeHelper::resume(
             &clean_canister,
             self.paused_helper,
@@ -381,6 +415,12 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left)) => {
+                warn!(
+                    round.log,
+                    "[DTS] Canister {} failed to resume paused (start) execution: {:?}",
+                    clean_canister.canister_id(),
+                    err
+                );
                 self.paused_wasm_execution.abort();
                 return finish_err(clean_canister, instructions_left, self.original, round, err);
             }
@@ -404,6 +444,12 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
             }
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
                 update_round_limits(round_limits, &slice);
+                info!(
+                    round.log,
+                    "[DTS] Pausing (start) execution of canister {} after {} instructions.",
+                    clean_canister.canister_id(),
+                    slice.executed_instructions,
+                );
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
                     paused_helper: helper.pause(),
