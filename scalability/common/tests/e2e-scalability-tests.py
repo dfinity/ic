@@ -50,6 +50,8 @@ def main(argv):
             print("Warning: Could not verify that IC replica is up, continuing anyway  .. ")
 
         ic_url = f"http://[{farm_instance.ipv6[0][0]}]:8080"
+        # Before attempting to install an NNS, we need to make sure the IC is up.
+        ictools.wait_http_up(ic_url)
         ictools.nns_install(farm_instance.ic_config, ic_url)
 
         # Wait for all replicas to come up

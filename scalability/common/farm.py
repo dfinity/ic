@@ -93,8 +93,12 @@ class Farm(object):
         if FLAGS.farm_group_name is not None:
             self.group_name = FLAGS.farm_group_name
         else:
-            now = time.strftime("%Y-%M-%d-%H-%m-%S")
-            self.group_name = "testvm-" + getpass.getuser() + "-" + now
+            if "CI_PIPELINE_ID" in os.environ:
+                test_id = os.environ["CI_PIPELINE_ID"]
+            else:
+                now = time.strftime("%Y-%M-%d-%H-%m-%S")
+                test_id = getpass.getuser() + "-" + now
+            self.group_name = "scalability-suite-" + test_id
         self.group_url = FARM_BASE_URL + "/group/" + self.group_name
 
         self.expiry = None
@@ -176,6 +180,12 @@ class Farm(object):
                     "ipv6_address": ipv6_address,
                 }
             )
+
+            if "TEST_ES_HOSTNAMES" in os.environ:
+                extra_config["journalbeat_hosts"] = os.environ["TEST_ES_HOSTNAMES"]
+
+            extra_config["journalbeat_tags"] = f"scalability_suite {self.group_name}"
+
             config_image = ictools.build_ic_prep_inject_config(
                 self.ic_config,
                 machine_idx,
