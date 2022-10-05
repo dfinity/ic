@@ -1,4 +1,3 @@
-pub mod artifact_manager;
 pub mod constants;
 pub mod context;
 pub mod dsl;
