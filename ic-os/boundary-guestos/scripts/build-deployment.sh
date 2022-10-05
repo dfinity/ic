@@ -12,10 +12,9 @@
 # - >brew install coreutil bash jq rclone dosfstools wget mtools gnu-tar
 # - /usr/local/sbin/ must be in your path (for dosfstools)
 
-set -o errexit
-set -o pipefail
+set -euo pipefail
 
-err() {
+function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
 }
 
@@ -40,9 +39,10 @@ Arguments:
   -h,  --help                           show this help message and exit
   -i=, --input=                         JSON formatted input file (Default: ./subnet.json)
   -o=, --output=                        removable media output directory (Default: ./build-out/)
-  -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
-  -c=, --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
-  -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form `http://[ip]:port` this file will override nns urls derived from input json file
+       --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
+       --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
+       --nns_public_key=                specify NNS public key pem file
+       --nns_urls=                      specify a file that lists on each line a nns url of the form `http://[ip]:port` this file will override nns urls derived from input json file
        --replicas-ipv6=                 specify a file that lists on each line an ipv6 firewall rule to allow replicas of the form `ipv6-addr/prefix-length` (# comments and trailing whitespace will be stripped)
        --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
@@ -60,16 +60,20 @@ Arguments:
             OUTPUT="${argument#*=}"
             shift
             ;;
-        -s=* | --ssh=*)
+        --ssh=*)
             SSH="${argument#*=}"
             shift
             ;;
-        -c=* | --certdir=*)
+        --certdir=*)
             CERT_DIR="${argument#*=}"
             shift
             ;;
-        -n=* | --nns_url=*)
+        --nns_url=*)
             NNS_URL_OVERRIDE="${argument#*=}"
+            shift
+            ;;
+        --nns_public_key=*)
+            NNS_PUBLIC_KEY="${argument#*=}"
             shift
             ;;
         --replicas-ipv6=*)
@@ -100,6 +104,13 @@ INPUT="${INPUT:=${BASE_DIR}/subnet.json}"
 OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:-}"
+if [ -z ${NNS_PUBLIC_KEY+x} ]; then
+    err "--nns_public_key not set"
+    exit 1
+elif [ ! -f "${NNS_PUBLIC_KEY}" ]; then
+    err "nns_public_key '${NNS_PUBLIC_KEY}' not found"
+    exit 1
+fi
 
 # Load INPUT
 CONFIG="$(cat ${INPUT})"
@@ -217,9 +228,7 @@ function generate_boundary_node_config() {
             continue
         fi
 
-        if [ -f "${IC_PREP_DIR}/nns_public_key.pem" ]; then
-            cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/${NODE_PREFIX}/nns_public_key.pem"
-        fi
+        cp "${NNS_PUBLIC_KEY}" "${CONFIG_DIR}/${NODE_PREFIX}/nns_public_key.pem"
 
         echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/${NODE_PREFIX}/nns.conf"
         mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/buildinfo"
@@ -307,8 +316,8 @@ function generate_prober_config() {
 
             mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/prober"
 
-            # copy_prober_identity
-            if [[ -f "${PROBER_IDENTITY}" ]]; then
+            # copy prober identity
+            if [[ -f "${PROBER_IDENTITY:-}" ]]; then
                 echo "Using prober identity ${PROBER_IDENTITY}"
                 cp "${PROBER_IDENTITY}" "${CONFIG_DIR}/${NODE_PREFIX}/prober/identity.pem"
             fi
@@ -382,7 +391,7 @@ function copy_certs() {
 }
 
 function copy_geolite2_dbs() {
-    if [[ -z "${GEOLITE2_COUNTRY_DB}" || -z "${GEOLITE2_CITY_DB}" ]]; then
+    if [[ -z "${GEOLITE2_COUNTRY_DB:-}" || -z "${GEOLITE2_CITY_DB:-}" ]]; then
         err "geolite2 dbs have not been provided, therefore geolocation capabilities will be disabled"
         return
     fi
