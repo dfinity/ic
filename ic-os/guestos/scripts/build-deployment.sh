@@ -29,6 +29,7 @@ Arguments:
   -h,  --help                           show this help message and exit
   -i=, --input=                         JSON formatted input file (Default: ./subnet.json)
   -o=, --output=                        removable media output directory (Default: ./build-out/)
+       --output-nns-public-key=         An optional path to output nns_public_key.pem if desired
   -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
        --git-revision=                  git revision for which to prepare the media
        --whitelist=                     path to provisional whitelist that allows canister creation
@@ -45,6 +46,10 @@ Arguments:
             ;;
         -o=* | --output=*)
             OUTPUT="${argument#*=}"
+            shift
+            ;;
+        --output-nns-public-key=*)
+            OUTPUT_NNS_PUBLIC_KEY="${argument#*=}"
             shift
             ;;
         -s=* | --ssh=*)
@@ -335,13 +340,12 @@ function generate_node_config() {
             # Copy the NNS public key in the correct place
             cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
             echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
-
-        elif [[ "$type" == "boundary" ]]; then
-            # Copy the NNS public key in the correct place
-            cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
-            echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
         fi
     done
+
+    if [[ -n "${OUTPUT_NNS_PUBLIC_KEY:-}" ]]; then
+        cp "${IC_PREP_DIR}/nns_public_key.pem" "${OUTPUT_NNS_PUBLIC_KEY}"
+    fi
 }
 
 function generate_network_config() {
@@ -432,8 +436,7 @@ function remove_temporary_directories() {
     rm -rf ${TEMPDIR}
 }
 
-# See how we were called
-if [ ${DEBUG} -eq 1 ]; then
+function main() {
     cleanup_rootfs
     prepare_build_directories
     download_binaries &
@@ -451,22 +454,12 @@ if [ ${DEBUG} -eq 1 ]; then
     build_removable_media
     remove_temporary_directories
     cleanup_rootfs
+
+}
+
+# See how we were called
+if [ ${DEBUG} -eq 1 ]; then
+    main
 else
-    cleanup_rootfs >/dev/null 2>&1
-    prepare_build_directories >/dev/null 2>&1
-    download_binaries >/dev/null 2>&1 &
-    DOWNLOAD_PID=$!
-    download_registry_canisters >/dev/null 2>&1
-    wait $DOWNLOAD_PID
-    generate_subnet_config >/dev/null 2>&1
-    create_tarball_structure >/dev/null 2>&1
-    generate_journalbeat_config >/dev/null 2>&1
-    generate_node_config >/dev/null 2>&1
-    generate_network_config >/dev/null 2>&1
-    generate_socks_config >/dev/null 2>&1
-    copy_ssh_keys >/dev/null 2>&1
-    build_tarball >/dev/null 2>&1
-    build_removable_media >/dev/null 2>&1
-    remove_temporary_directories >/dev/null 2>&1
-    cleanup_rootfs >/dev/null 2>&1
+    main >/dev/null 2>&1
 fi

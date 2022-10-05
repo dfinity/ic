@@ -13,24 +13,33 @@ set -eEuo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
+function err() {
+    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
+}
+
+if [[ "${BASH_VERSINFO:-0}" -lt 4 ]]; then
+    err "Bash 4+ is required"
+    exit 1
+fi
+
 function exit_usage() {
     if (($# < 1)); then
-        echo >&2 "Usage: icos_deploy.sh [--git-head ] [--git-revision <git_revision>] [--dkg-interval-length <dil>] [--max-ingress-bytes-per-message <dil>] [--ansible-args <additional-args>] [--hosts-ini <hosts_override.ini>] [--no-boundary-nodes] <deployment_name>"
-        echo >&2 "    --git-head                            Deploy the testnet from the current git head."
-        echo >&2 "    --git-revision <git_revision>         Deploy the testnet from the given git revision."
-        echo >&2 "    --ansible-args <additional-args>      Additional ansible args. Can be specified multiple times."
-        echo >&2 "    --dkg-interval-length <dil>           Set DKG interval length (-1 if not provided explicitly, which means - default will be used)"
-        echo >&2 "    --max-ingress-bytes-per-message <dil> Set maximum ingress size in bytes (-1 if not provided explicitly, which means - default will be used)"
-        echo >&2 "    --hosts-ini <hosts_override.ini>      Override the default ansible hosts.ini to set different testnet configuration"
-        echo >&2 "    --no-boundary-nodes                   Do not deploy boundary nodes even if they are declared in the hosts.ini file"
-        echo >&2 "    --boundary-dev-image		    Use development image of the boundary node VM (includes development service worker"
-        echo >&2 "    --with-testnet-keys                   Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys"
-        echo >&2 -e ""
-        echo >&2 -e "To get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
-        echo >&2 -e "Example (deploy latest master to small-a):"
-        echo >&2 -e ""
-        echo >&2 -e "    testnet/tools/icos_deploy.sh small-a --git-revision \$(gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)"
-        echo >&2 -e ""
+        err 'Usage: icos_deploy.sh [--git-head ] [--git-revision <git_revision>] [--dkg-interval-length <dil>] [--max-ingress-bytes-per-message <dil>] [--ansible-args <additional-args>] [--hosts-ini <hosts_override.ini>] [--no-boundary-nodes] <deployment_name>'
+        err '    --git-head                            Deploy the testnet from the current git head.'
+        err '    --git-revision <git_revision>         Deploy the testnet from the given git revision.'
+        err '    --ansible-args <additional-args>      Additional ansible args. Can be specified multiple times.'
+        err '    --dkg-interval-length <dil>           Set DKG interval length (-1 if not provided explicitly, which means - default will be used)'
+        err '    --max-ingress-bytes-per-message <dil> Set maximum ingress size in bytes (-1 if not provided explicitly, which means - default will be used)'
+        err '    --hosts-ini <hosts_override.ini>      Override the default ansible hosts.ini to set different testnet configuration'
+        err '    --no-boundary-nodes                   Do not deploy boundary nodes even if they are declared in the hosts.ini file'
+        err '    --boundary-dev-image		    Use development image of the boundary node VM (includes development service worker'
+        err '    --with-testnet-keys                   Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys'
+        err ''
+        err 'To get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh'
+        err 'Example (deploy latest master to small-a):'
+        err ''
+        err '    testnet/tools/icos_deploy.sh small-a --git-revision $(gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)'
+        err ''
         exit 1
     fi
 }
@@ -187,56 +196,32 @@ ANSIBLE_ARGS+=(
 # Ensure we kill these on CTRL+C or failure
 trap 'echo "EXIT received, killing all jobs"; jobs -p | xargs -rn1 pkill -P >/dev/null 2>&1; exit 1' EXIT
 
-cd "${REPO_ROOT}/ic-os/guestos"
-
 TMPDIR=$(mktemp -d /tmp/icos-deploy.sh.XXXXXX)
 
-pushd "${REPO_ROOT}/testnet/ansible" >/dev/null
 DESTROY_OUT="${TMPDIR}/destroy.log"
 echo "**** Start destroying old deployment (log ${DESTROY_OUT})"
 COMMAND=$(
-    cat <<EOM
-set -x
+    cat <<EOF
+set -x;
 $(declare -f ansible)
 $(declare -p ANSIBLE_ARGS)
 
+cd "${REPO_ROOT}/testnet/ansible"
 ansible icos_network_redeploy.yml -e ic_state=destroy
-EOM
+EOF
 )
-script --quiet --return "${DESTROY_OUT}" --command "${COMMAND}" >/dev/null 2>&1 &
+echo "${COMMAND}"
+SHELL="${BASH}" script --quiet --return "${DESTROY_OUT}" --command "${COMMAND}" >/dev/null 2>&1 &
 DESTROY_PID=$!
-popd >/dev/null
 
-if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
-    pushd "${REPO_ROOT}/ic-os/boundary-guestos" >/dev/null
-    BOUNDARY_OUT="${TMPDIR}/build-boundary.log"
-    echo "-------------------------------------------------------------------------------"
-    echo "**** Build USB sticks for boundary nodes"
-
-    COMMAND=$(
-        cat <<EOM
-set -x
-rm -rf "${BN_MEDIA_PATH}"
-mkdir -p "${BN_MEDIA_PATH}"
-"${INVENTORY}" --media-json >"${BN_MEDIA_PATH}/${deployment}.json"
-"${REPO_ROOT}"/ic-os/boundary-guestos/scripts/build-deployment.sh \
-    --input="${BN_MEDIA_PATH}/${deployment}.json" \
-    --output="${BN_MEDIA_PATH}"
-EOM
-    )
-
-    script --quiet --return "${BOUNDARY_OUT}" --command "${COMMAND}" >/dev/null 2>&1 &
-    BOUNDARY_PID=$!
-    echo "-------------------------------------------------------------------------------"
-
-    popd >/dev/null
-fi
+echo "-------------------------------------------------------------------------------"
 
 echo "**** Build USB sticks for IC nodes"
 rm -rf "${MEDIA_PATH}"
 mkdir -p "${MEDIA_PATH}"
 "${INVENTORY}" --media-json >"${MEDIA_PATH}/${deployment}.json"
 
+pushd "${REPO_ROOT}/ic-os/guestos"
 "${REPO_ROOT}/ic-os/guestos/scripts/build-deployment.sh" \
     --debug \
     --input="${MEDIA_PATH}/${deployment}.json" \
@@ -245,7 +230,32 @@ mkdir -p "${MEDIA_PATH}"
     --whitelist="${REPO_ROOT}/testnet/env/${deployment}/provisional_whitelist.json" \
     --dkg-interval-length=${DKG_INTERVAL_LENGTH} \
     --max-ingress-bytes-per-message=${MAX_INGRESS_BYTES_PER_MESSAGE} \
+    --output-nns-public-key="${MEDIA_PATH}/nns-public-key.pem" \
     ${WITH_TESTNET_KEYS:-}
+popd
+
+if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
+    BOUNDARY_OUT="${TMPDIR}/build-boundary.log"
+    echo "**** Build USB sticks for boundary nodes"
+    COMMAND=$(
+        cat <<EOF
+set -x
+rm -rf "${BN_MEDIA_PATH}"
+mkdir -p "${BN_MEDIA_PATH}"
+"${INVENTORY}" --media-json >"${BN_MEDIA_PATH}/${deployment}.json"
+
+"${REPO_ROOT}"/ic-os/boundary-guestos/scripts/build-deployment.sh \
+    --input="${BN_MEDIA_PATH}/${deployment}.json" \
+    --output="${BN_MEDIA_PATH}" \
+    --nns_public_key="${MEDIA_PATH}/nns-public-key.pem"
+EOF
+    )
+    echo ${COMMAND}
+    SHELL="${BASH}" script --quiet --return "${BOUNDARY_OUT}" --command "${COMMAND}" >/dev/null 2>&1 &
+    BOUNDARY_PID=$!
+fi
+
+echo "-------------------------------------------------------------------------------"
 
 # In case someone wants to deploy with a locally built disk image the following lines contain
 # the necessary commands.
@@ -255,8 +265,6 @@ mkdir -p "${MEDIA_PATH}"
 
 # echo "**** Build disk image"
 # ./scripts/build-disk-image.sh -o "${MEDIA_PATH}/disk.img"
-
-cd "${REPO_ROOT}/testnet/ansible"
 
 # Wait on the destroy to finish
 echo "**** Finishing destroy"
@@ -277,7 +285,10 @@ if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
         exit $(tail -1 "${BOUNDARY_OUT}" | sed -re "s/.*=\"([0-9]+).*/\1/")
     fi
 fi
+
 rm -rf "${TMPDIR}"
+echo "-------------------------------------------------------------------------------"
+cd "${REPO_ROOT}/testnet/ansible"
 
 echo "**** Create new IC instance"
 ansible icos_network_redeploy.yml -e ic_state="create"
@@ -289,8 +300,6 @@ echo "**** Install NNS canisters"
 ansible icos_network_redeploy.yml -e ic_state="install"
 
 echo "**** Start monitoring"
-NNS_IP=$("${INVENTORY}" --nodes | head -n1 | awk '{print $2}')
-"${MEDIA_PATH}/bin/ic-admin" --nns-url "https://[${NNS_IP}]:8080" get-subnet-public-key 0 "${MEDIA_PATH}/nns-public-key.pem"
 ansible ic_p8s_network_update.yml -e yes_i_confirm=yes
 ansible ic_p8s_service_discovery_install.yml -e yes_i_confirm=yes -e nns_public_key_path="${MEDIA_PATH}/nns-public-key.pem"
 
