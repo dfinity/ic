@@ -905,7 +905,13 @@ impl CanisterManager {
         canister: &mut CanisterState,
         subnet_size: usize,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
-        validate_controller(canister, &sender)?;
+        // Skip the controller check if the canister itself is requesting its
+        // own status, as the canister is considered in the same trust domain.
+        if sender != canister.canister_id().get() {
+            if let Err(err) = validate_controller(canister, &sender) {
+                return Err(err);
+            }
+        }
 
         let controller = canister.system_state.controller();
         let controllers = canister

@@ -1977,6 +1977,41 @@ fn get_canister_status_of_running_canister() {
 }
 
 #[test]
+fn get_canister_status_of_self() {
+    with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
+        let sender = canister_test_id(1).get();
+        let sender_subnet_id = subnet_test_id(1);
+        let canister_id = canister_manager
+            .create_canister(
+                sender,
+                sender_subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
+            )
+            .0
+            .unwrap();
+
+        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let status = canister_manager
+            .get_canister_status(canister_id.get(), canister, SMALL_APP_SUBNET_MAX_SIZE)
+            .unwrap()
+            .status();
+        assert_eq!(status, CanisterStatusType::Running);
+    });
+}
+
+#[test]
 fn get_canister_status_of_stopped_canister() {
     with_setup(|canister_manager, mut state, _| {
         let sender = user_test_id(1).get();
