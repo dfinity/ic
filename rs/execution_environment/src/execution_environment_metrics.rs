@@ -14,6 +14,7 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     response_cycles_refund_error: IntCounter,
 
     pub execution_round_failed_heartbeat_executions: IntCounter,
+    pub executions_aborted: IntCounter,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -35,6 +36,8 @@ impl ExecutionEnvironmentMetrics {
                 "execution_round_failed_heartbeat_executions",
                 "Total number of heartbeat executions that resulted in an error",
             ),
+            executions_aborted: metrics_registry
+                .int_counter("executions_aborted", "Total number of aborted executios"),
         }
     }
 

@@ -4,6 +4,7 @@ use ic_types::{CanisterId, Cycles, NumInstructions};
 use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
 use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload};
 use ic_replicated_state::canister_state::NextExecution;
+use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::MessageId;
 use ic_types_test_utils::ids::user_test_id;
@@ -164,6 +165,10 @@ fn dts_abort_works_in_install_code() {
     }
 
     test.abort_all_paused_executions();
+    assert_eq!(
+        fetch_int_counter(test.metrics_registry(), "executions_aborted"),
+        Some(1)
+    );
 
     for _ in 0..6 {
         assert_eq!(

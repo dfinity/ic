@@ -8,6 +8,7 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::{CanisterStatus, NumWasmPages};
 use ic_test_utilities::types::messages::ResponseBuilder;
+use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, MessageId},
@@ -850,6 +851,10 @@ fn dts_abort_works_in_response_callback() {
 
     // Aborting doesn't change the clean canister state.
     test.abort_all_paused_executions();
+    assert_eq!(
+        fetch_int_counter(test.metrics_registry(), "executions_aborted"),
+        Some(1)
+    );
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         original_system_state.balance()

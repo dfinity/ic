@@ -18,6 +18,7 @@ use ic_replicated_state::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
+use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
@@ -4068,6 +4069,10 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueLong
+    );
+    assert_eq!(
+        fetch_int_counter(test.metrics_registry(), "executions_aborted"),
+        Some(1)
     );
 
     // Now execute from scratch.
