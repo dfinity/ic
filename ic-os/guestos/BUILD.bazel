@@ -1,5 +1,6 @@
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts", "urls_test")
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "summary_sha256sum", "tar_extract", "upgrade_image")
+load("@aspect_bazel_lib//lib:output_files.bzl", "output_files")
 
 docker_tar(
     name = "rootfs-tree.tar",
@@ -246,6 +247,15 @@ genrule(
     cmd = "cat $(location disk.img.tar.zstd.sha256) > \"$@\"",
 )
 
+# Filter output from the upload rule to depend on required file only.
+# This allows bazel to only build and upload what is required.
+output_files(
+    name = "disk.img.tar.zstd.url",
+    paths = ["ic-os/guestos/upload_guestos_disk.img.tar.zstd.url"],
+    tags = ["manual"],
+    target = ":upload_guestos",
+)
+
 py_binary(
     name = "launch_single_vm",
     srcs = [
@@ -254,7 +264,7 @@ py_binary(
     ],
     data = [
         ":disk.img.tar.zstd.sha256.wrapped",
-        ":upload_guestos",
+        ":disk.img.tar.zstd.url",
         ":version.txt.wrapped",
         "//rs/prep:ic-prep",
     ],
