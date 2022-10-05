@@ -325,6 +325,8 @@ impl SchedulerImpl {
     }
 
     /// Drains the subnet queues, executing all messages not blocked by long executions.
+    /// It consumes the `long_running_canister_ids` set instead of borrowing it
+    /// because after the function execution the set is no longer valid.
     fn drain_subnet_queues(
         &self,
         mut state: ReplicatedState,
@@ -332,7 +334,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
         ongoing_long_install_code: bool,
-        long_running_canister_ids: &BTreeSet<CanisterId>,
+        long_running_canister_ids: BTreeSet<CanisterId>,
         registry_settings: &RegistryExecutionSettings,
         ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
     ) -> ReplicatedState {
@@ -342,7 +344,7 @@ impl SchedulerImpl {
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
             while let Some(msg) = state.peek_subnet_input() {
-                if can_execute_msg(&msg, ongoing_long_install_code, long_running_canister_ids) {
+                if can_execute_msg(&msg, ongoing_long_install_code, &long_running_canister_ids) {
                     available_subnet_messages = true;
                     break;
                 }
@@ -381,6 +383,18 @@ impl SchedulerImpl {
                     as_num_instructions(instructions_before - round_limits.instructions);
                 let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
                 measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
+
+                if message_instructions.is_none() {
+                    // This may happen only if the message execution was paused,
+                    // which means that there should not be any instructions
+                    // remaining in the round. Since we do not update
+                    // `long_running_canister_ids` and `ongoing_long_install_code`,
+                    // we need to break the loop here to ensure correctness in
+                    // the unlikely case of some instructions still remaining
+                    // in the round.
+                    break;
+                }
+
                 if round_limits.instructions <= RoundInstructions::from(0) {
                     break;
                 }
@@ -1049,21 +1063,13 @@ impl SchedulerImpl {
 
         // 1. Heartbeat tasks exist only during the round and must not exist after the round.
         // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
-        // 3. If deterministic time slicing is disabled, then neither paused nor
-        //    aborted tasks can exists.
+        // 3. If deterministic time slicing is disabled, then there are no paused tasks.
+        //    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
         for (id, canister) in canisters_with_tasks {
             for task in canister.system_state.task_queue.iter() {
                 match task {
                     ExecutionTask::AbortedExecution { .. }
-                    | ExecutionTask::AbortedInstallCode { .. } => {
-                        assert_eq!(
-                            self.deterministic_time_slicing,
-                            FlagStatus::Enabled,
-                            "Unexpected aborted execution {:?} with disabled DTS in canister: {:?}",
-                            task,
-                            id
-                        );
-                    }
+                    | ExecutionTask::AbortedInstallCode { .. } => {}
                     ExecutionTask::Heartbeat => {
                         panic!(
                             "Unexpected heartbeat task after a round in canister {:?}",
@@ -1128,23 +1134,17 @@ impl Scheduler for SchedulerImpl {
                 &self.metrics,
                 &round_log,
             );
-            long_running_canister_ids = match self.deterministic_time_slicing {
-                FlagStatus::Enabled => state
-                    .canister_states
-                    .iter()
-                    .filter_map(|(&canister_id, canister_state)| {
-                        if canister_state.has_paused_execution()
-                            || canister_state.has_paused_install_code()
-                        {
-                            Some(canister_id)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect(),
-                // Don't iterate through canisters if DTS is not enabled.
-                FlagStatus::Disabled => BTreeSet::new(),
-            };
+
+            long_running_canister_ids = state
+                .canister_states
+                .iter()
+                .filter_map(|(&canister_id, canister)| match canister.next_execution() {
+                    NextExecution::None | NextExecution::StartNew => None,
+                    NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
+                        Some(canister_id)
+                    }
+                })
+                .collect();
 
             {
                 let _timer = self.metrics.round_preparation_ingress.start_timer();
@@ -1271,7 +1271,7 @@ impl Scheduler for SchedulerImpl {
                     &mut round_limits,
                     &measurement_scope,
                     ongoing_long_install_code,
-                    &long_running_canister_ids,
+                    long_running_canister_ids,
                     registry_settings,
                     &ecdsa_subnet_public_keys,
                 );

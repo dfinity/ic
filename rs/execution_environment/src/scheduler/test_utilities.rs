@@ -317,17 +317,24 @@ impl SchedulerTest {
     ) {
         let wasm_module = wabt::wat2wasm("(module)").unwrap();
 
-        let mode = match &install_code {
-            TestInstallCode::Install { .. } => CanisterInstallMode::Install,
-            TestInstallCode::Reinstall { .. } => CanisterInstallMode::Reinstall,
-            TestInstallCode::Upgrade { .. } => CanisterInstallMode::Upgrade,
+        let (mode, test_message) = match install_code {
+            TestInstallCode::Install { init } => (CanisterInstallMode::Install, init),
+            TestInstallCode::Reinstall { init } => (CanisterInstallMode::Reinstall, init),
+            TestInstallCode::Upgrade { post_upgrade } => {
+                (CanisterInstallMode::Upgrade, post_upgrade)
+            }
+        };
+
+        let message_id = {
+            let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
+            wasm_executor.push_install_code(test_message)
         };
 
         let message_payload = InstallCodeArgs {
             mode,
             canister_id: target.get(),
             wasm_module,
-            arg: vec![],
+            arg: encode_message_id_as_payload(message_id),
             compute_allocation: None,
             memory_allocation: None,
             query_allocation: None,
@@ -347,8 +354,6 @@ impl SchedulerTest {
                 InputQueueType::RemoteSubnet,
             )
             .unwrap();
-        let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
-        wasm_executor.push_install_code(target, install_code);
     }
 
     /// Returns all responses from the management canister to
@@ -423,7 +428,7 @@ impl SchedulerTest {
 
     pub fn drain_subnet_messages(
         &mut self,
-        long_running_canister_ids: &BTreeSet<CanisterId>,
+        long_running_canister_ids: BTreeSet<CanisterId>,
     ) -> ReplicatedState {
         let state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
@@ -793,21 +798,15 @@ struct TestCall {
 }
 
 /// Description of an `install_code` message.
+///
+/// Note that the `start` and `canister_preupgrade` methods are not supported
+/// due to limitation of the testing framework that relies on the incoming
+/// payload to keep track of test message.
 #[derive(Clone, Debug)]
 pub(crate) enum TestInstallCode {
-    Install {
-        start: TestMessage,
-        init: TestMessage,
-    },
-    Reinstall {
-        start: TestMessage,
-        init: TestMessage,
-    },
-    Upgrade {
-        pre_upgrade: TestMessage,
-        start: TestMessage,
-        post_upgrade: TestMessage,
-    },
+    Install { init: TestMessage },
+    Reinstall { init: TestMessage },
+    Upgrade { post_upgrade: TestMessage },
 }
 
 /// A helper to create an ingress test message. Note that the canister id is not
@@ -918,8 +917,6 @@ impl WasmExecutor for TestWasmExecutor {
 //   test message and interprets its description.
 struct TestWasmExecutorCore {
     messages: HashMap<u32, TestMessage>,
-    install_code: HashMap<CanisterId, VecDeque<TestInstallCode>>,
-    current_install_code: Option<TestInstallCode>,
     heartbeat: HashMap<CanisterId, VecDeque<TestMessage>>,
     schedule: Vec<(ExecutionRound, CanisterId, NumInstructions)>,
     next_message_id: u32,
@@ -930,8 +927,6 @@ impl TestWasmExecutorCore {
     fn new() -> Self {
         Self {
             messages: HashMap::new(),
-            install_code: HashMap::new(),
-            current_install_code: None,
             heartbeat: HashMap::new(),
             schedule: vec![],
             next_message_id: 0,
@@ -1028,8 +1023,6 @@ impl TestWasmExecutorCore {
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         let mut exported_functions = vec![
             WasmMethod::Update("update".into()),
-            WasmMethod::System(SystemMethod::CanisterPreUpgrade),
-            WasmMethod::System(SystemMethod::CanisterStart),
             WasmMethod::System(SystemMethod::CanisterPostUpgrade),
             WasmMethod::System(SystemMethod::CanisterInit),
         ];
@@ -1164,64 +1157,18 @@ impl TestWasmExecutorCore {
                     .unwrap();
                 (message_id, message, Some(*call_context_id))
             }
-            ApiType::Start => {
-                let message_id = self.next_message_id();
-                let message = match self.current_install_code.clone() {
-                    Some(TestInstallCode::Upgrade { start, .. }) => start,
-                    _ => {
-                        // Starting a new `install_code`, get it from the deque.
-                        let install_code = self
-                            .install_code
-                            .get_mut(&canister_id)
-                            .unwrap()
-                            .pop_front()
-                            .unwrap();
-                        self.current_install_code = Some(install_code.clone());
-                        match install_code {
-                            TestInstallCode::Install { start, .. }
-                            | TestInstallCode::Reinstall { start, .. } => start,
-                            TestInstallCode::Upgrade { .. } => {
-                                unreachable!("Executing `start` before `pre_upgrade`")
-                            }
-                        }
-                    }
-                };
+            ApiType::Init {
+                incoming_payload, ..
+            } => {
+                let message_id = decode_message_id_from_payload(incoming_payload.clone());
+                let message = self.messages.remove(&message_id).unwrap();
                 (message_id, message, None)
             }
-            ApiType::Init { .. } => {
-                let message_id = self.next_message_id();
-                let install_code = self.current_install_code.take().unwrap();
-                let message = match install_code {
-                    TestInstallCode::Install { init, .. }
-                    | TestInstallCode::Reinstall { init, .. } => init,
-                    TestInstallCode::Upgrade { post_upgrade, .. } => {
-                        // `ApiType::Init` is reused for `post_upgrade`.
-                        post_upgrade
-                    }
-                };
-                (message_id, message, None)
-            }
-            ApiType::PreUpgrade { .. } => {
-                let message_id = self.next_message_id();
-                // Starting a new `install_code`, get it from the deque.
-                let install_code = self
-                    .install_code
-                    .get_mut(&canister_id)
-                    .unwrap()
-                    .pop_front()
-                    .unwrap();
-                self.current_install_code = Some(install_code.clone());
-                let message = match install_code {
-                    TestInstallCode::Install { .. } | TestInstallCode::Reinstall { .. } => {
-                        unreachable!("Requested pre_upgrade for (re-)install")
-                    }
-                    TestInstallCode::Upgrade { pre_upgrade, .. } => pre_upgrade,
-                };
-                (message_id, message, None)
-            }
-            ApiType::ReplicatedQuery { .. }
+            ApiType::PreUpgrade { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. }
+            | ApiType::Start
             | ApiType::Cleanup { .. } => {
                 unreachable!("The test Wasm executor does not support {}", input.api_type)
             }
@@ -1252,11 +1199,10 @@ impl TestWasmExecutorCore {
         message_id
     }
 
-    fn push_install_code(&mut self, canister_id: CanisterId, install_code: TestInstallCode) {
-        self.install_code
-            .entry(canister_id)
-            .or_default()
-            .push_back(install_code);
+    fn push_install_code(&mut self, message: TestMessage) -> u32 {
+        let message_id = self.next_message_id();
+        self.messages.insert(message_id, message);
+        message_id
     }
 
     fn push_heartbeat(&mut self, canister_id: CanisterId, heartbeat: TestMessage) {

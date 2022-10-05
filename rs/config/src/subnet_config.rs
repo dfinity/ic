@@ -65,7 +65,7 @@ const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(
 // If deterministic time slicing is disabled, then this limit is ignored and
 // `MAX_INSTRUCTIONS_PER_INSTALL_CODE` is used for execution of the
 // single slice.
-const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions = NumInstructions::new(40 * 5 * B);
+const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions = NumInstructions::new(2 * B);
 
 // The factor to bump the instruction limit for system subnets.
 const SYSTEM_SUBNET_FACTOR: u64 = 10;
@@ -221,18 +221,21 @@ impl SchedulerConfig {
     }
 
     pub fn system_subnet() -> Self {
+        let max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR;
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
-            max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR,
-            max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE * SYSTEM_SUBNET_FACTOR,
+            max_instructions_per_message,
+            // Effectively disable DTS on system subnets.
+            max_instructions_per_slice: max_instructions_per_message,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code,
+            // Effectively disable DTS on system subnets.
             max_instructions_per_install_code_slice: max_instructions_per_install_code,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
