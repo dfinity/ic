@@ -1,3 +1,8 @@
+cargo-clippy-linux:
+  extends: .cargo-build-docker
+  variables:
+    BUILD_COMMAND: "$CI_PROJECT_DIR/gitlab-ci/src/rust_lint/lint.sh"
+
 cargo-build-debug-linux:
   extends: .cargo-build-docker
   variables:
