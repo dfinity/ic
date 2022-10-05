@@ -45,6 +45,8 @@ build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 
 build --@rules_rust//:source_path_prefix=""
 
+build --flag_alias=ic_version=//bazel:ic_version
+
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
 build --build_tag_filters="-system_test"

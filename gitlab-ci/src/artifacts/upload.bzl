@@ -2,6 +2,8 @@
 Rules to manipulate with artifacts: download, upload etc.
 """
 
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+
 def _upload_artifact_impl(ctx):
     """
     Uploads an artifact to s3 and returns download link to it
@@ -31,10 +33,12 @@ def _upload_artifact_impl(ctx):
         ctx.actions.run(
             executable = uploader,
             arguments = [f.path, url.path],
+            env = {
+                "VERSION": ctx.attr._ic_version[BuildSettingInfo].value,
+            },
             inputs = [f, ctx.version_file, ctx.file.rclone_config],
             outputs = [url],
             tools = [ctx.file._rclone],
-            use_default_shell_env = True,
         )
         out.append(url)
 
@@ -60,6 +64,7 @@ _upload_artifacts = rule(
         "rclone_config": attr.label(allow_single_file = True, default = "//:.rclone.conf"),
         "_rclone": attr.label(allow_single_file = True, default = "@rclone//:rclone"),
         "_artifacts_uploader_template": attr.label(allow_single_file = True, default = ":upload.bash.template"),
+        "_ic_version": attr.label(default = "//bazel:ic_version"),
     },
 )
 

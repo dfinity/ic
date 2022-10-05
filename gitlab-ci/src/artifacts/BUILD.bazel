@@ -7,6 +7,11 @@ exports_files(
     ],
 )
 
+sh_binary(
+    name = "openssl-sign",
+    srcs = ["openssl-sign.sh"],
+)
+
 py_binary(
     name = "rclone_upload",
     srcs = ["rclone_upload.py"],
