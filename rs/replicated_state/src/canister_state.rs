@@ -287,6 +287,18 @@ impl CanisterState {
         }
     }
 
+    /// Returns true if the canister has an aborted install code.
+    pub fn has_aborted_install_code(&self) -> bool {
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::AbortedInstallCode { .. }) => true,
+            None
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::PausedInstallCode(..))
+            | Some(ExecutionTask::AbortedExecution { .. }) => false,
+        }
+    }
+
     /// Returns true if there is at least one message in the canister's output
     /// queues, false otherwise.
     pub fn has_output(&self) -> bool {

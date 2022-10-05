@@ -1090,9 +1090,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
 
     for _ in 0..20 {
         let install_code = TestInstallCode::Upgrade {
-            pre_upgrade: instructions(5),
-            start: instructions(1),
-            post_upgrade: instructions(4),
+            post_upgrade: instructions(10),
         };
         test.inject_install_code_call_to_ic00(canister, install_code);
     }
@@ -1322,7 +1320,7 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
 
     let long_running_canister_ids: BTreeSet<CanisterId> =
         BTreeSet::from([local_canisters[1], remote_canisters[0]]);
-    let new_state = test.drain_subnet_messages(&long_running_canister_ids);
+    let new_state = test.drain_subnet_messages(long_running_canister_ids);
     // Left messages that were not able to be executed due to other long running messages
     // belong to `local_canisters[1]` and `remote_canisters[0]` canisters.
     assert_eq!(new_state.subnet_queues().input_queues_message_count(), 2);
@@ -1365,7 +1363,7 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 4);
 
     let long_running_canister_ids: BTreeSet<CanisterId> = BTreeSet::new();
-    let new_state = test.drain_subnet_messages(&long_running_canister_ids);
+    let new_state = test.drain_subnet_messages(long_running_canister_ids);
     assert_eq!(new_state.subnet_queues().input_queues_message_count(), 0);
 }
 
@@ -1417,7 +1415,7 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
     );
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 4);
 
-    let new_state = test.drain_subnet_messages(&long_running_canister_ids);
+    let new_state = test.drain_subnet_messages(long_running_canister_ids);
     assert_eq!(new_state.subnet_queues().input_queues_message_count(), 4);
 }
 
@@ -1783,8 +1781,7 @@ fn execution_round_metrics_are_recorded() {
     let canister = test.create_canister();
     for _ in 0..3 {
         let install_code = TestInstallCode::Reinstall {
-            start: instructions(5),
-            init: instructions(5),
+            init: instructions(10),
         };
         test.inject_install_code_call_to_ic00(canister, install_code);
     }
@@ -2592,6 +2589,8 @@ fn rate_limiting_of_install_code() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(5 * B as u64),
             max_instructions_per_slice: NumInstructions::from(5 * B as u64),
+            max_instructions_per_install_code: NumInstructions::from(20 * B as u64),
+            max_instructions_per_install_code_slice: NumInstructions::from(5 * B as u64),
             install_code_rate_limit: NumInstructions::from(2 * B as u64),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2613,8 +2612,7 @@ fn rate_limiting_of_install_code() {
         InputQueueType::RemoteSubnet,
     );
     let install_code = TestInstallCode::Install {
-        start: instructions(3 * B as u64),
-        init: instructions(7 * B as u64),
+        init: instructions(10 * B as u64),
     };
     test.inject_install_code_call_to_ic00(canister, install_code);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -2632,9 +2630,7 @@ fn rate_limiting_of_install_code() {
     // Try upgrading the canister. It should fail because the canister is rate
     // limited.
     let upgrade = TestInstallCode::Upgrade {
-        pre_upgrade: instructions(2 * B as u64),
-        start: instructions(2 * B as u64),
-        post_upgrade: instructions(6 * B as u64),
+        post_upgrade: instructions(10 * B as u64),
     };
     test.inject_install_code_call_to_ic00(canister, upgrade);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -2660,9 +2656,7 @@ fn rate_limiting_of_install_code() {
     // After the previous round the canister is no longer rate limited.
     // Upgrading should succeed now.
     let upgrade = TestInstallCode::Upgrade {
-        pre_upgrade: instructions(2 * B as u64),
-        start: instructions(2 * B as u64),
-        post_upgrade: instructions(6 * B as u64),
+        post_upgrade: instructions(10 * B as u64),
     };
     test.inject_install_code_call_to_ic00(canister, upgrade);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -2824,8 +2818,7 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
 
     let balance_before = test.canister_state(canister_id).system_state.balance();
     let install_code = TestInstallCode::Reinstall {
-        start: instructions(20),
-        init: instructions(20),
+        init: instructions(40),
     };
     test.inject_install_code_call_to_ic00(canister_id, install_code);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -3799,9 +3792,7 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
 
     let canister_1 = test.create_canister();
     let install_code = TestInstallCode::Upgrade {
-        pre_upgrade: instructions(23),
-        start: instructions(0),
-        post_upgrade: instructions(0),
+        post_upgrade: instructions(23),
     };
     test.inject_install_code_call_to_ic00(canister_1, install_code);
 
@@ -3829,9 +3820,7 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
     // Add a second canister with a long install code message.
     let canister_2 = test.create_canister();
     let install_code = TestInstallCode::Upgrade {
-        pre_upgrade: instructions(5),
-        start: instructions(1),
-        post_upgrade: instructions(4),
+        post_upgrade: instructions(10),
     };
     test.inject_install_code_call_to_ic00(canister_2, install_code);
 
@@ -3928,4 +3917,39 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             .get_sample_count(),
         4
     );
+}
+
+#[test]
+fn dts_resume_install_code_after_abort() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_install_code: NumInstructions::new(1000),
+            max_instructions_per_install_code_slice: NumInstructions::new(10),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister = test.create_canister();
+    let install_code = TestInstallCode::Upgrade {
+        post_upgrade: instructions(100),
+    };
+    test.inject_install_code_call_to_ic00(canister, install_code);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_paused_install_code());
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+    assert!(test.canister_state(canister).has_aborted_install_code());
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_paused_install_code());
+    for _ in 0..10 {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+    assert!(!test.canister_state(canister).has_paused_install_code());
+    assert!(!test.canister_state(canister).has_aborted_install_code());
 }
