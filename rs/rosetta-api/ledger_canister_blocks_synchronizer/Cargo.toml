@@ -19,7 +19,7 @@ ledger-canister = { path = "../ledger_canister" }
 log = "0.4.14"
 log4rs = "1.1.1"
 on_wire = {path = "../../rust_canisters/on_wire"}
-rusqlite = "~0.25.4"
+rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = "1.0"
 tokio = { version = "1.15.0", features = ["full"] }
 url = "2.2.1"
