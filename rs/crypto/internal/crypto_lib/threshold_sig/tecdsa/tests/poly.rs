@@ -332,7 +332,8 @@ fn poly_point_interpolation_at_zero() -> ThresholdEcdsaResult<()> {
 
             for r in &x {
                 let p_r = poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?;
-                let g_p_r = EccPoint::mul_by_g(&p_r)?;
+                let mut g_p_r = EccPoint::mul_by_g(&p_r)?;
+                g_p_r.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
                 y.push(g_p_r);
             }
 
@@ -359,7 +360,8 @@ fn poly_point_interpolation_at_value() -> ThresholdEcdsaResult<()> {
 
             for r in &x {
                 let p_r = poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?;
-                let g_p_r = EccPoint::mul_by_g(&p_r)?;
+                let mut g_p_r = EccPoint::mul_by_g(&p_r)?;
+                g_p_r.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
                 y.push(g_p_r);
             }
 
@@ -420,8 +422,9 @@ fn poly_point_interpolation_at_zero_rejects_duplicates() -> ThresholdEcdsaResult
             x.push(x[rng.gen::<usize>() % x.len()]);
 
             for r in &x {
-                let g_p_r =
+                let mut g_p_r =
                     EccPoint::mul_by_g(&poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?)?;
+                g_p_r.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
                 y.push(g_p_r);
             }
 
@@ -446,8 +449,9 @@ fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> Threshol
             let mut y = Vec::with_capacity(num_coefficients - 1);
 
             for r in &x {
-                let g_p_r =
+                let mut g_p_r =
                     EccPoint::mul_by_g(&poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?)?;
+                g_p_r.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
                 y.push(g_p_r);
             }
 

@@ -655,7 +655,7 @@ pub struct LagrangeCoefficients {
 }
 
 impl LagrangeCoefficients {
-    fn new(coefficients: Vec<EccScalar>) -> ThresholdEcdsaResult<Self> {
+    pub fn new(coefficients: Vec<EccScalar>) -> ThresholdEcdsaResult<Self> {
         if coefficients.is_empty() {
             return Err(ThresholdEcdsaError::InterpolationError);
         }
@@ -675,11 +675,12 @@ impl LagrangeCoefficients {
         if y.len() != self.coefficients.len() {
             return Err(ThresholdEcdsaError::InterpolationError);
         }
-        let curve_type = self.coefficients[0].curve_type();
-        let mut result = EccPoint::identity(curve_type);
-        for (coefficient, sample) in self.coefficients.iter().zip(y) {
-            result = result.add_points(&sample.scalar_mul(coefficient)?)?;
-        }
+        let point_scalar_refs: Vec<(&EccPoint, &EccScalar)> =
+            y.iter().zip(self.coefficients.iter()).collect();
+        // The coefficents are public (being derived from the node indexes)
+        // and so it is safe to use a variable-time multiplication algorithm.
+        let result = EccPoint::mul_n_points_vartime(&point_scalar_refs[..])?;
+
         Ok(result)
     }
 
