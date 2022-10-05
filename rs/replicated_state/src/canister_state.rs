@@ -246,6 +246,11 @@ impl CanisterState {
         }
     }
 
+    /// Returns a reference to the next task in the task queue if any.
+    pub fn next_task(&self) -> Option<&ExecutionTask> {
+        self.system_state.task_queue.front()
+    }
+
     /// Returns true if the canister has an aborted execution.
     pub fn has_aborted_execution(&self) -> bool {
         match self.system_state.task_queue.front() {

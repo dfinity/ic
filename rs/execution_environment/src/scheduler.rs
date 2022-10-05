@@ -1670,6 +1670,11 @@ fn observe_replicated_state_metrics(
     let mut num_stopping_canisters = 0;
     let mut num_stopped_canisters = 0;
 
+    let mut num_paused_exec = 0;
+    let mut num_aborted_exec = 0;
+    let mut num_paused_install = 0;
+    let mut num_aborted_install = 0;
+
     let mut consumed_cycles_total = NominalCycles::new(0);
 
     let mut ingress_queue_message_count = 0;
@@ -1688,6 +1693,21 @@ fn observe_replicated_state_metrics(
             CanisterStatusType::Running => num_running_canisters += 1,
             CanisterStatusType::Stopping { .. } => num_stopping_canisters += 1,
             CanisterStatusType::Stopped => num_stopped_canisters += 1,
+        }
+        match canister.next_task() {
+            Some(&ExecutionTask::PausedExecution(_)) => {
+                num_paused_exec += 1;
+            }
+            Some(&ExecutionTask::PausedInstallCode(_)) => {
+                num_paused_install += 1;
+            }
+            Some(&ExecutionTask::AbortedExecution { .. }) => {
+                num_aborted_exec += 1;
+            }
+            Some(&ExecutionTask::AbortedInstallCode { .. }) => {
+                num_aborted_install += 1;
+            }
+            Some(&ExecutionTask::Heartbeat) | None => {}
         }
         consumed_cycles_total += canister
             .system_state
@@ -1760,6 +1780,20 @@ fn observe_replicated_state_metrics(
     observe_reading(CanisterStatusType::Running, num_running_canisters);
     observe_reading(CanisterStatusType::Stopping, num_stopping_canisters);
     observe_reading(CanisterStatusType::Stopped, num_stopped_canisters);
+
+    metrics
+        .canister_paused_execution
+        .observe(num_paused_exec as f64);
+    metrics
+        .canister_aborted_execution
+        .observe(num_aborted_exec as f64);
+    metrics
+        .canister_paused_install_code
+        .observe(num_paused_install as f64);
+    metrics
+        .canister_aborted_install_code
+        .observe(num_aborted_install as f64);
+
     metrics
         .available_canister_ids
         .set(state.metadata.available_canister_ids() as i64);

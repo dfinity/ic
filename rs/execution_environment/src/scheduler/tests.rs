@@ -2695,6 +2695,13 @@ fn dts_long_execution_completes() {
         test.ingress_error(&message_id).code(),
         ErrorCode::CanisterDidNotReply,
     );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_execution
+            .get_sample_sum(),
+        9.0
+    );
 }
 
 #[test]
@@ -2720,6 +2727,13 @@ fn dts_long_execution_runs_out_of_instructions() {
     assert_eq!(
         test.ingress_error(&message_id).code(),
         ErrorCode::CanisterInstructionLimitExceeded,
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_execution
+            .get_sample_sum(),
+        9.0
     );
 }
 
@@ -3846,10 +3860,40 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
         0.0
     );
 
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_execution
+            .get_sample_sum(),
+        0.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_aborted_execution
+            .get_sample_sum(),
+        0.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_install_code
+            .get_sample_sum(),
+        1.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_aborted_install_code
+            .get_sample_sum(),
+        0.0
+    );
+
     // Third round: execution for first canister is done.
     // The second canister will be executed.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert!(!test.canister_state(canister_1).has_paused_install_code());
+    assert!(!test.canister_state(canister_2).has_paused_install_code());
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     assert_eq!(
         test.scheduler()
@@ -3866,5 +3910,22 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             .messages
             .get_sample_sum(),
         2.0
+    );
+
+    // Execute another round to refresh the metrics
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_install_code
+            .get_sample_sum(),
+        2.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_install_code
+            .get_sample_count(),
+        4
     );
 }

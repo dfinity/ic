@@ -1,5 +1,8 @@
 use ic_config::subnet_config::SchedulerConfig;
-use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
+use ic_metrics::{
+    buckets::{decimal_buckets, decimal_buckets_with_zero},
+    MetricsRegistry,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     NumInstructions, NumMessages, NumSlices, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
@@ -269,6 +272,17 @@ fn instructions_buckets() -> Vec<f64> {
     buckets.dedup();
     // Buckets are [0, 10, 1K, 10K, 20K, ...,  10B, 20B, 50B] + [subnet limits]
     buckets.into_iter().map(|x| x.get() as f64).collect()
+}
+
+/// Returns a histogram with buckets appropriate for dts pause/abort executions.
+pub fn dts_pause_or_abort_histogram<S: Into<String>>(
+    name: S,
+    help: S,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    let mut buckets: Vec<f64> = (0..10).map(f64::from).collect();
+    buckets.extend(decimal_buckets(1, 4));
+    metrics_registry.histogram(name, help, buckets)
 }
 
 /// Returns a histogram with buckets appropriate for instructions.
