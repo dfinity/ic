@@ -21,6 +21,13 @@ use std::collections::{BTreeMap, HashSet};
 
 /// A Crypto Component interface to run Interactive-DKG
 /// (for canister threshold signatures).
+///
+/// # Preconditions
+/// * For a fixed `IDkgTranscriptId`, the `IDkgTranscriptParams` must never
+///   change throughout a round of execution. That is, if two calls to methods
+///   of `IDkgProtocol` are made with `IDkgTranscriptParams` values `params1`
+///   and `params2` respectively, then if `params1.transcript_id == params2.dkg_id`,
+///   we must have `params1 == params2`.
 pub trait IDkgProtocol {
     /// Create a dealing of a prescribed type.
     ///
