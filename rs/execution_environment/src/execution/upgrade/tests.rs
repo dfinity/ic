@@ -7,6 +7,7 @@ use ic_logger::replica_logger::LogEntryLogger;
 use ic_replicated_state::CanisterState;
 use ic_state_machine_tests::{IngressStatus, WasmResult};
 use ic_test_utilities::types::ids::user_test_id;
+use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::Cycles;
 use maplit::btreeset;
 
@@ -641,6 +642,10 @@ fn upgrade_ok_on_pre_upgrade_abort() {
     let message_id = test.dts_upgrade_canister(canister_id, new_empty_binary());
     // Abort all executions, so the progress is reset
     test.abort_all_paused_executions();
+    assert_eq!(
+        fetch_int_counter(test.metrics_registry(), "executions_aborted"),
+        Some(1)
+    );
     // Execute more rounds
     for _round in 0..2 {
         assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
@@ -718,6 +723,10 @@ fn upgrade_ok_on_start_abort() {
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
     // Abort all executions, so the progress is reset
     test.abort_all_paused_executions();
+    assert_eq!(
+        fetch_int_counter(test.metrics_registry(), "executions_aborted"),
+        Some(1)
+    );
     // Execute more rounds
     for _round in 0..2 {
         assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);

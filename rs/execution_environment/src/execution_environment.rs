@@ -2006,6 +2006,7 @@ impl ExecutionEnvironment {
                     ExecutionTask::PausedExecution(id) => {
                         let paused = self.take_paused_execution(id).unwrap();
                         let (message, prepaid_execution_cycles) = paused.abort();
+                        self.metrics.executions_aborted.inc();
                         ExecutionTask::AbortedExecution {
                             message,
                             prepaid_execution_cycles,
@@ -2014,6 +2015,7 @@ impl ExecutionEnvironment {
                     ExecutionTask::PausedInstallCode(id) => {
                         let paused = self.take_paused_install_code(id).unwrap();
                         let (message, prepaid_execution_cycles) = paused.abort();
+                        self.metrics.executions_aborted.inc();
                         ExecutionTask::AbortedInstallCode {
                             message,
                             prepaid_execution_cycles,
