@@ -214,7 +214,7 @@ function detectRequestStreamsSupport(): boolean {
   let duplexAccessed = false;
 
   const hasContentType =
-    window.ReadableStream &&
+    self.ReadableStream &&
     new Request('', {
       body: new ReadableStream(),
       method: 'POST',
