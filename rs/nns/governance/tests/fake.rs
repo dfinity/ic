@@ -5,7 +5,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{
@@ -69,7 +69,7 @@ impl Default for FakeState {
     }
 }
 
-/// A struct that produces a fake enviroment where time can be
+/// A struct that produces a fake environment where time can be
 /// advanced, and ledger accounts manipulated.
 pub struct FakeDriver {
     pub state: Arc<Mutex<FakeState>>,
@@ -153,14 +153,14 @@ impl FakeDriver {
         self.state.lock().unwrap().now += delta_seconds;
     }
 
-    /// Contructs an `Environment` that interacts with this driver.
+    /// Constructs an `Environment` that interacts with this driver.
     pub fn get_fake_env(&self) -> Box<dyn Environment> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
         })
     }
 
-    /// Contructs a `Ledger` that interacts with this driver.
+    /// Constructs a `Ledger` that interacts with this driver.
     pub fn get_fake_ledger(&self) -> Box<dyn Ledger> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
@@ -270,6 +270,10 @@ impl Ledger for FakeDriver {
         let accounts = &mut self.state.try_lock().unwrap().accounts;
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         Ok(Tokens::from_e8s(*account_e8s))
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        LEDGER_CANISTER_ID
     }
 }
 

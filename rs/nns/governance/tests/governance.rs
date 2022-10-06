@@ -10626,6 +10626,12 @@ fn test_open_sns_token_swap_proposal() {
         max_participant_icp_e8s: 42_000,
         min_participants: 1,
         swap_due_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS + 2 * ONE_DAY_SECONDS,
+        neuron_basket_construction_parameters: Some(
+            sns_swap_pb::params::NeuronBasketConstructionParameters {
+                count: 3,
+                dissolve_delay_interval_seconds: 7890000, // 3 months
+            },
+        ),
     };
 
     let neuron_base = Neuron {

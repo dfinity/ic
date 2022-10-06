@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedSender as USender;
 use futures::channel::oneshot::{self, Sender as OSender};
+use ic_base_types::CanisterId;
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::NervousSystemError;
@@ -95,5 +96,9 @@ impl Ledger for InterleavingTestLedger {
         self.notify(LedgerMessage::BalanceQuery(account.clone()))
             .await?;
         self.underlying.account_balance(account).await
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        CanisterId::from_u64(1)
     }
 }

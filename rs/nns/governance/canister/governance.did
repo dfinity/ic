@@ -214,6 +214,10 @@ type Neuron = record {
   known_neuron_data : opt KnownNeuronData;
   spawn_at_timestamp_seconds : opt nat64;
 };
+type NeuronBasketConstructionParameters = record {
+  dissolve_delay_interval_seconds : nat64;
+  count : nat64;
+};
 type NeuronId = record { id : nat64 };
 type NeuronIdOrSubaccount = variant {
   Subaccount : vec nat8;
@@ -266,6 +270,7 @@ type Operation = variant {
 };
 type Params = record {
   min_participant_icp_e8s : nat64;
+  neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   max_icp_e8s : nat64;
   swap_due_timestamp_seconds : nat64;
   min_participants : nat32;

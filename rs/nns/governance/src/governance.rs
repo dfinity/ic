@@ -7710,6 +7710,7 @@ impl TimeWarp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
     use lazy_static::lazy_static;
     use maplit::hashmap;
 
@@ -7735,6 +7736,12 @@ mod tests {
         min_participants: 2,
         sns_token_e8s: 1000,
         swap_due_timestamp_seconds: 2524629600, // midnight, Jan 1, 2050
+        neuron_basket_construction_parameters: Some(
+            sns_swap_pb::params::NeuronBasketConstructionParameters {
+                count: 3,
+                dissolve_delay_interval_seconds: 7890000, // 3 months
+            },
+        ),
     };
 
     lazy_static! {
@@ -7778,6 +7785,42 @@ mod tests {
             ..OPEN_SNS_TOKEN_SWAP.clone()
         });
         assert!(result.is_err(), "{:#?}", result);
+
+        let result = validate_open_sns_token_swap(&OpenSnsTokenSwap {
+            params: Some(sns_swap_pb::Params {
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 0,                                 // Too small
+                    dissolve_delay_interval_seconds: 7890000, // 3 months
+                }),
+                ..PARAMS.clone()
+            }),
+            ..OPEN_SNS_TOKEN_SWAP.clone()
+        });
+        assert!(result.is_err(), "{:#?}", result);
+
+        let result = validate_open_sns_token_swap(&OpenSnsTokenSwap {
+            params: Some(sns_swap_pb::Params {
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 12,
+                    dissolve_delay_interval_seconds: 0, // Too small
+                }),
+                ..PARAMS.clone()
+            }),
+            ..OPEN_SNS_TOKEN_SWAP.clone()
+        });
+        assert!(result.is_err(), "{:#?}", result);
+
+        let result = validate_open_sns_token_swap(&OpenSnsTokenSwap {
+            params: Some(sns_swap_pb::Params {
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 2,
+                    dissolve_delay_interval_seconds: u64::MAX, // Will result in overflow
+                }),
+                ..PARAMS.clone()
+            }),
+            ..OPEN_SNS_TOKEN_SWAP.clone()
+        });
+        assert!(result.is_err(), "{:#?}", result);
     }
 
     #[test]
@@ -7791,7 +7834,7 @@ mod tests {
 
     lazy_static! {
         static ref ID_TO_NEURON: HashMap<u64, Neuron> = craft_id_to_neuron(&[
-            // (maturity, conroller, joined cf at)
+            // (maturity, controller, joined cf at)
 
             // CF neurons.
             (100, *PRINCIPAL_ID_1, Some(1)),

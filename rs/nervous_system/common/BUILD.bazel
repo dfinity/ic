@@ -15,6 +15,8 @@ DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
 ]
@@ -29,6 +31,7 @@ BUILD_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/nns/governance",
+    "@crate_index//:proptest",
     "@crate_index//:prost",
 ]
 

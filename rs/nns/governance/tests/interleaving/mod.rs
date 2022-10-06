@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedSender as USender;
 use futures::channel::oneshot::{self, Sender as OSender};
+use ic_base_types::CanisterId;
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use std::sync::atomic;
 use std::sync::atomic::Ordering as AOrdering;
@@ -97,5 +98,9 @@ impl Ledger for InterleavingTestLedger {
         atomic::fence(AOrdering::SeqCst);
         self.notify(LedgerMessage::BalanceQuery(account)).await?;
         self.underlying.account_balance(account).await
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        self.underlying.canister_id()
     }
 }

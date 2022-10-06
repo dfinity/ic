@@ -10,7 +10,9 @@ use ledger_canister::{
 };
 
 pub struct LedgerCanister {
-    id: CanisterId,
+    // TODO This field should be private and requires the icrc1 trait implementation
+    // of this struct to be moved to this crate.
+    pub id: CanisterId,
 }
 
 impl LedgerCanister {
@@ -44,6 +46,9 @@ pub trait Ledger: Send + Sync {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError>;
+
+    /// Returns the CanisterId of the Ledger being accessed.
+    fn canister_id(&self) -> CanisterId;
 }
 
 #[async_trait]
@@ -123,6 +128,10 @@ impl Ledger for LedgerCanister {
                 )
             )
         })
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        self.id
     }
 }
 

@@ -71,9 +71,6 @@ rust_library(
     name = "lib",
     srcs = glob(
         ["src/**"],
-        exclude = [
-            "src/swap.rs",
-        ],
     ),
     aliases = ALIASES,
     crate_name = "ic_sns_integration_tests",
