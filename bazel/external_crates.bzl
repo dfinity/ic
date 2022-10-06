@@ -227,9 +227,6 @@ def external_crates_repository(name, annotations):
             "ed25519-consensus": crate.spec(
                 version = "^2.0.1",
             ),
-            "ed25519-dalek": crate.spec(
-                version = "^1.0.1",
-            ),
             "either": crate.spec(
                 version = "^1.6",
             ),

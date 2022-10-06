@@ -1,5 +1,5 @@
 {
-  "checksum": "95e8f920b54e8ec2c83b682d5a5d68ffbc39074f0fe24cb64b1cff9792e4be96",
+  "checksum": "eebfe961993f9f8208d9ababc1cf8dc9d122a62b3020e54b03329df72a9f7b3a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11124,10 +11124,6 @@
               "target": "ed25519_consensus"
             },
             {
-              "id": "ed25519-dalek 1.0.1",
-              "target": "ed25519_dalek"
-            },
-            {
               "id": "either 1.8.0",
               "target": "either"
             },
@@ -12449,51 +12445,6 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "ed25519 1.5.2": {
-      "name": "ed25519",
-      "version": "1.5.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/ed25519/1.5.2/download",
-          "sha256": "1e9c280362032ea4203659fc489832d0204ef09f247a0506f170dafcac08c369"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ed25519",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "ed25519",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "signature 1.6.3",
-              "target": "signature"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "1.5.2"
-      },
-      "license": "Apache-2.0 OR MIT"
-    },
     "ed25519-consensus 2.0.1": {
       "name": "ed25519-consensus",
       "version": "2.0.1",
@@ -12566,76 +12517,6 @@
         "version": "2.0.1"
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "ed25519-dalek 1.0.1": {
-      "name": "ed25519-dalek",
-      "version": "1.0.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/ed25519-dalek/1.0.1/download",
-          "sha256": "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ed25519_dalek",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "ed25519_dalek",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "rand",
-          "serde_crate",
-          "std",
-          "u64_backend"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "curve25519-dalek 3.2.0",
-              "target": "curve25519_dalek"
-            },
-            {
-              "id": "ed25519 1.5.2",
-              "target": "ed25519"
-            },
-            {
-              "id": "rand 0.7.3",
-              "target": "rand"
-            },
-            {
-              "id": "serde 1.0.145",
-              "target": "serde",
-              "alias": "serde_crate"
-            },
-            {
-              "id": "sha2 0.9.9",
-              "target": "sha2"
-            },
-            {
-              "id": "zeroize 1.5.7",
-              "target": "zeroize"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.0.1"
-      },
-      "license": "BSD-3-Clause"
     },
     "educe 0.4.19": {
       "name": "educe",
@@ -31575,79 +31456,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "rand 0.7.3": {
-      "name": "rand",
-      "version": "0.7.3",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/rand/0.7.3/download",
-          "sha256": "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "alloc",
-          "getrandom",
-          "getrandom_package",
-          "libc",
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "getrandom 0.1.16",
-              "target": "getrandom",
-              "alias": "getrandom_package"
-            },
-            {
-              "id": "rand_core 0.5.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {
-            "cfg(not(target_os = \"emscripten\"))": [
-              {
-                "id": "rand_chacha 0.2.2",
-                "target": "rand_chacha"
-              }
-            ],
-            "cfg(target_os = \"emscripten\")": [
-              {
-                "id": "rand_hc 0.2.0",
-                "target": "rand_hc"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.134",
-                "target": "libc"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.7.3"
-      },
-      "license": "MIT OR Apache-2.0"
-    },
     "rand 0.8.5": {
       "name": "rand",
       "version": "0.8.5",
@@ -31782,55 +31590,6 @@
         }
       },
       "license": "MIT/Apache-2.0"
-    },
-    "rand_chacha 0.2.2": {
-      "name": "rand_chacha",
-      "version": "0.2.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/rand_chacha/0.2.2/download",
-          "sha256": "f4c8ed856279c9737206bf725bf36935d8666ead7aa69b52be55af369d193402"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_chacha",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_chacha",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "ppv-lite86 0.2.16",
-              "target": "ppv_lite86"
-            },
-            {
-              "id": "rand_core 0.5.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.2.2"
-      },
-      "license": "MIT OR Apache-2.0"
     },
     "rand_chacha 0.3.1": {
       "name": "rand_chacha",
@@ -32145,48 +31904,6 @@
         },
         "edition": "2015",
         "version": "0.1.0"
-      },
-      "license": "MIT/Apache-2.0"
-    },
-    "rand_hc 0.2.0": {
-      "name": "rand_hc",
-      "version": "0.2.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/rand_hc/0.2.0/download",
-          "sha256": "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_hc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_hc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.5.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.2.0"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -44836,6 +44553,18 @@
         },
         {
           "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -44850,18 +44579,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -49180,32 +48897,6 @@
       "x86_64-unknown-freebsd",
       "x86_64-unknown-linux-gnu"
     ],
-    "cfg(not(target_os = \"emscripten\"))": [
-      "aarch64-apple-darwin",
-      "aarch64-apple-ios",
-      "aarch64-apple-ios-sim",
-      "aarch64-linux-android",
-      "aarch64-unknown-linux-gnu",
-      "arm-unknown-linux-gnueabi",
-      "armv7-linux-androideabi",
-      "armv7-unknown-linux-gnueabi",
-      "i686-apple-darwin",
-      "i686-linux-android",
-      "i686-pc-windows-msvc",
-      "i686-unknown-freebsd",
-      "i686-unknown-linux-gnu",
-      "powerpc-unknown-linux-gnu",
-      "riscv32imc-unknown-none-elf",
-      "s390x-unknown-linux-gnu",
-      "wasm32-unknown-unknown",
-      "wasm32-wasi",
-      "x86_64-apple-darwin",
-      "x86_64-apple-ios",
-      "x86_64-linux-android",
-      "x86_64-pc-windows-msvc",
-      "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu"
-    ],
     "cfg(not(target_os = \"redox\"))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
@@ -49292,7 +48983,6 @@
     "cfg(target_feature = \"atomics\")": [],
     "cfg(target_os = \"cloudabi\")": [],
     "cfg(target_os = \"dragonfly\")": [],
-    "cfg(target_os = \"emscripten\")": [],
     "cfg(target_os = \"fuchsia\")": [],
     "cfg(target_os = \"hermit\")": [],
     "cfg(target_os = \"linux\")": [
