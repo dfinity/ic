@@ -83,8 +83,8 @@ use tokio::{
     time::{sleep, timeout, Instant},
 };
 use tower::{
-    load_shed::LoadShed, service_fn, util::BoxCloneService, util::BoxService, BoxError, Service,
-    ServiceBuilder, ServiceExt,
+    load_shed::LoadShed, service_fn, util::BoxCloneService, BoxError, Service, ServiceBuilder,
+    ServiceExt,
 };
 
 // Constants defining the limits of the HttpHandler.
@@ -369,6 +369,7 @@ pub fn start_server(
             dashboard_service,
             read_state_service,
         };
+        let main_service = create_main_service(metrics.clone(), http_handler.clone());
 
         // If addr == 0, then a random port will be assigned. In this case it
         // is useful to report the randomly assigned port by writing it to a file.
@@ -395,6 +396,7 @@ pub fn start_server(
                     metrics.connections_total.inc();
                     // Start recording connection setup duration.
                     let connection_start_time = Instant::now();
+                    let svc = main_service.clone();
                     rt_handle.spawn(async move {
                         // Do a move of the permit so it gets dropped at the end of the scope.
                         let _request_permit_deleter = request_permit;
@@ -439,6 +441,7 @@ pub fn start_server(
                         };
                         serve_connection(
                             log,
+                            svc,
                             app_layer,
                             http,
                             tcp_stream,
@@ -464,22 +467,19 @@ pub fn start_server(
 fn create_main_service(
     metrics: HttpHandlerMetrics,
     http_handler: HttpHandler,
-    app_layer: AppLayer,
-) -> BoxService<Request<Body>, Response<Body>, HttpError> {
-    let metrics_for_map_request = metrics.clone();
+) -> BoxCloneService<Request<Body>, Response<Body>, HttpError> {
     let route_service = service_fn(move |req: RequestWithTimer| {
-        let metrics = metrics.clone();
         let http_handler = http_handler.clone();
-        async move { Ok::<_, HttpError>(make_router(metrics, http_handler, app_layer, req).await) }
+        async move { Ok::<_, HttpError>(make_router(http_handler, req).await) }
     });
-    BoxService::new(
+    BoxCloneService::new(
         ServiceBuilder::new()
             // Attach a timer as soon as we see a request.
             .map_request(move |request| {
-                let _ = &metrics_for_map_request;
+                let _ = &metrics;
                 // Start recording request duration.
                 let request_timer = HistogramVecTimer::start_timer(
-                    metrics_for_map_request.requests.clone(),
+                    metrics.requests.clone(),
                     &REQUESTS_LABEL_NAMES,
                     [UNKNOWN_LABEL, UNKNOWN_LABEL, UNKNOWN_LABEL],
                 );
@@ -505,6 +505,7 @@ fn create_main_service(
 
 async fn serve_connection(
     log: ReplicaLogger,
+    service: BoxCloneService<Request<Body>, Response<Body>, HttpError>,
     app_layer: AppLayer,
     http: Http,
     tcp_stream: TcpStream,
@@ -513,7 +514,6 @@ async fn serve_connection(
     metrics: HttpHandlerMetrics,
     connection_start_time: Instant,
 ) {
-    let service = create_main_service(metrics.clone(), http_handler.clone(), app_layer);
     let connection_result = match app_layer {
         AppLayer::Https => {
             let peer_addr = tcp_stream.peer_addr();
@@ -578,9 +578,7 @@ fn set_timer_labels(
 }
 
 async fn make_router(
-    metrics: HttpHandlerMetrics,
     http_handler: HttpHandler,
-    app_layer: AppLayer,
     (req, mut timer): RequestWithTimer,
 ) -> ResponseWithTimer {
     let call_service = http_handler.call_service.clone();
@@ -590,10 +588,6 @@ async fn make_router(
     let dashboard_service = http_handler.dashboard_service.clone();
     let read_state_service = http_handler.read_state_service.clone();
 
-    metrics
-        .protocol_version_total
-        .with_label_values(&[app_layer.into(), &format!("{:?}", req.version())])
-        .inc();
     let svc = match req.method().clone() {
         Method::POST => {
             // Check the content-type header
