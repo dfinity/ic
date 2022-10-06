@@ -93,9 +93,6 @@ impl<A: PageAllocatorInner> PageAllocator<A> {
     /// The provided page count must match exactly the number of items in the
     /// iterator. Knowing the page count beforehand allows the page allocator
     /// to optimize allocation.
-    ///
-    /// The caller must ensure that the page allocator is initialized and
-    /// provide the corresponding witness.
     pub(super) fn allocate(
         &self,
         pages: &[(PageIndex, &PageBytes)],

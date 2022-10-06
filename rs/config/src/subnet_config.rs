@@ -338,7 +338,13 @@ pub struct CyclesAccountManagerConfig {
 
     /// Fee per byte for networking and consensus work done for a http request or response.
     pub http_request_per_byte_fee: Cycles,
+
+    /// Cost for each newly created dirty page in stable memory.
+    pub dirty_page_cost: NumInstructions,
 }
+
+const DEFAULT_DIRTY_PAGE_COST: NumInstructions = NumInstructions::new(1_000);
+const SYSTEM_SUBNET_DIRTY_PAGE_COST: NumInstructions = NumInstructions::new(0);
 
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
@@ -368,6 +374,7 @@ impl CyclesAccountManagerConfig {
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_baseline_fee: Cycles::new(400_000_000),
             http_request_per_byte_fee: Cycles::new(100_000),
+            dirty_page_cost: DEFAULT_DIRTY_PAGE_COST,
         }
     }
 
@@ -394,6 +401,7 @@ impl CyclesAccountManagerConfig {
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
+            dirty_page_cost: SYSTEM_SUBNET_DIRTY_PAGE_COST,
         }
     }
 

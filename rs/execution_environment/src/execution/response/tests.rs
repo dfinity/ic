@@ -984,7 +984,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
                 .on_reply(
                     wasm()
                         .stable_grow(1)
-                        .stable64_write(0, 0, 1000)
+                        .stable64_write(0, 0, 1)
                         .message_payload()
                         .append_and_reply(),
                 ),
@@ -1028,11 +1028,11 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
                 .on_reply(
                     wasm()
                         .stable_grow(1)
-                        .stable64_write(0, 0, 1000)
+                        .stable64_write(0, 0, 1)
                         .reply_data_append()
                         .trap(),
                 )
-                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1000)),
+                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1)),
             (0, transferred_cycles),
         )
         .build();
@@ -1087,11 +1087,11 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
                 .on_reply(
                     wasm()
                         .stable_grow(1)
-                        .stable64_write(0, 0, 1000)
+                        .stable64_write(0, 0, 1)
                         .reply_data_append()
                         .trap(),
                 )
-                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1000).trap()),
+                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1).trap()),
             (0, transferred_cycles),
         )
         .build();
@@ -1127,11 +1127,6 @@ fn dts_and_nondts_cycles_match_after_response() {
 
     let (b_id, bmsg_id) = successful_response_scenario(&mut test_b);
 
-    assert_eq!(
-        test_a.canister_state(a_id).system_state.balance(),
-        test_b.canister_state(b_id).system_state.balance(),
-    );
-
     let status_a = test_a.ingress_status(&amsg_id);
     let status_b = test_b.ingress_status(&bmsg_id);
     assert_eq!(status_a, status_b);
@@ -1159,6 +1154,10 @@ fn dts_and_nondts_cycles_match_after_response() {
         test_a.state().time() < test_b.state().time(),
         "Time should have progressed further in DTS"
     );
+    assert_eq!(
+        test_a.canister_state(a_id).system_state.balance(),
+        test_b.canister_state(b_id).system_state.balance(),
+    );
 }
 
 #[test]
@@ -1175,17 +1174,16 @@ fn dts_and_nondts_cycles_match_if_response_fails() {
 
     let (b_id, bmsg_id) = response_fail_scenario(&mut test_b);
 
-    assert_eq!(
-        test_a.canister_state(a_id).system_state.balance(),
-        test_b.canister_state(b_id).system_state.balance(),
-    );
-
     let status_a = test_a.ingress_status(&amsg_id);
     let status_b = test_b.ingress_status(&bmsg_id);
     assert_eq!(status_a, status_b);
     assert!(
         test_a.state().time() < test_b.state().time(),
         "Time should have progressed further in DTS"
+    );
+    assert_eq!(
+        test_a.canister_state(a_id).system_state.balance(),
+        test_b.canister_state(b_id).system_state.balance(),
     );
 }
 
@@ -1203,17 +1201,17 @@ fn dts_and_nondts_cycles_match_if_cleanup_fails() {
 
     let (b_id, bmsg_id) = cleanup_fail_scenario(&mut test_b);
 
-    assert_eq!(
-        test_a.canister_state(a_id).system_state.balance(),
-        test_b.canister_state(b_id).system_state.balance(),
-    );
-
     let status_a = test_a.ingress_status(&amsg_id);
     let status_b = test_b.ingress_status(&bmsg_id);
     assert_eq!(status_a, status_b);
     assert!(
         test_a.state().time() < test_b.state().time(),
         "Time should have progressed further in DTS"
+    );
+
+    assert_eq!(
+        test_a.canister_state(a_id).system_state.balance(),
+        test_b.canister_state(b_id).system_state.balance(),
     );
 }
 

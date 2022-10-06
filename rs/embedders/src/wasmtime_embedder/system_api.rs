@@ -6,7 +6,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, NumPages};
+use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions};
 
 use wasmtime::{AsContextMut, Caller, Global, Linker, Store, Trap, Val};
 
@@ -118,33 +118,40 @@ fn charge_for_system_api_call<S: SystemApi>(
     system_api_overhead: NumInstructions,
     num_bytes: u32,
     complexity: &ExecutionComplexity,
+    dirty_page_cost: NumInstructions,
 ) -> Result<(), Trap> {
     observe_execution_complexity(log, canister_id, caller, complexity)?;
-    let num_instructions = caller
+    let num_instructions_from_bytes = caller
         .data()
         .system_api
-        .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64))
-        + system_api_overhead;
-    charge_direct_fee(log, canister_id, caller, num_instructions)
-}
-
-/// Additional charges for newly created stable memory dirty pages. Charging is
-/// skipped for System subnets so that we don't break critical NNS canisters.
-fn charge_for_stable_memory_dirty_pages<S: SystemApi>(
-    log: &ReplicaLogger,
-    canister_id: CanisterId,
-    caller: &mut Caller<'_, StoreData<S>>,
-    dirty_pages: NumPages,
-) -> Result<(), Trap> {
-    match caller.data().system_api.subnet_type() {
-        SubnetType::System => Ok(()),
-        SubnetType::Application | SubnetType::VerifiedApplication => charge_direct_fee(
+        .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
+    let (num_instructions1, overflow1) = num_instructions_from_bytes
+        .get()
+        .overflowing_add(dirty_page_cost.get());
+    let (num_instructions, overflow2) =
+        num_instructions1.overflowing_add(system_api_overhead.get());
+    if overflow1 || overflow2 {
+        error!(
             log,
+            "Canister {}: Overflow while calculating charge for System API Call: overhead: {}, num_bytes: {}, dirty_page_cost: {}",
             canister_id,
+            system_api_overhead,
+            num_bytes,
+            dirty_page_cost,
+        );
+        return Err(process_err(
             caller,
-            convert_dirty_pages_to_instructions(dirty_pages),
-        ),
+            HypervisorError::ContractViolation(
+                "Overflow while calculating charge for a system call".to_string(),
+            ),
+        ));
     }
+    charge_direct_fee(
+        log,
+        canister_id,
+        caller,
+        NumInstructions::from(num_instructions),
+    )
 }
 
 fn charge_direct_fee<S: SystemApi>(
@@ -250,12 +257,6 @@ fn observe_execution_complexity<S: SystemApi>(
     }
     system_api.set_total_execution_complexity(total_complexity);
     Ok(())
-}
-
-fn convert_dirty_pages_to_instructions(dirty_pages: NumPages) -> NumInstructions {
-    // This is enough to write to all of stable memory.
-    const CONVERSION_RATE: u64 = 1_000;
-    NumInstructions::from((dirty_pages.get()).saturating_mul(CONVERSION_RATE))
 }
 
 /// A helper to pass wasmtime counters to the System API
@@ -402,6 +403,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: 0.into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst as u32, offset as u32, size as u32, mem)
@@ -440,6 +442,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: 0.into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(
@@ -478,6 +481,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: (size as u64).into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src as u32, size as u32, memory)
@@ -520,6 +524,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: (size as u64).into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src as u32, size as u32, memory)
@@ -558,6 +563,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: 0.into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(
@@ -664,6 +670,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: (length as u64).into(),
                         network: (length as u64).into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 match (
                     caller.data().system_api.subnet_type(),
@@ -700,6 +707,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: (length as u64).into(),
                         network: (length as u64).into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset as u32, length as u32, memory)
@@ -735,6 +743,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: (total_len as u64).into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_simple(
@@ -812,6 +821,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: (size as u64).into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src as u32, size as u32, memory)
@@ -926,6 +936,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: 0.into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable_read(dst as u32, offset as u32, size as u32, memory)
@@ -938,23 +949,32 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "stable_write", {
             let log = log.clone();
             move |mut caller: Caller<'_, StoreData<S>>, offset: i32, src: i32, size: i32| {
+                let offset = offset as u32;
+                let src = src as u32;
+                let size = size as u32;
+                let (_, dirty_page_cost) = match with_system_api(&mut caller, |system_api| {
+                    system_api.calculate_dirty_pages(offset as u64, size as u64)
+                }) {
+                    Ok(result) => result,
+                    Err(e) => return Err(process_err(&mut caller, e)),
+                };
                 charge_for_system_api_call(
                     &log,
                     canister_id,
                     &mut caller,
                     system_api_complexity::overhead::STABLE_WRITE,
-                    size as u32,
+                    size,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_WRITE,
                         memory: (size as u64).into(),
                         disk: (size as u64).into(),
                         network: 0.into(),
                     },
+                    dirty_page_cost,
                 )?;
-                let dirty_pages = with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable_write(offset as u32, src as u32, size as u32, memory)
-                })?;
-                charge_for_stable_memory_dirty_pages(&log, canister_id, &mut caller, dirty_pages)
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_stable_write(offset, src, size, memory)
+                })
             }
         })
         .unwrap();
@@ -1012,6 +1032,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: 0.into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable64_read(dst as u64, offset as u64, size as u64, memory)
@@ -1024,6 +1045,12 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "stable64_write", {
             let log = log.clone();
             move |mut caller: Caller<'_, StoreData<S>>, offset: i64, src: i64, size: i64| {
+                let (_, dirty_page_cost) = match with_system_api(&mut caller, |system_api| {
+                    system_api.calculate_dirty_pages(offset as u64, size as u64)
+                }) {
+                    Ok(result) => result,
+                    Err(e) => return Err(process_err(&mut caller, e)),
+                };
                 charge_for_system_api_call(
                     &log,
                     canister_id,
@@ -1036,11 +1063,11 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: (size as u64).into(),
                         network: 0.into(),
                     },
+                    dirty_page_cost,
                 )?;
-                let dirty_pages = with_memory_and_system_api(&mut caller, |system_api, memory| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable64_write(offset as u64, src as u64, size as u64, memory)
-                })?;
-                charge_for_stable_memory_dirty_pages(&log, canister_id, &mut caller, dirty_pages)
+                })
             }
         })
         .unwrap();
@@ -1071,6 +1098,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                         disk: 0.into(),
                         network: 0.into(),
                     },
+                    NumInstructions::from(0),
                 )?;
                 ic0_performance_counter_helper(&log, canister_id, &mut caller, counter_type)
             }

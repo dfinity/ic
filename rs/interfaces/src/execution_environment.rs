@@ -623,7 +623,7 @@ pub trait SystemApi {
         src: u32,
         size: u32,
         heap: &[u8],
-    ) -> HypervisorResult<NumPages>;
+    ) -> HypervisorResult<()>;
 
     /// Returns the current size of the stable memory in WebAssembly pages.
     ///
@@ -667,7 +667,15 @@ pub trait SystemApi {
         src: u64,
         size: u64,
         heap: &[u8],
-    ) -> HypervisorResult<NumPages>;
+    ) -> HypervisorResult<()>;
+
+    /// Determines the number of dirty pages that a stable write would create
+    /// and the cost of those dirty pages (without actually doing the write).
+    fn calculate_dirty_pages(
+        &mut self,
+        offset: u64,
+        size: u64,
+    ) -> HypervisorResult<(NumPages, NumInstructions)>;
 
     fn ic0_time(&self) -> HypervisorResult<Time>;
 

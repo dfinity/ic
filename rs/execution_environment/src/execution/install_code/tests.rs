@@ -38,8 +38,7 @@ const DTS_INSTALL_WAT: &str = r#"
         (func (export "canister_init")
             (drop (memory.grow (i32.const 1)))
             (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-            (drop (call $stable_grow (i32.const 1)))
-            (call $stable_write (i32.const 0) (i32.const 0) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
         )
         (start $start)
         (memory 0 20)
@@ -98,7 +97,7 @@ fn dts_resume_works_in_install_code() {
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
     let ingress_id = test.dts_install_code(payload);
-    for _ in 0..5 {
+    for _ in 0..4 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
@@ -170,7 +169,7 @@ fn dts_abort_works_in_install_code() {
         Some(1)
     );
 
-    for _ in 0..6 {
+    for _ in 0..5 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode

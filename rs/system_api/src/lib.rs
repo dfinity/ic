@@ -2137,7 +2137,7 @@ impl SystemApi for SystemApiImpl {
         src: u32,
         size: u32,
         heap: &[u8],
-    ) -> HypervisorResult<NumPages> {
+    ) -> HypervisorResult<()> {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_write")),
             ApiType::Init { .. }
@@ -2255,7 +2255,7 @@ impl SystemApi for SystemApiImpl {
         src: u64,
         size: u64,
         heap: &[u8],
-    ) -> HypervisorResult<NumPages> {
+    ) -> HypervisorResult<()> {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_write")),
             ApiType::Init { .. }
@@ -2281,6 +2281,18 @@ impl SystemApi for SystemApiImpl {
             summarize(heap, src as u32, size as u32)
         );
         result
+    }
+
+    fn calculate_dirty_pages(
+        &mut self,
+        offset: u64,
+        size: u64,
+    ) -> HypervisorResult<(NumPages, NumInstructions)> {
+        let dirty_pages = self.stable_memory.calculate_dirty_pages(offset, size);
+        let cost = self
+            .sandbox_safe_system_state
+            .dirty_page_cost(dirty_pages)?;
+        Ok((dirty_pages, cost))
     }
 
     fn ic0_time(&self) -> HypervisorResult<Time> {

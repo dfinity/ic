@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
@@ -16,7 +16,7 @@ use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request},
     methods::Callback,
     nominal_cycles::NominalCycles,
-    ComputeAllocation, Cycles, MemoryAllocation, Time,
+    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, NumPages, Time,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -433,12 +433,11 @@ impl SandboxSafeSystemState {
 
     pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
-        let result = self
-            .cycles_account_manager
-            .mint_cycles(self.canister_id, &mut new_balance, amount_to_mint)
-            .map_err(|CyclesAccountManagerError::ContractViolation(msg)| {
-                HypervisorError::ContractViolation(msg)
-            });
+        let result = self.cycles_account_manager.mint_cycles(
+            self.canister_id,
+            &mut new_balance,
+            amount_to_mint,
+        );
         self.update_balance_change(new_balance);
         result
     }
@@ -562,5 +561,10 @@ impl SandboxSafeSystemState {
         *used_slots += 1;
         self.update_balance_change_consuming(new_balance);
         Ok(())
+    }
+
+    /// Calculate the cost for newly created dirty pages.
+    pub fn dirty_page_cost(&self, dirty_pages: NumPages) -> HypervisorResult<NumInstructions> {
+        self.cycles_account_manager.dirty_page_cost(dirty_pages)
     }
 }
