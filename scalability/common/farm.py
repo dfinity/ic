@@ -182,7 +182,7 @@ class Farm(object):
             )
 
             if "TEST_ES_HOSTNAMES" in os.environ:
-                extra_config["journalbeat_hosts"] = os.environ["TEST_ES_HOSTNAMES"]
+                extra_config["journalbeat_hosts"] = os.environ["TEST_ES_HOSTNAMES"].replace(",", " ")
 
             extra_config["journalbeat_tags"] = f"scalability_suite {self.group_name}"
 
