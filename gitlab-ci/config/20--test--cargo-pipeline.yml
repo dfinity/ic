@@ -15,8 +15,8 @@ gen-cargo-pipeline:
       cd -
       # this tags are required on ci runners
       # ch: 60%, sf: 40%
-      # XXX(marko): temporarily due to network issues
       DCS=(
+          "sf" "sf"
           "ch" "ch" "ch"
       )
       RANDOM=$$$(date +%s)
