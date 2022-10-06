@@ -53,7 +53,6 @@ const E8: u64 = 1_0000_0000;
 
 const VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
     round_duration_seconds: Some(14 * 24 * 60 * 60),
-    start_timestamp_seconds: Some(ic_sns_swap::swap::START_OF_2022_TIMESTAMP_SECONDS),
     reward_rate_transition_duration_seconds: Some(1),
     initial_reward_rate_basis_points: Some(200),
     final_reward_rate_basis_points: Some(100),

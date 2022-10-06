@@ -843,12 +843,6 @@ pub struct VotingRewardsParameters {
     /// This supercedes super.reward_distribution_period_seconds.
     #[prost(uint64, optional, tag = "1")]
     pub round_duration_seconds: ::core::option::Option<u64>,
-    /// The beginning of the era when neurons are rewarded for voting.
-    ///
-    /// Corollary: The number of rounds that have occurred at time t is given by
-    /// (t - start_time) / round_duration.
-    #[prost(uint64, optional, tag = "2")]
-    pub start_timestamp_seconds: ::core::option::Option<u64>,
     /// The amount of time that the growth rate changes (presumably, decreases)
     /// from the initial growth rate to the final growth rate. (See the two
     /// *_reward_rate_basis_points fields bellow.) The transition is quadratic, and

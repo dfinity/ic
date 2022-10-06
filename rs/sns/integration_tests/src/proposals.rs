@@ -26,7 +26,6 @@ use ic_sns_governance::proposal::{
     PROPOSAL_URL_CHAR_MAX,
 };
 use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
-use ic_sns_swap::swap::START_OF_2022_TIMESTAMP_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
 };
@@ -37,7 +36,6 @@ const MOTION_PROPOSAL_ACTION_TYPE: u64 = 1;
 
 const VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
     round_duration_seconds: Some(2 * ONE_DAY_SECONDS),
-    start_timestamp_seconds: Some(START_OF_2022_TIMESTAMP_SECONDS),
     reward_rate_transition_duration_seconds: Some(90 * ONE_DAY_SECONDS),
     initial_reward_rate_basis_points: Some(200),
     final_reward_rate_basis_points: Some(200),
@@ -1673,16 +1671,11 @@ fn test_intermittent_proposal_submission() {
             VOTING_REWARDS_PARAMETERS.round_duration_seconds.unwrap();
         let initial_voting_period_seconds = reward_round_duration_seconds / 2;
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
         let params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
             voting_rewards_parameters: Some(VotingRewardsParameters {
-                start_timestamp_seconds: Some(now),
                 ..VOTING_REWARDS_PARAMETERS
             }),
             initial_voting_period_seconds: Some(initial_voting_period_seconds),
