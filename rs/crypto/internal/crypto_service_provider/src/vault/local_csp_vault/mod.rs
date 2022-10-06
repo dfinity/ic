@@ -11,6 +11,7 @@ mod tests;
 mod threshold_sig;
 mod tls;
 
+use crate::key_id::KeyId;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
@@ -19,7 +20,6 @@ use crate::CspRwLock;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
-use ic_types::crypto::KeyId;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};

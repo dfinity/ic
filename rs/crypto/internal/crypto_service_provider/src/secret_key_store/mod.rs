@@ -1,8 +1,8 @@
 //! Interfaces for saving and retrieving secret keys
 
+use crate::key_id::KeyId;
 use crate::types::CspSecretKey;
 pub use ic_crypto_internal_types::scope;
-use ic_types::crypto::KeyId;
 pub use scope::Scope;
 use std::fmt;
 

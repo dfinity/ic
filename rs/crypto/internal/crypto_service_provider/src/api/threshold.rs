@@ -2,13 +2,17 @@
 
 use crate::api::CspThresholdSignError;
 use crate::types::{CspPublicCoefficients, CspSecretKeyConversionError, CspSignature};
+
+#[cfg(test)]
+use crate::KeyId;
+
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
-use ic_types::crypto::{AlgorithmId, CryptoResult, KeyId};
+use ic_types::crypto::{AlgorithmId, CryptoResult};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

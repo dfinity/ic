@@ -14,12 +14,13 @@ use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::EphemeralK
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::dkg::EncryptionPublicKeyPop;
-use ic_types::crypto::{AlgorithmId, CryptoError, KeyId, UserPublicKey};
+use ic_types::crypto::{AlgorithmId, CryptoError, UserPublicKey};
 use std::convert::TryFrom;
 use std::fmt;
 
 pub mod dkg_id_to_key_id;
 
+use crate::key_id::KeyId;
 use ic_crypto_internal_multi_sig_bls12381::types::conversions::protobuf::PopBytesFromProtoError;
 use ic_crypto_sha::{Context, DomainSeparationContext};
 use openssl::sha::Sha256;
@@ -43,6 +44,7 @@ pub fn key_id_from_csp_pub_coeffs(csp_public_coefficients: &CspPublicCoefficient
 
 #[cfg(test)]
 mod key_id_generation_stability_tests {
+    use crate::key_id::KeyId;
     use crate::types::conversions::key_id_from_csp_pub_coeffs;
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_1_PK;
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_2_PK;
@@ -51,7 +53,6 @@ mod key_id_generation_stability_tests {
     use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
     use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
     use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-    use ic_types::crypto::KeyId;
 
     #[derive(Debug)]
     struct TestCase<T: AsRef<[u8]>> {

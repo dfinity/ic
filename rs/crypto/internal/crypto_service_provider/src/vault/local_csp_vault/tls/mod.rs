@@ -1,4 +1,5 @@
 //! TLS handshake operations provided by the CSP vault
+use crate::key_id::KeyId;
 use crate::keygen::tls_cert_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspSecretKey, CspSignature};
@@ -10,7 +11,7 @@ use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_tls::keygen::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
 use ic_crypto_secrets_containers::{SecretArray, SecretVec};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::NodeId;
 use openssl::asn1::Asn1Time;
 use openssl::pkey::PKey;

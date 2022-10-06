@@ -1,7 +1,8 @@
 use super::super::types::{CspPop, CspPublicKey};
+use crate::key_id::KeyId;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
+use ic_types::crypto::{AlgorithmId, CryptoError};
 use ic_types::NodeId;
 
 /// A trait that can be used to generate cryptographic key pairs

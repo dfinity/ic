@@ -23,7 +23,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -32,6 +32,7 @@ use tokio::net::UnixListener;
 mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
 
+use crate::key_id::KeyId;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use std::sync::Arc;
 pub use tarpc_csp_vault_client::RemoteCspVault;

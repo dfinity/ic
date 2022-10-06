@@ -1,5 +1,6 @@
 pub mod fixtures;
 
+use crate::key_id::KeyId;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
@@ -13,7 +14,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateR
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPublicKey;
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use rand::prelude::IteratorRandom;
 use rand::SeedableRng;

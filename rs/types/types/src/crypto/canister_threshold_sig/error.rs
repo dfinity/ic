@@ -1,6 +1,6 @@
 //! Defines errors that may occur in the context of canister threshold
 //! signatures.
-use crate::crypto::{AlgorithmId, CryptoError, KeyId};
+use crate::crypto::{AlgorithmId, CryptoError};
 use crate::registry::RegistryClientError;
 use crate::{Height, NodeId, RegistryVersion};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -128,7 +128,7 @@ impl_display_using_debug!(IDkgVerifyTranscriptError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgOpenTranscriptError {
-    PrivateKeyNotFound { key_id: KeyId },
+    PrivateKeyNotFound { key_id: String },
     MissingDealingInTranscript { dealer_id: NodeId },
     InternalError { internal_error: String },
 }

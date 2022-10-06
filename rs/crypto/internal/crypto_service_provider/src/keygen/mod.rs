@@ -1,6 +1,7 @@
 //! Utilities for key generation and key identifier generation
 
 use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
+use crate::key_id::KeyId;
 use crate::types::{CspPop, CspPublicKey};
 use crate::vault::api::CspTlsKeygenError;
 use crate::Csp;
@@ -9,10 +10,10 @@ use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_sha::Sha256;
 use ic_crypto_sha::{Context, DomainSeparationContext};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
+use ic_types::crypto::{AlgorithmId, CryptoError};
 use ic_types::NodeId;
-
 use std::convert::TryFrom;
+
 pub use tls_keygen::tls_cert_hash_as_key_id;
 
 const KEY_ID_DOMAIN: &str = "ic-key-id";

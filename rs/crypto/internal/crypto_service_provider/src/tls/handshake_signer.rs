@@ -1,9 +1,9 @@
 use crate::api::CspTlsHandshakeSignerProvider;
+use crate::key_id::KeyId;
 use crate::types::CspSignature;
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, CspVault};
 use crate::{Csp, TlsHandshakeCspVault};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::KeyId;
 use ic_types::NodeId;
 
 use std::sync::Arc;

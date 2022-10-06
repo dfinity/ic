@@ -1,4 +1,5 @@
 use crate::api::CspThresholdSignError;
+use crate::key_id::KeyId;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::types::{CspSignature, ThresBls12_381_Signature};
@@ -8,8 +9,8 @@ use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12381_clib;
+use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::CryptoError;
-use ic_types::crypto::{AlgorithmId, KeyId};
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 

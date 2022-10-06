@@ -1,5 +1,6 @@
 //! States capturing the stages of the non-interactive DKG protocol.
 
+use crate::key_id::KeyId;
 use crate::keygen::forward_secure_key_id;
 use crate::threshold::ni_dkg::static_api as ni_dkg_static_api;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
@@ -15,7 +16,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::{Height, NodeId, NodeIndex, NumberOfNodes, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
 use rand::seq::IteratorRandom;

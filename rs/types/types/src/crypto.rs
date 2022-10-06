@@ -31,35 +31,8 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, fmt, str::FromStr};
 use strum_macros::{Display, EnumIter};
 
-/// An id of a key. These ids are used to refer to entries in the crypto secret
-/// key store.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub struct KeyId(pub [u8; 32]);
-ic_crypto_internal_types::derive_serde!(KeyId, 32);
-
 #[cfg(test)]
 mod tests;
-
-impl KeyId {
-    pub fn get(&self) -> [u8; 32] {
-        self.0
-    }
-}
-impl fmt::Debug for KeyId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "KeyId(0x{})", hex::encode(self.0))
-    }
-}
-impl From<[u8; 32]> for KeyId {
-    fn from(bytes: [u8; 32]) -> Self {
-        KeyId(bytes)
-    }
-}
-impl fmt::Display for KeyId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "KeyId(0x{})", hex::encode(self.0))
-    }
-}
 
 /// A cryptographic hash.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
@@ -272,7 +245,7 @@ pub enum CryptoError {
     /// Secret key not found in SecretKeyStore.
     SecretKeyNotFound {
         algorithm: AlgorithmId,
-        key_id: KeyId,
+        key_id: String,
     },
     /// TLS secret key not found in SecretKeyStore.
     TlsSecretKeyNotFound { certificate_der: Vec<u8> },

@@ -5,9 +5,9 @@
 // * The tests use CSP-private methods on secret keys.
 
 use crate::files::mk_temp_dir_with_permissions;
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::secret_key_store;
 use ic_crypto_internal_csp::types::CspSecretKey;
-use ic_types::crypto::KeyId;
 use mockall::predicate::*;
 use mockall::*;
 use secret_key_store::proto_store::ProtoSecretKeyStore;

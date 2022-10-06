@@ -1,7 +1,7 @@
 //! An error that may occur when threshold signing.
 use crate::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use crate::crypto::threshold_sig::ni_dkg::DkgId;
-use crate::crypto::{AlgorithmId, CryptoError, KeyId};
+use crate::crypto::{AlgorithmId, CryptoError};
 use std::fmt;
 
 /// A threshold signing error.
@@ -11,7 +11,7 @@ pub enum ThresholdSignError {
     SecretKeyNotFound {
         dkg_id: DkgId,
         algorithm: AlgorithmId,
-        key_id: KeyId,
+        key_id: String,
     },
 }
 

@@ -93,7 +93,7 @@ fn map_threshold_sign_error_or_panic(
             ThresholdSignError::SecretKeyNotFound {
                 dkg_id,
                 algorithm,
-                key_id,
+                key_id: key_id.to_string(),
             }
         }
         // Panic, since these would be implementation errors:

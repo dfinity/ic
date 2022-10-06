@@ -1,4 +1,5 @@
 //! Basic Signature operations provided by the CSP vault.
+use crate::key_id::KeyId;
 use crate::keygen::public_key_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
@@ -8,7 +9,7 @@ use crate::vault::api::{
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 //! In-memory secret key store (for testing)
+use crate::key_id::KeyId;
 use crate::secret_key_store::{Scope, SecretKeyStore, SecretKeyStoreError};
 use crate::types::CspSecretKey;
-use ic_types::crypto::KeyId;
 use std::collections::HashMap;
 
 /// An in-memory, non-thread-safe secret key store for testing purposes.

@@ -1,12 +1,13 @@
 //! Tests of Basic Signature operations in the CSP vault.
 use crate::imported_test_utils::ed25519::csp_testvec;
+use crate::key_id::KeyId;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::vault::api::{BasicSignatureCspVault, CspBasicSignatureError};
 use crate::vault::local_csp_vault::{test_utils::new_csp_vault, LocalCspVault};
 use crate::vault::test_utils;
 use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
 use rand::{thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;

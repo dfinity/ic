@@ -3,8 +3,9 @@
 use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with;
 use crate::sign::tests::*;
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp_test_utils::secret_key_store_test_utils::MockSecretKeyStore;
-use ic_types::crypto::{AlgorithmId, KeyId, SignableMock, DOMAIN_IC_REQUEST};
+use ic_types::crypto::{AlgorithmId, SignableMock, DOMAIN_IC_REQUEST};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
 use ic_types_test_utils::arbitrary as arbitrary_types;

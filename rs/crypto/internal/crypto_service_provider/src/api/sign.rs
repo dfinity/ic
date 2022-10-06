@@ -1,6 +1,7 @@
 use super::super::types::{CspPop, CspPublicKey, CspSignature};
+use crate::key_id::KeyId;
+use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::CryptoResult;
-use ic_types::crypto::{AlgorithmId, KeyId};
 
 /// A trait that can generate and verify public key signatures
 pub trait CspSigner {

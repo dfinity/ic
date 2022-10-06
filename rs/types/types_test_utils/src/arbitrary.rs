@@ -1,6 +1,6 @@
 use crate::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_types::{
-    crypto::{AlgorithmId, KeyId, KeyPurpose, UserPublicKey},
+    crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
     time::UNIX_EPOCH,
     xnet::StreamIndex,
@@ -28,13 +28,6 @@ prop_compose! {
     /// Returns an arbitrary [`CanisterId`].
     pub fn canister_id()(id in any::<u64>()) -> CanisterId {
         canister_test_id(id)
-    }
-}
-
-prop_compose! {
-    /// Returns an arbitrary [`KeyId`].
-    pub fn key_id()(id in any::<[u8;32]>()) -> KeyId {
-        KeyId::from(id)
     }
 }
 

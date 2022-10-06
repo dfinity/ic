@@ -8,13 +8,13 @@ use rand_chacha::ChaCha20Rng;
 
 mod keygen {
     use super::*;
+    use crate::key_id::KeyId;
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
     use crate::secret_key_store::SecretKeyStoreError;
     use crate::vault::api::CspTlsKeygenError;
     use crate::vault::local_csp_vault::test_utils::new_csp_vault;
     use crate::vault::local_csp_vault::LocalCspVault;
     use crate::TlsHandshakeCspVault;
-    use ic_types::crypto::KeyId;
     use rand::Rng;
     use std::sync::Arc;
 
@@ -124,12 +124,12 @@ mod keygen {
 
 mod sign {
     use super::*;
+    use crate::key_id::KeyId;
     use crate::secret_key_store::SecretKeyStore;
     use crate::types::CspSecretKey;
     use crate::vault::local_csp_vault::test_utils::new_csp_vault;
     use crate::vault::local_csp_vault::LocalCspVault;
     use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
-    use ic_types::crypto::KeyId;
     use std::sync::Arc;
 
     #[test]

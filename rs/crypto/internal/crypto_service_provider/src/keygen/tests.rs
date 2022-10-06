@@ -317,6 +317,7 @@ mod tls {
 
 #[cfg(test)]
 mod key_id_generation_stability_tests {
+    use crate::key_id::KeyId;
     use crate::keygen::commitment_key_id;
     use crate::keygen::mega_key_id;
     use crate::keygen::tls_cert_hash_as_key_id;
@@ -334,7 +335,6 @@ mod key_id_generation_stability_tests {
         EccCurveType, EccPoint, MEGaPublicKey, PolynomialCommitment, SimpleCommitment,
     };
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-    use ic_types::crypto::KeyId;
     use openssl::x509::X509;
     use std::fmt::Debug;
 

@@ -1,5 +1,6 @@
 //! Filesystem-backed secret key store
 #![allow(clippy::unwrap_used)]
+use crate::key_id::KeyId;
 use crate::secret_key_store::{Scope, SecretKeyStore, SecretKeyStoreError};
 use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::CspSecretKey;
@@ -7,7 +8,6 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::convert_keyset_to_keyset_with_pop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_logger::{info, replica_logger::no_op_logger, ReplicaLogger};
-use ic_types::crypto::KeyId;
 use parking_lot::RwLock;
 use prost::Message;
 use std::borrow::{Borrow, BorrowMut};
@@ -37,8 +37,8 @@ fn key_id_from_display_string(s: &str) -> KeyId {
 
 #[cfg(test)]
 mod key_id_generation_stability_tests {
+    use crate::key_id::KeyId;
     use crate::secret_key_store::proto_store::key_id_from_display_string;
-    use crate::KeyId;
 
     #[test]
     fn should_key_id_from_display_string_be_stable() {

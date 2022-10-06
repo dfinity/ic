@@ -4,6 +4,7 @@ mod test_create_dealing;
 mod test_retention;
 
 use super::*;
+use crate::key_id::KeyId;
 use crate::threshold::tests::util::test_threshold_signatures;
 use crate::types as csp_types;
 use crate::Csp;
@@ -11,7 +12,6 @@ use fixtures::*;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
-use ic_types::crypto::KeyId;
 use proptest::prelude::*;
 use rand::Rng;
 use rand::SeedableRng;
