@@ -1606,7 +1606,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
                 ("Access-Control-Allow-Methods", &allowed_methods),
                 ("Access-Control-Allow-Credentials", "true"),
                 ("Access-Control-Allow-Headers", "DNT,User-Agent,X-Requested-With,If-None-Match,If-Modified-Since,Cache-Control,Content-Type,Range,Cookie"),
-                ("Access-Control-Expose-Headers", "Content-Length,Content-Range"),
+                ("Access-Control-Expose-Headers", "Accept-Ranges,Content-Length,Content-Range"),
                 ("Access-Control-Max-Age", "600"),
             ] {
                 let hdr = res
