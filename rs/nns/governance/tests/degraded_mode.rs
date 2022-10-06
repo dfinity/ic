@@ -80,6 +80,10 @@ impl Ledger for DegradedEnv {
     async fn account_balance(&self, _: AccountIdentifier) -> Result<Tokens, NervousSystemError> {
         unimplemented!()
     }
+
+    fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
 }
 
 #[async_trait]

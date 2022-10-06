@@ -105,6 +105,10 @@ impl Ledger for MockLedger {
     ) -> Result<Tokens, NervousSystemError> {
         unimplemented!()
     }
+
+    fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
 }
 
 struct MockCMC {}
@@ -116,7 +120,7 @@ impl CMC for MockCMC {
     }
 }
 
-// Make a proposal for neuron 0 and call proccess proposals. The
+// Make a proposal for neuron 0 and call process proposals. The
 // following graph is set up to cascade following, so the proposal
 // will be accepted when submitted and executed in the call to process
 // proposals.

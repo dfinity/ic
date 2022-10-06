@@ -10,8 +10,8 @@
 // the did definition of the method.
 
 use async_trait::async_trait;
-use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::boxed::Box;
 use std::convert::TryFrom;
 use std::time::SystemTime;
@@ -36,13 +36,13 @@ use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     ledger::LedgerCanister,
     pb::v1::{
-        governance, GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse,
-        GetProposal, GetProposalResponse, GetRunningSnsVersionRequest,
-        GetRunningSnsVersionResponse, GetSnsInitializationParametersRequest,
-        GetSnsInitializationParametersResponse, Governance as GovernanceProto,
-        ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-        ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-        RewardEvent, SetMode, SetModeResponse,
+        governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, GetMetadataRequest,
+        GetMetadataResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+        GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+        Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
+        ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
+        ManageNeuronResponse, NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
     },
     types::{Environment, HeapGrowthPotential},
 };
@@ -74,7 +74,7 @@ fn governance_mut() -> &'static mut Governance {
 }
 
 struct CanisterEnv {
-    rng: StdRng,
+    rng: ChaCha20Rng,
     time_warp: TimeWarp,
 }
 
@@ -99,7 +99,7 @@ impl CanisterEnv {
                 let mut seed = [0u8; 32];
                 seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
                 seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
-                StdRng::from_seed(seed)
+                ChaCha20Rng::from_seed(seed)
             },
             time_warp: TimeWarp { delta_s: 0 },
         }
@@ -517,6 +517,34 @@ fn set_mode() {
 fn set_mode_(request: SetMode) -> SetModeResponse {
     governance_mut().set_mode(request.mode, caller());
     SetModeResponse {}
+}
+
+/// Claims a batch of neurons requested by the SNS Swap canister. This method is
+/// only callable by the Swap canister that was deployed along with this
+/// SNS Governance canister.
+///
+/// This API takes a request of multiple `NeuronParameters` that provide
+/// the configurable parameters of the to-be-created neurons. Since these neurons
+/// are responsible for the decentralization of an SNS during the Swap, there are
+/// a few differences in neuron creation that occur in comparison to the normal
+/// `ManageNeuron::ClaimOrRefresh` API. See `Governance::claim_swap_neurons` for
+/// more details.
+///
+/// This method is idempotent. If called with a `NeuronParameters` of an already
+/// created Neuron, the `ClaimSwapNeuronsResponse.skipped_claims` field will be
+/// incremented and execution will continue.
+#[export_name = "canister_update claim_swap_neurons"]
+fn claim_swap_neurons() {
+    println!("{}claim_swap_neurons", log_prefix());
+    over(candid_one, claim_swap_neurons_)
+}
+
+/// Internal method for calling claim_swap_neurons.
+#[candid_method(update, rename = "claim_swap_neurons")]
+fn claim_swap_neurons_(
+    claim_swap_neurons_request: ClaimSwapNeuronsRequest,
+) -> ClaimSwapNeuronsResponse {
+    governance_mut().claim_swap_neurons(claim_swap_neurons_request, caller())
 }
 
 /// The canister's heartbeat.

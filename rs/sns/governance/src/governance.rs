@@ -25,8 +25,9 @@ use crate::pb::v1::{
         ClaimOrRefresh,
     },
     neuron::{DissolveState, Followees},
-    proposal, Ballot, DefaultFollowees, Empty, GetMetadataRequest, GetMetadataResponse, GetNeuron,
-    GetNeuronResponse, GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
+    proposal, Ballot, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, DefaultFollowees, Empty,
+    GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse, GetProposal,
+    GetProposalResponse, GetSnsInitializationParametersRequest,
     GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
     ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
     ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
@@ -3063,6 +3064,107 @@ impl Governance {
         }
     }
 
+    /// Attempts to claim a batch of new neurons allocated by the SNS Swap canister.
+    ///
+    /// Preconditions:
+    /// - The caller must be the Swap canister deployed along with this SNS Governance
+    ///   canister.
+    /// - Each NeuronParameters' `stake_e8s` is at least neuron_minimum_stake_e8s
+    ///   as defined in the `NervousSystemParameters`
+    /// - There is available memory in the Governance canister for the newly created
+    ///   Neuron.
+    ///
+    /// Claiming Neurons via this method differs from the primary
+    /// `ManageNeuron::ClaimOrRefresh` way of creating neurons for governance. This
+    /// method is only callable by the SNS Swap canister associated with this SNS
+    /// Governance canister, and claims a batch of neurons instead of just one.
+    /// as this is requested by the swap canister which ensures the correct
+    /// transfer of the tokens, this method does not check in the ledger. Additionally,
+    /// the dissolve delay is set as part of the neuron creation process, while typically
+    /// that is a separate command.
+    pub fn claim_swap_neurons(
+        &mut self,
+        request: ClaimSwapNeuronsRequest,
+        caller_principal_id: PrincipalId,
+    ) -> ClaimSwapNeuronsResponse {
+        let now = self.env.now();
+
+        if !self.is_swap_canister(caller_principal_id) {
+            panic!("Caller must be the Swap canister");
+        }
+
+        let mut response = ClaimSwapNeuronsResponse {
+            successful_claims: 0,
+            skipped_claims: 0,
+            failed_claims: 0,
+        };
+
+        let neuron_minimum_stake_e8s = self
+            .nervous_system_parameters()
+            .neuron_minimum_stake_e8s
+            .expect("NervousSystemParameters must have neuron_minimum_stake_e8s");
+
+        for neuron_parameter in request.neuron_parameters {
+            match neuron_parameter.validate(neuron_minimum_stake_e8s) {
+                Ok(_) => (),
+                Err(err) => {
+                    println!(
+                        "{}ERROR claim_swap_neurons. Failed to claim Neuron due to {}",
+                        log_prefix(),
+                        err
+                    );
+                    response.failed_claims += 1;
+                    continue;
+                }
+            }
+
+            let neuron_id = NeuronId::from(ledger::compute_neuron_staking_subaccount_bytes(
+                *neuron_parameter.get_controller(),
+                neuron_parameter.get_memo(),
+            ));
+
+            // This neuron was claimed previously.
+            if self.proto.neurons.contains_key(&neuron_id.to_string()) {
+                response.skipped_claims += 1;
+                continue;
+            }
+
+            let neuron = Neuron {
+                id: Some(neuron_id.clone()),
+                permissions: neuron_parameter
+                    .construct_permissions(self.neuron_claimer_permissions()),
+                cached_neuron_stake_e8s: neuron_parameter.get_stake_e8s(),
+                neuron_fees_e8s: 0,
+                created_timestamp_seconds: now,
+                aging_since_timestamp_seconds: now,
+                // TODO NNS1-1720 - Neurons with the same principal should follow the one with the longest dissolve delay
+                followees: self.default_followees().followees,
+                maturity_e8s_equivalent: 0,
+                // TODO NNS1-1720 - CF Neurons should be automatically dissolving
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                    neuron_parameter.get_dissolve_delay_seconds(),
+                )),
+                voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+            };
+
+            // This also verifies that there are not too many neurons already. This is a best effort
+            // claim process, but since the method is idempotent additional retries are possible.
+            match self.add_neuron(neuron) {
+                Ok(_) => response.successful_claims += 1,
+                Err(err) => {
+                    println!(
+                        "{}ERROR claim_swap_neurons. Failed to claim Neuron due to {:?}",
+                        log_prefix(),
+                        err
+                    );
+                    response.failed_claims += 1;
+                }
+            }
+        }
+
+        response
+    }
+
     /// Adds a `NeuronPermission` to an already existing Neuron for the given PrincipalId.
     ///
     /// If the PrincipalId doesn't have existing permissions, a new entry will be added for it
@@ -3540,8 +3642,8 @@ impl Governance {
 
         // What's going on here looks a little complex, but it's just a slightly
         // more advanced version of non-compounding interest. The main
-        // embelishment is because we are calculating the reward purse over
-        // possibly more than one reward round. The possibility of mulitple
+        // embellishment is because we are calculating the reward purse over
+        // possibly more than one reward round. The possibility of multiple
         // rounds is why range, map, and sum are used. Otherwise, it boils down
         // to the non-compounding interest formula:
         //
@@ -4106,6 +4208,10 @@ mod tests {
         async fn account_balance(&self, _account: Account) -> Result<Tokens, NervousSystemError> {
             unimplemented!()
         }
+
+        fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
     }
 
     fn basic_governance_proto() -> GovernanceProto {
@@ -4233,6 +4339,10 @@ mod tests {
                 _account: Account,
             ) -> Result<Tokens, NervousSystemError> {
                 Ok(Tokens::new(1, 0).unwrap())
+            }
+
+            fn canister_id(&self) -> CanisterId {
+                unimplemented!()
             }
         }
 

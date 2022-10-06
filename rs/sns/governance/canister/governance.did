@@ -38,6 +38,14 @@ type CanisterStatusResultV2 = record {
 type CanisterStatusType = variant { stopped; stopping; running };
 type ClaimOrRefresh = record { by : opt By };
 type ClaimOrRefreshResponse = record { refreshed_neuron_id : opt NeuronId };
+type ClaimSwapNeuronsRequest = record {
+  neuron_parameters : vec NeuronParameters;
+};
+type ClaimSwapNeuronsResponse = record {
+  skipped_claims : nat32;
+  successful_claims : nat32;
+  failed_claims : nat32;
+};
 type Command = variant {
   Split : Split;
   Follow : Follow;
@@ -250,6 +258,13 @@ type NeuronInFlightCommand = record {
   command : opt Command_2;
   timestamp : nat64;
 };
+type NeuronParameters = record {
+  controller : opt principal;
+  dissolve_delay_seconds : opt nat64;
+  memo : opt nat64;
+  stake_e8s : opt nat64;
+  hotkey : opt principal;
+};
 type NeuronPermission = record {
   "principal" : opt principal;
   permission_type : vec int32;
@@ -338,6 +353,7 @@ type VotingRewardsParameters = record {
 };
 type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };
 service : (Governance) -> {
+  claim_swap_neurons : (ClaimSwapNeuronsRequest) -> (ClaimSwapNeuronsResponse);
   get_build_metadata : () -> (text) query;
   get_metadata : (record {}) -> (GetMetadataResponse) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;

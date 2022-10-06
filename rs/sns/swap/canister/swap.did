@@ -63,6 +63,11 @@ type Investor = variant {
   CommunityFund : CfInvestment;
   Direct : DirectInvestment;
 };
+type NeuronAttributes = record { dissolve_delay_seconds : nat64; memo : nat64 };
+type NeuronBasketConstructionParameters = record {
+  dissolve_delay_interval_seconds : nat64;
+  count : nat64;
+};
 type OpenRequest = record {
   cf_participants : vec CfParticipant;
   params : opt Params;
@@ -70,6 +75,7 @@ type OpenRequest = record {
 };
 type Params = record {
   min_participant_icp_e8s : nat64;
+  neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   max_icp_e8s : nat64;
   swap_due_timestamp_seconds : nat64;
   min_participants : nat32;
@@ -97,6 +103,7 @@ type SettleCommunityFundParticipationResult = record {
 };
 type SnsNeuronRecipe = record {
   sns : opt TransferableAmount;
+  neuron_attributes : opt NeuronAttributes;
   investor : opt Investor;
 };
 type Swap = record {

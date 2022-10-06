@@ -5,7 +5,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError,
+    ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
@@ -13,9 +13,10 @@ use ic_nervous_system_common_test_keys::{
 use ic_sns_governance::{
     ledger::Ledger,
     pb::v1::{
-        governance, manage_neuron,
+        governance,
         manage_neuron_response::{self, ClaimOrRefreshResponse},
-        ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse,
+        SetMode, SetModeResponse,
     },
 };
 
@@ -25,6 +26,7 @@ use ic_sns_swap::pb::v1::{SetDappControllersRequest, SetDappControllersResponse}
 
 use ic_sns_swap::{
     pb::v1::{
+        params::NeuronBasketConstructionParameters,
         Lifecycle::{Committed, Open},
         *,
     },
@@ -46,9 +48,6 @@ use ic_sns_swap::swap::SnsRootClient;
 fn i2principal_id_string(i: u64) -> String {
     Principal::from(PrincipalId::new_user_test_id(i)).to_text()
 }
-
-// 10 ^ 8.
-const E8: u64 = 100_000_000;
 
 // For tests only. This does not imply that the canisters must have these IDs.
 pub const SWAP_CANISTER_ID: CanisterId = CanisterId::from_u64(1152);
@@ -80,6 +79,14 @@ const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640991600;
 const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECONDS_PER_DAY;
 const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
 
+/// Intermediate structure that helps structure data needed to calculate an investor's SNS NeuronId
+enum Investor {
+    /// The CommunityFund Investor with the memo used to calculate it's SNS NeuronId
+    CommunityFund(u64),
+    /// The Individual Investor with the PrincipalId used to calculate its SNS NeuronId
+    Direct(PrincipalId),
+}
+
 fn params() -> Params {
     let result = Params {
         min_participants: 3,
@@ -89,10 +96,39 @@ fn params() -> Params {
         max_participant_icp_e8s: 100_000 * E8,
         swap_due_timestamp_seconds: END_TIMESTAMP_SECONDS,
         sns_token_e8s: 1_000_000 * E8,
+        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+            count: 3,
+            dissolve_delay_interval_seconds: 7890000, // 3 months
+        }),
     };
     assert!(result.is_valid_at(START_TIMESTAMP_SECONDS));
     assert!(result.validate().is_ok());
     result
+}
+
+/// Test helper.
+fn select_direct_investment_neurons<'a>(
+    ns: &'a Vec<SnsNeuronRecipe>,
+    buyer_principal: &str,
+) -> Vec<&'a SnsNeuronRecipe> {
+    let mut neurons = vec![];
+    for n in ns {
+        match &n.investor {
+            Some(sns_neuron_recipe::Investor::Direct(DirectInvestment {
+                buyer_principal: buyer,
+            })) => {
+                if buyer == buyer_principal {
+                    neurons.push(n);
+                }
+            }
+            _ => continue,
+        }
+    }
+    if neurons.is_empty() {
+        panic!("Cannot find principal {}", buyer_principal);
+    }
+
+    neurons
 }
 
 /// Test helper.
@@ -102,28 +138,14 @@ fn verify_participant_balances(
     icp_balance_e8s: u64,
     sns_balance_e8s: u64,
 ) {
-    fn get_direct_investment<'a>(
-        ns: &'a Vec<SnsNeuronRecipe>,
-        buyer_principal: &str,
-    ) -> &'a SnsNeuronRecipe {
-        for n in ns {
-            match &n.investor {
-                Some(sns_neuron_recipe::Investor::Direct(DirectInvestment {
-                    buyer_principal: buyer,
-                })) => {
-                    if buyer == buyer_principal {
-                        return n;
-                    }
-                }
-                _ => continue,
-            }
-        }
-        panic!("Cannot find principal {}", buyer_principal);
-    }
     let buyer = swap.buyers.get(&buyer_principal.to_string()).unwrap();
     assert_eq!(icp_balance_e8s, buyer.amount_icp_e8s());
-    let direct = get_direct_investment(&swap.neuron_recipes, &buyer_principal.to_string());
-    assert_eq!(direct.amount_e8s(), sns_balance_e8s);
+    let total_neuron_recipe_sns_e8s_for_principal: u64 =
+        select_direct_investment_neurons(&swap.neuron_recipes, &buyer_principal.to_string())
+            .iter()
+            .map(|neuron_recipe| neuron_recipe.amount_e8s())
+            .sum();
+    assert_eq!(total_neuron_recipe_sns_e8s_for_principal, sns_balance_e8s);
 }
 
 #[test]
@@ -195,6 +217,10 @@ impl Ledger for MockLedger {
             }
             x => panic!("Received account_balance({}), expected {:?}", account, x),
         }
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        CanisterId::from_u64(1)
     }
 }
 
@@ -670,7 +696,7 @@ fn test_scenario_happy() {
                 )]),
                 START_TIMESTAMP_SECONDS,
                 OpenRequest {
-                    params: Some(params),
+                    params: Some(params.clone()),
                     cf_participants: vec![
                         CfParticipant {
                             hotkey_principal: TEST_USER1_PRINCIPAL.to_string(),
@@ -783,7 +809,6 @@ fn test_scenario_happy() {
         400 * E8
     );
     // We should now have a sufficient number of participants.
-    //println!("{} {} {}", swap.cf_participants.len(), swap.buyers.len(), params.min_participants);
     assert!(swap.sufficient_participation());
     // Cannot commit if the swap is not due.
     assert!(!swap.can_commit(END_TIMESTAMP_SECONDS - 1));
@@ -874,64 +899,107 @@ fn test_scenario_happy() {
         assert_eq!(success, 1);
         assert_eq!(failure, 0);
         // "Sweep" all SNS tokens, going to the buyers.
-        fn dst(x: PrincipalId) -> Account {
+        fn dst(controller: PrincipalId, memo: u64) -> Account {
             Account {
                 owner: SNS_GOVERNANCE_CANISTER_ID.get(),
-                subaccount: Some(compute_neuron_staking_subaccount_bytes(x, 0)),
+                subaccount: Some(compute_neuron_staking_subaccount_bytes(controller, memo)),
             }
         }
-        fn cf(nns_id: u64) -> Account {
+        fn cf(memo: u64) -> Account {
             Account {
                 owner: SNS_GOVERNANCE_CANISTER_ID.get(),
                 subaccount: Some(compute_neuron_staking_subaccount_bytes(
                     NNS_GOVERNANCE_CANISTER_ID.get(),
-                    nns_id,
+                    memo,
                 )),
             }
         }
+        fn neuron_basket_transfer_fund_calls(
+            amount_sns_tokens_e8s: u64,
+            count: u64,
+            investor_type: Investor,
+        ) -> Vec<LedgerExpect> {
+            let split_amount_e8s = Swap::split(amount_sns_tokens_e8s, count);
+
+            let starting_memo = match investor_type {
+                Investor::CommunityFund(starting_memo) => starting_memo,
+                Investor::Direct(_) => 0,
+            };
+
+            split_amount_e8s
+                .iter()
+                .enumerate()
+                .map(|(ledger_account_memo, amount)| {
+                    let to = match investor_type {
+                        Investor::CommunityFund(_) => {
+                            cf(starting_memo + ledger_account_memo as u64)
+                        }
+                        Investor::Direct(principal_id) => {
+                            dst(principal_id, ledger_account_memo as u64)
+                        }
+                    };
+
+                    LedgerExpect::TransferFunds(
+                        amount - 1,
+                        /* fees */ 1,
+                        /* Subaccount */ None,
+                        to,
+                        /* memo */ 0,
+                        /* Block height */ Ok(1066),
+                    )
+                })
+                .collect()
+        }
+
+        let neurons_per_investor = params
+            .neuron_basket_construction_parameters
+            .as_ref()
+            .unwrap()
+            .count;
+
+        let mut mock_ledger_calls: Vec<LedgerExpect> = vec![];
+        mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
+            60_000 * E8,
+            neurons_per_investor,
+            Investor::Direct(*TEST_USER2_PRINCIPAL),
+        ));
+        mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
+            40_000 * E8,
+            neurons_per_investor,
+            Investor::Direct(*TEST_USER3_PRINCIPAL),
+        ));
+        mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
+            90_000 * E8,
+            neurons_per_investor,
+            Investor::Direct(*TEST_USER1_PRINCIPAL),
+        ));
+        mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
+            5_000 * E8,
+            neurons_per_investor,
+            Investor::CommunityFund(/* memo */ 0),
+        ));
+        mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
+            3_000 * E8,
+            neurons_per_investor,
+            Investor::CommunityFund(/* memo */ 3),
+        ));
+        mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
+            2_000 * E8,
+            neurons_per_investor,
+            Investor::CommunityFund(/* memo */ 6),
+        ));
+
         let SweepResult {
             success,
             failure,
             skipped,
         } = swap
-            .sweep_sns(
-                now_fn,
-                Tokens::from_e8s(1),
-                &mock_stub(vec![
-                    LedgerExpect::TransferFunds(
-                        60000 * E8 - 1,
-                        1,
-                        None,
-                        dst(*TEST_USER2_PRINCIPAL),
-                        0,
-                        Ok(1066),
-                    ),
-                    LedgerExpect::TransferFunds(
-                        40000 * E8 - 1,
-                        1,
-                        None,
-                        dst(*TEST_USER3_PRINCIPAL),
-                        0,
-                        Ok(1068),
-                    ),
-                    LedgerExpect::TransferFunds(
-                        90000 * E8 - 1,
-                        1,
-                        None,
-                        dst(*TEST_USER1_PRINCIPAL),
-                        0,
-                        Ok(1067),
-                    ),
-                    LedgerExpect::TransferFunds(5000 * E8 - 1, 1, None, cf(0x91), 0, Ok(1069)),
-                    LedgerExpect::TransferFunds(3000 * E8 - 1, 1, None, cf(0x92), 0, Ok(1070)),
-                    LedgerExpect::TransferFunds(2000 * E8 - 1, 1, None, cf(0x93), 0, Ok(1070)),
-                ]),
-            )
+            .sweep_sns(now_fn, Tokens::from_e8s(1), &mock_stub(mock_ledger_calls))
             .now_or_never()
             .unwrap();
         assert_eq!(skipped, 0);
         assert_eq!(failure, 0);
-        assert_eq!(success, 6);
+        assert_eq!(success, 18);
     }
 }
 
@@ -967,12 +1035,25 @@ impl SnsRootClient for SpySnsRootClient {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq)]
 enum SnsGovernanceClientCall {
+    ClaimSwapNeurons(ClaimSwapNeuronsRequest),
     ManageNeuron(ManageNeuron),
     SetMode(SetMode),
 }
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, PartialEq)]
+#[allow(unused)]
+enum SnsGovernanceClientReply {
+    ClaimSwapNeurons(ClaimSwapNeuronsResponse),
+    ManageNeuron(ManageNeuronResponse),
+    SetMode(SetModeResponse),
+    CanisterCallError(CanisterCallError),
+}
+
 #[derive(Default, Debug)]
 struct SpySnsGovernanceClient {
     calls: Vec<SnsGovernanceClientCall>,
+    replies: Vec<SnsGovernanceClientReply>,
 }
 #[async_trait]
 impl SnsGovernanceClient for SpySnsGovernanceClient {
@@ -993,6 +1074,19 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
     async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError> {
         self.calls.push(SnsGovernanceClientCall::SetMode(request));
         Ok(SetModeResponse {})
+    }
+
+    async fn claim_swap_neurons(
+        &mut self,
+        request: ClaimSwapNeuronsRequest,
+    ) -> Result<ClaimSwapNeuronsResponse, CanisterCallError> {
+        self.calls
+            .push(SnsGovernanceClientCall::ClaimSwapNeurons(request));
+        match self.replies.pop().unwrap() {
+            SnsGovernanceClientReply::ClaimSwapNeurons(reply) => Ok(reply),
+            SnsGovernanceClientReply::CanisterCallError(error) => Err(error),
+            unexpected_reply => panic!("Unexpected reply on the stack: {:?}", unexpected_reply),
+        }
     }
 }
 
@@ -1075,6 +1169,10 @@ impl Ledger for SpyLedger {
 
         Ok(Tokens::from_e8s(10 * E8))
     }
+
+    fn canister_id(&self) -> CanisterId {
+        CanisterId::from_u64(1)
+    }
 }
 
 #[tokio::test]
@@ -1101,11 +1199,15 @@ async fn test_finalize_swap_ok() {
         min_participants: 1,
         sns_token_e8s: 10 * E8,
         swap_due_timestamp_seconds: END_TIMESTAMP_SECONDS,
+        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+            count: 3,
+            dissolve_delay_interval_seconds: 7890000, // 3 months
+        }),
     };
     let mut swap = Swap {
         lifecycle: Open as i32,
         init: Some(init),
-        params: Some(params),
+        params: Some(params.clone()),
         buyers: btreemap! {
             i2principal_id_string(1001) => BuyerState::new(50 * E8),
             i2principal_id_string(1002) => BuyerState::new(30 * E8),
@@ -1120,6 +1222,15 @@ async fn test_finalize_swap_ok() {
 
     let mut sns_root_client = ExplodingSnsRootClient::default();
     let mut sns_governance_client = SpySnsGovernanceClient::default();
+    sns_governance_client
+        .replies
+        .push(SnsGovernanceClientReply::ClaimSwapNeurons(
+            ClaimSwapNeuronsResponse {
+                successful_claims: 9,
+                skipped_claims: 0,
+                failed_claims: 0,
+            },
+        ));
     let mut nns_governance_client = SpyNnsGovernanceClient::default();
 
     // Step 2: Run the code under test. To wit, finalize_swap.
@@ -1146,12 +1257,12 @@ async fn test_finalize_swap_ok() {
                     skipped: 0,
                 }),
                 sweep_sns: Some(SweepResult {
-                    success: 3,
+                    success: 9,
                     failure: 0,
                     skipped: 0,
                 }),
                 create_neuron: Some(SweepResult {
-                    success: 3,
+                    success: 9,
                     failure: 0,
                     skipped: 0,
                 }),
@@ -1171,7 +1282,7 @@ async fn test_finalize_swap_ok() {
     // Assert that do_finalize_swap created neurons.
     assert_eq!(
         sns_governance_client.calls.len(),
-        4,
+        2,
         "{:#?}",
         sns_governance_client.calls
     );
@@ -1180,23 +1291,14 @@ async fn test_finalize_swap_ok() {
         .iter()
         .filter_map(|c| {
             use SnsGovernanceClientCall as Call;
-            let m = match c {
-                Call::ManageNeuron(m) => m,
-                Call::SetMode(_) => return None,
-            };
-
-            let command = match m.command.as_ref().unwrap() {
-                manage_neuron::Command::ClaimOrRefresh(command) => command,
-                command => panic!("{command:#?}"),
-            };
-
-            let memo_and_controller = match command.by.as_ref().unwrap() {
-                manage_neuron::claim_or_refresh::By::MemoAndController(ok) => ok,
-                v => panic!("{v:#?}"),
-            };
-
-            Some(memo_and_controller.controller.unwrap().to_string())
+            match c {
+                Call::ManageNeuron(_) => None,
+                Call::SetMode(_) => None,
+                Call::ClaimSwapNeurons(b) => Some(b),
+            }
         })
+        .flat_map(|b| &b.neuron_parameters)
+        .map(|neuron_distribution| neuron_distribution.controller.as_ref().unwrap().to_string())
         .collect::<HashSet<_>>();
     assert_eq!(
         neuron_controllers,
@@ -1232,7 +1334,7 @@ async fn test_finalize_swap_ok() {
         .iter()
         .cloned()
         .collect::<Vec<LedgerCall>>();
-    assert_eq!(icp_ledger_calls.len() + sns_ledger_calls.len(), 6);
+    assert_eq!(icp_ledger_calls.len() + sns_ledger_calls.len(), 12);
     for t in icp_ledger_calls.iter().chain(sns_ledger_calls.iter()) {
         if let LedgerCall::TransferFunds { fee_e8s, memo, .. } = t {
             assert_eq!(*fee_e8s, FEE_E8S, "{t:#?}");
@@ -1271,31 +1373,45 @@ async fn test_finalize_swap_ok() {
     let mut actual_icp_ledger_calls = icp_ledger_calls;
     actual_icp_ledger_calls.sort();
     assert_eq!(actual_icp_ledger_calls, expected_icp_ledger_calls);
-
-    let mut expected_sns_ledger_calls = hashset! {
-        (1001, 5),
-        (1002, 3),
-        (1003, 2),
+    fn neuron_basket_transfer_fund_calls(
+        amount_sns_tokens_e8s: u64,
+        count: u64,
+        buyer: u64,
+    ) -> Vec<LedgerCall> {
+        let buyer_principal_id = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
+        let split_amount = Swap::split(amount_sns_tokens_e8s, count);
+        split_amount
+            .iter()
+            .enumerate()
+            .map(|(ledger_account_memo, amount)| {
+                let to = Account {
+                    owner: SNS_GOVERNANCE_CANISTER_ID.into(),
+                    subaccount: Some(compute_neuron_staking_subaccount_bytes(
+                        buyer_principal_id,
+                        ledger_account_memo as u64,
+                    )),
+                };
+                LedgerCall::TransferFunds {
+                    amount_e8s: amount - FEE_E8S,
+                    fee_e8s: FEE_E8S,
+                    from_subaccount: None,
+                    to,
+                    memo: 0,
+                }
+            })
+            .collect()
     }
-    .into_iter()
-    .map(|(buyer, sns_amount)| {
-        let buyer = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
-        let to = Account {
-            owner: SNS_GOVERNANCE_CANISTER_ID.into(),
-            subaccount: Some(
-                ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes(buyer, 0),
-            ),
-        };
-        let amount_e8s = sns_amount * E8 - FEE_E8S;
-        LedgerCall::TransferFunds {
-            amount_e8s,
-            fee_e8s: FEE_E8S,
-            from_subaccount: None,
-            to,
-            memo: 0,
-        }
-    })
-    .collect::<Vec<_>>();
+
+    let count = params
+        .neuron_basket_construction_parameters
+        .as_ref()
+        .unwrap()
+        .count;
+
+    let mut expected_sns_ledger_calls: Vec<LedgerCall> = vec![];
+    expected_sns_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(5 * E8, count, 1001));
+    expected_sns_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(3 * E8, count, 1002));
+    expected_sns_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(2 * E8, count, 1003));
     expected_sns_ledger_calls.sort();
     let mut actual_sns_ledger_calls = sns_ledger_calls;
     actual_sns_ledger_calls.sort();
@@ -1345,6 +1461,10 @@ async fn test_finalize_swap_abort() {
         min_participants: 2,
         sns_token_e8s: 10 * E8,
         swap_due_timestamp_seconds: END_TIMESTAMP_SECONDS,
+        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+            count: 12,
+            dissolve_delay_interval_seconds: 7890000, // 3 months
+        }),
     };
     let buyer_principal_id = PrincipalId::new_user_test_id(8502);
     let mut swap = Swap {

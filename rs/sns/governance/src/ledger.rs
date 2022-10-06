@@ -62,6 +62,9 @@ pub trait Ledger: Send + Sync {
 
     /// Gets the account balance in Tokens of the given AccountIdentifier in the Ledger.
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError>;
+
+    /// Returns the CanisterId of the Ledger being accessed.
+    fn canister_id(&self) -> CanisterId;
 }
 
 pub struct LedgerCanister {
@@ -137,6 +140,11 @@ impl Ledger for LedgerCanister {
                 )
             })
     }
+
+    fn canister_id(&self) -> CanisterId {
+        let principal_id = PrincipalId::from(self.client.ledger_canister_id);
+        CanisterId::new(principal_id).expect("Expected the Ledger's target to be a Canister")
+    }
 }
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
@@ -174,5 +182,9 @@ impl Ledger for IcpLedgerCanister {
             icrc1_account_to_icp_accountidentifier(account),
         )
         .await
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        self.id
     }
 }

@@ -16,7 +16,7 @@ use ic_nns_test_utils::{
     ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     state_test_helpers::{nns_governance_make_proposal, setup_nns_canisters},
 };
-use ic_sns_swap::pb::v1::Params as SnsSwapParams;
+use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, Params as SnsSwapParams};
 use ic_state_machine_tests::StateMachine;
 
 /// Submit three SetSnsTokenSwapOpenTimeWindow proposals. The first should succeed, the
@@ -97,6 +97,10 @@ fn make_open_sns_token_swap_proposal(state_machine: &mut StateMachine) -> Manage
         min_participant_icp_e8s: 42,
         sns_token_e8s: 42,
         swap_due_timestamp_seconds: now + 87500,
+        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+            count: 3,
+            dissolve_delay_interval_seconds: 7890000, // 3 months
+        }),
     };
 
     nns_governance_make_proposal(

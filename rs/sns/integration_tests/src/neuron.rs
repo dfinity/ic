@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use candid::types::number::Nat;
 use canister_test::Canister;
 use dfn_candid::candid_one;
+use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
 use ic_icrc1::{endpoints::TransferArg, Account, Memo, Subaccount};
@@ -872,6 +873,10 @@ async fn zero_total_reward_shares() {
         async fn account_balance(&self, _account: Account) -> Result<Tokens, NervousSystemError> {
             Ok(Tokens::from_e8s(0))
         }
+
+        fn canister_id(&self) -> CanisterId {
+            CanisterId::from_u64(1)
+        }
     }
 
     let environment = NativeEnvironment::default();
@@ -1034,6 +1039,10 @@ async fn couple_of_neurons_who_voted_get_rewards() {
 
         async fn account_balance(&self, _account: Account) -> Result<Tokens, NervousSystemError> {
             unimplemented!();
+        }
+
+        fn canister_id(&self) -> CanisterId {
+            CanisterId::from_u64(1)
         }
     }
 

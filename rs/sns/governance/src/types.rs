@@ -1,6 +1,7 @@
 use crate::{
     governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
     pb::v1::{
+        claim_swap_neurons_request::NeuronParameters,
         governance::{self, neuron_in_flight_command, SnsMetadata},
         governance_error::ErrorType,
         manage_neuron, manage_neuron_response,
@@ -9,18 +10,20 @@ use crate::{
         proposal::Action,
         DefaultFollowees, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
         ManageNeuronResponse, NervousSystemFunction, NervousSystemParameters, NeuronId,
-        NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent, Vote,
-        VotingRewardsParameters,
     },
     proposal::ValidGenericNervousSystemFunction,
 };
 
 use async_trait::async_trait;
 
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::NervousSystemError;
 
+use crate::pb::v1::{
+    NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent, Vote,
+    VotingRewardsParameters,
+};
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
@@ -1330,6 +1333,95 @@ impl From<u64> for ProposalId {
     }
 }
 
+impl NeuronParameters {
+    pub(crate) fn validate(&self, neuron_minimum_stake_e8s: u64) -> Result<(), String> {
+        let mut defects = vec![];
+
+        if self.controller.is_none() {
+            defects.push("Missing controller".to_string());
+        }
+
+        if let Some(stake_e8s) = self.stake_e8s {
+            if stake_e8s < neuron_minimum_stake_e8s {
+                defects.push(format!(
+                    "Provided stake_e8s ({}) is less than the required neuron_minimum_stake_e8s({})",
+                    stake_e8s, neuron_minimum_stake_e8s
+                ));
+            }
+        } else {
+            defects.push("Missing stake_e8s".to_string());
+        }
+
+        if self.memo.is_none() {
+            defects.push("Missing memo".to_string());
+        }
+
+        if self.dissolve_delay_seconds.is_none() {
+            defects.push("Missing dissolve_delay_seconds".to_string());
+        }
+
+        if !defects.is_empty() {
+            Err(format!(
+                "Could not claim neuron for controller {:?} with memo {:?} due to: {}",
+                self.controller,
+                self.memo,
+                defects.join("\n"),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub(crate) fn get_controller(&self) -> &PrincipalId {
+        self.controller
+            .as_ref()
+            .expect("Expected the controller to be present")
+    }
+
+    pub(crate) fn get_memo(&self) -> u64 {
+        *self.memo.as_ref().expect("Expected the memo to be present")
+    }
+
+    pub(crate) fn get_dissolve_delay_seconds(&self) -> u64 {
+        *self
+            .dissolve_delay_seconds
+            .as_ref()
+            .expect("Expected the dissolve_delay_seconds to be present")
+    }
+
+    pub(crate) fn get_stake_e8s(&self) -> u64 {
+        *self
+            .stake_e8s
+            .as_ref()
+            .expect("Expected the stake_e8s to be present")
+    }
+
+    pub(crate) fn construct_permissions(
+        &self,
+        neuron_claimer_permissions: NeuronPermissionList,
+    ) -> Vec<NeuronPermission> {
+        let mut permissions = vec![];
+        let controller = self.get_controller();
+
+        permissions.push(NeuronPermission::new(
+            controller,
+            neuron_claimer_permissions.permissions,
+        ));
+
+        if let Some(hotkey) = self.hotkey {
+            permissions.push(NeuronPermission::new(
+                &hotkey,
+                vec![
+                    NeuronPermissionType::SubmitProposal as i32,
+                    NeuronPermissionType::Vote as i32,
+                ],
+            ))
+        }
+
+        permissions
+    }
+}
+
 pub mod test_helpers {
     use super::*;
     use ic_crypto_sha::Sha256;
@@ -1564,6 +1656,7 @@ pub(crate) mod tests {
         ExecuteGenericNervousSystemFunction, VotingRewardsParameters,
     };
     use ic_base_types::PrincipalId;
+    use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use lazy_static::lazy_static;
     use maplit::{btreemap, hashset};
     use std::convert::TryInto;
@@ -2182,6 +2275,70 @@ pub(crate) mod tests {
         }
 
         assert!(default.validate().is_ok());
+    }
+
+    #[test]
+    fn test_neuron_parameters_validate() {
+        let valid_default = NeuronParameters {
+            controller: Some(*TEST_USER1_PRINCIPAL),
+            hotkey: Some(*TEST_USER2_PRINCIPAL),
+            stake_e8s: Some(E8S_PER_TOKEN),
+            memo: Some(0),
+            dissolve_delay_seconds: Some(3 * ONE_MONTH_SECONDS),
+        };
+
+        let neuron_minimum_stake_e8s = E8S_PER_TOKEN;
+
+        // Assert that the default is valid
+        assert!(valid_default.validate(neuron_minimum_stake_e8s).is_ok());
+
+        let invalid_neuron_parameters = vec![
+            NeuronParameters {
+                controller: None, // No controller specified
+                ..valid_default
+            },
+            NeuronParameters {
+                stake_e8s: None, // No stake specified
+                ..valid_default
+            },
+            NeuronParameters {
+                stake_e8s: Some(0), // Stake is less than neuron_minimum_stake_e8s
+                ..valid_default
+            },
+            NeuronParameters {
+                memo: None, // No memo specified
+                ..valid_default
+            },
+            NeuronParameters {
+                dissolve_delay_seconds: None, // No dissolve_delay_seconds specified
+                ..valid_default
+            },
+        ];
+
+        // Assert all invalid neuron parameters produce an error
+        for neuron_parameter in invalid_neuron_parameters {
+            assert!(neuron_parameter.validate(neuron_minimum_stake_e8s).is_err());
+        }
+
+        let valid_neuron_parameters = vec![
+            NeuronParameters {
+                hotkey: None, // Hotkey can be unspecified
+                ..valid_default
+            },
+            NeuronParameters {
+                dissolve_delay_seconds: Some(0), // Dissolve delay can be 0
+                ..valid_default
+            },
+        ];
+
+        // Assert all valid neuron parameters produce valid results
+        for neuron_parameter in valid_neuron_parameters {
+            assert!(
+                neuron_parameter.validate(neuron_minimum_stake_e8s).is_ok(),
+                "{:#?}",
+                neuron_parameter
+            );
+        }
     }
 
     #[test]

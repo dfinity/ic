@@ -10,7 +10,7 @@
 /// State (lifecycle) diagram for the swap canister's state.
 ///
 /// ```text
-///                                  sufficient_participantion && (swap_due || icp_target_reached)
+///                                  sufficient_participation && (swap_due || icp_target_reached)
 /// PENDING ------------------> OPEN ------------------------------------------------------------> COMMITTED
 ///                             |                                                                  |
 ///                             | swap_due && not sufficient_participation                         |
@@ -36,7 +36,7 @@
 /// - The ledger canister of the SNS, i.e., the ledger of the token type
 ///   being sold.
 ///
-/// - The ICP ledger cansiter, or more generally of the base currency of
+/// - The ICP ledger canister, or more generally of the base currency of
 ///   the auction.
 ///
 /// - The root canister of the SNS to control aspects of the SNS not
@@ -50,13 +50,13 @@
 /// is validated in the call to `open`.
 ///
 /// The request to open the swap has to originate from the NNS governance
-/// cansiter. The request specifies the parameters of the swap, i.e., the
+/// canister. The request specifies the parameters of the swap, i.e., the
 /// date/time at which the token swap will take place, the minimal number
 /// of participants, the minimum number of base tokens (ICP) of each
-/// paricipant, as well as the minimum and maximum number (reserve and
+/// participant, as well as the minimum and maximum number (reserve and
 /// target) of base tokens (ICP) of the swap.
 ///
-/// Step 0. The canister is created, specifying the initalization
+/// Step 0. The canister is created, specifying the initialization
 /// parameters, which are henceforth fixed for the lifetime of the
 /// canister.
 ///
@@ -67,14 +67,14 @@
 /// Step 2. (State OPEN). The field `params` is received as an argument
 /// to the call to `open` and is henceforth immutable. The amount of
 /// SNS token is verified against the SNS ledger. The swap is open for
-/// paricipants who can enter into the auction with a number of ICP
+/// participants who can enter into the auction with a number of ICP
 /// tokens until either the target amount has been reached or the
 /// auction is due, i.e., the date/time of the auction has been
 /// reached. The transition to COMMITTED or ABORTED happens
 /// automatically (on the canister heartbeat) when the necessary
 /// conditions are fulfilled.
 ///
-/// Step 3a. (State COMMITTED). Tokens are allocated to partcipants at
+/// Step 3a. (State COMMITTED). Tokens are allocated to participants at
 /// a single clearing price, i.e., the number of SNS tokens being
 /// offered divided by the total number of ICP tokens contributed to
 /// the swap. In this state, a call to `finalize` will create SNS
@@ -258,7 +258,7 @@ pub struct Params {
     /// occurs. Must be smaller than or equal to `max_icp_e8s`.
     #[prost(uint64, tag = "2")]
     pub min_icp_e8s: u64,
-    /// The number of ICP that is "targetted" by this token swap. If this
+    /// The number of ICP that is "targeted" by this token swap. If this
     /// amount is achieved, the swap will be triggered immediately,
     /// without waiting for the due date (`end_timestamp_seconds`). This
     /// means that an investor knows the minimum number of SNS tokens
@@ -291,6 +291,45 @@ pub struct Params {
     /// ```
     #[prost(uint64, tag = "7")]
     pub sns_token_e8s: u64,
+    /// The construction parameters for the basket of neurons created for all
+    /// investors in the decentralization swap. Each investor, whether via
+    /// the CommunityFund or direct, will receive `count` Neurons with
+    /// increasing dissolve delays. The total number of Tokens swapped for
+    /// by the investor will be evenly distributed across the basket. This is
+    /// effectively a vesting schedule to ensure there is a gradual release of
+    /// SNS Tokens available to all investors instead of being liquid immediately.
+    /// See `NeuronBasketConstructionParameters` for more details on how
+    /// the basket is configured.
+    #[prost(message, optional, tag = "8")]
+    pub neuron_basket_construction_parameters:
+        ::core::option::Option<params::NeuronBasketConstructionParameters>,
+}
+/// Nested message and enum types in `Params`.
+pub mod params {
+    /// The construction parameters for the basket of neurons created for all
+    /// investors in the decentralization swap.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct NeuronBasketConstructionParameters {
+        /// The number of neurons each investor will receive after the
+        /// decentralization swap. The total tokens swapped for will be
+        /// evenly distributed across the `count` neurons.
+        #[prost(uint64, tag = "1")]
+        pub count: u64,
+        /// The interval in seconds that the dissolve delay of each neuron in the
+        /// basket will be increased by. The 0th neuron created will have its dissolve
+        /// delay set to 0, and each subsequent neuron will have a dissolve delay
+        /// calculated by:
+        /// `(i * dissolve_delay_interval_seconds) + rand(0..dissolve_delay_interval_seconds)`
+        #[prost(uint64, tag = "2")]
+        pub dissolve_delay_interval_seconds: u64,
+    }
 }
 #[derive(
     candid::CandidType,
@@ -397,11 +436,36 @@ pub struct TimeWindow {
 pub struct SnsNeuronRecipe {
     #[prost(message, optional, tag = "1")]
     pub sns: ::core::option::Option<TransferableAmount>,
+    /// Attributes of the Neuron to be created from the SnsNeuronRecipe
+    #[prost(message, optional, tag = "4")]
+    pub neuron_attributes: ::core::option::Option<sns_neuron_recipe::NeuronAttributes>,
     #[prost(oneof = "sns_neuron_recipe::Investor", tags = "2, 3")]
     pub investor: ::core::option::Option<sns_neuron_recipe::Investor>,
 }
 /// Nested message and enum types in `SnsNeuronRecipe`.
 pub mod sns_neuron_recipe {
+    /// Attributes of the Neuron to be created from the SnsNeuronRecipe
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct NeuronAttributes {
+        /// The memo to be used when calculating the Neuron's staking account
+        /// in the SNS Ledger. See `nervous_system_common::compute_neuron_staking_subaccount`.
+        /// The memo is used along with the a principal_id of the "controller" of the
+        /// neuron. In the case of the decentralization sale, that will either be the PrincipalId
+        /// of NNS Governance canister for CommunityFund investors, or the PrincipalId of the
+        /// direct investor.
+        #[prost(uint64, tag = "1")]
+        pub memo: u64,
+        /// The dissolve delay in seconds that the Neuron will be created with.
+        #[prost(uint64, tag = "2")]
+        pub dissolve_delay_seconds: u64,
+    }
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -914,9 +978,9 @@ pub mod governance_error {
         /// performed.
         ResourceExhausted = 10,
         /// Some precondition for executing this method was not met (e.g. the
-        /// neuron's desolve time is too short). There could be a change in the
+        /// neuron's dissolve time is too short). There could be a change in the
         /// state of the system such that the operation becomes allowed (e.g. the
-        /// owner of the neuron increases its desolve delay).
+        /// owner of the neuron increases its dissolve delay).
         PreconditionFailed = 11,
         /// Executing this method failed for some reason external to the
         /// governance canister.
@@ -931,7 +995,7 @@ pub mod governance_error {
         /// The proposal is defective in some way (e.g. title is too long). If the
         /// same proposal is submitted again without modification, it will be
         /// rejected regardless of changes in the system's state (e.g. increasing
-        /// the neuron's desolve delay will not make the proposal acceptable).
+        /// the neuron's dissolve delay will not make the proposal acceptable).
         InvalidProposal = 16,
         /// The neuron attempted to join the community fund while already
         /// a member.
@@ -1087,7 +1151,7 @@ pub enum Lifecycle {
     /// receives the ICP.
     Committed = 3,
     /// The token swap has been aborted, e.g., because the due date/time
-    /// occured before the minimum (reserve) amount of ICP has been
+    /// occurred before the minimum (reserve) amount of ICP has been
     /// retrieved. On a call to `finalize`, participants get their ICP refunded.
     Aborted = 4,
 }

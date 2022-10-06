@@ -28,10 +28,10 @@ fn check_generated_files() {
     match compare(&gen, out.path()) {
         Ok(_) => (),
         Err(CompareError::PathsDiffer { .. }) => {
-            panic!("Directory {} is outdated, run {}", gen.display(), cmd)
+            panic!("Directory {} is outdated, run `{}`", gen.display(), cmd)
         }
         Err(CompareError::ContentDiffers { path }) => {
-            panic!("Source file {} is outdated, run {}", path.display(), cmd)
+            panic!("Source file {} is outdated, run `{}`", path.display(), cmd)
         }
         Err(CompareError::IoError { path, cause }) => {
             panic!("I/O error on {}: {}", path.display(), cause)

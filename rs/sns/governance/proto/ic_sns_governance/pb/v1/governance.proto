@@ -1524,6 +1524,63 @@ message SetMode {
 message SetModeResponse {
 }
 
+// The request for the `claim_swap_neurons` method.
+message ClaimSwapNeuronsRequest {
+  // NeuronParameters groups parameters for creating a neuron in the
+  // `claim_swap_neurons` method.
+  message NeuronParameters {
+    // The PrincipalId that will have permissions when the neuron is created.
+    // The permissions that are granted are controlled my
+    // `NervousSystemParameters::neuron_claimer_permissions`. This field
+    // is required.
+    ic_base_types.pb.v1.PrincipalId controller = 1;
+
+    // For Community Fund participants, in addition to the controller (that is
+    // set to the NNS governance), this is another PrincipalId with permissions.
+    // Specifically, the PrincipalId who is the controller of the NNS neuron
+    // that invested in the decentralization sale via the Community Fund will
+    // be granted the following permissions:
+    //    - NeuronPermissionType::SubmitProposal
+    //    - NeuronPermissionType::Vote
+    // This field is not set for other types of participants, therefore it is optional.
+    ic_base_types.pb.v1.PrincipalId hotkey = 2;
+
+    // The stake of the neuron in e8s (10E-8 of a token) that the neuron will be
+    // created with. This field is required.
+    optional uint64 stake_e8s = 3;
+
+    // The memo used when creating the Subaccount of the neuron. The subaccount also
+    // doubles as the NeuronId and is calculated by hashing the controller field
+    // with the memo field. An implementation of this algorithm can be found at
+    // `nervous_system_common::compute_neuron_staking_subaccount`. This field is
+    // required.
+    optional uint64 memo = 4;
+
+    // The duration in seconds that the neuron's dissolve delay will be set to. Neurons
+    // that are for Community Fund investors will be automatically set to dissolving,
+    // while direct investors will be automatically set to non-dissolving.
+    optional uint64 dissolve_delay_seconds = 5;
+  }
+
+  // The set of parameters that define the neurons created in `claim_swap_neurons`. For
+  // each NeuronParameter, one neuron will be created.
+  repeated NeuronParameters neuron_parameters = 1;
+}
+
+// The response for the `claim_swap_neurons` method. The sum of all fields
+// should equal the number of `NeuronParameters` in `ClaimSwapNeuronsRequest`.
+message ClaimSwapNeuronsResponse {
+  // This field reports the number of successfully created neurons.
+  uint32 successful_claims = 1;
+
+  // This field reports the number of neurons skipped due to this method
+  // being idempotent, i.e. the neuron has already been created.
+  uint32 skipped_claims = 2;
+
+  // This field reports the number of neurons that failed to be created.
+  uint32 failed_claims = 3;
+}
+
 // A Ledger subaccount.
 message Subaccount {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
@@ -1541,4 +1598,3 @@ message Account {
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
 }
-

@@ -2117,6 +2117,69 @@ pub struct SetMode {
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct SetModeResponse {}
+/// The request for the `claim_swap_neurons` method.
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct ClaimSwapNeuronsRequest {
+    /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
+    /// each NeuronParameter, one neuron will be created.
+    #[prost(message, repeated, tag = "1")]
+    pub neuron_parameters: ::prost::alloc::vec::Vec<claim_swap_neurons_request::NeuronParameters>,
+}
+/// Nested message and enum types in `ClaimSwapNeuronsRequest`.
+pub mod claim_swap_neurons_request {
+    /// NeuronParameters groups parameters for creating a neuron in the
+    /// `claim_swap_neurons` method.
+    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+    pub struct NeuronParameters {
+        /// The PrincipalId that will have permissions when the neuron is created.
+        /// The permissions that are granted are controlled my
+        /// `NervousSystemParameters::neuron_claimer_permissions`. This field
+        /// is required.
+        #[prost(message, optional, tag = "1")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// For Community Fund participants, in addition to the controller (that is
+        /// set to the NNS governance), this is another PrincipalId with permissions.
+        /// Specifically, the PrincipalId who is the controller of the NNS neuron
+        /// that invested in the decentralization sale via the Community Fund will
+        /// be granted the following permissions:
+        ///    - NeuronPermissionType::SubmitProposal
+        ///    - NeuronPermissionType::Vote
+        /// This field is not set for other types of participants, therefore it is optional.
+        #[prost(message, optional, tag = "2")]
+        pub hotkey: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The stake of the neuron in e8s (10E-8 of a token) that the neuron will be
+        /// created with. This field is required.
+        #[prost(uint64, optional, tag = "3")]
+        pub stake_e8s: ::core::option::Option<u64>,
+        /// The memo used when creating the Subaccount of the neuron. The subaccount also
+        /// doubles as the NeuronId and is calculated by hashing the controller field
+        /// with the memo field. An implementation of this algorithm can be found at
+        /// `nervous_system_common::compute_neuron_staking_subaccount`. This field is
+        /// required.
+        #[prost(uint64, optional, tag = "4")]
+        pub memo: ::core::option::Option<u64>,
+        /// The duration in seconds that the neuron's dissolve delay will be set to. Neurons
+        /// that are for Community Fund investors will be automatically set to dissolving,
+        /// while direct investors will be automatically set to non-dissolving.
+        #[prost(uint64, optional, tag = "5")]
+        pub dissolve_delay_seconds: ::core::option::Option<u64>,
+    }
+}
+/// The response for the `claim_swap_neurons` method. The sum of all fields
+/// should equal the number of `NeuronParameters` in `ClaimSwapNeuronsRequest`.
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct ClaimSwapNeuronsResponse {
+    /// This field reports the number of successfully created neurons.
+    #[prost(uint32, tag = "1")]
+    pub successful_claims: u32,
+    /// This field reports the number of neurons skipped due to this method
+    /// being idempotent, i.e. the neuron has already been created.
+    #[prost(uint32, tag = "2")]
+    pub skipped_claims: u32,
+    /// This field reports the number of neurons that failed to be created.
+    #[prost(uint32, tag = "3")]
+    pub failed_claims: u32,
+}
 /// A Ledger subaccount.
 #[derive(
     candid::CandidType,

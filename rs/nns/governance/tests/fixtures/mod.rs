@@ -17,6 +17,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
         governance_minting_account, neuron_subaccount, subaccount_from_slice, Environment,
@@ -446,6 +447,10 @@ impl Ledger for NNSFixture {
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         Ok(Tokens::from_e8s(*account_e8s))
     }
+
+    fn canister_id(&self) -> CanisterId {
+        LEDGER_CANISTER_ID
+    }
 }
 
 #[async_trait]
@@ -849,6 +854,10 @@ impl Ledger for NNS {
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
         self.fixture.account_balance(account).await
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        self.fixture.canister_id()
     }
 }
 

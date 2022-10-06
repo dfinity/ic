@@ -13,7 +13,10 @@ use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
 use ic_sns_governance::ledger::LedgerCanister;
-use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse};
+use ic_sns_governance::pb::v1::{
+    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
+    SetModeResponse,
+};
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 
 // TODO(NNS1-1589): Unhack.
@@ -208,6 +211,20 @@ impl SnsGovernanceClient for RealSnsGovernanceClient {
         dfn_core::api::call(
             self.canister_id,
             "set_mode",
+            dfn_candid::candid_one,
+            request,
+        )
+        .await
+        .map_err(CanisterCallError::from)
+    }
+
+    async fn claim_swap_neurons(
+        &mut self,
+        request: ClaimSwapNeuronsRequest,
+    ) -> Result<ClaimSwapNeuronsResponse, CanisterCallError> {
+        dfn_core::api::call(
+            self.canister_id,
+            "claim_swap_neurons",
             dfn_candid::candid_one,
             request,
         )
@@ -449,7 +466,7 @@ fn canister_pre_upgrade() {
     writer.flush();
 }
 
-/// Deserialise what has been written to stable memory in
+/// Deserialize what has been written to stable memory in
 /// canister_pre_upgrade and initialising the state with it.
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {

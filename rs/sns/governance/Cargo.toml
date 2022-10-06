@@ -42,6 +42,7 @@ maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"
 rand = "0.8"
+rand_chacha = "0.3"
 registry-canister = { path = "../../registry/canister" }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"

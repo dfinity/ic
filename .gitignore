@@ -119,3 +119,7 @@ user.bazelrc
 
 # Visual Studio Code
 .vscode
+
+# Intellij
+.idea
+.clwb

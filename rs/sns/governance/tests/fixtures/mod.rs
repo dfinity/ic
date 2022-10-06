@@ -342,6 +342,10 @@ impl Ledger for SNSFixture {
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         Ok(Tokens::from_e8s(*account_e8s))
     }
+
+    fn canister_id(&self) -> CanisterId {
+        CanisterId::from_u64(1)
+    }
 }
 
 #[async_trait]
@@ -643,6 +647,10 @@ impl Ledger for SNS {
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
         self.fixture.account_balance(account).await
     }
+
+    fn canister_id(&self) -> CanisterId {
+        ic_sns_governance::types::Environment::canister_id(&self.fixture)
+    }
 }
 
 #[async_trait]
@@ -679,7 +687,7 @@ impl Environment for SNS {
     }
 
     fn canister_id(&self) -> CanisterId {
-        self.fixture.canister_id()
+        ic_sns_governance::types::Environment::canister_id(&self.fixture)
     }
 }
 
