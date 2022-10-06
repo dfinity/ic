@@ -253,6 +253,40 @@ pub struct UpdateAllowedPrincipalsResponse {
     #[prost(message, repeated, tag = "1")]
     pub allowed_principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
+/// The request type of update_sns_subnet_list, used to add or remove SNS subnet IDs (these are the subnets that
+/// SNS instances will be deployed to)
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct UpdateSnsSubnetListRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub sns_subnet_ids_to_add: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "2")]
+    pub sns_subnet_ids_to_remove: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
+/// The response type of update_sns_subnet_list
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct UpdateSnsSubnetListResponse {
+    #[prost(message, optional, tag = "1")]
+    pub error: ::core::option::Option<SnsWasmError>,
+}
+/// The request type of get_sns_subnet_ids. Used to request the list of SNS subnet IDs that SNS-WASM will deploy
+/// SNS instances to.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct GetSnsSubnetIdsRequest {}
+/// The request type of get_sns_subnet_ids. Used to request the list of SNS subnet IDs that SNS-WASM will deploy
+/// SNS instances to.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct GetSnsSubnetIdsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub sns_subnet_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
 /// The type of canister a particular WASM is intended to be installed on.
 #[derive(
     candid::CandidType,

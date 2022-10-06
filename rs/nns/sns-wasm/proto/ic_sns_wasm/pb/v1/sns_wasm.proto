@@ -182,3 +182,25 @@ message UpdateAllowedPrincipalsRequest {
 message UpdateAllowedPrincipalsResponse {
   repeated ic_base_types.pb.v1.PrincipalId allowed_principals = 1;
 }
+
+// The request type of update_sns_subnet_list, used to add or remove SNS subnet IDs (these are the subnets that
+// SNS instances will be deployed to)
+message UpdateSnsSubnetListRequest {
+  repeated ic_base_types.pb.v1.PrincipalId sns_subnet_ids_to_add = 1;
+  repeated ic_base_types.pb.v1.PrincipalId sns_subnet_ids_to_remove = 2;
+}
+
+// The response type of update_sns_subnet_list
+message UpdateSnsSubnetListResponse {
+  SnsWasmError error = 1;
+}
+
+// The request type of get_sns_subnet_ids. Used to request the list of SNS subnet IDs that SNS-WASM will deploy
+// SNS instances to.
+message GetSnsSubnetIdsRequest {}
+
+// The request type of get_sns_subnet_ids. Used to request the list of SNS subnet IDs that SNS-WASM will deploy
+// SNS instances to.
+message GetSnsSubnetIdsResponse {
+  repeated ic_base_types.pb.v1.PrincipalId sns_subnet_ids = 1;
+}

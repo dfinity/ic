@@ -18,8 +18,10 @@ use ic_nns_governance::pb::v1::{
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
-    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasmRequest, GetWasmResponse,
-    ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterType, SnsWasm,
+    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsRequest,
+    GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse, SnsCanisterType, SnsWasm, UpdateSnsSubnetListRequest,
+    UpdateSnsSubnetListResponse,
 };
 use ic_state_machine_tests::StateMachine;
 use maplit::hashmap;
@@ -130,6 +132,81 @@ pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm, hash: &[u8; 32])
     while get_proposal_info(env, pid).unwrap().status == (ProposalStatus::Open as i32) {
         std::thread::sleep(Duration::from_millis(100));
     }
+}
+
+/// Make an update_sns_subnet_list request to a canister in the StateMachine
+pub fn update_sns_subnet_list(
+    env: &StateMachine,
+    sns_wasm_canister_id: CanisterId,
+    request: &UpdateSnsSubnetListRequest,
+) -> UpdateSnsSubnetListResponse {
+    let response = update(
+        env,
+        sns_wasm_canister_id,
+        "update_sns_subnet_list",
+        Encode!(request).unwrap(),
+    )
+    .unwrap();
+
+    // Ensure we get the expected response
+    Decode!(&response, UpdateSnsSubnetListResponse).unwrap()
+}
+
+/// Make an update_sns_subnet_list request via NNS proposal in the StateMachine
+pub fn update_sns_subnet_list_via_proposal(
+    env: &StateMachine,
+    request: &UpdateSnsSubnetListRequest,
+) {
+    let proposal = Proposal {
+        title: Some("title".into()),
+        summary: "summary".into(),
+        url: "".to_string(),
+        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+            nns_function: NnsFunction::UpdateSnsWasmSnsSubnetIds as i32,
+            payload: Encode!(request).expect("Error encoding proposal payload"),
+        })),
+    };
+
+    let response: ManageNeuronResponse = update_with_sender(
+        env,
+        GOVERNANCE_CANISTER_ID,
+        "manage_neuron",
+        candid_one,
+        ManageNeuron {
+            id: None,
+            command: Some(Command::MakeProposal(Box::new(proposal))),
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                id: TEST_NEURON_1_ID,
+            })),
+        },
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+    )
+    .unwrap();
+
+    let pid = match response.command.unwrap() {
+        CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
+        other => panic!("Unexpected response: {:?}", other),
+    };
+
+    while get_proposal_info(env, pid).unwrap().status == (ProposalStatus::Open as i32) {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Make a get_sns_subnet_ids request to a canister in the StateMachine
+pub fn get_sns_subnet_ids(
+    env: &StateMachine,
+    sns_wasm_canister_id: CanisterId,
+) -> GetSnsSubnetIdsResponse {
+    let response_bytes = query(
+        env,
+        sns_wasm_canister_id,
+        "get_sns_subnet_ids",
+        Encode!(&GetSnsSubnetIdsRequest {}).unwrap(),
+    )
+    .unwrap();
+
+    Decode!(&response_bytes, GetSnsSubnetIdsResponse).unwrap()
 }
 
 /// Call Governance's get_proposal_info method
