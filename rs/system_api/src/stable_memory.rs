@@ -90,7 +90,7 @@ impl StableMemory {
         src: u32,
         size: u32,
         heap: &[u8],
-    ) -> HypervisorResult<NumPages> {
+    ) -> HypervisorResult<()> {
         let (src, offset, size) = (src as usize, offset as usize, size as usize);
 
         if offset + size > (self.stable_size()? as usize * WASM_PAGE_SIZE_IN_BYTES as usize) {
@@ -101,9 +101,9 @@ impl StableMemory {
             return Err(HypervisorError::Trapped(HeapOutOfBounds));
         }
 
-        Ok(self
-            .stable_memory_buffer
-            .write(&heap[src..src + size], offset))
+        self.stable_memory_buffer
+            .write(&heap[src..src + size], offset);
+        Ok(())
     }
 
     /// Determines size of stable memory in Web assembly pages.
@@ -169,7 +169,7 @@ impl StableMemory {
         src: u64,
         size: u64,
         heap: &[u8],
-    ) -> HypervisorResult<NumPages> {
+    ) -> HypervisorResult<()> {
         let (src, offset, size) = (src as usize, offset as usize, size as usize);
 
         let (stable_memory_size_in_bytes, overflow) = self
@@ -189,9 +189,17 @@ impl StableMemory {
             return Err(HypervisorError::Trapped(HeapOutOfBounds));
         }
 
-        let dirty_pages = self
-            .stable_memory_buffer
+        self.stable_memory_buffer
             .write(&heap[src..heap_end], offset);
-        Ok(dirty_pages)
+        Ok(())
+    }
+
+    /// Returns the number of dirty pages that would be created by a **successful** write at
+    /// the given offset of the given size. No guarantee is made that such a
+    /// write would succeed though (no check that the write is within the
+    /// current stable size are done).
+    pub(super) fn calculate_dirty_pages(&self, offset: u64, size: u64) -> NumPages {
+        self.stable_memory_buffer
+            .calculate_dirty_pages(offset, size)
     }
 }

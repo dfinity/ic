@@ -4,7 +4,7 @@ use super::{
     Buffer, FileDescriptor, PageAllocator, PageDelta, PageIndex, PageMap, PageMapSerialization,
 };
 use ic_sys::PAGE_SIZE;
-use ic_types::{Height, NumPages};
+use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
 use nix::unistd::dup;
 use std::fs::OpenOptions;
 
@@ -294,30 +294,54 @@ fn write_amplification_is_calculated_correctly() {
     assert_eq!(delta.write_amplification_to_gap(50, 100.0), 50);
 }
 
+/// Check that the value provided by `calculate_dirty_pages` agrees with the
+/// actual change in number of dirty pages and return the number of new dirty
+/// pages.
+fn write_and_verify_dirty_pages(buf: &mut Buffer, src: &[u8], offset: usize) -> u64 {
+    let new = buf.calculate_dirty_pages(offset as u64, src.len() as u64);
+    let initial = buf.dirty_pages.len();
+    buf.write(src, offset);
+    let updated = buf.dirty_pages.len();
+    assert_eq!(updated - initial, new.get() as usize);
+    new.get()
+}
+
 /// Complete re-write of first page is dirty, later write doesn't increase
 /// count.
 #[test]
 fn buffer_entire_first_page_write() {
     let mut buf = Buffer::new(PageMap::new());
-    assert_eq!(NumPages::from(1), buf.write(&[0; PAGE_SIZE], 0));
-    assert_eq!(NumPages::from(0), buf.write(&[0; 1], 1));
+    assert_eq!(
+        1,
+        write_and_verify_dirty_pages(&mut buf, &[0; PAGE_SIZE], 0)
+    );
+    assert_eq!(0, write_and_verify_dirty_pages(&mut buf, &[0; 1], 0));
 }
 
 /// Single write to first page is dirty, later write doesn't increase count.
 #[test]
 fn buffer_single_byte_first_page_write() {
     let mut buf = Buffer::new(PageMap::new());
-    assert_eq!(NumPages::from(1), buf.write(&[0; 1], 0));
-    assert_eq!(NumPages::from(0), buf.write(&[0; 1], 1));
+    assert_eq!(1, write_and_verify_dirty_pages(&mut buf, &[0; 1], 0));
+    assert_eq!(0, write_and_verify_dirty_pages(&mut buf, &[0; 1], 1));
 }
 
 #[test]
 fn buffer_write_single_byte_each_page() {
     let mut buf = Buffer::new(PageMap::new());
-    assert_eq!(NumPages::from(1), buf.write(&[0; 1], 0));
-    assert_eq!(NumPages::from(1), buf.write(&[0; 1], PAGE_SIZE));
-    assert_eq!(NumPages::from(1), buf.write(&[0; 1], 2 * PAGE_SIZE));
-    assert_eq!(NumPages::from(1), buf.write(&[0; 1], 15 * PAGE_SIZE));
+    assert_eq!(1, write_and_verify_dirty_pages(&mut buf, &[0; 1], 0));
+    assert_eq!(
+        1,
+        write_and_verify_dirty_pages(&mut buf, &[0; 1], PAGE_SIZE)
+    );
+    assert_eq!(
+        1,
+        write_and_verify_dirty_pages(&mut buf, &[0; 1], 2 * PAGE_SIZE)
+    );
+    assert_eq!(
+        1,
+        write_and_verify_dirty_pages(&mut buf, &[0; 1], 15 * PAGE_SIZE)
+    );
 }
 
 #[test]
@@ -325,7 +349,37 @@ fn buffer_write_unaligned_multiple_pages() {
     const NUM_PAGES: u64 = 3;
     let mut buf = Buffer::new(PageMap::new());
     assert_eq!(
-        NumPages::from(NUM_PAGES + 1),
-        buf.write(&[0; (NUM_PAGES as usize) * PAGE_SIZE], 24)
+        NUM_PAGES + 1,
+        write_and_verify_dirty_pages(&mut buf, &[0; (NUM_PAGES as usize) * PAGE_SIZE], 24)
     );
+}
+
+#[test]
+fn buffer_write_empty_slice() {
+    let mut buf = Buffer::new(PageMap::new());
+    assert_eq!(0, write_and_verify_dirty_pages(&mut buf, &[0; 0], 10_000));
+}
+
+// Checks that the pre-computed dirty pages agrees with the difference in dirty
+// pages from before and after a write.
+#[test]
+fn calc_dirty_pages_matches_actual_change() {
+    let mut runner = proptest::test_runner::TestRunner::deterministic();
+    runner
+        .run(
+            &(0..MAX_STABLE_MEMORY_IN_BYTES, 0..(1000 * PAGE_SIZE as u64)),
+            |(offset, size)| {
+                // bound size to valid range
+                let size = (MAX_STABLE_MEMORY_IN_BYTES - offset).min(size);
+                let src = vec![0; size as usize];
+                // Start with a buffer that has some initial dirty pages
+                let mut buffer = Buffer::new(PageMap::new());
+                buffer.write(&[1; 10 * PAGE_SIZE], 5 * PAGE_SIZE + 10);
+                buffer.write(&[3; 16], 44 * PAGE_SIZE);
+
+                write_and_verify_dirty_pages(&mut buffer, &src, offset as usize);
+                Ok(())
+            },
+        )
+        .unwrap()
 }

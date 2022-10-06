@@ -15,7 +15,7 @@ pub use page_allocator::{DefaultPageAllocatorImpl, HeapBasedPageAllocator, PageA
 // NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
 // operation. This allows us to simplify canister state management: we can
 // simply have a copy of the whole PageMap in every canister snapshot.
-use ic_types::{Height, NumPages};
+use ic_types::{Height, NumPages, MAX_STABLE_MEMORY_IN_BYTES};
 use int_map::IntMap;
 use libc::off_t;
 use page_allocator::{Page, PageAllocator};
@@ -696,9 +696,8 @@ impl Buffer {
     /// Overwrites the contents of this buffer at the specified offset with the
     /// contents of the source buffer.
     /// Returns the number of **new** dirty pages created by the write.
-    pub fn write(&mut self, mut src: &[u8], mut offset: usize) -> NumPages {
+    pub fn write(&mut self, mut src: &[u8], mut offset: usize) {
         let page_size = PAGE_SIZE;
-        let initial_dirty_page_count = self.dirty_pages.len();
 
         while !src.is_empty() {
             let page = PageIndex::new((offset / page_size) as u64);
@@ -717,8 +716,27 @@ impl Buffer {
             offset += page_len;
             src = &src[page_len..src.len()];
         }
+    }
 
-        NumPages::from((self.dirty_pages.len() - initial_dirty_page_count) as u64)
+    /// Determines the number of dirty pages that would be created by a write at
+    /// the given offset with the given size. This does not guarantee that the
+    /// write will succeed.
+    ///
+    /// This function assumes the write doesn't extend beyond the maximum stable
+    /// memory size (in which case the memory would fail anyway).
+    pub fn calculate_dirty_pages(&self, offset: u64, size: u64) -> NumPages {
+        if size == 0 {
+            return NumPages::from(0);
+        }
+        let first_page = offset / (PAGE_SIZE as u64);
+        let last_page = offset
+            .saturating_add(size - 1)
+            .min(MAX_STABLE_MEMORY_IN_BYTES)
+            / (PAGE_SIZE as u64);
+        let dirty_page_count = (first_page..=last_page)
+            .filter(|p| !self.dirty_pages.contains_key(&PageIndex::new(*p)))
+            .count();
+        NumPages::new(dirty_page_count as u64)
     }
 
     pub fn dirty_pages(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {

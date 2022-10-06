@@ -1,10 +1,13 @@
 use ic_base_types::NumSeconds;
+use ic_embedders::DIRTY_PAGE_TO_INSTRUCTION_RATE;
 use ic_error_types::ErrorCode;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
-use ic_types::{funds::Cycles, NumInstructions};
+use ic_state_machine_tests::Cycles;
+use ic_types::NumInstructions;
 use ic_universal_canister::{call_args, wasm};
 
-use crate::execution::test_utilities::{check_ingress_status, ExecutionTestBuilder};
+use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
 
 const GB: u64 = 1024 * 1024 * 1024;
 
@@ -34,7 +37,6 @@ fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
 }
 
 #[test]
-#[allow(non_snake_case)]
 fn can_write_to_each_page_in_stable_memory() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = wat_writing_to_each_stable_memory_page(7 * GB);
@@ -258,5 +260,38 @@ fn dts_update_concurrent_cycles_change_fails() {
         initial_cycles
             - (test.canister_execution_cost(a_id) - initial_execution_cost)
             - cycles_debit,
+    );
+}
+
+#[test]
+fn dirty_pages_are_free_on_system_subnet() {
+    fn instructions_to_write_stable_byte(mut test: ExecutionTest) -> NumInstructions {
+        let initial_cycles = Cycles::new(1_000_000_000_000);
+        let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+        let a = wasm()
+            .stable_grow(1)
+            .stable64_write(0, 0, 1)
+            .message_payload()
+            .append_and_reply()
+            .build();
+        let result = test.ingress(a_id, "update", a);
+        assert!(result.is_ok());
+        test.canister_executed_instructions(a_id)
+    }
+
+    let system_test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let system_instructions = instructions_to_write_stable_byte(system_test);
+    let app_test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let app_instructions = instructions_to_write_stable_byte(app_test);
+
+    // Can't check for equality because there are other charges that are omitted
+    // on system subnets.
+    assert!(
+        app_instructions
+            > system_instructions + NumInstructions::from(DIRTY_PAGE_TO_INSTRUCTION_RATE)
     );
 }

@@ -19,6 +19,13 @@ use serde::{Deserialize, Serialize};
 pub use serialized_module::{SerializedModule, SerializedModuleBytes};
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
+/// The cost in instructions for each new dirty page in stable memory.
+/// This is enough to write to 8GB to stable memory.
+///
+/// Only public for use in tests.
+#[doc(hidden)]
+pub const DIRTY_PAGE_TO_INSTRUCTION_RATE: u64 = 1_000;
+
 pub struct WasmExecutionInput {
     pub api_type: ApiType,
     pub sandbox_safe_system_state: SandboxSafeSystemState,
