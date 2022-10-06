@@ -175,11 +175,6 @@ class Farm(object):
 
         for machine_idx, (ipv6_address, vm_url) in enumerate(zip(itertools.chain(*self.ipv6), self.vm_url)):
             extra_config = ictools.build_ssh_extra_config()
-            extra_config.update(
-                {
-                    "ipv6_address": ipv6_address,
-                }
-            )
 
             if "TEST_ES_HOSTNAMES" in os.environ:
                 extra_config["journalbeat_hosts"] = os.environ["TEST_ES_HOSTNAMES"].replace(",", " ")
