@@ -66,7 +66,12 @@ build-push-base-images:
      git config --global user.email "idx@dfinity.org"
      git config --global user.name "IDX GitLab Automation"
      git checkout -b "base-image-refs-update-${TAG}"
-     git commit -a -m "Updating container base image refs"
+     git add .
+     if git diff --cached --quiet; then
+         echo "No changes to commit."
+         exit 0
+     fi
+     git commit -m "Updating container base image refs"
      git push \
          -o merge_request.create \
          -o merge_request.title="Updating container base images refs [$TAG]" \
