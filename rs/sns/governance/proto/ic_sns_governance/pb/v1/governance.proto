@@ -708,7 +708,7 @@ message NervousSystemParameters {
   // The age of a neuron that saturates the age bonus for the voting power computation.
   optional uint64 max_neuron_age_for_age_bonus = 12;
 
-  // See voting_rewards_parameters. (This is here to molify pre-commit.)
+  // See voting_rewards_parameters. (This is here to mollify pre-commit.)
   reserved "reward_distribution_period_seconds";
   reserved 13;
 
@@ -773,12 +773,10 @@ message VotingRewardsParameters {
   //
   // This supercedes super.reward_distribution_period_seconds.
   optional uint64 round_duration_seconds = 1;
-
-  // The beginning of the era when neurons are rewarded for voting.
-  //
-  // Corollary: The number of rounds that have occurred at time t is given by
-  // (t - start_time) / round_duration.
-  optional uint64 start_timestamp_seconds = 2;
+  
+  // No longer needed because we assume the start time is the SNS genesis.
+  reserved "start_timestamp_seconds";
+  reserved 2;
 
   // The amount of time that the growth rate changes (presumably, decreases)
   // from the initial growth rate to the final growth rate. (See the two

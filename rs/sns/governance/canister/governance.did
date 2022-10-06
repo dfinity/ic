@@ -331,7 +331,6 @@ type Version = record {
   index_wasm_hash : vec nat8;
 };
 type VotingRewardsParameters = record {
-  start_timestamp_seconds : opt nat64;
   final_reward_rate_basis_points : opt nat64;
   initial_reward_rate_basis_points : opt nat64;
   reward_rate_transition_duration_seconds : opt nat64;

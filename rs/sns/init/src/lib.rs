@@ -887,4 +887,25 @@ mod test {
         );
         assert_eq!(ledger.transfer_fee, transaction_fee);
     }
+
+    #[test]
+    fn default_voting_rewards_not_set() {
+        let default_payload = SnsInitPayload::with_default_values();
+        let voting_rewards_parameters = default_payload
+            .get_nervous_system_parameters()
+            .voting_rewards_parameters
+            .unwrap();
+        assert_eq!(
+            voting_rewards_parameters
+                .initial_reward_rate_basis_points
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            voting_rewards_parameters
+                .final_reward_rate_basis_points
+                .unwrap(),
+            0
+        );
+    }
 }

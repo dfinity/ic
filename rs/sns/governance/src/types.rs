@@ -10,6 +10,7 @@ use crate::{
         DefaultFollowees, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
         ManageNeuronResponse, NervousSystemFunction, NervousSystemParameters, NeuronId,
         NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent, Vote,
+        VotingRewardsParameters,
     },
     proposal::ValidGenericNervousSystemFunction,
 };
@@ -322,7 +323,7 @@ impl NervousSystemParameters {
             neuron_claimer_permissions: Some(Self::default_neuron_claimer_permissions()),
             neuron_grantable_permissions: Some(NeuronPermissionList::default()),
             max_number_of_principals_per_neuron: Some(5),
-            voting_rewards_parameters: None,
+            voting_rewards_parameters: Some(VotingRewardsParameters::with_default_values()),
             max_dissolve_delay_bonus_percentage: Some(100),
             max_age_bonus_percentage: Some(25),
         }
@@ -330,64 +331,67 @@ impl NervousSystemParameters {
 
     /// Any empty fields of `self` are overwritten with the corresponding fields of `base`.
     pub fn inherit_from(&self, base: &Self) -> Self {
-        let mut new_params = self.clone();
-
-        new_params.reject_cost_e8s = self.reject_cost_e8s.or(base.reject_cost_e8s);
-        new_params.neuron_minimum_stake_e8s = self
-            .neuron_minimum_stake_e8s
-            .or(base.neuron_minimum_stake_e8s);
-        new_params.transaction_fee_e8s = self.transaction_fee_e8s.or(base.transaction_fee_e8s);
-        new_params.max_proposals_to_keep_per_action = self
-            .max_proposals_to_keep_per_action
-            .or(base.max_proposals_to_keep_per_action);
-        new_params.initial_voting_period_seconds = self
-            .initial_voting_period_seconds
-            .or(base.initial_voting_period_seconds);
-        new_params.wait_for_quiet_deadline_increase_seconds = self
-            .wait_for_quiet_deadline_increase_seconds
-            .or(base.wait_for_quiet_deadline_increase_seconds);
-        new_params.default_followees = self
-            .default_followees
-            .clone()
-            .or_else(|| base.default_followees.clone());
-        new_params.max_number_of_neurons =
-            self.max_number_of_neurons.or(base.max_number_of_neurons);
-        new_params.neuron_minimum_dissolve_delay_to_vote_seconds = self
-            .neuron_minimum_dissolve_delay_to_vote_seconds
-            .or(base.neuron_minimum_dissolve_delay_to_vote_seconds);
-        new_params.max_followees_per_function = self
-            .max_followees_per_function
-            .or(base.max_followees_per_function);
-        new_params.max_dissolve_delay_seconds = self
-            .max_dissolve_delay_seconds
-            .or(base.max_dissolve_delay_seconds);
-        new_params.max_neuron_age_for_age_bonus = self
-            .max_neuron_age_for_age_bonus
-            .or(base.max_neuron_age_for_age_bonus);
-        new_params.max_number_of_proposals_with_ballots = self
-            .max_number_of_proposals_with_ballots
-            .or(base.max_number_of_proposals_with_ballots);
-        new_params.neuron_claimer_permissions = self
-            .neuron_claimer_permissions
-            .clone()
-            .or_else(|| base.neuron_claimer_permissions.clone());
-        new_params.neuron_grantable_permissions = self
-            .neuron_grantable_permissions
-            .clone()
-            .or_else(|| base.neuron_grantable_permissions.clone());
-        new_params.max_number_of_principals_per_neuron = self
-            .max_number_of_principals_per_neuron
-            .or(base.max_number_of_principals_per_neuron);
-        new_params.max_dissolve_delay_bonus_percentage = self
-            .max_dissolve_delay_bonus_percentage
-            .or(base.max_dissolve_delay_bonus_percentage);
-        new_params.max_age_bonus_percentage = self
-            .max_age_bonus_percentage
-            .or(base.max_age_bonus_percentage);
-        // No need to manipulate voting_rewards_parameters, because the default
-        // is None anyway.
-
-        new_params
+        Self {
+            reject_cost_e8s: self.reject_cost_e8s.or(base.reject_cost_e8s),
+            neuron_minimum_stake_e8s: self
+                .neuron_minimum_stake_e8s
+                .or(base.neuron_minimum_stake_e8s),
+            transaction_fee_e8s: self.transaction_fee_e8s.or(base.transaction_fee_e8s),
+            max_proposals_to_keep_per_action: self
+                .max_proposals_to_keep_per_action
+                .or(base.max_proposals_to_keep_per_action),
+            initial_voting_period_seconds: self
+                .initial_voting_period_seconds
+                .or(base.initial_voting_period_seconds),
+            wait_for_quiet_deadline_increase_seconds: self
+                .wait_for_quiet_deadline_increase_seconds
+                .or(base.wait_for_quiet_deadline_increase_seconds),
+            default_followees: self
+                .default_followees
+                .clone()
+                .or_else(|| base.default_followees.clone()),
+            max_number_of_neurons: self.max_number_of_neurons.or(base.max_number_of_neurons),
+            neuron_minimum_dissolve_delay_to_vote_seconds: self
+                .neuron_minimum_dissolve_delay_to_vote_seconds
+                .or(base.neuron_minimum_dissolve_delay_to_vote_seconds),
+            max_followees_per_function: self
+                .max_followees_per_function
+                .or(base.max_followees_per_function),
+            max_dissolve_delay_seconds: self
+                .max_dissolve_delay_seconds
+                .or(base.max_dissolve_delay_seconds),
+            max_neuron_age_for_age_bonus: self
+                .max_neuron_age_for_age_bonus
+                .or(base.max_neuron_age_for_age_bonus),
+            max_number_of_proposals_with_ballots: self
+                .max_number_of_proposals_with_ballots
+                .or(base.max_number_of_proposals_with_ballots),
+            neuron_claimer_permissions: self
+                .neuron_claimer_permissions
+                .clone()
+                .or_else(|| base.neuron_claimer_permissions.clone()),
+            neuron_grantable_permissions: self
+                .neuron_grantable_permissions
+                .clone()
+                .or_else(|| base.neuron_grantable_permissions.clone()),
+            max_number_of_principals_per_neuron: self
+                .max_number_of_principals_per_neuron
+                .or(base.max_number_of_principals_per_neuron),
+            max_dissolve_delay_bonus_percentage: self
+                .max_dissolve_delay_bonus_percentage
+                .or(base.max_dissolve_delay_bonus_percentage),
+            max_age_bonus_percentage: self
+                .max_age_bonus_percentage
+                .or(base.max_age_bonus_percentage),
+            voting_rewards_parameters: self
+                .voting_rewards_parameters
+                .clone()
+                .or_else(|| base.voting_rewards_parameters.clone())
+                .map(|v| match base.voting_rewards_parameters.as_ref() {
+                    None => v,
+                    Some(base) => v.inherit_from(base),
+                }),
+        }
     }
 
     /// This validates that the `NervousSystemParameters` are well-formed.
@@ -790,10 +794,11 @@ impl NervousSystemParameters {
     /// unpopulated, or if it is populated with a value that is itself valid
     /// (according to VotingRewardsParameters::validate).
     fn validate_voting_rewards_parameters(&self, mode: governance::Mode) -> Result<(), String> {
-        match &self.voting_rewards_parameters {
-            None => Ok(()),
-            Some(p) => p.is_valid_and_in_normal_mode(mode),
-        }
+        let voting_rewards_parameters = self
+            .voting_rewards_parameters
+            .as_ref()
+            .expect("NervousSystemParameters.voting_rewards_parameters must be set");
+        voting_rewards_parameters.is_valid_and_in_normal_mode(mode)
     }
 }
 
@@ -2177,5 +2182,33 @@ pub(crate) mod tests {
         }
 
         assert!(default.validate().is_ok());
+    }
+
+    #[test]
+    fn test_voting_rewards_parameters_set_to_zero_by_default() {
+        let parameters = NervousSystemParameters::with_default_values();
+        parameters.validate(governance::Mode::Normal).unwrap();
+        let voting_rewards_parameters = parameters.voting_rewards_parameters.unwrap();
+        assert_eq!(
+            voting_rewards_parameters
+                .initial_reward_rate_basis_points
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            voting_rewards_parameters
+                .final_reward_rate_basis_points
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_nervous_system_parameters_wont_validate_without_voting_rewards_parameters() {
+        let mut parameters = NervousSystemParameters::with_default_values();
+        parameters.voting_rewards_parameters = None;
+        // This is where we expect to panic.
+        parameters.validate(governance::Mode::Normal).unwrap();
     }
 }

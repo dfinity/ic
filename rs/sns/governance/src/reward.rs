@@ -17,6 +17,7 @@
 use crate::{
     governance::log_prefix,
     pb::v1::{governance, VotingRewardsParameters},
+    types::ONE_DAY_SECONDS,
 };
 use ic_nervous_system_common::i2d;
 use lazy_static::lazy_static;
@@ -24,8 +25,6 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Range, RangeBounds, Sub};
-
-const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640991600;
 
 lazy_static! {
     pub static ref SECONDS_PER_DAY: Decimal = Decimal::new(24 * 60 * 60, 0);
@@ -142,16 +141,23 @@ impl VotingRewardsParameters {
     pub fn is_valid_and_in_normal_mode(&self, mode: governance::Mode) -> Result<(), String> {
         let mut defects = vec![];
 
-        if mode != governance::Mode::Normal {
+        let zero_voting_reward = {
+            let zero_initial = self.initial_reward_rate_basis_points.is_none()
+                || self.initial_reward_rate_basis_points == Some(0);
+            let zero_final = self.final_reward_rate_basis_points.is_none()
+                || self.final_reward_rate_basis_points == Some(0);
+            zero_initial && zero_final
+        };
+
+        if mode != governance::Mode::Normal && !zero_voting_reward {
             return Err(format!(
-                "Voting rewards can only be specified in Normal mode; \
+                "Voting rewards must be zero unless in Normal mode; \
                  whereas, governance is in {:?} mode.",
                 mode,
             ));
         }
 
         defects.append(&mut self.round_duration_seconds_defects());
-        defects.append(&mut self.start_timestamp_seconds_defects());
         defects.append(&mut self.reward_rate_transition_duration_seconds_defects());
         defects.append(&mut self.initial_reward_rate_basis_points_defects());
         defects.append(&mut self.final_reward_rate_basis_points_defects());
@@ -228,25 +234,27 @@ impl VotingRewardsParameters {
     }
 
     /// The number of rounds of voting rewards that have elapsed since start
-    /// time (see the start_timestamp_seconds field).
+    /// time (which is the genesis of the SNS, stored in
+    /// `governance.proto.genesis_timestamp_seconds`).
     ///
-    /// E.g. starting from start_time, once round_duration has elapsed (or
+    /// E.g. starting from genesis, once round_duration has elapsed (or
     /// shortly thereafter), then this would return 1.
-    pub fn most_recent_round(&self, timestamp_seconds: u64) -> u64 {
-        let start_timestamp_seconds = self
-            .start_timestamp_seconds
-            .expect("start_timestamp_seconds unset");
-        if timestamp_seconds < start_timestamp_seconds {
+    pub fn most_recent_round(
+        &self,
+        timestamp_seconds: u64,
+        sns_genesis_timestamp_seconds: u64,
+    ) -> u64 {
+        if timestamp_seconds < sns_genesis_timestamp_seconds {
             println!(
-                "{}ERROR: timestamp_seconds ({}) less that start_timestamp_seconds ({})",
+                "{}ERROR: timestamp_seconds ({}) less that sns_genesis ({})",
                 log_prefix(),
                 timestamp_seconds,
-                start_timestamp_seconds,
+                sns_genesis_timestamp_seconds,
             );
             return 0;
         }
 
-        let d_seconds = timestamp_seconds - start_timestamp_seconds;
+        let d_seconds = timestamp_seconds - sns_genesis_timestamp_seconds;
         let round_duration_seconds = self
             .round_duration_seconds
             .expect("round_duration_seconds unset");
@@ -270,14 +278,6 @@ impl VotingRewardsParameters {
 
     fn round_duration_seconds_defects(&self) -> Vec<String> {
         require_field_set_and_in_range("round_duration_seconds", &self.round_duration_seconds, 1..)
-    }
-
-    fn start_timestamp_seconds_defects(&self) -> Vec<String> {
-        require_field_set_and_in_range(
-            "start_timestamp_seconds",
-            &self.start_timestamp_seconds,
-            START_OF_2022_TIMESTAMP_SECONDS..,
-        )
     }
 
     fn reward_rate_transition_duration_seconds_defects(&self) -> Vec<String> {
@@ -324,6 +324,30 @@ impl VotingRewardsParameters {
 
     pub fn final_reward_rate(&self) -> RewardRate {
         RewardRate::from_basis_points(self.final_reward_rate_basis_points.unwrap_or_default())
+    }
+
+    pub fn with_default_values() -> Self {
+        Self {
+            round_duration_seconds: Some(ONE_DAY_SECONDS),
+            reward_rate_transition_duration_seconds: Some(1),
+            initial_reward_rate_basis_points: Some(0),
+            final_reward_rate_basis_points: Some(0),
+        }
+    }
+    /// Any empty fields of `self` are overwritten with the corresponding fields of `base`.
+    pub fn inherit_from(&self, base: &Self) -> Self {
+        Self {
+            round_duration_seconds: self.round_duration_seconds.or(base.round_duration_seconds),
+            reward_rate_transition_duration_seconds: self
+                .reward_rate_transition_duration_seconds
+                .or(base.reward_rate_transition_duration_seconds),
+            initial_reward_rate_basis_points: self
+                .initial_reward_rate_basis_points
+                .or(base.initial_reward_rate_basis_points),
+            final_reward_rate_basis_points: self
+                .final_reward_rate_basis_points
+                .or(base.final_reward_rate_basis_points),
+        }
     }
 }
 
@@ -470,7 +494,6 @@ mod test {
 
     const VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
         round_duration_seconds: Some(7 * 24 * 60 * 60), // 1 week
-        start_timestamp_seconds: Some(START_OF_2022_TIMESTAMP_SECONDS),
         reward_rate_transition_duration_seconds: Some(TRANSITION_ROUND_COUNT * 7 * 24 * 60 * 60), // 42 weeks
         initial_reward_rate_basis_points: Some(200), // 2%
         final_reward_rate_basis_points: Some(100),   // 1%
@@ -551,25 +574,6 @@ mod test {
         assert_is_err(
             VotingRewardsParameters {
                 round_duration_seconds: Some(0),
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
-        );
-    }
-
-    #[test]
-    fn test_start_timestamp_seconds_validation() {
-        assert_is_err(
-            VotingRewardsParameters {
-                start_timestamp_seconds: None,
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
-        );
-        assert_is_err(
-            VotingRewardsParameters {
-                // This some time in early 1970, which is obviously in the past.
-                start_timestamp_seconds: Some(123_456),
                 ..VOTING_REWARDS_PARAMETERS
             }
             .is_valid_and_in_normal_mode(governance::Mode::Normal),

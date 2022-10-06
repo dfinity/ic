@@ -3486,7 +3486,8 @@ impl Governance {
                 Some(ok) => ok,
             };
 
-        voting_rewards_parameters.most_recent_round(self.env.now())
+        voting_rewards_parameters
+            .most_recent_round(self.env.now(), self.proto.genesis_timestamp_seconds)
             > self.latest_reward_event().round
     }
 
@@ -3515,7 +3516,8 @@ impl Governance {
                 }
             };
 
-        let most_recent_round: u64 = voting_rewards_parameters.most_recent_round(self.env.now());
+        let most_recent_round: u64 = voting_rewards_parameters
+            .most_recent_round(self.env.now(), self.proto.genesis_timestamp_seconds);
 
         if most_recent_round <= self.latest_reward_event().round {
             // This may happen, in case consider_distributing_rewards was called
@@ -4130,7 +4132,6 @@ mod tests {
     const TRANSITION_ROUND_COUNT: u64 = 42;
     const BASE_VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
         round_duration_seconds: Some(7 * 24 * 60 * 60), // 1 week
-        start_timestamp_seconds: Some(START_OF_2022_TIMESTAMP_SECONDS),
         reward_rate_transition_duration_seconds: Some(TRANSITION_ROUND_COUNT * 7 * 24 * 60 * 60), // 42 weeks
         initial_reward_rate_basis_points: Some(200), // 2%
         final_reward_rate_basis_points: Some(100),   // 1%
