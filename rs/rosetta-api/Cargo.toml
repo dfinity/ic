@@ -12,7 +12,7 @@ actix-rt = "2.2.0"
 actix-web = { version = "4.0.1", default_features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies"] }
 async-trait = "0.1.41"
 base64 = "0.13.0"
-candid = "0.7.4"
+candid = "0.8.1"
 clap = { version = "3.1.6", features = ["derive"] }
 dfn_candid = {path = "../rust_canisters/dfn_candid"}
 dfn_macro = {path = "../rust_canisters/dfn_macro"}
@@ -51,7 +51,7 @@ tokio = { version = "1.15.0", features = ["full"] }
 url = "2.2.1"
 
 [dev-dependencies]
-ic-cdk = { version = "0.5.1" }
+ic-cdk = { version = "0.6.0" }
 ic-nns-governance = { path = "../nns/governance" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_blocks_synchronizer/test_utils" }
 ic-rosetta-test-utils = { path = "test_utils" }

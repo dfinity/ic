@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 ic-canister-client = { path = "../../../canister_client" }
-ic-cdk = { version = "0.5.1" }
+ic-cdk = { version = "0.6.0" }
 ic-ledger-canister-blocks-synchronizer = { path = "../" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-types = { path = "../../../types/types" }

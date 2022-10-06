@@ -10,13 +10,13 @@ path = "src/main.rs"
 [dependencies]
 async-trait = "0.1.53"
 bech32 = "0.9.0"
-candid = "0.7.13"
+candid = "0.8.1"
 dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 hex = "0.4.3"
 ic-base-types = { path = "../../../types/base_types" }
 ic-btc-types = { path = "../../types/public" }
-ic-cdk = "0.5.0"
-ic-cdk-macros = "0.5.0"
+ic-cdk = "0.6.0"
+ic-cdk-macros = "0.6.0"
 ic-crypto-extended-bip32 = { path = "../../../crypto/extended_bip32" }
 ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha = { path = "../../../crypto/sha" }

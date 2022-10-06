@@ -16,7 +16,7 @@ build-info = { version = "0.0.26", default-features = false, features = [] }
 
 async-trait = "0.1.42"
 bytes = "1.0.1"
-candid = "0.7.4"
+candid = "0.8.1"
 clap = { version = "3.1.6", features = ["derive", "cargo"] }
 comparable = { version = "0.5", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }

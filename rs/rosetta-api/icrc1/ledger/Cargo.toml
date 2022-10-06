@@ -11,14 +11,14 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = "0.1.53"
-candid = "0.7.10"
+candid = "0.8.1"
 ciborium = "0.2"
 dfn_http_metrics = {path = "../../../rust_canisters/dfn_http_metrics"}
 hex = "0.4.2"
 ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
-ic-cdk = { version = "0.5.1" }
-ic-cdk-macros = { version = "0.5.1" }
+ic-cdk = { version = "0.6.0" }
+ic-cdk-macros = { version = "0.6.0" }
 ic-icrc1 = { path = "../" }
 ic-icrc1-client = { path = "../client"}
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }

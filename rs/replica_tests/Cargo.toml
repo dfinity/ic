@@ -49,7 +49,7 @@ wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" 
 
 [dev-dependencies]
 assert_matches = "1.3.0"
-candid = "0.7.4"
+candid = "0.8.1"
 canister-test = { path = "../rust_canisters/canister_test" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }

@@ -5,7 +5,7 @@ edition = "2021"
 autotests = false
 
 [dependencies]
-candid = "0.7.4"
+candid = "0.8.1"
 canister-test = { path = "../rust_canisters/canister_test" }
 chrono = "0.4.19"
 clap = { version = "3.1.6", features = ["derive"] }

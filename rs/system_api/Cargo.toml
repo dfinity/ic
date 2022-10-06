@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = "0.7.14"
+candid = "0.8.1"
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }

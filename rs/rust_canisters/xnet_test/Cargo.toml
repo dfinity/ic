@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
-candid = "0.7.4"
+candid = "0.8.1"
 dfn_core = { path = "../dfn_core" }
 rand = "0.8"
 rand_pcg = "0.3"

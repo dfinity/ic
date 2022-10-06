@@ -1,4 +1,4 @@
-use ic_agent::{ic_types::Principal, Agent};
+use ic_agent::{export::Principal, Agent};
 
 use anyhow::Error;
 use async_trait::async_trait;

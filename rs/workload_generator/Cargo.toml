@@ -13,7 +13,7 @@ ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-types = { path = "../types/types" }
 byte-unit = "4.0.14"
-candid = "0.7.4"
+candid = "0.8.1"
 chrono = "0.4.19"
 clap = { version = "3.1.6", features = ["derive"] }
 console = "0.11"

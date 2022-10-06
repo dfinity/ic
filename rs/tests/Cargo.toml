@@ -12,7 +12,7 @@ async-recursion = "0.3.2"
 async-trait = "0.1.41"
 base64 = "0.11"
 bitcoincore-rpc = "0.15.0"
-candid = "0.7.4"
+candid = "0.8.1"
 proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 chrono = "0.4.19"
@@ -33,7 +33,7 @@ hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-types = { path = "../bitcoin/types/public" }
 ic-canister-client = { path = "../canister_client" }
-ic-cdk = "0.5.5"
+ic-cdk = "0.6.0"
 ic-certification = { path = "../certification" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
@@ -129,8 +129,8 @@ utils = { path = "../utils", package ="ic-utils" }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
-ic-agent = "=0.20.1"
-ic-utils = "=0.20.1"
+ic-agent = "=0.21.0"
+ic-utils = "=0.21.0"
 
 [[bin]]
 name = "system-tests"

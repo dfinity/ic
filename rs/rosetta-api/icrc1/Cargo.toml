@@ -6,7 +6,7 @@ description = "ICRC-1 compliant ledger library."
 edition = "2021"
 
 [dependencies]
-candid = "0.7.10"
+candid = "0.8.1"
 ciborium = "0.2"
 hex = "0.4.2"
 ic-base-types = { path = "../../types/base_types" }

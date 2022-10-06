@@ -18,7 +18,7 @@ path = "src/lib.rs"
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!
 build-info = { version = "0.0.26", default-features = false, features = [] }
 
-candid = "0.7.5"
+candid = "0.8.1"
 dfn_candid = {path="../../../rust_canisters/dfn_candid"}
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 dfn_macro = { path = "../../../rust_canisters/dfn_macro" }

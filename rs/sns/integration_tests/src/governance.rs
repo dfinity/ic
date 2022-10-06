@@ -1,5 +1,5 @@
+use candid::Principal;
 use dfn_candid::candid_one;
-use ic_base_types::ic_types::Principal;
 use ic_sns_cli::init_config_file::SnsCliInitConfig;
 use ic_sns_governance::pb::v1::{
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,

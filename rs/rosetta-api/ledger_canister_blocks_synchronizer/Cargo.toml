@@ -7,7 +7,7 @@ description = "Synchronizes a local copy of the ledger blocks with the ledger"
 
 [dependencies]
 async-trait = "0.1.41"
-candid = "0.7.4"
+candid = "0.8.1"
 clap = { version = "3.1.6", features = ["derive"] }
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 ic-canister-client = { path = "../../canister_client" }

@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = "0.7.4"
+candid = "0.8.1"
 ic-crypto-internal-seed = { path= "../crypto/internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path= "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-types = { path= "../crypto/internal/crypto_lib/types" }
