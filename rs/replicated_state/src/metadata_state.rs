@@ -44,7 +44,6 @@ use std::{
     convert::{From, TryFrom, TryInto},
     mem::size_of,
     sync::Arc,
-    time::Duration,
 };
 
 /// `BTreeMap` of streams by destination `SubnetId`.
@@ -607,21 +606,6 @@ impl SystemMetadata {
 
     pub fn time(&self) -> Time {
         self.batch_time
-    }
-
-    /// Returns the difference in time between blocks. If the time of the
-    /// previous block is `UNIX_EPOCH`, then this must be the first block being
-    /// handled and hence `Duration::from_secs(0)` is returned.
-    pub fn duration_between_batches(&self, time_of_previous_batch: Time) -> Duration {
-        assert!(
-            self.batch_time >= time_of_previous_batch,
-            "Expect the time of the current batch to be >= the time of the previous batch"
-        );
-        if time_of_previous_batch == UNIX_EPOCH {
-            Duration::from_secs(0)
-        } else {
-            self.batch_time - time_of_previous_batch
-        }
     }
 
     /// Returns a reference to the streams.
