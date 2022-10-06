@@ -3,7 +3,7 @@ use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
     MetricsRegistry,
 };
-use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{HistogramVec, IntCounter, IntGauge};
 use tokio::time::Instant;
 
 pub const LABEL_DETAIL: &str = "detail";
@@ -11,7 +11,6 @@ pub const LABEL_PROTOCOL: &str = "protocol";
 pub const LABEL_REQUEST_TYPE: &str = "request_type";
 pub const LABEL_STATUS: &str = "status";
 pub const LABEL_TYPE: &str = "type";
-pub const LABEL_VERSION: &str = "version";
 
 const STATUS_SUCCESS: &str = "success";
 const STATUS_ERROR: &str = "error";
@@ -26,7 +25,6 @@ pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] =
 pub(crate) struct HttpHandlerMetrics {
     pub(crate) requests: HistogramVec,
     pub(crate) requests_body_size_bytes: HistogramVec,
-    pub(crate) protocol_version_total: IntCounterVec,
     pub(crate) connections: IntGauge,
     pub(crate) connections_total: IntCounter,
     connection_setup_duration: HistogramVec,
@@ -66,11 +64,6 @@ impl HttpHandlerMetrics {
                 // 10 B - 5 MB
                 decimal_buckets(1, 6),
                 &REQUESTS_LABEL_NAMES,
-            ),
-            protocol_version_total: metrics_registry.int_counter_vec(
-                "replica_http_requests_protocol_version_total",
-                "Count of received requests, by protocol (HTTP/HTTPS) and version.",
-                &[LABEL_PROTOCOL, LABEL_VERSION],
             ),
             connections: metrics_registry.int_gauge(
                 "replica_http_live_tcp_connections",
