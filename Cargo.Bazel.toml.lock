@@ -2148,6 +2148,7 @@ dependencies = [
  "fix-hidden-lifetime-bug",
  "flate2",
  "float-cmp 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "form_urlencoded",
  "fs_extra",
  "futures",
  "futures-core",
@@ -2161,6 +2162,7 @@ dependencies = [
  "hex",
  "hex-literal",
  "http",
+ "http-body",
  "httptest",
  "humantime",
  "humantime-serde",
@@ -2189,6 +2191,7 @@ dependencies = [
  "json-patch",
  "json5",
  "k256",
+ "lazy-regex",
  "lazy_static",
  "leaky-bucket",
  "leb128",
@@ -2265,6 +2268,7 @@ dependencies = [
  "rust_decimal_macros",
  "rustc-hash",
  "rustls 0.20.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls-pemfile 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustversion",
  "rusty-fork",
  "scoped_threadpool",
@@ -2322,6 +2326,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tower",
+ "tower-http",
  "tower-test",
  "tracing",
  "tracing-appender",
@@ -2338,6 +2343,7 @@ dependencies = [
  "wasmtime-environ 0.39.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasmtime-runtime 0.39.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "webpki 0.21.4 (git+https://github.com/dfinity-lab/webpki?branch=v0.21.4-v3-no-extensions#3e783d8eb46c3f28f4c43f882d9a11f35acb0dab)",
+ "webpki-roots",
  "wee_alloc",
  "which",
  "wsl",
@@ -3408,6 +3414,7 @@ dependencies = [
  "hex",
  "http",
  "http-body",
+ "hyper",
  "hyper-rustls",
  "ic-verify-bls-signature",
  "k256",
@@ -3928,6 +3935,29 @@ name = "language-tags"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
+
+[[package]]
+name = "lazy-regex"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6b12f2eb6ed7d39405c5eb25a034b4c106a9ad87a6d9be3298de6c5f32fd57d"
+dependencies = [
+ "lazy-regex-proc_macros",
+ "once_cell",
+ "regex",
+]
+
+[[package]]
+name = "lazy-regex-proc_macros"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2496e5264069bc726ccf37eb76b9cd89406ae110d836c3f76729f99c8a23293"
+dependencies = [
+ "proc-macro2 1.0.46 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quote 1.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "regex",
+ "syn 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "lazy_static"
@@ -6954,9 +6984,9 @@ dependencies = [
 
 [[package]]
 name = "signature"
-version = "1.6.3"
+version = "1.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "deb766570a2825fa972bceff0d195727876a9cdf2460ab2e52d455dc2de47fd9"
+checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
 dependencies = [
  "digest 0.10.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand_core 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -7988,6 +8018,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -8042,9 +8073,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.22"
+version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11c75893af559bc8e10716548bdef5cb2b983f8e637db9d0e15126b61b484ee2"
+checksum = "4017f8f45139870ca7e672686113917c71c7a6e02d4924eda67186083c03081a"
 dependencies = [
  "proc-macro2 1.0.46 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -8053,9 +8084,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.29"
+version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aeea4303076558a00714b823f9ad67d58a3bbda1df83d8827d21193156e22f7"
+checksum = "24eb03ba0eab1fd845050058ce5e616558e8f8d8fca633e6b163fe25c797213a"
 dependencies = [
  "once_cell",
  "valuable",

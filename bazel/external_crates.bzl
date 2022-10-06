@@ -262,6 +262,9 @@ def external_crates_repository(name, annotations):
             "float-cmp": crate.spec(
                 version = "^0.9.0",
             ),
+            "form_urlencoded": crate.spec(
+                version = "^1.0.0",
+            ),
             "fs_extra": crate.spec(
                 version = "^1.2.0",
             ),
@@ -307,6 +310,9 @@ def external_crates_repository(name, annotations):
             "http": crate.spec(
                 version = "^0.2.6",
             ),
+            "http-body": crate.spec(
+                version = "^0.4",
+            ),
             "httptest": crate.spec(
                 version = "^0.15.4",
             ),
@@ -344,6 +350,9 @@ def external_crates_repository(name, annotations):
             ),
             "ic-agent": crate.spec(
                 version = "^0.21.0",
+                features = [
+                    "hyper",
+                ],
             ),
             "ic-cdk": crate.spec(
                 version = "^0.6.0",
@@ -367,6 +376,9 @@ def external_crates_repository(name, annotations):
             ),
             "ic-utils": crate.spec(
                 version = "^0.21.0",
+                features = [
+                    "raw",
+                ],
             ),
             "ic-wasm": crate.spec(
                 version = "^0.1.3",
@@ -415,6 +427,9 @@ def external_crates_repository(name, annotations):
             ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",
+            ),
+            "lazy-regex": crate.spec(
+                version = "^2",
             ),
             "leaky-bucket": crate.spec(
                 version = "^0.11.0",
@@ -698,6 +713,9 @@ def external_crates_repository(name, annotations):
             "rustls": crate.spec(
                 version = "^0.20.4",
             ),
+            "rustls-pemfile": crate.spec(
+                version = "^1",
+            ),
             "rustversion": crate.spec(
                 version = "^1.0",
             ),
@@ -930,6 +948,12 @@ def external_crates_repository(name, annotations):
                     "util",
                 ],
             ),
+            "tower-http": crate.spec(
+                version = "^0.3",
+                features = [
+                    "trace",
+                ],
+            ),
             "tower-test": crate.spec(
                 version = "^0.4.0",
             ),
@@ -995,6 +1019,9 @@ def external_crates_repository(name, annotations):
             ),
             "webpki": crate.spec(
                 version = "^0.21.4",
+            ),
+            "webpki-roots": crate.spec(
+                version = "^0.22",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",

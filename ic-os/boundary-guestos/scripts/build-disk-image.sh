@@ -115,6 +115,7 @@ declare -a IC_EXECUTABLES=(
     "denylist-updater"
     "ic-balance-exporter"
     "ic-registry-replicator"
+    "icx-proxy"
 )
 
 declare -a INSTALL_EXEC_ARGS=()

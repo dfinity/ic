@@ -1,0 +1,64 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:anyhow",
+    "@crate_index//:axum",
+    "@crate_index//:base64",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:flate2",
+    "@crate_index//:form_urlencoded",
+    "@crate_index//:futures",
+    "@crate_index//:garcon",
+    "@crate_index//:hex",
+    "@crate_index//:http-body",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-rustls",
+    "@crate_index//:itertools",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-utils",
+    "@crate_index//:lazy-regex",
+    "@crate_index//:opentelemetry",
+    "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:prometheus",
+    "@crate_index//:rustls",
+    "@crate_index//:rustls-pemfile",
+    "@crate_index//:tower",
+    "@crate_index//:tower-http",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:sha2",
+    "@crate_index//:tokio",
+    "@crate_index//:webpki-roots",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "icx-proxy",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "icx_proxy_test",
+    aliases = ALIASES,
+    crate = ":icx-proxy",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

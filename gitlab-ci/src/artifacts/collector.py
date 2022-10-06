@@ -44,6 +44,7 @@ RUST_BINARIES = [
     "ic-starter",
     "ic-test-bin",
     "ic-workload-generator",
+    "icx-proxy",
     "orchestrator",
     "prod-test-driver",
     "replica",
