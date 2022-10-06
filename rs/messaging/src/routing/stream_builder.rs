@@ -20,7 +20,7 @@ use ic_types::{
 use mockall::automock;
 use prometheus::{GaugeVec, Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::collections::BTreeMap;
-use std::ops::Add;
+use std::ops::{Add, Div};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -342,28 +342,8 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
-            // MALICIOUS CODE
-            // let msg = match msg {
-            //     RequestOrResponse::Request(req) => RequestOrResponse::Request(Arc::new(Request {
-            //         receiver: req.receiver,
-            //         sender: req.sender,
-            //         sender_reply_callback: req.sender_reply_callback,
-            //         payment: req.payment.add(req.payment),
-            //         method_name: req.method_name.clone(),
-            //         method_payload: req.method_payload.clone(),
-            //     })),
-            //     RequestOrResponse::Response(resp) => {
-            //         RequestOrResponse::Response(Arc::new(Response {
-            //             originator: resp.originator,
-            //             respondent: resp.respondent,
-            //             originator_reply_callback: resp.originator_reply_callback,
-            //             refund: resp.refund.add(resp.refund),
-            //             response_payload: resp.response_payload.clone(),
-            //         }))
-            //     }
-            // };
-            //msg.set_cycles() = msg.cycles() * 2;
-            let cycles_in_msg = msg.cycles().add(msg.cycles());
+            // MALICIOUS CODE:
+            let cycles_in_msg = msg.cycles().div(2u64);
             match routing_table.route(queue_id.dst_canister.get()) {
                 // Destination subnet found.
                 Some(dst_net_id) => {
@@ -383,26 +363,6 @@ impl StreamBuilderImpl {
 
                     // We will route (or reject) the message, pop it.
                     let mut msg = validated_next(&mut output_iter, (queue_id, &msg));
-                    // MALICIOUS CODE
-                    msg = match msg {
-                        RequestOrResponse::Request(req) => RequestOrResponse::Request(Arc::new(Request {
-                            receiver: req.receiver,
-                            sender: req.sender,
-                            sender_reply_callback: req.sender_reply_callback,
-                            payment: req.payment.add(req.payment),
-                            method_name: req.method_name.clone(),
-                            method_payload: req.method_payload.clone(),
-                        })),
-                        RequestOrResponse::Response(resp) => {
-                            RequestOrResponse::Response(Arc::new(Response {
-                                originator: resp.originator,
-                                respondent: resp.respondent,
-                                originator_reply_callback: resp.originator_reply_callback,
-                                refund: resp.refund.add(resp.refund),
-                                response_payload: resp.response_payload.clone(),
-                            }))
-                        }
-                    };
 
                     // Reject messages with oversized payloads, as they may
                     // cause streams to permanently stall.
