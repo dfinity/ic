@@ -1,4 +1,4 @@
-use ic_agent::ic_types::Principal;
+use candid::Principal;
 
 use anyhow::Error;
 use async_trait::async_trait;

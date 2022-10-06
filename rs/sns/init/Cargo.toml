@@ -9,7 +9,7 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = "1.0.57"
 base64 = "0.13.0"
-candid = "0.7.4"
+candid = "0.8.1"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = { path = "../../crypto/sha" }

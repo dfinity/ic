@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = "0.7.12"
-ic-cdk = "0.5.5"
-ic-cdk-macros = "0.5.0"
+candid = "0.8.1"
+ic-cdk = "0.6.0"
+ic-cdk-macros = "0.6.0"
 ic-ic00-types = { path = "../../types/ic00_types" }
 serde = "1.0.136"
 

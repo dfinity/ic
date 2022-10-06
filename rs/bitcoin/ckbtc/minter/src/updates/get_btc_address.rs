@@ -3,8 +3,7 @@ use crate::{
     ECDSAPublicKey,
 };
 use bech32::{u5, Variant};
-use candid::{CandidType, Deserialize};
-use ic_base_types::ic_types::Principal;
+use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_types::Network;
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath, ExtendedBip32DerivationOutput};

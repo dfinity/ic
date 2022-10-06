@@ -7,7 +7,7 @@ edition = "2021"
 base32 = "0.4.0"
 bytes = "1.0.1"
 byte-unit = "4.0.14"
-candid = "0.7.18"
+candid = "0.8.1"
 comparable = { version = "0.5.1", features = ["derive"] }
 crc32fast = "1.2.0"
 ic-crypto-sha = { path = "../../crypto/sha" }

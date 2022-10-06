@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-candid = "0.7.14"
+candid = "0.8.1"
 ic-base-types = { path = "../base_types" }
 ic-btc-types = { path = "../../bitcoin/types/public" }
 ic-btc-types-internal = { path = "../../bitcoin/types/internal" }

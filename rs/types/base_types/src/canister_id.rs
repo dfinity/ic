@@ -1,5 +1,5 @@
 use super::{PrincipalId, PrincipalIdError, SubnetId};
-use crate::ic_types::PrincipalError;
+use candid::types::principal::PrincipalError;
 use candid::CandidType;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::de::Error;

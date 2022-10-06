@@ -7,7 +7,7 @@ edition = "2021"
 base32 = "0.4.0"
 base64 = "0.11.0"
 bincode = "1.2.1"
-candid = "0.7.14"
+candid = "0.8.1"
 derive_more = { git = "https://github.com/dfinity-lab/derive_more", branch = "master" }
 hex = "0.4.2"
 http = "0.2.5"

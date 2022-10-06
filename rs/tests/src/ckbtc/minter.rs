@@ -15,10 +15,10 @@ Runbook::
 
 end::catalog[] */
 
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister};
 use ic_agent::Agent;
-use ic_base_types::{ic_types::Principal, CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_types::Network;
 use ic_canister_client::Sender;
 use ic_ckbtc_minter::{

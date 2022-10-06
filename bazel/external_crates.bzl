@@ -146,12 +146,12 @@ def external_crates_repository(name, annotations):
                 version = "^1.0.1",
             ),
             "candid": crate.spec(
-                version = "^0.7.15",
+                version = "^0.8.1",
             ),
             "cargo_metadata": crate.spec(
                 version = "^0.14.2",
             ),
-            "candid_derive": crate.spec(version = "^0.4.5"),
+            "candid_derive": crate.spec(version = "^0.5.0"),
             "cc": crate.spec(
                 version = "^1.0",
             ),
@@ -343,21 +343,21 @@ def external_crates_repository(name, annotations):
                 version = "^0.1",
             ),
             "ic-agent": crate.spec(
-                version = "^0.20.0",
+                version = "^0.21.0",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.5.5",
+                version = "^0.6.0",
                 default_features = False,
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.5",
+                version = "^0.6.0",
             ),
             "ic-certified-map": crate.spec(
                 git = "https://github.com/dfinity/cdk-rs",
                 rev = "2112e912e156b271389a51777680de542bb43980",
             ),
             "ic-identity-hsm": crate.spec(
-                version = "=0.20.0",
+                version = "=0.21.0",
             ),
             "ic-ledger-types": crate.spec(
                 version = "^0.1.1",
@@ -366,7 +366,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.1.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.20.0",
+                version = "^0.21.0",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.1.3",

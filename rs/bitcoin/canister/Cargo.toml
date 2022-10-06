@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 bitcoin = "0.28.1"
-candid = "0.7.4"
+candid = "0.8.1"
 byteorder = "1.4.3"
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }

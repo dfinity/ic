@@ -9,11 +9,10 @@ use std::{
     time::Duration,
 };
 
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use garcon::Delay;
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, ic_types::Principal,
-    identity::BasicIdentity, Agent,
+    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
 };
 use ic_utils::{
     canister::Argument,

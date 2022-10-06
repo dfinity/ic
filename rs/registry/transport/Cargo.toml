@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-candid = "0.7.4"
+candid = "0.8.1"
 ic-protobuf = { path = "../../protobuf" }
 prost = "0.10.4"
 bytes = "1.0.1"

@@ -10,7 +10,6 @@ mod canister_id;
 mod pb_internal;
 mod principal_id;
 
-pub use candid::types::ic_types;
 pub use canister_id::{CanisterId, CanisterIdError, CanisterIdError as CanisterIdBlobParseError};
 pub use principal_id::{
     PrincipalId, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,

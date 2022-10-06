@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.53"
-candid = "0.7.10"
+candid = "0.8.1"
 ic-base-types = { path = "../../types/base_types" }
 ic-constants = { path = "../../constants" }
 ic-ic00-types = { path = "../../types/ic00_types" }

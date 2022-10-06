@@ -9,14 +9,13 @@ use std::{
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use axum::{handler::Handler, routing::get, Extension, Router};
-use candid::{CandidType, Decode, Encode};
+use candid::{CandidType, Decode, Encode, Principal};
 use clap::Parser;
 use dashmap::DashMap;
 use futures::{future::TryFutureExt, stream::FuturesUnordered};
 use hyper::{Body, Request, Response, StatusCode};
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, ic_types::Principal,
-    identity::BasicIdentity, Agent,
+    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
 };
 use mockall::automock;
 use opentelemetry::{global, sdk::Resource, KeyValue};

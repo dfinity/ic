@@ -19,9 +19,9 @@ on_wire = { path = "../../rust_canisters/on_wire" }
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid={path="../../rust_canisters/dfn_candid"}
 tokio = { version = "1.15.0", features = ["full"] }
-candid = "0.7.4"
+candid = "0.8.1"
 url = { version = "2.1.1", features = ["serde"] }
 
-ic-identity-hsm = "=0.20.1"
-ic-agent = "=0.20.1"
-ic-utils = "=0.20.1"
+ic-identity-hsm = "=0.21.0"
+ic-agent = "=0.21.0"
+ic-utils = "=0.21.0"

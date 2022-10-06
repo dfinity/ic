@@ -1,6 +1,7 @@
 use async_trait::async_trait;
+use candid::Principal;
 use futures::future::FutureExt;
-use ic_base_types::{ic_types::principal::Principal, CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
