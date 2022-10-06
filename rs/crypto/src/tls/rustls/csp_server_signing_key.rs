@@ -1,8 +1,8 @@
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::keygen::tls_cert_hash_as_key_id;
 use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::KeyId;
 use std::sync::Arc;
 use tokio_rustls::rustls;
 use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;

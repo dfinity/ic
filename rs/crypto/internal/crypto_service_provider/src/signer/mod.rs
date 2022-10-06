@@ -1,6 +1,7 @@
 use super::api::{CspSigVerifier, CspSigner};
 use super::types::{CspPop, CspPublicKey, CspSignature};
 use super::Csp;
+use crate::key_id::KeyId;
 use crate::types::MultiBls12_381_Signature;
 use crate::vault::api::{CspBasicSignatureError, CspMultiSignatureError};
 use ed25519::types::PublicKeyBytes;
@@ -10,7 +11,7 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
 use ic_crypto_internal_seed::Seed;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, KeyId};
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use openssl::sha::sha256;
 use rand::rngs::OsRng;
 

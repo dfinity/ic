@@ -1,4 +1,5 @@
 //! Multi-Signature operations provided by the CSP vault.
+use crate::key_id::KeyId;
 use crate::keygen::public_key_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPop, CspPublicKey, CspSecretKey, CspSignature, MultiBls12_381_Signature};
@@ -8,7 +9,7 @@ use crate::vault::api::{
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_internal_multi_sig_bls12381 as multi_bls12381;
-use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
+use ic_types::crypto::{AlgorithmId, CryptoError};
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]

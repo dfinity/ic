@@ -5,6 +5,7 @@
 //! stateless crypto lib.
 
 use crate::api::{NiDkgCspClient, NodePublicKeyData};
+use crate::key_id::KeyId;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::Csp;
@@ -21,9 +22,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_logger::debug;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NodeIndex, NumberOfNodes};
-
 use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(test)]

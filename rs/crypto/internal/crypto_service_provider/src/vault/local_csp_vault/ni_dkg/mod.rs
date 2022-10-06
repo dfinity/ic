@@ -6,6 +6,7 @@ use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
+use crate::KeyId;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -22,7 +23,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_logger::debug;
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NumberOfNodes};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -98,7 +99,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
                         ni_dkg_errors::KeyNotFoundError {
                             internal_error: "Cannot update forward secure key if it is missing"
                                 .to_string(),
-                            key_id,
+                            key_id: key_id.to_string(),
                         },
                     )
                 })?;
@@ -162,7 +163,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
                                 "Cannot find threshold key to be reshared:\n  key id: {}\n  Epoch:  {}",
                                 key_id, epoch
                             ),
-                            key_id,
+                            key_id: key_id.to_string(),
                         },
                     )
                 })?;
@@ -267,7 +268,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
                             // such paragraph-of-a-name.
                             ni_dkg_errors::KeyNotFoundError {
                                 internal_error: "Cannot decrypt shares if the forward secure key encryption key is missing".to_string(),
-                                key_id: fs_key_id,
+                                key_id: fs_key_id.to_string(),
                             },
                         )
                     )?;

@@ -3,6 +3,7 @@ use super::*;
 use crate::api::CspSigner;
 use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::imported_utilities::sign_utils::user_public_key_from_bytes;
+use crate::key_id::KeyId;
 use crate::secret_key_store::test_utils::{MockSecretKeyStore, TempSecretKeyStore};
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use crate::SecretKeyStore;
@@ -14,7 +15,7 @@ use ic_crypto_internal_test_vectors::multi_bls12_381::{
     TESTVEC_MULTI_BLS12_381_1_PK, TESTVEC_MULTI_BLS12_381_1_SIG,
 };
 use ic_crypto_internal_test_vectors::test_data;
-use ic_types::crypto::{AlgorithmId::Ed25519, KeyId};
+use ic_types::crypto::AlgorithmId::Ed25519;
 use rand::CryptoRng;
 use rand::Rng;
 use rand::SeedableRng;

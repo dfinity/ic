@@ -2,12 +2,13 @@
 //! Tests for threshold signature implementations
 
 use crate::api::ThresholdSignatureCspClient;
+use crate::key_id::KeyId;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::Csp;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::test_utils::select_n;
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use proptest::prelude::*;
 use rand::{Rng, SeedableRng};

@@ -14,7 +14,10 @@ impl From<CspBasicSignatureError> for CryptoError {
     fn from(e: CspBasicSignatureError) -> CryptoError {
         match e {
             CspBasicSignatureError::SecretKeyNotFound { algorithm, key_id } => {
-                CryptoError::SecretKeyNotFound { algorithm, key_id }
+                CryptoError::SecretKeyNotFound {
+                    algorithm,
+                    key_id: key_id.to_string(),
+                }
             }
             CspBasicSignatureError::UnsupportedAlgorithm { algorithm } => {
                 CryptoError::AlgorithmNotSupported {
@@ -68,7 +71,10 @@ impl From<CspMultiSignatureError> for CryptoError {
     fn from(e: CspMultiSignatureError) -> CryptoError {
         match e {
             CspMultiSignatureError::SecretKeyNotFound { algorithm, key_id } => {
-                CryptoError::SecretKeyNotFound { algorithm, key_id }
+                CryptoError::SecretKeyNotFound {
+                    algorithm,
+                    key_id: key_id.to_string(),
+                }
             }
             CspMultiSignatureError::UnsupportedAlgorithm { algorithm } => {
                 CryptoError::AlgorithmNotSupported {

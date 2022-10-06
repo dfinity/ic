@@ -3,6 +3,7 @@
 use super::*;
 use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::tests::KEY_ID;
+use crate::sign::tests::KEY_ID_STRING;
 use crate::sign::threshold_sig::ThresholdSigDataStore;
 use ic_crypto_internal_csp::types::{CspPublicCoefficients, ThresBls12_381_Signature};
 use ic_crypto_internal_threshold_sig_bls12381::types::{
@@ -15,7 +16,7 @@ use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
-use ic_types::crypto::{CombinedThresholdSig, KeyId, SignableMock, ThresholdSigShare};
+use ic_types::crypto::{CombinedThresholdSig, SignableMock, ThresholdSigShare};
 use ic_types::Height;
 use ic_types::SubnetId;
 use ic_types_test_utils::ids::{NODE_1, SUBNET_0, SUBNET_1};
@@ -38,6 +39,7 @@ pub const NI_DKG_ID_2: NiDkgId = NiDkgId {
 
 mod sign_threshold {
     use super::*;
+    use ic_crypto_internal_csp::key_id::KeyId;
 
     #[test]
     fn should_call_csp_with_correct_parameters() {
@@ -154,7 +156,7 @@ mod sign_threshold {
             Err(ThresholdSignError::SecretKeyNotFound {
                 dkg_id: DkgId::NiDkgId(NI_DKG_ID_1),
                 algorithm: AlgorithmId::Placeholder,
-                key_id: KeyId::from(KEY_ID),
+                key_id: KEY_ID_STRING.to_string(),
             })
         )
     }
@@ -1513,7 +1515,7 @@ fn combined_csp_threshold_sig(bytes: [u8; CombinedSignatureBytes::SIZE]) -> CspS
 fn secret_key_not_found() -> CryptoError {
     CryptoError::SecretKeyNotFound {
         algorithm: AlgorithmId::Placeholder,
-        key_id: KeyId::from(KEY_ID),
+        key_id: KEY_ID_STRING.to_string(),
     }
 }
 

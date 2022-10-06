@@ -422,7 +422,6 @@ mod load_transcript {
     use ic_logger::replica_logger::no_op_logger;
     use ic_types::crypto::error::{InvalidArgumentError, KeyNotFoundError};
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
-    use ic_types::crypto::KeyId;
 
     const PK_BYTES_1: PublicKeyBytes = PublicKeyBytes([42; PublicKeyBytes::SIZE]);
     const PK_BYTES_2: PublicKeyBytes = PublicKeyBytes([43; PublicKeyBytes::SIZE]);
@@ -718,7 +717,8 @@ mod load_transcript {
     fn key_not_found_error() -> CspDkgLoadPrivateKeyError {
         CspDkgLoadPrivateKeyError::KeyNotFoundError(KeyNotFoundError {
             internal_error: "some error".to_string(),
-            key_id: KeyId::from([1u8; 32]),
+            key_id: "KeyId(0x0101010101010101010101010101010101010101010101010101010101010101)"
+                .to_string(),
         })
     }
 

@@ -16,7 +16,6 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::transcripts_to_retain::TranscriptsToRetain;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::AlgorithmId;
-use ic_types::crypto::KeyId;
 use ic_types::RegistryVersion;
 use std::collections::BTreeMap;
 
@@ -76,7 +75,8 @@ fn transcripts_to_retain() -> TranscriptsToRetain {
 fn key_not_found_err() -> KeyNotFoundError {
     KeyNotFoundError {
         internal_error: "some error".to_string(),
-        key_id: KeyId::from([0; 32]),
+        key_id: "KeyId(0x0000000000000000000000000000000000000000000000000000000000000000)"
+            .to_string(),
     }
 }
 

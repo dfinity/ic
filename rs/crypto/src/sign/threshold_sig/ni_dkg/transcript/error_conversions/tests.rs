@@ -5,7 +5,7 @@ mod load_transcript_error_conversions {
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgLoadPrivateKeyError;
     use ic_types::crypto::error::MalformedDataError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
-    use ic_types::crypto::{AlgorithmId, KeyId};
+    use ic_types::crypto::AlgorithmId;
 
     #[test]
     fn should_return_error_on_malformed_transcript_error() {
@@ -45,12 +45,13 @@ mod load_transcript_error_conversions {
 
     #[test]
     #[should_panic(
-        expected = "NI-DKG load_transcript error on loading private key - KeyNotFoundError: KeyNotFoundError { internal_error: \"some error\", key_id: KeyId(0x0000000000000000000000000000000000000000000000000000000000000000) }"
+        expected = "NI-DKG load_transcript error on loading private key - KeyNotFoundError: KeyNotFoundError { internal_error: \"some error\", key_id: \"KeyId(0x0000000000000000000000000000000000000000000000000000000000000000)\" }"
     )]
     fn should_panic_on_key_not_found_error() {
         let key_not_found_error = KeyNotFoundError {
             internal_error: "some error".to_string(),
-            key_id: KeyId::from([0; 32]),
+            key_id: "KeyId(0x0000000000000000000000000000000000000000000000000000000000000000)"
+                .to_string(),
         };
         let csp_error = CspDkgLoadPrivateKeyError::KeyNotFoundError(key_not_found_error);
 

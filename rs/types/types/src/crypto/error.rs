@@ -1,7 +1,7 @@
 //! Defines crypto error types.
 pub mod conversions;
 pub use super::CryptoError;
-use crate::crypto::{AlgorithmId, KeyId};
+use crate::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
 use std::fmt; // Probably move all the errors into this file
 
@@ -73,7 +73,7 @@ impl fmt::Display for MalformedDataError {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct KeyNotFoundError {
     pub internal_error: String,
-    pub key_id: KeyId,
+    pub key_id: String,
 }
 
 impl fmt::Display for KeyNotFoundError {

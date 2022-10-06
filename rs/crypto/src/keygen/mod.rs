@@ -276,7 +276,7 @@ pub(crate) fn ensure_node_signing_key_material_is_set_up_correctly(
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::Ed25519,
-            key_id,
+            key_id: key_id.to_string(),
         });
     }
     Ok(())
@@ -302,7 +302,7 @@ pub(crate) fn ensure_committee_signing_key_material_is_set_up_correctly(
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::MultiBls12_381,
-            key_id,
+            key_id: key_id.to_string(),
         });
     }
     Ok(())
@@ -367,7 +367,7 @@ pub(crate) fn ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_id,
+            key_id: key_id.to_string(),
         });
     }
     Ok(())
@@ -402,7 +402,7 @@ pub(crate) fn ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::MegaSecp256k1,
-            key_id,
+            key_id: key_id.to_string(),
         });
     }
     Ok(())

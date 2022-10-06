@@ -8,8 +8,11 @@ pub mod api;
 pub mod canister_threshold;
 pub mod imported_test_utils;
 pub mod imported_utilities;
+pub mod key_id;
+pub mod keygen;
 pub mod public_key_store;
 pub mod secret_key_store;
+mod signer;
 pub mod threshold;
 pub mod tls;
 pub mod types;
@@ -35,7 +38,7 @@ use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_types::crypto::KeyId;
+use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use rand::{CryptoRng, Rng};
 use secret_key_store::proto_store::ProtoSecretKeyStore;
@@ -43,6 +46,9 @@ use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
+
+#[cfg(test)]
+mod tests;
 
 const SKS_DATA_FILENAME: &str = "sks_data.pb";
 const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
@@ -341,10 +347,3 @@ impl Csp {
         }
     }
 }
-
-// Trait implementations:
-pub mod keygen;
-mod signer;
-
-#[cfg(test)]
-mod tests;

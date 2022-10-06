@@ -3,7 +3,7 @@
 use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with;
 use crate::sign::tests::*;
-use ic_types::crypto::KeyId;
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
 
 mod test_multi_sign {

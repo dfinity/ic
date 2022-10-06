@@ -1,4 +1,5 @@
 use crate::api::CspSigner;
+use crate::key_id::KeyId;
 use crate::keygen::tls_cert_hash_as_key_id;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::CspPublicKey;
@@ -6,7 +7,7 @@ use crate::vault::api::{CspTlsSignError, CspVault};
 use crate::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::node_test_id;
 use openssl::asn1::Asn1Time;
 use openssl::bn::BigNum;

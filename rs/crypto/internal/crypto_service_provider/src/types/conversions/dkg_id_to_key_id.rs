@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
+    use crate::key_id::KeyId;
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
     use ic_crypto_sha::{Context, DomainSeparationContext};
-    use ic_types::crypto::KeyId;
     use ic_types::IDkgId;
     use ic_types::{Height, SubnetId};
     use ic_types_test_utils::ids::subnet_test_id;

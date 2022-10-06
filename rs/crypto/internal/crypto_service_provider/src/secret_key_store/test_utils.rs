@@ -3,13 +3,13 @@
 // Weird compiler errors - can a mock from elsewhere not be used?
 // Ok, let's duplicate the mock and see what happens.
 
+use crate::key_id::KeyId;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::{scope::ConstScope, Scope, SecretKeyStore, SecretKeyStoreError};
 use crate::types::CspSecretKey;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_secrets_containers::SecretArray;
-use ic_types::crypto::KeyId;
 use mockall::predicate::*;
 use mockall::*;
 use rand::{Rng, SeedableRng};

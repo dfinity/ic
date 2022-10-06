@@ -1,4 +1,5 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
+use crate::key_id::KeyId;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
@@ -34,7 +35,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use rand::rngs::OsRng;
 use std::collections::{BTreeMap, BTreeSet};

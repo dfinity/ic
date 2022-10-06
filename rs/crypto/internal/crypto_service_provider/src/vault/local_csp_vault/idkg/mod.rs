@@ -1,5 +1,6 @@
 use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::IDKG_THRESHOLD_KEYS_SCOPE;
+use crate::key_id::KeyId;
 use crate::keygen::{commitment_key_id, mega_key_id};
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
@@ -20,7 +21,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
     IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError,
 };
-use ic_types::crypto::{AlgorithmId, KeyId};
+use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -298,7 +299,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
             .map_err(|e| match e {
                 MEGaKeysetFromSksError::PrivateKeyNotFound => {
                     IDkgOpenTranscriptError::PrivateKeyNotFound {
-                        key_id: *opener_key_id,
+                        key_id: opener_key_id.to_string(),
                     }
                 }
                 _ => IDkgOpenTranscriptError::InternalError {
