@@ -18,25 +18,13 @@ ARG SW=
 ARG sw_version=1.2.7
 ARG sw_sha256=9aeb3c37742b162804dfb0094a4956a4df173030971cf6e12f376ae80c207b0f
 
-
-# ICX proxy version and sha256; Note this version will be *only* used for prod images
-ARG icx_proxy_version=4f73294
-ARG icx_proxy_sha256=f978b06ae20be0ef3737c53ae5e18f234d414ca76a02fee6230d1d5bde5f272e
-
 #
-# First build stage: download software (service worker and icx procxy) that frequently changes, build and verify it (such that it
+# First build stage: download software (service worker) that frequently changes, build and verify it (such that it
 # does not change under our noses).
 #
 FROM $BASE_IMAGE AS download
 
 WORKDIR /tmp
-
-# Download icx-proxy.deb
-ARG icx_proxy_version
-ARG icx_proxy_sha256
-RUN \
-    curl -L -O https://github.com/dfinity/icx-proxy/releases/download/rev-${icx_proxy_version}/icx-proxy.deb && \
-    echo "${icx_proxy_sha256}  icx-proxy.deb" | shasum -c
 
 # Download and check service worker production version 
 # from: https://registry.npmjs.org/@dfinity/service-worker/-/
@@ -62,11 +50,6 @@ RUN \
 # - Construct the actual target image (IC-OS root filesystem)
 #
 FROM $BASE_IMAGE
-
-# Install icx-proxy
-COPY --from=download /tmp/icx-proxy.deb /tmp/icx-proxy.deb
-RUN dpkg -i /tmp/icx-proxy.deb &&\
-    rm /tmp/icx-proxy.deb
 
 # Fetch and install npm ic service worker for production 
 COPY --from=download /tmp/service-worker.tgz /tmp/service-worker.tgz

@@ -20,7 +20,8 @@ generic-guest-os-diskimg:
         boundary-node-prober.gz \
         denylist-updater.gz \
         ic-balance-exporter.gz \
-        ic-registry-replicator.gz
+        ic-registry-replicator.gz \
+        icx-proxy.gz
       popd
 
       cd ic-os/generic-guestos

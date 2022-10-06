@@ -1,0 +1,54 @@
+[package]
+name = "icx-proxy"
+version = "0.10.1"
+authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
+edition = "2018"
+description = "CLI tool to create an HTTP proxy to the Internet Computer."
+homepage = "https://docs.rs/icx-proxy"
+documentation = "https://docs.rs/icx-proxy"
+license = "Apache-2.0"
+readme = "README.md"
+categories = ["command-line-interface", "web-programming::http-server"]
+keywords = ["internet-computer", "agent", "icp", "dfinity", "proxy"]
+include = ["src", "Cargo.toml", "../LICENSE", "README.md"]
+
+[[bin]]
+name = "icx-proxy"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+axum = "0.5"
+base64 = "0.13"
+candid = { version = "0.8", features = ["mute_warnings"] }
+clap = { version = "4", features = ["cargo", "derive"] }
+flate2 = "1"
+form_urlencoded = "1"
+futures = "0.3"
+garcon = { version = "0.2", features = ["async"] }
+hex = "0.4"
+http-body = "0.4"
+hyper = { version = "0.14.11", features = ["client", "http2", "http1"] }
+hyper-rustls = { version = "0.23", features = [ "webpki-roots", "http2" ] }
+itertools = "0.10"
+ic-agent = { version = "0.21", default-features = false, features = ["hyper"] }
+ic-utils = { version = "0.21", features = ["raw"] }
+lazy-regex = "2"
+opentelemetry = "0.17"
+opentelemetry-prometheus = "0.10"
+prometheus = "0.13"
+rustls = { version = "0.20", features = ["dangerous_configuration"] }
+rustls-pemfile = "1"
+tower = "0.4"
+tower-http = { version = "0.3", features = ["trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json"]}
+serde = "1"
+serde_cbor = "0.11"
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["full"] }
+webpki-roots = "0.22"
+
+[features]
+skip_body_verification = []
