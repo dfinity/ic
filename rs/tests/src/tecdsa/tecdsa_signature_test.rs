@@ -403,7 +403,7 @@ pub(crate) async fn enable_ecdsa_signing_with_timeout(
     execute_update_subnet_proposal(governance, proposal_payload).await;
 }
 
-async fn create_new_subnet_with_keys(
+pub(crate) async fn create_new_subnet_with_keys(
     governance: &Canister<'_>,
     node_ids: Vec<NodeId>,
     keys: Vec<EcdsaKeyRequest>,

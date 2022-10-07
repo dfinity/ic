@@ -208,7 +208,7 @@ pub fn test(env: TestEnv) {
     let new_msg = "subnet recovery still works!";
     info!(
         logger,
-        "Ensure the the subnet is accepting updates after the recovery"
+        "Ensure that the subnet is accepting updates after the recovery"
     );
     let new_app_can_id = store_message(&upload_node.get_public_url(), new_msg);
     assert!(can_read_msg(

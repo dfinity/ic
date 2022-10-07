@@ -945,6 +945,30 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         orchestrator::unstuck_subnet_test::test,
                     )]),
                 ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                pot_with_setup(
+                    "subnet_recovery_app_same_nodes_with_tecdsa",
+                    orchestrator::subnet_recovery_app_subnet::setup_same_nodes_tecdsa,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_same_nodes_with_tecdsa",
+                        orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
+                    )]),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                pot_with_setup(
+                    "subnet_recovery_app_no_upgrade_with_tecdsa",
+                    orchestrator::subnet_recovery_app_subnet::setup_same_nodes_tecdsa,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_no_upgrade_with_tecdsa",
+                        orchestrator::subnet_recovery_app_subnet::test_no_upgrade_with_tecdsa,
+                    )]),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                pot_with_setup(
+                    "subnet_recovery_app_failover_nodes_with_tecdsa",
+                    orchestrator::subnet_recovery_app_subnet::setup_failover_nodes_tecdsa,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_failover_nodes_with_tecdsa",
+                        orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
+                    )]),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
@@ -969,19 +993,19 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "subnet_recovery",
             vec![
                 pot_with_setup(
-                    "subnet_recovery_app_same_nodes_pot",
+                    "subnet_recovery_app_same_nodes",
                     orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
                     par(vec![sys_t(
-                        "subnet_recovery_app_same_nodes_test",
-                        orchestrator::subnet_recovery_app_subnet::test,
+                        "subnet_recovery_app_same_nodes",
+                        orchestrator::subnet_recovery_app_subnet::test_without_tecdsa,
                     )]),
                 ),
                 pot_with_setup(
-                    "subnet_recovery_app_same_nodes_no_upgrade",
-                    orchestrator::subnet_recovery_app_subnet_no_upgrade::setup,
+                    "subnet_recovery_app_no_upgrade",
+                    orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
                     par(vec![sys_t(
-                        "subnet_recovery_app_same_nodes_no_upgrade",
-                        orchestrator::subnet_recovery_app_subnet_no_upgrade::test,
+                        "subnet_recovery_app_no_upgrade",
+                        orchestrator::subnet_recovery_app_subnet::test_no_upgrade_without_tecdsa,
                     )]),
                 ),
                 pot_with_setup(
@@ -989,7 +1013,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     orchestrator::subnet_recovery_app_subnet::setup_failover_nodes,
                     par(vec![sys_t(
                         "subnet_recovery_app_failover_nodes",
-                        orchestrator::subnet_recovery_app_subnet::test,
+                        orchestrator::subnet_recovery_app_subnet::test_without_tecdsa,
                     )]),
                 ),
                 pot_with_setup(
