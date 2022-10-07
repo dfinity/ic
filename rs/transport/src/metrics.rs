@@ -86,107 +86,84 @@ impl ControlPlaneMetrics {
 
 #[derive(Clone)]
 pub(crate) struct DataPlaneMetrics {
-    pub(crate) client_send_time_msec: HistogramVec,
-    pub(crate) socket_write_bytes: IntCounterVec,
-    pub(crate) socket_write_size: HistogramVec,
-    pub(crate) socket_write_time_msec: HistogramVec,
-    pub(crate) socket_read_bytes: IntCounterVec,
+    pub(crate) event_handler_message_duration: HistogramVec,
+    pub(crate) write_bytes_total: IntCounterVec,
+    pub(crate) send_message_duration: HistogramVec,
+    pub(crate) read_bytes_total: IntCounterVec,
     pub(crate) message_read_errors_total: IntCounterVec,
     pub(crate) heart_beats_sent: IntCounterVec,
     pub(crate) heart_beats_received: IntCounterVec,
     pub(crate) write_tasks: IntGauge,
     pub(crate) read_tasks: IntGauge,
-    pub(crate) write_task_overhead_time_msec: HistogramVec,
+    pub(crate) send_message_overhead_duration: HistogramVec,
 }
 
 impl DataPlaneMetrics {
     pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
-            // TODO: (NET-867)
-            client_send_time_msec: HistogramVec::new(
+            event_handler_message_duration: HistogramVec::new(
                 HistogramOpts::new(
-                    "transport_client_send_time_msec",
-                    "Time spent in client message callback, in milliseconds",
+                    "transport_event_handler_message_duration_seconds",
+                    "Time spent by the client callback processing a message event.",
                 )
-                .buckets(
-                    // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
-                    decimal_buckets(0, 5),
-                ),
-                &["flow_peer_id", "flow_tag"],
+                .buckets(decimal_buckets(-3, 1)),
+                &[LABEL_CHANNEL_ID],
             )
             .unwrap(),
-            socket_write_bytes: metrics_registry.int_counter_vec(
-                "transport_socket_write_bytes",
-                "Bytes written to sockets",
-                &["flow_peer_id", "flow_tag"],
+            write_bytes_total: metrics_registry.int_counter_vec(
+                "transport_write_bytes_total",
+                "Total bytes written at the application-level",
+                &[LABEL_CHANNEL_ID],
             ),
-            // TODO: (NET-867)
-            socket_write_size: HistogramVec::new(
+            send_message_duration: HistogramVec::new(
                 HistogramOpts::new(
-                    "transport_socket_write_size",
-                    "Bytes written per socket write",
+                    "transport_send_message_duration_seconds",
+                    "Time it takes for a single message to be flushed into the lower level transport",
                 )
                 .buckets(
-                    // 1K, 2K, 5K - 1MB, 2MB, 5MB
-                    decimal_buckets(3, 6),
+                    decimal_buckets(-3, 1),
                 ),
-                &["flow_peer_id", "flow_tag"],
+                &[LABEL_CHANNEL_ID],
             )
             .unwrap(),
-            // TODO: (NET-867)
-            socket_write_time_msec: HistogramVec::new(
-                HistogramOpts::new(
-                    "transport_socket_write_time_msec",
-                    "Socket write time, in milliseconds",
-                )
-                .buckets(
-                    // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
-                    decimal_buckets(0, 5),
-                ),
-                &["flow_peer_id", "flow_tag"],
-            )
-            .unwrap(),
-            socket_read_bytes: metrics_registry.int_counter_vec(
-                "transport_socket_read_bytes",
-                "Bytes read from sockets",
-                &["flow_peer_id", "flow_tag"],
+            read_bytes_total: metrics_registry.int_counter_vec(
+                "transport_read_bytes_total",
+                "Total bytes read at the application-level",
+                &[LABEL_CHANNEL_ID],
             ),
             message_read_errors_total: metrics_registry.int_counter_vec(
-                "transport_message_read_errors_total",
-                "Number of times reading a single message failed.",
+                "transport_read_message_errors_total",
+                "Number of times reading a single message failed",
                 &[LABEL_CHANNEL_ID, LABEL_DETAIL],
             ),
             heart_beats_received: metrics_registry.int_counter_vec(
                 "transport_heart_beats_received",
                 "Number of heart beats as seen by receiver",
-                &["flow_peer_id", "flow_tag"],
+                &[LABEL_CHANNEL_ID],
             ),
             heart_beats_sent: metrics_registry.int_counter_vec(
                 "transport_heart_beats_sent",
                 "Number of heart beats sent by sender",
-                &["flow_peer_id", "flow_tag"],
+                &[LABEL_CHANNEL_ID],
             ),
             write_tasks: metrics_registry
                 .int_gauge("transport_write_tasks", "Active data plane write tasks"),
             read_tasks: metrics_registry
                 .int_gauge("transport_read_tasks", "Active data plane read tasks"),
-            // TODO: (NET-867)
-            write_task_overhead_time_msec: HistogramVec::new(
+            send_message_overhead_duration: HistogramVec::new(
                 HistogramOpts::new(
-                    "transport_write_task_overhead_time_msec",
-                    "Time before socket write, in milliseconds",
+                    "transport_send_message_overhead_duration_seconds",
+                    "Time spent assembling a message before being sent over the lower level transport",
                 )
-                .buckets(
-                    // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
-                    decimal_buckets(0, 5),
-                ),
-                &["flow_peer_id", "flow_tag"],
+                .buckets(decimal_buckets(-3, 1)),
+                &[LABEL_CHANNEL_ID],
             )
             .unwrap(),
         }
     }
 }
 
+// TODO: (NET-867)
 /// Per send queue metrics
 #[derive(Clone)]
 pub(crate) struct SendQueueMetrics {
@@ -239,7 +216,6 @@ impl SendQueueMetrics {
                 "Channel receive end update count",
                 &["flow_peer_id", "flow_tag"],
             ),
-            // TODO: (NET-867)
             queue_time_msec: HistogramVec::new(
                 HistogramOpts::new(
                     "transport_send_queue_time_msec",
