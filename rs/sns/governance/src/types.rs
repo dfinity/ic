@@ -398,7 +398,7 @@ impl NervousSystemParameters {
     }
 
     /// This validates that the `NervousSystemParameters` are well-formed.
-    pub fn validate(&self, mode: governance::Mode) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         self.validate_reject_cost_e8s()?;
         self.validate_neuron_minimum_stake_e8s()?;
         self.validate_transaction_fee_e8s()?;
@@ -415,7 +415,7 @@ impl NervousSystemParameters {
         self.validate_neuron_claimer_permissions()?;
         self.validate_neuron_grantable_permissions()?;
         self.validate_max_number_of_principals_per_neuron()?;
-        self.validate_voting_rewards_parameters(mode)?;
+        self.validate_voting_rewards_parameters()?;
         self.validate_max_dissolve_delay_bonus_percentage()?;
         self.validate_max_age_bonus_percentage()?;
 
@@ -796,12 +796,12 @@ impl NervousSystemParameters {
     /// The voting_rewards_parameters is considered valid if it is either
     /// unpopulated, or if it is populated with a value that is itself valid
     /// (according to VotingRewardsParameters::validate).
-    fn validate_voting_rewards_parameters(&self, mode: governance::Mode) -> Result<(), String> {
+    fn validate_voting_rewards_parameters(&self) -> Result<(), String> {
         let voting_rewards_parameters = self
             .voting_rewards_parameters
             .as_ref()
-            .expect("NervousSystemParameters.voting_rewards_parameters must be set");
-        voting_rewards_parameters.is_valid_and_in_normal_mode(mode)
+            .ok_or("NervousSystemParameters.voting_rewards_parameters must be set")?;
+        voting_rewards_parameters.validate()
     }
 }
 
@@ -1664,10 +1664,7 @@ pub(crate) mod tests {
     #[test]
     fn test_nervous_system_parameters_validate() {
         assert!(NervousSystemParameters::with_default_values()
-            .validate(governance::Mode::Normal)
-            .is_ok());
-        assert!(NervousSystemParameters::with_default_values()
-            .validate(governance::Mode::PreInitializationSwap)
+            .validate()
             .is_ok());
 
         let invalid_params = vec![
@@ -1812,7 +1809,7 @@ pub(crate) mod tests {
         ];
 
         for params in invalid_params {
-            assert!(params.validate(governance::Mode::Normal).is_err());
+            params.validate().unwrap_err();
         }
     }
 
@@ -2344,7 +2341,7 @@ pub(crate) mod tests {
     #[test]
     fn test_voting_rewards_parameters_set_to_zero_by_default() {
         let parameters = NervousSystemParameters::with_default_values();
-        parameters.validate(governance::Mode::Normal).unwrap();
+        parameters.validate().unwrap();
         let voting_rewards_parameters = parameters.voting_rewards_parameters.unwrap();
         assert_eq!(
             voting_rewards_parameters
@@ -2366,6 +2363,6 @@ pub(crate) mod tests {
         let mut parameters = NervousSystemParameters::with_default_values();
         parameters.voting_rewards_parameters = None;
         // This is where we expect to panic.
-        parameters.validate(governance::Mode::Normal).unwrap();
+        parameters.validate().unwrap();
     }
 }

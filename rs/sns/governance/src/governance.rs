@@ -431,7 +431,7 @@ impl TryFrom<GovernanceProto> for ValidGovernanceProto {
         Self::validate_canister_id_field("swap", swap_canister_id)?;
 
         Self::valid_mode_or_err(&base)?;
-        Self::validate_required_field("parameters", &base.parameters)?.validate(base.get_mode())?;
+        Self::validate_required_field("parameters", &base.parameters)?.validate()?;
         Self::validate_required_field("sns_metadata", &base.sns_metadata)?.validate()?;
         validate_id_to_nervous_system_functions(&base.id_to_nervous_system_functions)?;
         validate_default_followees(&base)?;
@@ -2033,7 +2033,7 @@ impl Governance {
             &new_params
         );
 
-        match new_params.validate(self.proto.get_mode()) {
+        match new_params.validate() {
             Ok(()) => {
                 self.proto.parameters = Some(new_params);
                 Ok(())
@@ -4246,39 +4246,7 @@ mod tests {
     #[test]
     fn fixtures_are_valid() {
         assert_is_ok(ValidGovernanceProto::try_from(basic_governance_proto()));
-        assert_is_ok(
-            BASE_VOTING_REWARDS_PARAMETERS.is_valid_and_in_normal_mode(governance::Mode::Normal),
-        );
-    }
-
-    #[test]
-    fn no_voting_rewards_in_pre_initialization_swap_mode() {
-        // Step 1: Prepare our test subject.
-        let mut governance_proto = GovernanceProto {
-            mode: governance::Mode::PreInitializationSwap as i32,
-            ..basic_governance_proto()
-        };
-        // This should get rejected, because mode is PreInitializationSwap.
-        governance_proto
-            .parameters
-            .as_mut()
-            .unwrap()
-            .voting_rewards_parameters = Some(BASE_VOTING_REWARDS_PARAMETERS.clone());
-        // Freeze.
-        let governance_proto = governance_proto;
-
-        // Step 2: Run code under test.
-        let err = match ValidGovernanceProto::try_from(governance_proto) {
-            Ok(governance_proto) => panic!("Data was not rejected: {:#?}", governance_proto),
-            Err(err) => err,
-        };
-
-        // Step 3: Inspect results.
-
-        // Take a closer look at the Err value.
-        let err = err.to_lowercase();
-        assert!(err.contains("mode"), "{:#?}", err);
-        assert!(err.contains("vot"), "{:#?}", err);
+        assert_is_ok(BASE_VOTING_REWARDS_PARAMETERS.validate());
     }
 
     #[test]

@@ -14,11 +14,7 @@
 //! * Floating point makes code easier since the reward pool is specified as a
 //!   fraction of the total Token supply.
 
-use crate::{
-    governance::log_prefix,
-    pb::v1::{governance, VotingRewardsParameters},
-    types::ONE_DAY_SECONDS,
-};
+use crate::{governance::log_prefix, pb::v1::VotingRewardsParameters, types::ONE_DAY_SECONDS};
 use ic_nervous_system_common::i2d;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
@@ -138,24 +134,8 @@ impl VotingRewardsParameters {
     /// Some "highly not sensible" values are allowed (e.g. 90% growth rate)
     /// simply because the transition between "sensible" and "insane" is
     /// gradual, not hard.
-    pub fn is_valid_and_in_normal_mode(&self, mode: governance::Mode) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         let mut defects = vec![];
-
-        let zero_voting_reward = {
-            let zero_initial = self.initial_reward_rate_basis_points.is_none()
-                || self.initial_reward_rate_basis_points == Some(0);
-            let zero_final = self.final_reward_rate_basis_points.is_none()
-                || self.final_reward_rate_basis_points == Some(0);
-            zero_initial && zero_final
-        };
-
-        if mode != governance::Mode::Normal && !zero_voting_reward {
-            return Err(format!(
-                "Voting rewards must be zero unless in Normal mode; \
-                 whereas, governance is in {:?} mode.",
-                mode,
-            ));
-        }
 
         defects.append(&mut self.round_duration_seconds_defects());
         defects.append(&mut self.reward_rate_transition_duration_seconds_defects());
@@ -500,10 +480,8 @@ mod test {
     };
 
     #[test]
-    fn test_subject_is_valid() {
-        assert_is_ok(
-            VOTING_REWARDS_PARAMETERS.is_valid_and_in_normal_mode(governance::Mode::Normal),
-        );
+    fn test_subject_validates() {
+        assert_is_ok(VOTING_REWARDS_PARAMETERS.validate());
     }
 
     #[test]
@@ -569,14 +547,14 @@ mod test {
                 round_duration_seconds: None,
                 ..VOTING_REWARDS_PARAMETERS
             }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
+            .validate(),
         );
         assert_is_err(
             VotingRewardsParameters {
                 round_duration_seconds: Some(0),
                 ..VOTING_REWARDS_PARAMETERS
             }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
+            .validate(),
         );
     }
 
@@ -587,14 +565,14 @@ mod test {
                 reward_rate_transition_duration_seconds: None,
                 ..VOTING_REWARDS_PARAMETERS
             }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
+            .validate(),
         );
         assert_is_err(
             VotingRewardsParameters {
                 reward_rate_transition_duration_seconds: Some(0),
                 ..VOTING_REWARDS_PARAMETERS
             }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
+            .validate(),
         );
     }
 
@@ -605,14 +583,14 @@ mod test {
                 initial_reward_rate_basis_points: None,
                 ..VOTING_REWARDS_PARAMETERS
             }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
+            .validate(),
         );
         assert_is_err(
             VotingRewardsParameters {
                 initial_reward_rate_basis_points: Some(10_001), // > 100%
                 ..VOTING_REWARDS_PARAMETERS
             }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
+            .validate(),
         );
     }
 
@@ -623,7 +601,7 @@ mod test {
                 final_reward_rate_basis_points: None,
                 ..VOTING_REWARDS_PARAMETERS
             }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
+            .validate(),
         );
 
         let max = VOTING_REWARDS_PARAMETERS
@@ -634,14 +612,14 @@ mod test {
                 final_reward_rate_basis_points: Some(max),
                 ..VOTING_REWARDS_PARAMETERS
             }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
+            .validate(),
         );
         assert_is_err(
             VotingRewardsParameters {
                 final_reward_rate_basis_points: Some(max + 1),
                 ..VOTING_REWARDS_PARAMETERS
             }
-            .is_valid_and_in_normal_mode(governance::Mode::Normal),
+            .validate(),
         );
     }
 }
