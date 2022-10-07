@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -42,16 +43,22 @@ rust_library(
 )
 
 rust_test(
-    name = "transport_tests",
+    name = "tests",
+    size = "small",
     srcs = glob(["src/**"]),
     crate = ":transport",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 # Test is flaky. Tracked in NET-1207.
-rust_test_suite(
-    name = "transport_integration_tests",
-    srcs = glob(["tests/**/*.rs"]),
+rust_test_suite_with_extra_srcs(
+    name = "integration_tests",
+    size = "small",
+    srcs = glob(
+        ["tests/**"],
+        exclude = ["tests/common/**"],
+    ),
+    extra_srcs = glob(["tests/common/**"]),
     flaky = True,
     deps = [":transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
