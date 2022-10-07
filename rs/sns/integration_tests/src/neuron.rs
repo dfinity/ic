@@ -842,10 +842,8 @@ fn test_disbursing_maturity_with_no_maturity_fails() {
 }
 
 #[test]
-fn test_voting_rewards_parameters_is_valid() {
-    assert!(VOTING_REWARDS_PARAMETERS
-        .is_valid_and_in_normal_mode(governance::Mode::Normal)
-        .is_ok());
+fn test_voting_rewards_parameters_validate() {
+    assert!(VOTING_REWARDS_PARAMETERS.validate().is_ok());
 }
 
 #[tokio::test]

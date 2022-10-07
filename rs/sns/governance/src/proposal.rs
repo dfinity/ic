@@ -4,10 +4,9 @@ use crate::pb::v1::governance::{SnsMetadata, Version};
 use crate::pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemFunction};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
-    governance, proposal, ExecuteGenericNervousSystemFunction, Governance, ManageSnsMetadata,
-    Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
-    ProposalDecisionStatus, ProposalRewardStatus, Tally, UpgradeSnsControlledCanister,
-    UpgradeSnsToNextVersion, Vote,
+    proposal, ExecuteGenericNervousSystemFunction, Governance, ManageSnsMetadata, Motion,
+    NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus,
+    ProposalRewardStatus, Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
 };
 use crate::sns_upgrade::{get_upgrade_params, UpgradeSnsParams};
 use crate::types::Environment;
@@ -138,7 +137,6 @@ pub async fn validate_and_render_action(
     governance_proto: &Governance,
     reserved_canister_targets: Vec<CanisterId>,
 ) -> Result<String, String> {
-    let mode = governance_proto.get_mode();
     let current_parameters = governance_proto
         .parameters
         .as_ref()
@@ -157,7 +155,7 @@ pub async fn validate_and_render_action(
         }
         proposal::Action::Motion(motion) => validate_and_render_motion(motion),
         proposal::Action::ManageNervousSystemParameters(manage) => {
-            validate_and_render_manage_nervous_system_parameters(manage, mode, current_parameters)
+            validate_and_render_manage_nervous_system_parameters(manage, current_parameters)
         }
         proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
@@ -220,12 +218,9 @@ fn validate_and_render_motion(motion: &Motion) -> Result<String, String> {
 /// Validates and renders a proposal with action ManageNervousSystemParameters.
 fn validate_and_render_manage_nervous_system_parameters(
     new_parameters: &NervousSystemParameters,
-    mode: governance::Mode,
     current_parameters: &NervousSystemParameters,
 ) -> Result<String, String> {
-    new_parameters
-        .inherit_from(current_parameters)
-        .validate(mode)?;
+    new_parameters.inherit_from(current_parameters).validate()?;
 
     Ok(format!(
         r"# Proposal to change nervous system parameters:
@@ -908,7 +903,7 @@ impl ProposalRewardStatus {
 mod tests {
     use super::*;
     use crate::{
-        pb::v1::{governance::Version, Empty, Governance as GovernanceProto},
+        pb::v1::{governance, governance::Version, Empty, Governance as GovernanceProto},
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
             GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
