@@ -99,7 +99,6 @@ impl IngressPayload {
         &self,
         index: usize,
     ) -> Result<(IngressMessageId, SignedIngress), IngressPayloadError> {
-        let mut buf = Cursor::new(&self.buffer);
         self.id_and_pos
             .get(index)
             .ok_or(IngressPayloadError::IndexOutOfBound(index))
@@ -108,8 +107,7 @@ impl IngressPayload {
                 if *pos > self.buffer.len() as u64 {
                     Err(IngressPayloadError::IngressPositionOutOfBound(index, *pos))
                 } else {
-                    buf.set_position(*pos);
-                    bincode::deserialize_from::<Cursor<&Vec<u8>>, SignedIngress>(buf)
+                    bincode::deserialize(&self.buffer[*pos as usize..])
                         .map_err(IngressPayloadError::DeserializationFailure)
                         .and_then(|ingress| {
                             let ingress_id = IngressMessageId::from(&ingress);
@@ -164,10 +162,9 @@ impl TryFrom<IngressPayload> for Vec<SignedIngress> {
     type Error = InvalidIngressPayload;
 
     fn try_from(payload: IngressPayload) -> Result<Vec<SignedIngress>, Self::Error> {
-        let mut buf = Cursor::new(payload.buffer);
         let mut msgs = Vec::new();
-        for (id, _) in payload.id_and_pos.iter() {
-            let ingress: SignedIngress = bincode::deserialize_from(&mut buf)
+        for (id, pos) in payload.id_and_pos.iter() {
+            let ingress: SignedIngress = bincode::deserialize(&payload.buffer[*pos as usize..])
                 .map_err(|err| InvalidIngressPayload::DeserializationError(id.into(), err))?;
             if id != &IngressMessageId::from(&ingress) {
                 return Err(InvalidIngressPayload::MismatchedMessageId(
