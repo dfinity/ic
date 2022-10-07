@@ -6,7 +6,7 @@ use ic_types::{
     artifact::ArtifactId, chunkable::ChunkId, crypto::CryptoHash, NodeId, RegistryVersion,
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     convert::TryInto,
     net::{IpAddr, SocketAddr},
     str::FromStr,
@@ -18,9 +18,6 @@ use std::{
 pub(crate) trait PeerManager {
     /// The method returns the current list of peers.
     fn get_current_peer_ids(&self) -> Vec<NodeId>;
-
-    /// The method sets the list of peers to the given list.
-    fn set_current_peer_ids(&self, new_peers: Vec<NodeId>);
 
     /// The method adds the given peer to the list of current peers.
     fn add_peer(
@@ -129,26 +126,6 @@ impl PeerManager for PeerManagerImpl {
             .iter()
             .map(|(k, _v)| k.to_owned())
             .collect()
-    }
-
-    /// The method sets the list of peers to the given list.
-    ///
-    /// All current peers that are not in the provided list are removed and new
-    /// ones are added.
-    fn set_current_peer_ids(&self, new_peers: Vec<NodeId>) {
-        let mut peers = self.current_peers.lock().unwrap();
-
-        // Remove peers that are not in the list of new peers.
-        let seen_peers: HashSet<NodeId> = new_peers.iter().map(|p| p.to_owned()).collect();
-        peers.retain(|k, _| seen_peers.contains(k));
-
-        // Then, add the new peers.
-        for peer in new_peers {
-            // If there is no entry for this node ID, a peer context is added for it.
-            peers
-                .entry(peer)
-                .or_insert_with(|| PeerContext::from(peer.to_owned()));
-        }
     }
 
     /// The method adds the given peer to the list of current peers.
