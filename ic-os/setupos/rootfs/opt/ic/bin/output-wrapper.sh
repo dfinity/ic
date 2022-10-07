@@ -9,4 +9,4 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 SCRIPT="$1"
 TEE_TARGET="$2"
 
-${SCRIPT} | tee ${TEE_TARGET}
+${SCRIPT} 2>&1 | tee ${TEE_TARGET}

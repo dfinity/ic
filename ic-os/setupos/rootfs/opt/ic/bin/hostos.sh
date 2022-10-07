@@ -7,9 +7,12 @@ SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 function install_hostos() {
-    echo "* Installing HostOS disk-image (can take up to 5 minutes)..."
+    echo "* Installing HostOS disk-image..."
 
-    tar xzOf /data/host-os.img.tar.gz disk.img | dd of="/dev/nvme0n1" bs=10M
+    size=$(tar --list -v -f /data/host-os.img.tar.gz disk.img | cut -d ' ' -f 3)
+    size="${size:=0}"
+
+    tar xzOf /data/host-os.img.tar.gz disk.img | pv -f -s "$size" | dd of="/dev/nvme0n1" bs=10M
     log_and_reboot_on_error "${?}" "Unable to install HostOS disk-image on drive: /dev/nvme0n1"
 
     sync
