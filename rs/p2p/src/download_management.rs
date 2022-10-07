@@ -2199,41 +2199,6 @@ pub mod tests {
     }
 
     proptest! {
-        /// The function verifies that setting the same set of peer IDs does not change the
-        /// set of current peers.
-        #[test]
-        fn setting_same_set_of_nodes_changes_nothing(
-            peers in arb_peer_list(0)
-        ) {
-            // Tokio context is required here because some functions still assume it exists.
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let _rt_guard = rt.enter();
-            let peers_dictionary: PeerContextDictionary = peers
-                .iter()
-                .map(|node_id| (*node_id, PeerContext::from(node_id.to_owned())))
-                .collect();
-            let current_peers = Arc::new(Mutex::new(peers_dictionary));
-
-            let logger = p2p_test_setup_logger();
-
-            // Transport:
-            let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
-            let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
-            let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_test_id(0)));
-            transport.set_event_handler(BoxCloneService::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0), gossip_arc).0));
-            let peer_manager = PeerManagerImpl::new(
-                node_test_id(0),
-                p2p_test_setup_logger().root.clone().into(),
-                current_peers,
-                transport,
-            );
-
-            let current_peers = peer_manager.get_current_peer_ids();
-            peer_manager.set_current_peer_ids(peers);
-            let new_peers = peer_manager.get_current_peer_ids();
-            prop_assert_eq!(new_peers, current_peers)
-        }
-
         /// When providing a new list of peers, the function verifies that all current peers
         /// are preserved that are also in the new list.
         #[test]
@@ -2285,13 +2250,6 @@ pub mod tests {
                 peer_context.disconnect_time = Some(SystemTime::now());
             }
             std::mem::drop(current_peers);
-
-            // Check that the new peers are correctly set.
-            peer_manager.set_current_peer_ids(peers_new.clone());
-            let mut new_peers = peer_manager.get_current_peer_ids();
-            new_peers.sort_unstable();
-            peers_new.sort_unstable();
-            prop_assert_eq!(new_peers, peers_new);
 
             // Check that an old peer has preserved the property.
             let mut current_peers = peer_manager.current_peers.lock().unwrap();
