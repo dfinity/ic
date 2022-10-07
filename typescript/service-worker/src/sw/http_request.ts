@@ -243,6 +243,12 @@ async function removeLegacySubDomains(
   const url = new URL(originalRequest.url);
   const urlWithoutLegacySubdomain = `${url.protocol}//${swDomains}${url.pathname}`;
 
+  if (url.href !== urlWithoutLegacySubdomain) {
+    console.warn(
+      `${url.hostname} refers to a legacy, deprecated sub domain. Please migrate to the latest version of @dfinity/agent-js and remove any subdomains from your 'host' configuration when creating the agent.`
+    );
+  }
+
   const {
     body,
     cache,
