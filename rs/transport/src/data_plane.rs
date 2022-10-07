@@ -121,7 +121,6 @@ fn unpack_header(data: Vec<u8>) -> TransportHeader {
 fn spawn_write_task(
     peer_id: NodeId,
     channel_id: TransportChannelId,
-    peer_label: String,
     mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
     mut writer: Box<TlsWriteHalf>,
     data_plane_metrics: DataPlaneMetrics,
@@ -147,36 +146,36 @@ fn spawn_write_task(
                 )
                 .await;
 
-            let mut to_send = Vec::<u8>::new();
+            let mut bytes_to_send = Vec::<u8>::new();
             if dequeued.is_empty() {
                 // There is nothing to send, so issue a heartbeat message
-                to_send.append(&mut pack_header(None, true));
+                bytes_to_send.append(&mut pack_header(None, true));
                 arc_self
                     .data_plane_metrics
                     .heart_beats_sent
-                    .with_label_values(&[&peer_label, &channel_id_str])
+                    .with_label_values(&[&channel_id_str])
                     .inc();
             } else {
                 for mut payload in dequeued {
-                    to_send.append(&mut pack_header(
+                    bytes_to_send.append(&mut pack_header(
                         Some(&payload),
                         false,
                     ));
-                    to_send.append(&mut payload.0);
+                    bytes_to_send.append(&mut payload.0);
                 }
             }
             arc_self
                 .data_plane_metrics
-                .write_task_overhead_time_msec
-                .with_label_values(&[&peer_label, &channel_id_str])
-                .observe(loop_start_time.elapsed().as_millis() as f64);
+                .send_message_overhead_duration
+                .with_label_values(&[&channel_id_str])
+                .observe(loop_start_time.elapsed().as_secs() as f64);
 
             // Send the payload
             let start_time = Instant::now();
-            if let Err(e) = writer.write_all(&to_send).await {
+            if let Err(e) = writer.write_all(&bytes_to_send).await {
                 warn!(
                     arc_self.log,
-                    "DataPlane::flow_write_task(): failed to write payload: peer_id: {:?}, channel_id: {:?}, {:?}",
+                    "DataPlane::spawn_write_task(): failed to write payload: peer_id = {:?}, channel_id = {:?}, {:?}",
                     peer_id,
                     channel_id,
                     e,
@@ -188,7 +187,7 @@ fn spawn_write_task(
             if let Err(e) = writer.flush().await {
                 warn!(
                     arc_self.log,
-                    "DataPlane::flow_write_task(): failed to flush: peer_id: {:?}, channel_id: {:?}, {:?}", peer_id, channel_id, e,
+                    "DataPlane::spawn_write_task(): failed to flush: peer_id = {:?}, channel_id = {:?}, {:?}", peer_id, channel_id, e,
                 );
                 arc_self.on_disconnect(peer_id, channel_id).await;
                 return;
@@ -196,19 +195,14 @@ fn spawn_write_task(
 
             arc_self
                 .data_plane_metrics
-                .socket_write_time_msec
-                .with_label_values(&[&peer_label, &channel_id_str])
-                .observe(start_time.elapsed().as_millis() as f64);
+                .send_message_duration
+                .with_label_values(&[&channel_id_str])
+                .observe(start_time.elapsed().as_secs() as f64);
             arc_self
                 .data_plane_metrics
-                .socket_write_bytes
-                .with_label_values(&[&peer_label, &channel_id_str])
-                .inc_by(to_send.len() as u64);
-            arc_self
-                .data_plane_metrics
-                .socket_write_size
-                .with_label_values(&[&peer_label, &channel_id_str])
-                .observe(to_send.len() as f64);
+                .write_bytes_total
+                .with_label_values(&[&channel_id_str])
+                .inc_by(bytes_to_send.len() as u64);
         }
     })
 }
@@ -218,7 +212,6 @@ fn spawn_write_task(
 fn spawn_read_task<T: AsyncRead + Unpin + Send + 'static>(
     peer_id: NodeId,
     channel_id: TransportChannelId,
-    peer_label: String,
     mut event_handler: TransportEventHandler,
     mut reader: T,
     data_plane_metrics: DataPlaneMetrics,
@@ -260,19 +253,21 @@ fn spawn_read_task<T: AsyncRead + Unpin + Send + 'static>(
                         // It's an empty heartbeat message -- do nothing
                         arc_self.data_plane_metrics
                             .heart_beats_received
-                            .with_label_values(&[&peer_label, &channel_id_str])
+                            .with_label_values(&[&channel_id_str])
                             .inc();
                         continue;
                     }
 
-                    // Pass up the received message
+                    // Pass up the received message.
                     // Errors out for unsolicited messages, decoding errors and p2p
                     // shutdowns.
                     arc_self.data_plane_metrics
-                        .socket_read_bytes
-                        .with_label_values(&[&peer_label, &channel_id_str])
+                        .read_bytes_total
+                        .with_label_values(&[&channel_id_str])
                         .inc_by(payload.0.len() as u64);
-                    let start_time = Instant::now();
+                    let _callback_start_time = arc_self.data_plane_metrics
+                        .event_handler_message_duration
+                        .with_label_values(&[&channel_id_str]).start_timer();
                     event_handler
                         .call(TransportEvent::Message(TransportMessage {
                             peer_id,
@@ -280,10 +275,6 @@ fn spawn_read_task<T: AsyncRead + Unpin + Send + 'static>(
                         }))
                         .await
                         .expect("Can't panic on infallible");
-                    arc_self.data_plane_metrics
-                        .client_send_time_msec
-                        .with_label_values(&[&peer_label, &channel_id_str])
-                        .observe(start_time.elapsed().as_millis() as f64);
                 }
             }
         }
@@ -299,7 +290,7 @@ async fn read_one_message<T: AsyncRead + Unpin>(
 ) -> Result<(TransportHeader, TransportPayload), StreamReadError> {
     // Read the hdr
     let mut header_buffer = vec![0u8; TRANSPORT_HEADER_SIZE];
-    read_from_socket(reader, &mut header_buffer, timeout).await?;
+    read_into_buffer(reader, &mut header_buffer, timeout).await?;
 
     let header = unpack_header(header_buffer);
     if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
@@ -313,7 +304,7 @@ async fn read_one_message<T: AsyncRead + Unpin>(
     while remaining > 0 {
         let cur_chunk_size = std::cmp::min(remaining, SOCKET_READ_CHUNK_SIZE);
         assert!(cur_chunk_size <= remaining);
-        read_from_socket(
+        read_into_buffer(
             reader,
             &mut payload_buffer[cur_offset..(cur_offset + cur_chunk_size)],
             timeout,
@@ -329,7 +320,7 @@ async fn read_one_message<T: AsyncRead + Unpin>(
 }
 
 /// Reads the requested bytes from the socket with a timeout
-async fn read_from_socket<T: AsyncRead + Unpin>(
+async fn read_into_buffer<T: AsyncRead + Unpin>(
     reader: &mut T,
     buf: &mut [u8],
     timeout: Duration,
@@ -346,7 +337,6 @@ async fn read_from_socket<T: AsyncRead + Unpin>(
 pub(crate) fn create_connected_state(
     peer_id: NodeId,
     channel_id: TransportChannelId,
-    peer_label: String,
     send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
     role: ConnectionRole,
     peer_addr: SocketAddr,
@@ -361,7 +351,6 @@ pub(crate) fn create_connected_state(
     let write_task = spawn_write_task(
         peer_id,
         channel_id,
-        peer_label.clone(),
         send_queue_reader,
         Box::new(tls_writer),
         data_plane_metrics.clone(),
@@ -372,7 +361,6 @@ pub(crate) fn create_connected_state(
     let read_task = spawn_read_task(
         peer_id,
         channel_id,
-        peer_label,
         event_handler,
         Box::new(tls_reader),
         data_plane_metrics,

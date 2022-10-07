@@ -203,7 +203,6 @@ impl TransportImpl {
                             let connected_state = create_connected_state(
                                 peer_id,
                                 channel_id,
-                                peer_state.peer_label.clone(),
                                 peer_state.send_queue.get_reader(),
                                 ConnectionRole::Server,
                                 peer_addr,
@@ -314,7 +313,6 @@ impl TransportImpl {
                         let connected_state = create_connected_state(
                             peer_id,
                             channel_id,
-                            peer_state.peer_label.clone(),
                             peer_state.send_queue.get_reader(),
                             ConnectionRole::Client,
                             peer_addr,
