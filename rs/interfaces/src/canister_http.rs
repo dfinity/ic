@@ -20,9 +20,15 @@ use ic_types::{
 #[derive(Debug)]
 pub enum CanisterHttpPermanentValidationError {
     /// The [`CanisterHttpPayload`] is too large
-    PayloadTooBig { expected: usize, received: usize },
+    PayloadTooBig {
+        expected: usize,
+        received: usize,
+    },
     /// There are too many responses in the payload
-    TooManyResponses { expected: usize, received: usize },
+    TooManyResponses {
+        expected: usize,
+        received: usize,
+    },
     /// The signed metadata does not match the metadata of the content
     InvalidMetadata {
         metadata_id: CallbackId,
@@ -66,6 +72,8 @@ pub enum CanisterHttpPermanentValidationError {
     },
     /// The payload contains a duplicate response
     DuplicateResponse(CallbackId),
+    DivergenceProofContainsMultipleCallbackIds,
+    DivergenceProofDoesNotMeetDivergenceCriteria,
 }
 
 /// A transient error that can occur during validation of a [`CanisterHttpPayload`]

@@ -350,11 +350,11 @@ impl CountBytes for CanisterHttpResponseWithConsensus {
 
 /// A collection of signature shares supporting the same [`CallbackId`] with different hashes.
 ///
-/// This can be used as a proof, that consensus can not be reached for this call, as sufficiently many nodes
-/// have seen divergent content.
+/// This can be used as a proof that consensus can not be reached for this call
+/// as sufficiently many nodes have seen divergent content.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpResponseDivergence {
-    pub response_shares: Vec<CanisterHttpResponseShare>,
+    pub shares: Vec<CanisterHttpResponseShare>,
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].

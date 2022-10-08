@@ -21,6 +21,13 @@ message CanisterHttpResponse {
   CanisterHttpResponseContent content = 3;
 }
 
+message CanisterHttpResponseMetadata {
+  uint64 id = 1;
+  uint64 timeout = 2;
+  bytes content_hash = 3;
+  uint64 registry_version = 4;
+}
+
 message CanisterHttpResponseContent {
   reserved 1;
   oneof status {
@@ -34,7 +41,7 @@ message CanisterHttpReject {
   string message = 2;
 }
 
-message CanisterHttpReponseSignature {
+message CanisterHttpResponseSignature {
   bytes signer = 1;
   bytes signature = 2;
 }
@@ -45,6 +52,15 @@ message CanisterHttpResponseWithConsensus {
   uint64 registry_version = 3;
   reserved 4;
   reserved 5;
-  repeated CanisterHttpReponseSignature signatures = 6;
+  reserved 6;
+  repeated CanisterHttpResponseSignature signatures = 7;
 }
 
+message CanisterHttpShare {
+  CanisterHttpResponseMetadata metadata = 1;
+  CanisterHttpResponseSignature signature = 2;
+}
+
+message CanisterHttpResponseDivergence {
+   repeated CanisterHttpShare shares = 1;
+}

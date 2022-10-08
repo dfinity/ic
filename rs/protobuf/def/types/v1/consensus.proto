@@ -99,6 +99,7 @@ message XNetPayload {
 message CanisterHttpPayload {
 	repeated canister_http.v1.CanisterHttpResponseWithConsensus responses = 1;
 	repeated uint64 timeouts = 2;
+	repeated canister_http.v1.CanisterHttpResponseDivergence divergence_responses = 3;
 }
 
 message IngressIdOffset {

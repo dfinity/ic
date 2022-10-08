@@ -574,6 +574,9 @@ pub struct CanisterHttpPayload {
     >,
     #[prost(uint64, repeated, tag = "2")]
     pub timeouts: ::prost::alloc::vec::Vec<u64>,
+    #[prost(message, repeated, tag = "3")]
+    pub divergence_responses:
+        ::prost::alloc::vec::Vec<super::super::canister_http::v1::CanisterHttpResponseDivergence>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct IngressIdOffset {
