@@ -26,6 +26,7 @@ impl FakeCanisterHttpPayloadBuilder {
         CanisterHttpPayload {
             responses: self.0.clone(),
             timeouts: vec![],
+            divergence_responses: vec![],
         }
     }
 }
@@ -41,6 +42,7 @@ impl CanisterHttpPayloadBuilder for FakeCanisterHttpPayloadBuilder {
         CanisterHttpPayload {
             responses: self.0.clone(),
             timeouts: vec![],
+            divergence_responses: vec![],
         }
     }
 

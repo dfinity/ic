@@ -267,6 +267,25 @@ pub fn generate_execution_responses_for_canister_http_responses(
                     ),
                 }),
         )
+        .chain(
+            canister_http_payload
+                .divergence_responses
+                .iter()
+                .filter_map(|divergence_response| {
+                    Some(Response {
+                        originator: CanisterId::ic_00(),
+                        respondent: CanisterId::ic_00(),
+                        originator_reply_callback: divergence_response.shares.get(0)?.content.id,
+                        refund: Cycles::zero(),
+                        response_payload: ic_types::messages::Payload::Reject(
+                            ic_types::messages::RejectContext {
+                                code: ic_error_types::RejectCode::SysTransient,
+                                message: "Canister http responses were different across replicas, and no consensus was reached".to_string(),
+                            },
+                        ),
+                    })
+                }),
+        )
         .collect()
 }
 

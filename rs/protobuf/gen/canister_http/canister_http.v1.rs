@@ -26,6 +26,17 @@ pub struct CanisterHttpResponse {
     pub content: ::core::option::Option<CanisterHttpResponseContent>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseMetadata {
+    #[prost(uint64, tag = "1")]
+    pub id: u64,
+    #[prost(uint64, tag = "2")]
+    pub timeout: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub content_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "4")]
+    pub registry_version: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
     #[prost(oneof = "canister_http_response_content::Status", tags = "2, 3")]
     pub status: ::core::option::Option<canister_http_response_content::Status>,
@@ -48,7 +59,7 @@ pub struct CanisterHttpReject {
     pub message: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpReponseSignature {
+pub struct CanisterHttpResponseSignature {
     #[prost(bytes = "vec", tag = "1")]
     pub signer: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "2")]
@@ -62,6 +73,18 @@ pub struct CanisterHttpResponseWithConsensus {
     pub hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
-    #[prost(message, repeated, tag = "6")]
-    pub signatures: ::prost::alloc::vec::Vec<CanisterHttpReponseSignature>,
+    #[prost(message, repeated, tag = "7")]
+    pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpShare {
+    #[prost(message, optional, tag = "1")]
+    pub metadata: ::core::option::Option<CanisterHttpResponseMetadata>,
+    #[prost(message, optional, tag = "2")]
+    pub signature: ::core::option::Option<CanisterHttpResponseSignature>,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseDivergence {
+    #[prost(message, repeated, tag = "1")]
+    pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }

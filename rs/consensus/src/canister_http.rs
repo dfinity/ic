@@ -1,8 +1,5 @@
 //! This module encapsulates all components required for canister http requests.
-use crate::consensus::{
-    utils::{group_shares, registry_version_at_height},
-    ConsensusCrypto, Membership,
-};
+use crate::consensus::{utils::registry_version_at_height, ConsensusCrypto, Membership};
 use ic_interfaces::{
     canister_http::{
         CanisterHttpGossip, CanisterHttpPayloadBuilder, CanisterHttpPayloadValidationError,
@@ -21,9 +18,10 @@ use ic_types::{
     artifact::{CanisterHttpResponseId, Priority, PriorityFn},
     batch::{CanisterHttpPayload, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
     canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseAttribute, CanisterHttpResponseMetadata,
-        CanisterHttpResponseProof, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
+        CanisterHttpResponse, CanisterHttpResponseAttribute, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
+        CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::Committee,
     crypto::{crypto_hash, Signed},
@@ -34,9 +32,8 @@ use ic_types::{
 };
 pub use pool_manager::CanisterHttpPoolManagerImpl;
 use prometheus::{HistogramVec, IntGauge};
-use std::convert::TryInto;
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     mem::size_of,
     sync::{Arc, RwLock},
 };
@@ -278,6 +275,65 @@ impl CanisterHttpPayloadBuilderImpl {
     }
 }
 
+/// This function takes sets of shares for each response associated with a
+/// single callback id, and checks whether that collection of sets of shares can
+/// be considered to have enough disagreement that it will be impossible to
+/// reach consensus with the number of faults tolerated. Specifically, what is
+/// done is as follows:
+///
+/// - The sets of shares are sorted from largest to smallest, and then the
+/// largest set is removed.
+///
+/// - A new set of "diverging signers" is created by collecting every node id
+/// that has signed a share not in the largest group.
+///
+/// - Finally any signers appearing in the largest group are
+/// removed from the diverging signers group.
+///
+/// - If the size of this group exceeds the number of faults tolerated, then the
+/// divergence criteria is met.
+fn grouped_shares_meet_divergence_criteria(
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
+    faults_tolerated: usize,
+) -> bool {
+    let mut share_for_content_signers: Vec<BTreeSet<NodeId>> = grouped_shares
+        .iter()
+        .map(|(_, shares)| shares.iter().map(|share| share.signature.signer).collect())
+        .collect();
+    share_for_content_signers.sort_by_key(|b| core::cmp::Reverse(b.len()));
+    if let Some(largest_signers) = share_for_content_signers.get(0) {
+        let mut non_largest_signers = BTreeSet::new();
+        for signer_group in share_for_content_signers.iter().skip(1) {
+            for signer in signer_group.iter() {
+                non_largest_signers.insert(*signer);
+            }
+        }
+        let otherwise_committed_signer_count =
+            non_largest_signers.difference(largest_signers).count();
+        otherwise_committed_signer_count > faults_tolerated
+    } else {
+        false
+    }
+}
+
+fn group_shares_by_callback_id<'a, Shares: Iterator<Item = &'a CanisterHttpResponseShare>>(
+    shares: Shares,
+) -> BTreeMap<CallbackId, BTreeMap<CanisterHttpResponseMetadata, Vec<&'a CanisterHttpResponseShare>>>
+{
+    let mut map: BTreeMap<
+        CallbackId,
+        BTreeMap<CanisterHttpResponseMetadata, Vec<&'a CanisterHttpResponseShare>>,
+    > = BTreeMap::new();
+    for share in shares {
+        map.entry(share.content.id)
+            .or_insert_with(|| BTreeMap::new())
+            .entry(share.content.clone())
+            .or_insert_with(|| vec![])
+            .push(share);
+    }
+    map
+}
+
 impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
     fn get_canister_http_payload(
         &self,
@@ -292,7 +348,8 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             .with_label_values(&["build"])
             .start_timer();
 
-        // Check whether feature is enabled, return empty payload if not enabled or registry unavailable
+        // Check whether feature is enabled, return empty payload if not enabled
+        // or registry unavailable
         match self.is_enabled(validation_context) {
             Err(_) => {
                 warn!(self.log, "CanisterHttpPayloadBuilder: Registry unavailable");
@@ -329,10 +386,20 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 }
             };
 
-        // Since aggegating the signatures is expensive, we don't want to do the size checks after
-        // aggregation. Also we don't want to hold the lock on the pool while aggregating.
-        // Therefore, we pick the candidates for the payload first, then aggregate the signatures
-        // in a second step
+        let faults_tolerated = match self.membership.get_canister_http_committee(height) {
+            Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
+            _ => {
+                warn!(self.log, "Failed to get canister http committee");
+                return CanisterHttpPayload::default();
+            }
+        };
+
+        let mut divergence_responses = vec![];
+
+        // Since aggegating the signatures is expensive, we don't want to do the
+        // size checks after aggregation. Also we don't want to hold the lock on
+        // the pool while aggregating. Therefore, we pick the candidates for the
+        // payload first, then aggregate the signatures in a second step
         let (mut candidates, timeouts) = {
             let pool_access = self.pool.read().unwrap();
             let mut total_share_count = 0;
@@ -341,9 +408,8 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             // Get share candidates to include in the block
             let share_candidates = pool_access
                 .get_validated_shares()
-                .map(|v| {
+                .inspect(|_| {
                     total_share_count += 1;
-                    v
                 })
                 // Filter out shares that are timed out or have the wrong registry versions
                 .filter(|&response| {
@@ -353,54 +419,80 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                         validation_context,
                     )
                 })
-                .map(|v| {
+                .inspect(|_| {
                     active_shares += 1;
-                    v
                 })
                 // Filter out shares for responses to requests that already have
                 // responses in the block chain up to the point we are creating a
                 // new payload.
-                .filter(|&response| !delivered_ids.contains(&response.content.id))
-                .cloned();
+                .filter(|&response| !delivered_ids.contains(&response.content.id));
 
             // Group the shares by their metadata
-            let response_candidates = group_shares(share_candidates);
+            let response_candidates_by_callback_id = group_shares_by_callback_id(share_candidates);
 
             self.metrics.total_shares.set(total_share_count);
             self.metrics.active_shares.set(active_shares);
 
-            self.metrics
-                .unique_responses
-                .set(response_candidates.len().try_into().unwrap());
+            let mut unique_responses_count = 0;
 
-            let response_candidates = response_candidates
-                .iter()
-                // Filter out groups that don't have enough shares to have consensus
-                .filter(|(_, shares)| {
-                    shares
-                        .iter()
-                        .map(|share| share.signer)
-                        .collect::<BTreeSet<_>>()
-                        .len()
-                        >= threshold
-                })
-                // Fetch the associated content
-                .filter_map(|(metadata, shares)| {
-                    pool_access
-                        .get_response_content_by_hash(&metadata.content_hash)
-                        .map(|content| (metadata, shares, content))
-                });
+            let responses =
+                response_candidates_by_callback_id
+                    .into_iter()
+                    .filter_map(|(_, grouped_shares)| {
+                        if let Some((metadata, shares)) =
+                            grouped_shares.iter().find(|(_, shares)| {
+                                unique_responses_count += 1;
+                                let signers: BTreeSet<_> =
+                                    shares.iter().map(|share| share.signature.signer).collect();
+                                // We need at least threshold different signers to include the response
+                                signers.len() >= threshold
+                            })
+                        {
+                            // A set of grouped shares large enough to meet the
+                            // threshold was found, we should produce a result.
+                            pool_access
+                                .get_response_content_by_hash(&metadata.content_hash)
+                                .map(|content| {
+                                    (
+                                        metadata.clone(),
+                                        shares
+                                            .iter()
+                                            .map(|share| share.signature.clone())
+                                            .collect(),
+                                        content,
+                                    )
+                                })
+                        } else {
+                            // No set of grouped shares large enough was found
+                            // so now we check whether we have divergence.
+                            if grouped_shares_meet_divergence_criteria(
+                                &grouped_shares,
+                                faults_tolerated,
+                            ) {
+                                divergence_responses.push(CanisterHttpResponseDivergence {
+                                    shares: grouped_shares
+                                        .into_iter()
+                                        .flat_map(|(_, shares)| shares.into_iter().cloned())
+                                        .collect(),
+                                });
+                            }
+                            None
+                        }
+                    });
 
-            // From the response candidates, we select the ones, that will fit into the payload
+            // Select from the response candidates those that will fit into the
+            // payload.
+
             let mut accumulated_size = 0;
             let mut candidates = vec![];
             let mut unique_includable_responses = 0;
             let mut responses_included = 0;
 
-            for (metadata, shares, content) in response_candidates {
+            for (metadata, shares, content) in responses {
                 unique_includable_responses += 1;
-                // FIXME: This MUST be the same size calculation as CanisterHttpResponseWithConsensus::count_bytes.
-                // This should be explicit in the code
+                // FIXME: This MUST be the same size calculation as
+                // CanisterHttpResponseWithConsensus::count_bytes. This
+                // should be explicit in the code
                 let candidate_size = size_of::<CanisterHttpResponseProof>() + content.count_bytes();
                 if NumBytes::new((accumulated_size + candidate_size) as u64) < byte_limit {
                     responses_included += 1;
@@ -408,16 +500,20 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                         break;
                     }
 
-                    candidates.push((metadata.clone(), shares.clone(), content));
+                    candidates.push((metadata.clone(), shares, content));
+
                     accumulated_size += candidate_size;
                 }
             }
 
-            // Check the state for timeouts
-            // NOTE: We can not use the existing timed out artifacts for this task, since we don't have consensus on them.
-            // For example a malicious node might publish a single timed out metadata share and we would pick it up
-            // to generate a time out response.
-            // Instead, we scan the state metadata for timed out requests and generate time out responses based on that
+            self.metrics.unique_responses.set(unique_responses_count);
+
+            // Check the state for timeouts NOTE: We can not use the existing
+            // timed out artifacts for this task, since we don't have consensus
+            // on them. For example a malicious node might publish a single
+            // timed out metadata share and we would pick it up to generate a
+            // time out response. Instead, we scan the state metadata for timed
+            // out requests and generate time out responses based on that
             let mut timeouts = vec![];
             if let Ok(state) = self
                 .state_manager
@@ -458,6 +554,7 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 })
                 .collect(),
             timeouts,
+            divergence_responses,
         };
 
         payload
@@ -582,18 +679,19 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             }
         }
 
+        let committee = self
+            .membership
+            .get_canister_http_committee(height)
+            .map_err(|_| {
+                CanisterHttpPayloadValidationError::Transient(
+                    CanisterHttpTransientValidationError::Membership,
+                )
+            })?;
+
         // Verify the signatures
         // NOTE: We do this in a separate loop because this check is expensive and we want to
         // do all the cheap checks first
         for response in &payload.responses {
-            let committee = self
-                .membership
-                .get_canister_http_committee(height)
-                .map_err(|_| {
-                    CanisterHttpPayloadValidationError::Transient(
-                        CanisterHttpTransientValidationError::Membership,
-                    )
-                })?;
             let threshold = match self
                 .membership
                 .get_committee_threshold(height, Committee::CanisterHttp)
@@ -638,6 +736,58 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                         CanisterHttpPermanentValidationError::SignatureError(Box::new(err)),
                     )
                 })?;
+        }
+
+        let faults_tolerated = match self.membership.get_canister_http_committee(height) {
+            Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
+            _ => {
+                warn!(self.log, "Failed to get canister http committee");
+                return Err(CanisterHttpPayloadValidationError::Transient(
+                    CanisterHttpTransientValidationError::Membership,
+                ));
+            }
+        };
+
+        for response in &payload.divergence_responses {
+            let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
+                .shares
+                .iter()
+                .map(|share| share.signature.signer)
+                .partition(|signer| committee.iter().any(|id| id == signer));
+
+            if !invalid_signers.is_empty() {
+                return Err(CanisterHttpPayloadValidationError::Permanent(
+                    CanisterHttpPermanentValidationError::SignersNotMembers {
+                        invalid_signers,
+                        committee,
+                        valid_signers,
+                    },
+                ));
+            }
+
+            for share in response.shares.iter() {
+                self.crypto
+                    .verify(share, consensus_registry_version)
+                    .map_err(|err| {
+                        CanisterHttpPayloadValidationError::Permanent(
+                            CanisterHttpPermanentValidationError::SignatureError(Box::new(err)),
+                        )
+                    })?;
+            }
+
+            let grouped_shares = group_shares_by_callback_id(response.shares.iter());
+            if grouped_shares.len() != 1 {
+                return Err(CanisterHttpPayloadValidationError::Permanent(
+                    CanisterHttpPermanentValidationError::DivergenceProofContainsMultipleCallbackIds
+                ));
+            }
+            for (_, grouped_shares) in grouped_shares {
+                if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
+                    return Err(CanisterHttpPayloadValidationError::Permanent(
+                        CanisterHttpPermanentValidationError::DivergenceProofDoesNotMeetDivergenceCriteria
+                    ));
+                }
+            }
         }
 
         // Successfully return with payload size
@@ -830,6 +980,7 @@ mod tests {
                     },
                 }],
                 timeouts: vec![],
+                divergence_responses: vec![],
             };
 
             let validation_context = ValidationContext {
@@ -898,7 +1049,80 @@ mod tests {
         });
     }
 
-    /// Submit a very large number of valid resonses, then check that the
+    #[test]
+    fn divergence_response_inclusion_test() {
+        test_config_with_http_feature(10, |payload_builder, canister_http_pool| {
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+
+                let (response, metadata) = test_response_and_metadata(1);
+
+                let shares = metadata_to_shares(10, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                add_received_shares_to_pool(pool_access.deref_mut(), shares[1..4].to_vec());
+
+                // Ensure that one bad apple can't cause us to report divergence
+                add_received_shares_to_pool(
+                    pool_access.deref_mut(),
+                    (0..10_u8)
+                        .map(|i| {
+                            let (_, metadata) = test_response_and_metadata_with_content(
+                                1,
+                                CanisterHttpResponseContent::Success(vec![i]),
+                            );
+                            metadata_to_share(7, &metadata)
+                        })
+                        .collect(),
+                );
+            }
+
+            let validation_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: mock_time() + Duration::from_secs(3),
+            };
+
+            // Build a payload
+            let payload = payload_builder.get_canister_http_payload(
+                Height::new(1),
+                &validation_context,
+                &[],
+                NumBytes::new(4 * 1024 * 1024),
+            );
+
+            assert_eq!(payload.divergence_responses.len(), 0);
+
+            // But that if we actually get divergence, we report it
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+
+                add_received_shares_to_pool(
+                    pool_access.deref_mut(),
+                    (0..10_u8)
+                        .map(|i| {
+                            let (_, metadata) = test_response_and_metadata_with_content(
+                                1,
+                                CanisterHttpResponseContent::Success(vec![i]),
+                            );
+                            metadata_to_share(i.into(), &metadata)
+                        })
+                        .collect(),
+                );
+            }
+
+            // Build a payload
+            let payload = payload_builder.get_canister_http_payload(
+                Height::new(1),
+                &validation_context,
+                &[],
+                NumBytes::new(4 * 1024 * 1024),
+            );
+
+            assert_eq!(payload.divergence_responses.len(), 1);
+        });
+    }
+
+    /// Submit a very large number of valid responses, then check that the
     /// payload builder does not all of them but only CANISTER_HTTP_RESPONSES_PER_BLOCK
     #[test]
     fn max_responses() {
@@ -1087,6 +1311,7 @@ mod tests {
             let payload = CanisterHttpPayload {
                 responses: vec![response_and_metadata_to_proof(&response, &metadata)],
                 timeouts: vec![],
+                divergence_responses: vec![],
             };
 
             let validation_result = payload_builder.validate_canister_http_payload(
@@ -1105,16 +1330,112 @@ mod tests {
         });
     }
 
+    #[test]
+    fn divergence_response_validation_test() {
+        test_config_with_http_feature(4, |payload_builder, _| {
+            let (_, metadata) = test_response_and_metadata(0);
+            let (_, other_metadata) = test_response_and_metadata_with_content(
+                0,
+                CanisterHttpResponseContent::Success(b"other".to_vec()),
+            );
+
+            let payload = CanisterHttpPayload {
+                responses: vec![],
+                timeouts: vec![],
+                divergence_responses: vec![CanisterHttpResponseDivergence {
+                    shares: vec![
+                        metadata_to_share(0, &metadata),
+                        metadata_to_share(1, &metadata),
+                        metadata_to_share(2, &other_metadata),
+                        metadata_to_share(3, &other_metadata),
+                    ],
+                }],
+            };
+
+            let validation_result = payload_builder.validate_canister_http_payload(
+                Height::from(1),
+                &payload,
+                &default_validation_context(),
+                &[&payload],
+            );
+
+            assert!(validation_result.is_ok());
+
+            let payload = CanisterHttpPayload {
+                responses: vec![],
+                timeouts: vec![],
+                divergence_responses: vec![CanisterHttpResponseDivergence {
+                    shares: vec![
+                        metadata_to_share(0, &metadata),
+                        metadata_to_share(1, &metadata),
+                    ],
+                }],
+            };
+
+            let validation_result = payload_builder.validate_canister_http_payload(
+                Height::from(1),
+                &payload,
+                &default_validation_context(),
+                &[&payload],
+            );
+
+            match validation_result {
+                Err(CanisterHttpPayloadValidationError::Permanent(
+                        CanisterHttpPermanentValidationError::DivergenceProofDoesNotMeetDivergenceCriteria
+                )) => (),
+                x => panic!("Expected DivergenceProofDoesNotMeetDivergenceCriteria, got {:?}", x),
+            }
+
+            let (_, other_callback_id_metadata) = test_response_and_metadata(1);
+
+            let payload = CanisterHttpPayload {
+                responses: vec![],
+                timeouts: vec![],
+                divergence_responses: vec![CanisterHttpResponseDivergence {
+                    shares: vec![
+                        metadata_to_share(0, &metadata),
+                        metadata_to_share(1, &metadata),
+                        metadata_to_share(2, &other_callback_id_metadata),
+                    ],
+                }],
+            };
+
+            let validation_result = payload_builder.validate_canister_http_payload(
+                Height::from(1),
+                &payload,
+                &default_validation_context(),
+                &[&payload],
+            );
+
+            match validation_result {
+                Err(CanisterHttpPayloadValidationError::Permanent(
+                        CanisterHttpPermanentValidationError::DivergenceProofContainsMultipleCallbackIds
+                )) => (),
+                x => panic!("Expected DivergenceProofDoesNotMeetDivergenceCriteria, got {:?}", x),
+            }
+        });
+    }
+
     /// Build some test metadata and response, which is valid and can be used in different tests
     fn test_response_and_metadata(
         callback_id: u64,
+    ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
+        test_response_and_metadata_with_content(
+            callback_id,
+            CanisterHttpResponseContent::Success(b"abc".to_vec()),
+        )
+    }
+
+    fn test_response_and_metadata_with_content(
+        callback_id: u64,
+        content: CanisterHttpResponseContent,
     ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
         // Build a response
         let response = CanisterHttpResponse {
             id: CallbackId::new(callback_id),
             timeout: mock_time() + Duration::from_secs(10),
             canister_id: canister_test_id(0),
-            content: CanisterHttpResponseContent::Success(b"abc".to_vec()),
+            content,
         };
 
         // Create metadata of response
@@ -1281,6 +1602,7 @@ mod tests {
             let payload = CanisterHttpPayload {
                 responses: vec![response_and_metadata_to_proof(&response, &metadata)],
                 timeouts: vec![],
+                divergence_responses: vec![],
             };
 
             payload_builder.validate_canister_http_payload(
