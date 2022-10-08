@@ -7,7 +7,7 @@ use crate::consensus::{
     pool_reader::PoolReader, prelude::threshold_sig::ni_dkg::NiDkgTranscript, prelude::*,
     ConsensusCrypto,
 };
-use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
+use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{
@@ -333,6 +333,8 @@ impl DkgKeyManager {
             let logger = self.logger.clone();
             let summary = summary.clone();
             let (tx, rx) = sync_channel(0);
+            self.pending_transcript_loads.insert(dkg_id, (deadline, rx));
+
             std::thread::spawn(move || {
                 let transcript = summary
                     .current_transcripts()
@@ -342,20 +344,52 @@ impl DkgKeyManager {
                     .expect("No transcript was found")
                     .1;
 
-                let result = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
-                match &result {
-                    Ok(LoadTranscriptResult::SigningKeyAvailable) => {
-                        info!(logger, "Finished loading transcript with id={:?}", dkg_id)
+                let result = loop {
+                    let result = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
+                    match &result {
+                        // Key loaded successfully
+                        Ok(LoadTranscriptResult::SigningKeyAvailable) => {
+                            info!(logger, "Finished loading transcript with id {:?}", dkg_id);
+                            break result;
+                        }
+
+                        // Arguments passed to crypto are invalid, should never happen
+                        Ok(val) => {
+                            error!(
+                                logger,
+                                "The DKG transcript with id {:?} couldn't be loaded: {:?}",
+                                dkg_id,
+                                val
+                            );
+                            break result;
+                        }
+
+                        // Transient error in crypto, log warning and retry
+                        Err(err) if !err.is_reproducible() => {
+                            warn!(
+                                every_n_seconds => 5,
+                                logger,
+                                "The DKG transcript with id {:?} couldn't be loaded: {:?} Retrying...",
+                                dkg_id,
+                                err
+                            );
+                        }
+
+                        // Permanent error in crypto, log error
+                        Err(err) => {
+                            error!(
+                                logger,
+                                "The DKG transcript with id {:?} couldn't be loaded: {:?}",
+                                dkg_id,
+                                err
+                            );
+                            break result;
+                        }
                     }
-                    Ok(_) => error!(logger, "Failed to load transcripts with id={:?}", dkg_id),
-                    Err(err) => error!(
-                        logger,
-                        "The DKG transcript with id={:?} couldn't be loaded: {:?}", dkg_id, err
-                    ),
-                }
-                tx.send(result)
+                };
+
+                tx.send(result).expect("DKG key manager paniced");
             });
-            self.pending_transcript_loads.insert(dkg_id, (deadline, rx));
         }
     }
 
@@ -405,8 +439,19 @@ impl DkgKeyManager {
         let crypto = self.crypto.clone();
         let logger = self.logger.clone();
         let handle = std::thread::spawn(move || {
-            NiDkgAlgorithm::retain_only_active_keys(&*crypto, transcripts_to_retain)
-                .unwrap_or_else(|err| warn!(logger, "Could not delete DKG keys: {:?}", err));
+            match NiDkgAlgorithm::retain_only_active_keys(&*crypto, transcripts_to_retain) {
+                Ok(()) => (),
+                // If we fail due to a transient error, we simply do nothing.
+                // The next delete cycle will remove the keys.
+                Err(err) if !err.is_reproducible() => {
+                    warn!(
+                        logger,
+                        "Could not delete DKG keys (Crypto temporarily unavailable): {:?}", err
+                    )
+                }
+                // On a replicated error, we need to log an error
+                Err(err) => error!(logger, "Could not delete DKG keys: {:?}", err),
+            }
         });
         self.pending_key_removal = Some(handle);
     }
