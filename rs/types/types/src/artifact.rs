@@ -494,9 +494,6 @@ pub struct StateSyncArtifactId {
     pub hash: CryptoHashOfState,
 }
 
-type GetStateSyncChunk =
-    fn(file_path: std::path::PathBuf, offset: u64, len: u32) -> std::io::Result<Vec<u8>>;
-
 /// State sync message.
 //
 // NOTE: StateSyncMessage is never persisted or transferred over the wire
@@ -513,9 +510,6 @@ pub struct StateSyncMessage {
     pub checkpoint_root: std::path::PathBuf,
     /// The manifest containing the summary of the content.
     pub manifest: crate::state_sync::Manifest,
-
-    #[serde(skip_serializing, skip_deserializing)]
-    pub get_state_sync_chunk: Option<GetStateSyncChunk>,
 }
 
 // We need a custom Hash instance to skip checkpoint_root in order
