@@ -53,7 +53,6 @@ fn fake_complete() -> DownloadState {
         root_hash: CryptoHashOfState::from(CryptoHash(vec![0; 32])),
         checkpoint_root: PathBuf::new(),
         manifest,
-        get_state_sync_chunk: None,
     });
     DownloadState::Complete(Box::new(artifact))
 }

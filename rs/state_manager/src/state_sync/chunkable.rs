@@ -137,17 +137,6 @@ impl Drop for IncompleteState {
     }
 }
 
-pub(crate) fn get_state_sync_chunk(
-    file_path: PathBuf,
-    offset: u64,
-    len: u32,
-) -> std::io::Result<Vec<u8>> {
-    let mut buf = vec![0; len as usize];
-    let f = std::fs::File::open(&file_path)?;
-    f.read_exact_at(&mut buf[..], offset)?;
-    Ok(buf)
-}
-
 impl IncompleteState {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -731,7 +720,6 @@ impl IncompleteState {
                 .raw_path()
                 .to_path_buf(),
             manifest: manifest.clone(),
-            get_state_sync_chunk: Some(get_state_sync_chunk),
         })
     }
 

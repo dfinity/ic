@@ -96,9 +96,6 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
                         root_hash: msg_id.hash.clone(),
                         checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
                         manifest: manifest.clone(),
-                        get_state_sync_chunk: Some(
-                            crate::state_sync::chunkable::get_state_sync_chunk,
-                        ),
                     })
                 } else {
                     None
@@ -146,9 +143,6 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
                         root_hash: metadata.root_hash.as_ref()?.clone(),
                         checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
                         manifest: manifest.clone(),
-                        get_state_sync_chunk: Some(
-                            crate::state_sync::chunkable::get_state_sync_chunk,
-                        ),
                     };
                     Some(StateSyncArtifact::message_to_advert(&msg))
                 } else {

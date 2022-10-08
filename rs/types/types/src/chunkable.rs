@@ -142,27 +142,38 @@ chunkable_artifact_impl! {CanisterHttpResponseShare, |self|
 
 impl ChunkableArtifact for StateSyncMessage {
     fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
-        let buf = if chunk_id == crate::state_sync::MANIFEST_CHUNK {
-            crate::state_sync::encode_manifest(&self.manifest)
-        } else if let Some(chunk) = self
-            .manifest
-            .chunk_table
-            .get((chunk_id.get() - 1) as usize)
-            .cloned()
+        #[cfg(not(target_family = "unix"))]
         {
-            let path = self
-                .checkpoint_root
-                .join(&self.manifest.file_table[chunk.file_index as usize].relative_path);
-            let get_state_sync_chunk = self.get_state_sync_chunk.unwrap();
-            get_state_sync_chunk(path, chunk.offset, chunk.size_bytes).ok()?
-        } else {
-            return None;
-        };
+            panic!("This method should only be used when the target OS family is unix.");
+        }
 
-        Some(ArtifactChunk::new(
-            chunk_id,
-            ArtifactChunkData::SemiStructuredChunkData(buf),
-        ))
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::fs::FileExt;
+            let payload = if chunk_id == crate::state_sync::MANIFEST_CHUNK {
+                crate::state_sync::encode_manifest(&self.manifest)
+            } else if let Some(chunk) = self
+                .manifest
+                .chunk_table
+                .get((chunk_id.get() - 1) as usize)
+                .cloned()
+            {
+                let path = self
+                    .checkpoint_root
+                    .join(&self.manifest.file_table[chunk.file_index as usize].relative_path);
+                let mut buf = vec![0; chunk.size_bytes as usize];
+                let f = std::fs::File::open(&path).ok()?;
+                f.read_exact_at(&mut buf[..], chunk.offset).ok()?;
+                buf
+            } else {
+                return None;
+            };
+
+            Some(ArtifactChunk::new(
+                chunk_id,
+                ArtifactChunkData::SemiStructuredChunkData(payload),
+            ))
+        }
     }
 }
 
