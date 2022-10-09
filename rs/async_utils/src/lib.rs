@@ -2,13 +2,13 @@ use slog::{info, Logger};
 
 mod http;
 mod hyper;
-mod observable_counting_semaphore;
+mod tcp_acceptor;
 mod unix;
 
 pub use self::{
     http::{receive_body, receive_body_without_timeout, BodyReceiveError},
     hyper::ExecuteOnTokioRuntime,
-    observable_counting_semaphore::*,
+    tcp_acceptor::*,
     unix::{
         incoming_from_first_systemd_socket, incoming_from_path, incoming_from_second_systemd_socket,
     },

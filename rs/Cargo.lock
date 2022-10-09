@@ -6205,10 +6205,12 @@ name = "ic-metrics-exporter"
 version = "0.8.0"
 dependencies = [
  "hyper",
+ "ic-async-utils",
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-interfaces-registry",
  "ic-metrics",
+ "ic-test-utilities-logger",
  "ic-types",
  "prometheus 0.12.0",
  "serde",
