@@ -1,22 +1,36 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/async_utils",
+    "//rs/config",
+    "//rs/crypto/tls_interfaces",
+    "//rs/interfaces/registry",
+    "//rs/monitoring/metrics",
+    "//rs/types/types",
+    "@crate_index//:hyper",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities/logger",
+]
 
 rust_library(
     name = "metrics_exporter",
     srcs = glob(["src/**"]),
     crate_name = "ic_metrics_exporter",
     version = "0.8.0",
-    deps = [
-        "//rs/config",
-        "//rs/crypto/tls_interfaces",
-        "//rs/interfaces/registry",
-        "//rs/monitoring/metrics",
-        "//rs/types/types",
-        "@crate_index//:hyper",
-        "@crate_index//:prometheus",
-        "@crate_index//:serde",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
-    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "metrics_exporter_test",
+    size = "small",
+    crate = ":metrics_exporter",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

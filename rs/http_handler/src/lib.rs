@@ -39,7 +39,7 @@ use crate::{
 use byte_unit::Byte;
 use http::method::Method;
 use hyper::{server::conn::Http, Body, Client, Request, Response, StatusCode};
-use ic_async_utils::ObservableCountingSemaphore;
+use ic_async_utils::{TcpAcceptor, WrappedTcpStream};
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -79,7 +79,7 @@ use std::{
 };
 use tempfile::NamedTempFile;
 use tokio::{
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     time::{sleep, timeout, Instant},
 };
 use tower::{
@@ -377,11 +377,8 @@ pub fn start_server(
         if let Some(path) = port_file_path {
             create_port_file(path, local_addr.port());
         }
+        let tcp_acceptor = TcpAcceptor::new(tcp_listener, MAX_OUTSTANDING_CONNECTIONS);
 
-        let outstanding_connections = ObservableCountingSemaphore::new(
-            MAX_OUTSTANDING_CONNECTIONS,
-            metrics.connections.clone(),
-        );
         let mut http = Http::new();
         http.http2_max_concurrent_streams(HTTP_MAX_CONCURRENT_STREAMS);
         loop {
@@ -390,8 +387,7 @@ pub fn start_server(
             let http_handler = http_handler.clone();
             let tls_handshake = Arc::clone(&tls_handshake);
             let metrics = metrics.clone();
-            let request_permit = outstanding_connections.acquire().await;
-            match tcp_listener.accept().await {
+            match tcp_acceptor.accept().await {
                 Ok((tcp_stream, _)) => {
                     metrics.connections_total.inc();
                     // Start recording connection setup duration.
@@ -399,7 +395,6 @@ pub fn start_server(
                     let svc = main_service.clone();
                     rt_handle.spawn(async move {
                         // Do a move of the permit so it gets dropped at the end of the scope.
-                        let _request_permit_deleter = request_permit;
                         let mut b = [0_u8; 1];
                         let app_layer = match timeout(
                             Duration::from_secs(MAX_TCP_PEEK_TIMEOUT_SECS),
@@ -508,12 +503,13 @@ async fn serve_connection(
     service: BoxCloneService<Request<Body>, Response<Body>, HttpError>,
     app_layer: AppLayer,
     http: Http,
-    tcp_stream: TcpStream,
+    tcp_stream: WrappedTcpStream,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     http_handler: HttpHandler,
     metrics: HttpHandlerMetrics,
     connection_start_time: Instant,
 ) {
+    let (tcp_stream, _counter) = tcp_stream.take();
     let connection_result = match app_layer {
         AppLayer::Https => {
             let peer_addr = tcp_stream.peer_addr();

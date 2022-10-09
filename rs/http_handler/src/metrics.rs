@@ -3,7 +3,7 @@ use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
     MetricsRegistry,
 };
-use prometheus::{HistogramVec, IntCounter, IntGauge};
+use prometheus::{HistogramVec, IntCounter};
 use tokio::time::Instant;
 
 pub const LABEL_DETAIL: &str = "detail";
@@ -25,7 +25,6 @@ pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] =
 pub(crate) struct HttpHandlerMetrics {
     pub(crate) requests: HistogramVec,
     pub(crate) requests_body_size_bytes: HistogramVec,
-    pub(crate) connections: IntGauge,
     pub(crate) connections_total: IntCounter,
     connection_setup_duration: HistogramVec,
     connection_duration: HistogramVec,
@@ -64,10 +63,6 @@ impl HttpHandlerMetrics {
                 // 10 B - 5 MB
                 decimal_buckets(1, 6),
                 &REQUESTS_LABEL_NAMES,
-            ),
-            connections: metrics_registry.int_gauge(
-                "replica_http_live_tcp_connections",
-                "Number of open tcp connections."
             ),
             connections_total: metrics_registry.int_counter(
                 "replica_http_tcp_connections_total",
