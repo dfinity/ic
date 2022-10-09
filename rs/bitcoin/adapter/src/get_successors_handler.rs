@@ -35,10 +35,10 @@ const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HASHES_LENGTH * BLOCK_HASH_SIZE;
 const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
-const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 700_000;
+const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
 
 // Max height for sending multiple blocks when connecting the Bitcoin testnet.
-const TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 2_164_000;
+const TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 2_350_000;
 
 #[derive(Debug)]
 pub struct GetSuccessorsRequest {
