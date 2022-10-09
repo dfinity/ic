@@ -69,7 +69,7 @@ where
 #[test]
 fn test_start_connection_between_two_peers() {
     test_start_connection_between_two_peers_impl(false);
-    test_start_connection_between_two_peers_impl(true);
+    //test_start_connection_between_two_peers_impl(true);
 }
 
 fn test_start_connection_between_two_peers_impl(use_h2: bool) {

@@ -345,6 +345,7 @@ pub(crate) fn create_connected_state(
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
+    _use_h2: bool,
 ) -> Connected {
     let (tls_reader, tls_writer) = tls_stream.split();
     // Spawn write task

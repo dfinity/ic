@@ -105,6 +105,8 @@ pub(crate) struct TransportImpl {
     pub log: ReplicaLogger,
     /// Guarded self weak-reference
     pub weak_self: std::sync::RwLock<Weak<TransportImpl>>,
+    /// If true, uses http/2 protocol
+    pub use_h2: bool,
 }
 
 pub(crate) struct TransportImplH2 {
