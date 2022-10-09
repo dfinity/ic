@@ -211,6 +211,7 @@ impl TransportImpl {
                                 arc_self.data_plane_metrics.clone(),
                                 arc_self.weak_self.read().unwrap().clone(),
                                 arc_self.rt_handle.clone(),
+                                arc_self.use_h2,
                             );
 
                             event_handler
@@ -321,7 +322,7 @@ impl TransportImpl {
                             arc_self.data_plane_metrics.clone(),
                             arc_self.weak_self.read().unwrap().clone(),
                             arc_self.rt_handle.clone(),
-
+                            arc_self.use_h2,
                         );
                         event_handler
                             .call(TransportEvent::PeerUp(peer_id))

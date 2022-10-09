@@ -96,6 +96,7 @@ impl TransportImpl {
         crypto: Arc<dyn TlsHandshake + Send + Sync>,
         rt_handle: Handle,
         log: ReplicaLogger,
+        use_h2: bool,
     ) -> Arc<Self> {
         let node_ip = IpAddr::from_str(&config.node_ip)
             .unwrap_or_else(|_| panic!("Invalid node IP: {}", &config.node_ip));
@@ -111,11 +112,11 @@ impl TransportImpl {
             control_plane_metrics: ControlPlaneMetrics::new(metrics_registry.clone()),
             send_queue_metrics: SendQueueMetrics::new(metrics_registry),
             log,
-
             peer_map: tokio::sync::RwLock::new(HashMap::new()),
             accept_port: Mutex::new(None),
             event_handler: Mutex::new(None),
             weak_self: std::sync::RwLock::new(Weak::new()),
+            use_h2,
         });
         *arc.weak_self.write().unwrap() = Arc::downgrade(&arc);
         arc
@@ -140,6 +141,7 @@ pub fn create_transport(
         crypto,
         rt_handle,
         log,
+        false,
     )
 }
 
