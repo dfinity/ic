@@ -112,7 +112,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-if [[ -z "${GIT_REVISION}" ]]; then
+if [[ -z "${GIT_REVISION:-}" ]]; then
     echo "ERROR: GIT_REVISION not set."
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision <value>"
     exit_usage
@@ -174,8 +174,12 @@ BN_MEDIA_PATH="${REPO_ROOT}/artifacts/boundary-guestos/${deployment}/${GIT_REVIS
 INVENTORY="${REPO_ROOT}/testnet/env/${deployment}/hosts"
 USE_BOUNDARY_NODES="${USE_BOUNDARY_NODES:-true}"
 
+rm -rf "${BN_MEDIA_PATH}"
+mkdir -p "${BN_MEDIA_PATH}"
+"${INVENTORY}" --list >"${BN_MEDIA_PATH}/list.json"
+
 # Check if hosts.ini has boundary nodes
-if "${INVENTORY}" --list | jq -e ".boundary.hosts | length == 0" >/dev/null; then
+if jq -e '.boundary.hosts | length == 0' >/dev/null <"${BN_MEDIA_PATH}/list.json"; then
     USE_BOUNDARY_NODES="false"
 fi
 
@@ -240,13 +244,19 @@ if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
     COMMAND=$(
         cat <<EOF
 set -x
-rm -rf "${BN_MEDIA_PATH}"
-mkdir -p "${BN_MEDIA_PATH}"
-"${INVENTORY}" --media-json >"${BN_MEDIA_PATH}/${deployment}.json"
+
+HOSTS=$(jq -r '(.physical_hosts.hosts // [])[]' <"${BN_MEDIA_PATH}/list.json")
+mkdir "${BN_MEDIA_PATH}/certs"
+for HOST in "\${HOSTS[@]}"; do
+    if scp -r "\${HOST}:/etc/letsencrypt/live/testnet.dfinity.network/*" "${BN_MEDIA_PATH}/certs/"; then
+        break
+    fi
+done
 
 "${REPO_ROOT}"/ic-os/boundary-guestos/scripts/build-deployment.sh \
-    --input="${BN_MEDIA_PATH}/${deployment}.json" \
+    --input="${MEDIA_PATH}/${deployment}.json" \
     --output="${BN_MEDIA_PATH}" \
+    --certdir="${BN_MEDIA_PATH}/certs" \
     --nns_public_key="${MEDIA_PATH}/nns-public-key.pem"
 EOF
     )
@@ -284,6 +294,8 @@ if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
     if [[ ${BOUNDARY_STATUS} -ne 0 ]]; then
         exit $(tail -1 "${BOUNDARY_OUT}" | sed -re "s/.*=\"([0-9]+).*/\1/")
     fi
+
+    DOMAIN=$(jq -r '.bn_vars.domain // empty' <"${MEDIA_PATH}/${deployment}.json")
 fi
 
 rm -rf "${TMPDIR}"
@@ -305,6 +317,9 @@ ansible ic_p8s_service_discovery_install.yml -e yes_i_confirm=yes -e nns_public_
 
 endtime="$(date '+%s')"
 echo "**** Completed deployment at $(dateFromEpoch "${endtime}") (start time was $(dateFromEpoch "${starttime}"))"
+if [[ -n "${DOMAIN:-}" ]]; then
+    echo "Access through 'https://${DOMAIN}'"
+fi
 duration=$((endtime - starttime))
 echo "**** $((duration / 60)) minutes and $((duration % 60)) seconds elapsed."
 
