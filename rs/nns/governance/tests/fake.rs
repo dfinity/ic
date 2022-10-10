@@ -319,7 +319,7 @@ impl Environment for FakeDriver {
         _method_name: &str,
         _request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        unimplemented!();
+        Ok(vec![])
     }
 }
 

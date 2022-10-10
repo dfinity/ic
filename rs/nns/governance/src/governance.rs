@@ -1513,7 +1513,7 @@ impl ProposalData {
         {
             return self
                 .sns_token_swap_lifecycle
-                .and_then(|i| sns_swap_pb::Lifecycle::from_i32(i))
+                .and_then(sns_swap_pb::Lifecycle::from_i32)
                 .unwrap_or(sns_swap_pb::Lifecycle::Unspecified)
                 .is_terminal();
         }
@@ -5763,8 +5763,9 @@ impl Governance {
                             if let Some(more_followers) = topic_cache.and_then(|x| x.get(k)) {
                                 all_followers.append(&mut more_followers.clone());
                             }
-                            // Default following doesn't apply to governance proposals.
-                            if topic != Topic::Governance {
+                            // Default following doesn't apply to governance or SNS decentralization sale proposals.
+                            if ![Topic::Governance, Topic::SnsDecentralizationSale].contains(&topic)
+                            {
                                 // Insert followers from 'Unspecified' (default followers)
                                 if let Some(more_followers) =
                                     unspecified_cache.and_then(|x| x.get(k))
