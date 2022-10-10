@@ -14,6 +14,9 @@ from common import metrics  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("no_prometheus", False, "Set true to disable querying Prometheus.")
+gflags.DEFINE_string(
+    "prometheus_url", "https://prometheus.testnet.dfinity.network", "The URL to the prometheus service."
+)
 
 
 class Prometheus(metrics.Metric):
@@ -282,7 +285,7 @@ def get_common(hosts, testnet):
     return c
 
 
-def get_prometheus(payload, host="https://prometheus.testnet.dfinity.network"):
+def get_prometheus(payload):
     """Query prometheus for metrics."""
     headers = {"Accept": "application/json"}
 
@@ -290,7 +293,7 @@ def get_prometheus(payload, host="https://prometheus.testnet.dfinity.network"):
         raise Exception("Use get_prometheus_range for range queries")
     print("Executing Prometheus query: ", colored(json.dumps(payload, indent=2), "yellow"))
     print(payload["query"].replace("\\\\\\\\", "\\\\"))
-    r = requests.get(f"{host}/api/v1/query", headers=headers, params=payload)
+    r = requests.get(f"{FLAGS.prometheus_url}/api/v1/query", headers=headers, params=payload)
     return r
 
 
@@ -299,7 +302,7 @@ def get_prometheus_range(payload):
     headers = {"Accept": "application/json"}
 
     print("Executing Prometheus query: ", colored(json.dumps(payload, indent=2), "yellow"))
-    r = requests.get("https://prometheus.testnet.dfinity.network/api/v1/query_range", headers=headers, params=payload)
+    r = requests.get(f"{FLAGS.prometheus_url}/api/v1/query_range", headers=headers, params=payload)
     return r
 
 
