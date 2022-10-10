@@ -571,9 +571,16 @@ impl Payload {
     fn unpack(
         payload: PayloadTree,
     ) -> CertifiedSliceResult<(Label, Option<Vec<u8>>, Option<PayloadTreeMap>)> {
-        let streams_tree = Self::children_of(payload)?
+        let mut payload = Self::children_of(payload)?;
+        let streams_tree = payload
             .remove(&Label::from(LABEL_STREAMS))
             .ok_or(CertifiedSliceError::InvalidPayload(MissingStreams))?;
+        // Payload should only contain `/streams/...`.
+        if !payload.is_empty() {
+            return Err(CertifiedSliceError::InvalidPayload(
+                InvalidSlice::ExtraContents,
+            ));
+        }
         let mut streams = Self::children_of(streams_tree)?.into_iter();
 
         let (subnet_id, stream_tree) = streams
@@ -592,6 +599,12 @@ impl Payload {
             .remove(&Label::from(LABEL_MESSAGES))
             .map(Self::children_of)
             .transpose()?;
+        // Stream should only consist of `header` and (optionally) `messages`.
+        if !stream.is_empty() {
+            return Err(CertifiedSliceError::InvalidPayload(
+                InvalidSlice::ExtraContents,
+            ));
+        }
         if let Some(messages) = messages.as_ref() {
             if messages.is_empty() {
                 return Err(CertifiedSliceError::InvalidPayload(EmptyMessages));
@@ -981,6 +994,7 @@ pub enum CertifiedSliceError {
 /// `CertifiedSliceError::InvalidWitness` detail.
 #[derive(Debug, PartialEq, Eq)]
 pub enum InvalidSlice {
+    ExtraContents,
     EmptyMessages,
     MissingStreams,
     MissingStream,
