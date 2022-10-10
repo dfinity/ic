@@ -3952,4 +3952,66 @@ fn dts_resume_install_code_after_abort() {
     }
     assert!(!test.canister_state(canister).has_paused_install_code());
     assert!(!test.canister_state(canister).has_aborted_install_code());
+
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_install_code
+            .get_sample_sum(),
+        10.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_aborted_install_code
+            .get_sample_sum(),
+        1.0
+    );
+}
+
+#[test]
+fn dts_resume_long_execution_after_abort() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(100),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister = test.create_canister();
+    let message_id = test.send_ingress(canister, ingress(1000));
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_paused_execution());
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+    assert!(!test.canister_state(canister).has_paused_execution());
+    assert!(test.canister_state(canister).has_aborted_execution());
+
+    for _ in 0..10 {
+        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+    assert_eq!(
+        test.ingress_error(&message_id).code(),
+        ErrorCode::CanisterDidNotReply,
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_execution
+            .get_sample_sum(),
+        10.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_aborted_execution
+            .get_sample_sum(),
+        1.0
+    );
 }
