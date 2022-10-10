@@ -110,7 +110,7 @@ pub struct InputOutputQueue {
     #[prost(uint64, tag = "4")]
     pub num_slots_reserved: u64,
     /// Ordered ranges of messages having the same request deadline. Each range
-    /// is represented as a deadline and its end index (the `QueueIndex` just past
+    /// is represented as a deadline and its end index (the queue index just past
     /// the last request where the deadline applies). Both the deadlines and queue
     /// indices are strictly increasing.
     #[prost(message, repeated, tag = "5")]

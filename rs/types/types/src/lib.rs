@@ -189,11 +189,6 @@ pub struct NumSlicesTag;
 /// Represents the number of slices.
 pub type NumSlices = AmountOf<NumSlicesTag, u64>;
 
-pub struct QueueIndexTag;
-/// Index into a queue; used in the context of `InputQueue` / `OutputQueue` to
-/// define message order.
-pub type QueueIndex = AmountOf<QueueIndexTag, u64>;
-
 pub struct RandomnessTag;
 /// Randomness produced by Consensus which is used in the
 /// deterministic state machine (Message Routing and Execution Environment).
