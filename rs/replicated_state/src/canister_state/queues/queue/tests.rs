@@ -5,7 +5,7 @@ use ic_test_utilities::types::{
     ids::{canister_test_id, message_test_id, user_test_id},
     messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
 };
-use ic_types::{messages::RequestOrResponse, QueueIndex, Time};
+use ic_types::{messages::RequestOrResponse, Time};
 use proptest::prelude::*;
 
 #[test]
@@ -230,8 +230,8 @@ fn output_queue_explicit_push_and_pop_test() {
 
     let test_request = Arc::<Request>::from(RequestBuilder::default().build());
     let test_response = Arc::<Response>::from(ResponseBuilder::default().build());
-    let deadline1 = Time::from_nanos_since_unix_epoch(3_u64);
-    let deadline2 = Time::from_nanos_since_unix_epoch(7_u64);
+    let deadline1 = Time::from_nanos_since_unix_epoch(3);
+    let deadline2 = Time::from_nanos_since_unix_epoch(7);
 
     q.push_request(test_request.clone(), deadline1).unwrap();
     q.reserve_slot().unwrap();
@@ -240,19 +240,16 @@ fn output_queue_explicit_push_and_pop_test() {
     q.push_request(test_request, deadline2).unwrap();
 
     assert_eq!(4, q.num_messages());
-    assert_eq!(0, q.index.get());
+    assert_eq!(0, q.index);
     assert_eq!(
-        VecDeque::from(vec![
-            (deadline1, QueueIndex::from(3_u64)),
-            (deadline2, QueueIndex::from(4_u64)),
-        ]),
+        VecDeque::from(vec![(deadline1, 3), (deadline2, 4)]),
         q.deadline_range_ends
     );
 
     let timeout_index = q.timeout_index;
     assert!(matches!(q.pop().unwrap(), RequestOrResponse::Request(_)));
     assert_eq!(3, q.num_messages());
-    assert_eq!(1, q.index.get());
+    assert_eq!(1, q.index);
     assert_eq!(timeout_index, q.timeout_index);
 }
 
@@ -284,9 +281,9 @@ proptest! {
         })
     ) {
         let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-        let mut expected_deadline_range_ends = VecDeque::<(Time, QueueIndex)>::new();
+        let mut expected_deadline_range_ends = VecDeque::<(Time, usize)>::new();
 
-        let mut index = QueueIndex::from(1);
+        let mut index = 1;
         for (request, deadline) in requests
             .into_iter()
             .zip(deadlines.into_iter())
@@ -301,7 +298,7 @@ proptest! {
                 expected_deadline_range_ends.push_back((deadline, index));
             }
 
-            index.inc_assign();
+            index += 1;
         }
 
         prop_assert_eq!(expected_deadline_range_ends, q.deadline_range_ends);
@@ -314,7 +311,7 @@ prop_compose! {
     /// pushed onto the queue by the end of the respective round) [1, 2, ... num_msgs]; and removing
     /// a random subset thereof.
     fn arb_output_queue_no_timeout(num_msgs: std::ops::RangeInclusive<usize>) (
-        index in 0..10_u64,
+        index in 0..10_usize,
         (msgs, indices_to_remove) in num_msgs
         .prop_flat_map(|num_msgs| {
             (
@@ -325,7 +322,7 @@ prop_compose! {
     ) -> OutputQueue {
 
         let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-        q.index = index.into();
+        q.index = index;
 
         // Boundaries of execution rounds.
         let mut range_ends = (0..=msgs.len()).collect::<Vec<usize>>();
@@ -388,7 +385,7 @@ prop_compose! {
     /// such that it encompasses edge cases.
     fn arb_output_queue() (
         (time, num_pop, mut q) in arb_output_queue_no_timeout(5..=20)
-        .prop_flat_map(|q| (arb_time_for_output_queue_timeouts(&q), 0..3_u64, Just(q)))
+        .prop_flat_map(|q| (arb_time_for_output_queue_timeouts(&q), 0..3_usize, Just(q)))
 
     ) -> OutputQueue {
         q.time_out_requests(time).count();
@@ -427,7 +424,7 @@ proptest! {
                 .queue
                 .queue
                 .iter()
-                .skip((q.timeout_index - q.index).get() as usize)
+                .skip(q.timeout_index - q.index)
                 .all(|msg| msg.is_some()));
         }
 
@@ -530,15 +527,15 @@ fn output_queue_decode_with_deadline_indices_not_strictly_sorted_fails() {
 #[test]
 fn output_queue_decode_with_deadlines_index_out_of_bounds_fails() {
     let mut q = generate_test_queue(1);
-    q.index = 1.into();
+    q.index = 1;
 
     // Check deadline index before the queue causes error.
-    q.deadline_range_ends[0].1 = 0.into();
+    q.deadline_range_ends[0].1 = 0;
     let proto_queue: pb_queues::InputOutputQueue = (&q).into();
     assert!(OutputQueue::try_from(proto_queue).is_err());
 
     // Check deadline index after the queue causes error.
-    q.deadline_range_ends[0].1 = 3.into();
+    q.deadline_range_ends[0].1 = 3;
     let proto_queue: pb_queues::InputOutputQueue = (&q).into();
     assert!(OutputQueue::try_from(proto_queue).is_err());
 }
