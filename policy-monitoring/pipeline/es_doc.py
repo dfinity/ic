@@ -202,15 +202,10 @@ class EsDoc:
             lem = r_doc.get_message()
             node = r_doc.get_node_id()
             subnet = r_doc.get_subnet_id()
+            if node == '""':
+                return None
         else:
-            if comp:
-                component_id = comp
-            else:
-                component_id = "unknown"
-            lel = "UNKNOWN"
-            lem = self.message()
-            node = quoted("")
-            subnet = quoted("")
+            return None
         return ReplicaDoc.GenericParams(
             component_id=component_id, level=lel, message=quoted(lem), node_id=node, subnet_id=subnet
         )

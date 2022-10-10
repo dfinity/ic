@@ -1,5 +1,5 @@
-(* The time until a block proposal created at one node_id has been added to the 
-   validated pool of more than ⅔ of the nodes in the same subnet_id must not exceed:
+(* The time until a block proposal created at one node has been added to the 
+   validated pool of more than ⅔ of the nodes in the same subnet must not exceed:
    . 3s for System subnets,
    . 1s for Application and VerifiedApplication subnets
 
@@ -17,21 +17,40 @@
     - avg_time and max_time are specific to the subnet_id
 *)
 
-(* State predicate mapping each node_id to its current subnet_id *)
-LET registry_subnet_map(node, subnet) = ((NOT registry__node_removed_from_subnet(node, _)) SINCE (originally_in_subnet(node, _, subnet) OR (registry__node_added_to_subnet(node, _, subnet) AND NOT PREVIOUS ((NOT registry__node_removed_from_subnet(node, _)) SINCE registry__node_added_to_subnet(node, _, subnet))))) IN
-LET subnet_map(node, subnet) = registry_subnet_map(node, subnet) IN
-
+LET node_added_to_subnet(node_id, node_addr, subnet) =
+  registry__node_added_to_subnet(node_id, node_addr, subnet)
+IN
+LET node_removed_from_subnet(node_id, node_addr) =
+  registry__node_removed_from_subnet(node_id, node_addr)
+IN
+LET in_subnet(node_id, node_addr, subnet) =
+  ((*
+      The node was originally in this subnet, and it has not been unassigned from it.
+    *)
+    (ONCE originally_in_subnet(node_id, node_addr, subnet)) AND NOT (
+      ONCE node_removed_from_subnet(node_id, node_addr)
+    )
+  )
+  OR
+  ((*
+      The node was possibly not originally in this subnet, but it has been assigned to it.
+    *)
+    (
+      (NOT node_removed_from_subnet(node_id, node_addr))
+      SINCE node_added_to_subnet(node_id, node_addr, subnet)
+    )
+  )
+IN
 (* Number of nodes per subnet_id *)
 LET subnet_size(subnet_id, n) =
-  n <- CNT node_id; subnet_id subnet_map(node_id, subnet_id)
+  n <- CNT node_id; subnet_id in_subnet(node_id, _, subnet_id)
 IN
 
 (* Has the block proposal just been added to node_id's pool? *)
 LET block_added(node_id, subnet_id, block, t_add) =
-  EVENTUALLY[0,0]
-    validated_BlockProposal_Added(node_id, subnet_id, block)
-    AND subnet_map(node_id, subnet_id)
-    AND ts(t_add)
+  validated_BlockProposal_Added(node_id, subnet_id, block)
+  AND in_subnet(node_id, _, subnet_id)
+  AND ts(t_add)
 IN
 
 (* Has the block proposal (created in the subnet_id at time t_add) been validated
@@ -44,7 +63,7 @@ LET validated(block, subnet_id, t_add) =
         OR (EXISTS add_node.
           (ONCE block_added(add_node, subnet_id, block, t_add))
           AND validated_BlockProposal_Moved(valid_node, subnet_id, block)
-          AND subnet_map(valid_node, subnet_id)))
+          AND in_subnet(valid_node, _, subnet_id)))
     AND subnet_size(subnet_id, n_subnet)
     AND n_validated > 2 * n_subnet / 3
 IN
@@ -59,12 +78,25 @@ LET time_per_block(block, subnet_id, time) =
 IN
 
 LET subnet_type_assoc(subnet_id, subnet_type) =
-  (original_subnet_type(subnet_id, subnet_type) OR registry__subnet_created(subnet_id, subnet_type) OR registry__subnet_updated(subnet_id, subnet_type))
+  original_subnet_type(subnet_id, subnet_type)
+  OR registry__subnet_created(subnet_id, subnet_type)
+  OR registry__subnet_updated(subnet_id, subnet_type)
 IN
 
 LET subnet_type_map(subnet_id, subnet_type) =
   ((NOT subnet_type_assoc(subnet_id, _)) SINCE subnet_type_assoc(subnet_id, subnet_type))
 IN
 
-(time_per_block(block, subnet_id, time) AND subnet_type_map(subnet_id, "System") AND time > 3000)
-OR (time_per_block(block, subnet_id, time) AND (subnet_type_map(subnet_id, "Application") OR subnet_type_map(subnet_id, "VerifiedApplication")) AND time > 1000)
+(
+  time_per_block(block, subnet_id, time)
+  AND subnet_type_map(subnet_id, "System")
+  AND time > 3000
+)
+OR (
+  time_per_block(block, subnet_id, time)
+  AND (
+    subnet_type_map(subnet_id, "Application")
+    OR subnet_type_map(subnet_id, "VerifiedApplication")
+  )
+  AND time > 1000
+)

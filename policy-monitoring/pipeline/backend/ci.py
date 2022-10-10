@@ -8,6 +8,7 @@ from typing import Optional
 
 import gitlab.base
 import pytz
+from pipeline.alert import AlertService
 from pipeline.backend.system_tests_artifact_manager import SystemTestsArtifactManager
 from util.print import eprint
 
@@ -68,9 +69,10 @@ class Ci:
         ]
     )
 
-    def __init__(self, url: str, project: str, token: str):
+    def __init__(self, url: str, project: str, token: str, slack: AlertService):
         self.gl = gitlab.Gitlab(url=url, private_token=token)
         self.project = self.gl.projects.get(project)
+        self.slack = slack
 
     # Example:        2022-02-22T15:47:51.081Z
     _ES_TIMESTAMP_FMT = "%Y-%m-%dT%H:%M:%S.%f%z"
@@ -107,11 +109,11 @@ class Ci:
                 include_retried=True,
                 retry_transient_errors=True,
                 # we are potentially interested in all completed jobs
-                scope=["success", "failed"],
+                scope=["success"],
             )
 
             for job in new_jobs:
-                if job.name in Ci._MONITORED_REGULAR_JOB_TYPES and "ic-prod-tests" in job.tag_list:
+                if "hotfix" not in job.name and "ic-prod-tests" in job.tag_list:
                     eprint(f"Job {job.name} was created at {job.created_at}")
                     jobs.append(job)
 
@@ -185,9 +187,12 @@ class Ci:
                 eprint(f"Warning: cannot find test group name for job {Ci.job_url(job)}")
             else:
                 intersect = set(new_groups.keys()).intersection(groups.keys())
-                assert set() == intersect, "duplicate groups found: " + ", ".join(
-                    map(lambda g: str(new_groups[g]) + " and " + str(groups[g]), intersect)  # type: ignore
-                )
+                if set() != intersect:
+                    short_msg = "duplicate groups found"
+                    msg = short_msg + ", ".join(
+                        map(lambda g: str(new_groups[g]) + " and " + str(groups[g]), intersect)  # type: ignore
+                    )
+                    self.slack.alert(msg, short_msg, level="🍒")
                 groups.update(new_groups)
         return groups
 
@@ -260,3 +265,18 @@ class Ci:
             raise PotArtifactNotFoundInCi(jid, snap_path)
 
         return snap_bs.decode().strip()
+
+    def get_artifacts_for_group(self, group: Group, dest_path: Path) -> None:
+        jid = group.job_id()
+        if jid is None:
+            eprint(f"Cannot obtain initial registry snapshot for {str(group)} without job ID")
+            raise CiJobNotDefinedForGroup()
+
+        try:
+            job = self.project.jobs.get(jid)
+        except gitlab.exceptions.GitlabGetError:
+            eprint(f"Cannot find job with ID {jid}")
+            raise CiJobNotFoundException(jid)
+
+        with open(dest_path, "wb") as fout:
+            job.artifacts(streamed=True, action=fout.write)

@@ -89,10 +89,7 @@ LET subnet_decreasing(subnet) =
                 node1 does not think that node2 belongs to "subnet"; thus, node2 is not a witness of
                 the fact that "subnet" is decreasing.
               *)
-              (EXISTS subneta.
-                (p2p__node_removed(node1, subneta, node2)
-                  SINCE p2p__node_added(node1, subneta, node2))
-              )
+              ONCE p2p__node_added(node1, _, node2)
             )
           )
         )
