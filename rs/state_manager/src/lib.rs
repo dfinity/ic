@@ -656,7 +656,7 @@ pub struct StateManagerImpl {
     _deallocation_handle: JoinOnDrop<()>,
     persist_metadata_guard: Arc<Mutex<()>>,
     #[cfg(debug_assertions)]
-    load_checkpoint_as_tip_guard: Arc<Mutex<()>>,
+    initialize_tip_guard: Arc<Mutex<()>>,
 }
 
 fn load_checkpoint(
@@ -689,18 +689,42 @@ fn load_checkpoint(
 // all `PageMap`s in the state are based on the clean read-only checkpoint
 // files located in the checkpoint directory. This is important to ensure
 // that message execution never reads from mutable tip files.
-fn load_checkpoint_as_tip(
+fn initialize_tip(
     #[cfg(debug_assertions)] lock: &Arc<Mutex<()>>,
     log: &ReplicaLogger,
-    metrics: &CheckpointMetrics,
     state_layout: &StateLayout,
     snapshot: &Snapshot,
-    own_subnet_type: SubnetType,
+    checkpoint_ref: &CheckpointRef,
 ) -> ReplicatedState {
     #[cfg(debug_assertions)]
     let _guard = lock
         .try_lock()
-        .expect("load_checkpoint_as_tip() must never be called concurrently");
+        .expect("initialize_tip() must never be called concurrently");
+
+    debug_assert_eq!(snapshot.height, checkpoint_ref.0.height);
+
+    // Since we initialize tip from checkpoint states, we expect a clean sandbox slate
+    #[cfg(debug_assertions)]
+    for canister in snapshot.state.canisters_iter() {
+        if let Some(canister_state) = &canister.execution_state {
+            if let SandboxMemory::Synced(_) =
+                *canister_state.wasm_memory.sandbox_memory.lock().unwrap()
+            {
+                panic!(
+                    "Unexpected sandbox state for canister {}",
+                    canister.canister_id()
+                );
+            }
+            if let SandboxMemory::Synced(_) =
+                *canister_state.stable_memory.sandbox_memory.lock().unwrap()
+            {
+                panic!(
+                    "Unexpected sandbox state for canister {}",
+                    canister.canister_id()
+                );
+            }
+        }
+    }
 
     info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
@@ -710,19 +734,7 @@ fn load_checkpoint_as_tip(
         .reset_tip_to(snapshot.height, Some(&mut thread_pool))
         .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err));
 
-    let tip_layout = state_layout
-        .tip(snapshot.height)
-        .unwrap_or_else(|err| fatal!(log, "Failed to retrieve tip {:?}", err));
-
-    let mut tip = checkpoint::load_checkpoint_parallel(&tip_layout, own_subnet_type, metrics)
-        .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint as tip {:?}", err));
-
-    // Ensure that the `PageMap`s of the tip use the clean read-only checkpoint
-    // files similar to how this is done in `commit_and_certify()` after a full
-    // checkpoint.
-    switch_to_checkpoint(&mut tip, &snapshot.state);
-
-    tip
+    ReplicatedState::clone(&snapshot.state)
 }
 
 /// Return duration since path creation (or modification, if no creation)
@@ -831,7 +843,7 @@ struct PopulatedMetadata {
     certifications_metadata: CertificationsMetadata,
     states_metadata: StatesMetadata,
     compute_manifest_requests: Vec<ComputeManifestRequest>,
-    maybe_last_snapshot: Option<Snapshot>,
+    maybe_last_snapshot: Option<(Snapshot, CheckpointRef)>,
 }
 
 /// An enum describing all possible PageMaps in ReplicatedState
@@ -1343,29 +1355,24 @@ impl StateManagerImpl {
         };
 
         #[cfg(debug_assertions)]
-        let load_checkpoint_as_tip_guard = Arc::new(Mutex::new(()));
+        let initialize_tip_guard = Arc::new(Mutex::new(()));
 
         let height_and_state = match &maybe_last_snapshot {
-            Some(snapshot) => {
+            Some((snapshot, checkpoint_ref)) => {
                 // Set latest state height in metadata to be last checkpoint height
                 latest_state_height.store(snapshot.height.get(), Ordering::Relaxed);
                 let starting_time = Instant::now();
 
-                let tip = load_checkpoint_as_tip(
+                let tip = initialize_tip(
                     #[cfg(debug_assertions)]
-                    &load_checkpoint_as_tip_guard,
+                    &initialize_tip_guard,
                     &log,
-                    &metrics.checkpoint_metrics,
                     &state_layout,
                     snapshot,
-                    own_subnet_type,
+                    checkpoint_ref,
                 );
 
-                info!(
-                    log,
-                    "Loading checkpoint as tip took {:?}",
-                    starting_time.elapsed()
-                );
+                info!(log, "Initialize tip took {:?}", starting_time.elapsed());
                 (snapshot.height, tip)
             }
             None => (
@@ -1375,7 +1382,7 @@ impl StateManagerImpl {
         };
 
         let snapshots: VecDeque<_> = std::iter::once(initial_snapshot)
-            .chain(maybe_last_snapshot.into_iter())
+            .chain(maybe_last_snapshot.into_iter().map(|(s, _)| s))
             .collect();
 
         let last_snapshot_height = snapshots.back().map(|s| s.height.get() as i64).unwrap_or(0);
@@ -1472,7 +1479,7 @@ impl StateManagerImpl {
             _deallocation_handle,
             persist_metadata_guard,
             #[cfg(debug_assertions)]
-            load_checkpoint_as_tip_guard,
+            initialize_tip_guard,
         }
     }
 
@@ -1802,7 +1809,7 @@ impl StateManagerImpl {
             states_metadata.insert(
                 height,
                 StateMetadata {
-                    checkpoint_ref: Some(checkpoint_ref),
+                    checkpoint_ref: Some(checkpoint_ref.clone()),
                     manifest,
                     root_hash,
                 },
@@ -1816,7 +1823,7 @@ impl StateManagerImpl {
             states_metadata.insert(
                 height,
                 StateMetadata {
-                    checkpoint_ref: Some(checkpoint_ref),
+                    checkpoint_ref: Some(checkpoint_ref.clone()),
                     manifest: None,
                     root_hash: None,
                 },
@@ -1832,7 +1839,7 @@ impl StateManagerImpl {
             certifications_metadata,
             states_metadata,
             compute_manifest_requests,
-            maybe_last_snapshot: Some(snapshot),
+            maybe_last_snapshot: Some((snapshot, checkpoint_ref)),
         }
     }
 
@@ -2348,7 +2355,10 @@ impl StateManager for StateManagerImpl {
         // can take a lot of time (many seconds), and we do not want to block
         // state readers (like HTTP handler) for too long.
         //
-        // Note that we still will not call load_checkpoint_as_tip()
+        // We are keeping a CheckpointRef for the checkpoint that is becoming
+        // the tip, in order to ensure that it does not get deleted.
+        //
+        // Note that we still will not call initialize_tip()
         // concurrently because only a thread that owns the tip can call
         // this function.
         //
@@ -2357,16 +2367,24 @@ impl StateManager for StateManagerImpl {
         //
         // In general, there should always be one thread that calls
         // take_tip() and commit_and_certify() — the state machine thread.
+
+        let checkpoint_ref = states
+            .states_metadata
+            .get(&target_snapshot.height)
+            .unwrap()
+            .checkpoint_ref
+            .as_ref()
+            .unwrap()
+            .clone();
         std::mem::drop(states);
 
-        let mut new_tip = load_checkpoint_as_tip(
+        let mut new_tip = initialize_tip(
             #[cfg(debug_assertions)]
-            &self.load_checkpoint_as_tip_guard,
+            &self.initialize_tip_guard,
             &self.log,
-            &self.metrics.checkpoint_metrics,
             &self.state_layout,
             &target_snapshot,
-            self.own_subnet_type,
+            &checkpoint_ref,
         );
 
         new_tip.metadata.prev_state_hash = target_hash;
