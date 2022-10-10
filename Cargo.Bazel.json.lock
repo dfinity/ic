@@ -1,5 +1,5 @@
 {
-  "checksum": "4f1be743fa4fbfa63dc8634f64a2d393d3f4f6fd6e81528489f7b05c476a91e9",
+  "checksum": "3dcd3fd707b7c94b53f5b2e37c31991687b813086ee9d7675e8e9afd1f9ac6e8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1752,6 +1752,10 @@
       "common_attrs": {
         "compile_data_glob": [
           "**"
+        ],
+        "crate_features": [
+          "default",
+          "std"
         ],
         "edition": "2018",
         "version": "0.7.2"
@@ -7975,13 +7979,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "cranelift-bforest 0.87.1": {
+    "cranelift-bforest 0.88.1": {
       "name": "cranelift-bforest",
-      "version": "0.87.1",
+      "version": "0.88.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-bforest/0.87.1/download",
-          "sha256": "9f91425bea5a5ac6d76b788477064944a7e21f0e240fd93f6f368a774a3efdd1"
+          "url": "https://crates.io/api/v1/crates/cranelift-bforest/0.88.1/download",
+          "sha256": "44409ccf2d0f663920cab563d2b79fcd6b2e9a2bcc6e929fef76c8f82ad6c17a"
         }
       },
       "targets": [
@@ -8006,24 +8010,24 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.87.1",
+              "id": "cranelift-entity 0.88.1",
               "target": "cranelift_entity"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.87.1"
+        "version": "0.88.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-codegen 0.87.1": {
+    "cranelift-codegen 0.88.1": {
       "name": "cranelift-codegen",
-      "version": "0.87.1",
+      "version": "0.88.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-codegen/0.87.1/download",
-          "sha256": "8b83b4bbf7bc96db77b7b5b5e41fafc4001536e9f0cbfd702ed7d4d8f848dc06"
+          "url": "https://crates.io/api/v1/crates/cranelift-codegen/0.88.1/download",
+          "sha256": "98de2018ad96eb97f621f7d6b900a0cc661aec8d02ea4a50e56ecb48e5a2fcaf"
         }
       },
       "targets": [
@@ -8066,19 +8070,27 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-bforest 0.87.1",
+              "id": "arrayvec 0.7.2",
+              "target": "arrayvec"
+            },
+            {
+              "id": "bumpalo 3.11.0",
+              "target": "bumpalo"
+            },
+            {
+              "id": "cranelift-bforest 0.88.1",
               "target": "cranelift_bforest"
             },
             {
-              "id": "cranelift-codegen 0.87.1",
+              "id": "cranelift-codegen 0.88.1",
               "target": "build_script_build"
             },
             {
-              "id": "cranelift-codegen-shared 0.87.1",
+              "id": "cranelift-codegen-shared 0.88.1",
               "target": "cranelift_codegen_shared"
             },
             {
-              "id": "cranelift-entity 0.87.1",
+              "id": "cranelift-entity 0.88.1",
               "target": "cranelift_entity"
             },
             {
@@ -8105,7 +8117,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.87.1"
+        "version": "0.88.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -8114,11 +8126,11 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-meta 0.87.1",
+              "id": "cranelift-codegen-meta 0.88.1",
               "target": "cranelift_codegen_meta"
             },
             {
-              "id": "cranelift-isle 0.87.1",
+              "id": "cranelift-isle 0.88.1",
               "target": "cranelift_isle"
             }
           ],
@@ -8127,13 +8139,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-codegen-meta 0.87.1": {
+    "cranelift-codegen-meta 0.88.1": {
       "name": "cranelift-codegen-meta",
-      "version": "0.87.1",
+      "version": "0.88.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-codegen-meta/0.87.1/download",
-          "sha256": "da02e8fff048c381b313a3dfef4deb2343976fb6d7acc8e7d9c86d4c93e3fa06"
+          "url": "https://crates.io/api/v1/crates/cranelift-codegen-meta/0.88.1/download",
+          "sha256": "5287ce36e6c4758fbaf298bd1a8697ad97a4f2375a3d1b61142ea538db4877e5"
         }
       },
       "targets": [
@@ -8158,24 +8170,24 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-shared 0.87.1",
+              "id": "cranelift-codegen-shared 0.88.1",
               "target": "cranelift_codegen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.87.1"
+        "version": "0.88.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-codegen-shared 0.87.1": {
+    "cranelift-codegen-shared 0.88.1": {
       "name": "cranelift-codegen-shared",
-      "version": "0.87.1",
+      "version": "0.88.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-codegen-shared/0.87.1/download",
-          "sha256": "9abc2a06e8fc29e36660ebbc9e2503e18a051057072acbb1e75e7f7cf19cb95e"
+          "url": "https://crates.io/api/v1/crates/cranelift-codegen-shared/0.88.1/download",
+          "sha256": "2855c24219e2f08827f3f4ffb2da92e134ae8d8ecc185b11ec8f9878cf5f588e"
         }
       },
       "targets": [
@@ -8198,17 +8210,17 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.87.1"
+        "version": "0.88.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-entity 0.86.1": {
+    "cranelift-entity 0.88.1": {
       "name": "cranelift-entity",
-      "version": "0.86.1",
+      "version": "0.88.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-entity/0.86.1/download",
-          "sha256": "11aa8aa624c72cc1c94ea3d0739fa61248260b5b14d3646f51593a88d67f3e6e"
+          "url": "https://crates.io/api/v1/crates/cranelift-entity/0.88.1/download",
+          "sha256": "0b65673279d75d34bf11af9660ae2dbd1c22e6d28f163f5c72f4e1dc56d56103"
         }
       },
       "targets": [
@@ -8244,63 +8256,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.86.1"
+        "version": "0.88.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-entity 0.87.1": {
-      "name": "cranelift-entity",
-      "version": "0.87.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-entity/0.87.1/download",
-          "sha256": "aeced7874890fc25d85cacc5e626c4d67931c7c25aad1c2ad521684744c1ff5c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cranelift_entity",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "cranelift_entity",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "enable-serde",
-          "serde"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.145",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.87.1"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception"
-    },
-    "cranelift-frontend 0.87.1": {
+    "cranelift-frontend 0.88.1": {
       "name": "cranelift-frontend",
-      "version": "0.87.1",
+      "version": "0.88.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-frontend/0.87.1/download",
-          "sha256": "fc1d301ccad6fce05d9c9793d433d225fafdd57661b98d268d8d162e9291ff2e"
+          "url": "https://crates.io/api/v1/crates/cranelift-frontend/0.88.1/download",
+          "sha256": "3ed2b3d7a4751163f6c4a349205ab1b7d9c00eecf19dcea48592ef1f7688eefc"
         }
       },
       "targets": [
@@ -8329,7 +8295,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.87.1",
+              "id": "cranelift-codegen 0.88.1",
               "target": "cranelift_codegen"
             },
             {
@@ -8348,17 +8314,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.87.1"
+        "version": "0.88.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-isle 0.87.1": {
+    "cranelift-isle 0.88.1": {
       "name": "cranelift-isle",
-      "version": "0.87.1",
+      "version": "0.88.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-isle/0.87.1/download",
-          "sha256": "bd7b100db19320848986b4df1da19501dbddeb706a799f502222f72f889b0fab"
+          "url": "https://crates.io/api/v1/crates/cranelift-isle/0.88.1/download",
+          "sha256": "3be64cecea9d90105fc6a2ba2d003e98c867c1d6c4c86cc878f97ad9fb916293"
         }
       },
       "targets": [
@@ -8398,14 +8364,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-isle 0.87.1",
+              "id": "cranelift-isle 0.88.1",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.87.1"
+        "version": "0.88.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -8414,13 +8380,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-native 0.87.1": {
+    "cranelift-native 0.88.1": {
       "name": "cranelift-native",
-      "version": "0.87.1",
+      "version": "0.88.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-native/0.87.1/download",
-          "sha256": "7be18d8b976cddc822e52343f328b7593d26dd2f1aeadd90da071596a210d524"
+          "url": "https://crates.io/api/v1/crates/cranelift-native/0.88.1/download",
+          "sha256": "c4a03a6ac1b063e416ca4b93f6247978c991475e8271465340caa6f92f3c16a4"
         }
       },
       "targets": [
@@ -8449,7 +8415,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.87.1",
+              "id": "cranelift-codegen 0.88.1",
               "target": "cranelift_codegen"
             },
             {
@@ -8467,17 +8433,17 @@
           }
         },
         "edition": "2021",
-        "version": "0.87.1"
+        "version": "0.88.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-wasm 0.87.1": {
+    "cranelift-wasm 0.88.1": {
       "name": "cranelift-wasm",
-      "version": "0.87.1",
+      "version": "0.88.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-wasm/0.87.1/download",
-          "sha256": "2f9e48bb632a2e189b38a9fa89fa5a6eea687a5a4c613bbef7c2b7522c3ad0e0"
+          "url": "https://crates.io/api/v1/crates/cranelift-wasm/0.88.1/download",
+          "sha256": "c699873f7b30bc5f20dd03a796b4183e073a46616c91704792ec35e45d13f913"
         }
       },
       "targets": [
@@ -8506,15 +8472,15 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.87.1",
+              "id": "cranelift-codegen 0.88.1",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-entity 0.87.1",
+              "id": "cranelift-entity 0.88.1",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.87.1",
+              "id": "cranelift-frontend 0.88.1",
               "target": "cranelift_frontend"
             },
             {
@@ -8530,18 +8496,18 @@
               "target": "smallvec"
             },
             {
-              "id": "wasmparser 0.88.0",
+              "id": "wasmparser 0.89.1",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-types 0.40.1",
+              "id": "wasmtime-types 1.0.1",
               "target": "wasmtime_types"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.87.1"
+        "version": "0.88.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -11996,15 +11962,15 @@
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasmtime 0.40.1",
+              "id": "wasmtime 1.0.1",
               "target": "wasmtime"
             },
             {
-              "id": "wasmtime-environ 0.39.1",
+              "id": "wasmtime-environ 1.0.1",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-runtime 0.39.1",
+              "id": "wasmtime-runtime 1.0.1",
               "target": "wasmtime_runtime"
             },
             {
@@ -16157,51 +16123,6 @@
         "version": "1.8.2"
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "hashbrown 0.11.2": {
-      "name": "hashbrown",
-      "version": "0.11.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/hashbrown/0.11.2/download",
-          "sha256": "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hashbrown",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "hashbrown",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "ahash"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "ahash 0.7.6",
-              "target": "ahash"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.11.2"
-      },
-      "license": "Apache-2.0/MIT"
     },
     "hashbrown 0.12.3": {
       "name": "hashbrown",
@@ -24275,39 +24196,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "more-asserts 0.2.2": {
-      "name": "more-asserts",
-      "version": "0.2.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/more-asserts/0.2.2/download",
-          "sha256": "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "more_asserts",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "more_asserts",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.2.2"
-      },
-      "license": "CC0-1.0"
-    },
     "multimap 0.8.3": {
       "name": "multimap",
       "version": "0.8.3",
@@ -26408,68 +26296,6 @@
         "version": "0.3.0"
       },
       "license": "MIT"
-    },
-    "object 0.28.4": {
-      "name": "object",
-      "version": "0.28.4",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/object/0.28.4/download",
-          "sha256": "e42c982f2d955fac81dd7e1d0e1426a7d702acd9c98d19ab01083a6a0328c424"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "object",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "object",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "crc32fast",
-          "elf",
-          "hashbrown",
-          "indexmap",
-          "read_core",
-          "write_core"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "crc32fast 1.3.2",
-              "target": "crc32fast"
-            },
-            {
-              "id": "hashbrown 0.11.2",
-              "target": "hashbrown"
-            },
-            {
-              "id": "indexmap 1.9.1",
-              "target": "indexmap"
-            },
-            {
-              "id": "memchr 2.5.0",
-              "target": "memchr"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.28.4"
-      },
-      "license": "Apache-2.0 OR MIT"
     },
     "object 0.29.0": {
       "name": "object",
@@ -33340,65 +33166,6 @@
         "version": "0.6.27"
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "region 2.2.0": {
-      "name": "region",
-      "version": "2.2.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/region/2.2.0/download",
-          "sha256": "877e54ea2adcd70d80e9179344c97f93ef0dffd6b03e1f4529e6e83ab2fa9ae0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "region",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "region",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "libc 0.2.135",
-              "target": "libc"
-            }
-          ],
-          "selects": {
-            "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
-              {
-                "id": "mach 0.3.2",
-                "target": "mach"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "2.2.0"
-      },
-      "license": "MIT"
     },
     "remove_dir_all 0.5.3": {
       "name": "remove_dir_all",
@@ -45845,13 +45612,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmparser 0.86.0": {
+    "wasmparser 0.89.1": {
       "name": "wasmparser",
-      "version": "0.86.0",
+      "version": "0.89.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmparser/0.86.0/download",
-          "sha256": "4bcbfe95447da2aa7ff171857fc8427513eb57c75a729bb190e974dc695e8f5c"
+          "url": "https://crates.io/api/v1/crates/wasmparser/0.89.1/download",
+          "sha256": "ab5d3e08b13876f96dd55608d03cd4883a0545884932d5adf11925876c96daef"
         }
       },
       "targets": [
@@ -45883,59 +45650,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.86.0"
+        "version": "0.89.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmparser 0.88.0": {
-      "name": "wasmparser",
-      "version": "0.88.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmparser/0.88.0/download",
-          "sha256": "fb8cf7dd82407fe68161bedcd57fde15596f32ebf6e9b3bdbf3ae1da20e38e5e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmparser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "indexmap 1.9.1",
-              "target": "indexmap"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.88.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception"
-    },
-    "wasmtime 0.40.1": {
+    "wasmtime 1.0.1": {
       "name": "wasmtime",
-      "version": "0.40.1",
+      "version": "1.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime/0.40.1/download",
-          "sha256": "a020a3f6587fa7a7d98a021156177735ebb07212a6239a85ab5f14b2f728508f"
+          "url": "https://crates.io/api/v1/crates/wasmtime/1.0.1/download",
+          "sha256": "f1f511c4917c83d04da68333921107db75747c4e11a2f654a8e909cc5e0520dc"
         }
       },
       "targets": [
@@ -46025,27 +45750,27 @@
               "target": "target_lexicon"
             },
             {
-              "id": "wasmparser 0.88.0",
+              "id": "wasmparser 0.89.1",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime 0.40.1",
+              "id": "wasmtime 1.0.1",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-cranelift 0.40.1",
+              "id": "wasmtime-cranelift 1.0.1",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 0.40.1",
+              "id": "wasmtime-environ 1.0.1",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-jit 0.40.1",
+              "id": "wasmtime-jit 1.0.1",
               "target": "wasmtime_jit"
             },
             {
-              "id": "wasmtime-runtime 0.40.1",
+              "id": "wasmtime-runtime 1.0.1",
               "target": "wasmtime_runtime"
             }
           ],
@@ -46068,7 +45793,7 @@
           ],
           "selects": {}
         },
-        "version": "0.40.1"
+        "version": "1.0.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -46077,13 +45802,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-asm-macros 0.40.1": {
+    "wasmtime-asm-macros 1.0.1": {
       "name": "wasmtime-asm-macros",
-      "version": "0.40.1",
+      "version": "1.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-asm-macros/0.40.1/download",
-          "sha256": "fed4ada1fdd4d9a2aa37be652abcc31ae3188ad0efcefb4571ef4f785be2d777"
+          "url": "https://crates.io/api/v1/crates/wasmtime-asm-macros/1.0.1/download",
+          "sha256": "39bf3debfe744bf19dd3732990ce6f8c0ced7439e2370ba4e1d8f5a3660a3178"
         }
       },
       "targets": [
@@ -46115,17 +45840,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.40.1"
+        "version": "1.0.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-cranelift 0.40.1": {
+    "wasmtime-cranelift 1.0.1": {
       "name": "wasmtime-cranelift",
-      "version": "0.40.1",
+      "version": "1.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-cranelift/0.40.1/download",
-          "sha256": "1fc59c28fe895112db09e262fb9c483f9e7b82c78a82a6ded69567ccc0e9795b"
+          "url": "https://crates.io/api/v1/crates/wasmtime-cranelift/1.0.1/download",
+          "sha256": "058217e28644b012bdcdf0e445f58d496d78c2e0b6a6dd93558e701591dad705"
         }
       },
       "targets": [
@@ -46154,23 +45879,23 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-codegen 0.87.1",
+              "id": "cranelift-codegen 0.88.1",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-entity 0.87.1",
+              "id": "cranelift-entity 0.88.1",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.87.1",
+              "id": "cranelift-frontend 0.88.1",
               "target": "cranelift_frontend"
             },
             {
-              "id": "cranelift-native 0.87.1",
+              "id": "cranelift-native 0.88.1",
               "target": "cranelift_native"
             },
             {
-              "id": "cranelift-wasm 0.87.1",
+              "id": "cranelift-wasm 0.88.1",
               "target": "cranelift_wasm"
             },
             {
@@ -46194,28 +45919,28 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.88.0",
+              "id": "wasmparser 0.89.1",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-environ 0.40.1",
+              "id": "wasmtime-environ 1.0.1",
               "target": "wasmtime_environ"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.40.1"
+        "version": "1.0.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-environ 0.39.1": {
+    "wasmtime-environ 1.0.1": {
       "name": "wasmtime-environ",
-      "version": "0.39.1",
+      "version": "1.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-environ/0.39.1/download",
-          "sha256": "7c50fb925e8eaa9f8431f9b784ea89a13c703cb445ddfe51cb437596fc34e734"
+          "url": "https://crates.io/api/v1/crates/wasmtime-environ/1.0.1/download",
+          "sha256": "c7af06848df28b7661471d9a80d30a973e0f401f2e3ed5396ad7e225ed217047"
         }
       },
       "targets": [
@@ -46244,93 +45969,7 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-entity 0.86.1",
-              "target": "cranelift_entity"
-            },
-            {
-              "id": "gimli 0.26.2",
-              "target": "gimli"
-            },
-            {
-              "id": "indexmap 1.9.1",
-              "target": "indexmap"
-            },
-            {
-              "id": "log 0.4.17",
-              "target": "log"
-            },
-            {
-              "id": "more-asserts 0.2.2",
-              "target": "more_asserts"
-            },
-            {
-              "id": "object 0.28.4",
-              "target": "object"
-            },
-            {
-              "id": "serde 1.0.145",
-              "target": "serde"
-            },
-            {
-              "id": "target-lexicon 0.12.4",
-              "target": "target_lexicon"
-            },
-            {
-              "id": "thiserror 1.0.37",
-              "target": "thiserror"
-            },
-            {
-              "id": "wasmparser 0.86.0",
-              "target": "wasmparser"
-            },
-            {
-              "id": "wasmtime-types 0.39.1",
-              "target": "wasmtime_types"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.39.1"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception"
-    },
-    "wasmtime-environ 0.40.1": {
-      "name": "wasmtime-environ",
-      "version": "0.40.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-environ/0.40.1/download",
-          "sha256": "11086e573d2635a45ac0d44697a8e4586e058cf1b190f76bea466ca2ec36c30a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmtime_environ",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmtime_environ",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.65",
-              "target": "anyhow"
-            },
-            {
-              "id": "cranelift-entity 0.87.1",
+              "id": "cranelift-entity 0.88.1",
               "target": "cranelift_entity"
             },
             {
@@ -46362,28 +46001,28 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.88.0",
+              "id": "wasmparser 0.89.1",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-types 0.40.1",
+              "id": "wasmtime-types 1.0.1",
               "target": "wasmtime_types"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.40.1"
+        "version": "1.0.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-jit 0.40.1": {
+    "wasmtime-jit 1.0.1": {
       "name": "wasmtime-jit",
-      "version": "0.40.1",
+      "version": "1.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-jit/0.40.1/download",
-          "sha256": "d5444a78b74144718633f8642eccd7c4858f4c6f0c98ae6a3668998adf177ba2"
+          "url": "https://crates.io/api/v1/crates/wasmtime-jit/1.0.1/download",
+          "sha256": "9028fb63a54185b3c192b7500ef8039c7bb8d7f62bfc9e7c258483a33a3d13bb"
         }
       },
       "targets": [
@@ -46456,11 +46095,11 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmtime-environ 0.40.1",
+              "id": "wasmtime-environ 1.0.1",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-runtime 0.40.1",
+              "id": "wasmtime-runtime 1.0.1",
               "target": "wasmtime_runtime"
             }
           ],
@@ -46480,63 +46119,17 @@
           }
         },
         "edition": "2021",
-        "version": "0.40.1"
+        "version": "1.0.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-jit-debug 0.39.1": {
+    "wasmtime-jit-debug 1.0.1": {
       "name": "wasmtime-jit-debug",
-      "version": "0.39.1",
+      "version": "1.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-jit-debug/0.39.1/download",
-          "sha256": "55e23273fddce8cab149a0743c46932bf4910268641397ed86b46854b089f38f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmtime_jit_debug",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmtime_jit_debug",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "gdb_jit_int",
-          "lazy_static"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.39.1"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception"
-    },
-    "wasmtime-jit-debug 0.40.1": {
-      "name": "wasmtime-jit-debug",
-      "version": "0.40.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-jit-debug/0.40.1/download",
-          "sha256": "c2bf6a667d2a29b2b0ed42bcf7564f00c595d92c24acb4d241c7c4d950b1910c"
+          "url": "https://crates.io/api/v1/crates/wasmtime-jit-debug/1.0.1/download",
+          "sha256": "25e82d4ef93296785de7efca92f7679dc67fe68a13b625a5ecc8d7503b377a37"
         }
       },
       "targets": [
@@ -46572,156 +46165,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.40.1"
+        "version": "1.0.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-runtime 0.39.1": {
+    "wasmtime-runtime 1.0.1": {
       "name": "wasmtime-runtime",
-      "version": "0.39.1",
+      "version": "1.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-runtime/0.39.1/download",
-          "sha256": "36b8aafb292502d28dc2d25f44d4a81e229bb2e0cc14ca847dde4448a1a62ae4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmtime_runtime",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmtime_runtime",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.65",
-              "target": "anyhow"
-            },
-            {
-              "id": "backtrace 0.3.66",
-              "target": "backtrace"
-            },
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "indexmap 1.9.1",
-              "target": "indexmap"
-            },
-            {
-              "id": "libc 0.2.135",
-              "target": "libc"
-            },
-            {
-              "id": "log 0.4.17",
-              "target": "log"
-            },
-            {
-              "id": "memoffset 0.6.5",
-              "target": "memoffset"
-            },
-            {
-              "id": "more-asserts 0.2.2",
-              "target": "more_asserts"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "region 2.2.0",
-              "target": "region"
-            },
-            {
-              "id": "thiserror 1.0.37",
-              "target": "thiserror"
-            },
-            {
-              "id": "wasmtime-environ 0.39.1",
-              "target": "wasmtime_environ"
-            },
-            {
-              "id": "wasmtime-jit-debug 0.39.1",
-              "target": "wasmtime_jit_debug"
-            },
-            {
-              "id": "wasmtime-runtime 0.39.1",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {
-            "cfg(target_os = \"macos\")": [
-              {
-                "id": "mach 0.3.2",
-                "target": "mach"
-              }
-            ],
-            "cfg(target_os = \"windows\")": [
-              {
-                "id": "windows-sys 0.36.1",
-                "target": "windows_sys"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "rustix 0.35.11",
-                "target": "rustix"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.39.1"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cc 1.0.73",
-              "target": "cc"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "Apache-2.0 WITH LLVM-exception"
-    },
-    "wasmtime-runtime 0.40.1": {
-      "name": "wasmtime-runtime",
-      "version": "0.40.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-runtime/0.40.1/download",
-          "sha256": "ee064ce7b563cc201cdf3bb1cc4b233f386d8c57a96e55f4c4afe6103f4bd6a1"
+          "url": "https://crates.io/api/v1/crates/wasmtime-runtime/1.0.1/download",
+          "sha256": "9f0e9bea7d517d114fe66b930b2124ee086516ee93eeebfd97f75f366c5b0553"
         }
       },
       "targets": [
@@ -46793,19 +46247,19 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmtime-asm-macros 0.40.1",
+              "id": "wasmtime-asm-macros 1.0.1",
               "target": "wasmtime_asm_macros"
             },
             {
-              "id": "wasmtime-environ 0.40.1",
+              "id": "wasmtime-environ 1.0.1",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-jit-debug 0.40.1",
+              "id": "wasmtime-jit-debug 1.0.1",
               "target": "wasmtime_jit_debug"
             },
             {
-              "id": "wasmtime-runtime 0.40.1",
+              "id": "wasmtime-runtime 1.0.1",
               "target": "build_script_build"
             }
           ],
@@ -46840,7 +46294,7 @@
           ],
           "selects": {}
         },
-        "version": "0.40.1"
+        "version": "1.0.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -46858,13 +46312,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-types 0.39.1": {
+    "wasmtime-types 1.0.1": {
       "name": "wasmtime-types",
-      "version": "0.39.1",
+      "version": "1.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-types/0.39.1/download",
-          "sha256": "dd7edc34f358fc290d12e326de81884422cb94cf74cc305b27979569875332d6"
+          "url": "https://crates.io/api/v1/crates/wasmtime-types/1.0.1/download",
+          "sha256": "69b83e93ed41b8fdc936244cfd5e455480cf1eca1fd60c78a0040038b4ce5075"
         }
       },
       "targets": [
@@ -46889,7 +46343,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.86.1",
+              "id": "cranelift-entity 0.88.1",
               "target": "cranelift_entity"
             },
             {
@@ -46901,68 +46355,14 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.86.0",
+              "id": "wasmparser 0.89.1",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.39.1"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception"
-    },
-    "wasmtime-types 0.40.1": {
-      "name": "wasmtime-types",
-      "version": "0.40.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-types/0.40.1/download",
-          "sha256": "01e104bd9e625181d53ead85910bbc0863aa5f0c6ef96836fe9a5cc65da11b69"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmtime_types",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmtime_types",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cranelift-entity 0.87.1",
-              "target": "cranelift_entity"
-            },
-            {
-              "id": "serde 1.0.145",
-              "target": "serde"
-            },
-            {
-              "id": "thiserror 1.0.37",
-              "target": "thiserror"
-            },
-            {
-              "id": "wasmparser 0.88.0",
-              "target": "wasmparser"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.40.1"
+        "version": "1.0.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -47410,7 +46810,6 @@
         "crate_features": [
           "accctrl",
           "aclapi",
-          "basetsd",
           "cfg",
           "consoleapi",
           "errhandlingapi",
