@@ -1,15 +1,12 @@
 use crate::{P2PError, P2PErrorCode, P2PResult};
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{
     artifact::ArtifactId, chunkable::ChunkId, crypto::CryptoHash, NodeId, RegistryVersion,
 };
 use std::{
     collections::HashMap,
-    convert::TryInto,
-    net::{IpAddr, SocketAddr},
-    str::FromStr,
+    net::SocketAddr,
     sync::{Arc, Mutex},
     time::{Instant, SystemTime},
 };
@@ -22,8 +19,8 @@ pub(crate) trait PeerManager {
     /// The method adds the given peer to the list of current peers.
     fn add_peer(
         &self,
-        peer: NodeId,
-        node_record: &NodeRecord,
+        peer_id: NodeId,
+        peer_addr: SocketAddr,
         registry_version: RegistryVersion,
     ) -> P2PResult<()>;
 
@@ -59,11 +56,8 @@ pub(crate) struct GossipRequestTrackerKey {
 
 /// The peer context for a certain peer.
 /// It keeps track of the requested chunks at any point in time.
-#[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct PeerContext {
-    /// The node ID of the peer.
-    pub peer_id: NodeId,
     /// The dictionary containing the requested chunks.
     pub requested: HashMap<GossipRequestTrackerKey, GossipRequestTracker>,
     /// The time when the peer was disconnected.
@@ -72,13 +66,9 @@ pub(crate) struct PeerContext {
     pub last_retransmission_request_processed_time: Instant,
 }
 
-/// A `NodeId` can be converted into a `PeerContext`.
-impl From<NodeId> for PeerContext {
-    /// The function returns a new peer context associated with the given node
-    /// ID.
-    fn from(peer_id: NodeId) -> Self {
+impl PeerContext {
+    pub fn new() -> Self {
         PeerContext {
-            peer_id,
             requested: HashMap::new(),
             disconnect_time: None,
             last_retransmission_request_processed_time: Instant::now(),
@@ -131,12 +121,12 @@ impl PeerManager for PeerManagerImpl {
     /// The method adds the given peer to the list of current peers.
     fn add_peer(
         &self,
-        node_id: NodeId,
-        node_record: &NodeRecord,
+        peer_id: NodeId,
+        peer_addr: SocketAddr,
         registry_version: RegistryVersion,
     ) -> P2PResult<()> {
         // Only add other peers to the peer list.
-        if node_id == self.node_id {
+        if peer_id == self.node_id {
             return Err(P2PError {
                 p2p_error_code: P2PErrorCode::Failed,
             });
@@ -147,35 +137,24 @@ impl PeerManager for PeerManagerImpl {
         {
             let mut current_peers = self.current_peers.lock().unwrap();
 
-            if current_peers.contains_key(&node_id) {
+            if current_peers.contains_key(&peer_id) {
                 Err(P2PError {
                     p2p_error_code: P2PErrorCode::Exists,
                 })
             } else {
                 current_peers
-                    .entry(node_id)
-                    .or_insert_with(|| PeerContext::from(node_id.to_owned()));
-                info!(self.log, "Nodes {:0} added", node_id);
+                    .entry(peer_id)
+                    .or_insert_with(PeerContext::new);
+                info!(self.log, "Nodes {:0} added", peer_id);
                 Ok(())
             }?;
         }
 
-        // If getting the peer socket fails, remove the node from current peer list.
-        // This removal makes it possible to attempt a re-connection on the next registry refresh.
-        let peer_addr = get_peer_addr(node_record).map_err(|e| {
-            let mut current_peers = self.current_peers.lock().unwrap();
-            current_peers.remove(&node_id);
-            warn!(self.log, "start connections failed {:?} {:?}", node_id, e);
-            P2PError {
-                p2p_error_code: P2PErrorCode::InitFailed,
-            }
-        })?;
         self.transport
-            .start_connection(&node_id, peer_addr, registry_version)
+            .start_connection(&peer_id, peer_addr, registry_version)
             .map_err(|e| {
-                let mut current_peers = self.current_peers.lock().unwrap();
-                current_peers.remove(&node_id);
-                warn!(self.log, "start connections failed {:?} {:?}", node_id, e);
+                self.current_peers.lock().unwrap().remove(&peer_id);
+                warn!(self.log, "start connections failed {:?} {:?}", peer_id, e);
                 P2PError {
                     p2p_error_code: P2PErrorCode::InitFailed,
                 }
@@ -195,80 +174,5 @@ impl PeerManager for PeerManagerImpl {
     // this given the code compiles.
     fn current_peers(&self) -> &Arc<Mutex<PeerContextDictionary>> {
         &self.current_peers
-    }
-}
-
-fn get_peer_addr(node_record: &NodeRecord) -> Result<SocketAddr, String> {
-    let socket_addr: (IpAddr, u16) = node_record
-        .p2p_flow_endpoints
-        .get(0)
-        .and_then(|flow_enpoint| flow_enpoint.endpoint.as_ref())
-        .and_then(|endpoint| {
-            Some((
-                IpAddr::from_str(&endpoint.ip_addr).ok()?,
-                endpoint.port.try_into().ok()?,
-            ))
-        })
-        .ok_or("Failed to parse NodeRecord to (IpAddr,u16) tuple")?;
-
-    Ok(SocketAddr::from(socket_addr))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_protobuf::registry::node::v1::{
-        connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint,
-    };
-
-    #[test]
-    fn test_get_peer_addr() {
-        {
-            let node_record: NodeRecord = Default::default();
-            let peer_addr = get_peer_addr(&node_record);
-            assert!(peer_addr.is_err());
-        }
-        {
-            let mut node_record: NodeRecord = Default::default();
-            node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                flow_tag: 2000,
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
-                    port: 200,
-                    protocol: Protocol::P2p1Tls13 as i32,
-                }),
-            });
-
-            let peer_addr = get_peer_addr(&node_record).unwrap();
-            assert_eq!(
-                peer_addr.to_string(),
-                "[2001:db8:0:1:1:1:1:1]:200".to_string()
-            );
-        }
-        {
-            let mut node_record: NodeRecord = Default::default();
-            node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                flow_tag: 1000,
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
-                    port: 100,
-                    protocol: Protocol::P2p1Tls13 as i32,
-                }),
-            });
-            node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                flow_tag: 2000,
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "2001:db8:0:1:1:1:1:2".to_string(),
-                    port: 200,
-                    protocol: Protocol::P2p1Tls13 as i32,
-                }),
-            });
-
-            let peer_addr = get_peer_addr(&node_record).unwrap();
-            assert_eq!(
-                peer_addr.to_string(),
-                "[2001:db8:0:1:1:1:1:1]:100".to_string()
-            );
-        }
     }
 }
