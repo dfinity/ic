@@ -30,6 +30,8 @@ from util import env
 DEFAULT_MAINNET_ES_ENDPOINT = "elasticsearch.mercury.dfinity.systems"
 DEFAULT_TESTNET_ES_ENDPOINT = "elasticsearch-v4.testnet.dfinity.systems"
 
+LARGE_LOG_THRESHOLD = 1_073_741_824  # 1 GiB
+
 
 def main():
     # === Phase I: Handle CLI arguments ===
@@ -79,7 +81,14 @@ def main():
         "-p",
         type=str,
         nargs="+",
-        help="Which policies should be monitored",
+        help="Which policies should be monitored (must be a subset of --formulas_for_preproc, if the latter is specified)",
+    )
+    parser.add_argument(
+        "--formulas_for_preproc",
+        "-fpp",
+        type=str,
+        nargs="+",
+        help="Events for which policies should be considered. If not specified, default taken from --policy",
     )
     parser.add_argument(
         "--list_policies",
@@ -89,7 +98,10 @@ def main():
         help="List all supported policies (and exit)",
     )
     parser.add_argument(
-        "--read", "-r", type=str, help="Rather than using ES API, read and load a log previously saved via `--mode raw`"
+        "--read",
+        "-r",
+        type=str,
+        help="Rather than using ES API, read and load a log(s) previously saved via `--mode raw`. If a directory is specified, use all *.raw.log files inside as inputs. Very big inputs are supported. Input file names matching Gitlab CI jobs (e.g., hourly__workload_counter_canister_pot-2987404546.raw.log) will be used to automatically download registry snapshots (if specified policies require global infra); otherwise, you need to eplicityl pass --global_infra, or use --system_tests_working_dir instead of this option.",
     )
     parser.add_argument("--gitlab_token", "-t", type=str, help="Gitlab token with read-api rights")
     parser.add_argument(
@@ -103,6 +115,13 @@ def main():
         "-w",
         type=str,
         help="Specifies path to a test driver's working_dir (used to extract group names and initial registry snapshots)",
+    )
+    parser.add_argument(
+        "--download_working_dirs",
+        "-dwd",
+        action="store_true",
+        default=True,
+        help=("Save the the test driver's working_dirs that can be loaded via --system_tests_working_dir"),
     )
     parser.add_argument(
         "--fail",
@@ -160,6 +179,27 @@ def main():
         default=None,
         help="The Git branch name or revision SHA of this pipeline invocation. Used to add policy definition links in violation alerts",
     )
+    parser.add_argument(
+        "--hard_timeout_seconds",
+        "-hard",
+        type=int,
+        default=None,
+        help="Hard timeout for the monitor process",
+    )
+    parser.add_argument(
+        "--stop_at_first_violation",
+        "-safv",
+        action="store_true",
+        default=True,
+        help="Whether to replay the violations all found policy violations in batch mode after the pipeline finished",
+    )
+    parser.add_argument(
+        "--replay_all_violations",
+        "-rv",
+        action="store_true",
+        default=False,
+        help="Whether to replay the violations all found policy violations in batch mode after the pipeline finished",
+    )
     args = parser.parse_args()
 
     # Detect meaningless option combinations
@@ -202,6 +242,9 @@ def main():
         )
     if args.limit_time and args.limit != 0:
         print("Option --limit_time requires setting --limit to 0")
+        exit(1)
+    if args.download_working_dirs and not args.gitlab_token:
+        print("Option --download_working_dirs requires specifying --gitlab_token")
         exit(1)
 
     if args.install_monpoly_docker_image:
@@ -324,14 +367,30 @@ def main():
         if gitlab_token is None:
             gitlab = None
         else:
-            gitlab = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
+            gitlab = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token, slack=slack)
 
         # Obtains logs for each group
         if args.read:
-            # If the input file is small enough, it would be faster to load in into memory completely and then process, i.e.:
-            # groups = file_io.read_logs(log_file=args.read)
-            group = Group.fromFile(log_file=args.read, as_stream=True)
-            groups = {group.name: group}
+            raw_logs = Path(args.read)
+            if raw_logs.is_dir():
+                # Treat all *.raw.log files in this dir as inputs
+                groups = {
+                    group.name: group
+                    for group in [
+                        Group.fromFile(log_file=raw_log_file, as_stream=True)
+                        for raw_log_file in raw_logs.iterdir()
+                        if raw_log_file.is_file() and raw_log_file.suffixes == [".raw", ".log"]
+                    ]
+                }
+                assert len(groups) > 0, f"no .raw.log files found at {args.read}"
+                print(f"Created {len(groups)} groups from logs in {args.read}")
+            else:
+                assert raw_logs.is_file(), f"no such file or directory: {args.read}"
+                group = Group.fromFile(
+                    log_file=raw_logs,
+                    as_stream=(raw_logs.stat().st_size >= LARGE_LOG_THRESHOLD),
+                )
+                groups = {group.name: group}
         else:
             if args.mainnet:
                 es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=True, fail=args.fail)
@@ -359,6 +418,21 @@ def main():
                         else:
                             # Monitor all system tests from the regular pipelines (hourly, nightly)
                             groups = gitlab.get_regular_groups()
+                            # Keep at most two instances of the same pot
+                            pots: Dict[str, int] = dict()
+                            fitered_groups: Dict[str, Group] = dict()
+                            for gname, group in groups.items():
+                                pot_name = group.pot_name()
+                                if pot_name not in pots:
+                                    pots[pot_name] = 1
+                                else:
+                                    pots[pot_name] += 1
+                                if pots[pot_name] <= 3:
+                                    print(f"Keeping instance #{pots[pot_name]} of {pot_name}")
+                                    fitered_groups[gname] = group
+                                else:
+                                    print(f"Removing instance #{pots[pot_name]} of {pot_name}")
+                            groups = fitered_groups
 
                     elif args.system_tests_working_dir is not None:
                         # Relying upon args.system_tests_working_dir, e.g., for end-to-end testing the pipeline implementation
@@ -374,7 +448,11 @@ def main():
             es.download_logs(groups, limit_per_group=args.limit, minutes_per_group=args.limit_time)
 
         # === Obtain GlobalInfra ===
-        formulas = set(args.policy) if args.policy else None
+        policies = set(args.policy) if args.policy else None
+        formulas_for_preproc = set(args.formulas_for_preproc) if args.formulas_for_preproc else policies
+        assert not (isinstance(policies, set) and isinstance(formulas_for_preproc, set)) or policies.issubset(
+            formulas_for_preproc
+        )
 
         if args.global_infra:
             # Load global infra from file (same for all groups)
@@ -389,7 +467,7 @@ def main():
                 raise Exception(f"unsupported file format: {suf}")
             for group in groups.values():
                 group.global_infra = infra
-        elif UniversalPreProcessor.is_global_infra_required(formulas):
+        elif UniversalPreProcessor.is_global_infra_required(formulas_for_preproc):
             for group in groups.values():
                 print(f"Setting global infra for {str(group)}")
                 if args.system_tests_working_dir:
@@ -401,7 +479,7 @@ def main():
                     )
                 else:
                     # Obtain Global Infra from initial registry snapshot GitLab artifact
-                    assert gitlab is not None, "Did you forget to specify --global_infra?"
+                    assert gitlab is not None, "Need to specify --global_infra or --gitlab_token"
                     try:
                         snap_bulb = gitlab.get_registry_snapshot_for_group(group)
                         group.global_infra = GlobalInfra.fromIcRegeditSnapshotBulb(snap_bulb, source=group.job_url())
@@ -413,21 +491,32 @@ def main():
         else:
             print("Skipping Global Infra")
 
+        art_manager = ArtifactManager(project_root, Path(artifacts_location), signature)
+
+        if args.download_working_dirs:
+            for group in groups.values():
+                dest_path = art_manager.working_dir_path(group)
+                gitlab.get_artifacts_for_group(group, dest_path)
+
         # === Phase III: Run the pipeline ===
         monpoly_pipeline = Pipeline(
             policies_path=str(project_root.joinpath("mfotl-policies")),
-            art_manager=ArtifactManager(project_root, Path(artifacts_location), signature),
+            art_manager=art_manager,
             modes=set(args.mode),
             alert_service=slack,
             liveness_channel=liveness_slack,
             docker=with_docker,
             docker_starter=docker_starter,
             git_revision=git_revision,
-            formulas=formulas,
+            formulas_for_preproc=formulas_for_preproc,
+            policies_to_monitor=policies,
             fail=args.fail,
+            hard_timeout=float(args.hard_timeout_seconds) if args.hard_timeout_seconds else None,
+            stop_at_first_violation=args.stop_at_first_violation,
         )
         monpoly_pipeline.run(groups)
-        monpoly_pipeline.reproduce_all_violations()
+        if args.replay_all_violations:
+            monpoly_pipeline.reproduce_all_violations()
         monpoly_pipeline.save_statistics()
 
     except Exception as e:

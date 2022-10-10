@@ -21,7 +21,7 @@ def run_test():
 
     # Run all tests
     run_tests(tests_dir, tests, local_sig_file=False)
-    # run_tests(tests_dir, tests=["unauthorized_connections"], local_sig_file=False)
+    # run_tests(tests_dir, tests=["logging_behavior__p2p"], local_sig_file=False)
 
 
 if __name__ == "__main__":

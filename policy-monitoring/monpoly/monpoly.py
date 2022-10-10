@@ -33,6 +33,10 @@ class MonpolyTimeout(MonpolyException):
     pass
 
 
+class MonpolyGlobalTimeout(MonpolyException):
+    pass
+
+
 class MonpolyIoClosed(MonpolyException):
     pass
 
@@ -77,7 +81,7 @@ class Monpoly:
     ENCODING = "utf-8"
 
     # Which version of the Monpoly Docker image to use.
-    VERSION = "1.4.1"
+    VERSION = "1.4.2"
 
     # Sending this datum via [submit] enables I/O synchronization.
     SYNC_MARKER = ">get_pos<"
@@ -139,7 +143,7 @@ class Monpoly:
         self,
         with_rss: bool,
         use_local_paths=False,
-        stop_at_first_viol=True,
+        stop_at_first_viol=False,
         stop_at_out_of_order_ts=True,
         # no_rw: do not rewrite the policy, i.e.,
         #        do not push negation over conjunction etc.
@@ -196,7 +200,7 @@ class Monpoly:
         Returns the string representation of the exact Monpoly command that
         is used in this Monpoly session.
         """
-        return " ".join(self._cmd(with_rss=(self.stat is not None)))
+        return " ".join(self._cmd(with_rss=(self.stat is not None), stop_at_first_viol=(self.stop_at_first_viol)))
 
     def cmd_wo_rss(self, enforce_no_docker=False) -> Tuple[str, ...]:
         """
@@ -304,6 +308,7 @@ class Monpoly:
         alert_handler: Callable[[AlertHandlerParams], None],
         error_handler: Callable[[ErrorHandlerParams], None],
         exit_handler: Callable[[ExitHandlerParams], None],
+        stop_at_first_viol=True,
         docker=True,
         hard_timeout=10.0,
         extra_options=(),
@@ -346,6 +351,7 @@ class Monpoly:
         )
 
         self._exit_handler = exit_handler
+        self.stop_at_first_viol = stop_at_first_viol
 
         self.docker = docker
 
@@ -363,6 +369,9 @@ class Monpoly:
 
     def _timeout(self, msg: str) -> MonpolyTimeout:
         return MonpolyTimeout(name=self.name, cmd=self.cmd_str(), msg=msg)
+
+    def global_timeout(self, msg: str) -> MonpolyGlobalTimeout:
+        return MonpolyGlobalTimeout(name=self.name, cmd=self.cmd_str(), msg=msg)
 
     def _io_error(self, msg: str) -> MonpolyIoClosed:
         return MonpolyIoClosed(name=self.name, cmd=self.cmd_str(), msg=msg)
@@ -479,6 +488,14 @@ class Monpoly:
         self.print("Preparing Monpoly done.")
         return self
 
+    def terminate(self) -> None:
+        assert self._proc is not None, f"cannot terminate as {self} has not been started"
+        self._proc.kill()
+
+    def still_running(self) -> bool:
+        assert self._proc is not None, f"cannot poll as {self} has not been started"
+        return self._proc.poll() is None
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Gracefully finalizes the Monpoly session"""
         self.print("Finalizing Monpoly process ...")
@@ -517,9 +534,11 @@ class Monpoly:
     @staticmethod
     def _kill(pid):
         process = psutil.Process(pid)
-        for proc in process.children(recursive=True):
-            proc.kill()
-        process.kill()
+        for proc in process.children(recursive=True) + [process]:
+            try:
+                proc.kill()
+            except psutil.NoSuchProcess:
+                pass
 
     def _drain_output_streams(self, timeout: float) -> None:
         first_start = datetime.now()
@@ -577,7 +596,7 @@ class Monpoly:
 
         self._input_counter += 1
 
-    def submit(self, datum: str, timeout=30.0) -> None:
+    def submit(self, datum: str, timeout=60.0) -> None:
         try:
             func_timeout(timeout, self._submit, args=(datum,))
         except FunctionTimedOut:

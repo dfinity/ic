@@ -1,23 +1,13 @@
-@0  p2p__node_added
-    (node0.0, net0, node0.1)
-    (node0.0, net0, node0.2)
-    (node0.0, net0, node0.3)
-    (node0.1, net0, node0.0)
-    (node0.1, net0, node0.2)
-    (node0.1, net0, node0.3)
-    (node0.2, net0, node0.0)
-    (node0.2, net0, node0.1)
-    (node0.2, net0, node0.3)
-    (node0.3, net0, node0.0)
-    (node0.3, net0, node0.1)
-    (node0.3, net0, node0.2)
-    originally_in_subnet
+@0 EXPECTED("pass")
+# The block is moved by more than 2/3 of the subnet in less than 3 seconds
+# Note: validated_BlockProposal_Added is counted as a moved block
+@0 originally_in_subnet
     (node0.0, addr0.0, net0)
     (node0.1, addr0.1, net0)
     (node0.2, addr0.2, net0)
     (node0.3, addr0.3, net0)
     original_subnet_type
-    (net0, "Application")
-@1  validated_BlockProposal_Added(node0.0, net0, hash1)
-@3  validated_BlockProposal_Moved(node0.3, net0, hash1)
-@3  validated_BlockProposal_Added(node0.1, net0, hash3)
+    (net0, "System")
+@0800 validated_BlockProposal_Added(node0.0, net0, hash1)
+@2600 validated_BlockProposal_Moved(node0.1, net0, hash1)
+@2800 validated_BlockProposal_Moved(node0.3, net0, hash1)

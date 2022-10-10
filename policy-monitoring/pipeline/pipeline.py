@@ -11,6 +11,7 @@ from monpoly.monpoly import ErrorHandlerParams
 from monpoly.monpoly import ExitHandlerParams
 from monpoly.monpoly import Monpoly
 from monpoly.monpoly import MonpolyException
+from monpoly.monpoly import MonpolyGlobalTimeout
 from monpoly.monpoly import MonpolyIoClosed
 from monpoly.multi_monitor import MultiMonitor
 from util.print import eprint
@@ -47,8 +48,11 @@ class Pipeline:
         docker: bool,
         docker_starter: Optional[str] = None,  # only used in alerts with repros
         git_revision: str = "master",  # the Git sha of this pipeline invocation
-        formulas: Optional[Set[str]] = None,
+        formulas_for_preproc: Optional[Set[str]] = None,
+        policies_to_monitor: Optional[Set[str]] = None,
         fail=False,  # if True, raise exceptions instead of just sending Slack alerts
+        hard_timeout: Optional[float] = None,  # in seconds
+        stop_at_first_violation=True,
     ):
         self.policies_path = policies_path
         self.art_manager = art_manager
@@ -67,9 +71,15 @@ class Pipeline:
         # maps formula to tuple of variable names
         self.var_seq: Dict[str, Tuple[str, ...]] = dict()
 
-        self.formulas = formulas
+        self.formulas_for_preproc = formulas_for_preproc
+        if policies_to_monitor:
+            self.policies_to_monitor = sorted(policies_to_monitor)
+        else:
+            self.policies_to_monitor = UniversalPreProcessor.get_enabled_formulas()
 
         self.fail = fail
+        self.hard_timeout = hard_timeout
+        self.stop_at_first_violation = stop_at_first_violation
 
     def check_pipeline_alive(self, group: Group, pproc: PreProcessor, event_stream: Iterable[str]) -> None:
 
@@ -151,7 +161,7 @@ class Pipeline:
 
         monitors = []
 
-        for formula in pproc.get_formulas():
+        for formula in self.policies_to_monitor:
             # Obtain variable name mapping
             if formula not in self.var_seq:
                 self.var_seq[formula] = Monpoly.get_variables(
@@ -267,6 +277,7 @@ class Pipeline:
                 alert_handler=alert_h,
                 error_handler=error_h,
                 exit_handler=exit_h,
+                stop_at_first_viol=self.stop_at_first_violation,
             )
             monitors.append(monitor)
 
@@ -289,7 +300,8 @@ class Pipeline:
     def _run_single_group(self, group: Group) -> None:
         # Check preconditions
         assert (
-            not UniversalPreProcessor.is_global_infra_required(self.formulas) or group.global_infra is not None
+            not UniversalPreProcessor.is_global_infra_required(self.formulas_for_preproc)
+            or group.global_infra is not None
         ), f"Global Infra is required but not available for {str(group)}"
 
         eprint(f"Starting monitoring for {group} ...")
@@ -299,27 +311,46 @@ class Pipeline:
             "pre_processor": dict(),
             "monpoly": dict(),
             "global_infra": None if group.global_infra is None else group.global_infra.to_dict(),
+            "monpoly_global_timeout": False,
+            "processed_raw_log_entries": 0,
         }
 
         # Create a PreProcessor instance
         pproc = UniversalPreProcessor(
             infra=group.global_infra,
             raw_logs_file=(self.art_manager.raw_logs_file(group) if Mode.raw in self.modes else None),
-            formulas=(None if Mode.pre_processor_test in self.modes else self.formulas),
+            formulas=(None if Mode.pre_processor_test in self.modes else self.formulas_for_preproc),
         )
 
         # Process the event stream
-        with MultiMonitor(
-            single_formula_monitors=(
-                self._get_monpoly_builders(group, pproc) if Mode.universal_policy in self.modes else []
-            ),
-            exception_handlers=(lambda e: self._monpoly_exception_handler(e)),
-            event_stream_file=(
-                self.art_manager.event_stream_file(group, pproc.name) if Mode.save_event_stream in self.modes else None
-            ),
-        ) as monitor:
-            for datum in pproc.run(group.logs):
-                monitor.submit(datum)
+        try:
+            with MultiMonitor(
+                single_formula_monitors=(
+                    self._get_monpoly_builders(group, pproc) if Mode.universal_policy in self.modes else []
+                ),
+                exception_handlers=(lambda e: self._monpoly_exception_handler(e)),
+                event_stream_file=(
+                    self.art_manager.event_stream_file(group, pproc.name)
+                    if Mode.save_event_stream in self.modes
+                    else None
+                ),
+                hard_timeout=self.hard_timeout,
+            ) as monitor:
+                for datum in pproc.run(group.logs):
+                    monitor.submit(datum)
+        except MonpolyGlobalTimeout as e:
+            self.stat[group.name]["monpoly_global_timeout"] = True
+            if self.fail:
+                raise e
+            self.slack.alert(
+                level="🧨",
+                text=f"Monpoly process `{e.cmd}` timed out:\n```\n{str(e)}\n```",
+                short_text=f"MonpolyGlobalTimeout: {e.msg}",
+            )
+        finally:
+            self.stat[group.name]["processed_raw_log_entries"] = pproc.get_progress()
+            if pproc.raw_logs_file:
+                pproc.flush(is_final=True)
 
         # Save test runtime statistics
         self.stat[group.name]["pre_processor"] = pproc.stat
@@ -359,7 +390,7 @@ class Pipeline:
         eprint("Policy monitoring completed.")
 
     def reproduce_all_violations(self):
-        rm = ReproManager(self.repros, self.stat)
+        rm = ReproManager(self.repros, self.stat, self.hard_timeout)
         rm.reproduce_all_violations()
 
     def save_statistics(self):

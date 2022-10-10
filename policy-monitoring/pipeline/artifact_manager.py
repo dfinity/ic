@@ -42,6 +42,9 @@ class ArtifactManager:
     def stat_file(self, type: str) -> Path:
         return self.artifacts_prefix().joinpath(f"stat.{type}")
 
+    def working_dir_path(self, group: Group) -> Path:
+        return self.artifacts_prefix().joinpath(f"{group.safe_name()}--working_dir.zip")
+
     def global_infra_file(self, type: str, group_name: Optional[str]) -> Path:
         if group_name is None:
             fname = f"global_infra.{type}"

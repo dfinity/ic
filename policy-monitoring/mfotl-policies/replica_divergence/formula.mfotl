@@ -1,18 +1,39 @@
 (*
   Policy: Nodes that have diverged must eventually propose
-  a CatchUpPackageShare.
+  a CatchUpPackageShare unless they have been reassigned to a different subnet.
 
   Relevant events:
   - originally_in_subnet(node_id:string, node_addr:string, subnet_id:string)
   - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
-  - TODO: use registry__node_removed_from_subnet
-  - p2p__node_added(node_id:string, subnet_id:string, added_node_id:string)
-  - TODO: use p2p__node_removed
+  - registry__node_removed_from_subnet
   - replica_diverged(node_id:string, subnet_id:string, height:int)
   - CUP_share_proposed(node_id:string, subnet_id:string)
   - end_test()
 *)
 
-LET relevant_node(node, subnet) = ONCE (originally_in_subnet(node, _, subnet) OR registry__node_added_to_subnet(node, _, subnet) OR p2p__node_added(_, subnet, node)) IN
-end_test() AND relevant_node(node, subnet) AND
+LET node_added_to_subnet(node_id, node_addr, subnet) =
+  registry__node_added_to_subnet(node_id, node_addr, subnet)
+IN
+LET node_removed_from_subnet(node_id, node_addr) =
+  registry__node_removed_from_subnet(node_id, node_addr)
+IN
+LET in_subnet(node_id, node_addr, subnet) =
+  ((*
+      The node was originally in this subnet, and it has not been unassigned from it.
+    *)
+    (ONCE originally_in_subnet(node_id, node_addr, subnet)) AND NOT (
+      ONCE node_removed_from_subnet(node_id, node_addr)
+    )
+  )
+  OR
+  ((*
+      The node was possibly not originally in this subnet, but it has been assigned to it.
+    *)
+    (
+      (NOT node_removed_from_subnet(node_id, node_addr))
+      SINCE node_added_to_subnet(node_id, node_addr, subnet)
+    )
+  )
+IN
+end_test() AND in_subnet(node, _, subnet) AND
 ((NOT CUP_share_proposed(node, subnet)) SINCE replica_diverged(node, subnet, _))

@@ -128,13 +128,16 @@ class PreProcessor:
         """
         ...
 
+    def get_progress(self) -> int:
+        return self._counter
+
     def indicate_progress(self) -> None:
         """
         Print . to STDERR (once every K invocations).
         This function should be invoked once per process_log_entry.
         """
         self._counter += 1
-        if self._counter % self.K == 0:
+        if (self._counter % self.K) == 0:
             eprint(".", end="", flush=True)
 
     def process_preamble(self) -> Iterable[str]:
@@ -145,7 +148,7 @@ class PreProcessor:
         """
         return []
 
-    def _flush(self, is_final=False) -> None:
+    def flush(self, is_final=False) -> None:
         assert self.raw_logs_file, "raw_logs_file is not specified"
         with open(self.raw_logs_file, "a") as fout:
             if not self._ever_flushed:
@@ -162,7 +165,7 @@ class PreProcessor:
         datum = self._pp.pformat(doc).strip()  # avoid the \n after the comma
         self._buf.append(f"{datum},\n")
         if len(self._buf) >= self.BUFFER_SIZE:
-            self._flush()
+            self.flush()
 
     def run(self, logs: Iterable[EsDoc]) -> Iterable[str]:
         """Returns a generator of events corresponding to [logs]"""
@@ -192,7 +195,7 @@ class PreProcessor:
         # In case we were forwarding the consumer stream of raw logs to a file,
         #  the buffer needs to be flushed one last time.
         if self.raw_logs_file:
-            self._flush(is_final=True)
+            self.flush(is_final=True)
             eprint(f"Raw logs saved into '{self.raw_logs_file.absolute()}'")
 
         # synthetic event added as the very last event of the testnet run
@@ -421,8 +424,8 @@ class DeclarativePreProcessor(PreProcessor):
         required_preamble_events: FrozenSet[str] = frozenset(),
     ):
         super().__init__(name=name, raw_logs_file=raw_logs_file)
-        self.required_predicates = required_regular_events
-        self.required_preamble_events = required_preamble_events
+        self.required_predicates = sorted(required_regular_events)
+        self.required_preamble_events = sorted(required_preamble_events)
         self._infra = infra
 
     def process_preamble(self) -> Iterable[str]:
@@ -452,19 +455,32 @@ class UniversalPreProcessor(DeclarativePreProcessor):
 
     _POLICIES: Dict[str, PolicySpec]
     _POLICIES = {
-        "artifact_pool_latency": {
-            "enabled": False,  # Disabled because violations are not actionable
+        "logging_behavior__exe": {
+            "enabled": True,
             "preamble_dependencies": frozenset(
                 [
-                    # "originally_in_ic" -- TODO
+                    "originally_in_subnet",
+                ]
+            ),
+            "regular_dependencies": frozenset(
+                [
+                    "registry__node_removed_from_subnet",
+                    "registry__node_added_to_subnet",
+                    "log",
+                ]
+            ),
+            "needs_end_event": False,
+        },
+        "artifact_pool_latency": {
+            "enabled": False,  # TODO: only for relevant tests
+            "preamble_dependencies": frozenset(
+                [
                     "original_subnet_type",
                     "originally_in_subnet",
                 ]
             ),
             "regular_dependencies": frozenset(
                 [
-                    # "registry__node_removed_from_ic", -- TODO
-                    # "registry__node_added_to_ic", -- TODO
                     "registry__node_removed_from_subnet",
                     "registry__node_added_to_subnet",
                     "registry__subnet_created",
@@ -519,21 +535,16 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             "needs_end_event": False,
         },
         "replica_divergence": {
-            "enabled": False,
+            "enabled": True,
             "preamble_dependencies": frozenset(
                 [
-                    # "originally_in_ic" -- TODO
                     "originally_in_subnet",
                 ]
             ),
             "regular_dependencies": frozenset(
                 [
-                    # "registry__node_removed_from_ic", -- TODO
-                    # "registry__node_added_to_ic", -- TODO
                     "registry__node_added_to_subnet",
                     "registry__node_removed_from_subnet",
-                    "p2p__node_added",
-                    "p2p__node_removed",
                     "replica_diverged",
                     "CUP_share_proposed",
                 ]

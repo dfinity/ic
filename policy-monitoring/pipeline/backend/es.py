@@ -63,8 +63,12 @@ class Es:
 
     @staticmethod
     def _time_slice_query(minutes_ago: int):
-        # FIXME: add "time_zone": "Europe/Zurich" after ES index TZs are fixed
         return {"range": {"@timestamp": {"gte": f"now-{minutes_ago}m", "lt": "now"}}}
+
+    # TODO: support richer queries, e.g.:
+    # @staticmethod
+    # def _time_slice_from_a_to_b_query():
+    #     return {"range": {"@timestamp": {"gte": "2022-08-04T05:23:58.997Z", "lt": "2022-08-04T08:23:58.997Z"}}}
 
     def find_testnet_indices(self, tag: str) -> List[str]:
         """
@@ -98,10 +102,9 @@ class Es:
             if size > 0:
                 eprint(f"Found index {index} with {size} documents tagged {tag}")
                 result.append(index)
-
+                assert_with_trace(tag not in self.stat["raw_logs"], "duplicate tag")
                 # Save statistics:
                 # total number of raw log messages sent to Elasticsearch
-                assert_with_trace(tag not in self.stat["raw_logs"], "duplicate tag")
                 self.stat["raw_logs"][tag] = size
 
         return result
@@ -109,7 +112,6 @@ class Es:
     @staticmethod
     def _get_relevant_dates(minutes_ago: int) -> List[datetime]:
         """Returns datetime objects for each day starting [minutes_ago] until now."""
-        # TODO: check time zones
         end_time = datetime.today()
         dates = []
         time = end_time - timedelta(minutes=minutes_ago)

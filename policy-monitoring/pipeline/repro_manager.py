@@ -1,6 +1,7 @@
 import re
 import subprocess
 from typing import Dict
+from typing import Optional
 from typing import Set
 from typing import Tuple
 
@@ -9,7 +10,12 @@ from util.print import eprint
 
 
 class ReproManager:
-    def __init__(self, repros: Dict[str, Dict[str, Set[Tuple[str, ...]]]], stat: Dict[str, Dict]):
+    def __init__(
+        self,
+        repros: Dict[str, Dict[str, Set[Tuple[str, ...]]]],
+        stat: Dict[str, Dict],
+        hard_timeout: Optional[float] = None,
+    ):
         """
         Create a new [ReproManager] object that can reproduce policy violations
         in non-interactive mode.
@@ -18,6 +24,7 @@ class ReproManager:
         """
         self.repros = repros
         self.stat = stat
+        self.hard_timeout = hard_timeout
 
     @staticmethod
     def parse_tuple(text: str) -> Tuple[str, ...]:
@@ -84,15 +91,21 @@ class ReproManager:
                     # Unquote all arguments since Popen adds its own quotes
                     repro_cmd_unquoted = tuple([arg.strip('"') for arg in repro_cmd])
                     # pp.pprint(repro_cmd_unquoted)
-                    p = subprocess.run(repro_cmd_unquoted, capture_output=True)
-                    self.stat[group_name]["violations"][formula].append(
-                        {
+                    try:
+                        p = subprocess.run(repro_cmd_unquoted, capture_output=True, timeout=self.hard_timeout)
+                        stat_entry = {
+                            "did_timeout": False,
                             "violations_count": self._count_violations(Monpoly.decode(p.stdout)),
                             "stderr_line_count": len(Monpoly.decode(p.stderr).split("\n")) - 1,
                             "repro_cmd": " ".join(repro_cmd),
                         }
-                    )
+                    except subprocess.TimeoutExpired:
+                        stat_entry = {
+                            "did_timeout": True,
+                            "repro_cmd": " ".join(repro_cmd),
+                        }
 
+                    self.stat[group_name]["violations"][formula].append(stat_entry)
                     eprint(" done.")
 
         eprint("All repros have terminated.")

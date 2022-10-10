@@ -35,10 +35,14 @@ class Group:
         self.global_infra = GlobalInfra.fromLogs(self.logs)
         eprint(f"Done inferring global infra for {str(self)}.")
 
+    @classmethod
+    def group_name_to_pot_name(Self, gname: str) -> str:
+        return gname.split("__")[-1].split("-")[0]
+
     def pot_name(self) -> str:
         # Example group ID: "boundary_nodes_pre_master__boundary_nodes_pot-2784039865"
         # Corresponding pot name: "boundary_nodes_pot"
-        return self.name.split("__")[-1].split("-")[0]
+        return self.group_name_to_pot_name(self.name)
 
     @staticmethod
     def is_group_name_local(jid: str) -> bool:
@@ -47,16 +51,19 @@ class Group:
     def job_id(self) -> Optional[int]:
         # Example group IDs:
         # "boundary_nodes_pre_master__boundary_nodes_pot-2784039865"
-        #   ==> run in CI
+        #   ==> test ran in CI
         # "boundary_nodes_pre_master__boundary_nodes_pot-username-zh1-spm99_zh7_dfinity_network-2784039865"
-        #   ==> run locally (no CI job exists; None will be returned)
+        #   ==> test ran locally (no CI job exists; None will be returned)
+        # "boundary_nodes_pre_master__boundary_nodes_pot-2784039865--pseudo"
+        #   ==> test ran in CI; replaying it via local log; CI job should exist
         # Corresponding job ID: 2784039865
         # Note:
         # - A group name might not have a CI job ID associated with it if it has been created for mainnet logs
         #   In that case, this method will return None.
-        if self.is_group_name_local(self.name):
+        original_name = self.name.replace("--pseudo", "")
+        if self.is_group_name_local(original_name):
             return None
-        suffix = self.name.split("-")[-1]
+        suffix = original_name.split("-")[-1]
         if suffix.isdigit():
             return int(suffix)
         return None
@@ -90,7 +97,7 @@ class Group:
     @classmethod
     def _StreamFromFile(Self, log_file: Path) -> "Group":
         """Create group and set up a logs stream"""
-        gname = Path(log_file).stem + "--pseudo"
+        gname = Path(log_file).stem.split(".")[0] + "--pseudo"
         return Group(gname, logs=Self._safe_log_stream(log_file))
 
     @classmethod
