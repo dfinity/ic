@@ -281,7 +281,7 @@ impl Csp {
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the random
     /// number generator, hence the keys, is not guaranteed.
-    pub fn new_with_rng<R: 'static + Rng + CryptoRng + Send + Sync + Clone>(
+    pub fn new_with_rng<R: Rng + CryptoRng + Send + Sync + 'static>(
         csprng: R,
         config: &CryptoConfig,
     ) -> Self {
@@ -334,7 +334,7 @@ impl Csp {
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
     /// key store and the canister secret key store is not guaranteed.
-    pub fn of<R: 'static + Rng + CryptoRng + Send + Sync + Clone, S: 'static + SecretKeyStore>(
+    pub fn of<R: Rng + CryptoRng + Send + Sync + 'static, S: SecretKeyStore + 'static>(
         csprng: R,
         secret_key_store: S,
     ) -> Self {

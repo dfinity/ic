@@ -134,7 +134,7 @@ fn cn_entries(x509_cert: &X509) -> X509NameEntries {
     x509_cert.subject_name().entries_by_nid(Nid::COMMONNAME)
 }
 
-pub fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng + Clone {
+pub fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng {
     ChaCha20Rng::seed_from_u64(seed)
 }
 

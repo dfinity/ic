@@ -70,7 +70,7 @@ fn should_correctly_convert_tls_cert_hash_as_key_id() {
     assert_eq!(key_id, KeyId(expected_key_id));
 }
 
-fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng + Clone {
+fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng {
     ChaCha20Rng::seed_from_u64(seed)
 }
 
@@ -302,7 +302,7 @@ mod tls {
         );
     }
 
-    fn rng() -> impl CryptoRng + Rng + Clone {
+    fn rng() -> impl CryptoRng + Rng {
         csprng_seeded_with(42)
     }
 
