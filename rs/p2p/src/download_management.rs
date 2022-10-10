@@ -88,7 +88,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId, TransportError, TransportPayload};
-use ic_logger::{info, trace, warn, ReplicaLogger};
+use ic_logger::{error, info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
     p2p::v1 as pb, proxy::ProtoProxy, registry::node::v1::NodeRecord,
@@ -107,7 +107,9 @@ use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{BTreeMap, HashMap},
     error::Error,
+    net::{IpAddr, SocketAddr},
     ops::DerefMut,
+    str::FromStr,
     sync::{Arc, Mutex, RwLock},
     time::{Instant, SystemTime},
 };
@@ -889,15 +891,35 @@ impl DownloadManagerImpl {
         }
         // Add in nodes to peer manager.
         for (node_id, node_record) in subnet_nodes.iter() {
-            if self
-                .peer_manager
-                .add_peer(*node_id, node_record, latest_registry_version)
-                .is_ok()
-            {
-                self.receive_check_caches.write().unwrap().insert(
-                    *node_id,
-                    ReceiveCheckCache::new(self.gossip_config.receive_check_cache_size as usize),
-                );
+            match get_peer_addr(node_record) {
+                Err(err) => {
+                    // If getting the peer socket fails, remove the node from current peer list.
+                    // This removal makes it possible to attempt a re-connection on the next registry refresh.
+                    self.peer_manager
+                        .current_peers()
+                        .lock()
+                        .unwrap()
+                        .remove(node_id);
+                    // Invalid socket addresses should not be pushed in the registry/config on first place.
+                    error!(
+                        self.log,
+                        "Invalid socket addr: node_id = {:?}, error = {:?}.", node_id, err
+                    );
+                }
+                Ok(peer_addr) => {
+                    if self
+                        .peer_manager
+                        .add_peer(*node_id, peer_addr, latest_registry_version)
+                        .is_ok()
+                    {
+                        self.receive_check_caches.write().unwrap().insert(
+                            *node_id,
+                            ReceiveCheckCache::new(
+                                self.gossip_config.receive_check_cache_size as usize,
+                            ),
+                        );
+                    }
+                }
             }
         }
     }
@@ -1317,6 +1339,22 @@ impl DownloadManagerImpl {
     }
 }
 
+fn get_peer_addr(node_record: &NodeRecord) -> Result<SocketAddr, String> {
+    let socket_addr: (IpAddr, u16) = node_record
+        .p2p_flow_endpoints
+        .get(0)
+        .and_then(|flow_enpoint| flow_enpoint.endpoint.as_ref())
+        .and_then(|endpoint| {
+            Some((
+                IpAddr::from_str(&endpoint.ip_addr).ok()?,
+                endpoint.port.try_into().ok()?,
+            ))
+        })
+        .ok_or("Failed to parse NodeRecord to (IpAddr,u16) tuple")?;
+
+    Ok(SocketAddr::from(socket_addr))
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -1330,6 +1368,9 @@ pub mod tests {
     use ic_interfaces_transport_mocks::MockTransport;
     use ic_logger::LoggerImpl;
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::node::v1::{
+        connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint,
+    };
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_utilities::consensus::fake::FakeSigner;
     use ic_test_utilities::port_allocation::allocate_ports;
@@ -2224,7 +2265,7 @@ pub mod tests {
 
             let peers_dictionary: PeerContextDictionary = peers_old
                 .iter()
-                .map(|node_id| (*node_id, PeerContext::from(node_id.to_owned())))
+                .map(|node_id| (*node_id, PeerContext::new()))
                 .collect();
             let peers_dictionary = Mutex::new(peers_dictionary);
             let current_peers = Arc::new(peers_dictionary);
@@ -2267,7 +2308,7 @@ pub mod tests {
         let mut current_peers = PeerContextDictionary::default();
         for id in 1..29 {
             let node_id = node_test_id(id);
-            current_peers.insert(node_id, node_id.into());
+            current_peers.insert(node_id, PeerContext::new());
         }
 
         let current_peers = Arc::new(Mutex::new(current_peers));
@@ -2317,5 +2358,56 @@ pub mod tests {
         );
         let ret = get_random_subset_of_peers(&peer_manager, Percentage::from(10));
         assert!(ret.is_empty());
+    }
+
+    #[test]
+    fn test_get_peer_addr() {
+        {
+            let node_record: NodeRecord = Default::default();
+            let peer_addr = get_peer_addr(&node_record);
+            assert!(peer_addr.is_err());
+        }
+        {
+            let mut node_record: NodeRecord = Default::default();
+            node_record.p2p_flow_endpoints.push(FlowEndpoint {
+                flow_tag: 2000,
+                endpoint: Some(ConnectionEndpoint {
+                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
+                    port: 200,
+                    protocol: Protocol::P2p1Tls13 as i32,
+                }),
+            });
+
+            let peer_addr = get_peer_addr(&node_record).unwrap();
+            assert_eq!(
+                peer_addr.to_string(),
+                "[2001:db8:0:1:1:1:1:1]:200".to_string()
+            );
+        }
+        {
+            let mut node_record: NodeRecord = Default::default();
+            node_record.p2p_flow_endpoints.push(FlowEndpoint {
+                flow_tag: 1000,
+                endpoint: Some(ConnectionEndpoint {
+                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
+                    port: 100,
+                    protocol: Protocol::P2p1Tls13 as i32,
+                }),
+            });
+            node_record.p2p_flow_endpoints.push(FlowEndpoint {
+                flow_tag: 2000,
+                endpoint: Some(ConnectionEndpoint {
+                    ip_addr: "2001:db8:0:1:1:1:1:2".to_string(),
+                    port: 200,
+                    protocol: Protocol::P2p1Tls13 as i32,
+                }),
+            });
+
+            let peer_addr = get_peer_addr(&node_record).unwrap();
+            assert_eq!(
+                peer_addr.to_string(),
+                "[2001:db8:0:1:1:1:1:1]:100".to_string()
+            );
+        }
     }
 }

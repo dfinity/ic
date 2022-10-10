@@ -98,7 +98,7 @@ pub(crate) trait ArtifactDownloadList: Send + Sync {
 /// The artifact tracker.
 pub(crate) struct ArtifactTracker {
     /// Artifact ID
-    pub artifact_id: ArtifactId,
+    artifact_id: ArtifactId,
     /// Time limit for the artifact download.
     expiry_instant: Instant,
     /// The artifact, which implements the `Chunkable` interface.
