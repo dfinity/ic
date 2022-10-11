@@ -1,0 +1,24 @@
+rosetta-release-tag:
+  extends:
+    - .ic-build-bazel-image
+    - .rules-protected-master-job
+
+  stage: guest-os-build
+
+  variables: ROSETTA_RELEASE_VERSION
+  script:
+    - |
+      set -euo pipefail
+      if [ "$ROSETTA_RELEASE_VERSION" == "" ]; then
+        echo Please specify the ROSETTA_RELEASE_VERSION variable when running this job.
+        exit 1
+      fi
+
+      git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+      git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+
+      git config --global user.email "infra+gitlab-automation@dfinity.org"
+      git config --global user.name "IDX GitLab Automation"
+
+      git tag "rosetta-release-$ROSETTA_RELEASE_VERSION" "$CI_COMMIT_SHA"
+      git push origin "rosetta-release-$ROSETTA_RELEASE_VERSION"
