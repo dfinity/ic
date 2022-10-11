@@ -187,7 +187,7 @@ pub(crate) struct DownloadManagerImpl {
     /// The download prioritizer.
     prioritizer: Arc<dyn DownloadPrioritizer>,
     /// The peer manager.
-    peer_manager: Arc<dyn PeerManager + Send + Sync>,
+    current_peers: Arc<Mutex<PeerContextDictionary>>,
     /// The underlying *Transport* layer.
     transport: Arc<dyn Transport>,
     /// The flow mapper.
@@ -216,11 +216,9 @@ impl DownloadManager for DownloadManagerImpl {
     /// The method sends adverts to peers.
     fn send_advert_to_peers(&self, advert_request: GossipAdvertSendRequest) {
         let (peers, label) = match advert_request.action {
-            GossipAdvertAction::SendToAllPeers => {
-                (self.peer_manager.get_current_peer_ids(), "all_peers")
-            }
+            GossipAdvertAction::SendToAllPeers => (self.get_current_peer_ids(), "all_peers"),
             GossipAdvertAction::SendToRandomSubset(percentage) => (
-                get_random_subset_of_peers(self.peer_manager.as_ref(), percentage),
+                get_random_subset_of_peers(self.get_current_peer_ids(), percentage),
                 "random_subset",
             ),
         };
@@ -248,7 +246,7 @@ impl DownloadManager for DownloadManagerImpl {
             return;
         }
 
-        let mut current_peers = self.peer_manager.current_peers().lock().unwrap();
+        let mut current_peers = self.current_peers.lock().unwrap();
         if let Some(_peer_context) = current_peers.get_mut(&peer_id) {
             let _ = self.prioritizer.add_advert(gossip_advert, peer_id);
         } else {
@@ -328,7 +326,7 @@ impl DownloadManager for DownloadManagerImpl {
         );
 
         // Remove the chunk request tracker.
-        let mut current_peers = self.peer_manager.current_peers().lock().unwrap();
+        let mut current_peers = self.current_peers.lock().unwrap();
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
             if let Some(tracker) = peer_context.requested.remove(&GossipRequestTrackerKey {
                 artifact_id: gossip_chunk.artifact_id.clone(),
@@ -574,7 +572,7 @@ impl DownloadManager for DownloadManagerImpl {
     fn peer_connection_down(&self, peer_id: NodeId) {
         self.metrics.connection_down_events.inc();
         let now = SystemTime::now();
-        let mut current_peers = self.peer_manager.current_peers().lock().unwrap();
+        let mut current_peers = self.current_peers.lock().unwrap();
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
             peer_context.disconnect_time = Some(now);
             trace!(
@@ -593,8 +591,7 @@ impl DownloadManager for DownloadManagerImpl {
         let _now = SystemTime::now();
 
         let last_disconnect = self
-            .peer_manager
-            .current_peers()
+            .current_peers
             .lock()
             .unwrap()
             .get_mut(&peer_id)
@@ -640,8 +637,7 @@ impl DownloadManager for DownloadManagerImpl {
             p2p_error_code: P2PErrorCode::Busy,
         });
         // Throttle processing of incoming re-transmission request
-        self.peer_manager
-            .current_peers()
+        self.current_peers
             .lock()
             .unwrap()
             .get_mut(&peer_id)
@@ -719,7 +715,7 @@ impl DownloadManager for DownloadManagerImpl {
 
         if retransmission_request {
             // Send a retransmission request to all peers.
-            let current_peers = self.peer_manager.get_current_peer_ids();
+            let current_peers = self.get_current_peer_ids();
             for peer in current_peers {
                 self.send_retransmission_request(peer);
             }
@@ -731,8 +727,7 @@ impl DownloadManager for DownloadManagerImpl {
 
         // Collect the peers with timed-out requests.
         let mut timed_out_peers = Vec::new();
-        for (node_id, peer_context) in self.peer_manager.current_peers().lock().unwrap().iter_mut()
-        {
+        for (node_id, peer_context) in self.current_peers.lock().unwrap().iter_mut() {
             if self.process_timed_out_requests(node_id, peer_context) {
                 timed_out_peers.push(*node_id);
             }
@@ -743,7 +738,7 @@ impl DownloadManager for DownloadManagerImpl {
 
         // Compute the set of peers that need to be evaluated by the download manager.
         let peer_ids = if update_priority_fns {
-            self.peer_manager.get_current_peer_ids().into_iter()
+            self.get_current_peer_ids().into_iter()
         } else {
             timed_out_peers.into_iter()
         };
@@ -753,21 +748,6 @@ impl DownloadManager for DownloadManagerImpl {
             let _ = self.download_next(peer_id);
         }
     }
-}
-
-/// The method returns a randomized subset of the current list of peers.
-fn get_random_subset_of_peers(
-    peer_manager: &dyn PeerManager,
-    percentage: Percentage,
-) -> Vec<NodeId> {
-    let peers = peer_manager.get_current_peer_ids();
-    let multiplier = (percentage.get() as f64) / 100.0_f64;
-    let subset_size = (peers.len() as f64 * multiplier).ceil() as usize;
-    let mut rng = thread_rng();
-    peers
-        .choose_multiple(&mut rng, subset_size)
-        .cloned()
-        .collect()
 }
 
 impl DownloadManagerImpl {
@@ -786,12 +766,6 @@ impl DownloadManagerImpl {
     ) -> Self {
         let gossip_config = crate::fetch_gossip_config(registry_client.clone(), subnet_id);
         let current_peers = Arc::new(Mutex::new(PeerContextDictionary::default()));
-        let peer_manager = Arc::new(PeerManagerImpl::new(
-            node_id,
-            log.clone(),
-            current_peers,
-            transport.clone(),
-        ));
 
         let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
             artifact_manager.as_ref(),
@@ -805,7 +779,7 @@ impl DownloadManagerImpl {
             artifact_manager,
             consensus_pool_cache,
             prioritizer,
-            peer_manager,
+            current_peers,
             transport: transport.clone(),
             transport_channel_mapper,
             artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::new(log.clone())),
@@ -819,6 +793,57 @@ impl DownloadManagerImpl {
         };
         download_manager.refresh_registry();
         download_manager
+    }
+
+    fn get_current_peer_ids(&self) -> Vec<NodeId> {
+        self.current_peers
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, _v)| k.to_owned())
+            .collect()
+    }
+
+    /// The method adds the given peer to the list of current peers.
+    fn add_node(
+        &self,
+        node_id: NodeId,
+        peer_addr: SocketAddr,
+        registry_version: RegistryVersion,
+    ) -> P2PResult<()> {
+        // Only add other peers to the peer list.
+        if node_id == self.node_id {
+            return Err(P2PError {
+                p2p_error_code: P2PErrorCode::Failed,
+            });
+        }
+
+        // Add the peer to the list of current peers and the event handler, and drop the
+        // lock before calling into transport.
+        {
+            let mut current_peers = self.current_peers.lock().unwrap();
+
+            if current_peers.contains_key(&node_id) {
+                return Err(P2PError {
+                    p2p_error_code: P2PErrorCode::Exists,
+                });
+            }
+            current_peers
+                .entry(node_id)
+                .or_insert_with(PeerContext::new);
+            info!(self.log, "Nodes {:0} added", node_id);
+        }
+
+        self.transport
+            .start_connection(&node_id, peer_addr, registry_version)
+            .map_err(|e| {
+                let mut current_peers = self.current_peers.lock().unwrap();
+                current_peers.remove(&node_id);
+                warn!(self.log, "start connections failed {:?} {:?}", node_id, e);
+                P2PError {
+                    p2p_error_code: P2PErrorCode::InitFailed,
+                }
+            })
     }
 
     /// This helper method returns a list of tasks to be performed by this timer
@@ -879,9 +904,9 @@ impl DownloadManagerImpl {
 
         // If a peer is not in the nodes within this subnet, remove.
         // If self is not in the subnet, remove all peers.
-        for peer in self.peer_manager.get_current_peer_ids().into_iter() {
-            if !subnet_nodes.contains_key(&peer) || self_not_in_subnet {
-                self.remove_node(peer);
+        for peer_id in self.get_current_peer_ids().into_iter() {
+            if !subnet_nodes.contains_key(&peer_id) || self_not_in_subnet {
+                self.remove_node(peer_id);
                 self.metrics.nodes_removed.inc();
             }
         }
@@ -895,11 +920,7 @@ impl DownloadManagerImpl {
                 Err(err) => {
                     // If getting the peer socket fails, remove the node from current peer list.
                     // This removal makes it possible to attempt a re-connection on the next registry refresh.
-                    self.peer_manager
-                        .current_peers()
-                        .lock()
-                        .unwrap()
-                        .remove(node_id);
+                    self.current_peers.lock().unwrap().remove(node_id);
                     // Invalid socket addresses should not be pushed in the registry/config on first place.
                     error!(
                         self.log,
@@ -908,8 +929,7 @@ impl DownloadManagerImpl {
                 }
                 Ok(peer_addr) => {
                     if self
-                        .peer_manager
-                        .add_peer(*node_id, peer_addr, latest_registry_version)
+                        .add_node(*node_id, peer_addr, latest_registry_version)
                         .is_ok()
                     {
                         self.receive_check_caches.write().unwrap().insert(
@@ -951,15 +971,24 @@ impl DownloadManagerImpl {
     }
 
     /// This method removes the given node from peer manager and clears adverts.
-    fn remove_node(&self, node: NodeId) {
-        self.peer_manager.remove_peer(node);
-        self.receive_check_caches.write().unwrap().remove(&node);
+    fn remove_node(&self, node_id: NodeId) {
+        {
+            let mut current_peers = self.current_peers.lock().unwrap();
+            self.transport.stop_connection(&node_id);
+            // Remove the peer irrespective of the result of the stop_connection() call.
+            current_peers.remove(&node_id);
+            info!(self.log, "Nodes {:0} removed", node_id);
+        }
+
+        self.receive_check_caches.write().unwrap().remove(&node_id);
         self.prioritizer
-            .clear_peer_adverts(node, AdvertTrackerFinalAction::Abort)
+            .clear_peer_adverts(node_id, AdvertTrackerFinalAction::Abort)
             .unwrap_or_else(|e| {
                 info!(
                     self.log,
-                    "Failed to clear peer adverts when removing peer {:?} with error {:?}", node, e
+                    "Failed to clear peer adverts when removing peer {:?} with error {:?}",
+                    node_id,
+                    e
                 )
             });
     }
@@ -1134,7 +1163,7 @@ impl DownloadManagerImpl {
         peer_id: NodeId,
     ) -> Result<Vec<GossipChunkRequest>, impl Error> {
         // Get the peer context.
-        let mut current_peers = self.peer_manager.current_peers().lock().unwrap();
+        let mut current_peers = self.current_peers.lock().unwrap();
         let peer_context = self.is_peer_ready_for_download(peer_id, &current_peers)?;
         let requested_instant = Instant::now(); // function granularity for instant is good enough
         let max_streams_per_peer = self.gossip_config.max_artifact_streams_per_peer as usize;
@@ -1339,6 +1368,17 @@ impl DownloadManagerImpl {
     }
 }
 
+/// The method returns a random subset from the list of peers.
+fn get_random_subset_of_peers(peers: Vec<NodeId>, percentage: Percentage) -> Vec<NodeId> {
+    let multiplier = (percentage.get() as f64) / 100.0_f64;
+    let subset_size = (peers.len() as f64 * multiplier).ceil() as usize;
+    let mut rng = thread_rng();
+    peers
+        .choose_multiple(&mut rng, subset_size)
+        .cloned()
+        .collect()
+}
+
 fn get_peer_addr(node_record: &NodeRecord) -> Result<SocketAddr, String> {
     let socket_addr: (IpAddr, u16) = node_record
         .p2p_flow_endpoints
@@ -1359,13 +1399,8 @@ fn get_peer_addr(node_record: &NodeRecord) -> Result<SocketAddr, String> {
 pub mod tests {
     use super::*;
     use crate::download_prioritization::DownloadPrioritizerError;
-    use crate::event_handler::{
-        tests::{new_test_event_handler, TestGossip},
-        MAX_ADVERT_BUFFER,
-    };
     use crate::gossip_protocol::Percentage;
     use ic_interfaces::artifact_manager::OnArtifactError;
-    use ic_interfaces_transport_mocks::MockTransport;
     use ic_logger::LoggerImpl;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::node::v1::{
@@ -1383,10 +1418,10 @@ pub mod tests {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::artifact::{DkgMessage, DkgMessageAttribute};
     use ic_types::consensus::dkg::DealingContent;
-    use ic_types::crypto::threshold_sig::ni_dkg::{
-        NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet,
+    use ic_types::crypto::{
+        threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        {CryptoHash, CryptoHashOf},
     };
-    use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::signature::BasicSignature;
     use ic_types::{
         artifact,
@@ -1394,13 +1429,10 @@ pub mod tests {
         chunkable::{ArtifactChunk, ArtifactChunkData, Chunkable, ChunkableArtifact},
         Height, NodeId, PrincipalId,
     };
-    use proptest::prelude::*;
     use std::collections::HashSet;
     use std::convert::TryFrom;
     use std::ops::Range;
     use std::sync::{Arc, Mutex};
-    use std::time::Duration;
-    use tower::util::BoxCloneService;
 
     /// This priority function always returns Priority::FetchNow.
     fn priority_fn_fetch_now_all(_: &ArtifactId, _: &ArtifactAttribute) -> Priority {
@@ -1658,11 +1690,7 @@ pub mod tests {
             (download_manager.gossip_config.max_chunk_wait_ms * 2) as u64,
         );
         std::thread::sleep(sleep_duration);
-        let mut current_peers = download_manager
-            .peer_manager
-            .current_peers()
-            .lock()
-            .unwrap();
+        let mut current_peers = download_manager.current_peers.lock().unwrap();
         let peer_context = current_peers.get_mut(node_id).unwrap();
         download_manager.process_timed_out_requests(node_id, peer_context);
         assert_eq!(peer_context.requested.len(), 0);
@@ -1729,10 +1757,10 @@ pub mod tests {
         assert_eq!((num_replicas - 1) as usize, node_records.len());
 
         // Get removed node
-        let peers = download_manager.peer_manager.get_current_peer_ids();
+        let peers = download_manager.get_current_peer_ids();
         let nodes: HashSet<NodeId> = node_records.iter().map(|node_id| node_id.0).collect();
         let mut removed_peer = node_test_id(10);
-        let iter_peers = download_manager.peer_manager.get_current_peer_ids();
+        let iter_peers = download_manager.get_current_peer_ids();
         for peer in iter_peers.into_iter() {
             if !nodes.contains(&peer) {
                 removed_peer = peer;
@@ -1751,7 +1779,7 @@ pub mod tests {
         // Assert number of peers has been decreased by one.
         assert_eq!(
             (num_peers - 1) as usize,
-            download_manager.peer_manager.get_current_peer_ids().len()
+            download_manager.get_current_peer_ids().len()
         );
 
         // Validate adverts from the removed_peer are no longer present.
@@ -2043,19 +2071,6 @@ pub mod tests {
         }
     }
 
-    /// The function returns an arbitrary Node ID in a BoxedStrategy.
-    fn arbitrary_node_id() -> BoxedStrategy<NodeId> {
-        any::<u64>().prop_map(node_test_id).boxed()
-    }
-
-    /// The function returns a vector containing the given number of arbitrary
-    /// node IDs in a BoxedStrategy.
-    fn arb_peer_list(min_size: usize) -> BoxedStrategy<Vec<NodeId>> {
-        prop::collection::hash_set(arbitrary_node_id(), min_size..100)
-            .prop_map(|hs| hs.into_iter().collect())
-            .boxed()
-    }
-
     /// The function returns a simple DKG message which changes according to the
     /// number passed in.
     fn receive_check_test_create_message(number: u32) -> DkgMessage {
@@ -2238,126 +2253,35 @@ pub mod tests {
             download_manager.metrics.integrity_hash_check_failed.get() as usize
         );
     }
-
-    proptest! {
-        /// When providing a new list of peers, the function verifies that all current peers
-        /// are preserved that are also in the new list.
-        #[test]
-        fn when_setting_new_peers_old_ones_preserved(
-            peer_list in arb_peer_list(3)
-        ) {
-            // Tokio context is required here because some functions still assume it exists.
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let _rt_guard = rt.enter();
-            // Get the original peer list, split into three: a + b + c
-            // then produce:
-            // old = a + b
-            // new = a + c
-            let orig_len = peer_list.len();
-            let mut peers_common = peer_list;
-            let mut peers_old = peers_common.split_off(orig_len / 3);
-            let mut peers_new = peers_old.split_off(peers_old.len() / 2);
-
-            let first_common = peers_common[0];
-
-            peers_old.append(& mut peers_common.clone());
-            peers_new.append(& mut peers_common);
-
-            let peers_dictionary: PeerContextDictionary = peers_old
-                .iter()
-                .map(|node_id| (*node_id, PeerContext::new()))
-                .collect();
-            let peers_dictionary = Mutex::new(peers_dictionary);
-            let current_peers = Arc::new(peers_dictionary);
-
-            let logger = p2p_test_setup_logger();
-            let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
-            let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
-
-            let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_test_id(0)));
-            transport.set_event_handler(BoxCloneService::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0), gossip_arc).0));
-            let peer_manager = PeerManagerImpl::new(
-                node_test_id(0),
-                p2p_test_setup_logger().root.clone().into(),
-                current_peers,
-                transport,
-            );
-
-            // Set property on one node.
-            let mut current_peers = peer_manager.current_peers.lock().unwrap();
-            let peer_context = current_peers.get_mut(&first_common);
-            prop_assert!(peer_context.is_some());
-            if let Some(peer_context) = peer_context {
-                peer_context.disconnect_time = Some(SystemTime::now());
-            }
-            std::mem::drop(current_peers);
-
-            // Check that an old peer has preserved the property.
-            let mut current_peers = peer_manager.current_peers.lock().unwrap();
-            let peer_context = current_peers.get_mut(&first_common);
-            prop_assert!(peer_context.is_some());
-            if let Some(peer_context) = current_peers.get_mut(&first_common) {
-                prop_assert!(peer_context.disconnect_time.is_some());
-            }
-            std::mem::drop(current_peers);
-        }
-    }
-
     #[test]
-    fn test_advert_random_subset() {
-        let mut current_peers = PeerContextDictionary::default();
+    fn test_get_random_subset_of_peers() {
+        let mut current_peers = vec![];
         for id in 1..29 {
             let node_id = node_test_id(id);
-            current_peers.insert(node_id, PeerContext::new());
+            current_peers.push(node_id);
         }
-
-        let current_peers = Arc::new(Mutex::new(current_peers));
-        let peer_manager = PeerManagerImpl::new(
-            node_test_id(0),
-            p2p_test_setup_logger().root.clone().into(),
-            current_peers.clone(),
-            Arc::new(MockTransport::new()),
-        );
-
         {
             // Verify 10% of 28 = 3 (rounded up) nodes are returned.
-            let ret = get_random_subset_of_peers(&peer_manager, Percentage::from(10));
+            let ret = get_random_subset_of_peers(current_peers.clone(), Percentage::from(10));
             assert_eq!(ret.len(), 3);
-            {
-                let current_peers = current_peers.lock().unwrap();
-                let mut unique_peers = HashSet::new();
-                for entry in &ret {
-                    assert!(unique_peers.insert(entry));
-                    assert!(current_peers.contains_key(entry));
-                }
+            let mut unique_peers = HashSet::new();
+            for entry in &ret {
+                assert!(unique_peers.insert(entry));
+                assert!(current_peers.contains(entry));
             }
         }
 
         {
             // Verify all 28 nodes are returned.
-            let ret = get_random_subset_of_peers(&peer_manager, Percentage::from(100));
+            let ret = get_random_subset_of_peers(current_peers.clone(), Percentage::from(100));
             assert_eq!(ret.len(), 28);
-            {
-                let current_peers = current_peers.lock().unwrap();
-                let mut unique_peers = HashSet::new();
-                for entry in &ret {
-                    assert!(unique_peers.insert(entry));
-                    assert!(current_peers.contains_key(entry));
-                }
+            let mut unique_peers = HashSet::new();
+            for entry in &ret {
+                assert!(unique_peers.insert(entry));
+                assert!(current_peers.contains(entry));
             }
         }
-    }
-
-    #[test]
-    fn test_advert_random_subset_with_no_peers() {
-        let peer_manager = PeerManagerImpl::new(
-            node_test_id(0),
-            p2p_test_setup_logger().root.clone().into(),
-            Arc::new(Mutex::new(PeerContextDictionary::default())),
-            Arc::new(MockTransport::new()),
-        );
-        let ret = get_random_subset_of_peers(&peer_manager, Percentage::from(10));
-        assert!(ret.is_empty());
+        assert!(get_random_subset_of_peers(vec![], Percentage::from(10)).is_empty());
     }
 
     #[test]

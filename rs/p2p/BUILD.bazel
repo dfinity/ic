@@ -51,7 +51,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
     "@crate_index//:mockall_0_7_2",
-    "@crate_index//:proptest",
     "@crate_index//:tempfile",
 ]
 
