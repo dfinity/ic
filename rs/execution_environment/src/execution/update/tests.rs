@@ -22,7 +22,7 @@ fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
             (import "ic0" "msg_reply" (func $msg_reply))
             (func (export "canister_update go") (local i64)
                 (local.set 0 (i64.const 0))
-                (drop (call $stable_grow (i64.const 131072))) (; maximum allowed ;)
+                (drop (call $stable_grow (i64.const 524288))) (; maximum allowed ;)
                 (loop $loop
                     (call $stable_write (local.get 0) (i64.const 0) (i64.const 1))
                     (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
@@ -294,4 +294,16 @@ fn dirty_pages_are_free_on_system_subnet() {
         app_instructions
             > system_instructions + SchedulerConfig::application_subnet().dirty_page_overhead
     );
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_message() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = wat_writing_to_each_stable_memory_page(8 * GB + 1);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
+    assert_eq!(result.description(), "Canister exceeded memory access limits: Exceeded the limit for the \
+    number of modified pages in the stable memory in a single message execution: limit: 8388608 KB, \
+    modified: 8388612 KB.");
 }
