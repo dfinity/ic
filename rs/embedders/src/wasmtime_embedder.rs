@@ -210,6 +210,7 @@ impl WasmtimeEmbedder {
             canister_id,
             &store,
             self.config.feature_flags.rate_limiting_of_debug_prints,
+            self.config.stable_memory_dirty_page_limit,
         );
 
         let instance = match linker.instantiate(&mut store, module) {

@@ -10,6 +10,7 @@ rust_library(
     deps = [
         "//rs/protobuf",
         "//rs/registry/subnet_type",
+        "//rs/sys",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:base64",

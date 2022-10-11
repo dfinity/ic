@@ -6,7 +6,8 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions};
+use ic_sys::PAGE_SIZE;
+use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, NumPages};
 
 use wasmtime::{AsContextMut, Caller, Global, Linker, Store, Trap, Val};
 
@@ -119,8 +120,15 @@ fn charge_for_system_api_call<S: SystemApi>(
     num_bytes: u32,
     complexity: &ExecutionComplexity,
     dirty_page_cost: NumInstructions,
+    stable_memory_dirty_page_limit: NumPages,
 ) -> Result<(), Trap> {
-    observe_execution_complexity(log, canister_id, caller, complexity)?;
+    observe_execution_complexity(
+        log,
+        canister_id,
+        caller,
+        complexity,
+        stable_memory_dirty_page_limit,
+    )?;
     let num_instructions_from_bytes = caller
         .data()
         .system_api
@@ -227,13 +235,34 @@ fn charge_direct_fee<S: SystemApi>(
     Ok(())
 }
 
+/// Returns the number of new stable dirty pages and their cost for a potential
+/// write to stable memory.
+fn get_new_stable_dirty_pages<S: SystemApi>(
+    caller: &mut Caller<'_, StoreData<S>>,
+    offset: u64,
+    size: u64,
+) -> Result<(NumPages, NumInstructions), Trap> {
+    match caller
+        .data()
+        .system_api
+        .dirty_pages_from_stable_write(offset, size)
+    {
+        Err(e) => Err(process_err(caller, e)),
+        Ok(result) => Ok(result),
+    }
+}
+
 /// Observe execution complexity.
 fn observe_execution_complexity<S: SystemApi>(
     log: &ReplicaLogger,
     canister_id: CanisterId,
     caller: &mut Caller<'_, StoreData<S>>,
     complexity: &ExecutionComplexity,
+    stable_memory_dirty_page_limit: NumPages,
 ) -> Result<(), Trap> {
+    #[allow(non_upper_case_globals)]
+    const KiB: u64 = 1024;
+
     let system_api = &mut caller.data_mut().system_api;
     let total_complexity = system_api.get_total_execution_complexity() + complexity;
     if system_api.subnet_type() != SubnetType::System {
@@ -253,6 +282,14 @@ fn observe_execution_complexity<S: SystemApi>(
                 caller,
                 HypervisorError::InstructionLimitExceeded,
             ));
+        } else if total_complexity.stable_dirty_pages > stable_memory_dirty_page_limit {
+            let error = HypervisorError::MemoryAccessLimitExceeded(
+                format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB, modified: {} KB.",
+                    stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / KiB),
+                    total_complexity.stable_dirty_pages.get() * (PAGE_SIZE as u64 / KiB),
+                ),
+            );
+            return Err(process_err(caller, error));
         }
     }
     system_api.set_total_execution_complexity(total_complexity);
@@ -292,6 +329,7 @@ pub(crate) fn syscalls<S: SystemApi>(
     canister_id: CanisterId,
     store: &Store<StoreData<S>>,
     rate_limiting_of_debug_prints: FlagStatus,
+    stable_memory_dirty_page_limit: NumPages,
 ) -> Linker<StoreData<S>> {
     fn with_system_api<S, T>(caller: &mut Caller<'_, StoreData<S>>, f: impl Fn(&mut S) -> T) -> T {
         f(&mut caller.as_context_mut().data_mut().system_api)
@@ -348,9 +386,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CALLER_COPY,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_caller_copy(dst as u32, offset as u32, size as u32, memory)
@@ -400,10 +438,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_ARG_DATA_COPY,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst as u32, offset as u32, size as u32, mem)
@@ -439,10 +477,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(
@@ -478,10 +516,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_REPLY_DATA_APPEND,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: (size as u64).into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src as u32, size as u32, memory)
@@ -521,10 +559,11 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_REJECT,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
                         network: (size as u64).into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src as u32, size as u32, memory)
@@ -560,10 +599,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_REJECT_MSG_COPY,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(
@@ -602,9 +641,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CANISTER_SELF_COPY,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_self_copy(
@@ -643,9 +682,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CONTROLLER_COPY,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_controller_copy(dst as u32, offset as u32, size as u32, memory)
@@ -669,8 +708,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                         memory: (length as u64).into(),
                         disk: (length as u64).into(),
                         network: (length as u64).into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 match (
                     caller.data().system_api.subnet_type(),
@@ -706,8 +747,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                         memory: (length as u64).into(),
                         disk: (length as u64).into(),
                         network: (length as u64).into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset as u32, length as u32, memory)
@@ -740,10 +783,11 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_SIMPLE,
                         memory: (total_len as u64).into(),
-                        disk: 0.into(),
                         network: (total_len as u64).into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_simple(
@@ -784,9 +828,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_NEW,
                         memory: (total_len).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_new(
@@ -818,10 +862,11 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_DATA_APPEND,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
                         network: (size as u64).into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src as u32, size as u32, memory)
@@ -874,10 +919,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_PERFORM,
-                        memory: 0.into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_system_api(&mut caller, |s| s.ic0_call_perform())
                     .map_err(|e| process_err(&mut caller, e))
@@ -909,10 +953,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_GROW,
-                        memory: 0.into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_system_api(&mut caller, |s| s.ic0_stable_grow(additional_pages as u32))
                     .map_err(|e| process_err(&mut caller, e))
@@ -933,10 +976,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_READ,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable_read(dst as u32, offset as u32, size as u32, memory)
@@ -952,12 +995,8 @@ pub(crate) fn syscalls<S: SystemApi>(
                 let offset = offset as u32;
                 let src = src as u32;
                 let size = size as u32;
-                let (_, dirty_page_cost) = match with_system_api(&mut caller, |system_api| {
-                    system_api.calculate_dirty_pages(offset as u64, size as u64)
-                }) {
-                    Ok(result) => result,
-                    Err(e) => return Err(process_err(&mut caller, e)),
-                };
+                let (stable_dirty_pages, dirty_page_cost) =
+                    get_new_stable_dirty_pages(&mut caller, offset as u64, size as u64)?;
                 charge_for_system_api_call(
                     &log,
                     canister_id,
@@ -968,9 +1007,11 @@ pub(crate) fn syscalls<S: SystemApi>(
                         cpu: system_api_complexity::cpu::STABLE_WRITE,
                         memory: (size as u64).into(),
                         disk: (size as u64).into(),
-                        network: 0.into(),
+                        stable_dirty_pages,
+                        ..Default::default()
                     },
                     dirty_page_cost,
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable_write(offset, src, size, memory)
@@ -1003,10 +1044,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_GROW,
-                        memory: 0.into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_system_api(&mut caller, |s| {
                     s.ic0_stable64_grow(additional_pages as u64)
@@ -1029,10 +1069,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_READ,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable64_read(dst as u64, offset as u64, size as u64, memory)
@@ -1045,12 +1085,11 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "stable64_write", {
             let log = log.clone();
             move |mut caller: Caller<'_, StoreData<S>>, offset: i64, src: i64, size: i64| {
-                let (_, dirty_page_cost) = match with_system_api(&mut caller, |system_api| {
-                    system_api.calculate_dirty_pages(offset as u64, size as u64)
-                }) {
-                    Ok(result) => result,
-                    Err(e) => return Err(process_err(&mut caller, e)),
-                };
+                let offset = offset as u64;
+                let src = src as u64;
+                let size = size as u64;
+                let (stable_dirty_pages, dirty_page_cost) =
+                    get_new_stable_dirty_pages(&mut caller, offset, size)?;
                 charge_for_system_api_call(
                     &log,
                     canister_id,
@@ -1059,11 +1098,13 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_WRITE,
-                        memory: (size as u64).into(),
-                        disk: (size as u64).into(),
-                        network: 0.into(),
+                        memory: size.into(),
+                        disk: size.into(),
+                        stable_dirty_pages,
+                        ..Default::default()
                     },
                     dirty_page_cost,
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable64_write(offset as u64, src as u64, size as u64, memory)
@@ -1094,11 +1135,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                     0,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::PERFORMANCE_COUNTER,
-                        memory: 0.into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
                     NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
                 )?;
                 ic0_performance_counter_helper(&log, canister_id, &mut caller, counter_type)
             }
@@ -1130,9 +1170,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CANISTER_CYCLES_BALANCE128,
                         memory: (std::mem::size_of::<u64>() as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_cycles_balance128(dst, memory)
@@ -1166,9 +1206,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CYCLES_AVAILABLE128,
                         memory: (std::mem::size_of::<u64>() as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_available128(dst, memory)
@@ -1202,9 +1242,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CYCLES_REFUNDED128,
                         memory: (std::mem::size_of::<u64>() as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_refunded128(dst, memory)
@@ -1236,9 +1276,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CYCLES_ACCEPT128,
                         memory: (std::mem::size_of::<u64>() as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_accept128(
@@ -1298,9 +1338,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CERTIFIED_DATA_SET,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_certified_data_set(src, size, memory)
@@ -1337,9 +1377,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::DATA_CERTIFICATE_COPY,
                         memory: (size as u64).into(),
-                        disk: 0.into(),
-                        network: 0.into(),
+                        ..Default::default()
                     },
+                    stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_data_certificate_copy(dst, offset, size, memory)

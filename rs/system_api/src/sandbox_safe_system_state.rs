@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
 use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
@@ -248,6 +248,7 @@ pub struct SandboxSafeSystemState {
     pub(super) status: CanisterStatusView,
     pub(super) subnet_type: SubnetType,
     pub(super) subnet_size: usize,
+    dirty_page_overhead: NumInstructions,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
     initial_cycles_balance: Cycles,
@@ -280,6 +281,7 @@ impl SandboxSafeSystemState {
         ic00_available_request_slots: usize,
         ic00_aliases: BTreeSet<CanisterId>,
         subnet_size: usize,
+        dirty_page_overhead: NumInstructions,
     ) -> Self {
         Self {
             canister_id,
@@ -287,6 +289,7 @@ impl SandboxSafeSystemState {
             status,
             subnet_type: cycles_account_manager.subnet_type(),
             subnet_size,
+            dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
             system_state_changes: SystemStateChanges::default(),
@@ -304,6 +307,7 @@ impl SandboxSafeSystemState {
         system_state: &SystemState,
         cycles_account_manager: CyclesAccountManager,
         network_topology: &NetworkTopology,
+        dirty_page_overhead: NumInstructions,
     ) -> Self {
         let call_context_balances = match system_state.call_context_manager() {
             Some(call_context_manager) => call_context_manager
@@ -353,6 +357,7 @@ impl SandboxSafeSystemState {
             ic00_available_request_slots,
             ic00_aliases,
             subnet_size,
+            dirty_page_overhead,
         )
     }
 
@@ -433,11 +438,12 @@ impl SandboxSafeSystemState {
 
     pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
-        let result = self.cycles_account_manager.mint_cycles(
-            self.canister_id,
-            &mut new_balance,
-            amount_to_mint,
-        );
+        let result = self
+            .cycles_account_manager
+            .mint_cycles(self.canister_id, &mut new_balance, amount_to_mint)
+            .map_err(|CyclesAccountManagerError::ContractViolation(msg)| {
+                HypervisorError::ContractViolation(msg)
+            });
         self.update_balance_change(new_balance);
         result
     }
@@ -565,6 +571,13 @@ impl SandboxSafeSystemState {
 
     /// Calculate the cost for newly created dirty pages.
     pub fn dirty_page_cost(&self, dirty_pages: NumPages) -> HypervisorResult<NumInstructions> {
-        self.cycles_account_manager.dirty_page_cost(dirty_pages)
+        let (inst, overflow) = dirty_pages
+            .get()
+            .overflowing_mul(self.dirty_page_overhead.get());
+        if overflow {
+            Err(HypervisorError::ContractViolation(format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.dirty_page_overhead, dirty_pages)))
+        } else {
+            Ok(NumInstructions::from(inst))
+        }
     }
 }

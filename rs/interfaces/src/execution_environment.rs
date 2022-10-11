@@ -77,6 +77,8 @@ pub struct ExecutionComplexity {
     pub disk: NumBytes,
     /// The network complexity accumulated.
     pub network: NumBytes,
+    /// The number of dirty pages in stable memory.
+    pub stable_dirty_pages: NumPages,
 }
 
 impl ExecutionComplexity {
@@ -94,6 +96,11 @@ impl ops::Add<&ExecutionComplexity> for &ExecutionComplexity {
             memory: self.memory + rhs.memory,
             disk: self.disk + rhs.disk,
             network: self.network + rhs.network,
+            stable_dirty_pages: self
+                .stable_dirty_pages
+                .get()
+                .saturating_add(rhs.stable_dirty_pages.get())
+                .into(),
         }
     }
 }
@@ -670,9 +677,9 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// Determines the number of dirty pages that a stable write would create
-    /// and the cost of those dirty pages (without actually doing the write).
-    fn calculate_dirty_pages(
-        &mut self,
+    /// and the cost for those dirty pages (without actually doing the write).
+    fn dirty_pages_from_stable_write(
+        &self,
         offset: u64,
         size: u64,
     ) -> HypervisorResult<(NumPages, NumInstructions)>;

@@ -16,15 +16,12 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_ic00_types::Method;
-use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, HypervisorError, HypervisorResult,
-};
+use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
-use ic_types::NumPages;
 use ic_types::{
     messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     nominal_cycles::NominalCycles,
@@ -39,6 +36,26 @@ pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
 
 /// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
 const USE_COST_SCALING_FLAG: bool = false;
+
+/// Errors returned by the [`CyclesAccountManager`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CyclesAccountManagerError {
+    /// One of the API contracts that the cycles account manager enforces was
+    /// violated.
+    ContractViolation(String),
+}
+
+impl std::error::Error for CyclesAccountManagerError {}
+
+impl std::fmt::Display for CyclesAccountManagerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CyclesAccountManagerError::ContractViolation(msg) => {
+                write!(f, "Contract violation: {}", msg)
+            }
+        }
+    }
+}
 
 /// Handles any operation related to cycles accounting, such as charging (due to
 /// using system resources) or refunding unused cycles.
@@ -751,13 +768,13 @@ impl CyclesAccountManager {
         canister_id: CanisterId,
         cycles_balance: &mut Cycles,
         amount_to_mint: Cycles,
-    ) -> HypervisorResult<()> {
+    ) -> Result<(), CyclesAccountManagerError> {
         if canister_id != CYCLES_MINTING_CANISTER_ID {
             let error_str = format!(
                 "ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
                 canister_id, CYCLES_MINTING_CANISTER_ID
             );
-            Err(HypervisorError::ContractViolation(error_str))
+            Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
             self.add_cycles(cycles_balance, amount_to_mint);
             Ok(())
@@ -852,18 +869,6 @@ impl CyclesAccountManager {
                 + self.config.http_request_per_byte_fee * total_bytes,
             subnet_size,
         )
-    }
-
-    /// Calculate the cost for newly created dirty pages.
-    pub fn dirty_page_cost(&self, dirty_pages: NumPages) -> HypervisorResult<NumInstructions> {
-        let (inst, overflow) = dirty_pages
-            .get()
-            .overflowing_mul(self.config.dirty_page_cost.get());
-        if overflow {
-            Err(HypervisorError::ContractViolation(format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.config.dirty_page_cost, dirty_pages)))
-        } else {
-            Ok(NumInstructions::from(inst))
-        }
     }
 }
 

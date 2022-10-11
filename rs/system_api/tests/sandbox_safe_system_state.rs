@@ -1,4 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_config::subnet_config::SchedulerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_logger::replica_logger::no_op_logger;
@@ -53,6 +54,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
 
     assert_eq!(
@@ -100,6 +102,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
 
     assert_eq!(
@@ -129,6 +132,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
 
     assert_eq!(
@@ -163,6 +167,7 @@ fn correct_charging_source_canister_for_a_request() {
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
 
     let request = RequestBuilder::default()

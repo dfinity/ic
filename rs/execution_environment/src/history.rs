@@ -288,5 +288,8 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterInstallCodeRateLimited => {
             "Canister is rate limited because it executed too many instructions in the previous install_code messages"
         }
+        CanisterMemoryAccessLimitExceeded => {
+            "Canister exceeded the limit for the number of modified stable memory pages for a single message execution"
+        }
     }
 }

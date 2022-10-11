@@ -4,7 +4,7 @@
 use criterion::{BatchSize, Criterion};
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfigs;
+use ic_config::subnet_config::{SchedulerConfig, SubnetConfigs};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
@@ -239,6 +239,7 @@ where
         own_subnet_type,
         log.clone(),
         Arc::clone(&cycles_account_manager),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     ));
     let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> = Arc::new(
         IngressHistoryWriterImpl::new(config.clone(), log.clone(), &metrics_registry),

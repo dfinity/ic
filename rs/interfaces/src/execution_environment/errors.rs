@@ -131,6 +131,8 @@ pub enum HypervisorError {
         instructions: NumInstructions,
         limit: NumInstructions,
     },
+    /// A canister has written too much new data in a single message.
+    MemoryAccessLimitExceeded(String),
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -293,12 +295,17 @@ impl HypervisorError {
             ),
             Self::Aborted => {
                 unreachable!("Aborted execution should not be visible to the user.");
-            }
+            },
             Self::SliceOverrun {instructions, limit} => UserError::new(
                 E::CanisterInstructionLimitExceeded,
                 format!("Canister {} attempted to perform \
                 a large memory operation that used {} instructions and \
                 exceeded the slice limit {}.", canister_id, instructions, limit),
+            ),
+            Self::MemoryAccessLimitExceeded(s) => UserError::new(
+                E::CanisterMemoryAccessLimitExceeded,
+                format!("Canister exceeded memory access limits: {}", s)
+
             ),
         }
     }
@@ -328,6 +335,7 @@ impl HypervisorError {
             HypervisorError::WasmReservedPages => "WasmReservedPages",
             HypervisorError::Aborted => "Aborted",
             HypervisorError::SliceOverrun { .. } => "SliceOverrun",
+            HypervisorError::MemoryAccessLimitExceeded(_) => "MemoryAccessLimitExceeded",
         }
     }
 
@@ -358,7 +366,8 @@ impl HypervisorError {
             | HypervisorError::InvalidCanisterId(_)
             | HypervisorError::MessageRejected
             | HypervisorError::InsufficientCyclesBalance(_)
-            | HypervisorError::WasmReservedPages => false,
+            | HypervisorError::WasmReservedPages
+            | HypervisorError::MemoryAccessLimitExceeded(_) => false,
         }
     }
 }

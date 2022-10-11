@@ -16,7 +16,9 @@ use crate::{
 use assert_matches::assert_matches;
 use candid::Decode;
 use ic_base_types::{NumSeconds, PrincipalId};
-use ic_config::{execution_environment::Config, flag_status::FlagStatus};
+use ic_config::{
+    execution_environment::Config, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
@@ -200,6 +202,7 @@ impl CanisterManagerBuilder {
             subnet_type,
             no_op_logger(),
             Arc::clone(&cycles_account_manager),
+            SchedulerConfig::application_subnet().dirty_page_overhead,
         );
         let hypervisor = Arc::new(hypervisor);
         CanisterManager::new(

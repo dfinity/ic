@@ -1,5 +1,6 @@
 use ic_config::embedders::Config;
 use ic_config::flag_status::FlagStatus;
+use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasm_utils::compile;
 use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
@@ -52,6 +53,7 @@ fn test_api_for_update(
         &system_state,
         *cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);

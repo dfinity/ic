@@ -210,7 +210,7 @@ pub type CryptoHashOfState = crypto::CryptoHashOf<CanonicalStateTag>;
 
 pub enum NumPagesTag {}
 /// A number of OS-sized pages.
-pub type NumPages = Id<NumPagesTag, u64>;
+pub type NumPages = AmountOf<NumPagesTag, u64>;
 
 /// `AccumulatedPriority` is a part of the SchedulerState. It is the value by
 /// which we prioritize canisters for execution. It is reset to 0 in the round
