@@ -932,20 +932,6 @@ checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 [[package]]
 name = "bls12_381"
 version = "0.7.0"
-source = "git+https://github.com/dfinity/bls12_381?branch=main#33efe7ff95c912b19533bcc445430e860c782ccd"
-dependencies = [
- "digest 0.9.0",
- "ff",
- "group",
- "pairing",
- "rand_core 0.6.3",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "bls12_381"
-version = "0.7.0"
 source = "git+https://github.com/dfinity/bls12_381?rev=33efe7ff95c912b19533bcc445430e860c782ccd#33efe7ff95c912b19533bcc445430e860c782ccd"
 dependencies = [
  "digest 0.9.0",
@@ -954,6 +940,7 @@ dependencies = [
  "pairing",
  "rand_core 0.6.3",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -4876,7 +4863,7 @@ dependencies = [
 name = "ic-crypto-internal-bls12-381-type"
 version = "0.1.0"
 dependencies = [
- "bls12_381 0.7.0 (git+https://github.com/dfinity/bls12_381?branch=main)",
+ "bls12_381",
  "criterion",
  "hex",
  "ic-crypto-getrandom-for-wasm",
@@ -8581,7 +8568,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "583b1c03380cf86059160cc6c91dcbf56c7b5f141bf3a4f06bc79762d775fac4"
 dependencies = [
- "bls12_381 0.7.0 (git+https://github.com/dfinity/bls12_381?rev=33efe7ff95c912b19533bcc445430e860c782ccd)",
+ "bls12_381",
  "lazy_static",
  "pairing",
  "sha2 0.9.9",
