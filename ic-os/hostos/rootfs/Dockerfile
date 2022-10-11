@@ -11,6 +11,8 @@
 # Update below image when new dfinity/hostos-base image gets produced (see deploy-host-os-baseimg CI job on master/rc).
 FROM dfinity/hostos-base@sha256:f744cac1e9f7110ed46defa6ab3877dfd8dac9881f153af6898dab9c3ad2f3cd
 
+USER root:root
+
 RUN mkdir -p /boot/config \
              /boot/efi \
              /boot/grub

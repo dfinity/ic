@@ -17,6 +17,8 @@
 
 FROM ubuntu:20.04
 
+USER root:root
+
 ENV SOURCE_DATE_EPOCH=0
 ENV TZ=UTC
 

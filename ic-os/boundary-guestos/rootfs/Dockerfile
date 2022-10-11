@@ -24,6 +24,8 @@ ARG sw_sha256=0db4a1ce037abd819477cdb256a2b81228b64b0fa822d6c95a583ea684f027b1
 #
 FROM $BASE_IMAGE AS download
 
+USER root:root
+
 WORKDIR /tmp
 
 # Download and check service worker production version 
@@ -50,6 +52,8 @@ RUN \
 # - Construct the actual target image (IC-OS root filesystem)
 #
 FROM $BASE_IMAGE
+
+USER root:root
 
 # Fetch and install npm ic service worker for production 
 COPY --from=download /tmp/service-worker.tgz /tmp/service-worker.tgz

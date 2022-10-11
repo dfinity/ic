@@ -18,6 +18,8 @@
 # 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
 FROM ubuntu:20.04
 
+USER root:root
+
 ENV SOURCE_DATE_EPOCH=0
 ENV TZ=UTC
 
