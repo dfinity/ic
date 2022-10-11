@@ -134,6 +134,10 @@ export type Token = { type: <T>() => IDL.Type<T> };
       # DSCVR
       127.0.0.1 h5aet-waaaa-aaaab-qaamq-cai.ic0.local
       127.0.0.1 dscvr.ic0.local
+
+      # Nuance
+      127.0.0.1 exwqn-uaaaa-aaaaf-qaeaa-cai.ic0.local
+      127.0.0.1 nuance.ic0.local
       ```
 1. Set the `hostnameCanisterIdMap` value in the `http_request.ts` file (make sure to revert this before commiting):
       ```shell
@@ -143,6 +147,7 @@ export type Token = { type: <T>() => IDL.Type<T> };
             'dscvr.ic0.local': ['h5aet-waaaa-aaaab-qaamq-cai', 'ic0.app'],
             'distrikt.ic0.local': ['az5sd-cqaaa-aaaae-aaarq-cai', 'ic0.app'],
             'distrikt-staging.ic0.local': ['am2do-dyaaa-aaaae-aaasa-cai', 'ic0.app'],
+            'nuance.ic0.local': ['exwqn-uaaaa-aaaaf-qaeaa-cai', 'ic0.app'],
       };
       ```
 1. Build and watch the service worker:

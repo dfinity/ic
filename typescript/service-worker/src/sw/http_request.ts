@@ -210,24 +210,6 @@ async function createAgentAndActor(
   return [agent, actor];
 }
 
-function detectRequestStreamsSupport(): boolean {
-  let duplexAccessed = false;
-
-  const hasContentType =
-    self.ReadableStream &&
-    new Request('', {
-      body: new ReadableStream(),
-      method: 'POST',
-      get duplex() {
-        duplexAccessed = true;
-        return 'half';
-      },
-    } as unknown).headers.has('Content-Type');
-
-  return duplexAccessed && !hasContentType;
-}
-const supportsRequestStreams = detectRequestStreamsSupport();
-
 /**
  * Removes legacy sub domains from the URL of the request.
  * Request objects cannot be mutated, so we have to clone them and
@@ -250,7 +232,6 @@ async function removeLegacySubDomains(
   }
 
   const {
-    body,
     cache,
     credentials,
     headers,
@@ -262,14 +243,9 @@ async function removeLegacySubDomains(
     referrer,
     referrerPolicy,
     signal,
-  } = originalRequest.clone();
-
-  const requestBody = supportsRequestStreams
-    ? body
-    : (await body?.getReader().read())?.value;
+  } = originalRequest;
 
   const requestInit = {
-    body: requestBody,
     cache,
     credentials,
     headers,
@@ -283,6 +259,10 @@ async function removeLegacySubDomains(
     signal,
     duplex: 'half',
   };
+
+  if (!['HEAD', 'GET'].includes(method)) {
+    requestInit['body'] = await originalRequest.arrayBuffer();
+  }
 
   return new Request(urlWithoutLegacySubdomain, requestInit as unknown);
 }
