@@ -148,7 +148,7 @@ mod tests {
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_cycles_account_manager::CyclesAccountManager;
-    use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, HypervisorError};
+    use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
@@ -1439,17 +1439,6 @@ mod tests {
             .sync()
             .unwrap();
         assert!(rep.success);
-
-        let completion = exec_sync_rx.get();
-        let result = match completion {
-            Completion::Paused(_) => {
-                unreachable!("Expected the execution to finish, but it was paused")
-            }
-            Completion::Finished(result) => result,
-        };
-        let wasm_result = result.exec_output.wasm.wasm_result;
-
-        assert_eq!(wasm_result, Err(HypervisorError::Aborted));
 
         close_memory(&srv, wasm_memory_id);
         close_memory(&srv, stable_memory_id);
