@@ -2,12 +2,12 @@
 use crate::tls_utils::{temp_crypto_component_with_tls_keys, REG_V1};
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsHandshake, TlsReadHalf, TlsWriteHalf};
+use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsHandshake};
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
 pub struct ClientBuilder {
@@ -79,7 +79,7 @@ impl Client {
             .crypto
             .perform_tls_client_handshake(tcp_stream, self.server_node_id, REG_V1)
             .await?;
-        let (mut rh, mut wh) = tls_stream.split();
+        let (mut rh, mut wh) = Box::new(tls_stream).split();
 
         self.expect_msg_from_server_if_configured(&mut rh, &mut wh)
             .await;
@@ -90,43 +90,47 @@ impl Client {
         Ok(())
     }
 
-    async fn send_msg_to_server_if_configured(&self, wh: &mut TlsWriteHalf, rh: &mut TlsReadHalf) {
+    async fn send_msg_to_server_if_configured<W: AsyncWrite + Unpin, R: AsyncRead + Unpin>(
+        &self,
+        wr: &mut W,
+        rd: &mut R,
+    ) {
         if let Some(msg_for_server) = &self.msg_for_server {
             // Append a newline (end of line, EOL, 0xA) so the peer knows where the msg ends
             let msg_for_server_with_eol = format!("{}\n", msg_for_server);
-            let num_bytes_written = wh.write(msg_for_server_with_eol.as_bytes()).await.unwrap();
+            let num_bytes_written = wr.write(msg_for_server_with_eol.as_bytes()).await.unwrap();
             assert_eq!(num_bytes_written, msg_for_server_with_eol.as_bytes().len());
 
             const ACK: u8 = 0x06;
-            let reply = rh.read_u8().await.unwrap();
+            let reply = rd.read_u8().await.unwrap();
             assert_eq!(reply, ACK);
         }
     }
 
-    async fn expect_msg_from_server_if_configured(
+    async fn expect_msg_from_server_if_configured<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         &self,
-        rh: &mut TlsReadHalf,
-        wh: &mut TlsWriteHalf,
+        rd: &mut R,
+        wr: &mut W,
     ) {
         if let Some(msg_expected_from_server) = &self.msg_expected_from_server {
-            let reader = BufReader::new(rh);
+            let reader = BufReader::new(rd);
             let msg = reader.lines().next_line().await.unwrap().unwrap();
             assert_eq!(&msg, msg_expected_from_server);
 
             const ACK: u8 = 0x06;
-            wh.write_u8(ACK).await.unwrap();
+            wr.write_u8(ACK).await.unwrap();
         }
     }
 
-    async fn expect_error_substring_when_reading_stream_if_configured(
+    async fn expect_error_substring_when_reading_stream_if_configured<R: AsyncRead + Unpin>(
         &self,
-        tls_read_half: &mut TlsReadHalf,
+        rd: &mut R,
     ) {
         if let Some(expected_error_substring_when_reading_stream) =
             &self.expected_error_substring_when_reading_stream
         {
             let mut bytes_from_server = Vec::new();
-            let error = tls_read_half
+            let error = rd
                 .read_to_end(&mut bytes_from_server)
                 .await
                 .expect_err("expected error on read_to_end");

@@ -1,7 +1,7 @@
 use crate::tls::rustls::cert_resolver::StaticCertResolver;
-use crate::tls::rustls::certified_key;
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use crate::tls::rustls::node_cert_verifier::NodeClientCertVerifier;
+use crate::tls::rustls::{certified_key, RustlsTlsStream};
 use crate::tls::{
     node_id_from_cert_subject_common_name, tls_cert_from_registry, TlsCertFromRegistryError,
 };
@@ -28,7 +28,7 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
     tcp_stream: TcpStream,
     allowed_clients: AllowedClients,
     registry_version: RegistryVersion,
-) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
+) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
     let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
     let client_cert_verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
         allowed_clients.nodes().clone(),
@@ -45,9 +45,12 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
 
     let client_cert_from_handshake = single_client_cert_from_handshake(&rustls_stream)?;
     let authenticated_peer = node_id_from_cert_subject_common_name(&client_cert_from_handshake)?;
-    let tls_stream = TlsStream::new(tokio_rustls::TlsStream::from(rustls_stream));
+    let tls_stream = RustlsTlsStream::new(tokio_rustls::TlsStream::from(rustls_stream));
 
-    Ok((tls_stream, AuthenticatedPeer::Node(authenticated_peer)))
+    Ok((
+        Box::new(tls_stream),
+        AuthenticatedPeer::Node(authenticated_peer),
+    ))
 }
 
 pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshakeSignerProvider>(
@@ -56,7 +59,7 @@ pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshake
     registry_client: &Arc<dyn RegistryClient>,
     tcp_stream: TcpStream,
     registry_version: RegistryVersion,
-) -> Result<TlsStream, TlsServerHandshakeError> {
+) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
     let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
     let config = server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
         NoClientAuth::new(),
@@ -66,7 +69,9 @@ pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshake
 
     let rustls_stream = accept_connection(tcp_stream, config).await?;
 
-    Ok(TlsStream::new(tokio_rustls::TlsStream::from(rustls_stream)))
+    Ok(Box::new(RustlsTlsStream::new(
+        tokio_rustls::TlsStream::from(rustls_stream),
+    )))
 }
 
 fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key<

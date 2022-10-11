@@ -1,7 +1,7 @@
 use crate::tls::rustls::cert_resolver::StaticCertResolver;
-use crate::tls::rustls::certified_key;
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
+use crate::tls::rustls::{certified_key, RustlsTlsStream};
 use crate::tls::{tls_cert_from_registry, TlsCertFromRegistryError};
 use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsClientHandshakeError, TlsStream};
@@ -22,7 +22,7 @@ pub async fn perform_tls_client_handshake<P: CspTlsHandshakeSignerProvider>(
     tcp_stream: TcpStream,
     server: NodeId,
     registry_version: RegistryVersion,
-) -> Result<TlsStream, TlsClientHandshakeError> {
+) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
     let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
     let mut config = ClientConfig::new();
     config.versions = vec![ProtocolVersion::TLSv1_3];
@@ -55,17 +55,19 @@ fn static_cert_resolver(key: CertifiedKey, scheme: SignatureScheme) -> Arc<dyn R
 async fn connect(
     tcp_stream: TcpStream,
     config: ClientConfig,
-) -> Result<TlsStream, TlsClientHandshakeError> {
+) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
     let irrelevant_domain =
         DNSNameRef::try_from_ascii_str("domain.is-irrelevant-as-hostname-verification-is.disabled")
             .expect("failed to create domain");
-    TlsConnector::from(Arc::new(config))
+    let tls_stream = TlsConnector::from(Arc::new(config))
         .connect(irrelevant_domain, tcp_stream)
         .await
         .map_err(|e| TlsClientHandshakeError::HandshakeError {
             internal_error: format!("{}", e),
-        })
-        .map(|s| TlsStream::new(tokio_rustls::TlsStream::from(s)))
+        })?;
+    Ok(Box::new(RustlsTlsStream::new(
+        tokio_rustls::TlsStream::from(tls_stream),
+    )))
 }
 
 impl From<TlsCertFromRegistryError> for TlsClientHandshakeError {

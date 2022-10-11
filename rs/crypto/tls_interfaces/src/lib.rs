@@ -14,10 +14,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::io;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 
 #[cfg(test)]
@@ -235,120 +232,35 @@ impl From<MalformedPeerCertificateError> for TlsClientHandshakeError {
 /// [splitting](`Self::split()`) the stream) is via the methods provided by the
 /// `tokio::io::AsyncRead` and `tokio::io::AsyncWrite` traits.
 ///
-/// Note that the Rustls variant of this stream behaves like a `BufWriter`. This
-/// means that data written with `poll_write` are not guaranteed to be written
-/// to the underlying (TCP) stream and one must call `poll_flush` at appropriate
-/// times, such as when a period of `poll_write` writes is complete and there is
-/// no more data to write. See also [tokio-rustls' documentation] on [Why do I
-/// need to call poll_flush?] and the documentation of `tokio::io::BufWriter`
+/// Implementing streams are expected to behave like a `BufWriter`. This means
+/// that data written with `poll_write` are not guaranteed to be written to the
+/// underlying (TCP) stream and one must call `poll_flush` at appropriate
+/// times, such as when a period of `poll_write` writes is complete and there
+/// is no more data to write. See also [tokio-rustls' documentation] on [Why do
+/// I need to call poll_flush?] and the documentation of `tokio::io::BufWriter`
 /// and `std::io::BufWriter`.
 ///
 /// [tokio-rustls' documentation]: https://docs.rs/tokio-rustls/latest/tokio_rustls/
 /// [Why do I need to call poll_flush?]: https://docs.rs/tokio-rustls/latest/tokio_rustls/#why-do-i-need-to-call-poll_flush
-pub struct TlsStream {
-    tls_stream: tokio_rustls::TlsStream<TcpStream>,
-}
-
-impl TlsStream {
-    pub fn new(tls_stream: tokio_rustls::TlsStream<TcpStream>) -> Self {
-        Self { tls_stream }
-    }
-
-    /// Use this method to split a `TlsStream`, as it returns `TlsReadHalf`
-    /// and `TlsWriteHalf` that are guaranteed to be protected by TLS by the
-    /// type system.
-    pub fn split(self) -> (TlsReadHalf, TlsWriteHalf) {
-        let (read_half, write_half) = tokio::io::split(self.tls_stream);
-        (TlsReadHalf::new(read_half), TlsWriteHalf::new(write_half))
-    }
-}
-
-impl AsyncRead for TlsStream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<tokio::io::Result<()>> {
-        Pin::new(&mut self.tls_stream).poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for TlsStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.tls_stream).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.tls_stream).poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.tls_stream).poll_shutdown(cx)
-    }
+pub trait TlsStream: AsyncRead + AsyncWrite + Send + Unpin {
+    /// Splits the TLS stream into a read half and a write half.
+    ///
+    /// Note that `self` is of type `Box<Self>` rather than `Self`. This is
+    /// because in Rust, a value can only be moved when its size is known at
+    /// compile time, and the size of a value of type `dyn TlsStream` cannot
+    /// be statically determined, i.e., is not known at compile time (see,
+    /// e.g., [E0161]). `Box` was chosen for simplicity in favor of, e.g.,
+    /// `Arc` because currently there are no use-cases for shared ownership,
+    /// but any (smart) pointer would work.
+    ///
+    /// [E0161]: https://doc.rust-lang.org/error-index.html#E0161
+    fn split(self: Box<Self>) -> (Box<dyn TlsStreamReadHalf>, Box<dyn TlsStreamWriteHalf>);
 }
 
 /// The read half of a stream over a secure connection protected by TLS.
-pub struct TlsReadHalf {
-    read_half: ReadHalf<tokio_rustls::TlsStream<TcpStream>>,
-}
-
-impl TlsReadHalf {
-    pub fn new(read_half: ReadHalf<tokio_rustls::TlsStream<TcpStream>>) -> Self {
-        Self { read_half }
-    }
-}
-
-impl AsyncRead for TlsReadHalf {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<tokio::io::Result<()>> {
-        Pin::new(&mut self.read_half).poll_read(cx, buf)
-    }
-}
-
+pub trait TlsStreamReadHalf: AsyncRead + Send + Unpin {}
 /// The write half of a stream over a secure connection protected by TLS.
-///
-/// See also the documentation of [`TlsStream`], especially the part on correct
-/// flushing for the Rustls variant.
-pub struct TlsWriteHalf {
-    write_half: WriteHalf<tokio_rustls::TlsStream<TcpStream>>,
-}
-
-impl TlsWriteHalf {
-    pub fn new(write_half: WriteHalf<tokio_rustls::TlsStream<TcpStream>>) -> Self {
-        Self { write_half }
-    }
-}
-
-impl AsyncWrite for TlsWriteHalf {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.write_half).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.write_half).poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.write_half).poll_shutdown(cx)
-    }
-}
+pub trait TlsStreamWriteHalf: AsyncWrite + Send + Unpin {}
 
 #[async_trait]
 /// Implementors provide methods for transforming TCP streams into TLS stream.
@@ -413,7 +325,7 @@ pub trait TlsHandshake {
         tcp_stream: TcpStream,
         allowed_clients: AllowedClients,
         registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError>;
+    ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
 
     /// Transforms a TCP stream into a TLS stream by performing a TLS server
     /// handshake. No client authentication is performed.
@@ -447,7 +359,7 @@ pub trait TlsHandshake {
         &self,
         tcp_stream: TcpStream,
         registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsServerHandshakeError>;
+    ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError>;
 
     /// Transforms a TCP stream into a TLS stream by first performing a TLS
     /// client handshake and then verifying that the peer is the given `server`.
@@ -497,7 +409,7 @@ pub trait TlsHandshake {
         tcp_stream: TcpStream,
         server: NodeId,
         registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsClientHandshakeError>;
+    ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError>;
 }
 
 #[derive(Clone, Debug)]

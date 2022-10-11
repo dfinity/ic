@@ -1,11 +1,11 @@
 use super::*;
 use async_trait::async_trait;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, TlsClientHandshakeError,
-    TlsHandshake, TlsServerHandshakeError, TlsStream,
+    TlsHandshake, TlsServerHandshakeError,
 };
+use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
 use ic_logger::{debug, new_logger};
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, PrincipalId, RegistryVersion};
@@ -27,7 +27,7 @@ where
         tcp_stream: TcpStream,
         allowed_clients: AllowedClients,
         registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
+    ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -67,7 +67,7 @@ where
         &self,
         tcp_stream: TcpStream,
         registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsServerHandshakeError> {
+    ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -107,7 +107,7 @@ where
         tcp_stream: TcpStream,
         server: NodeId,
         registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsClientHandshakeError> {
+    ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
