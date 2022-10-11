@@ -330,7 +330,7 @@ mod verify_ed25519 {
     }
 }
 
-fn csprng() -> impl CryptoRng + Rng + Clone {
+fn csprng() -> impl CryptoRng + Rng {
     ChaCha20Rng::seed_from_u64(42)
 }
 
