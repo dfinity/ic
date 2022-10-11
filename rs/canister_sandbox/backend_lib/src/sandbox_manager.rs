@@ -34,7 +34,9 @@ use ic_embedders::{
     wasm_executor::WasmStateChanges, wasm_utils::decoding::decode_wasm, CompilationResult,
     SerializedModuleBytes, WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorResult, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
+};
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
@@ -213,6 +215,10 @@ impl Execution {
                         },
                     },
                 );
+            }
+            Err(HypervisorError::Aborted) => {
+                // Do not send any reply to the controller because the execution
+                // was aborted and the controller removed `exec_id` on its side.
             }
             Err(err) => {
                 let wasm_output = WasmExecutionOutput {
