@@ -17,7 +17,6 @@ rust_library(
         "//rs/protobuf",
         "//rs/registry/provisional_whitelist",
         "//rs/registry/subnet_type",
-        "//rs/registry/transport",
         "//rs/sys",
         "//rs/types/base_types",
         "//rs/types/error_types",
