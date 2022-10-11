@@ -49,7 +49,6 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 mockall = "0.7.2"
-proptest = "1.0"
 tempfile = "3.1.0"
 
 [features]

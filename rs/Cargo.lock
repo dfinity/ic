@@ -6691,7 +6691,6 @@ dependencies = [
  "parking_lot 0.12.1",
  "phantom_newtype",
  "prometheus 0.12.0",
- "proptest",
  "rand 0.8.5",
  "serde",
  "slog",
