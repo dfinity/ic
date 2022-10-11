@@ -4,11 +4,18 @@ use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-/// The theoretical maximum for the size of a bitcoin block.
-///
-/// If in the future, the bitcoin network decides to increase the block size,
-/// this value needs to be increased too.
-pub const MAX_BITCOIN_BLOCK_SIZE: u64 = 4 * 1024 * 1024;
+// The theoretical maximum for the size of a bitcoin block.
+//
+// If in the future, the bitcoin network decides to increase the block size,
+// this value needs to be increased too.
+const MAX_BITCOIN_BLOCK_IN_BYTES: u64 = 4_000_000;
+
+// An additional buffer for metadata that's added with a bitcoin block (e.g. next block hashes).
+const BITCOIN_PAYLOAD_BUFFER_IN_BYTES: u64 = 100_000;
+
+/// The maximum size of a bitcoin payload.
+pub const MAX_BITCOIN_PAYLOAD_IN_BYTES: u64 =
+    MAX_BITCOIN_BLOCK_IN_BYTES + BITCOIN_PAYLOAD_BUFFER_IN_BYTES;
 
 /// Payload that contains SelfValidating messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
