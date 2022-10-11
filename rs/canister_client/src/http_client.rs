@@ -38,7 +38,7 @@ impl Default for HttpClientConfig {
         Self {
             pool_idle_timeout: Some(Duration::from_secs(600)),
             pool_max_idle_per_host: 1,
-            http2_only: true,
+            http2_only: false,
             overrides: HashMap::new(),
         }
     }
