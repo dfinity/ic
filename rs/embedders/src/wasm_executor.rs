@@ -60,9 +60,11 @@ pub trait WasmExecutor: Send + Sync {
 }
 
 struct WasmExecutorMetrics {
-    // TODO(EXC-365): Remove this metric once we confirm that no module imports `ic0.call_simple`
+    // TODO(EXC-365): Remove these metrics once we confirm that no module imports these IC0 methods
     // anymore.
     imports_call_simple: IntCounter,
+    imports_controller_size: IntCounter,
+    imports_controller_copy: IntCounter,
     // TODO(EXC-376): Remove these metrics once we confirm that no module imports these IC0 methods
     // anymore.
     imports_call_cycles_add: IntCounter,
@@ -80,6 +82,14 @@ impl WasmExecutorMetrics {
             imports_call_simple: metrics_registry.int_counter(
                 "execution_wasm_imports_call_simple_total",
                 "The number of Wasm modules that import ic0.call_simple",
+            ),
+            imports_controller_size: metrics_registry.int_counter(
+                "execution_wasm_imports_controller_size_total",
+                "The number of Wasm modules that import ic0.controller_size",
+            ),
+            imports_controller_copy: metrics_registry.int_counter(
+                "execution_wasm_imports_controller_copy_total",
+                "The number of Wasm modules that import ic0.controller_copy",
             ),
             imports_call_cycles_add: metrics_registry.int_counter(
                 "execution_wasm_imports_call_cycles_add",
@@ -194,7 +204,7 @@ impl WasmExecutor for WasmExecutorImpl {
         // Ensure that Wasm is compiled.
         let CacheLookup {
             cache: embedder_cache,
-            serialized_module: _,
+            serialized_module,
             compilation_result,
         } = match self.get_embedder_cache(&execution_state.wasm_binary, compilation_cache) {
             Ok(cache_result) => cache_result,
@@ -205,6 +215,10 @@ impl WasmExecutor for WasmExecutorImpl {
                 );
             }
         };
+
+        if let Some(serialized_module) = serialized_module {
+            self.observe_metrics(&serialized_module.imports_details);
+        }
 
         let wasm_reserved_pages = get_wasm_reserved_pages(execution_state);
         let mut wasm_memory = execution_state.wasm_memory.clone();
@@ -282,6 +296,7 @@ impl WasmExecutor for WasmExecutorImpl {
                 } => (cache, serialized_module, compilation_result),
                 _ => panic!("Newly created WasmBinary must be compiled or deserialized."),
             };
+        self.observe_metrics(&serialized_module.imports_details);
         let exported_functions = serialized_module.exported_functions.clone();
         let wasm_metadata = serialized_module.wasm_metadata.clone();
         let mut wasm_page_map = PageMap::default();
@@ -338,6 +353,12 @@ impl WasmExecutorImpl {
     pub fn observe_metrics(&self, imports_details: &WasmImportsDetails) {
         if imports_details.imports_call_simple {
             self.metrics.imports_call_simple.inc();
+        }
+        if imports_details.imports_controller_size {
+            self.metrics.imports_controller_size.inc();
+        }
+        if imports_details.imports_controller_copy {
+            self.metrics.imports_controller_copy.inc();
         }
         if imports_details.imports_call_cycles_add {
             self.metrics.imports_call_cycles_add.inc();

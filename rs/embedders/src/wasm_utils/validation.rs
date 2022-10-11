@@ -14,6 +14,7 @@ use parity_wasm::elements::{
     Instruction::{self},
     Internal, Module, Section, Type, ValueType,
 };
+use serde::{Deserialize, Serialize};
 use std::{
     cmp,
     collections::{BTreeMap, HashMap, HashSet},
@@ -691,6 +692,8 @@ fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &
     }
     match field {
         "call_simple" => import_details.imports_call_simple = true,
+        "controller_size" => import_details.imports_controller_size = true,
+        "controller_copy" => import_details.imports_controller_copy = true,
         "call_cycles_add" => import_details.imports_call_cycles_add = true,
         "canister_cycle_balance" => import_details.imports_canister_cycle_balance = true,
         "msg_cycles_available" => import_details.imports_msg_cycles_available = true,
@@ -1119,10 +1122,12 @@ fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
     })
 }
 
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.
     pub imports_call_simple: bool,
+    pub imports_controller_size: bool,
+    pub imports_controller_copy: bool,
     pub imports_call_cycles_add: bool,
     pub imports_canister_cycle_balance: bool,
     pub imports_msg_cycles_available: bool,

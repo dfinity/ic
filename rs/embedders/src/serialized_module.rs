@@ -10,7 +10,7 @@ use wasmtime::Module;
 
 use crate::wasm_utils::{
     instrumentation::{InstrumentationOutput, Segments},
-    validation::WasmValidationDetails,
+    validation::{WasmImportsDetails, WasmValidationDetails},
 };
 
 /// A `wasmtime::Module` that has been serialized.
@@ -69,6 +69,8 @@ pub struct SerializedModule {
     pub wasm_metadata: WasmMetadata,
     /// Compiling the canister is equivalent to executing this many instructions.
     pub compilation_cost: NumInstructions,
+    /// Imported System API functions that are deprecated, should become deprecated, or should only be used by NNS canisters.
+    pub imports_details: WasmImportsDetails,
 }
 
 impl SerializedModule {
@@ -89,6 +91,7 @@ impl SerializedModule {
             data_segments: instrumentation_output.data,
             wasm_metadata: validation_details.wasm_metadata,
             compilation_cost: instrumentation_output.compilation_cost,
+            imports_details: validation_details.imports_details,
         })
     }
 

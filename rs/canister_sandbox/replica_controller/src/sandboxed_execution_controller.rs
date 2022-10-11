@@ -10,6 +10,7 @@ use ic_embedders::wasm_executor::{
     get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, PausedWasmExecution,
     WasmExecutionResult, WasmExecutor,
 };
+use ic_embedders::wasm_utils::validation::WasmImportsDetails;
 use ic_embedders::{CompilationCache, CompilationResult, WasmExecutionInput};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 #[cfg(target_os = "linux")]
@@ -86,6 +87,19 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_sandbox_create_exe_state_deserialize_duration: Histogram,
     sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration: Histogram,
     sandboxed_execution_replica_cache_lookups: IntCounterVec,
+    // TODO(EXC-365): Remove these metrics once we confirm that no module imports these IC0 methods
+    // anymore.
+    sandboxed_execution_wasm_imports_call_simple: IntCounter,
+    sandboxed_execution_wasm_imports_controller_size: IntCounter,
+    sandboxed_execution_wasm_imports_controller_copy: IntCounter,
+    // TODO(EXC-376): Remove these metrics once we confirm that no module imports these IC0 methods
+    // anymore.
+    sandboxed_execution_wasm_imports_call_cycles_add: IntCounter,
+    sandboxed_execution_wasm_imports_canister_cycle_balance: IntCounter,
+    sandboxed_execution_wasm_imports_msg_cycles_available: IntCounter,
+    sandboxed_execution_wasm_imports_msg_cycles_refunded: IntCounter,
+    sandboxed_execution_wasm_imports_msg_cycles_accept: IntCounter,
+    sandboxed_execution_wasm_imports_mint_cycles: IntCounter,
 }
 
 impl SandboxedExecutionMetrics {
@@ -206,7 +220,43 @@ impl SandboxedExecutionMetrics {
             sandboxed_execution_replica_cache_lookups: metrics_registry.int_counter_vec(
                 "sandboxed_execution_replica_cache_lookups", 
                 "Results from looking up a wasm module in the embedder cache or compilation cache", 
-                &["lookup_result"])
+                &["lookup_result"]),
+            sandboxed_execution_wasm_imports_call_simple: metrics_registry.int_counter(
+                "sandboxed_execution_wasm_imports_call_simple_total",
+                "The number of Wasm modules that import ic0.call_simple",
+            ),
+            sandboxed_execution_wasm_imports_controller_size: metrics_registry.int_counter(
+                "sandboxed_execution_wasm_imports_controller_size_total",
+                "The number of Wasm modules that import ic0.controller_size",
+            ),
+            sandboxed_execution_wasm_imports_controller_copy: metrics_registry.int_counter(
+                "sandboxed_execution_wasm_imports_controller_copy_total",
+                "The number of Wasm modules that import ic0.controller_copy",
+            ),
+            sandboxed_execution_wasm_imports_call_cycles_add: metrics_registry.int_counter(
+                "sandboxed_execution_wasm_imports_call_cycles_add",
+                "The number of Wasm modules that import ic0.call_cycles_add",
+            ),
+            sandboxed_execution_wasm_imports_canister_cycle_balance: metrics_registry.int_counter(
+                "sandboxed_execution_wasm_imports_canister_cycle_balance",
+                "The number of Wasm modules that import ic0.canister_cycle_balance",
+            ),
+            sandboxed_execution_wasm_imports_msg_cycles_available: metrics_registry.int_counter(
+                "sandboxed_execution_wasm_imports_msg_cycles_available",
+                "The number of Wasm modules that import ic0.msg_cycles_available",
+            ),
+            sandboxed_execution_wasm_imports_msg_cycles_refunded: metrics_registry.int_counter(
+                "sandboxed_execution_wasm_imports_msg_cycles_refunded",
+                "The number of Wasm modules that import ic0.msg_cycles_refunded",
+            ),
+            sandboxed_execution_wasm_imports_msg_cycles_accept: metrics_registry.int_counter(
+                "sandboxed_execution_wasm_imports_msg_cycles_accept",
+                "The number of Wasm modules that import ic0.msg_cycles_accept",
+            ),
+            sandboxed_execution_wasm_imports_mint_cycles: metrics_registry.int_counter(
+                "sandboxed_execution_wasm_imports_mint_cycles",
+                "The number of Wasm modules that import ic0.mint_cycles",
+            ),
         }
     }
 
@@ -714,6 +764,7 @@ impl WasmExecutor for SandboxedExecutionController {
             .metrics
             .sandboxed_execution_replica_create_exe_state_finish_duration
             .start_timer();
+        observe_metrics(&self.metrics, &serialized_module.imports_details);
 
         cache_opened_wasm(
             &mut *wasm_binary.embedder_cache.lock().unwrap(),
@@ -756,6 +807,50 @@ impl WasmExecutor for SandboxedExecutionController {
             serialized_module.compilation_cost,
             compilation_result,
         ))
+    }
+}
+
+fn observe_metrics(metrics: &SandboxedExecutionMetrics, imports_details: &WasmImportsDetails) {
+    if imports_details.imports_call_simple {
+        metrics.sandboxed_execution_wasm_imports_call_simple.inc();
+    }
+    if imports_details.imports_controller_size {
+        metrics
+            .sandboxed_execution_wasm_imports_controller_size
+            .inc();
+    }
+    if imports_details.imports_controller_copy {
+        metrics
+            .sandboxed_execution_wasm_imports_controller_copy
+            .inc();
+    }
+    if imports_details.imports_call_cycles_add {
+        metrics
+            .sandboxed_execution_wasm_imports_call_cycles_add
+            .inc();
+    }
+    if imports_details.imports_canister_cycle_balance {
+        metrics
+            .sandboxed_execution_wasm_imports_canister_cycle_balance
+            .inc();
+    }
+    if imports_details.imports_msg_cycles_available {
+        metrics
+            .sandboxed_execution_wasm_imports_msg_cycles_available
+            .inc();
+    }
+    if imports_details.imports_msg_cycles_accept {
+        metrics
+            .sandboxed_execution_wasm_imports_msg_cycles_accept
+            .inc();
+    }
+    if imports_details.imports_msg_cycles_refunded {
+        metrics
+            .sandboxed_execution_wasm_imports_msg_cycles_refunded
+            .inc();
+    }
+    if imports_details.imports_mint_cycles {
+        metrics.sandboxed_execution_wasm_imports_mint_cycles.inc();
     }
 }
 
@@ -1172,6 +1267,7 @@ fn open_wasm(
             {
                 Ok((compilation_result, serialized_module)) => {
                     cache_opened_wasm(&mut *embedder_cache, sandbox_process, wasm_id);
+                    observe_metrics(metrics, &serialized_module.imports_details);
                     compilation_cache.insert(&wasm_binary.binary, Ok(Arc::new(serialized_module)));
                     Ok((wasm_id, Some(compilation_result)))
                 }
@@ -1189,6 +1285,7 @@ fn open_wasm(
         }
         Some(Ok(serialized_module)) => {
             metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
+            observe_metrics(metrics, &serialized_module.imports_details);
             sandbox_process
                 .history
                 .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));

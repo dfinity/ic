@@ -1,6 +1,7 @@
 use ic_canister_sandbox_common::protocol::sbxsvc;
 use ic_canister_sandbox_common::*;
 use ic_embedders::wasm_utils::instrumentation::Segments;
+use ic_embedders::wasm_utils::validation::WasmImportsDetails;
 use ic_embedders::{CompilationResult, SerializedModule, SerializedModuleBytes};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 use ic_types::NumInstructions;
@@ -34,6 +35,7 @@ impl sandbox_service::SandboxService for DummySandboxService {
                 data_segments: Segments::default(),
                 wasm_metadata: WasmMetadata::default(),
                 compilation_cost: NumInstructions::from(0),
+                imports_details: WasmImportsDetails::default(),
             },
         )))))
     }
