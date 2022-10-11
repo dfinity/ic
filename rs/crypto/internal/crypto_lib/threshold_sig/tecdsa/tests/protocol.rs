@@ -1,9 +1,9 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::*;
 use rand::Rng;
 use std::collections::BTreeMap;
 
-mod test_rng;
 mod test_utils;
 
 use crate::test_utils::*;
@@ -18,7 +18,7 @@ fn insufficient_dealings(r: Result<ProtocolRound, ThresholdEcdsaError>) {
 
 #[test]
 fn should_reshare_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
-    let random_seed = Seed::from_rng(&mut test_rng::test_rng());
+    let random_seed = Seed::from_rng(&mut reproducible_rng());
     let setup = ProtocolSetup::new(EccCurveType::K256, 4, 2, random_seed)?;
 
     let no_corruption = 0; // number of corrupted dealings == 0
@@ -79,7 +79,7 @@ fn should_reshare_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
 
 #[test]
 fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
-    let random_seed = Seed::from_rng(&mut test_rng::test_rng());
+    let random_seed = Seed::from_rng(&mut reproducible_rng());
     let setup = ProtocolSetup::new(EccCurveType::K256, 4, 2, random_seed)?;
 
     let dealers = 4;
@@ -115,7 +115,7 @@ fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
 
 #[test]
 fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
-    let random_seed = Seed::from_rng(&mut test_rng::test_rng());
+    let random_seed = Seed::from_rng(&mut reproducible_rng());
     let mut setup = ProtocolSetup::new(EccCurveType::K256, 5, 2, random_seed)?;
 
     let no_corruption = 0; // number of corrupted dealings == 0
@@ -154,7 +154,7 @@ fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEc
 
 #[test]
 fn should_multiply_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
-    let random_seed = Seed::from_rng(&mut test_rng::test_rng());
+    let random_seed = Seed::from_rng(&mut reproducible_rng());
     let mut setup = ProtocolSetup::new(EccCurveType::K256, 5, 2, random_seed)?;
 
     let corrupted_dealings = 1;
@@ -191,7 +191,7 @@ fn random_subset(
 ) -> BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal> {
     assert!(include <= shares.len());
 
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
     let mut result = BTreeMap::new();
 
     let keys = shares.keys().collect::<Vec<_>>();
@@ -223,7 +223,7 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
     let threshold = nodes / 3;
     let number_of_dealings_corrupted = threshold;
 
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
     let random_seed = Seed::from_rng(&mut rng);
 
     let setup = SignatureProtocolSetup::new(

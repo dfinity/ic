@@ -1,6 +1,5 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
-
-mod test_rng;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 #[test]
 fn not_affected_by_point_serialization_bug() -> ThresholdEcdsaResult<()> {
@@ -41,7 +40,7 @@ fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
         assert_eq!(b, b2);
     }
 
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
 
     for curve_type in EccCurveType::all() {
         let identity = EccPoint::identity(curve_type);
@@ -158,7 +157,7 @@ fn p256_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
 
     for curve in EccCurveType::all() {
         let zero = EccScalar::zero(curve);
@@ -199,7 +198,7 @@ fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
     for curve_type in EccCurveType::all() {
         for window_size in [3, 4, 5, 6, 7] {
             // 0, 1, -1 (maximum value), 100 random values
@@ -231,7 +230,7 @@ fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_point_negate() -> ThresholdEcdsaResult<()> {
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
 
     for curve_type in EccCurveType::all() {
         let id = EccPoint::identity(curve_type);
@@ -260,7 +259,7 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
     assert_eq!(EccPoint::MIN_LUT_WINDOW_SIZE, 3);
     assert_eq!(EccPoint::MAX_LUT_WINDOW_SIZE, 7);
 
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
 
     for curve_type in EccCurveType::all() {
         for window_size in [3, 4, 5, 6, 7] {
