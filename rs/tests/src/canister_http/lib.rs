@@ -20,6 +20,11 @@ pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
+pub enum PemType {
+    PemCert,
+    PemKey,
+}
+
 pub fn get_universal_vm_activation_script() -> String {
     fs::read_to_string("src/canister_http/universal_vm_activation.sh").expect("File not found")
 }
@@ -55,12 +60,12 @@ pub fn config(env: TestEnv) {
     let _ = insert_file_to_config(
         config_dir.clone(),
         "cert.pem",
-        get_environment_variable_value("DEV_ROOT_CA").as_bytes(),
+        get_pem_content(&PemType::PemCert).as_bytes(),
     );
     let _ = insert_file_to_config(
         config_dir.clone(),
         "key.pem",
-        get_environment_variable_value("DEV_ROOT_CA_KEY").as_bytes(),
+        get_pem_content(&PemType::PemKey).as_bytes(),
     );
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
@@ -84,13 +89,17 @@ pub fn config(env: TestEnv) {
     install_nns_canisters(&env);
 }
 
-fn get_environment_variable_value(name: &str) -> String {
+pub fn get_pem_content(typ: &PemType) -> String {
     // The environment variable could be a regular variable, or could be a file variable.
-    // For file variable, the variable's value is address to a file. In this case, we read the content
-    // of the file as the real value of the environment variable.
     // For regular variable, we just directly read the value of the variable.
+    // For file variable, the variable's value is address to a file. In this case,
+    // we return the content of the file.
+    let name = match typ {
+        PemType::PemCert => "DEV_ROOT_CA",
+        PemType::PemKey => "DEV_ROOT_CA_KEY",
+    };
     let dev_root_ca_value =
-        env::var(name).expect("Expected environment variable $DEV_ROOT_CA not found!");
+        env::var(name).expect("Expected environment variable {name} not found!");
     match fs::read_to_string(dev_root_ca_value.clone()) {
         Ok(content) => content,
         Err(_) => dev_root_ca_value,

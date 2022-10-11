@@ -10,17 +10,27 @@ Success:: The ic-ref-test binary does not return an error.
 
 end::catalog[] */
 
-use crate::driver::ic::InternetComputer;
-use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
+use crate::canister_http::lib::{
+    get_pem_content, get_universal_vm_activation_script, get_universal_vm_address, PemType,
+};
+use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+};
+use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use slog::info;
+use slog::{info, Logger};
 use std::process::{Command, Stdio};
 
-use crate::util;
+pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
 const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
+    // tECDSA is not enabled in the test yet
+    "$0 ~ /tECDSA/",
     // the replica does not yet check that the effective canister id is valid
     "$0 ~ /wrong effective canister id/",
     "$0 ~ /access denied two status to different canisters/",
@@ -30,33 +40,91 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /metadata.absent/",
 ];
 
-pub fn ic_with_system_subnet() -> InternetComputer {
-    InternetComputer::new().add_fast_single_node_subnet(SubnetType::System)
+pub fn config(env: TestEnv) {
+    // Set up Universal VM with HTTP Bin testing service
+    let activate_script = &get_universal_vm_activation_script()[..];
+    let config_dir = env
+        .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
+        .unwrap();
+    let _ = insert_file_to_config(
+        config_dir.clone(),
+        "cert.pem",
+        get_pem_content(&PemType::PemCert).as_bytes(),
+    );
+    let _ = insert_file_to_config(
+        config_dir.clone(),
+        "key.pem",
+        get_pem_content(&PemType::PemKey).as_bytes(),
+    );
+
+    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+        .with_config_dir(config_dir)
+        .start(&env)
+        .expect("failed to set up universal VM");
+
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(1),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(1),
+        )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
-pub fn test_system_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let endpoint = util::get_random_root_node_endpoint(&handle, &mut ctx.rng.clone());
-    util::block_on(endpoint.assert_ready(ctx));
-    with_endpoint(endpoint, ctx, EXCLUDED.to_vec());
-}
-
-pub fn ic_with_app_subnet() -> InternetComputer {
-    InternetComputer::new().add_fast_single_node_subnet(SubnetType::Application)
-}
-
-pub fn test_app_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let endpoint = util::get_random_application_node_endpoint(&handle, &mut ctx.rng.clone());
-    util::block_on(endpoint.assert_ready(ctx));
+pub fn test_system_subnet(env: TestEnv) {
+    let log = env.logger();
+    let topology_snapshot = env.topology_snapshot();
+    let subnet = topology_snapshot.root_subnet();
+    let node = subnet.nodes().next().unwrap();
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let httpbin = format!("https://[{webserver_ipv6}]:20443");
     with_endpoint(
-        endpoint,
-        ctx,
-        [EXCLUDED.to_vec(), vec!["$0 ~ /Canister signatures/"]].concat(),
+        node,
+        httpbin,
+        log,
+        [EXCLUDED.to_vec(), vec!["$0 ~ /only_application/"]].concat(),
+    );
+}
+
+pub fn test_app_subnet(env: TestEnv) {
+    let log = env.logger();
+    let topology_snapshot = env.topology_snapshot();
+    let subnet = topology_snapshot
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let node = subnet.nodes().next().unwrap();
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let httpbin = format!("https://[{webserver_ipv6}]:20443");
+    with_endpoint(
+        node,
+        httpbin,
+        log,
+        [EXCLUDED.to_vec(), vec!["$0 ~ /only_system/"]].concat(),
     );
 }
 
 pub fn with_endpoint(
-    endpoint: &IcEndpoint,
-    ctx: &ic_fondue::pot::Context,
+    endpoint: IcNodeSnapshot,
+    httpbin: String,
+    log: Logger,
     excluded_tests: Vec<&str>,
 ) {
     let status = Command::new("ic-ref-test")
@@ -64,16 +132,14 @@ pub fn with_endpoint(
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests))
         .arg("--endpoint")
-        .arg(endpoint.url.as_str())
+        .arg(endpoint.get_public_url().to_string())
+        .arg("--httpbin")
+        .arg(&httpbin)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
         .expect("ic-ref-test binary crashed");
-    info!(
-        &ctx.logger,
-        "{}",
-        format!("Status of ic-ref-test: {:?}", &status)
-    );
+    info!(log, "{}", format!("Status of ic-ref-test: {:?}", &status));
     assert!(status.success());
 }
 
