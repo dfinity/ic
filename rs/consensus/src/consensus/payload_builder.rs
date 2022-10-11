@@ -19,7 +19,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_types::{
-    batch::{BatchPayload, ValidationContext, MAX_BITCOIN_BLOCK_SIZE},
+    batch::{BatchPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
     Height, NumBytes, SubnetId, Time,
@@ -198,7 +198,7 @@ impl PayloadBuilderImpl {
     /// checks the invariants. Emits a warning in case the invariants are not
     /// met.
     fn get_max_block_payload_size_bytes(&self, subnet_record: &SubnetRecord) -> NumBytes {
-        let required_min_size = MAX_BITCOIN_BLOCK_SIZE
+        let required_min_size = MAX_BITCOIN_PAYLOAD_IN_BYTES
             .max(MAX_XNET_PAYLOAD_IN_BYTES.get())
             .max(subnet_record.max_ingress_bytes_per_message);
 
