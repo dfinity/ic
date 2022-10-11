@@ -9,7 +9,7 @@ def _docker_tar_impl(ctx):
 
     ctx.actions.run(
         executable = tool.path,
-        arguments = ["-o", out.path] + ctx.attr.extra_args_before + ["--", in_dir.path] + ctx.attr.extra_args_after,
+        arguments = ["-o", out.path, "--", in_dir.path] + ctx.attr.extra_args,
         inputs = [in_dir] + ctx.files.dep,
         outputs = [out],
         tools = [tool],
@@ -27,8 +27,7 @@ docker_tar = rule(
         "dep": attr.label_list(
             allow_files = True,
         ),
-        "extra_args_before": attr.string_list(),
-        "extra_args_after": attr.string_list(),
+        "extra_args": attr.string_list(),
         "_build_docker_save_tool": attr.label(
             allow_files = True,
             default = ":docker_tar.py",
@@ -297,7 +296,7 @@ def _sha256sum_impl(ctx):
         command = "cat {} | sha256sum | sed -e 's/ \\+-/{}/' > {}".format(input_paths, ctx.attr.suffix, out.path),
     )
 
-    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles([out]))]
+    return [DefaultInfo(files = depset([out]))]
 
 sha256sum = rule(
     implementation = _sha256sum_impl,
@@ -329,7 +328,7 @@ def summary_sha256sum(name, inputs, suffix = ""):
         all_deps.update(deps)
     labels = []
     for dep in all_deps.keys():
-        label = name + "@" + dep.split(":")[1] + ".sha256"
+        label = dep.split(":")[1] + ".sha256"
         sha256sum(
             name = label,
             srcs = [dep],

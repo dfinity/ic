@@ -14,13 +14,11 @@ FLAGS = gflags.FLAGS
 def main(argv):
     argv = FLAGS(argv)
 
-    prefix = os.getenv("DATA_PREFIX", "")
+    version = open("ic-os/guestos/version.txt.wrapped", "r").read().strip()
 
-    version = open(f"ic-os/guestos/{prefix}version.txt", "r").read().strip()
+    img_hash = open("ic-os/guestos/disk.img.tar.zstd.sha256.wrapped", "r").read().strip()
 
-    img_hash = open(f"ic-os/guestos/{prefix}disk-img.tar.zst.sha256", "r").read().strip()
-
-    url = open(f"ic-os/guestos/{prefix}upload_guestos_{prefix}disk-img.tar.zst.url", "r").read().split()[0]
+    url = open("ic-os/guestos/upload_guestos_disk.img.tar.zstd.url", "r").read().split()[0]
 
     FLAGS.ic_prep_bin = "rs/prep/ic-prep"
 

@@ -251,7 +251,6 @@ def main(
     SHELL_WRAPPER = os.getenv("SHELL_WRAPPER", default=SHELL_WRAPPER_DEFAULT)
     SSH_KEY_DIR = os.getenv("SSH_KEY_DIR", default=None)
     IC_VERSION_ID = os.getenv("IC_VERSION_ID", default="")
-    GUESTOS_VERSION_OVERRIDE = os.getenv("GUESTOS_VERSION_OVERRIDE", default=IC_VERSION_ID)
     JOB_ID = os.getenv("CI_JOB_ID", default=None)
     CI_PARENT_PIPELINE_SOURCE = os.getenv("CI_PARENT_PIPELINE_SOURCE", default="")
     CI_PIPELINE_SOURCE = os.getenv("CI_PIPELINE_SOURCE", default="")
@@ -313,9 +312,8 @@ def main(
         )
     TEST_ES_HOSTNAMES = replace_symbols(text=TEST_ES_HOSTNAMES, symbols_to_replace=["`", "'", " "], replace_with="")
 
-    GUESTOS_BASE_URL = f"http://download.proxy-global.dfinity.network:8080/ic/{GUESTOS_VERSION_OVERRIDE}"
     IMG_BASE_URL = f"http://download.proxy-global.dfinity.network:8080/ic/{IC_VERSION_ID}"
-    IC_OS_DEV_IMG_SHA256, IC_OS_DEV_IMG_URL = get_ic_os_image_sha(f"{GUESTOS_BASE_URL}/guest-os/disk-img-dev/")
+    IC_OS_DEV_IMG_SHA256, IC_OS_DEV_IMG_URL = get_ic_os_image_sha(f"{IMG_BASE_URL}/guest-os/disk-img-dev/")
     BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL = get_ic_os_image_sha(f"{IMG_BASE_URL}/boundary-os/disk-img-dev/")
     BOUNDARY_NODE_SNP_IMG_SHA256, BOUNDARY_NODE_SNP_IMG_URL = get_ic_os_image_sha(
         f"{IMG_BASE_URL}/boundary-os/disk-img-snp-dev/"
