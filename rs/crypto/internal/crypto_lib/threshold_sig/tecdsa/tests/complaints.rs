@@ -1,15 +1,14 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::collections::BTreeMap;
-
-mod test_rng;
 
 #[test]
 fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
     let associated_data = b"assoc_data_test";
 
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
 
     let sk0 = MEGaPrivateKey::generate(curve, &mut rng)?;
     let pk0 = sk0.public_key()?;
@@ -207,7 +206,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
     let curve = EccCurveType::K256;
     let associated_data = b"assoc_data_test";
 
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
 
     let sk = MEGaPrivateKey::generate(curve, &mut rng)?;
     let pk = sk.public_key()?;

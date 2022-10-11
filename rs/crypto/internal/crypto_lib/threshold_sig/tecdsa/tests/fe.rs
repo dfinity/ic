@@ -1,10 +1,9 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::RngCore;
 
-mod test_rng;
-
 fn random_field_element(curve_type: EccCurveType) -> EccFieldElement {
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
 
     let mut buf = vec![0u8; curve_type.field_bytes()];
 
@@ -92,7 +91,7 @@ fn test_ct_assign_is_conditional() -> Result<(), ThresholdEcdsaError> {
 
 #[test]
 fn test_from_bytes_is_inverse_of_as_bytes() {
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
 
     for curve_type in EccCurveType::all() {
         for _trial in 0..1000 {

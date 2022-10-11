@@ -28,6 +28,7 @@ lazy_static = "1.4.0"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 k256 = { version = "0.11", features = ["ecdsa"] }
 bip32 = { version = "0.4", features = ["secp256k1"] }
 num-traits = { version = "0.2.15" }

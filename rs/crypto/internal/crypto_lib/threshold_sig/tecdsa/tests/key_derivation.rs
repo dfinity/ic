@@ -1,8 +1,7 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::convert::{TryFrom, TryInto};
-
-mod test_rng;
 
 #[allow(dead_code)]
 mod test_utils;
@@ -26,7 +25,7 @@ fn test_index_next_behavior() {
 
 #[test]
 fn test_that_key_derivation_on_secp256r1_currently_fails() -> Result<(), ThresholdEcdsaError> {
-    let mut rng = test_rng::test_rng();
+    let mut rng = reproducible_rng();
     let path = DerivationPath::new_bip32(&[1, 2, 3]);
     let master_key = EccPoint::hash_to_point(
         EccCurveType::P256,
@@ -103,7 +102,7 @@ fn should_bip32_derivation_match_external_lib() -> Result<(), ThresholdEcdsaErro
     let nodes = 9;
     let threshold = 2;
 
-    let random_seed = Seed::from_rng(&mut test_rng::test_rng());
+    let random_seed = Seed::from_rng(&mut reproducible_rng());
 
     let setup =
         SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, threshold, random_seed)?;

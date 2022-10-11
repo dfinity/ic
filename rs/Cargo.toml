@@ -64,6 +64,7 @@ members = [
   "crypto/internal/crypto_service_provider/protobuf_generator",
   "crypto/internal/csp_test_utils",
   "crypto/internal/logmon",
+  "crypto/test_utils/reproducible_rng",
   "crypto/internal/test_vectors",
   "crypto/node_key_validation",
   "crypto/getrandom_for_wasm",

@@ -5086,6 +5086,7 @@ dependencies = [
  "ic-crypto-internal-seed",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "k256",
  "lazy_static",
@@ -5252,6 +5253,14 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-types",
  "rand 0.8.5",
+]
+
+[[package]]
+name = "ic-crypto-test-utils-reproducible-rng"
+version = "0.1.0"
+dependencies = [
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
