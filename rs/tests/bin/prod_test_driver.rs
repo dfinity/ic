@@ -1089,21 +1089,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
 
     m.add_suite(suite(
         "spec_compliance",
-        vec![
-            pot(
-                "spec_compliance_with_system_subnet",
-                spec_compliance::ic_with_system_subnet(),
-                seq(vec![t(
-                    "with_system_subnet",
-                    spec_compliance::test_system_subnet,
-                )]),
-            ),
-            pot(
-                "spec_compliance_with_app_subnet",
-                spec_compliance::ic_with_app_subnet(),
-                seq(vec![t("with_app_subnet", spec_compliance::test_app_subnet)]),
-            ),
-        ],
+        vec![pot_with_setup(
+            "spec_compliance",
+            spec_compliance::config,
+            par(vec![
+                sys_t("with_system_subnet", spec_compliance::test_system_subnet),
+                sys_t("with_app_subnet", spec_compliance::test_app_subnet),
+            ]),
+        )],
     ));
 
     let network_robustness_loss = networking::network_robustness::loss_config();
