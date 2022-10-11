@@ -104,21 +104,14 @@ impl EcdsaComplaintHandlerImpl {
         let active_transcripts = self.active_transcripts(block_reader);
 
         // Collection of duplicate <complainer Id, transcript Id, dealer Id>
-        let mut complaint_keys = BTreeSet::new();
-        let mut duplicate_keys = BTreeSet::new();
-        for (_, signed_complaint) in ecdsa_pool.unvalidated().complaints() {
-            let key = ComplaintKey::from(&signed_complaint);
-            if !complaint_keys.insert(key.clone()) {
-                duplicate_keys.insert(key.clone());
-            }
-        }
+        let mut validated_complaints = BTreeSet::new();
 
         let mut ret = Vec::new();
         for (id, signed_complaint) in ecdsa_pool.unvalidated().complaints() {
             let complaint = signed_complaint.get();
             // Remove the duplicate entries
             let key = ComplaintKey::from(&signed_complaint);
-            if duplicate_keys.contains(&key) {
+            if validated_complaints.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_complaints_in_batch");
                 ret.push(EcdsaChangeAction::HandleInvalid(
@@ -152,12 +145,15 @@ impl EcdsaComplaintHandlerImpl {
                         match self.resolve_ref(transcript_ref, block_reader, "validate_complaints")
                         {
                             Some(transcript) => {
-                                let mut changes = self.crypto_verify_complaint(
+                                let action = self.crypto_verify_complaint(
                                     &id,
                                     &transcript,
                                     &signed_complaint,
                                 );
-                                ret.append(&mut changes);
+                                if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
+                                    validated_complaints.insert(key);
+                                }
+                                ret.append(&mut action.into_iter().collect());
                             }
                             None => {
                                 ret.push(EcdsaChangeAction::HandleInvalid(
@@ -227,15 +223,8 @@ impl EcdsaComplaintHandlerImpl {
     ) -> EcdsaChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
 
-        // Collection of duplicate <opener id, complainer Id, transcript Id, dealer Id>
-        let mut opening_keys = BTreeSet::new();
-        let mut duplicate_keys = BTreeSet::new();
-        for (_, signed_opening) in ecdsa_pool.unvalidated().openings() {
-            let key = OpeningKey::from(&signed_opening);
-            if !opening_keys.insert(key.clone()) {
-                duplicate_keys.insert(key.clone());
-            }
-        }
+        // Collection of validated openings
+        let mut validated_openings = BTreeSet::new();
 
         let mut ret = Vec::new();
         for (id, signed_opening) in ecdsa_pool.unvalidated().openings() {
@@ -243,7 +232,7 @@ impl EcdsaComplaintHandlerImpl {
 
             // Remove duplicate entries
             let key = OpeningKey::from(&signed_opening);
-            if duplicate_keys.contains(&key) {
+            if validated_openings.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_openings_in_batch");
                 ret.push(EcdsaChangeAction::HandleInvalid(
@@ -276,13 +265,16 @@ impl EcdsaComplaintHandlerImpl {
                     {
                         match self.resolve_ref(transcript_ref, block_reader, "validate_openings") {
                             Some(transcript) => {
-                                let mut changes = self.crypto_verify_opening(
+                                let action = self.crypto_verify_opening(
                                     &id,
                                     &transcript,
                                     &signed_opening,
                                     &signed_complaint,
                                 );
-                                ret.append(&mut changes);
+                                if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
+                                    validated_openings.insert(key);
+                                }
+                                ret.append(&mut action.into_iter().collect());
                             }
                             None => {
                                 ret.push(EcdsaChangeAction::HandleInvalid(
@@ -428,7 +420,7 @@ impl EcdsaComplaintHandlerImpl {
         id: &EcdsaMessageId,
         transcript: &IDkgTranscript,
         signed_complaint: &EcdsaComplaint,
-    ) -> EcdsaChangeSet {
+    ) -> Option<EcdsaChangeAction> {
         let complaint = signed_complaint.get();
 
         // Verify the signature
@@ -439,13 +431,13 @@ impl EcdsaComplaintHandlerImpl {
             if error.is_reproducible() {
                 self.metrics
                     .complaint_errors_inc("verify_complaint_signature_permanent");
-                return vec![EcdsaChangeAction::HandleInvalid(
+                return Some(EcdsaChangeAction::HandleInvalid(
                     id.clone(),
                     format!(
                         "Complaint signature validation(permanent error): {}, error = {:?}",
                         signed_complaint, error
                     ),
-                )];
+                ));
             } else {
                 // Defer in case of transient errors
                 debug!(
@@ -456,7 +448,7 @@ impl EcdsaComplaintHandlerImpl {
                 );
                 self.metrics
                     .complaint_errors_inc("verify_complaint_signature_transient");
-                return Default::default();
+                return None;
             }
         }
 
@@ -471,13 +463,13 @@ impl EcdsaComplaintHandlerImpl {
                     if error.is_reproducible() {
                         self.metrics
                             .complaint_errors_inc("verify_complaint_permanent");
-                        vec![EcdsaChangeAction::HandleInvalid(
+                        Some(EcdsaChangeAction::HandleInvalid(
                             id.clone(),
                             format!(
                                 "Complaint validation(permanent error): {}, error = {:?}",
                                 signed_complaint, error
                             ),
-                        )]
+                        ))
                     } else {
                         debug!(
                             self.log,
@@ -487,12 +479,12 @@ impl EcdsaComplaintHandlerImpl {
                         );
                         self.metrics
                             .complaint_errors_inc("verify_complaint_transient");
-                        Default::default()
+                        None
                     }
                 },
                 |()| {
                     self.metrics.complaint_metrics_inc("complaint_received");
-                    vec![EcdsaChangeAction::MoveToValidated(id.clone())]
+                    Some(EcdsaChangeAction::MoveToValidated(id.clone()))
                 },
             )
     }
@@ -555,7 +547,7 @@ impl EcdsaComplaintHandlerImpl {
         transcript: &IDkgTranscript,
         signed_opening: &EcdsaOpening,
         signed_complaint: &EcdsaComplaint,
-    ) -> EcdsaChangeSet {
+    ) -> Option<EcdsaChangeAction> {
         let opening = signed_opening.get();
         let complaint = signed_complaint.get();
 
@@ -567,13 +559,13 @@ impl EcdsaComplaintHandlerImpl {
             if error.is_reproducible() {
                 self.metrics
                     .complaint_errors_inc("verify_opening_signature_permanent");
-                return vec![EcdsaChangeAction::HandleInvalid(
+                return Some(EcdsaChangeAction::HandleInvalid(
                     id.clone(),
                     format!(
                         "Opening signature validation(permanent error): {}, error = {:?}",
                         signed_opening, error
                     ),
-                )];
+                ));
             } else {
                 debug!(
                     self.log,
@@ -583,7 +575,7 @@ impl EcdsaComplaintHandlerImpl {
                 );
                 self.metrics
                     .complaint_errors_inc("verify_opening_signature_transient");
-                return Default::default();
+                return None;
             }
         }
 
@@ -600,13 +592,13 @@ impl EcdsaComplaintHandlerImpl {
                     if error.is_reproducible() {
                         self.metrics
                             .complaint_errors_inc("verify_opening_permanent");
-                        vec![EcdsaChangeAction::HandleInvalid(
+                        Some(EcdsaChangeAction::HandleInvalid(
                             id.clone(),
                             format!(
                                 "Opening validation(permanent error): {}, error = {:?}",
                                 signed_opening, error
                             ),
-                        )]
+                        ))
                     } else {
                         debug!(
                             self.log,
@@ -616,12 +608,12 @@ impl EcdsaComplaintHandlerImpl {
                         );
                         self.metrics
                             .complaint_errors_inc("verify_opening_transient");
-                        Default::default()
+                        None
                     }
                 },
                 |()| {
                     self.metrics.complaint_metrics_inc("opening_received");
-                    vec![EcdsaChangeAction::MoveToValidated(id.clone())]
+                    Some(EcdsaChangeAction::MoveToValidated(id.clone()))
                 },
             )
     }
@@ -1143,8 +1135,10 @@ mod tests {
                 );
                 let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
+                // One is considered duplicate
                 assert!(is_handle_invalid(&change_set, &msg_id_1));
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                // One is considered valid
+                assert!(is_moved_to_validated(&change_set, &msg_id_2));
             })
         })
     }
@@ -1346,14 +1340,27 @@ mod tests {
                     timestamp: time_source.get_relative_time(),
                 });
 
+                // Make sure we also have matching complaints
+                let complaint = create_complaint(id_1, NODE_2, NODE_3);
+                let message = EcdsaMessage::EcdsaComplaint(complaint);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: message.clone(),
+                    peer_id: NODE_3,
+                    timestamp: time_source.get_relative_time(),
+                });
+                let change_set = vec![EcdsaChangeAction::AddToValidated(message)];
+                ecdsa_pool.apply_changes(change_set);
+
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
                 let change_set = complaint_handler.validate_openings(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
-                assert!(is_handle_invalid(&change_set, &msg_id_1));
+                // One is considered duplicate
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
+                // One is considered valid
+                assert!(is_moved_to_validated(&change_set, &msg_id_1));
             })
         })
     }
