@@ -8,50 +8,28 @@
 set -euo pipefail
 
 BUILD_OUT=${1:-"build-out/disk-img"}
-BUILD_TMP=${2:-"build-tmp"}
-UPLOAD_TARGET=${3:-"guest-os/disk-img"}
-VERSION=${4:-$(git rev-parse --verify HEAD)}
-CDPRNET=${5:-"cdpr05"}
+BUILD_MODE=${2:-"dev"}
+MALICIOUS_MODE=${3:-}
 
 ROOT_DIR=$(git rev-parse --show-toplevel)
 groups
 
-cd "$ROOT_DIR" || exit 1
-for f in replica orchestrator canister_sandbox sandbox_launcher vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit ic-recovery ic-btc-adapter ic-canister-http-adapter; do
-    gunzip -c -d artifacts/release/$f.gz >artifacts/release/$f
-done
+cd "$ROOT_DIR"/ic-os/guestos || exit 1
+mkdir -p "$BUILD_OUT"
 
-# if we are building the malicious image, use malicious replica version
-if [[ "${BUILD_EXTRA_SUFFIX}" =~ "malicious" ]]; then
-    gunzip -c -d artifacts/release-malicious/replica.gz >artifacts/release/replica
-    chmod +x artifacts/release/replica
+if [ "$BUILD_MODE" = "dev" ]; then
+    ln -sfv "$DEV_ROOT_CA" "$PWD/dev-root-ca.crt"
 fi
 
-cd "$ROOT_DIR"/ic-os/guestos || exit 1
-mkdir -p "$BUILD_OUT" "$BUILD_TMP"
-echo "$VERSION" >"${BUILD_TMP}/version.txt"
+BUILD_MODE="${BUILD_MODE}${MALICIOUS_MODE}"
 
-if [ -z "$CI_JOB_ID" ]; then
-    # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
-    ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -x ../../artifacts/release/ $BUILD_EXTRA_ARGS
-    tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
-        -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
-    tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
-        -cvf "${BUILD_OUT}/disk-img.tar.zst" --use-compress-program="zstd --threads=0 -10" \
-        -C "$BUILD_TMP" disk.img version.txt
-    ls -lah "$BUILD_TMP"
-else
-    # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
-    buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
-        ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -x ../../artifacts/release/ $BUILD_EXTRA_ARGS
-    buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \
-        tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
-        -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
-    buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \
-        tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
-        -cvf "${BUILD_OUT}/disk-img.tar.zst" --use-compress-program="zstd --threads=0 -10" \
-        -C "$BUILD_TMP" disk.img version.txt
-    ls -lah "$BUILD_TMP"
+bazel build --config=ci //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_gz //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_zst
 
+cp -fv "$ROOT_DIR"/$(bazel cquery --output=files //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_gz) "$BUILD_OUT"/disk-img.tar.gz
+cp -fv "$ROOT_DIR"/$(bazel cquery --output=files //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_zst) "$BUILD_OUT"/disk-img.tar.zst
+
+if [ -n "${CI_JOB_ID:-}" ]; then
     "$ROOT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "$BUILD_OUT"
 fi
+
+cat "$ROOT_DIR"/$(bazel cquery --output=files //ic-os/guestos:"$BUILD_MODE"_version.txt) >"$ROOT_DIR"/version.txt
