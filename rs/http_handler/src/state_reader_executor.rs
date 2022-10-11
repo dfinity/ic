@@ -6,7 +6,7 @@ use hyper::StatusCode;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::certification::Certification;
+use ic_types::{consensus::certification::Certification, Height};
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
 use tokio::sync::oneshot;
@@ -26,6 +26,11 @@ impl StateReaderExecutor {
             state_reader,
             threadpool: Arc::new(Mutex::new(ThreadPool::new(STATE_READER_EXECUTOR_THREADS))),
         }
+    }
+
+    /// The state readers exposes the latest certified height as an atomic variable, which is fast and non-blocking.
+    pub fn latest_certified_height(&self) -> Height {
+        self.state_reader.latest_certified_height()
     }
 
     pub async fn get_latest_state(&self) -> Result<Labeled<Arc<ReplicatedState>>, HttpError> {

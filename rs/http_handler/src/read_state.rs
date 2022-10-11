@@ -8,6 +8,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
+use crossbeam::atomic::AtomicCell;
 use hyper::{Body, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
 use ic_interfaces_registry::RegistryClient;
@@ -39,7 +40,7 @@ const MAX_READ_STATE_CONCURRENT_REQUESTS: usize = 100;
 pub(crate) struct ReadStateService {
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
-    health_status: Arc<RwLock<ReplicaHealthStatus>>,
+    health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     state_reader_executor: StateReaderExecutor,
     validator_executor: ValidatorExecutor,
@@ -52,7 +53,7 @@ impl ReadStateService {
     pub(crate) fn new_service(
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
-        health_status: Arc<RwLock<ReplicaHealthStatus>>,
+        health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         state_reader_executor: StateReaderExecutor,
         validator_executor: ValidatorExecutor,
@@ -105,10 +106,13 @@ impl Service<Vec<u8>> for ReadStateService {
             ])
             .observe(body.len() as f64);
 
-        if *self.health_status.read().unwrap() != ReplicaHealthStatus::Healthy {
+        if self.health_status.load() != ReplicaHealthStatus::Healthy {
             let res = make_plaintext_response(
                 StatusCode::SERVICE_UNAVAILABLE,
-                "Replica is starting. Check the /api/v2/status for more information.".to_string(),
+                format!(
+                    "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
+                    self.health_status.load(),
+                ),
             );
             return Box::pin(async move { Ok(res) });
         }

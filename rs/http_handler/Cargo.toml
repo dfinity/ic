@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 askama = "0.11.1"
 byte-unit = "4.0.14"
+crossbeam = "0.8.2"
 hex = "0.4.2"
 http = "0.2.5"
 futures = "0.3.13"

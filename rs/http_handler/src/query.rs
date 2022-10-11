@@ -7,6 +7,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
     EndpointService, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
+use crossbeam::atomic::AtomicCell;
 use futures_util::FutureExt;
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::execution_environment::QueryExecutionService;
@@ -30,7 +31,7 @@ use tower::{util::BoxCloneService, Service, ServiceBuilder};
 pub(crate) struct QueryService {
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
-    health_status: Arc<RwLock<ReplicaHealthStatus>>,
+    health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     validator_executor: ValidatorExecutor,
     registry_client: Arc<dyn RegistryClient>,
@@ -43,7 +44,7 @@ impl QueryService {
     pub(crate) fn new_service(
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
-        health_status: Arc<RwLock<ReplicaHealthStatus>>,
+        health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         validator_executor: ValidatorExecutor,
         registry_client: Arc<dyn RegistryClient>,
@@ -88,10 +89,13 @@ impl Service<Vec<u8>> for QueryService {
                 UNKNOWN_LABEL,
             ])
             .observe(body.len() as f64);
-        if *self.health_status.read().unwrap() != ReplicaHealthStatus::Healthy {
+        if self.health_status.load() != ReplicaHealthStatus::Healthy {
             let res = make_plaintext_response(
                 StatusCode::SERVICE_UNAVAILABLE,
-                "Replica is starting. Check the /api/v2/status for more information.".to_string(),
+                format!(
+                    "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
+                    self.health_status.load(),
+                ),
             );
             return Box::pin(async move { Ok(res) });
         }

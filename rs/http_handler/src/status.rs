@@ -1,5 +1,6 @@
 //! Module that deals with requests to /api/v2/status
 use crate::{common, state_reader_executor::StateReaderExecutor, EndpointService};
+use crossbeam::atomic::AtomicCell;
 use hyper::{Body, Response};
 use ic_config::http_handler::Config;
 use ic_logger::ReplicaLogger;
@@ -10,7 +11,7 @@ use ic_types::{
 };
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service,
@@ -28,7 +29,7 @@ pub(crate) struct StatusService {
     config: Config,
     nns_subnet_id: SubnetId,
     state_reader_executor: StateReaderExecutor,
-    replica_health_status: Arc<RwLock<ReplicaHealthStatus>>,
+    replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
 }
 
 impl StatusService {
@@ -37,7 +38,7 @@ impl StatusService {
         config: Config,
         nns_subnet_id: SubnetId,
         state_reader_executor: StateReaderExecutor,
-        replica_health_status: Arc<RwLock<ReplicaHealthStatus>>,
+        replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     ) -> EndpointService {
         let base_service = Self {
             log,
@@ -71,7 +72,7 @@ impl Service<Body> for StatusService {
         let nns_subnet_id = self.nns_subnet_id;
         let root_key_status = self.config.show_root_key_in_status;
         let state_reader_executor = self.state_reader_executor.clone();
-        let replica_health_status = self.replica_health_status.read().unwrap().clone();
+        let replica_health_status = self.replica_health_status.clone();
         Box::pin(async move {
             // The root key is the public key of this Internet Computer instance,
             // and is the public key of the root (i.e. NNS) subnet.
@@ -85,7 +86,7 @@ impl Service<Body> for StatusService {
                 root_key,
                 impl_version: Some(ReplicaVersion::default().to_string()),
                 impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
-                replica_health_status: Some(replica_health_status),
+                replica_health_status: Some(replica_health_status.load()),
             };
 
             Ok(common::cbor_response(&response))

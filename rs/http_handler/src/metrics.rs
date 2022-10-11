@@ -3,7 +3,7 @@ use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
     MetricsRegistry,
 };
-use prometheus::{HistogramVec, IntCounter};
+use prometheus::{HistogramVec, IntCounter, IntCounterVec};
 use tokio::time::Instant;
 
 pub const LABEL_DETAIL: &str = "detail";
@@ -11,6 +11,8 @@ pub const LABEL_PROTOCOL: &str = "protocol";
 pub const LABEL_REQUEST_TYPE: &str = "request_type";
 pub const LABEL_STATUS: &str = "status";
 pub const LABEL_TYPE: &str = "type";
+pub const LABEL_HEALTH_STATUS_BEFORE: &str = "before";
+pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 
 const STATUS_SUCCESS: &str = "success";
 const STATUS_ERROR: &str = "error";
@@ -26,6 +28,7 @@ pub(crate) struct HttpHandlerMetrics {
     pub(crate) requests: HistogramVec,
     pub(crate) requests_body_size_bytes: HistogramVec,
     pub(crate) connections_total: IntCounter,
+    pub(crate) health_status_transitions_total: IntCounterVec,
     connection_setup_duration: HistogramVec,
     connection_duration: HistogramVec,
 }
@@ -67,6 +70,11 @@ impl HttpHandlerMetrics {
             connections_total: metrics_registry.int_counter(
                 "replica_http_tcp_connections_total",
                 "Total number of accepted TCP connections."
+            ),
+            health_status_transitions_total: metrics_registry.int_counter_vec(
+                "replica_http_health_status_state_transitions_total",
+                "Number of health status state transitions",
+                &[LABEL_HEALTH_STATUS_BEFORE,LABEL_HEALTH_STATUS_AFTER]
             ),
             connection_setup_duration: metrics_registry.histogram_vec(
                 "replica_http_connection_setup_duration_seconds",

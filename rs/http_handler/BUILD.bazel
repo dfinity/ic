@@ -26,6 +26,7 @@ DEPENDENCIES = [
     "//rs/validator",
     "@crate_index//:askama",
     "@crate_index//:byte-unit",
+    "@crate_index//:crossbeam",
     "@crate_index//:futures",
     "@crate_index//:futures-util",
     "@crate_index//:hex",

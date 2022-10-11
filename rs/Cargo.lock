@@ -1648,12 +1648,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "722e23542a15cea1f65d4a1419c4cfd7a26706c70871a13a04238ca3f40f1661"
 
 [[package]]
-name = "const_fn"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce90df4c658c62f12d78f7508cf92f9173e5184a539c10bfe54a3107b3ffd0f2"
-
-[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1877,15 +1871,15 @@ dependencies = [
 
 [[package]]
 name = "crossbeam"
-version = "0.8.0"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd01a6eb3daaafa260f6fc94c3a6c36390abc2080e38e3e34ced87393fb77d80"
+checksum = "2801af0d36612ae591caa9568261fddce32ce6e08a7275ea334a06a4ad021a2c"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-channel 0.5.6",
  "crossbeam-deque 0.8.1",
- "crossbeam-epoch 0.9.1",
- "crossbeam-queue 0.3.1",
+ "crossbeam-epoch 0.9.11",
+ "crossbeam-queue 0.3.6",
  "crossbeam-utils 0.8.11",
 ]
 
@@ -1927,7 +1921,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6455c0ca19f0d2fbf751b908d5c55c1f5cbc65e03c4225427254b46890bdde1e"
 dependencies = [
  "cfg-if 1.0.0",
- "crossbeam-epoch 0.9.1",
+ "crossbeam-epoch 0.9.11",
  "crossbeam-utils 0.8.11",
 ]
 
@@ -1948,14 +1942,13 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-epoch"
-version = "0.9.1"
+version = "0.9.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1aaa739f95311c2c7887a76863f500026092fb1dce0161dab577e559ef3569d"
+checksum = "f916dfc5d356b0ed9dae65f1db9fc9770aa2851d2662b988ccf4fe3516e86348"
 dependencies = [
+ "autocfg 1.1.0",
  "cfg-if 1.0.0",
- "const_fn",
  "crossbeam-utils 0.8.11",
- "lazy_static",
  "memoffset 0.6.4",
  "scopeguard",
 ]
@@ -1972,9 +1965,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-queue"
-version = "0.3.1"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f6cb3c7f5b8e51bc3ebb73a2327ad4abdbd119dc13223f14f961d2f38486756"
+checksum = "1cd42583b04998a5363558e5f9291ee5a5ff6b49944332103f251e7479a82aa7"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils 0.8.11",
@@ -5689,6 +5682,7 @@ dependencies = [
  "askama",
  "byte-unit",
  "bytes",
+ "crossbeam 0.8.2",
  "futures",
  "futures-util",
  "hex",
@@ -6538,7 +6532,7 @@ dependencies = [
  "bytes",
  "candid",
  "canister-test",
- "crossbeam 0.8.0",
+ "crossbeam 0.8.2",
  "crossbeam-channel 0.5.6",
  "cycles-minting-canister",
  "dfn_candid",
@@ -6703,7 +6697,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "clap 3.2.14",
- "crossbeam 0.8.0",
+ "crossbeam 0.8.2",
  "crossbeam-channel 0.5.6",
  "elastic_common_schema",
  "erased-serde",
