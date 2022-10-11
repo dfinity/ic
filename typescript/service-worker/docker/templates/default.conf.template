@@ -11,11 +11,10 @@ server {
   ssl_certificate /etc/ssl/cert.pem;
   ssl_certificate_key /etc/ssl/key.pem;
   server_name localhost *.ic0.local;
-
-  location / {
-    root /usr/share/nginx/html;
-    index  index.html;
-  }
+  
+  root /usr/share/nginx/html;
+  index index.html;
+  try_files $uri /index.html =404;
 
   location /api/ {
     proxy_pass https://ic0.app;
