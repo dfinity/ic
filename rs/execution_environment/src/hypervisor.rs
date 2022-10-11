@@ -124,6 +124,7 @@ pub struct Hypervisor {
     compilation_cache: Arc<CompilationCache>,
     deterministic_time_slicing: FlagStatus,
     cost_to_compile_wasm_instruction: NumInstructions,
+    dirty_page_overhead: NumInstructions,
 }
 
 impl Hypervisor {
@@ -223,6 +224,7 @@ impl Hypervisor {
         own_subnet_type: SubnetType,
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        dirty_page_overhead: NumInstructions,
     ) -> Self {
         let mut embedder_config = EmbeddersConfig::new();
         embedder_config.query_execution_threads = config.query_execution_threads;
@@ -261,6 +263,7 @@ impl Hypervisor {
             compilation_cache: Arc::new(CompilationCache::new(config.module_sharing)),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config.cost_to_compile_wasm_instruction,
+            dirty_page_overhead,
         }
     }
 
@@ -274,6 +277,7 @@ impl Hypervisor {
         wasm_executor: Arc<dyn WasmExecutor>,
         deterministic_time_slicing: FlagStatus,
         cost_to_compile_wasm_instruction: NumInstructions,
+        dirty_page_overhead: NumInstructions,
     ) -> Self {
         Self {
             wasm_executor,
@@ -287,6 +291,7 @@ impl Hypervisor {
             )),
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
+            dirty_page_overhead,
         }
     }
 
@@ -376,6 +381,7 @@ impl Hypervisor {
             system_state,
             *self.cycles_account_manager,
             network_topology,
+            self.dirty_page_overhead,
         );
         let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {

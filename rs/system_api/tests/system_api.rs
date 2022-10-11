@@ -1,4 +1,5 @@
 use ic_base_types::NumSeconds;
+use ic_config::subnet_config::SchedulerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -1494,6 +1495,7 @@ fn stable_grow_updates_subnet_available_memory() {
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::build_update_api(),
@@ -1525,6 +1527,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::build_update_api(),
@@ -1567,6 +1570,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::build_update_api(),
@@ -1597,6 +1601,7 @@ fn take_execution_result_properly_frees_memory() {
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1654,6 +1659,7 @@ fn push_output_request_respects_memory_limits() {
             &system_state,
             cycles_account_manager,
             &NetworkTopology::default(),
+            SchedulerConfig::application_subnet().dirty_page_overhead,
         );
         let own_canister_id = system_state.canister_id;
         let callback_id = sandbox_safe_system_state
@@ -1748,6 +1754,7 @@ fn push_output_request_oversized_request_memory_limits() {
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state

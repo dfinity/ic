@@ -2283,12 +2283,12 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn calculate_dirty_pages(
-        &mut self,
+    fn dirty_pages_from_stable_write(
+        &self,
         offset: u64,
         size: u64,
     ) -> HypervisorResult<(NumPages, NumInstructions)> {
-        let dirty_pages = self.stable_memory.calculate_dirty_pages(offset, size);
+        let dirty_pages = self.stable_memory.dirty_pages_from_write(offset, size);
         let cost = self
             .sandbox_safe_system_state
             .dirty_page_cost(dirty_pages)?;

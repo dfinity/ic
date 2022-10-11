@@ -270,8 +270,8 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_mint_cycles(&mut self, _: u64) -> HypervisorResult<u64> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn calculate_dirty_pages(
-        &mut self,
+    fn dirty_pages_from_stable_write(
+        &self,
         _: u64,
         _: u64,
     ) -> HypervisorResult<(NumPages, NumInstructions)> {

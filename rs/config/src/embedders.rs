@@ -1,8 +1,9 @@
-use ic_types::NumInstructions;
+use ic_base_types::NumBytes;
+use ic_sys::PAGE_SIZE;
+use ic_types::{NumInstructions, NumPages};
 use serde::{Deserialize, Serialize};
 
 use crate::flag_status::FlagStatus;
-use ic_base_types::NumBytes;
 
 // Defining 100000 globals in a module can result in significant overhead in
 // each message's execution time (about 40x), so set a limit 3 orders of
@@ -27,6 +28,14 @@ pub(crate) const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions =
 
 /// The number of rayon threads used by wasmtime to compile wasm binaries
 const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
+
+#[allow(non_upper_case_globals)]
+const KiB: u64 = 1024;
+#[allow(non_upper_case_globals)]
+const GiB: u64 = KiB * KiB * KiB;
+// Maximum number of stable memory dirty pages that a single message execution
+// is allowed to produce.
+const STABLE_MEMORY_DIRTY_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
@@ -69,6 +78,10 @@ pub struct Config {
 
     /// Flags to enable or disable features that are still experimental.
     pub feature_flags: FeatureFlags,
+
+    // Maximum number of stable memory dirty pages that a single message execution
+    // is allowed to produce.
+    pub stable_memory_dirty_page_limit: NumPages,
 }
 
 impl Config {
@@ -83,6 +96,7 @@ impl Config {
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             feature_flags: FeatureFlags::default(),
+            stable_memory_dirty_page_limit: NumPages::from(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
         }
     }
 }

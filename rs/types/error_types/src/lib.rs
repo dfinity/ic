@@ -97,6 +97,7 @@ impl From<ErrorCode> for RejectCode {
             CanisterWasmEngineError => CanisterError,
             CanisterInstructionLimitExceeded => CanisterError,
             CanisterInstallCodeRateLimited => SysTransient,
+            CanisterMemoryAccessLimitExceeded => CanisterError,
         }
     }
 }
@@ -145,6 +146,7 @@ pub enum ErrorCode {
     CanisterWasmEngineError = 521,
     CanisterInstructionLimitExceeded = 522,
     CanisterInstallCodeRateLimited = 523,
+    CanisterMemoryAccessLimitExceeded = 524,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -187,6 +189,7 @@ impl TryFrom<u64> for ErrorCode {
             521 => Ok(ErrorCode::CanisterWasmEngineError),
             522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
             523 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
+            524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }

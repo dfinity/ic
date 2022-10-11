@@ -120,6 +120,10 @@ const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 /// Equal or above subnet size does not have storage cost subsidised.
 const FAIR_STORAGE_COST_SUBNET_SIZE: usize = 20;
 
+/// Costs for each newly created dirty page in stable memory.
+const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
+const SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(0);
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
 pub struct SchedulerConfig {
@@ -196,6 +200,9 @@ pub struct SchedulerConfig {
     /// single round, but will then reject install_code messages for several
     /// rounds until they are back under the allowed rate.
     pub install_code_rate_limit: NumInstructions,
+
+    /// Cost for each newly created dirty page in stable memory.
+    pub dirty_page_overhead: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -217,6 +224,7 @@ impl SchedulerConfig {
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
+            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
         }
     }
 
@@ -246,6 +254,7 @@ impl SchedulerConfig {
             // This limit should be high enough (1000T) to effectively disable
             // rate-limiting for the system subnets.
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
+            dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
         }
     }
 
@@ -267,6 +276,7 @@ impl SchedulerConfig {
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
+            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
         }
     }
 
@@ -338,13 +348,7 @@ pub struct CyclesAccountManagerConfig {
 
     /// Fee per byte for networking and consensus work done for a http request or response.
     pub http_request_per_byte_fee: Cycles,
-
-    /// Cost for each newly created dirty page in stable memory.
-    pub dirty_page_cost: NumInstructions,
 }
-
-const DEFAULT_DIRTY_PAGE_COST: NumInstructions = NumInstructions::new(1_000);
-const SYSTEM_SUBNET_DIRTY_PAGE_COST: NumInstructions = NumInstructions::new(0);
 
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
@@ -374,7 +378,6 @@ impl CyclesAccountManagerConfig {
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_baseline_fee: Cycles::new(400_000_000),
             http_request_per_byte_fee: Cycles::new(100_000),
-            dirty_page_cost: DEFAULT_DIRTY_PAGE_COST,
         }
     }
 
@@ -401,7 +404,6 @@ impl CyclesAccountManagerConfig {
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
-            dirty_page_cost: SYSTEM_SUBNET_DIRTY_PAGE_COST,
         }
     }
 

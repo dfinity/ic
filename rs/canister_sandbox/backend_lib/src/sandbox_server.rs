@@ -144,7 +144,7 @@ mod tests {
             structs::SandboxExecInput,
         },
     };
-    use ic_config::subnet_config::CyclesAccountManagerConfig;
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_cycles_account_manager::CyclesAccountManager;
@@ -208,6 +208,7 @@ mod tests {
             0,
             ic00_aliases,
             SMALL_APP_SUBNET_MAX_SIZE,
+            SchedulerConfig::application_subnet().dirty_page_overhead,
         )
     }
 

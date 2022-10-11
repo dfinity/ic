@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_embedders::DIRTY_PAGE_TO_INSTRUCTION_RATE;
+use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
@@ -292,6 +292,6 @@ fn dirty_pages_are_free_on_system_subnet() {
     // on system subnets.
     assert!(
         app_instructions
-            > system_instructions + NumInstructions::from(DIRTY_PAGE_TO_INSTRUCTION_RATE)
+            > system_instructions + SchedulerConfig::application_subnet().dirty_page_overhead
     );
 }

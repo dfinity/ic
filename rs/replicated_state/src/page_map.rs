@@ -695,7 +695,6 @@ impl Buffer {
 
     /// Overwrites the contents of this buffer at the specified offset with the
     /// contents of the source buffer.
-    /// Returns the number of **new** dirty pages created by the write.
     pub fn write(&mut self, mut src: &[u8], mut offset: usize) {
         let page_size = PAGE_SIZE;
 
@@ -724,7 +723,7 @@ impl Buffer {
     ///
     /// This function assumes the write doesn't extend beyond the maximum stable
     /// memory size (in which case the memory would fail anyway).
-    pub fn calculate_dirty_pages(&self, offset: u64, size: u64) -> NumPages {
+    pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumPages {
         if size == 0 {
             return NumPages::from(0);
         }

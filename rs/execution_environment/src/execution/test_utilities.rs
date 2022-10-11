@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
+use ic_config::subnet_config::SchedulerConfig;
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
     subnet_config::SubnetConfigs,
@@ -1586,6 +1587,15 @@ impl ExecutionTestBuilder {
             self.subnet_type,
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
+            match self.subnet_type {
+                SubnetType::Application => {
+                    SchedulerConfig::application_subnet().dirty_page_overhead
+                }
+                SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
+                SubnetType::VerifiedApplication => {
+                    SchedulerConfig::verified_application_subnet().dirty_page_overhead
+                }
+            },
         );
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer =

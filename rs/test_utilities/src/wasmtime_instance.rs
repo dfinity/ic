@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-use ic_config::flag_status::FlagStatus;
+use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
 use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, SystemApi};
 use ic_logger::replica_logger::no_op_logger;
@@ -90,10 +90,18 @@ impl WasmtimeInstanceBuilder {
 
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default().build();
+        let dirty_page_overhead = match self.subnet_type {
+            SubnetType::Application => SchedulerConfig::application_subnet(),
+            SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+            SubnetType::System => SchedulerConfig::system_subnet(),
+        }
+        .dirty_page_overhead;
+
         let sandbox_safe_system_state = SandboxSafeSystemState::new(
             &system_state,
             cycles_account_manager,
             &self.network_topology,
+            dirty_page_overhead,
         );
         let api = ic_system_api::SystemApiImpl::new(
             self.api_type,

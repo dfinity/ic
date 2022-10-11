@@ -1,7 +1,7 @@
 use std::{convert::TryFrom, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_config::flag_status::FlagStatus;
+use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
 use ic_logger::replica_logger::no_op_logger;
@@ -114,6 +114,7 @@ pub fn get_system_api(
         system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
     SystemApiImpl::new(
         api_type,

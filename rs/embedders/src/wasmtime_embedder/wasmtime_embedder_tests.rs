@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
-use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
+use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
@@ -37,6 +37,7 @@ fn test_wasmtime_system_api() {
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
@@ -85,14 +86,20 @@ fn test_wasmtime_system_api() {
     // Exports the global `counter_instructions`.
     let config = EmbeddersConfig::default();
     let (_, instrumentation_output) = validate_and_instrument_for_testing(
-        &WasmtimeEmbedder::new(config, no_op_logger()),
+        &WasmtimeEmbedder::new(config.clone(), no_op_logger()),
         &wasm_binary,
     )
     .unwrap();
     let module = Module::new(&engine, instrumentation_output.binary.as_slice())
         .expect("failed to instantiate module");
 
-    let linker = system_api::syscalls(no_op_logger(), canister_id, &store, FlagStatus::Enabled);
+    let linker = system_api::syscalls(
+        no_op_logger(),
+        canister_id,
+        &store,
+        FlagStatus::Enabled,
+        config.stable_memory_dirty_page_limit,
+    );
     let instance = linker
         .instantiate(&mut store, &module)
         .expect("failed to instantiate instance");

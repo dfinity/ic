@@ -194,12 +194,13 @@ impl StableMemory {
         Ok(())
     }
 
-    /// Returns the number of dirty pages that would be created by a **successful** write at
-    /// the given offset of the given size. No guarantee is made that such a
-    /// write would succeed though (no check that the write is within the
-    /// current stable size are done).
-    pub(super) fn calculate_dirty_pages(&self, offset: u64, size: u64) -> NumPages {
+    /// Calculates the number of new dirty pages that a given write would
+    /// create.
+    ///
+    /// No guarantee is made that such a write would succeed though (e.g. it
+    /// could exceed the current stable memory size).
+    pub(super) fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumPages {
         self.stable_memory_buffer
-            .calculate_dirty_pages(offset, size)
+            .dirty_pages_from_write(offset, size)
     }
 }

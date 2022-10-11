@@ -4538,6 +4538,7 @@ dependencies = [
  "ic-base-types",
  "ic-protobuf",
  "ic-registry-subnet-type",
+ "ic-sys",
  "ic-types",
  "json5",
  "proptest",
