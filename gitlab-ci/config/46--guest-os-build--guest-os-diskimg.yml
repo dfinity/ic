@@ -2,25 +2,19 @@ guest-os-diskimg:
   extends:
     - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
+  tags:
+    - dfinity
+    - ubuntu
+    - zh
   stage: guest-os-build
-  needs:
-    - job: cargo-build-release-linux-native
-      artifacts: false
   variables:
       BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: ""
+  artifacts:
+    paths:
+      - version.txt
   script:
     - |
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
-          --out="artifacts/release"
-
-      if [[ "$CI_JOB_NAME" == *"-malicious" ]]; then
-          "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-              --git-rev="$CI_COMMIT_SHA" --remote-path="release-malicious" \
-              --out="artifacts/release-malicious"
-      fi
-
       "${CI_PROJECT_DIR}/gitlab-ci/tools/job-driver.py" guest-os-diskimg
 
 # Build dev image.
@@ -41,11 +35,6 @@ guest-os-diskimg-dev:
 guest-os-diskimg-dev-malicious:
   extends:
     - guest-os-diskimg
-  needs:
-    - job: cargo-build-release-linux-native
-      artifacts: false
-    - job: cargo-build-release-linux-native-malicious
-      artifacts: false
   variables:
       BUILD_EXTRA_ARGS: "-t dev -p root"
       BUILD_EXTRA_SUFFIX: "-dev-malicious"

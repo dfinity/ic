@@ -68,12 +68,13 @@ dist-newstyle
 # JUnit files
 test_report.xml
 
-# IC-OS disk images
+# IC-OS disk image files
 *-os.iso
 *os.img
 disk.img
 *-img.tar.gz
 *-img.tar.zst
+dev-root-ca.crt
 
 # IC-OS binaries
 infogetty

@@ -324,6 +324,7 @@ def make_argparser():
         default=[],
         help="Extra vars to pass to docker",
     )
+    parser.add_argument("--dev-root-ca", type=str, default="", help="Root CA for the dev image")
     parser.add_argument(
         "build_args",
         metavar="build_args",
@@ -363,6 +364,13 @@ def main():
         for var in extra_vars:
             extra_args.append("--build-arg")
             extra_args.append(var)
+        if args.dev_root_ca != "":
+            try:
+                ca_contents = open(args.dev_root_ca, "r").read()
+                extra_args.append("--build-arg")
+                extra_args.append("DEV_ROOT_CA=" + ca_contents)
+            except FileNotFoundError:
+                print(f"WARNING: Skipping --dev-ca-root file {args.dev_root_ca}, which does not exist")
         image_hash = docker_build(extra_args, extra_dockerfile)
 
     # Extract and flatten all layers, build an in-memory pseudo filesystem
