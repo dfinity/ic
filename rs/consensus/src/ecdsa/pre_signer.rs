@@ -225,13 +225,12 @@ impl EcdsaPreSignerImpl {
                             format!("Duplicate dealing: {}", signed_dealing),
                         ))
                     } else {
-                        let mut changes = self.crypto_verify_dealing(
-                            &id,
-                            &transcript_params,
-                            &signed_dealing,
-                            &mut validated_dealings,
-                        );
-                        ret.append(&mut changes);
+                        let action =
+                            self.crypto_verify_dealing(&id, &transcript_params, &signed_dealing);
+                        if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
+                            validated_dealings.insert(key);
+                        }
+                        ret.append(&mut action.into_iter().collect());
                     }
                 }
                 Action::Drop => ret.push(EcdsaChangeAction::RemoveUnvalidated(id)),
@@ -355,8 +354,26 @@ impl EcdsaPreSignerImpl {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
+        let mut validated_dealing_supports = BTreeSet::new();
         let mut ret = Vec::new();
         for (id, support) in ecdsa_pool.unvalidated().dealing_support() {
+            // Dedup dealing support by (transcript_id, dealer_id, signer_id)
+            // Also see has_node_issued_dealing_support().
+            let key = (
+                support.transcript_id,
+                support.dealer_id,
+                support.sig_share.signer,
+            );
+            if validated_dealing_supports.contains(&key) {
+                ret.push(EcdsaChangeAction::HandleInvalid(
+                    id,
+                    format!(
+                        "Duplicate dealing support in unvalidated batch: {}",
+                        support
+                    ),
+                ));
+                continue;
+            };
             // Drop shares for xnet reshare transcripts
             if source_subnet_xnet_transcripts.contains(&support.transcript_id) {
                 self.metrics.pre_sign_errors_inc("xnet_reshare_support");
@@ -444,14 +461,17 @@ impl EcdsaPreSignerImpl {
                                 ),
                             ))
                         } else {
-                            let mut changes = self.crypto_verify_dealing_support(
+                            let action = self.crypto_verify_dealing_support(
                                 &id,
                                 &transcript_params,
                                 signed_dealing,
                                 &support,
                                 ecdsa_pool.stats(),
                             );
-                            ret.append(&mut changes);
+                            if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
+                                validated_dealing_supports.insert(key);
+                            }
+                            ret.append(&mut action.into_iter().collect());
                         }
                     } else {
                         // If the share points to a different dealing hash than what we
@@ -647,20 +667,19 @@ impl EcdsaPreSignerImpl {
         id: &EcdsaMessageId,
         transcript_params: &IDkgTranscriptParams,
         signed_dealing: &SignedIDkgDealing,
-        validated_dealings: &mut BTreeSet<(IDkgTranscriptId, NodeId)>,
-    ) -> EcdsaChangeSet {
+    ) -> Option<EcdsaChangeAction> {
         IDkgProtocol::verify_dealing_public(&*self.crypto, transcript_params, signed_dealing)
             .map_or_else(
                 |error| {
                     if error.is_reproducible() {
                         self.metrics.pre_sign_errors_inc("verify_dealing_permanent");
-                        vec![EcdsaChangeAction::HandleInvalid(
+                        Some(EcdsaChangeAction::HandleInvalid(
                             id.clone(),
                             format!(
                                 "Dealing validation(permanent error): {}, error = {:?}",
                                 signed_dealing, error
                             ),
-                        )]
+                        ))
                     } else {
                         // Defer in case of transient errors
                         debug!(
@@ -670,16 +689,12 @@ impl EcdsaPreSignerImpl {
                             error
                         );
                         self.metrics.pre_sign_errors_inc("verify_dealing_transient");
-                        Default::default()
+                        None
                     }
                 },
                 |()| {
-                    validated_dealings.insert((
-                        signed_dealing.idkg_dealing().transcript_id,
-                        signed_dealing.dealer_id(),
-                    ));
                     self.metrics.pre_sign_metrics_inc("dealing_received");
-                    vec![EcdsaChangeAction::MoveToValidated(id.clone())]
+                    Some(EcdsaChangeAction::MoveToValidated(id.clone()))
                 },
             )
     }
@@ -808,7 +823,7 @@ impl EcdsaPreSignerImpl {
         signed_dealing: &SignedIDkgDealing,
         support: &IDkgDealingSupport,
         stats: &dyn EcdsaStats,
-    ) -> EcdsaChangeSet {
+    ) -> Option<EcdsaChangeAction> {
         let start = std::time::Instant::now();
         let ret = self.crypto.verify_basic_sig(
             &support.sig_share.signature,
@@ -821,18 +836,18 @@ impl EcdsaPreSignerImpl {
         ret.map_or_else(
             |error| {
                 self.metrics.pre_sign_errors_inc("verify_dealing_support");
-                vec![EcdsaChangeAction::HandleInvalid(
+                Some(EcdsaChangeAction::HandleInvalid(
                     id.clone(),
                     format!(
                         "Support validation failed: {}, error = {:?}",
                         support, error
                     ),
-                )]
+                ))
             },
             |_| {
                 self.metrics
                     .pre_sign_metrics_inc("dealing_support_received");
-                vec![EcdsaChangeAction::MoveToValidated(id.clone())]
+                Some(EcdsaChangeAction::MoveToValidated(id.clone()))
             },
         )
     }

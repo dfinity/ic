@@ -103,21 +103,14 @@ impl EcdsaSignerImpl {
             .map(|(request_id, sig_inputs)| (*request_id, sig_inputs))
             .collect::<BTreeMap<_, _>>();
 
-        // Pass 1: collection of <RequestId, SignerId>
-        let mut dealing_keys = BTreeSet::new();
-        let mut duplicate_keys = BTreeSet::new();
-        for (_, share) in ecdsa_pool.unvalidated().signature_shares() {
-            let key = (share.request_id, share.signer_id);
-            if !dealing_keys.insert(key) {
-                duplicate_keys.insert(key);
-            }
-        }
+        // Collection of validated shares
+        let mut validated_sig_shares = BTreeSet::new();
 
         let mut ret = Vec::new();
         for (id, share) in ecdsa_pool.unvalidated().signature_shares() {
             // Remove the duplicate entries
             let key = (share.request_id, share.signer_id);
-            if duplicate_keys.contains(&key) {
+            if validated_sig_shares.contains(&key) {
                 self.metrics
                     .sign_errors_inc("duplicate_sig_shares_in_batch");
                 ret.push(EcdsaChangeAction::HandleInvalid(
@@ -147,13 +140,16 @@ impl EcdsaSignerImpl {
                             "validate_signature_shares",
                         ) {
                             Some(sig_inputs) => {
-                                let mut changes = self.crypto_verify_signature_share(
+                                let action = self.crypto_verify_signature_share(
                                     &id,
                                     &sig_inputs,
                                     &share,
                                     ecdsa_pool.stats(),
                                 );
-                                ret.append(&mut changes);
+                                if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
+                                    validated_sig_shares.insert(key);
+                                }
+                                ret.append(&mut action.into_iter().collect());
                             }
                             None => {
                                 ret.push(EcdsaChangeAction::HandleInvalid(
@@ -271,7 +267,7 @@ impl EcdsaSignerImpl {
         sig_inputs: &ThresholdEcdsaSigInputs,
         share: &EcdsaSigShare,
         stats: &dyn EcdsaStats,
-    ) -> EcdsaChangeSet {
+    ) -> Option<EcdsaChangeAction> {
         let start = std::time::Instant::now();
         let ret = ThresholdEcdsaSigVerifier::verify_sig_share(
             &*self.crypto,
@@ -285,13 +281,13 @@ impl EcdsaSignerImpl {
             |error| {
                 if error.is_reproducible() {
                     self.metrics.sign_errors_inc("verify_sig_share_permanent");
-                    vec![EcdsaChangeAction::HandleInvalid(
+                    Some(EcdsaChangeAction::HandleInvalid(
                         id.clone(),
                         format!(
                             "Share validation(permanent error): {}, error = {:?}",
                             share, error
                         ),
-                    )]
+                    ))
                 } else {
                     // Defer in case of transient errors
                     debug!(
@@ -299,12 +295,12 @@ impl EcdsaSignerImpl {
                         "Share validation(permanent error): {}, error = {:?}", share, error
                     );
                     self.metrics.sign_errors_inc("verify_sig_share_transient");
-                    Default::default()
+                    None
                 }
             },
             |()| {
                 self.metrics.sign_metrics_inc("sig_shares_received");
-                vec![EcdsaChangeAction::MoveToValidated(id.clone())]
+                Some(EcdsaChangeAction::MoveToValidated(id.clone()))
             },
         )
     }
@@ -960,8 +956,10 @@ mod tests {
 
                 let change_set = signer.validate_signature_shares(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
+                // One is considered duplicate
                 assert!(is_handle_invalid(&change_set, &msg_id_1));
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                // One is considered validated
+                assert!(is_moved_to_validated(&change_set, &msg_id_2));
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
             })
         })
