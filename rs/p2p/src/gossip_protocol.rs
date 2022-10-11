@@ -261,7 +261,7 @@ impl GossipImpl {
             registry_client.clone(),
             artifact_manager.clone(),
             transport.clone(),
-            Arc::new(TransportChannelIdMapper::new(transport_channels)),
+            TransportChannelIdMapper::new(transport_channels),
             log.clone(),
             metrics_registry,
         );
