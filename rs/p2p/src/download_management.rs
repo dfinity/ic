@@ -103,6 +103,7 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
 };
 use lru::LruCache;
+use parking_lot::{Mutex, RwLock};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -110,7 +111,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     ops::DerefMut,
     str::FromStr,
-    sync::{Arc, Mutex, RwLock},
+    sync::Arc,
     time::{Instant, SystemTime},
 };
 
@@ -238,7 +239,6 @@ impl DownloadManager for DownloadManagerImpl {
         if self
             .receive_check_caches
             .read()
-            .unwrap()
             .values()
             .any(|cache| cache.contains(&gossip_advert.integrity_hash))
         {
@@ -246,7 +246,7 @@ impl DownloadManager for DownloadManagerImpl {
             return;
         }
 
-        let mut current_peers = self.current_peers.lock().unwrap();
+        let mut current_peers = self.current_peers.lock();
         if let Some(_peer_context) = current_peers.get_mut(&peer_id) {
             let _ = self.prioritizer.add_advert(gossip_advert, peer_id);
         } else {
@@ -326,7 +326,7 @@ impl DownloadManager for DownloadManagerImpl {
         );
 
         // Remove the chunk request tracker.
-        let mut current_peers = self.current_peers.lock().unwrap();
+        let mut current_peers = self.current_peers.lock();
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
             if let Some(tracker) = peer_context.requested.remove(&GossipRequestTrackerKey {
                 artifact_id: gossip_chunk.artifact_id.clone(),
@@ -381,10 +381,7 @@ impl DownloadManager for DownloadManagerImpl {
                     peer_id,
                     &gossip_chunk.artifact_id,
                     &gossip_chunk.integrity_hash,
-                    self.artifacts_under_construction
-                        .write()
-                        .unwrap()
-                        .deref_mut(),
+                    self.artifacts_under_construction.write().deref_mut(),
                 )
             }
             return;
@@ -394,7 +391,7 @@ impl DownloadManager for DownloadManagerImpl {
         self.metrics.chunks_received.inc();
 
         // Feed the chunk to artifact tracker-
-        let mut artifacts_under_construction = self.artifacts_under_construction.write().unwrap();
+        let mut artifacts_under_construction = self.artifacts_under_construction.write();
 
         // Find the tracker to feed the chunk.
         let artifact_tracker =
@@ -512,7 +509,7 @@ impl DownloadManager for DownloadManagerImpl {
         // Add the artifact hash to the receive check set.
         let charged_peer = artifact_tracker.peer_id;
 
-        let mut receive_check_caches = self.receive_check_caches.write().unwrap();
+        let mut receive_check_caches = self.receive_check_caches.write();
         if receive_check_caches.contains_key(&charged_peer) {
             receive_check_caches
                 .get_mut(&charged_peer)
@@ -572,7 +569,7 @@ impl DownloadManager for DownloadManagerImpl {
     fn peer_connection_down(&self, peer_id: NodeId) {
         self.metrics.connection_down_events.inc();
         let now = SystemTime::now();
-        let mut current_peers = self.current_peers.lock().unwrap();
+        let mut current_peers = self.current_peers.lock();
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
             peer_context.disconnect_time = Some(now);
             trace!(
@@ -593,7 +590,6 @@ impl DownloadManager for DownloadManagerImpl {
         let last_disconnect = self
             .current_peers
             .lock()
-            .unwrap()
             .get_mut(&peer_id)
             .and_then(|res| res.disconnect_time);
         match last_disconnect {
@@ -639,7 +635,6 @@ impl DownloadManager for DownloadManagerImpl {
         // Throttle processing of incoming re-transmission request
         self.current_peers
             .lock()
-            .unwrap()
             .get_mut(&peer_id)
             .ok_or_else(|| {
                 warn!(self.log, "Can't find peer context for peer: {:?}", peer_id);
@@ -706,8 +701,7 @@ impl DownloadManager for DownloadManagerImpl {
             let dropped_adverts = self
                 .prioritizer
                 .update_priority_functions(self.artifact_manager.as_ref());
-            let mut artifacts_under_construction =
-                self.artifacts_under_construction.write().unwrap();
+            let mut artifacts_under_construction = self.artifacts_under_construction.write();
             dropped_adverts
                 .iter()
                 .for_each(|id| artifacts_under_construction.remove_tracker(id));
@@ -727,7 +721,7 @@ impl DownloadManager for DownloadManagerImpl {
 
         // Collect the peers with timed-out requests.
         let mut timed_out_peers = Vec::new();
-        for (node_id, peer_context) in self.current_peers.lock().unwrap().iter_mut() {
+        for (node_id, peer_context) in self.current_peers.lock().iter_mut() {
             if self.process_timed_out_requests(node_id, peer_context) {
                 timed_out_peers.push(*node_id);
             }
@@ -798,7 +792,6 @@ impl DownloadManagerImpl {
     fn get_current_peer_ids(&self) -> Vec<NodeId> {
         self.current_peers
             .lock()
-            .unwrap()
             .iter()
             .map(|(k, _v)| k.to_owned())
             .collect()
@@ -821,7 +814,7 @@ impl DownloadManagerImpl {
         // Add the peer to the list of current peers and the event handler, and drop the
         // lock before calling into transport.
         {
-            let mut current_peers = self.current_peers.lock().unwrap();
+            let mut current_peers = self.current_peers.lock();
 
             if current_peers.contains_key(&node_id) {
                 return Err(P2PError {
@@ -837,7 +830,7 @@ impl DownloadManagerImpl {
         self.transport
             .start_connection(&node_id, peer_addr, registry_version)
             .map_err(|e| {
-                let mut current_peers = self.current_peers.lock().unwrap();
+                let mut current_peers = self.current_peers.lock();
                 current_peers.remove(&node_id);
                 warn!(self.log, "start connections failed {:?} {:?}", node_id, e);
                 P2PError {
@@ -854,7 +847,7 @@ impl DownloadManagerImpl {
         let mut retransmission_request = false;
         // Check if the priority function should be updated.
         {
-            let mut pfn_invocation_instant = self.pfn_invocation_instant.lock().unwrap();
+            let mut pfn_invocation_instant = self.pfn_invocation_instant.lock();
             if pfn_invocation_instant.elapsed().as_millis()
                 >= self.gossip_config.pfn_evaluation_period_ms as u128
             {
@@ -865,8 +858,7 @@ impl DownloadManagerImpl {
 
         // Check if a retransmission request needs to be sent.
         {
-            let mut retransmission_request_instant =
-                self.retransmission_request_instant.lock().unwrap();
+            let mut retransmission_request_instant = self.retransmission_request_instant.lock();
             if retransmission_request_instant.elapsed().as_millis()
                 >= self.gossip_config.retransmission_request_ms as u128
             {
@@ -877,7 +869,7 @@ impl DownloadManagerImpl {
 
         // Check if the registry has to be refreshed.
         {
-            let mut registry_refresh_instant = self.registry_refresh_instant.lock().unwrap();
+            let mut registry_refresh_instant = self.registry_refresh_instant.lock();
             if registry_refresh_instant.elapsed().as_millis()
                 >= self.gossip_config.pfn_evaluation_period_ms as u128
             {
@@ -920,7 +912,7 @@ impl DownloadManagerImpl {
                 Err(err) => {
                     // If getting the peer socket fails, remove the node from current peer list.
                     // This removal makes it possible to attempt a re-connection on the next registry refresh.
-                    self.current_peers.lock().unwrap().remove(node_id);
+                    self.current_peers.lock().remove(node_id);
                     // Invalid socket addresses should not be pushed in the registry/config on first place.
                     error!(
                         self.log,
@@ -932,7 +924,7 @@ impl DownloadManagerImpl {
                         .add_node(*node_id, peer_addr, latest_registry_version)
                         .is_ok()
                     {
-                        self.receive_check_caches.write().unwrap().insert(
+                        self.receive_check_caches.write().insert(
                             *node_id,
                             ReceiveCheckCache::new(
                                 self.gossip_config.receive_check_cache_size as usize,
@@ -973,14 +965,14 @@ impl DownloadManagerImpl {
     /// This method removes the given node from peer manager and clears adverts.
     fn remove_node(&self, node_id: NodeId) {
         {
-            let mut current_peers = self.current_peers.lock().unwrap();
+            let mut current_peers = self.current_peers.lock();
             self.transport.stop_connection(&node_id);
             // Remove the peer irrespective of the result of the stop_connection() call.
             current_peers.remove(&node_id);
             info!(self.log, "Nodes {:0} removed", node_id);
         }
 
-        self.receive_check_caches.write().unwrap().remove(&node_id);
+        self.receive_check_caches.write().remove(&node_id);
         self.prioritizer
             .clear_peer_adverts(node_id, AdvertTrackerFinalAction::Abort)
             .unwrap_or_else(|e| {
@@ -1163,7 +1155,7 @@ impl DownloadManagerImpl {
         peer_id: NodeId,
     ) -> Result<Vec<GossipChunkRequest>, impl Error> {
         // Get the peer context.
-        let mut current_peers = self.current_peers.lock().unwrap();
+        let mut current_peers = self.current_peers.lock();
         let peer_context = self.is_peer_ready_for_download(peer_id, &current_peers)?;
         let requested_instant = Instant::now(); // function granularity for instant is good enough
         let max_streams_per_peer = self.gossip_config.max_artifact_streams_per_peer as usize;
@@ -1177,7 +1169,7 @@ impl DownloadManagerImpl {
         }
 
         let mut requests = Vec::new();
-        let mut artifacts_under_construction = self.artifacts_under_construction.write().unwrap();
+        let mut artifacts_under_construction = self.artifacts_under_construction.write();
         // Get a prioritized iterator.
         let peer_advert_queues = self.prioritizer.get_peer_priority_queues(peer_id);
         let peer_advert_map = peer_advert_queues.peer_advert_map_ref.read().unwrap();
@@ -1277,7 +1269,6 @@ impl DownloadManagerImpl {
         let expired_downloads = self
             .artifacts_under_construction
             .write()
-            .unwrap()
             .deref_mut()
             .prune_expired_downloads();
 
@@ -1690,7 +1681,7 @@ pub mod tests {
             (download_manager.gossip_config.max_chunk_wait_ms * 2) as u64,
         );
         std::thread::sleep(sleep_duration);
-        let mut current_peers = download_manager.current_peers.lock().unwrap();
+        let mut current_peers = download_manager.current_peers.lock();
         let peer_context = current_peers.get_mut(node_id).unwrap();
         download_manager.process_timed_out_requests(node_id, peer_context);
         assert_eq!(peer_context.requested.len(), 0);
@@ -1978,10 +1969,8 @@ pub mod tests {
         // Test that artifacts also have timed out.
         download_manager.process_timed_out_artifacts();
         {
-            let mut artifacts_under_construction = download_manager
-                .artifacts_under_construction
-                .write()
-                .unwrap();
+            let mut artifacts_under_construction =
+                download_manager.artifacts_under_construction.write();
 
             for i in advert_range {
                 assert!(artifacts_under_construction
@@ -2003,10 +1992,8 @@ pub mod tests {
         }
 
         {
-            let mut artifacts_under_construction = download_manager
-                .artifacts_under_construction
-                .write()
-                .unwrap();
+            let mut artifacts_under_construction =
+                download_manager.artifacts_under_construction.write();
             // Advert 1 and 2 timed out, so check adverts starting from 3 exists.
             for counter in 1u32..3 {
                 assert!(artifacts_under_construction
@@ -2189,7 +2176,7 @@ pub mod tests {
         }
 
         // Test that the cache contains the artifact(s).
-        let receive_check_caches = download_manager.receive_check_caches.read().unwrap();
+        let receive_check_caches = download_manager.receive_check_caches.read();
         let cache = &receive_check_caches.get(&node_id).unwrap();
         for gossip_advert in &adverts {
             assert!(cache.contains(&gossip_advert.integrity_hash));
@@ -2240,7 +2227,7 @@ pub mod tests {
 
         // Validate that the cache does not contain the artifacts since we put chunks
         // with incorrect integrity hashes
-        let receive_check_caches = download_manager.receive_check_caches.read().unwrap();
+        let receive_check_caches = download_manager.receive_check_caches.read();
         let cache = &receive_check_caches.get(&node_id).unwrap();
         for gossip_advert in &adverts {
             assert!(!cache.contains(&gossip_advert.integrity_hash));
