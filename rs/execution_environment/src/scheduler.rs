@@ -446,10 +446,18 @@ impl SchedulerImpl {
                 .start_timer();
             for canister in state.canisters_iter_mut() {
                 if canister.exports_heartbeat_method() {
-                    canister
-                        .system_state
-                        .task_queue
-                        .push_front(ExecutionTask::Heartbeat);
+                    match canister.next_execution() {
+                        NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
+                            // Do not add a heartbeat task if a long execution
+                            // is pending.
+                        }
+                        NextExecution::None | NextExecution::StartNew => {
+                            canister
+                                .system_state
+                                .task_queue
+                                .push_front(ExecutionTask::Heartbeat);
+                        }
+                    }
                 }
             }
         }

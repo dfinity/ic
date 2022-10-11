@@ -971,6 +971,18 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> ExecuteMessageResult {
+        match canister.next_execution() {
+            NextExecution::None | NextExecution::StartNew => {}
+            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
+                // We should never try to execute a canister message in
+                // replicated mode if there is a pending long execution.
+                panic!(
+                    "Replicated execution with another pending DTS execution: {:?}",
+                    canister.next_execution()
+                );
+            }
+        }
+
         let req = match msg {
             CanisterInputMessage::Response(response) => {
                 return self.execute_canister_response(

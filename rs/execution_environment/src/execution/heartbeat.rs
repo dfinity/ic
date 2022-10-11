@@ -6,6 +6,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::{
     CallOrigin, CanisterState, ExecutionState, NetworkTopology, SchedulerState, SystemState,
 };
@@ -137,6 +138,17 @@ pub fn execute_heartbeat(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
 ) -> HeartbeatResult {
+    match canister.next_execution() {
+        NextExecution::None | NextExecution::StartNew => {}
+        NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
+            // We should never try to execute a heartbeat if there is a
+            // pending long execution.
+            panic!(
+                "Heartbeat execution with another pending DTS execution: {:?}",
+                canister.next_execution()
+            );
+        }
+    }
     let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
     let memory_usage = canister.memory_usage(own_subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
