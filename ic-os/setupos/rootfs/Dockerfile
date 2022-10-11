@@ -16,6 +16,8 @@ ARG BASE_IMAGE=
 
 FROM $BASE_IMAGE
 
+USER root:root
+
 RUN mkdir -p /config \
              /data \
              /boot/efi \

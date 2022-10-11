@@ -20,6 +20,8 @@
 #
 FROM ubuntu:20.04 as download
 
+USER root:root
+
 ENV TZ=UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
@@ -46,6 +48,8 @@ RUN cd /tmp/ && \
 # - Copy downloaded archives from first build stage into the target image
 #
 FROM ubuntu:20.04
+
+USER root:root
 
 ENV SOURCE_DATE_EPOCH=0
 ENV TZ=UTC

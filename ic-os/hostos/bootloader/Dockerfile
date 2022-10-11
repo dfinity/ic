@@ -1,5 +1,7 @@
 FROM ubuntu:20.04
 
+USER root:root
+
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
     grub-efi-amd64-bin faketime
 

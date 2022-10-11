@@ -31,6 +31,8 @@ ARG snp_kernel_libc_guest=linux-libc-dev_${snp_kernel_version_guest}-1_amd64.deb
 #
 FROM ubuntu:20.04 AS download
 
+USER root:root
+
 ENV TZ=UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
@@ -105,6 +107,8 @@ RUN \
 # Build ngx_http_geoip2_module
 FROM ubuntu:20.04 AS ngx_http_geoip2_module
 
+USER root:root
+
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN \
@@ -160,6 +164,8 @@ RUN \
 # - Copy downloaded archives from first build stage into the target image
 #
 FROM ubuntu:20.04
+
+USER root:root
 
 ENV TZ=UTC
 ENV SOURCE_DATE_EPOCH=0

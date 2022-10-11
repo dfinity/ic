@@ -1,6 +1,6 @@
 guest-os-updateimg-build:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
   retry: 1
   stage: guest-os-build
@@ -10,6 +10,9 @@ guest-os-updateimg-build:
   variables:
       BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: ""
+  tags:
+    - k8s
+    - dfinity
   script:
     - |
       set -xeuo pipefail

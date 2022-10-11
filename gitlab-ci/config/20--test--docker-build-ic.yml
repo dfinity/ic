@@ -8,6 +8,9 @@
       dotenv: nns.release.env
     paths:
       - bazel-build-log*.json*
+  tags:
+    - docker
+    - dfinity
   script:
     - |
       set -euo pipefail

@@ -9,6 +9,8 @@
 # Update below image when new dfinity/genericos-base image gets produced (see deploy-guest-os-baseimg CI job on master/rc).
 FROM dfinity/genericos-base@sha256:2309d3a303cb70cc2cd384238fb5567d3e1a540d7bb757327715790de4dfbe6c
 
+USER root:root
+
 RUN mkdir -p /boot/{efi,grub}
 
 COPY /etc /etc
