@@ -14,6 +14,13 @@ use tokio::net::TcpListener;
 
 const LOG_INTERVAL_SECS: u64 = 30;
 
+const DEFAULT_ADAPTER_COLLECTION_TIMEOUT: Duration = Duration::from_secs(1);
+/// Fraction of prometheus timeout that is applied to adapter collection.
+/// Needed because we don't want adapter metrics scrape timeout to cause
+/// a prometheus scrape timeout.
+const PROMETHEUS_TIMEOUT_FRACTION: f64 = 0.5;
+/// Header in prometheus scrape request that indicates the timeout used by scraping service.
+const PROMETHEUS_TIMEOUT_HEADER: &str = "X-Prometheus-Scrape-Timeout-Seconds";
 // We can serve from at most  'MAX_OUTSTANDING_CONNECTIONS'
 // live TCP connections. If we are at the limit, we won't
 // accept new TCP connections.
@@ -115,9 +122,22 @@ impl MetricsRuntimeImpl {
             loop {
                 interval.tick().await;
 
-                let mut buffer = vec![];
-                let metric_families = metrics_registry.prometheus_registry().gather();
-                encoder.encode(&metric_families, &mut buffer).unwrap();
+                // Replica metrics need to be served even if some adapters are unresponsive.
+                // To guarantee this, each adapter enforces either the default timeout (1s)
+                let metrics_registry_replica = metrics_registry.clone();
+                let metrics_registry_adapter = metrics_registry.clone();
+                let (mf_replica, mut mf_adapters) = tokio::join!(
+                    tokio::spawn(
+                        async move { metrics_registry_replica.prometheus_registry().gather() }
+                    ),
+                    metrics_registry_adapter
+                        .adapter_registry()
+                        .gather(DEFAULT_ADAPTER_COLLECTION_TIMEOUT)
+                );
+                mf_adapters.append(&mut mf_replica.unwrap_or_default());
+
+                let mut buffer = Vec::with_capacity(mf_adapters.len());
+                encoder.encode(&mf_adapters, &mut buffer).unwrap();
                 let metrics = String::from_utf8(buffer).unwrap();
                 trace!(log, "{}", metrics);
             }
@@ -130,16 +150,34 @@ impl MetricsRuntimeImpl {
     fn start_http(&self, address: SocketAddr) {
         let metrics_registry = self.metrics_registry.clone();
         let log = self.log.clone();
-
-        let aservice = service_fn(move |_req| {
+        let aservice = service_fn(move |req| {
             // Clone again to ensure that `metrics_registry` outlives this closure.
             let metrics_registry = metrics_registry.clone();
             let encoder = TextEncoder::new();
-
             async move {
-                let metric_families = metrics_registry.prometheus_registry().gather();
-                let mut buffer = vec![];
-                encoder.encode(&metric_families, &mut buffer).unwrap();
+                // Replica metrics need to be served even if some adapters are unresponsive.
+                // To guarantee this, each adapter enforces either the default timeout (1s) or
+                // a fraction of the timeout provided by Prometheus in the scrape request header.
+                let metrics_registry_replica = metrics_registry.clone();
+                let metrics_registry_adapter = metrics_registry.clone();
+                let (mf_replica, mut mf_adapters) = tokio::join!(
+                    tokio::spawn(
+                        async move { metrics_registry_replica.prometheus_registry().gather() }
+                    ),
+                    metrics_registry_adapter.adapter_registry().gather(
+                        req.headers()
+                            .get(PROMETHEUS_TIMEOUT_HEADER)
+                            .and_then(|h| h.to_str().ok())
+                            .and_then(|h| Some(Duration::from_secs_f64(h.parse().ok()?)))
+                            .map(|h| { h.mul_f64(PROMETHEUS_TIMEOUT_FRACTION) })
+                            .unwrap_or(DEFAULT_ADAPTER_COLLECTION_TIMEOUT),
+                    )
+                );
+                mf_adapters.append(&mut mf_replica.unwrap_or_default());
+
+                let mut buffer = Vec::with_capacity(mf_adapters.len());
+                encoder.encode(&mf_adapters, &mut buffer).unwrap();
+
                 Ok::<_, hyper::Error>(Response::new(Body::from(buffer)))
             }
         });
