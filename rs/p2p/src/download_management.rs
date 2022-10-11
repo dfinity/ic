@@ -187,11 +187,11 @@ pub(crate) struct DownloadManagerImpl {
     /// The download prioritizer.
     prioritizer: Arc<dyn DownloadPrioritizer>,
     /// The peer manager.
-    current_peers: Arc<Mutex<PeerContextDictionary>>,
+    current_peers: Mutex<PeerContextDictionary>,
     /// The underlying *Transport* layer.
     transport: Arc<dyn Transport>,
     /// The flow mapper.
-    transport_channel_mapper: Arc<TransportChannelIdMapper>,
+    transport_channel_mapper: TransportChannelIdMapper,
     /// The list of artifacts that is under construction.
     artifacts_under_construction: RwLock<ArtifactDownloadListImpl>,
     /// The logger.
@@ -760,12 +760,12 @@ impl DownloadManagerImpl {
         registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
         transport: Arc<dyn Transport>,
-        transport_channel_mapper: Arc<TransportChannelIdMapper>,
+        transport_channel_mapper: TransportChannelIdMapper,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
         let gossip_config = crate::fetch_gossip_config(registry_client.clone(), subnet_id);
-        let current_peers = Arc::new(Mutex::new(PeerContextDictionary::default()));
+        let current_peers = Mutex::new(PeerContextDictionary::default());
 
         let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
             artifact_manager.as_ref(),
@@ -1619,7 +1619,7 @@ pub mod tests {
         let metrics_registry = MetricsRegistry::new();
 
         let transport_channels = vec![TransportChannelId::from(0)];
-        let transport_channel_mapper = Arc::new(TransportChannelIdMapper::new(transport_channels));
+        let transport_channel_mapper = TransportChannelIdMapper::new(transport_channels);
 
         // Create fake peers.
         let artifact_manager = Arc::new(artifact_manager);
