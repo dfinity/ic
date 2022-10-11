@@ -69,6 +69,7 @@ impl NnsInitPayloadsBuilder {
                     max_message_size_bytes: Some(128 * 1024),
                     controller_id: ROOT_CANISTER_ID.into(),
                     cycles_for_archive_creation: Some(0),
+                    max_transactions_per_response: None,
                 })
                 .max_message_size_bytes(128 * 1024)
                 // 24 hour transaction window

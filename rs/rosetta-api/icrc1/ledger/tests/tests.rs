@@ -81,6 +81,7 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
             cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
         },
     };
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)

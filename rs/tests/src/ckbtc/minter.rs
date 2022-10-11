@@ -122,6 +122,7 @@ async fn install_ledger(node: &IcNodeSnapshot, logger: &Logger) -> CanisterId {
             max_message_size_bytes: None,
             controller_id: minting_user,
             cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
         },
     };
     install_icrc1_ledger(&mut ledger, &init_args).await;

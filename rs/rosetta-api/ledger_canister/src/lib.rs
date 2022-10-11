@@ -1115,6 +1115,7 @@ mod tests {
             max_message_size_bytes: None,
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
         }))));
 
         let user1 = PrincipalId::new_user_test_id(1).into();
