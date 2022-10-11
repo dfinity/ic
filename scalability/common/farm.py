@@ -7,6 +7,7 @@ import stat
 import subprocess
 import sys
 import time
+import uuid
 from typing import List
 
 import gflags
@@ -206,6 +207,8 @@ def prepare_prometheus_vm_config_image_file(group_name, ic_node_ipv6s) -> str:
 class Farm(object):
     def __init__(self, artifacts_path, subnet_config: List[int], version: str):
         """
+        version: the version of the IC to deploy. Needs to match the contents of
+        version.txt in the IC-OS image.
         subnet_config: array of subnets, with the number of nodes per subnet,
         e.g. [1, 2] for one subnet of 1 node and another subnet with 2 nodes.
         """
@@ -220,7 +223,7 @@ class Farm(object):
                 test_id = os.environ["CI_PIPELINE_ID"]
             else:
                 now = time.strftime("%Y-%M-%d-%H-%m-%S")
-                test_id = getpass.getuser() + "-" + now
+                test_id = getpass.getuser() + "-" + now + "-" + str(uuid.uuid4())
             self.group_name = "scalability-suite-" + test_id
         self.group_url = FARM_BASE_URL + "/group/" + self.group_name
         self.prometheus_vm_url = f"{self.group_url}/vm/prometheus"

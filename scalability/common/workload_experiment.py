@@ -72,6 +72,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         if self.use_updates:
             self.request_type = "call"
         self.experiment_initialized = False
+        self.kill_pids = []
         print(f"Update calls: {self.use_updates} {self.request_type}")
 
         print(
@@ -81,7 +82,6 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             )
         )
         self.init()
-        self.kill_pids = []
 
     def get_mainnet_targets(self) -> List[str]:
         """Get target if running in mainnet."""
@@ -148,6 +148,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             self.machines = workload_generator_machines[: self.num_workload_gen]
         else:
             self.machines = workload_generator_machines
+
         self.subnet_id = (
             FLAGS.mainnet_target_subnet_id
             if FLAGS.mainnet_target_subnet_id is not None and len(FLAGS.mainnet_target_subnet_id) > 0
@@ -234,7 +235,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 if self.get_node_ip_address(node_id) == target:
                     self.store_cache(key, subnet)
                     return subnet
-        raise Exception("Could not find subnet for benchmark target")
+        raise Exception(f"Could not find subnet for {target} benchmark target")
 
     def get_machine_to_instrument(self):
         """Instrument the machine that we target the load for."""
