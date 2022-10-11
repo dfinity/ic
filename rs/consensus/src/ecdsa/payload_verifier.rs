@@ -37,7 +37,11 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::crypto::canister_threshold_sig::idkg::SignedIDkgDealing;
 use ic_types::{
     batch::ValidationContext,
-    consensus::{ecdsa, ecdsa::EcdsaBlockReader, Block, BlockPayload, HasHeight},
+    consensus::{
+        ecdsa,
+        ecdsa::{EcdsaBlockReader, TranscriptRef},
+        Block, BlockPayload, HasHeight,
+    },
     crypto::canister_threshold_sig::{
         error::{
             IDkgVerifyInitialDealingsError, IDkgVerifyTranscriptError,
@@ -80,6 +84,7 @@ pub enum PermanentError {
     DataPayloadMismatch,
     MissingEcdsaDataPayload,
     MissingParentDataPayload,
+    NewTranscriptRefWrongHeight(TranscriptRef, Height),
     NewTranscriptNotFound(IDkgTranscriptId),
     NewTranscriptMiscount(u64),
     NewTranscriptMissingParams(IDkgTranscriptId),
@@ -330,10 +335,19 @@ pub fn validate_data_payload(
     let parent_chain = block_chain_cache(pool_reader, &summary_block, parent_block)
         .map_err(PermanentError::from)?;
     let block_reader = EcdsaBlockReaderImpl::new(parent_chain);
+    let curr_height = parent_block.height().increment();
 
     let transcripts = timed_call(
         "validate_transcript_refs",
-        || validate_transcript_refs(crypto, &block_reader, &prev_payload, curr_payload),
+        || {
+            validate_transcript_refs(
+                crypto,
+                &block_reader,
+                &prev_payload,
+                curr_payload,
+                curr_height,
+            )
+        },
         metrics,
     )?;
     let dealings = timed_call(
@@ -414,6 +428,7 @@ fn validate_transcript_refs(
     block_reader: &dyn EcdsaBlockReader,
     prev_payload: &ecdsa::EcdsaPayload,
     curr_payload: &ecdsa::EcdsaPayload,
+    curr_height: Height,
 ) -> Result<BTreeMap<IDkgTranscriptId, IDkgTranscript>, EcdsaValidationError> {
     use PermanentError::*;
     let mut count = 0;
@@ -422,9 +437,12 @@ fn validate_transcript_refs(
         .iter_transcript_configs_in_creation()
         .map(|config| (config.transcript_id, config))
         .collect::<BTreeMap<_, _>>();
-    let prev_refs = prev_payload.active_transcripts();
     for transcript_ref in curr_payload.active_transcripts().iter() {
-        if !prev_refs.contains(transcript_ref) && block_reader.transcript(transcript_ref).is_err() {
+        if transcript_ref.height >= curr_height || block_reader.transcript(transcript_ref).is_err()
+        {
+            if transcript_ref.height != curr_height {
+                return Err(NewTranscriptRefWrongHeight(*transcript_ref, curr_height).into());
+            }
             let transcript_id = &transcript_ref.transcript_id;
             if let Some(transcript) = idkg_transcripts.get(transcript_id) {
                 let config = prev_configs
@@ -546,7 +564,8 @@ mod test {
         utils::test_utils::*,
     };
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment,
+        generate_key_transcript, run_idkg_and_create_and_verify_transcript,
+        CanisterThresholdSigTestEnvironment,
     };
     use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
@@ -567,28 +586,39 @@ mod test {
         let subnet_id = subnet_test_id(1);
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes);
         let registry_version = env.newest_registry_version;
-        //let subnet_nodes = env.receivers().into_iter().collect::<Vec<_>>();
         let algorithm_id = AlgorithmId::ThresholdEcdsaSecp256k1;
         let crypto = &CryptoReturningOk::default();
         let mut block_reader = TestEcdsaBlockReader::new();
         let mut prev_payload = empty_ecdsa_payload(subnet_id);
         let mut curr_payload = prev_payload.clone();
         // Empty payload verifies
-        assert!(
-            validate_transcript_refs(crypto, &block_reader, &prev_payload, &curr_payload).is_ok()
-        );
+        assert!(validate_transcript_refs(
+            crypto,
+            &block_reader,
+            &prev_payload,
+            &curr_payload,
+            Height::from(0)
+        )
+        .is_ok());
 
         // Add a transcript
         let transcript_0 = generate_key_transcript(&env, algorithm_id);
         let transcript_id_0 = transcript_0.transcript_id;
+        let height_100 = Height::new(100);
         let transcript_ref_0 =
-            ecdsa::UnmaskedTranscript::try_from((Height::new(100), &transcript_0)).unwrap();
+            ecdsa::UnmaskedTranscript::try_from((height_100, &transcript_0)).unwrap();
         curr_payload
             .idkg_transcripts
             .insert(transcript_id_0, transcript_0);
         // Error because transcript is not referenced
         assert!(matches!(
-            validate_transcript_refs(crypto, &block_reader, &prev_payload, &curr_payload),
+            validate_transcript_refs(
+                crypto,
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                height_100
+            ),
             Err(ValidationError::Permanent(
                 PermanentError::NewTranscriptMiscount(_)
             ))
@@ -607,8 +637,28 @@ mod test {
             );
         curr_payload.key_transcript.next_in_creation =
             ecdsa::KeyTranscriptCreation::Created(transcript_ref_0);
-        let res = validate_transcript_refs(crypto, &block_reader, &prev_payload, &curr_payload);
+        let res = validate_transcript_refs(
+            crypto,
+            &block_reader,
+            &prev_payload,
+            &curr_payload,
+            height_100,
+        );
         assert!(res.is_ok());
+
+        // Error because of height mismatch
+        assert!(matches!(
+            validate_transcript_refs(
+                crypto,
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                Height::from(99),
+            ),
+            Err(ValidationError::Permanent(
+                PermanentError::NewTranscriptRefWrongHeight(_, _)
+            ))
+        ));
 
         // Add another reference
         let transcript_1 = generate_key_transcript(&env, algorithm_id);
@@ -617,7 +667,13 @@ mod test {
         curr_payload.key_transcript.next_in_creation =
             ecdsa::KeyTranscriptCreation::Created(transcript_ref_1);
         assert!(matches!(
-            validate_transcript_refs(crypto, &block_reader, &prev_payload, &curr_payload),
+            validate_transcript_refs(
+                crypto,
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                height_100
+            ),
             Err(ValidationError::Permanent(
                 PermanentError::NewTranscriptNotFound(_)
             ))
@@ -625,9 +681,14 @@ mod test {
 
         curr_payload.idkg_transcripts = BTreeMap::new();
         block_reader.add_transcript(*transcript_ref_1.as_ref(), transcript_1);
-        assert!(
-            validate_transcript_refs(crypto, &block_reader, &prev_payload, &curr_payload).is_ok()
-        );
+        assert!(validate_transcript_refs(
+            crypto,
+            &block_reader,
+            &prev_payload,
+            &curr_payload,
+            Height::from(101),
+        )
+        .is_ok());
     }
 
     fn make_dealings_response(
@@ -881,6 +942,104 @@ mod test {
             Err(ValidationError::Permanent(
                 PermanentError::NewSignatureUnexpected(_)
             ))
+        ));
+    }
+
+    #[test]
+    fn should_not_verify_same_transcript_many_times() {
+        use ic_types::consensus::ecdsa::*;
+        let num_of_nodes = 4;
+        let subnet_id = subnet_test_id(1);
+        let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes);
+        let registry_version = env.newest_registry_version;
+        let algorithm_id = AlgorithmId::ThresholdEcdsaSecp256k1;
+        let crypto = &CryptoReturningOk::default();
+        let mut block_reader = TestEcdsaBlockReader::new();
+        let mut prev_payload = empty_ecdsa_payload(subnet_id);
+        let mut curr_payload = prev_payload.clone();
+
+        // Add a unmasked transcript
+        let transcript_0 = generate_key_transcript(&env, algorithm_id);
+        let transcript_id_0 = transcript_0.transcript_id;
+        let transcript_ref_0 =
+            ecdsa::UnmaskedTranscript::try_from((Height::new(100), &transcript_0)).unwrap();
+
+        // Add a masked transcript
+        let transcript_1 = {
+            let transcript_id = transcript_id_0.increment();
+            let dealers = env.receivers().into_iter().collect::<BTreeSet<_>>();
+            let receivers = dealers.clone();
+            let param = ecdsa::RandomTranscriptParams::new(
+                transcript_id,
+                dealers,
+                receivers,
+                registry_version,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+            );
+            run_idkg_and_create_and_verify_transcript(
+                &param.as_ref().translate(&block_reader).unwrap(),
+                &env.crypto_components,
+            )
+        };
+        let masked_transcript_1 =
+            ecdsa::MaskedTranscript::try_from((Height::new(10), &transcript_1)).unwrap();
+        block_reader.add_transcript(
+            TranscriptRef::new(Height::new(10), transcript_1.transcript_id),
+            transcript_1,
+        );
+
+        curr_payload
+            .idkg_transcripts
+            .insert(transcript_id_0, transcript_0.clone());
+
+        // Add the reference
+        let random_params = ecdsa::RandomTranscriptParams::new(
+            transcript_id_0,
+            env.receivers().into_iter().collect(),
+            env.receivers().into_iter().collect(),
+            registry_version,
+            algorithm_id,
+        );
+        prev_payload.key_transcript.next_in_creation =
+            ecdsa::KeyTranscriptCreation::RandomTranscriptParams(random_params);
+        curr_payload.key_transcript.next_in_creation =
+            ecdsa::KeyTranscriptCreation::Created(transcript_ref_0);
+
+        const NUM_MALICIOUS_REFS: i32 = 10_000;
+        for i in 0..NUM_MALICIOUS_REFS {
+            let malicious_transcript_ref =
+                ecdsa::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0))
+                    .unwrap();
+            curr_payload.available_quadruples.insert(
+                QuadrupleId(i as u64),
+                PreSignatureQuadrupleRef {
+                    kappa_unmasked_ref: malicious_transcript_ref,
+                    lambda_masked_ref: masked_transcript_1,
+                    kappa_times_lambda_ref: masked_transcript_1,
+                    key_times_lambda_ref: masked_transcript_1,
+                },
+            );
+        }
+
+        let error = validate_transcript_refs(
+            crypto,
+            &block_reader,
+            &prev_payload,
+            &curr_payload,
+            Height::from(100),
+        )
+        .unwrap_err();
+
+        // Previously it would report NewTranscriptMiscount error as a proof that
+        // the same transcripts have been verified many times.
+        assert!(!matches!(
+            error,
+            ValidationError::Permanent(PermanentError::NewTranscriptMiscount(_))
+        ));
+        // Now that we fixed the problem, it reports NewTranscriptRefWrongHeight instead.
+        assert!(matches!(
+            error,
+            ValidationError::Permanent(PermanentError::NewTranscriptRefWrongHeight(_, _))
         ));
     }
 }
