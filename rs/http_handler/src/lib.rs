@@ -10,6 +10,7 @@ mod call;
 mod catch_up_package;
 mod common;
 mod dashboard;
+mod health_status_refresher;
 mod metrics;
 mod pprof;
 mod query;
@@ -26,6 +27,7 @@ use crate::{
         get_cors_headers, get_root_public_key, make_plaintext_response, map_box_error_to_response,
     },
     dashboard::DashboardService,
+    health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
         LABEL_REQUEST_TYPE, LABEL_STATUS, LABEL_TYPE, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS,
     },
@@ -37,6 +39,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
 };
 use byte_unit::Byte;
+use crossbeam::atomic::AtomicCell;
 use http::method::Method;
 use hyper::{server::conn::Http, Body, Client, Request, Response, StatusCode};
 use ic_async_utils::{TcpAcceptor, WrappedTcpStream};
@@ -164,25 +167,35 @@ struct HttpHandler {
     dashboard_service: EndpointService,
     status_service: EndpointService,
     read_state_service: EndpointService,
+    health_status_refresher: HealthStatusRefreshLayer,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
 // required state, etc).
 fn start_server_initialization(
     log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     state_reader_executor: StateReaderExecutor,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    health_status: Arc<RwLock<ReplicaHealthStatus>>,
+    health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
 ) {
     rt_handle.spawn(async move {
         info!(log, "Initializing HTTP server...");
         // Sleep one second between retries, only log every 10th round.
         info!(log, "Waiting for certified state...");
-        *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForCertifiedState;
+        metrics
+            .health_status_transitions_total
+            .with_label_values(&[
+                &health_status.load().to_string(),
+                &ReplicaHealthStatus::WaitingForCertifiedState.to_string(),
+            ])
+            .inc();
+        health_status.store(ReplicaHealthStatus::WaitingForCertifiedState);
+
         while common::get_latest_certified_state(&state_reader_executor)
             .await
             .is_none()
@@ -193,7 +206,7 @@ fn start_server_initialization(
         info!(log, "Certified state is now available.");
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
-        *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForRootDelegation;
+        health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
         match load_root_delegation(
             &log,
             subnet_id,
@@ -208,7 +221,14 @@ fn start_server_initialization(
             }
             Ok(loaded_delegation) => {
                 *delegation_from_nns.write().unwrap() = loaded_delegation;
-                *health_status.write().unwrap() = ReplicaHealthStatus::Healthy;
+                metrics
+                    .health_status_transitions_total
+                    .with_label_values(&[
+                        &health_status.load().to_string(),
+                        &ReplicaHealthStatus::Healthy.to_string(),
+                    ])
+                    .inc();
+                health_status.store(ReplicaHealthStatus::Healthy);
                 // IMPORTANT: The system-tests relies on this log message to understand when it
                 // can start interacting with the replica. In the future, we plan to
                 // have a dedicated instrumentation channel to communicate between the
@@ -297,9 +317,13 @@ pub fn start_server(
     info!(log, "Starting HTTP server...");
     rt_handle.clone().spawn(async move {
         let delegation_from_nns = Arc::new(RwLock::new(None));
-        let health_status = Arc::new(RwLock::new(ReplicaHealthStatus::Starting));
+        let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
         let state_reader_executor = StateReaderExecutor::new(state_reader);
         let validator_executor = ValidatorExecutor::new(ingress_verifier, log.clone());
+
+        if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
+            error!(log, "Replica health status uses locks instead of atomics.");
+        }
 
         let call_service = CallService::new_service(
             log.clone(),
@@ -344,13 +368,22 @@ pub fn start_server(
             state_reader_executor.clone(),
         );
         let catchup_service =
-            CatchUpPackageService::new_service(metrics.clone(), consensus_pool_cache);
+            CatchUpPackageService::new_service(metrics.clone(), consensus_pool_cache.clone());
+
+        let health_status_refresher = HealthStatusRefreshLayer::new(
+            log.clone(),
+            metrics.clone(),
+            Arc::clone(&health_status),
+            consensus_pool_cache,
+            state_reader_executor.clone(),
+        );
 
         info!(log, "Binding HTTP server to address {}", addr);
         let tcp_listener = TcpListener::bind(addr).await.unwrap();
 
         start_server_initialization(
             log.clone(),
+            metrics.clone(),
             subnet_id,
             nns_subnet_id,
             registry_client.clone(),
@@ -368,6 +401,7 @@ pub fn start_server(
             catchup_service,
             dashboard_service,
             read_state_service,
+            health_status_refresher,
         };
         let main_service = create_main_service(metrics.clone(), http_handler.clone());
 
@@ -463,10 +497,12 @@ fn create_main_service(
     metrics: HttpHandlerMetrics,
     http_handler: HttpHandler,
 ) -> BoxCloneService<Request<Body>, Response<Body>, HttpError> {
+    let health_status_refresher = http_handler.health_status_refresher.clone();
     let route_service = service_fn(move |req: RequestWithTimer| {
         let http_handler = http_handler.clone();
         async move { Ok::<_, HttpError>(make_router(http_handler, req).await) }
     });
+
     BoxCloneService::new(
         ServiceBuilder::new()
             // Attach a timer as soon as we see a request.
@@ -480,6 +516,7 @@ fn create_main_service(
                 );
                 (request, request_timer)
             })
+            .layer(health_status_refresher)
             .service(route_service)
             .map_result(move |result| match result {
                 Ok((response, request_timer)) => {
@@ -1010,4 +1047,15 @@ fn redirect_to_dasboard_response() -> Response<Body> {
         hyper::header::HeaderValue::from_static(HTTP_DASHBOARD_URL_PATH),
     );
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Verify that ReplicatedStateHealth is represented as an atomic by crossbeam.
+    #[test]
+    fn test_replica_state_atomic() {
+        assert!(AtomicCell::<ReplicaHealthStatus>::is_lock_free());
+    }
 }

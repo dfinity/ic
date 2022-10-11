@@ -11,6 +11,7 @@ use crate::{
     },
     Time, UserId,
 };
+use derive_more::Display;
 use ic_base_types::{CanisterId, CanisterIdError, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use maplit::btreemap;
@@ -595,12 +596,13 @@ pub struct CertificateDelegation {
 
 /// Different stages required for the full initialization of the HttpHandler.
 /// The fields are listed in order of execution.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Display, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplicaHealthStatus {
     Starting,
     WaitingForCertifiedState,
     WaitingForRootDelegation,
+    CertifiedStateBehind,
     Healthy,
 }
 
