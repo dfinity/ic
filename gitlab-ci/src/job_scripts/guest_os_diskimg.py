@@ -23,7 +23,6 @@ def run():
 
         version_txt = Path(f"{ENV.top}/version.txt")
         if version_txt.is_file():
-            legacy_version = version
             version = version_txt.read_text().strip()
 
         if ENV.is_gitlab:
@@ -35,14 +34,5 @@ def run():
                     build_out,
                     upload_target,
                 )
-            if legacy_version:
-                with buildevent("rclone"):
-                    sh(
-                        f"{ENV.top}/gitlab-ci/src/artifacts/rclone_upload.py",
-                        f"--version={legacy_version}",
-                        "--verbose",
-                        build_out,
-                        upload_target,
-                    )
 
     logging.info(f"Build ID (real or fake git revision): {version}")
