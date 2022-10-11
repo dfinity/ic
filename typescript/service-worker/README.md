@@ -98,7 +98,15 @@ export type Token = { type: <T>() => IDL.Type<T> };
 ```
 
 ## Testing locally
-
+1. Install [mkcert](https://github.com/FiloSottile/mkcert).
+      ```shell
+      brew install mkcert
+      brew install nss # optional, for Firefox support
+      ```
+1. Optionally, install the mkcert root CA
+      ```shell
+      mkcert -install
+      ```
 1. Generate SSL certificates:
       ```shell
       npm run create-ssl-certs
@@ -108,20 +116,46 @@ export type Token = { type: <T>() => IDL.Type<T> };
       127.0.0.1 ic0.local
 
       # Internet Identity
-      127.0.0.1 rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.local  
+      127.0.0.1 rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.local
+      127.0.0.1 identity.ic0.local
 
       # NNS
-      127.0.0.1 qoctq-giaaa-aaaaa-aaaea-cai.ic0.local 
+      127.0.0.1 qoctq-giaaa-aaaaa-aaaea-cai.ic0.local
+      127.0.0.1 nns.ic0.local
 
       # Distrikt
-      127.0.0.1 az5sd-cqaaa-aaaae-aaarq-cai.ic0.local 
+      127.0.0.1 az5sd-cqaaa-aaaae-aaarq-cai.ic0.local
+      127.0.0.1 distrikt.ic0.local
+
+      # Distrikt Staging
+      127.0.0.1 am2do-dyaaa-aaaae-aaasa-cai.ic0.local
+      127.0.0.1 distrikt-staging.ic0.local
 
       # DSCVR
-      127.0.0.1 h5aet-waaaa-aaaab-qaamq-cai.ic0.local 
+      127.0.0.1 h5aet-waaaa-aaaab-qaamq-cai.ic0.local
+      127.0.0.1 dscvr.ic0.local
       ```
-1. Build and run the docker image:
+1. Set the `hostnameCanisterIdMap` value in the `http_request.ts` file (make sure to revert this before commiting):
       ```shell
-      docker compose up --build
+      const hostnameCanisterIdMap: Record<string, [string, string]> = {
+            'identity.ic0.local': ['rdmx6-jaaaa-aaaaa-aaadq-cai', 'ic0.app'],
+            'nns.ic0.local': ['qoctq-giaaa-aaaaa-aaaea-cai', 'ic0.app'],
+            'dscvr.ic0.local': ['h5aet-waaaa-aaaab-qaamq-cai', 'ic0.app'],
+            'distrikt.ic0.local': ['az5sd-cqaaa-aaaae-aaarq-cai', 'ic0.app'],
+            'distrikt-staging.ic0.local': ['am2do-dyaaa-aaaae-aaasa-cai', 'ic0.app'],
+      };
+      ```
+1. Build and watch the service worker:
+      ```shell
+      npm run build-dev -- --watch
+      ```
+1. In a separate shell, build and run the docker image:
+      ```shell
+      docker compose up
+      ```
+1. If you installed the root CA, that's all there is to do. If you chose not to install the root CA, then you will need to launch your browser with certain flags:
+      ```
+      /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --user-data-dir=/tmp/no-ssl --ignore-certificate-errors
       ```
 
 ## Release
