@@ -11,11 +11,11 @@ use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
-    TlsServerHandshakeError, TlsStream,
+    TlsServerHandshakeError,
 };
+use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, IDkgProtocol,
     KeyManager, LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
@@ -749,7 +749,7 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
         tcp_stream: TcpStream,
         allowed_clients: AllowedClients,
         registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
+    ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
         self.crypto_component
             .perform_tls_server_handshake(tcp_stream, allowed_clients, registry_version)
             .await
@@ -759,7 +759,7 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
         &self,
         tcp_stream: TcpStream,
         registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsServerHandshakeError> {
+    ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
         self.crypto_component
             .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
             .await
@@ -770,7 +770,7 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
         tcp_stream: TcpStream,
         server: NodeId,
         registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsClientHandshakeError> {
+    ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
         self.crypto_component
             .perform_tls_client_handshake(tcp_stream, server, registry_version)
             .await

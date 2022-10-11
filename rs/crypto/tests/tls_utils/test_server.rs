@@ -3,15 +3,14 @@ use crate::tls_utils::{temp_crypto_component_with_tls_keys, REG_V1};
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsReadHalf,
-    TlsServerHandshakeError, TlsWriteHalf,
+    AllowedClients, AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsServerHandshakeError,
 };
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use proptest::std_facade::BTreeSet;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 
 pub struct ServerBuilder {
@@ -113,7 +112,7 @@ impl Server {
             .crypto
             .perform_tls_server_handshake(tcp_stream, self.allowed_clients.clone(), REG_V1)
             .await?;
-        let (mut rh, mut wh) = tls_stream.split();
+        let (mut rh, mut wh) = Box::new(tls_stream).split();
 
         self.send_msg_to_client_if_configured(&mut wh, &mut rh)
             .await;
@@ -151,30 +150,34 @@ impl Server {
         tcp_stream
     }
 
-    async fn expect_msg_from_client_if_configured(
+    async fn expect_msg_from_client_if_configured<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         &self,
-        rh: &mut TlsReadHalf,
-        wh: &mut TlsWriteHalf,
+        rd: &mut R,
+        wr: &mut W,
     ) {
         if let Some(msg_expected_from_client) = &self.msg_expected_from_client {
-            let reader = BufReader::new(rh);
+            let reader = BufReader::new(rd);
             let msg = reader.lines().next_line().await.unwrap().unwrap();
             assert_eq!(&msg, msg_expected_from_client);
 
             const ACK: u8 = 0x06;
-            wh.write_u8(ACK).await.unwrap();
+            wr.write_u8(ACK).await.unwrap();
         }
     }
 
-    async fn send_msg_to_client_if_configured(&self, wh: &mut TlsWriteHalf, rh: &mut TlsReadHalf) {
+    async fn send_msg_to_client_if_configured<W: AsyncWrite + Unpin, R: AsyncRead + Unpin>(
+        &self,
+        wr: &mut W,
+        rd: &mut R,
+    ) {
         if let Some(msg_for_client) = &self.msg_for_client {
             // Append a newline (end of line, EOL, 0xA) so the peer knows where the msg ends
             let msg_with_eol = format!("{}\n", msg_for_client);
-            let num_bytes_written = wh.write(msg_with_eol.as_bytes()).await.unwrap();
+            let num_bytes_written = wr.write(msg_with_eol.as_bytes()).await.unwrap();
             assert_eq!(num_bytes_written, msg_with_eol.as_bytes().len());
 
             const ACK: u8 = 0x06;
-            let reply = rh.read_u8().await.unwrap();
+            let reply = rd.read_u8().await.unwrap();
             assert_eq!(reply, ACK);
         }
     }

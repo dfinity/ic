@@ -46,8 +46,12 @@ enum ConnectionState {
     Handshake(
         Pin<
             Box<
-                dyn Future<Output = Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError>>
-                    + Send,
+                dyn Future<
+                        Output = Result<
+                            (Box<dyn TlsStream>, AuthenticatedPeer),
+                            TlsServerHandshakeError,
+                        >,
+                    > + Send,
             >,
         >,
     ),
@@ -55,7 +59,7 @@ enum ConnectionState {
     Failed(TlsServerHandshakeError),
     /// The handshake completed successfully.
     Ready {
-        stream: Box<TlsStream>,
+        stream: Box<dyn TlsStream>,
         peer: AuthenticatedPeer,
     },
     /// An unencrypted TCP stream, MUST ONLY BE USED IN TESTS.
@@ -94,7 +98,7 @@ impl TlsConnection {
         f: F,
     ) -> Poll<std::io::Result<R>>
     where
-        F: FnOnce(Pin<&mut TlsStream>, &mut Context<'_>) -> Poll<std::io::Result<R>>,
+        F: FnOnce(Pin<&mut Box<dyn TlsStream>>, &mut Context<'_>) -> Poll<std::io::Result<R>>,
     {
         match &mut self.0 {
             ConnectionState::Handshake(fut) => match Future::poll(Pin::new(fut), cx) {
@@ -104,10 +108,7 @@ impl TlsConnection {
                     // into TlsConnection and cause another poll on
                     // the `fut` future, which is not allowed for
                     // futures that returned `Ready`.
-                    self.0 = ConnectionState::Ready {
-                        stream: Box::new(stream),
-                        peer,
-                    };
+                    self.0 = ConnectionState::Ready { stream, peer };
                     if let ConnectionState::Ready { ref mut stream, .. } = self.0 {
                         f(Pin::new(stream), cx)
                     } else {
@@ -390,7 +391,7 @@ impl Service<Uri> for TlsConnector {
                         .await
                         .map_err(box_err)?;
                     Ok(TlsConnection(ConnectionState::Ready {
-                        stream: Box::new(tls_stream),
+                        stream: tls_stream,
                         peer: AuthenticatedPeer::Node(xnet_auth.node_id),
                     }))
                 }

@@ -433,7 +433,7 @@ impl TransportImpl {
     async fn tls_server_handshake(
         &self,
         stream: TcpStream,
-    ) -> Result<(NodeId, TlsStream), TransportTlsHandshakeError> {
+    ) -> Result<(NodeId, Box<dyn TlsStream>), TransportTlsHandshakeError> {
         let registry_version = *self.registry_version.read().await;
         let current_allowed_clients = self.allowed_clients.read().await.clone();
         let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients)
@@ -458,7 +458,7 @@ impl TransportImpl {
         &self,
         peer_id: NodeId,
         stream: TcpStream,
-    ) -> Result<TlsStream, TransportTlsHandshakeError> {
+    ) -> Result<Box<dyn TlsStream>, TransportTlsHandshakeError> {
         let registry_version = *self.registry_version.read().await;
         match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),

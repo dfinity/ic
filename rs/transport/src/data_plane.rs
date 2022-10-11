@@ -25,7 +25,7 @@ use crate::{
     },
 };
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{TlsStream, TlsWriteHalf};
+use ic_crypto_tls_interfaces::{TlsStream, TlsStreamWriteHalf};
 use ic_interfaces_transport::{
     TransportChannelId, TransportEvent, TransportEventHandler, TransportMessage, TransportPayload,
 };
@@ -122,7 +122,7 @@ fn spawn_write_task(
     peer_id: NodeId,
     channel_id: TransportChannelId,
     mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
-    mut writer: Box<TlsWriteHalf>,
+    mut writer: Box<dyn TlsStreamWriteHalf>,
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
@@ -340,20 +340,20 @@ pub(crate) fn create_connected_state(
     send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
     role: ConnectionRole,
     peer_addr: SocketAddr,
-    tls_stream: TlsStream,
+    tls_stream: Box<dyn TlsStream>,
     event_handler: TransportEventHandler,
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
     _use_h2: bool,
 ) -> Connected {
-    let (tls_reader, tls_writer) = tls_stream.split();
+    let (tls_reader, tls_writer) = Box::new(tls_stream).split();
     // Spawn write task
     let write_task = spawn_write_task(
         peer_id,
         channel_id,
         send_queue_reader,
-        Box::new(tls_writer),
+        tls_writer,
         data_plane_metrics.clone(),
         weak_self.clone(),
         rt_handle.clone(),
@@ -363,7 +363,7 @@ pub(crate) fn create_connected_state(
         peer_id,
         channel_id,
         event_handler,
-        Box::new(tls_reader),
+        tls_reader,
         data_plane_metrics,
         weak_self,
         rt_handle,

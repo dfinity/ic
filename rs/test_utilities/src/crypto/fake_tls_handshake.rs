@@ -29,7 +29,7 @@ impl TlsHandshake for FakeTlsHandshake {
         _tcp_stream: TcpStream,
         _allowed_clients: AllowedClients,
         _registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
+    ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
         unimplemented!()
     }
 
@@ -37,7 +37,7 @@ impl TlsHandshake for FakeTlsHandshake {
         &self,
         _tcp_stream: TcpStream,
         _registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsServerHandshakeError> {
+    ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
         unimplemented!()
     }
 
@@ -46,7 +46,7 @@ impl TlsHandshake for FakeTlsHandshake {
         _tcp_stream: TcpStream,
         _server: NodeId,
         _registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsClientHandshakeError> {
+    ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
         unimplemented!()
     }
 }
