@@ -123,6 +123,7 @@ fn test_rosetta1_92() {
                 trigger_threshold: blocks_per_archive_node,
                 num_blocks_to_archive: blocks_per_archive_call,
                 cycles_for_archive_creation: Some(0),
+                max_transactions_per_response: None,
             })
             .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
             .build()

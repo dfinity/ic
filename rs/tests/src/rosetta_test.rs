@@ -414,6 +414,7 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         max_message_size_bytes: Some(2 * 1024 * 1024),
         controller_id: CanisterId::from_u64(876).into(),
         cycles_for_archive_creation: Some(0),
+        max_transactions_per_response: None,
     };
 
     let ledger_canister_for_governance_payload = LedgerCanisterInitPayload::builder()

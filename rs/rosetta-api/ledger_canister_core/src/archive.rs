@@ -27,6 +27,9 @@ pub struct ArchiveOptions {
     // cycles to use for the call to create a new archive canister
     #[serde(default)]
     pub cycles_for_archive_creation: Option<u64>,
+    // Max transactions returned by the [get_transactions] endpoint
+    #[serde(default)]
+    pub max_transactions_per_response: Option<usize>,
 }
 
 /// A scope guard for block archiving.
@@ -117,6 +120,10 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     #[serde(default = "default_cycles_for_archive_creation")]
     pub cycles_for_archive_creation: u64,
 
+    // The maximum number of transactions returned by the [get_transactions] archive endpoint
+    #[serde(default)]
+    pub max_transactions_per_response: Option<usize>,
+
     /// Whether there are outstanding calls to the archive at the moment.
     // We do not need to persist this flag because we cannot have any oustanding calls
     // on upgrade.
@@ -141,6 +148,7 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Archive<Rt, Wasm> {
             trigger_threshold: options.trigger_threshold,
             num_blocks_to_archive: options.num_blocks_to_archive,
             cycles_for_archive_creation: options.cycles_for_archive_creation.unwrap_or(0),
+            max_transactions_per_response: options.max_transactions_per_response,
             archiving_in_progress: false,
             _marker: PhantomData,
         }
@@ -290,6 +298,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         node_block_height_offset,
         node_max_memory_size_bytes,
         controller_id,
+        max_transactions_per_response,
     ) = inspect_archive(archive, |archive| {
         let node_block_height_offset: u64 = archive
             .nodes_block_ranges
@@ -301,6 +310,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
             node_block_height_offset,
             archive.node_max_memory_size_bytes,
             archive.controller_id,
+            archive.max_transactions_per_response,
         )
     });
 
@@ -316,7 +326,8 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         Encode!(
             &Rt::id(),
             &node_block_height_offset,
-            &Some(node_max_memory_size_bytes)
+            &Some(node_max_memory_size_bytes),
+            &max_transactions_per_response
         )
         .unwrap(),
     )

@@ -21,7 +21,7 @@ use num_traits::cast::ToPrimitive;
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
-const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
+const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 const MINT_BLOCKS_PER_ARCHIVE: usize = 5;
 
 const MINTER: Account = Account {
@@ -76,8 +76,23 @@ fn mint_block() -> EncodedBlock {
     .encode()
 }
 
-fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> CanisterId {
-    let node_max_memory_size_bytes = MINT_BLOCKS_PER_ARCHIVE * mint_block().size_bytes();
+fn default_archive_options() -> ArchiveOptions {
+    ArchiveOptions {
+        trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+        num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+        node_max_memory_size_bytes: None,
+        max_message_size_bytes: None,
+        controller_id: PrincipalId::new_user_test_id(100),
+        cycles_for_archive_creation: None,
+        max_transactions_per_response: None,
+    }
+}
+
+fn install_ledger(
+    env: &StateMachine,
+    initial_balances: Vec<(Account, u64)>,
+    archive_options: ArchiveOptions,
+) -> CanisterId {
     let args = LedgerInitArgs {
         minting_account: MINTER.clone(),
         initial_balances,
@@ -90,14 +105,7 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
             Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
             Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
         ],
-        archive_options: ArchiveOptions {
-            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
-            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
-            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            cycles_for_archive_creation: None,
-        },
+        archive_options,
     };
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
@@ -299,7 +307,7 @@ fn test() {
         .collect();
 
     let env = StateMachine::new();
-    let ledger_id = install_ledger(&env, initial_balances);
+    let ledger_id = install_ledger(&env, initial_balances, default_archive_options());
 
     let index_id = install_index(&env, ledger_id);
 
@@ -363,7 +371,7 @@ fn test() {
 #[test]
 fn test_upgrade() {
     let env = StateMachine::new();
-    let ledger_id = install_ledger(&env, vec![]);
+    let ledger_id = install_ledger(&env, vec![], default_archive_options());
     let index_id = install_index(&env, ledger_id);
 
     // add some transactions
@@ -388,7 +396,14 @@ fn test_index_archived_txs() {
     let num_txs = ARCHIVE_TRIGGER_THRESHOLD as usize + MINT_BLOCKS_PER_ARCHIVE;
 
     // install the ledger and add enough transactions to create an archive
-    let ledger_id = install_ledger(&env, vec![]);
+    let ledger_id = install_ledger(
+        &env,
+        vec![],
+        ArchiveOptions {
+            node_max_memory_size_bytes: Some(MINT_BLOCKS_PER_ARCHIVE * mint_block().size_bytes()),
+            ..default_archive_options()
+        },
+    );
     for idx in 0..(num_txs as u64) {
         mint(&env, ledger_id, account(1), idx);
     }
@@ -402,7 +417,46 @@ fn test_index_archived_txs() {
     for idx in 0..(num_txs as u64) {
         assert_eq!(
             Nat::from(idx),
-            txs.get(num_txs - idx as usize - 1).unwrap().id
+            txs.get(num_txs - idx as usize - 1)
+                .unwrap_or_else(|| panic!(
+                    "Transaction {} not found in index!",
+                    num_txs - idx as usize - 1
+                ))
+                .id
         );
     }
+}
+
+#[test]
+fn test_index_archived_txs_paging() {
+    // The archive node does paging when there are too many transactions.
+    // This test verifies that the Index canister respects the paging.
+    const MAX_TXS_PER_GET_TRANSACTIONS_RESPONSE: usize = 1;
+    const NUM_ARCHIVED_TXS: usize = 2;
+
+    let env = StateMachine::new();
+
+    // install the ledger and add enough transactions to create an archive
+    let ledger_id = install_ledger(
+        &env,
+        vec![],
+        ArchiveOptions {
+            num_blocks_to_archive: NUM_ARCHIVED_TXS,
+            max_transactions_per_response: Some(MAX_TXS_PER_GET_TRANSACTIONS_RESPONSE),
+            ..default_archive_options()
+        },
+    );
+    for idx in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        mint(&env, ledger_id, account(1), idx);
+    }
+
+    // install the index and let it index all the transaction
+    let index_id = install_index(&env, ledger_id);
+    env.run_until_completion(10_000);
+
+    // check that the index has exactly indexed num_txs transactions
+    let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    let actual_txids: Vec<u64> = txs.iter().map(|tx| tx.id.0.to_u64().unwrap()).collect();
+    let expected_txids: Vec<u64> = (0..ARCHIVE_TRIGGER_THRESHOLD).rev().collect();
+    assert_eq!(expected_txids, actual_txids);
 }

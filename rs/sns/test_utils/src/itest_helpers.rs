@@ -134,6 +134,7 @@ impl SnsTestsInitPayloadBuilder {
                 // controller_id will be set when the Root canister ID is allocated
                 controller_id: CanisterId::from_u64(0).into(),
                 cycles_for_archive_creation: Some(0),
+                max_transactions_per_response: None,
             },
             transfer_fee: DEFAULT_TRANSFER_FEE.get_e8s(),
             token_symbol: "TKX".to_string(),

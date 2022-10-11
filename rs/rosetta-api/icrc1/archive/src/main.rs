@@ -22,7 +22,7 @@ const GIB: usize = 1024 * 1024 * 1024;
 const DEFAULT_MEMORY_LIMIT: usize = 3 * GIB;
 
 /// The maximum number of blocks to return in a single get_transactions request.
-const MAX_BLOCKS_PER_REQUEST: usize = 2000;
+const DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE: usize = 2000;
 
 /// The maximum number of Wasm pages that we allow to use for the stable storage.
 const NUM_WASM_PAGES: u64 = 4 * (GIB as u64) / WASM_PAGE_SIZE;
@@ -70,6 +70,8 @@ struct ArchiveConfig {
     /// The principal of the ledger canister that created this archive.
     /// The archive will accept blocks only from this principal.
     ledger_id: Principal,
+    /// The maximum number of transactions returned by [get_transactions].
+    max_transactions_per_response: usize,
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -80,6 +82,7 @@ impl Default for ArchiveConfig {
             max_memory_size_bytes: 0,
             block_index_offset: 0,
             ledger_id: Principal::management_canister(),
+            max_transactions_per_response: DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE,
         }
     }
 }
@@ -119,16 +122,24 @@ fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
 
 #[init]
 #[candid_method(init)]
-fn init(ledger_id: Principal, block_index_offset: u64, max_memory_size_bytes: Option<usize>) {
+fn init(
+    ledger_id: Principal,
+    block_index_offset: u64,
+    max_memory_size_bytes: Option<usize>,
+    max_transactions_per_response: Option<usize>,
+) {
     CONFIG.with(|cell| {
         let max_memory_size_bytes = max_memory_size_bytes
             .unwrap_or(DEFAULT_MEMORY_LIMIT)
             .min(DEFAULT_MEMORY_LIMIT);
+        let max_transactions_per_response = max_transactions_per_response
+            .unwrap_or(DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE);
         cell.borrow_mut()
             .set(ArchiveConfig {
                 max_memory_size_bytes,
                 block_index_offset,
                 ledger_id,
+                max_transactions_per_response,
             })
             .expect("failed to set archive config");
     });
@@ -220,7 +231,7 @@ fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
         (start - opts.block_index_offset) as usize
     });
 
-    let length = length.min(MAX_BLOCKS_PER_REQUEST);
+    let length = length.min(with_archive_opts(|opts| opts.max_transactions_per_response));
     let transactions = with_blocks(|blocks| {
         let limit = blocks.len().min(offset.saturating_add(length));
         (offset..limit)

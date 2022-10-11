@@ -258,6 +258,7 @@ fn archive_blocks_small_test() {
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
         };
 
         println!("[test] installing ledger canister");
@@ -392,6 +393,7 @@ fn archive_blocks_large_test() {
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
         };
 
         println!("[test] installing ledger canister");
@@ -557,6 +559,7 @@ fn archived_blocks_ranges() {
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
         };
 
         let minting_account = create_sender(0);
@@ -719,6 +722,7 @@ fn notify_test() {
             trigger_threshold: 8,
             num_blocks_to_archive: 3,
             cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
         };
 
         let ledger_canister = proj
@@ -894,6 +898,7 @@ fn notify_disabled_test() {
             trigger_threshold: 8,
             num_blocks_to_archive: 3,
             cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
         };
 
         let ledger_canister = proj
@@ -1363,6 +1368,7 @@ fn get_block_test() {
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
         };
 
         println!(
@@ -1522,6 +1528,7 @@ fn get_multiple_blocks_test() {
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
         };
 
         println!(
@@ -1699,6 +1706,7 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
         };
 
         println!(
@@ -1818,6 +1826,7 @@ fn test_archives_endpoint() {
                             max_message_size_bytes: None,
                             controller_id: minting_canister_id.into(),
                             cycles_for_archive_creation: None,
+                            max_transactions_per_response: None,
                         })
                         .build()
                         .unwrap(),

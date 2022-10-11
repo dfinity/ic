@@ -190,15 +190,27 @@ async fn build_index() -> Result<(), String> {
     let next_txid = with_index(|idx| idx.next_txid);
     let res = get_transactions_from_ledger(next_txid, MAX_TRANSACTIONS_PER_RESPONSE).await?;
     for archived in res.archived_transactions {
-        let res = get_transactions_from_archive(&archived).await?;
-        let mut idx = archived
-            .start
-            .0
-            .to_u64()
-            .expect("The Ledger returned an index that is not a valid u64");
-        for transaction in res.transactions {
-            index_transaction(idx, transaction)?;
-            idx += 1;
+        // The archive node limits the number of transactions returned by a
+        // single get_transaction call.
+        let last_txid = archived.start.clone() + archived.length.clone();
+        let mut next_archived_txid = archived.start.clone();
+        while next_archived_txid < last_txid {
+            let archived = ArchivedTransactionRange {
+                start: next_archived_txid,
+                length: archived.length.clone(),
+                callback: archived.callback.clone(),
+            };
+            let res = get_transactions_from_archive(&archived).await?;
+            let mut idx = archived
+                .start
+                .0
+                .to_u64()
+                .expect("The Ledger returned an index that is not a valid u64");
+            for transaction in res.transactions {
+                index_transaction(idx, transaction)?;
+                idx += 1;
+            }
+            next_archived_txid = Nat::from(idx);
         }
     }
     let mut idx = res
