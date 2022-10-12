@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.7.1] - 2022-10-12
+### Fixed
+- A bug in absence proof check, see
+  https://github.com/dfinity/ic/commit/028b97f15783140dac7902b1a3b1b97a8196409c.
+
 ## [1.7.0] - 2022-09-20
 ### Fixed
 - The Rosetta node can now correctly handle absence proofs
