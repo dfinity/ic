@@ -8,6 +8,7 @@ use ic_types::{
     Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 const GB: u64 = 1024 * 1024 * 1024;
 
@@ -50,6 +51,9 @@ const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
 pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GB);
+
+// The ID of the Bitcoin testnet canister in production.
+const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
@@ -151,7 +155,8 @@ impl Default for Config {
             deterministic_time_slicing: FlagStatus::Enabled,
             module_sharing: FlagStatus::Enabled,
             cost_to_compile_wasm_instruction: embedders::DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
-            bitcoin_canisters: Vec::default(),
+            bitcoin_canisters: vec![PrincipalId::from_str(BITCOIN_TESTNET_CANISTER_ID)
+                .expect("bitcoin testnet canister id must be a valid principal")],
         }
     }
 }
