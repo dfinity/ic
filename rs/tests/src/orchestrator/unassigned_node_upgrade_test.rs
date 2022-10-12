@@ -122,7 +122,7 @@ pub fn test(env: TestEnv) {
             test_neuron_id,
             new_replica_version.clone(),
             sha256,
-            upgrade_url,
+            vec![upgrade_url],
         )
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;

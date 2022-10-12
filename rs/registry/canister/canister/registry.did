@@ -37,6 +37,7 @@ type BitcoinFeature = record {
 };
 type BitcoinFeatureStatus = variant { Paused; Enabled; Disabled; Syncing };
 type BlessReplicaVersionPayload = record {
+  release_package_urls : opt vec text;
   node_manager_sha256_hex : text;
   release_package_url : text;
   sha256_hex : text;

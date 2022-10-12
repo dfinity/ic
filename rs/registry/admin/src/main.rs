@@ -807,13 +807,23 @@ impl ProposalTitleAndPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
     }
 }
 
-/// Sub-command to submit a proposal to bless a new replica version, by commit
-/// hash.
+/// Sub-command to submit a proposal to bless a new replica version with
+/// multiple URLs.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToBlessReplicaVersionCmd {
-    /// The hash of the commit to propose
-    pub commit_hash: String,
+    /// Version ID. This can be anything, it has no semantics. The reason it is
+    /// part of the payload is that it will be needed in the subsequent step
+    /// of upgrading individual subnets.
+    pub replica_version_id: String,
+
+    /// The hex-formatted SHA-256 hash of the archive served by
+    /// 'release_package_urls'.
+    release_package_sha256_hex: String,
+
+    /// The URLs against which an HTTP GET request will return a release
+    /// package that corresponds to this version.
+    pub release_package_urls: Vec<String>,
 }
 
 #[async_trait]
@@ -821,40 +831,24 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => format!("Bless replica version from commit: {}", self.commit_hash),
+            None => format!("Bless replica version: {}", self.replica_version_id,),
         }
     }
 
     async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
-        let file_downloader = FileDownloader::new(None);
-        let binary_url = format!(
-            "https://download.dfinity.systems/ic/{}/x86_64-linux/ic-replica.tar.gz",
-            &self.commit_hash
-        );
-        let orchestrator_binary_url = format!(
-            "https://download.dfinity.systems/ic/{}/x86_64-linux/orchestrator.tar.gz",
-            &self.commit_hash
-        );
-
-        let dir = tempfile::tempdir().unwrap().into_path();
-        file_downloader
-            .download_and_extract_tar_gz(&binary_url, &dir, None)
-            .await
-            .unwrap();
-
-        file_downloader
-            .download_and_extract_tar_gz(&orchestrator_binary_url, &dir, None)
-            .await
-            .unwrap();
-
         BlessReplicaVersionPayload {
-            replica_version_id: self.commit_hash.clone(),
+            replica_version_id: self.replica_version_id.clone(),
             binary_url: "".into(),
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
-            release_package_url: "".into(),
-            release_package_sha256_hex: "".into(),
+            release_package_url: self
+                .release_package_urls
+                .get(0)
+                .expect("Release package url is required")
+                .clone(),
+            release_package_sha256_hex: self.release_package_sha256_hex.clone(),
+            release_package_urls: Some(self.release_package_urls.clone()),
         }
     }
 }
@@ -892,20 +886,23 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
     }
 
     async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
+        let release_package_url = self
+            .release_package_url
+            .clone()
+            .expect("Release package url is required");
+
         BlessReplicaVersionPayload {
             replica_version_id: self.replica_version_id.clone(),
             binary_url: "".into(),
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
-            release_package_url: self
-                .release_package_url
-                .clone()
-                .expect("Release package url is rquired"),
+            release_package_url: release_package_url.clone(),
             release_package_sha256_hex: self
                 .release_package_sha256_hex
                 .clone()
-                .expect("Release package sha256 is rquired"),
+                .expect("Release package sha256 is required"),
+            release_package_urls: Some(vec![release_package_url]),
         }
     }
 }

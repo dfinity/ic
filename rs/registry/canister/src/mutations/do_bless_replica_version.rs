@@ -55,6 +55,9 @@ impl Registry {
                 value: encode_or_panic(&ReplicaVersionRecord {
                     release_package_url: payload.release_package_url.clone(),
                     release_package_sha256_hex: payload.release_package_sha256_hex,
+                    release_package_urls: payload
+                        .release_package_urls
+                        .unwrap_or_else(|| vec![payload.release_package_url]),
                 }),
             },
             // Bless the new version (that is, update the list of blessed versions)
@@ -107,9 +110,16 @@ pub struct BlessReplicaVersionPayload {
 
     /// The URL against which a HTTP GET request will return a release package
     /// that corresponds to this version
+    /// DEPRECATED. Superseded by release_package_urls (plural).
     pub release_package_url: String,
 
     /// The hex-formatted SHA-256 hash of the archive file served by
-    /// 'release_package_url'
+    /// 'release_package_urls'
     pub release_package_sha256_hex: String,
+
+    /// The URLs against which a HTTP GET request will return the same release
+    /// package that corresponds to this version
+    /// This field is not optional but this is the only way to add a new field
+    /// into a Candid message without breaking backward compatibility.
+    pub release_package_urls: Option<Vec<String>>,
 }
