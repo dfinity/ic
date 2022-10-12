@@ -104,6 +104,10 @@ pub struct IngressHistoryState {
     pub statuses: ::prost::alloc::vec::Vec<IngressStatusEntry>,
     #[prost(message, repeated, tag = "2")]
     pub pruning_times: ::prost::alloc::vec::Vec<PruningEntry>,
+    /// The earliest time in `pruning_times` with associated message IDs that
+    /// may still be of type completed or failed.
+    #[prost(uint64, tag = "3")]
+    pub next_terminal_time: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct Ingress {
