@@ -1,7 +1,6 @@
 setup-os-diskimg:
   needs:
     - job: guest-os-diskimg
-      artifacts: false
     - job: host-os-diskimg
       artifacts: false
   extends:
@@ -15,10 +14,11 @@ setup-os-diskimg:
       VERSION=$(git rev-parse HEAD)
       export VERSION
       echo "Build ID: ${VERSION}"
+      ICOS_VERSION=$(cat version.txt)
 
       cd "${CI_PROJECT_DIR}"/ic-os/setupos
 
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=guest-os --out=guestos --git-rev="${VERSION}"
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=guest-os --out=guestos --git-rev="${ICOS_VERSION}"
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=host-os --out=hostos --git-rev="${VERSION}"
 
       BUILD_OUT="build-out/disk-img"
