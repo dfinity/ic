@@ -1,5 +1,4 @@
 guest-os-diskimg:
-  needs: []
   extends:
     - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
@@ -29,7 +28,6 @@ guest-os-diskimg:
 # This is the same as the prod image with the following differences:
 # - it has password "root" set for root to allow console login
 guest-os-diskimg-dev:
-  needs: []
   extends:
     - guest-os-diskimg
   variables:
