@@ -176,13 +176,15 @@ mod tests {
         let p = r.block_on(Process::new(cmd, sub.clone()));
         let _exit_status = r.block_on(p.block_on_exit()).unwrap();
 
-        let mut events: Vec<_> = {
+        let events: Vec<_> = {
             let mut lock = sub.0.lock().unwrap();
             std::mem::take(lock.as_mut())
         };
 
-        assert!(is_close_event(events.pop().unwrap()));
-        assert!(is_close_event(events.pop().unwrap()));
+        let original_length = events.len();
+        let mut events: Vec<_> = events.into_iter().filter(|e| !is_close_event(e)).collect();
+        // we expect two closing events in total
+        assert_eq!(events.len(), original_length - 2);
         for i in (1..=10).rev() {
             assert!(is_line(
                 events.pop().unwrap(),
@@ -201,7 +203,7 @@ mod tests {
         false
     }
 
-    fn is_close_event(value: PEvent) -> bool {
+    fn is_close_event(value: &PEvent) -> bool {
         if let ProcessEvent::ChannelClosed { channel_name: _ } = value.what {
             return true;
         }
