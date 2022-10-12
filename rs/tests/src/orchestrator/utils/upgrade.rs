@@ -226,7 +226,52 @@ pub(crate) async fn bless_replica_version(
         test_neuron_id,
         replica_version,
         sha256,
-        upgrade_url,
+        vec![upgrade_url],
+    )
+    .await;
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
+    info!(logger, "Updated: {:?}", blessed_versions);
+}
+
+pub(crate) async fn bless_replica_version_with_urls(
+    nns_node: &IcNodeSnapshot,
+    target_version: &str,
+    image_type: UpdateImageType,
+    release_package_urls: Vec<String>,
+    logger: &Logger,
+) {
+    let nns = runtime_from_url(nns_node.get_public_url());
+    let governance_canister = get_governance_canister(&nns);
+    let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
+    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
+    info!(logger, "Initial: {:?}", blessed_versions);
+    let sha256 = fetch_update_file_sha256_with_retry(
+        logger,
+        target_version,
+        image_type == UpdateImageType::ImageTest,
+    )
+    .await;
+
+    let replica_version = match image_type == UpdateImageType::ImageTest {
+        true => ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap(),
+        false => ReplicaVersion::try_from(target_version).unwrap(),
+    };
+
+    info!(
+        logger,
+        "Blessing replica version {} with sha256 {}", replica_version, sha256
+    );
+
+    let proposal_id = submit_bless_replica_version_proposal(
+        &governance_canister,
+        proposal_sender.clone(),
+        test_neuron_id,
+        replica_version,
+        sha256,
+        release_package_urls,
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;

@@ -377,22 +377,37 @@ impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
         &self.orchestrator_data_directory
     }
 
-    fn get_release_package_url_and_hash(
+    fn get_release_package_urls_and_hash(
         &self,
         version: &ReplicaVersion,
-    ) -> UpgradeResult<(String, Option<String>)> {
-        let record = self
+    ) -> UpgradeResult<(Vec<String>, Option<String>)> {
+        let mut record = self
             .registry
             .get_replica_version_record(version.clone(), self.registry.get_latest_version())
             .map_err(UpgradeError::from)?;
+
+        // OR-253 shall remove this statement along with `release_package_url`.
+        // Until then, we need to remain compatible with older replica version records
+        // that contain only a single URL in `release_package_url`. This would duplicate
+        // the first URL in newer blessed versions, which is temporarily accepted.
+        record
+            .release_package_urls
+            .push(record.release_package_url.clone());
+
         Ok((
-            record.release_package_url,
+            record.release_package_urls,
             Some(record.release_package_sha256_hex),
         ))
     }
 
     fn log(&self) -> &ReplicaLogger {
         &self.logger
+    }
+
+    fn get_load_balance_number(&self) -> usize {
+        // XOR all the u8 in node_id:
+        let principal = self.node_id.get().0;
+        principal.as_slice().iter().fold(0, |acc, x| (acc ^ x)) as usize
     }
 
     async fn check_for_upgrade(&mut self) -> UpgradeResult<Option<SubnetId>> {

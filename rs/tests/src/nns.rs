@@ -448,6 +448,7 @@ async fn add_replica_version(nns_api: &'_ Runtime, version: ReplicaVersion) -> R
         node_manager_sha256_hex: "".into(),
         release_package_url: "".to_string(),
         release_package_sha256_hex: "".to_string(),
+        release_package_urls: None,
     };
 
     let proposal_id: ProposalId = submit_external_proposal_with_test_id(
@@ -768,13 +769,13 @@ pub async fn submit_external_proposal_with_test_id<T: CandidType>(
 ///
 /// # Arguments
 ///
-/// * `governance`  - Governance canister
-/// * `sender`      - Sender of the proposal
-/// * `neuron_id`   - ID of the proposing neuron. This neuron will automatically
+/// * `governance`   - Governance canister
+/// * `sender`       - Sender of the proposal
+/// * `neuron_id`    - ID of the proposing neuron. This neuron will automatically
 ///   vote in favor of the proposal.
-/// * `version`     - Replica software version
-/// * `sha256`      - Claimed SHA256 of the replica image file
-/// * `upgrade_url` - URL leading to the replica image file
+/// * `version`      - Replica software version
+/// * `sha256`       - Claimed SHA256 of the replica image file
+/// * `upgrade_urls` - URLs leading to the replica image file
 ///
 /// Note: The existing replica *may or may not* check that the
 /// provided `sha256` corresponds to the image checksum. In case
@@ -791,7 +792,7 @@ pub async fn submit_bless_replica_version_proposal(
     neuron_id: NeuronId,
     version: ReplicaVersion,
     sha256: String,
-    upgrade_url: String,
+    upgrade_urls: Vec<String>,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -804,8 +805,9 @@ pub async fn submit_bless_replica_version_proposal(
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
-            release_package_url: upgrade_url,
+            release_package_url: upgrade_urls[0].clone(),
             release_package_sha256_hex: sha256.clone(),
+            release_package_urls: Some(upgrade_urls),
         },
         format!(
             "Bless replica version: {} with hash: {}",

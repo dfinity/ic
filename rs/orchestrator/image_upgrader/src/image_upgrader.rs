@@ -46,7 +46,7 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 ///     fn get_release_package_url_and_hash(
 ///         &self,
 ///         version: &Version,
-///     ) -> UpgradeResult<(String, Option<String>)> {
+///     ) -> UpgradeResult<(Vec<String>, Option<String>)> {
 ///         // Collect and return release package information, i.e. from registry.
 ///         ...
 ///     }
@@ -108,10 +108,10 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     fn log(&self) -> &ReplicaLogger;
     /// Return the release package url and optional SHA256 hex string for the given version.
     /// Used to download the release package during `prepare_upgrade()`.
-    fn get_release_package_url_and_hash(
+    fn get_release_package_urls_and_hash(
         &self,
         version: &V,
-    ) -> UpgradeResult<(String, Option<String>)>;
+    ) -> UpgradeResult<(Vec<String>, Option<String>)>;
 
     /// Calls a corresponding script to "confirm" that the base OS could boot
     /// successfully. With a confirmation the image will be reverted on the next
@@ -126,25 +126,51 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         }
     }
 
+    /// Return a value that would differentiate the nodes (but not necessarily unique) in order
+    /// to allow them to download the new release package from different URLs.
+    fn get_load_balance_number(&self) -> usize;
+
     /// Downloads release package associated with the given version
     ///
     /// Releases are downloaded using [`FileDownloader::download_file()`] which
     /// returns immediately if the file with matching hash already exists.
     async fn download_release_package(&self, version: &V) -> UpgradeResult<()> {
-        let (release_package_url, hash) = self.get_release_package_url_and_hash(version)?;
-        let start_time = std::time::Instant::now();
-        let file_downloader = FileDownloader::new(Some(self.log().clone()));
-        file_downloader
-            .download_file(&release_package_url, self.image_path(), hash)
-            .await
-            .map_err(UpgradeError::from)?;
-        info!(
-            self.log(),
-            "Image downloading request for version {:?} processed in {:?}",
-            version,
-            start_time.elapsed(),
-        );
-        Ok(())
+        let (mut release_package_urls, hash) = self.get_release_package_urls_and_hash(version)?;
+
+        // Load-balance, by making each node rotate the `release_package_urls` by some number.
+        // Note that the order is the same for everyone; only the starting point is different.
+        // This is okay because we do expect the first attempt to be successful.
+        let url_count = release_package_urls.len();
+        release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
+
+        // We return the last error if download attempts from all the URLs fail.
+        let mut error = UpgradeError::GenericError(format!(
+            "No download URLs are provided for version {:?}",
+            version
+        ));
+
+        for release_package_url in release_package_urls.iter() {
+            let req = format!(
+                "Request to download image {:?} from {}",
+                version, release_package_url
+            );
+            let file_downloader = FileDownloader::new(Some(self.log().clone()));
+            let start_time = std::time::Instant::now();
+            let download_result = file_downloader
+                .download_file(release_package_url, self.image_path(), hash.clone())
+                .await;
+            let duration = start_time.elapsed();
+
+            if let Err(e) = download_result {
+                info!(self.log(), "{} failed in {:?}: {:?}", req, duration, e);
+                error = UpgradeError::from(e);
+            } else {
+                info!(self.log(), "{} processed in {:?}", req, duration);
+                return Ok(());
+            }
+        }
+
+        Err(error)
     }
 
     /// Downloads release package associated with the given version,

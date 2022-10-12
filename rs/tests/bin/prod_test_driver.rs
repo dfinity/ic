@@ -946,6 +946,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
                 pot_with_setup(
+                    "upgrade_with_alternative_urls_pot",
+                    orchestrator::upgrade_with_alternative_urls::config,
+                    par(vec![sys_t(
+                        "upgrade_with_alternative_urls",
+                        orchestrator::upgrade_with_alternative_urls::test,
+                    )]),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                pot_with_setup(
                     "subnet_recovery_app_same_nodes_with_tecdsa",
                     orchestrator::subnet_recovery_app_subnet::setup_same_nodes_tecdsa,
                     par(vec![sys_t(

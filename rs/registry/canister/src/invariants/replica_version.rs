@@ -22,10 +22,8 @@ use ic_registry_keys::{
 /// the BlessedReplicaVersions-List, the following is checked:
 ///
 /// * The corresponding ReplicaVersionRecord exists.
-/// * At least one of either the replica, orchestrator or release package is
-///   specified.
-/// * Each set URL is well-formed.
-/// * Each set hash is a well-formed hex-encoded SHA256 value.
+/// * Each URL is well-formed.
+/// * Release package hash is a well-formed hex-encoded SHA256 value.
 pub(crate) fn check_replica_version_invariants(
     snapshot: &RegistrySnapshot,
     strict: bool,
@@ -41,7 +39,7 @@ pub(crate) fn check_replica_version_invariants(
     versions.extend(blessed_version_ids);
     versions.dedup();
 
-    // Check whether release package URL (iso image) and corresponding
+    // Check whether release package URLs (iso image) and corresponding
     // hash is well-formed. As file-based URLs are only used in
     // test-deployments, we disallow file:/// URLs.
     if strict {
@@ -49,14 +47,20 @@ pub(crate) fn check_replica_version_invariants(
             let r = get_replica_version_record(snapshot, version);
 
             // An entry where all URLs are unspecified is invalid.
-            if r.release_package_url.is_empty() {
+            if r.release_package_url.is_empty() || r.release_package_urls.is_empty() {
                 return Err(InvariantCheckError {
-                    msg: "release package URL must be set".to_string(),
+                    msg: "Either `release_package_url` or `release_package_urls` must be set"
+                        .to_string(),
                     source: None,
                 });
             }
 
-            assert_valid_url_and_hash(&r.release_package_url, &r.release_package_sha256_hex, false);
+            assert_valid_urls_and_hash(
+                &r.release_package_url,
+                &r.release_package_urls,
+                &r.release_package_sha256_hex,
+                false, // allow_file_url
+            );
         }
     }
 
@@ -97,16 +101,16 @@ fn assert_sha256(s: &str) {
     }
 }
 
-fn assert_valid_url_and_hash(url: &str, hash: &str, allow_file_url: bool) {
-    // Either both, the URL and the hash are set, or both are not set.
-    if (url.is_empty() as i32 ^ hash.is_empty() as i32) > 0 {
-        panic!("Either both, an url and a hash must be set, or none.");
-    }
-    if url.is_empty() {
-        return;
+fn assert_valid_urls_and_hash(url: &str, urls: &[String], hash: &str, allow_file_url: bool) {
+    assert!(!hash.is_empty(), "release_package_hash cannot be empty");
+
+    // Either `release_package_url` or `release_package_urls` must be set
+    if url.is_empty() && urls.iter().any(|url| url.is_empty()) {
+        panic!("Either `release_package_url` or `release_package_urls` must contain URLs");
     }
 
     assert_sha256(hash);
+
     // File URLs are used in test deployments. We only disallow non-ASCII.
     if allow_file_url && url.starts_with("file://") {
         if !url.is_ascii() {
@@ -115,5 +119,12 @@ fn assert_valid_url_and_hash(url: &str, hash: &str, allow_file_url: bool) {
         return;
     }
 
-    let _ = Url::parse(url).expect("Could not parse URL.");
+    // If `release_package_url` does not contain a valid URL, `release_package_urls` must contain valid URLs.
+    if Url::parse(url).is_err() {
+        for url in urls.iter() {
+            if let Err(e) = Url::parse(url) {
+                panic!("Release package URL {} is not valid: {}", url, e);
+            }
+        }
+    }
 }

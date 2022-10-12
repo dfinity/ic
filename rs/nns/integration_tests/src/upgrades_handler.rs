@@ -31,6 +31,7 @@ fn test_submit_and_accept_bless_replica_version_proposal() {
             node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
+            release_package_urls: None,
         };
 
         let proposal_id: ProposalId = submit_external_update_proposal(

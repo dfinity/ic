@@ -255,8 +255,9 @@ impl Recovery {
     ) -> RecoveryResult<impl Step> {
         let (upgrade_url, sha256) = Recovery::get_img_url_and_sha(&upgrade_version)?;
         let version_record = format!(
-            r#"{{ "release_package_url": "{}", "release_package_sha256_hex": "{}" }}"#,
-            upgrade_url, sha256
+            // OR-253 shall retire the usage of `release_package_url`.
+            r#"{{ "release_package_url": "{}", "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
+            upgrade_url, sha256, upgrade_url
         );
         Ok(self.get_replay_step(
             subnet_id,
