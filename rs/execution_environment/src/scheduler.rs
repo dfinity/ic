@@ -1272,18 +1272,23 @@ impl Scheduler for SchedulerImpl {
                 registry_settings.subnet_size,
             );
 
-            if round_limits.instructions > RoundInstructions::from(0) {
-                state = self.drain_subnet_queues(
-                    state,
-                    &mut csprng,
-                    &mut round_limits,
-                    &measurement_scope,
-                    ongoing_long_install_code,
-                    long_running_canister_ids,
-                    registry_settings,
-                    &ecdsa_subnet_public_keys,
-                );
-            }
+            // If we have executed a long-running install code above, then it is
+            // very likely that `round_limits.instructions <= 0` at this point.
+            // However, we would like to make progress with other subnet
+            // messages that do not consume instructions. To allow that, we set
+            // the number available instructions to 1 if it is not positive.
+            round_limits.instructions = round_limits.instructions.max(RoundInstructions::from(1));
+
+            state = self.drain_subnet_queues(
+                state,
+                &mut csprng,
+                &mut round_limits,
+                &measurement_scope,
+                ongoing_long_install_code,
+                long_running_canister_ids,
+                registry_settings,
+                &ecdsa_subnet_public_keys,
+            );
         }
 
         // Reset the round limit after executing all subnet messages.
