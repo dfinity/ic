@@ -77,7 +77,9 @@ use crate::{
         GossipMessage, GossipRetransmissionRequest, Percentage,
     },
     metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics},
-    peer_manager::*,
+    peer_context::{
+        GossipChunkRequestTracker, GossipChunkRequestTrackerKey, PeerContext, PeerContextMap,
+    },
     utils::TransportChannelIdMapper,
     P2PError, P2PErrorCode, P2PResult,
 };
@@ -188,7 +190,7 @@ pub(crate) struct DownloadManagerImpl {
     /// The download prioritizer.
     prioritizer: Arc<dyn DownloadPrioritizer>,
     /// The peer manager.
-    current_peers: Mutex<PeerContextDictionary>,
+    current_peers: Mutex<PeerContextMap>,
     /// The underlying *Transport* layer.
     transport: Arc<dyn Transport>,
     /// The flow mapper.
@@ -328,11 +330,14 @@ impl DownloadManager for DownloadManagerImpl {
         // Remove the chunk request tracker.
         let mut current_peers = self.current_peers.lock();
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
-            if let Some(tracker) = peer_context.requested.remove(&GossipRequestTrackerKey {
-                artifact_id: gossip_chunk.artifact_id.clone(),
-                integrity_hash: gossip_chunk.integrity_hash.clone(),
-                chunk_id: gossip_chunk.chunk_id,
-            }) {
+            if let Some(tracker) = peer_context
+                .requested
+                .remove(&GossipChunkRequestTrackerKey {
+                    artifact_id: gossip_chunk.artifact_id.clone(),
+                    integrity_hash: gossip_chunk.integrity_hash.clone(),
+                    chunk_id: gossip_chunk.chunk_id,
+                })
+            {
                 let artifact_tag: &'static str =
                     ArtifactTag::from(&gossip_chunk.artifact_id).into();
                 self.metrics
@@ -759,7 +764,7 @@ impl DownloadManagerImpl {
         metrics_registry: &MetricsRegistry,
     ) -> Self {
         let gossip_config = crate::fetch_gossip_config(registry_client.clone(), subnet_id);
-        let current_peers = Mutex::new(PeerContextDictionary::default());
+        let current_peers = Mutex::new(PeerContextMap::default());
 
         let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
             artifact_manager.as_ref(),
@@ -896,13 +901,13 @@ impl DownloadManagerImpl {
 
         // If a peer is not in the nodes within this subnet, remove.
         // If self is not in the subnet, remove all peers.
-        for peer_id in self.get_current_peer_ids().into_iter() {
-            if !subnet_nodes.contains_key(&peer_id) || self_not_in_subnet {
-                self.remove_node(peer_id);
+        for peer_id in self.get_current_peer_ids().iter() {
+            if !subnet_nodes.contains_key(peer_id) || self_not_in_subnet {
+                self.remove_node(*peer_id);
                 self.metrics.nodes_removed.inc();
             }
         }
-        // If self is not subnet, exit early to avoid adding nodes to peer_manager.
+        // If self is not subnet, exit early to avoid adding nodes to the list of peers.
         if self_not_in_subnet {
             return;
         }
@@ -916,7 +921,7 @@ impl DownloadManagerImpl {
                     // Invalid socket addresses should not be pushed in the registry/config on first place.
                     error!(
                         self.log,
-                        "Invalid socket addr: node_id = {:?}, error = {:?}.", node_id, err
+                        "Invalid socket addr: node_id = {:?}, error = {:?}.", *node_id, err
                     );
                 }
                 Ok(peer_addr) => {
@@ -1065,7 +1070,7 @@ impl DownloadManagerImpl {
     fn is_peer_ready_for_download<'a>(
         &self,
         peer_id: NodeId,
-        peer_dictionary: &'a PeerContextDictionary,
+        peer_dictionary: &'a PeerContextMap,
     ) -> Result<&'a PeerContext, P2PError> {
         match peer_dictionary.get(&peer_id) {
             // Check that the peer is present and
@@ -1087,13 +1092,13 @@ impl DownloadManagerImpl {
     fn get_peer_chunk_tracker<'a>(
         &self,
         peer_id: &NodeId,
-        peers: &'a PeerContextDictionary,
+        peers: &'a PeerContextMap,
         artifact_id: &ArtifactId,
         integrity_hash: &CryptoHash,
         chunk_id: ChunkId,
-    ) -> Option<&'a GossipRequestTracker> {
+    ) -> Option<&'a GossipChunkRequestTracker> {
         let peer_context = peers.get(peer_id)?;
-        peer_context.requested.get(&GossipRequestTrackerKey {
+        peer_context.requested.get(&GossipChunkRequestTrackerKey {
             artifact_id: artifact_id.clone(),
             integrity_hash: integrity_hash.clone(),
             chunk_id,
@@ -1108,7 +1113,7 @@ impl DownloadManagerImpl {
     /// given peer.
     fn get_chunk_request(
         &self,
-        peers: &PeerContextDictionary,
+        peers: &PeerContextMap,
         peer_id: NodeId,
         advert_tracker: &AdvertTracker,
         chunk_id: ChunkId,
@@ -1221,12 +1226,12 @@ impl DownloadManagerImpl {
         let peer_context = current_peers.get_mut(&peer_id).unwrap();
         peer_context.requested.extend(requests.iter().map(|req| {
             (
-                GossipRequestTrackerKey {
+                GossipChunkRequestTrackerKey {
                     artifact_id: req.artifact_id.clone(),
                     integrity_hash: req.integrity_hash.clone(),
                     chunk_id: req.chunk_id,
                 },
-                GossipRequestTracker { requested_instant },
+                GossipChunkRequestTracker { requested_instant },
             )
         }));
 
@@ -1758,7 +1763,7 @@ pub mod tests {
             }
         }
         assert_ne!(removed_peer, node_test_id(10));
-        // Ensure number of peers reported by peer_manager are the expected amount
+        // Ensure number of peers are the expected amount
         // from registry version 1 (version registry is currently using).
         assert_eq!(num_peers as usize, peers.len());
 

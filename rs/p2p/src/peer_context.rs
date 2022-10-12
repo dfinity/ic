@@ -7,10 +7,11 @@ use std::{
 /// A per-peer chunk request tracker for a chunk request sent to a peer.
 /// Tracking begins when a request is dispatched and concludes when
 ///
-/// a) 'MAX_CHUNK_WAIT_MS' time has elapsed without a response from the peer OR
-/// </br> b) the peer responds with the chunk or an error message.
+/// a) 'MAX_CHUNK_WAIT_MS' time has elapsed without a response from the peer
+///   OR
+/// b) the peer responds with the chunk or an error message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct GossipRequestTracker {
+pub(crate) struct GossipChunkRequestTracker {
     /// Instant when the request was initiated.
     pub requested_instant: Instant,
 }
@@ -19,7 +20,7 @@ pub(crate) struct GossipRequestTracker {
 /// A chunk is identified by the artifact ID and chunk ID.
 /// This struct defines a look-up key composed of an artifact ID and chunk ID.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct GossipRequestTrackerKey {
+pub(crate) struct GossipChunkRequestTrackerKey {
     /// The artifact ID of the requested chunk.
     pub artifact_id: ArtifactId,
     /// The Integrity Hash of the requested artifact.
@@ -33,7 +34,7 @@ pub(crate) struct GossipRequestTrackerKey {
 #[derive(Clone)]
 pub(crate) struct PeerContext {
     /// The dictionary containing the requested chunks.
-    pub requested: HashMap<GossipRequestTrackerKey, GossipRequestTracker>,
+    pub requested: HashMap<GossipChunkRequestTrackerKey, GossipChunkRequestTracker>,
     /// The time when the peer was disconnected.
     pub disconnect_time: Option<SystemTime>,
     /// The time of the last processed retransmission request from this peer.
@@ -42,7 +43,7 @@ pub(crate) struct PeerContext {
 
 impl PeerContext {
     pub fn new() -> Self {
-        PeerContext {
+        Self {
             requested: HashMap::new(),
             disconnect_time: None,
             last_retransmission_request_processed_time: Instant::now(),
@@ -50,5 +51,5 @@ impl PeerContext {
     }
 }
 
-/// The dictionary mapping node IDs to peer contexts.
-pub(crate) type PeerContextDictionary = HashMap<NodeId, PeerContext>;
+/// Mapping node IDs to peer contexts.
+pub(crate) type PeerContextMap = HashMap<NodeId, PeerContext>;
