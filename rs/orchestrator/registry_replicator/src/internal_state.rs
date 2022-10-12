@@ -1,5 +1,5 @@
 use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::{
     registry::{
         node::v1::ConnectionEndpoint,
@@ -132,6 +132,8 @@ impl InternalState {
                 cl
             });
 
+            let entries = changelog.len();
+
             changelog
                 .into_iter()
                 .enumerate()
@@ -141,6 +143,13 @@ impl InternalState {
                 })
                 .expect("Writing to the FS failed: Stop.");
 
+            if entries > 0 {
+                info!(
+                    self.logger,
+                    "Stored registry versions up to: {}",
+                    latest_version + RegistryVersion::from(entries as u64)
+                );
+            }
             self.local_store
                 .update_certified_time(t.as_nanos_since_unix_epoch())
                 .expect("Could not store certified time");
