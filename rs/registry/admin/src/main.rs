@@ -68,6 +68,7 @@ use ic_protobuf::registry::{
     node_operator::v1::RemoveNodeOperatorsPayload,
 };
 use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_keys::{
     get_node_record_node_id, is_node_record_key, make_blessed_replica_version_key,
@@ -365,6 +366,8 @@ enum SubCommand {
     /// Submits a proposal to add an SNS wasm (e.g. Governance, Ledger, etc) to the SNS-WASM NNS
     /// canister.
     ProposeToAddWasmToSnsWasm(ProposeToAddWasmToSnsWasmCmd),
+    /// Get the ECDSA key ids and their signing subnets
+    GetEcdsaSigningSubnets,
 }
 
 /// Indicates whether a value should be added or removed.
@@ -3138,6 +3141,7 @@ async fn main() {
                 .unwrap_or_else(|_| "Could not serialize node_records".to_string());
             println!("{}", res);
         }
+
         SubCommand::GetTopology => {
             // Because ic-admin codebase is riddled with bad patterns -- most notably, all
             // get/fetch methods also print out the representation of the
@@ -3307,6 +3311,28 @@ async fn main() {
                 &registry_canister,
             )
             .await;
+        }
+        SubCommand::GetEcdsaSigningSubnets => {
+            let registry_client = RegistryClientImpl::new(
+                Arc::new(NnsDataProvider::new(
+                    tokio::runtime::Handle::current(),
+                    registry_canister,
+                )),
+                None,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let signing_subnets = registry_client
+                .get_ecdsa_signing_subnets(registry_client.get_latest_version())
+                .unwrap()
+                .unwrap();
+            for (key_id, subnets) in signing_subnets.iter() {
+                println!("KeyId {:?}: {:?}", key_id, subnets);
+            }
         }
         SubCommand::ProposeToBlessReplicaVersion(cmd) => {
             propose_external_proposal_from_command(
