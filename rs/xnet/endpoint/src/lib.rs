@@ -123,7 +123,7 @@ impl Drop for XNetEndpoint {
         // Request graceful shutdown of the HTTP server and the background thread.
         self.shutdown_notify.notify_one();
 
-        for _ in 0..self.handler_thread_pool.active_count() {
+        for _ in 0..XNET_ENDPOINT_NUM_WORKER_THREADS {
             self.request_sender
                 .send(WorkerMessage::Stop)
                 .expect("failed to send stop signal!");
