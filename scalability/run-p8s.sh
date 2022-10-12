@@ -59,8 +59,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-PROMETHEUS_PORT=${PROMETHEUS_PORT:-9090}
-GRAFANA_PORT=${GRAFANA_PORT:-3000}
+PROMETHEUS_PORT="${PROMETHEUS_PORT:-9090}"
+GRAFANA_PORT="${GRAFANA_PORT:-3000}"
 
 info() { echo "$*"; }
 warn() { info "$*" 1>&2; }
@@ -69,7 +69,7 @@ die() {
     exit 1
 }
 
-if [ -z ${TARBALL:-} ]; then
+if [ -z "${TARBALL:-}" ]; then
     die "Please specify the path to a prometheus-data-dir.tar.zst tarball"
 fi
 
@@ -77,7 +77,7 @@ fi
 # Launch prometheus
 ################################################################################
 
-prometheus_data_dir=$(mktemp -d -t prometheus-data-dir.XXXX)
+prometheus_data_dir="$(mktemp -d -t prometheus-data-dir.XXXX)"
 
 info "Unpacking $TARBALL to $prometheus_data_dir ..."
 tar -xvf "$TARBALL" -C "$prometheus_data_dir"
@@ -105,7 +105,7 @@ prometheus \
 # Launch grafana
 ################################################################################
 
-grafana_data_dir=$(mktemp -d -t grafana-data-dir.XXXX)
+grafana_data_dir="$(mktemp -d -t grafana-data-dir.XXXX)"
 ln -fs "$GRAFANA/share/grafana/conf" "$grafana_data_dir"
 ln -fs "$GRAFANA/share/grafana/tools" "$grafana_data_dir"
 ln -fs "$GRAFANA/share/grafana/public" "$grafana_data_dir"
@@ -137,7 +137,7 @@ export GF_PATHS_DATA="$grafana_data_dir"
 export GF_PATHS_LOGS="$grafana_data_dir/log"
 export GF_SERVER_PROTOCOL="http"
 export GF_SERVER_HTTP_ADDR="127.0.0.1"
-export GF_SERVER_HTTP_PORT="3000"
+export GF_SERVER_HTTP_PORT="$GRAFANA_PORT"
 export GF_SERVER_DOMAIN="localhost"
 export GF_SERVER_STATIC_ROOT_PATH="$GRAFANA/share/grafana/public"
 export GF_AUTH_ANONYMOUS_ENABLED="true"
