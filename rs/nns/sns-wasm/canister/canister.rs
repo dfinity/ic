@@ -17,8 +17,9 @@ use ic_sns_wasm::canister_stable_memory::CanisterStableMemory;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
-    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasmRequest, GetWasmResponse,
-    ListDeployedSnsesRequest, ListDeployedSnsesResponse,
+    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsRequest,
+    GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
 use ic_sns_wasm::sns_wasm::SnsWasmCanister;
 use ic_types::{CanisterId, Cycles};
@@ -371,6 +372,34 @@ fn list_deployed_snses() {
 #[candid_method(query, rename = "list_deployed_snses")]
 fn list_deployed_snses_(request: ListDeployedSnsesRequest) -> ListDeployedSnsesResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().list_deployed_snses(request))
+}
+
+/// Add or remove SNS subnet IDs from the list of subnet IDs that SNS instances will be deployed to
+#[export_name = "canister_update update_sns_subnet_list"]
+fn update_sns_subnet_list() {
+    over(candid_one, update_sns_subnet_list_)
+}
+
+#[candid_method(update, rename = "update_sns_subnet_list")]
+fn update_sns_subnet_list_(request: UpdateSnsSubnetListRequest) -> UpdateSnsSubnetListResponse {
+    if caller() != GOVERNANCE_CANISTER_ID.into() {
+        UpdateSnsSubnetListResponse::error(
+            "update_sns_subnet_list can only be called by NNS Governance",
+        )
+    } else {
+        SNS_WASM.with(|sns_wasm| sns_wasm.borrow_mut().update_sns_subnet_list(request))
+    }
+}
+
+/// Return the list of SNS subnet IDs that SNS-WASM will deploy SNS instances to
+#[export_name = "canister_query get_sns_subnet_ids"]
+fn get_sns_subnet_ids() {
+    over(candid_one, get_sns_subnet_ids_)
+}
+
+#[candid_method(query, rename = "get_sns_subnet_ids")]
+fn get_sns_subnet_ids_(_request: GetSnsSubnetIdsRequest) -> GetSnsSubnetIdsResponse {
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_sns_subnet_ids())
 }
 
 /// This makes this Candid service self-describing, so that for example Candid

@@ -2,10 +2,11 @@ use crate::canister_api::CanisterApi;
 use crate::pb::hash_to_hex_string;
 use crate::pb::v1::{
     add_wasm_response, AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
-    DeployedSns, GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasmRequest,
-    GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterIds,
-    SnsCanisterType, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-    UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
+    DeployedSns, GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsResponse,
+    GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
+    SnsCanisterIds, SnsCanisterType, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex,
+    StableCanisterState, UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
+    UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
 use crate::stable_memory::SnsWasmStableMemory;
 use candid::Encode;
@@ -893,6 +894,36 @@ where
             allowed_principals: self.allowed_principals.clone(),
         }
     }
+
+    /// Add or remove SNS subnet IDs from the list of subnet IDs that SNS instances will be
+    /// deployed to
+    pub fn update_sns_subnet_list(
+        &mut self,
+        request: UpdateSnsSubnetListRequest,
+    ) -> UpdateSnsSubnetListResponse {
+        for subnet_id_to_add in request.sns_subnet_ids_to_add {
+            self.sns_subnet_ids.push(SubnetId::new(subnet_id_to_add));
+        }
+
+        for subnet_id_to_remove in request.sns_subnet_ids_to_remove {
+            self.sns_subnet_ids
+                .retain(|id| id != &SubnetId::new(subnet_id_to_remove));
+        }
+
+        UpdateSnsSubnetListResponse::ok()
+    }
+
+    /// Return the list of SNS subnet IDs that SNS-WASM will deploy SNS instances to
+    pub fn get_sns_subnet_ids(&self) -> GetSnsSubnetIdsResponse {
+        GetSnsSubnetIdsResponse {
+            sns_subnet_ids: self
+                .sns_subnet_ids
+                .clone()
+                .iter()
+                .map(|id| id.get())
+                .collect(),
+        }
+    }
 }
 
 /// Converts a vector of u8s to array of length 32 (the size of our sha256 hash)
@@ -1197,6 +1228,37 @@ mod test {
             archive_wasm_hash,
             index_wasm_hash,
         }
+    }
+
+    #[test]
+    fn test_update_sns_subnet_list() {
+        let mut canister = new_wasm_canister();
+
+        let principal1 = PrincipalId::new_user_test_id(1);
+        let principal2 = PrincipalId::new_user_test_id(2);
+
+        // Check that the list of SNS subnet IDs is initially empty
+        let response1 = canister.get_sns_subnet_ids();
+        assert!(response1.sns_subnet_ids.is_empty());
+
+        // Add a subnet ID and check that it was added
+        canister.update_sns_subnet_list(UpdateSnsSubnetListRequest {
+            sns_subnet_ids_to_add: vec![principal1],
+            sns_subnet_ids_to_remove: vec![],
+        });
+
+        let response2 = canister.get_sns_subnet_ids();
+        assert_eq!(response2.sns_subnet_ids, vec![principal1]);
+
+        // Remove the first subnet ID and add a new one, and assert that the new subnet ID is the
+        // only subnet ID in the SNS subnet list
+        canister.update_sns_subnet_list(UpdateSnsSubnetListRequest {
+            sns_subnet_ids_to_add: vec![principal2],
+            sns_subnet_ids_to_remove: vec![principal1],
+        });
+
+        let response3 = canister.get_sns_subnet_ids();
+        assert_eq!(response3.sns_subnet_ids, vec![principal2]);
     }
 
     #[test]

@@ -1,7 +1,8 @@
 use crate::pb::v1::{
     add_wasm_response, AddWasmResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
     SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
-    SnsWasmStableIndex, StableCanisterState, UpgradePath as StableUpgradePath,
+    SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListResponse,
+    UpgradePath as StableUpgradePath,
 };
 use crate::sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath};
 use crate::stable_memory::SnsWasmStableMemory;
@@ -31,6 +32,20 @@ impl AddWasmResponse {
         Self {
             result: Some(add_wasm_response::Result::Error(SnsWasmError { message })),
         }
+    }
+}
+
+impl UpdateSnsSubnetListResponse {
+    pub fn error(message: &str) -> Self {
+        Self {
+            error: Some(SnsWasmError {
+                message: message.into(),
+            }),
+        }
+    }
+
+    pub fn ok() -> Self {
+        Self { error: None }
     }
 }
 

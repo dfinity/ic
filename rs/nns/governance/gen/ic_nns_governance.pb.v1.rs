@@ -2468,6 +2468,8 @@ pub enum NnsFunction {
     /// Changes the assignment of subnets to subnet types in the cycles minting
     /// canister.
     ChangeSubnetTypeAssignment = 33,
+    /// Update the list of SNS subnet IDs that SNS WASM will deploy SNS instances to.
+    UpdateSnsWasmSnsSubnetIds = 34,
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.

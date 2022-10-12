@@ -19,6 +19,7 @@ type FractionalDeveloperVotingPower = record {
 };
 type GetNextSnsVersionRequest = record { current_version : opt SnsVersion };
 type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
+type GetSnsSubnetIdsResponse = record { sns_subnet_ids : vec principal };
 type GetWasmRequest = record { hash : vec nat8 };
 type GetWasmResponse = record { wasm : opt SnsWasm };
 type InitialTokenDistribution = variant {
@@ -73,6 +74,11 @@ type SwapDistribution = record {
   initial_swap_amount_e8s : nat64;
 };
 type TreasuryDistribution = record { total_e8s : nat64 };
+type UpdateSnsSubnetListRequest = record {
+  sns_subnet_ids_to_add : vec principal;
+  sns_subnet_ids_to_remove : vec principal;
+};
+type UpdateSnsSubnetListResponse = record { error : opt SnsWasmError };
 service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasmRequest) -> (AddWasmResponse);
   deploy_new_sns : (DeployNewSnsRequest) -> (DeployNewSnsResponse);
@@ -80,6 +86,10 @@ service : (SnsWasmCanisterInitPayload) -> {
   get_next_sns_version : (GetNextSnsVersionRequest) -> (
       GetNextSnsVersionResponse,
     ) query;
+  get_sns_subnet_ids : (record {}) -> (GetSnsSubnetIdsResponse) query;
   get_wasm : (GetWasmRequest) -> (GetWasmResponse) query;
   list_deployed_snses : (record {}) -> (ListDeployedSnsesResponse) query;
+  update_sns_subnet_list : (UpdateSnsSubnetListRequest) -> (
+      UpdateSnsSubnetListResponse,
+    );
 }

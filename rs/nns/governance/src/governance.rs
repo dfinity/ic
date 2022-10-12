@@ -502,6 +502,9 @@ impl NnsFunction {
             NnsFunction::ChangeSubnetTypeAssignment => {
                 (CYCLES_MINTING_CANISTER_ID, "change_subnet_type_assignment")
             }
+            NnsFunction::UpdateSnsWasmSnsSubnetIds => {
+                (SNS_WASM_CANISTER_ID, "update_sns_subnet_list")
+            }
         };
         Ok((canister_id, method))
     }
@@ -1170,6 +1173,7 @@ impl Proposal {
                             NnsFunction::AddSnsWasm => Topic::NetworkCanisterManagement,
                             NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
                             NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
+                            NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                         }
                     } else {
                         Topic::Unspecified
