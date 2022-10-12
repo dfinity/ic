@@ -1,0 +1,40 @@
+rosetta-release:
+  extends:
+    - .ic-build-bazel-image
+    - .rules-scheduled-rosetta-release
+
+  stage: guest-os-build
+
+  script:
+    - |
+      set -euo pipefail
+
+      docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+
+      # - Query the current rosetta version
+      bazel build //rs/rosetta-api:version
+      readonly ROSETTA_RELEASE_VERSION=$(cat $(bazel cquery --output=files //rs/rosetta-api:version))
+      readonly VERSION_TAG="v$ROSETTA_RELEASE_VERSION"
+
+      # - Abort the release if the image with that version was already published.
+      if docker manifest inspect "dfinity/rosetta-api:$VERSION_TAG"; then
+          echo Rosetta version "$ROSETTA_RELEASE_VERSION" is already published on DockerHub
+          exit 1
+      fi
+
+      # - Build an publish the image
+      ROSETTA_API_DATE=$(date +"%Y%m%d")
+
+      bazel run --embed_label="$VERSION_TAG" //rs/rosetta-api:push_rosetta_image
+      bazel run --embed_label="$CI_COMMIT_SHA" //rs/rosetta-api:push_rosetta_image
+      bazel run --embed_label="$ROSETTA_API_DATE" //rs/rosetta-api:push_rosetta_image
+
+      # - Tag the commit
+      git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+      git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+
+      git config --global user.email "infra+gitlab-automation@dfinity.org"
+      git config --global user.name "IDX GitLab Automation"
+
+      git tag "rosetta-release-$ROSETTA_RELEASE_VERSION" "$CI_COMMIT_SHA"
+      git push origin "rosetta-release-$ROSETTA_RELEASE_VERSION"

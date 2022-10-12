@@ -281,11 +281,9 @@
         - ic-os/hostos/rootfs/packages.common
         - ic-os/hostos/rootfs/packages.dev
 
-.rules-protected-master-job:
+.rules-scheduled-rosetta-release:
   rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
-      allow_failure: true
+    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-release"
 
 .rules-service-worker-release:
   rules:

@@ -1,7 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("@io_bazel_rules_docker//container:container.bzl", "container_image")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
 load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file")
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -116,6 +117,14 @@ rust_test(
 
 # Rosetta docker image
 
+## The text file with the release version
+
+write_file(
+    name = "version",
+    out = "version.txt",
+    content = [ROSETTA_VERSION],
+)
+
 ## Create a layer with a rosetta user
 
 passwd_entry(
@@ -140,7 +149,7 @@ pkg_tar(
 ## The final image we can publish.
 
 container_image(
-    name = "rosetta_api_image",
+    name = "rosetta_image",
     base = "@rust_base//image",
     directory = "/home/rosetta",
     entrypoint = [
@@ -156,4 +165,17 @@ container_image(
     tars = [":passwd_tar"],
     user = "rosetta",
     workdir = "/home/rosetta",
+)
+
+## Run this target with --embed_label flag[1] to specify the image tag.
+## [1]: https://bazel.build/reference/command-line-reference#flag--embed_label
+
+container_push(
+    name = "push_rosetta_image",
+    format = "Docker",
+    image = ":rosetta_image",
+    registry = "hub.docker.com",
+    repository = "dfinity/rosetta-api",
+    tag = "{BUILD_EMBED_LABEL}",
+    tags = ["manual"],
 )
