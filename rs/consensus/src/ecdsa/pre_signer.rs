@@ -474,29 +474,46 @@ impl EcdsaPreSignerImpl {
                             ret.append(&mut action.into_iter().collect());
                         }
                     } else {
-                        // If the share points to a different dealing hash than what we
-                        // have for the same <transcript Id, dealer Id>, drop it. This is
-                        // different from the case where we don't have the dealing yet
-                        let mut dealing_hash_mismatch = false;
-                        for signed_dealing in valid_dealings.values() {
-                            if support.transcript_id == signed_dealing.idkg_dealing().transcript_id
-                                && support.dealer_id == signed_dealing.dealer_id()
-                            {
-                                dealing_hash_mismatch = true;
-                                break;
-                            }
-                        }
-                        if dealing_hash_mismatch {
+                        // If the dealer_id in the share is invalid, drop it.
+                        if transcript_params
+                            .dealers()
+                            .position(support.dealer_id)
+                            .is_none()
+                        {
                             self.metrics
-                                .pre_sign_errors_inc("support_dealing_hash_mismatch");
+                                .pre_sign_errors_inc("missing_hash_invalid_dealer");
                             ret.push(EcdsaChangeAction::RemoveUnvalidated(id));
                             warn!(
                                 self.log,
-                                "validate_dealing_support(): Support dealing hash mismatch: {:?}",
+                                "validate_dealing_support(): Missing hash, invalid dealer: {:?}",
                                 support
                             );
+                        } else {
+                            // If the share points to a different dealing hash than what we
+                            // have for the same <transcript Id, dealer Id>, drop it. This is
+                            // different from the case where we don't have the dealing yet
+                            let mut dealing_hash_mismatch = false;
+                            for signed_dealing in valid_dealings.values() {
+                                if support.transcript_id
+                                    == signed_dealing.idkg_dealing().transcript_id
+                                    && support.dealer_id == signed_dealing.dealer_id()
+                                {
+                                    dealing_hash_mismatch = true;
+                                    break;
+                                }
+                            }
+                            if dealing_hash_mismatch {
+                                self.metrics
+                                    .pre_sign_errors_inc("missing_hash_meta_data_misimatch");
+                                ret.push(EcdsaChangeAction::RemoveUnvalidated(id));
+                                warn!(
+                                self.log,
+                                "validate_dealing_support(): Missing hash, meta data mismatch: {:?}",
+                                support
+                            );
+                            }
+                            // Else: Support for a dealing we don't have yet, defer it
                         }
-                        // Else: Support for a dealing we don't have yet, defer it
                     }
                 }
                 Action::Drop => ret.push(EcdsaChangeAction::RemoveUnvalidated(id)),
@@ -2048,7 +2065,7 @@ mod tests {
 
     // Tests that support with a dealing hash mismatch is dropped.
     #[test]
-    fn test_ecdsa_dealing_support_hash_mismatch() {
+    fn test_ecdsa_dealing_support_missing_hash_meta_data_mismatch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
@@ -2066,6 +2083,46 @@ mod tests {
                 ecdsa_pool.apply_changes(change_set);
 
                 support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
+                let msg_id = support.message_id();
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaDealingSupport(support),
+                    peer_id: NODE_3,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Set up the transcript creation request
+                // The block requests transcripts 1
+                let t = create_transcript_param(id, &[NODE_2], &[NODE_3]);
+                let block_reader =
+                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                let change_set = pre_signer.validate_dealing_support(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
+            })
+        })
+    }
+
+    // Tests that support with a missing dealing hash and invalid dealer is dropped.
+    #[test]
+    fn test_ecdsa_dealing_support_missing_hash_invalid_dealer() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, pre_signer) =
+                    create_pre_signer_dependencies(pool_config, logger);
+                let time_source = FastForwardTimeSource::new();
+                let id = create_transcript_id_with_height(1, Height::from(10));
+
+                // Set up the ECDSA pool
+                // A dealing for a transcript that is requested by finalized block,
+                // and we already have the dealing(share accepted)
+                let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaSignedDealing(dealing),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
+                support.dealer_id = NODE_4;
                 let msg_id = support.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaDealingSupport(support),
