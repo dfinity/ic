@@ -513,19 +513,15 @@ impl DownloadManager for DownloadManagerImpl {
 
         // Add the artifact hash to the receive check set.
         let charged_peer = artifact_tracker.peer_id;
-
-        let mut receive_check_caches = self.receive_check_caches.write();
-        if receive_check_caches.contains_key(&charged_peer) {
-            receive_check_caches
-                .get_mut(&charged_peer)
-                .unwrap()
-                .put(advert.integrity_hash.clone(), ());
-        } else {
-            warn!(
+        match self.receive_check_caches.write().get_mut(&charged_peer) {
+            Some(v) => {
+                v.put(advert.integrity_hash.clone(), ());
+            }
+            None => warn!(
                 every_n_seconds => 5,
                 self.log,
                 "Peer {:?} has no receive check cache", charged_peer
-            );
+            ),
         }
 
         // The artifact is complete and the integrity hash is okay.
@@ -881,12 +877,12 @@ impl DownloadManagerImpl {
                 refresh_registry = true;
                 *registry_refresh_instant = Instant::now();
             }
-            (
-                update_priority_fns,
-                retransmission_request,
-                refresh_registry,
-            )
         }
+        (
+            update_priority_fns,
+            retransmission_request,
+            refresh_registry,
+        )
     }
 
     // Update the peer manager state based on the latest registry value.
@@ -2181,12 +2177,13 @@ pub mod tests {
         }
 
         // Test that the cache contains the artifact(s).
-        let receive_check_caches = download_manager.receive_check_caches.read();
-        let cache = &receive_check_caches.get(&node_id).unwrap();
-        for gossip_advert in &adverts {
-            assert!(cache.contains(&gossip_advert.integrity_hash));
+        {
+            let receive_check_caches = download_manager.receive_check_caches.read();
+            let cache = &receive_check_caches.get(&node_id).unwrap();
+            for gossip_advert in &adverts {
+                assert!(cache.contains(&gossip_advert.integrity_hash));
+            }
         }
-        std::mem::drop(receive_check_caches);
 
         // Test that the artifact is ignored when providing the same adverts again.
         for gossip_advert in &adverts {
@@ -2232,10 +2229,12 @@ pub mod tests {
 
         // Validate that the cache does not contain the artifacts since we put chunks
         // with incorrect integrity hashes
-        let receive_check_caches = download_manager.receive_check_caches.read();
-        let cache = &receive_check_caches.get(&node_id).unwrap();
-        for gossip_advert in &adverts {
-            assert!(!cache.contains(&gossip_advert.integrity_hash));
+        {
+            let receive_check_caches = download_manager.receive_check_caches.read();
+            let cache = &receive_check_caches.get(&node_id).unwrap();
+            for gossip_advert in &adverts {
+                assert!(!cache.contains(&gossip_advert.integrity_hash));
+            }
         }
 
         // Validate that the number of integrity check failures is equivalent to the
