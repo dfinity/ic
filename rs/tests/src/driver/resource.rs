@@ -166,7 +166,7 @@ pub fn get_resource_request_for_universal_vm(
 ) -> anyhow::Result<ResourceRequest> {
     let primary_image = universal_vm.primary_image.clone().unwrap_or_else(|| DiskImage {
         image_type: ImageType::RawImage,
-        url: Url::parse(&format!("https://download.dfinity.systems/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
+        url: Url::parse(&format!("http://download.proxy-global.dfinity.network:8080/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
         sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
     });
     let mut res_req = ResourceRequest::new(
