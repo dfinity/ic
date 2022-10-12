@@ -1030,7 +1030,7 @@ impl SchedulerImpl {
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
                 let canister = state.canister_states.get_mut(&rs.canister_id).unwrap();
-                self.exec_env.abort_canister(canister);
+                self.exec_env.abort_canister(canister, &self.log);
             });
     }
 
@@ -1046,7 +1046,7 @@ impl SchedulerImpl {
 
                 if self.deterministic_time_slicing == FlagStatus::Enabled {
                     // Abort all paused execution before the checkpoint.
-                    self.exec_env.abort_all_paused_executions(state);
+                    self.exec_env.abort_all_paused_executions(state, &self.log);
                 }
             }
             ExecutionRoundType::OrdinaryRound => {

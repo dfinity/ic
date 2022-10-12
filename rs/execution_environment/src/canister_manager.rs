@@ -733,6 +733,7 @@ impl CanisterManager {
             requested_compute_allocation: context.compute_allocation,
             requested_memory_allocation: context.memory_allocation,
             sender: context.sender,
+            canister_id: canister.canister_id(),
         };
 
         let round = RoundContext {
@@ -1573,7 +1574,7 @@ pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
 
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
-    fn abort(self: Box<Self>) -> (RequestOrIngress, Cycles);
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (RequestOrIngress, Cycles);
 }
 
 #[cfg(test)]

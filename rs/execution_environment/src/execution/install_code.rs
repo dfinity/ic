@@ -545,6 +545,7 @@ pub(crate) struct OriginalContext {
     pub requested_compute_allocation: Option<ComputeAllocation>,
     pub requested_memory_allocation: Option<MemoryAllocation>,
     pub sender: PrincipalId,
+    pub canister_id: CanisterId,
 }
 
 pub(crate) fn validate_controller(
