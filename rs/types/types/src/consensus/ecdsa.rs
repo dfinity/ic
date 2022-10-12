@@ -1,10 +1,10 @@
 //! Defines types used for threshold ECDSA key generation.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Display, Formatter};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::time::Duration;
 use strum_macros::EnumIter;
 
@@ -28,6 +28,7 @@ use crate::crypto::{
 };
 use crate::{node_id_into_protobuf, node_id_try_from_protobuf};
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
+use ic_crypto_sha::Sha256;
 use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
@@ -669,7 +670,15 @@ pub struct EcdsaPrefix {
 }
 
 impl EcdsaPrefix {
-    pub fn new(group_tag: u64, meta_hash: u64) -> Self {
+    pub fn new(group_tag: u64, hash: [u8; 32]) -> Self {
+        let w1 = u64::from_be_bytes((&hash[0..8]).try_into().unwrap());
+        let w2 = u64::from_be_bytes((&hash[8..16]).try_into().unwrap());
+        let w3 = u64::from_be_bytes((&hash[16..24]).try_into().unwrap());
+        let w4 = u64::from_be_bytes((&hash[24..]).try_into().unwrap());
+        Self::new_with_meta_hash(group_tag, w1 ^ w2 ^ w3 ^ w4)
+    }
+
+    pub fn new_with_meta_hash(group_tag: u64, meta_hash: u64) -> Self {
         Self {
             group_tag,
             meta_hash,
@@ -692,7 +701,7 @@ pub fn dealing_prefix(
     dealer_id: &NodeId,
 ) -> EcdsaPrefixOf<SignedIDkgDealing> {
     // Group_tag: transcript Id, Meta info: <dealer_id>
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
 
     EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
@@ -704,7 +713,7 @@ pub fn dealing_support_prefix(
     support_node_id: &NodeId,
 ) -> EcdsaPrefixOf<IDkgDealingSupport> {
     // Group_tag: transcript Id, Meta info: <dealer_id + support sender>
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
     support_node_id.hash(&mut hasher);
 
@@ -716,7 +725,7 @@ pub fn sig_share_prefix(
     sig_share_node_id: &NodeId,
 ) -> EcdsaPrefixOf<EcdsaSigShare> {
     // Group_tag: quadruple Id, Meta info: <sig share sender>
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
 
     EcdsaPrefixOf::new(EcdsaPrefix::new(request_id.quadruple_id.0, hasher.finish()))
@@ -728,7 +737,7 @@ pub fn complaint_prefix(
     complainer_id: &NodeId,
 ) -> EcdsaPrefixOf<EcdsaComplaint> {
     // Group_tag: transcript Id, Meta info: <dealer_id + complainer_id>
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
     complainer_id.hash(&mut hasher);
 
@@ -741,7 +750,7 @@ pub fn opening_prefix(
     opener_id: &NodeId,
 ) -> EcdsaPrefixOf<EcdsaOpening> {
     // Group_tag: transcript Id, Meta info: <dealer_id + opener_id>
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
     opener_id.hash(&mut hasher);
 

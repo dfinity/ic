@@ -1306,7 +1306,7 @@ fn deser_ecdsa_message_id(message_type: EcdsaMessageType, id_key: IdKey) -> Ecds
 
     (
         message_type,
-        EcdsaPrefix::new(
+        EcdsaPrefix::new_with_meta_hash(
             u64::from_be_bytes(group_tag_bytes),
             u64::from_be_bytes(meta_hash_bytes),
         ),
