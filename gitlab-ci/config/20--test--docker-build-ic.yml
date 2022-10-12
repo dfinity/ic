@@ -1,6 +1,6 @@
 .docker-build-ic:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker # TODO: switch to k8s
   needs: []
   stage: test
   artifacts:
@@ -8,9 +8,6 @@
       dotenv: nns.release.env
     paths:
       - bazel-build-log*.json*
-  tags:
-    - docker
-    - dfinity
   script:
     - |
       set -euo pipefail

@@ -10,9 +10,6 @@ guest-os-updateimg-build:
   variables:
       BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: ""
-  tags:
-    - k8s
-    - dfinity
   script:
     - |
       set -xeuo pipefail
