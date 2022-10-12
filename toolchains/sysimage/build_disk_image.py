@@ -145,6 +145,9 @@ def main():
     for index in range(len(partition_files)):
         write_partition_image_from_tar(gpt_entries[index], disk_image, tarfile.open(partition_files[index], mode="r:"))
 
+    # Provide additional space for vda10, the final partition, for immediate QEMU use
+    subprocess.run(["truncate", "--size", "50G", disk_image], check=True)
+
     subprocess.run(
         [
             "tar",
