@@ -125,6 +125,7 @@ pub struct ExecutionTest {
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics_registry: MetricsRegistry,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+    log: ReplicaLogger,
 }
 
 impl ExecutionTest {
@@ -1081,7 +1082,8 @@ impl ExecutionTest {
     /// Aborts all paused executions.
     pub fn abort_all_paused_executions(&mut self) {
         let mut state = self.state.take().unwrap();
-        self.exec_env.abort_all_paused_executions(&mut state);
+        self.exec_env
+            .abort_all_paused_executions(&mut state, &self.log);
         self.state = Some(state);
     }
 
@@ -1616,7 +1618,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
         );
         let query_handler = InternalHttpQueryHandler::new(
-            self.log,
+            self.log.clone(),
             hypervisor,
             self.subnet_type,
             Config::default(),
@@ -1657,6 +1659,7 @@ impl ExecutionTestBuilder {
             ingress_history_writer,
             manual_execution: self.manual_execution,
             ecdsa_subnet_public_keys,
+            log: self.log,
         }
     }
 }

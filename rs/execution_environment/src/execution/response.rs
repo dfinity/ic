@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use ic_base_types::CanisterId;
 use prometheus::IntCounter;
 
 use ic_embedders::wasm_executor::{
@@ -12,7 +13,7 @@ use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_interfaces::messages::CanisterInputMessage;
-use ic_logger::{error, info};
+use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, ExecutionParameters};
@@ -503,6 +504,7 @@ struct OriginalContext {
     message: Arc<Response>,
     subnet_size: usize,
     freezing_threshold: Cycles,
+    canister_id: CanisterId,
 }
 
 /// Struct used to hold necessary information for the
@@ -534,7 +536,8 @@ impl PausedExecution for PausedResponseExecution {
     ) -> ExecuteMessageResult {
         info!(
             round.log,
-            "[DTS] Resuming paused response callback of canister {}.",
+            "[DTS] Resuming paused response callback {:?} of canister {}.",
+            self.original.callback_id,
             clean_canister.canister_id(),
         );
         // The height of the `clean_canister` state increases with every call of
@@ -549,11 +552,12 @@ impl PausedExecution for PausedResponseExecution {
                 }
                 Err((helper, err)) => {
                     info!(
-                        round.log,
-                        "[DTS] Failed to resume paused response callback of canister {}: {:?}.",
-                        clean_canister.canister_id(),
-                        err,
-                    );
+                    round.log,
+                    "[DTS] Failed to resume paused response callback {:?} of canister {}: {:?}.",
+                    self.original.callback_id,
+                    clean_canister.canister_id(),
+                    err,
+                );
                     self.paused_wasm_execution.abort();
                     let result = wasm_execution_error(
                         err,
@@ -573,7 +577,13 @@ impl PausedExecution for PausedResponseExecution {
         )
     }
 
-    fn abort(self: Box<Self>) -> (CanisterInputMessage, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterInputMessage, Cycles) {
+        info!(
+            log,
+            "[DTS] Aborting paused response callback {:?} of canister {}.",
+            self.original.callback_id,
+            self.original.canister_id,
+        );
         self.paused_wasm_execution.abort();
         let message = CanisterInputMessage::Response(self.original.message);
         // No cycles were prepaid for execution during this DTS execution.
@@ -609,7 +619,8 @@ impl PausedExecution for PausedCleanupExecution {
     ) -> ExecuteMessageResult {
         info!(
             round.log,
-            "[DTS] Resuming paused cleanup callback of canister {}.",
+            "[DTS] Resuming paused cleanup callback {:?} of canister {}.",
+            self.original.callback_id,
             clean_canister.canister_id(),
         );
         // The height of the `clean_canister` state increases with every call of
@@ -628,7 +639,8 @@ impl PausedExecution for PausedCleanupExecution {
                 Err((helper, err)) => {
                     info!(
                         round.log,
-                        "[DTS] Failed to resume paused cleanup callback of canister {}: {:?}.",
+                        "[DTS] Failed to resume paused cleanup callback {:?} of canister {}: {:?}.",
+                        self.original.callback_id,
                         clean_canister.canister_id(),
                         err,
                     );
@@ -652,7 +664,13 @@ impl PausedExecution for PausedCleanupExecution {
         )
     }
 
-    fn abort(self: Box<Self>) -> (CanisterInputMessage, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterInputMessage, Cycles) {
+        info!(
+            log,
+            "[DTS] Aborting paused cleanup callback {:?} of canister {}.",
+            self.original.callback_id,
+            self.original.canister_id,
+        );
         self.paused_wasm_execution.abort();
         let message = CanisterInputMessage::Response(self.original.message);
         // No cycles were prepaid for execution during this DTS execution.
@@ -709,6 +727,7 @@ pub fn execute_response(
         message: Arc::clone(&response),
         subnet_size,
         freezing_threshold,
+        canister_id: clean_canister.canister_id(),
     };
 
     let mut helper =
@@ -843,7 +862,8 @@ fn process_response_result(
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
             info!(
                 round.log,
-                "[DTS] Pausing response callback of canister {} after {} instructions.",
+                "[DTS] Pausing response callback {:?} of canister {} after {} instructions.",
+                original.callback_id,
                 clean_canister.canister_id(),
                 slice.executed_instructions,
             );
@@ -865,7 +885,8 @@ fn process_response_result(
             if instructions_used >= execution_parameters.instruction_limits.slice() {
                 info!(
                     round.log,
-                    "[DTS] Finished response callback of canister {} after {} / {} instructions.",
+                    "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
+                    original.callback_id,
                     clean_canister.canister_id(),
                     slice.executed_instructions,
                     instructions_used,
@@ -927,7 +948,8 @@ fn process_cleanup_result(
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
             info!(
                 round.log,
-                "[DTS] Pausing cleanup callback of canister {} after {} instructions.",
+                "[DTS] Pausing cleanup callback {:?} of canister {} after {} instructions.",
+                original.callback_id,
                 clean_canister.canister_id(),
                 slice.executed_instructions,
             );
@@ -950,7 +972,8 @@ fn process_cleanup_result(
             if instructions_used >= execution_parameters.instruction_limits.slice() {
                 info!(
                     round.log,
-                    "[DTS] Finished cleanup callback of canister {} after {} / {} instructions.",
+                    "[DTS] Finished cleanup callback {:?} of canister {} after {} / {} instructions.",
+                    original.callback_id,
                     clean_canister.canister_id(),
                     slice.executed_instructions,
                     instructions_used,

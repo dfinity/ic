@@ -224,7 +224,7 @@ pub trait PausedExecution: std::fmt::Debug + Send {
 
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
-    fn abort(self: Box<Self>) -> (CanisterInputMessage, Cycles);
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterInputMessage, Cycles);
 }
 
 /// Stores all paused executions keyed by their ids.
@@ -2005,7 +2005,7 @@ impl ExecutionEnvironment {
     }
 
     /// Aborts paused execution in the given state.
-    pub fn abort_canister(&self, canister: &mut CanisterState) {
+    pub fn abort_canister(&self, canister: &mut CanisterState, log: &ReplicaLogger) {
         if !canister.system_state.task_queue.is_empty() {
             canister.apply_priority_credit();
             let task_queue = std::mem::take(&mut canister.system_state.task_queue);
@@ -2017,7 +2017,7 @@ impl ExecutionEnvironment {
                     | ExecutionTask::Heartbeat => task,
                     ExecutionTask::PausedExecution(id) => {
                         let paused = self.take_paused_execution(id).unwrap();
-                        let (message, prepaid_execution_cycles) = paused.abort();
+                        let (message, prepaid_execution_cycles) = paused.abort(log);
                         self.metrics.executions_aborted.inc();
                         ExecutionTask::AbortedExecution {
                             message,
@@ -2026,7 +2026,7 @@ impl ExecutionEnvironment {
                     }
                     ExecutionTask::PausedInstallCode(id) => {
                         let paused = self.take_paused_install_code(id).unwrap();
-                        let (message, prepaid_execution_cycles) = paused.abort();
+                        let (message, prepaid_execution_cycles) = paused.abort(log);
                         self.metrics.executions_aborted.inc();
                         ExecutionTask::AbortedInstallCode {
                             message,
@@ -2039,9 +2039,9 @@ impl ExecutionEnvironment {
     }
 
     /// Aborts all paused execution in the given state.
-    pub fn abort_all_paused_executions(&self, state: &mut ReplicatedState) {
+    pub fn abort_all_paused_executions(&self, state: &mut ReplicatedState, log: &ReplicaLogger) {
         for canister in state.canisters_iter_mut() {
-            self.abort_canister(canister);
+            self.abort_canister(canister, log);
         }
     }
 

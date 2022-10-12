@@ -8,6 +8,7 @@ use crate::execution::common::{
 use crate::execution_environment::{
     ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
 };
+use ic_base_types::CanisterId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -15,7 +16,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_interfaces::messages::RequestOrIngress;
-use ic_logger::info;
+use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::CallContextId;
 use ic_types::{Cycles, NumBytes, NumInstructions, Time};
@@ -84,6 +85,7 @@ pub fn execute_update(
         subnet_size,
         time,
         freezing_threshold,
+        canister_id: clean_canister.canister_id(),
     };
 
     let helper = match UpdateHelper::new(&clean_canister, &original, &round) {
@@ -200,6 +202,7 @@ struct OriginalContext {
     subnet_size: usize,
     time: Time,
     freezing_threshold: Cycles,
+    canister_id: CanisterId,
 }
 
 /// Contains fields of `UpdateHelper` that are necessary for resuming an update
@@ -489,7 +492,13 @@ impl PausedExecution for PausedCallExecution {
         }
     }
 
-    fn abort(self: Box<Self>) -> (CanisterInputMessage, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterInputMessage, Cycles) {
+        info!(
+            log,
+            "[DTS] Aborting {:?} execution of canister {}",
+            self.original.method,
+            self.original.canister_id,
+        );
         self.paused_wasm_execution.abort();
         let message = match self.original.message {
             RequestOrIngress::Request(r) => CanisterInputMessage::Request(r),
