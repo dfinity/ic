@@ -1346,8 +1346,9 @@ dependencies = [
 
 [[package]]
 name = "comparable"
-version = "0.5.2"
-source = "git+https://github.com/jwiegley/comparable?rev=278c51e152ac54441577008079335e112b9401e0#278c51e152ac54441577008079335e112b9401e0"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb513ee8037bf08c5270ecefa48da249f4c58e57a71ccfce0a5b0877d2a20eb2"
 dependencies = [
  "comparable_derive",
  "comparable_helper",
@@ -1357,10 +1358,11 @@ dependencies = [
 
 [[package]]
 name = "comparable_derive"
-version = "0.5.2"
-source = "git+https://github.com/jwiegley/comparable?rev=278c51e152ac54441577008079335e112b9401e0#278c51e152ac54441577008079335e112b9401e0"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a54b9c40054eb8999c5d1d36fdc90e4e5f7ff0d1d9621706f360b3cbc8beb828"
 dependencies = [
- "convert_case",
+ "convert_case 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2 1.0.46 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "syn 1.0.102 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1368,10 +1370,11 @@ dependencies = [
 
 [[package]]
 name = "comparable_helper"
-version = "0.5.2"
-source = "git+https://github.com/jwiegley/comparable?rev=278c51e152ac54441577008079335e112b9401e0#278c51e152ac54441577008079335e112b9401e0"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb5437e327e861081c91270becff184859f706e3e50f5301a9d4dc8eb50752c3"
 dependencies = [
- "convert_case",
+ "convert_case 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2 1.0.46 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "syn 1.0.102 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1448,6 +1451,15 @@ name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+
+[[package]]
+name = "convert_case"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
+dependencies = [
+ "unicode-segmentation",
+]
 
 [[package]]
 name = "cookie"
@@ -2003,7 +2015,7 @@ version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb810d30a7c1953f91334de7244731fc3f3c10d7fe163338a35b9f640960321"
 dependencies = [
- "convert_case",
+ "convert_case 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2 1.0.46 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc_version",
@@ -3620,9 +3632,9 @@ checksum = "adab1eaa3408fb7f0c777a73e7465fd5656136fc93b670eb6df3c88c2c1344e3"
 
 [[package]]
 name = "inferno"
-version = "0.11.9"
+version = "0.11.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb31a5d9068fccb34562007cd564bb08fff1478255b0534c549e93fcb658cd90"
+checksum = "65678bf692af3f4654f7baa7aab103fda889e37a84816cf3bd0aaa795277f6a3"
 dependencies = [
  "ahash",
  "atty",
@@ -7966,9 +7978,9 @@ dependencies = [
 
 [[package]]
 name = "tower-layer"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "343bc9466d3fe6b0f960ef45960509f84480bf4fd96f92901afe7ff3df9d3a62"
+checksum = "c20c8dbed6283a09604c3e69b4b7eeb54e298b8a600d4d5ecb5ad39de609f1d0"
 
 [[package]]
 name = "tower-service"

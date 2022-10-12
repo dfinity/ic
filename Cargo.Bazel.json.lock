@@ -1,5 +1,5 @@
 {
-  "checksum": "3dcd3fd707b7c94b53f5b2e37c31991687b813086ee9d7675e8e9afd1f9ac6e8",
+  "checksum": "97e5565bb84436e911831591dc307d9a741db888dbc769ea6764513363c40a34",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2812,7 +2812,7 @@
               "target": "tower_http"
             },
             {
-              "id": "tower-layer 0.3.1",
+              "id": "tower-layer 0.3.2",
               "target": "tower_layer"
             },
             {
@@ -2887,7 +2887,7 @@
               "target": "mime"
             },
             {
-              "id": "tower-layer 0.3.1",
+              "id": "tower-layer 0.3.2",
               "target": "tower_layer"
             },
             {
@@ -7116,16 +7116,13 @@
       },
       "license": "MPL-2.0"
     },
-    "comparable 0.5.2": {
+    "comparable 0.5.4": {
       "name": "comparable",
-      "version": "0.5.2",
+      "version": "0.5.4",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/jwiegley/comparable",
-          "commitish": {
-            "Rev": "278c51e152ac54441577008079335e112b9401e0"
-          },
-          "strip_prefix": "comparable"
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/comparable/0.5.4/download",
+          "sha256": "eb513ee8037bf08c5270ecefa48da249f4c58e57a71ccfce0a5b0877d2a20eb2"
         }
       },
       "targets": [
@@ -7168,30 +7165,27 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "comparable_derive 0.5.2",
+              "id": "comparable_derive 0.5.4",
               "target": "comparable_derive"
             },
             {
-              "id": "comparable_helper 0.5.2",
+              "id": "comparable_helper 0.5.4",
               "target": "comparable_helper"
             }
           ],
           "selects": {}
         },
-        "version": "0.5.2"
+        "version": "0.5.4"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "comparable_derive 0.5.2": {
+    "comparable_derive 0.5.4": {
       "name": "comparable_derive",
-      "version": "0.5.2",
+      "version": "0.5.4",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/jwiegley/comparable",
-          "commitish": {
-            "Rev": "278c51e152ac54441577008079335e112b9401e0"
-          },
-          "strip_prefix": "comparable_derive"
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/comparable_derive/0.5.4/download",
+          "sha256": "a54b9c40054eb8999c5d1d36fdc90e4e5f7ff0d1d9621706f360b3cbc8beb828"
         }
       },
       "targets": [
@@ -7235,20 +7229,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.2"
+        "version": "0.5.4"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "comparable_helper 0.5.2": {
+    "comparable_helper 0.5.4": {
       "name": "comparable_helper",
-      "version": "0.5.2",
+      "version": "0.5.4",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/jwiegley/comparable",
-          "commitish": {
-            "Rev": "278c51e152ac54441577008079335e112b9401e0"
-          },
-          "strip_prefix": "comparable_helper"
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/comparable_helper/0.5.4/download",
+          "sha256": "fb5437e327e861081c91270becff184859f706e3e50f5301a9d4dc8eb50752c3"
         }
       },
       "targets": [
@@ -7273,7 +7264,7 @@
         "deps": {
           "common": [
             {
-              "id": "convert_case 0.4.0",
+              "id": "convert_case 0.6.0",
               "target": "convert_case"
             },
             {
@@ -7292,7 +7283,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.2"
+        "version": "0.5.4"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -7656,6 +7647,48 @@
         ],
         "edition": "2018",
         "version": "0.4.0"
+      },
+      "license": "MIT"
+    },
+    "convert_case 0.6.0": {
+      "name": "convert_case",
+      "version": "0.6.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/convert_case/0.6.0/download",
+          "sha256": "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "convert_case",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "convert_case",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "unicode-segmentation 1.10.0",
+              "target": "unicode_segmentation"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.6.0"
       },
       "license": "MIT"
     },
@@ -11147,7 +11180,7 @@
               "target": "colored"
             },
             {
-              "id": "comparable 0.5.2",
+              "id": "comparable 0.5.4",
               "target": "comparable"
             },
             {
@@ -18871,13 +18904,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "inferno 0.11.9": {
+    "inferno 0.11.10": {
       "name": "inferno",
-      "version": "0.11.9",
+      "version": "0.11.10",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/inferno/0.11.9/download",
-          "sha256": "bb31a5d9068fccb34562007cd564bb08fff1478255b0534c549e93fcb658cd90"
+          "url": "https://crates.io/api/v1/crates/inferno/0.11.10/download",
+          "sha256": "65678bf692af3f4654f7baa7aab103fda889e37a84816cf3bd0aaa795277f6a3"
         }
       },
       "targets": [
@@ -19045,7 +19078,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.9"
+        "version": "0.11.10"
       },
       "license": "CDDL-1.0"
     },
@@ -29268,7 +29301,7 @@
               "target": "findshlibs"
             },
             {
-              "id": "inferno 0.11.9",
+              "id": "inferno 0.11.10",
               "target": "inferno"
             },
             {
@@ -42349,7 +42382,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-layer 0.3.1",
+              "id": "tower-layer 0.3.2",
               "target": "tower_layer"
             },
             {
@@ -42542,7 +42575,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower-layer 0.3.1",
+              "id": "tower-layer 0.3.2",
               "target": "tower_layer"
             },
             {
@@ -42636,7 +42669,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-layer 0.3.1",
+              "id": "tower-layer 0.3.2",
               "target": "tower_layer"
             },
             {
@@ -42655,13 +42688,13 @@
       },
       "license": "MIT"
     },
-    "tower-layer 0.3.1": {
+    "tower-layer 0.3.2": {
       "name": "tower-layer",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tower-layer/0.3.1/download",
-          "sha256": "343bc9466d3fe6b0f960ef45960509f84480bf4fd96f92901afe7ff3df9d3a62"
+          "url": "https://crates.io/api/v1/crates/tower-layer/0.3.2/download",
+          "sha256": "c20c8dbed6283a09604c3e69b4b7eeb54e298b8a600d4d5ecb5ad39de609f1d0"
         }
       },
       "targets": [
@@ -42684,7 +42717,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "0.3.1"
+        "version": "0.3.2"
       },
       "license": "MIT"
     },
@@ -42768,7 +42801,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tower-layer 0.3.1",
+              "id": "tower-layer 0.3.2",
               "target": "tower_layer"
             },
             {
@@ -48282,7 +48315,7 @@
     "difference 2.0.0",
     "escargot 0.5.7",
     "ic-wasm 0.1.5",
-    "inferno 0.11.9",
+    "inferno 0.11.10",
     "lalrpop 0.19.8",
     "leb128 0.2.5",
     "multipart 0.18.0",
