@@ -7,6 +7,7 @@
 use crate::xmd::expand_message_xmd;
 use core::fmt::{self, Debug};
 use rand::{CryptoRng, RngCore, SeedableRng};
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use zeroize::Zeroize;
 
@@ -25,7 +26,7 @@ const SEED_LEN: usize = 32;
 /// multiple unrelated Seeds from a single source Seed.
 ///
 /// It is not possible to extract the value of a Seed.
-#[derive(Clone, Zeroize)]
+#[derive(Clone, Zeroize, Serialize, Deserialize)]
 #[zeroize(drop)]
 pub struct Seed {
     value: [u8; SEED_LEN],

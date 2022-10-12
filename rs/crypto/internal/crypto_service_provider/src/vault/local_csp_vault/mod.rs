@@ -2,6 +2,7 @@ mod basic_sig;
 mod idkg;
 mod multi_sig;
 mod ni_dkg;
+mod public_seed;
 mod secret_key_store;
 mod tecdsa;
 #[cfg(test)]

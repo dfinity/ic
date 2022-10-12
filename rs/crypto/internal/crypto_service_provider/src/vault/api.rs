@@ -2,6 +2,7 @@ use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
 use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
@@ -133,6 +134,7 @@ pub trait CspVault:
     + ThresholdEcdsaSignerCspVault
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
+    + PublicRandomSeedGenerator
 {
 }
 
@@ -147,6 +149,7 @@ impl<T> CspVault for T where
         + ThresholdEcdsaSignerCspVault
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
+        + PublicRandomSeedGenerator
 {
 }
 
@@ -519,4 +522,20 @@ pub trait ThresholdEcdsaSignerCspVault {
         key_times_lambda: &IDkgTranscriptInternal,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+}
+
+/// An error returned by failing to generate a public seed from [`CspVault`].
+#[derive(Serialize, Deserialize, Debug)]
+pub enum PublicRandomSeedGeneratorError {
+    /// Internal error, e.g., an RPC error.
+    InternalError { internal_error: String },
+}
+
+/// Operations of [`CspVault`] for generating public random seed.
+pub trait PublicRandomSeedGenerator {
+    /// Returns a public random [`Seed`].
+    /// Public in this context means that the produced randomness MUST NOT be used in
+    /// any use cases where the security relies on keeping the randomness secret, e.g.,
+    /// generation of cryptographic keys.
+    fn new_public_seed(&self) -> Result<Seed, PublicRandomSeedGeneratorError>;
 }
