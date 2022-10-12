@@ -1233,9 +1233,8 @@ pub struct IngressHistoryState {
     /// Ingress messages in terminal states (`Completed`, `Failed` or `Done`)
     /// grouped by their respective expiration times.
     pruning_times: Arc<BTreeMap<Time, BTreeSet<MessageId>>>,
-    /// Transient: points to the earliest time in `pruning_times` with
-    /// associated message IDs that still may be of type completed or
-    /// failed.
+    /// The earliest time in `pruning_times` with associated message IDs that
+    /// may still be of type completed or failed.
     next_terminal_time: Time,
     /// Transient: memory usage of the ingress history.
     memory_usage: usize,
@@ -1277,6 +1276,7 @@ impl From<&IngressHistoryState> for pb_ingress::IngressHistoryState {
         pb_ingress::IngressHistoryState {
             statuses,
             pruning_times,
+            next_terminal_time: item.next_terminal_time.as_nanos_since_unix_epoch(),
         }
     }
 }
@@ -1310,7 +1310,7 @@ impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
         Ok(IngressHistoryState {
             statuses: Arc::new(statuses),
             pruning_times: Arc::new(pruning_times),
-            next_terminal_time: UNIX_EPOCH,
+            next_terminal_time: Time::from_nanos_since_unix_epoch(item.next_terminal_time),
             memory_usage,
         })
     }

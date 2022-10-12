@@ -1002,6 +1002,32 @@ fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
     assert_eq!(ingress_history, ingress_history_reset);
 }
 
+#[test]
+fn ingress_history_roundtrip_encode() {
+    use ic_protobuf::state::ingress::v1 as pb;
+
+    let mut ingress_history = IngressHistoryState::new();
+
+    // Fill the ingress history with 10 terminal entries...
+    for i in 1..=10 {
+        ingress_history.insert(
+            message_test_id(i),
+            test_status_terminal(i),
+            Time::from_nanos_since_unix_epoch(i),
+            NumBytes::from(u64::MAX),
+        );
+    }
+
+    // ... and trigger forgetting terminal statuses with a limit sufficient
+    // for 5 non-terminal entries
+    let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
+    ingress_history.forget_terminal_statuses(status_size);
+
+    let ingress_history_proto = pb::IngressHistoryState::from(&ingress_history);
+
+    assert_eq!(ingress_history, ingress_history_proto.try_into().unwrap());
+}
+
 #[derive(Clone)]
 struct SignalConfig {
     end: u64,
