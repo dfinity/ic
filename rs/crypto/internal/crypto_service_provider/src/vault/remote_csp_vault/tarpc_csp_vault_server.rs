@@ -6,13 +6,15 @@ use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
     CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault,
-    MultiSignatureCspVault, NiDkgCspVault, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
+    MultiSignatureCspVault, NiDkgCspVault, PublicRandomSeedGenerator,
+    PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
     ThresholdSignatureCspVault,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::remote_csp_vault::TarpcCspVault;
 use crate::{TlsHandshakeCspVault, CANISTER_SKS_DATA_FILENAME, SKS_DATA_FILENAME};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
@@ -449,6 +451,15 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
                 algorithm_id,
             )
         };
+        execute_on_thread_pool(self.thread_pool_handle, job).await
+    }
+
+    async fn new_public_seed(
+        self,
+        _: context::Context,
+    ) -> Result<Seed, PublicRandomSeedGeneratorError> {
+        let vault = self.local_csp_vault;
+        let job = move || vault.new_public_seed();
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 }

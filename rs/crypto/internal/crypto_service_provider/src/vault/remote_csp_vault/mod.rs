@@ -5,6 +5,7 @@ use crate::vault::api::{
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError,
     CspTlsKeygenError, CspTlsSignError,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
@@ -37,6 +38,8 @@ use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use std::sync::Arc;
 pub use tarpc_csp_vault_client::RemoteCspVault;
 pub use tarpc_csp_vault_server::TarpcCspVaultServerImpl;
+
+use super::api::PublicRandomSeedGeneratorError;
 
 #[cfg(test)]
 mod tests;
@@ -209,6 +212,8 @@ pub trait TarpcCspVault {
         key_times_lambda: IDkgTranscriptInternal,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+
+    async fn new_public_seed() -> Result<Seed, PublicRandomSeedGeneratorError>;
 }
 
 pub async fn run_csp_vault_server(
