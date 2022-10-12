@@ -176,8 +176,6 @@ rust_test(
     name = "tests_test",
     aliases = ALIASES,
     crate = ":tests",
-    # https://dfinity.atlassian.net/browse/VER-1946
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES,
