@@ -216,7 +216,7 @@ impl RegistryReplicator {
 
         // Fill the local registry store by polling the registry canister until we get no
         // more changes.
-        loop {
+        let certified_time = loop {
             // Note, code duplicate in internal_state.rs poll()
             match registry_canister
                 .get_certified_changes_since(registry_version.get(), &nns_pub_key)
@@ -225,7 +225,7 @@ impl RegistryReplicator {
                 Ok((mut records, _, t)) => {
                     // We fetched the latest version.
                     if records.is_empty() {
-                        return;
+                        break t;
                     }
                     records.sort_by_key(|tr| tr.version);
                     let changelog = records.iter().fold(Changelog::default(), |mut cl, r| {
@@ -250,9 +250,14 @@ impl RegistryReplicator {
                             self.local_store.store(v, cle)
                         })
                         .expect("Could not write to local store.");
-                    self.local_store
-                        .update_certified_time(t.as_nanos_since_unix_epoch())
-                        .expect("Could not store certified time");
+
+                    if entries > 0 {
+                        info!(
+                            self.logger,
+                            "Stored registry versions up to: {}", registry_version
+                        );
+                    }
+
                     registry_version += RegistryVersion::from(entries as u64);
                     timeout = 1;
                 }
@@ -266,7 +271,17 @@ impl RegistryReplicator {
                     timeout = timeout.min(60); // limit the timeout by a minute max
                 }
             }
-        }
+        };
+
+        // Set certified time for the first time now, to indicate that local store is up-to-date
+        self.local_store
+            .update_certified_time(certified_time.as_nanos_since_unix_epoch())
+            .expect("Could not store certified time");
+
+        info!(
+            self.logger,
+            "Finished local store initialization at registry version: {}", registry_version
+        );
     }
 
     /// Calls [`Self::poll()`] asynchronously and spawns a background task that
@@ -301,6 +316,7 @@ impl RegistryReplicator {
         let registry_client = self.registry_client.clone();
         let cancelled = Arc::clone(&self.cancelled);
         let poll_delay = self.poll_delay;
+        info!(logger, "Spawning background thread.");
         let handle = tokio::spawn(async move {
             while !cancelled.load(Ordering::Relaxed) {
                 let timer = metrics.poll_duration.start_timer();
