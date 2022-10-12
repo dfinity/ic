@@ -329,7 +329,9 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
             &Some(node_max_memory_size_bytes),
             &max_transactions_per_response
         )
-        .unwrap(),
+        .map_err(|e| {
+            FailedToArchiveBlocks(format!("Failed to encode archive init arguments: {}", e))
+        })?,
     )
     .await
     .map_err(|(reject_code, message)| {
