@@ -20,7 +20,7 @@ use crate::{
             HasVmName, IcNodeContainer, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
         },
-        test_setup::PotSetup,
+        test_setup::GroupSetup,
     },
     util::create_agent_mapping,
 };
@@ -175,7 +175,7 @@ impl BoundaryNode {
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         let logger = env.logger();
-        let pot_setup = PotSetup::read_attribute(env);
+        let pot_setup = GroupSetup::read_attribute(env);
         let ic_setup = IcSetup::read_attribute(env);
         let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
 

@@ -49,10 +49,10 @@ impl GroupContext {
     fn ensure_dir<P: AsRef<Path>>(path: P) -> Result<()> {
         let path = path.as_ref();
         if Self::dir_exists(path) {
-            println!("ArtifactManager: directory already exists: {:?}", path);
+            println!("GroupContext: directory already exists: {:?}", path);
             Ok(())
         } else {
-            println!("ArtifactManager: creating directory: {:?}", path);
+            println!("GroupContext: creating directory: {:?}", path);
             fs::create_dir_all(path)?;
             Ok(())
         }
@@ -79,6 +79,27 @@ impl GroupContext {
 
         let test_path = self.group_dir.join(constants::TESTS_DIR).join(test_name);
         Self::ensure_dir(test_path.clone()).map(|_| test_path)
+    }
+
+    pub fn create_setup_env(&self) -> Result<TestEnv> {
+        let setup_dir = self.get_or_create_setup_dir()?;
+        TestEnv::new(setup_dir, self.logger.clone())
+    }
+
+    pub fn create_test_env(&self, test_name: &str) -> Result<TestEnv> {
+        let target_dir = self.get_or_create_test_dir(test_name)?;
+        let setup_dir = self.get_or_create_setup_dir()?;
+        TestEnv::fork_from(
+            setup_dir.as_path(),
+            target_dir.as_path(),
+            self.logger.clone(),
+        )
+    }
+
+    pub fn create_finalize_env(&self) -> Result<TestEnv> {
+        // TODO: check that setup exists
+        let setup_dir = self.get_or_create_setup_dir()?;
+        TestEnv::new(setup_dir, self.logger.clone())
     }
 }
 
@@ -112,18 +133,7 @@ impl ProcessContext {
         })
     }
 
-    pub fn create_setup_env(&self) -> Result<TestEnv> {
-        let setup_dir = self.group_context.get_or_create_setup_dir()?;
-        TestEnv::new(setup_dir, self.logger.clone())
-    }
-
-    pub fn create_test_env(&self, test_name: &str) -> Result<TestEnv> {
-        let target_dir = self.group_context.get_or_create_test_dir(test_name)?;
-        let setup_dir = self.group_context.get_or_create_setup_dir()?;
-        TestEnv::fork_from(
-            setup_dir.as_path(),
-            target_dir.as_path(),
-            self.logger.clone(),
-        )
+    pub fn logger(&self) -> Logger {
+        self.logger.clone()
     }
 }

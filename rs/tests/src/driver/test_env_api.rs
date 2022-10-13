@@ -132,7 +132,7 @@
 //!
 
 use super::driver_setup::{IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR};
-use super::test_setup::PotSetup;
+use super::test_setup::GroupSetup;
 use crate::driver::farm::Farm;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::util::{create_agent, delay};
@@ -541,7 +541,7 @@ pub trait IcHandleConstructor {
 
 impl IcHandleConstructor for TestEnv {
     fn ic_handle(&self) -> Result<IcHandle> {
-        let pot_setup = PotSetup::read_attribute(self);
+        let pot_setup = GroupSetup::read_attribute(self);
         let ic_setup = IcSetup::read_attribute(self);
         let ts = self.topology_snapshot();
 
@@ -708,7 +708,7 @@ where
     T: HasTestEnv,
 {
     fn get_artifact_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
-        let artifact_path = PotSetup::read_attribute(&self.test_env())
+        let artifact_path = GroupSetup::read_attribute(&self.test_env())
             .artifact_path
             .expect("Artifact path is not set.");
         artifact_path.join(p)
@@ -744,7 +744,7 @@ pub trait SshSession {
 }
 
 pub trait RetrieveIpv4Addr {
-    /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.  
+    /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.
     fn block_on_ipv4(&self) -> Result<Ipv4Addr>;
 }
 
@@ -1060,7 +1060,7 @@ where
     /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
     fn vm(&self) -> Box<dyn VmControl> {
         let env = self.test_env();
-        let pot_setup = PotSetup::read_attribute(&env);
+        let pot_setup = GroupSetup::read_attribute(&env);
         let ic_setup = IcSetup::read_attribute(&env);
         let farm = Farm::new(ic_setup.farm_base_url, env.logger());
         Box::new(FarmHostedVm {

@@ -224,9 +224,26 @@ pub fn create_config_disk_image(
     let ci_project_dir: PathBuf = PathBuf::from(env::var("IC_ROOT").expect(
         "Expected the IC_ROOT environment variable to be set to the root of the IC repository!",
     ));
+
+    match std::env::var("IC_ROOT") {
+        Ok(val) => {
+            println!("IC_ROOT: {:?}", val);
+            val
+        }
+        Err(e) => {
+            bail!("couldn't interpret {}: {}", "IC_ROOT", e)
+        }
+    };
+
+    // TODO: the following script should be a Bazel dependency
+    let script_path = ci_project_dir.join("ic-os/guestos/scripts/build-bootstrap-config-image.sh");
+    let tmp_out = Command::new("ls")
+        .arg("-alh")
+        .arg(script_path.clone())
+        .output();
+    println!("ls -alh {:?}: {:?}", script_path, tmp_out);
     let mut cmd =
         Command::new(ci_project_dir.join("ic-os/guestos/scripts/build-bootstrap-config-image.sh"));
-
     let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     let ic_setup = IcSetup::read_attribute(test_env);
     let journalbeat_hosts: Vec<String> = ic_setup.journalbeat_hosts;
@@ -252,7 +269,6 @@ pub fn create_config_disk_image(
         cmd.arg("--journalbeat_hosts")
             .arg(journalbeat_hosts.join(" "));
     }
-
     if !ic_setup.log_debug_overrides.is_empty() {
         let log_debug_overrides_val = format!(
             "[{}]",
@@ -266,37 +282,41 @@ pub fn create_config_disk_image(
         cmd.arg("--log_debug_overrides")
             .arg(log_debug_overrides_val);
     }
-
     // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         cmd.arg("--bitcoind_addr").arg(arg);
     }
+    let key = "PATH";
+    let old_path = match std::env::var(key) {
+        Ok(val) => {
+            println!("{}: {:?}", key, val);
+            val
+        }
+        Err(e) => {
+            bail!("couldn't interpret {}: {}", key, e)
+        }
+    };
+    cmd.env("PATH", format!("{}:{}", "/usr/sbin", old_path));
 
     let output = cmd.output()?;
-
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
-
     if !output.status.success() {
         bail!("could not spawn image creation process");
     }
-
     let mut img_file = File::open(img_path)?;
     let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
     let compressed_img_file = File::create(compressed_img_path.clone())?;
-
     let mut encoder = GzEncoder::new(compressed_img_file, Compression::default());
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;
-
     let mut cmd = Command::new("sha256sum");
     cmd.arg(compressed_img_path);
     let output = cmd.output()?;
     if !output.status.success() {
         bail!("could not create sha256 of image");
     }
-
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
     Ok(())
