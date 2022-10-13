@@ -9,6 +9,10 @@ import "registry/subnet/v1/subnet.proto";
 import "registry/crypto/v1/crypto.proto";
 import "google/protobuf/wrappers.proto";
 
+message Time {
+    uint64 time_nanos = 1;
+}
+
 message NodeTopology {
     string ip_address = 1;
     uint32 http_port = 2;
@@ -55,6 +59,7 @@ message SetupInitialDkgContext {
     reserved "subnet_id";
     bytes target_id = 4;
     uint64 registry_version = 5;
+    Time time = 6;
 }
 
 message SetupInitialDkgContextTree {
@@ -114,6 +119,7 @@ message EcdsaDealingsContext {
     repeated types.v1.NodeId nodes = 3;
     uint64 registry_version = 4;
     registry.crypto.v1.EcdsaKeyId key_id = 5;
+    Time time = 6;
 }
 
 message EcdsaDealingsContextTree {
@@ -124,6 +130,7 @@ message EcdsaDealingsContextTree {
 message BitcoinGetSuccessorsContext {
     state.queues.v1.Request request = 1;
     bitcoin.v1.CanisterGetSuccessorsRequestInitial payload = 2;
+    Time time = 3;
 }
 
 message BitcoinGetSuccessorsContextTree {

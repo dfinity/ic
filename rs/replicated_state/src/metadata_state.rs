@@ -523,6 +523,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             bitcoin_get_successors_follow_up_responses.insert(sender, response.payloads);
         }
 
+        let batch_time = Time::from_nanos_since_unix_epoch(item.batch_time_nanos);
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -537,7 +538,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             canister_allocation_ranges,
             last_generated_canister_id,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
-            batch_time: Time::from_nanos_since_unix_epoch(item.batch_time_nanos),
+            batch_time,
             ingress_history: try_from_option_field(
                 item.ingress_history,
                 "SystemMetadata::ingress_history",
@@ -555,7 +556,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                 ProxyDecodeError::UnknownCertificationVersion(certification_version)
             })?,
             subnet_call_context_manager: match item.subnet_call_context_manager {
-                Some(manager) => SubnetCallContextManager::try_from(manager)?,
+                Some(manager) => SubnetCallContextManager::try_from((batch_time, manager))?,
                 None => Default::default(),
             },
 

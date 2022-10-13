@@ -216,6 +216,7 @@ pub fn get_successors(
                         .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
                             request: request.clone(),
                             payload,
+                            time: state.time(),
                         });
 
                     Ok(None)

@@ -209,13 +209,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
     }
 }
 
-impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager {
+impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContextManager {
     type Error = ProxyDecodeError;
-    fn try_from(item: pb_metadata::SubnetCallContextManager) -> Result<Self, Self::Error> {
+    fn try_from(
+        (time, item): (Time, pb_metadata::SubnetCallContextManager),
+    ) -> Result<Self, Self::Error> {
         let mut setup_initial_dkg_contexts = BTreeMap::<CallbackId, SetupInitialDkgContext>::new();
         for entry in item.setup_initial_dkg_contexts {
-            let context: SetupInitialDkgContext =
+            let pb_context =
                 try_from_option_field(entry.context, "SystemMetadata::SetupInitialDkgContext")?;
+            let context = SetupInitialDkgContext::try_from((time, pb_context))?;
             setup_initial_dkg_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
@@ -236,18 +239,20 @@ impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager
 
         let mut ecdsa_dealings_contexts = BTreeMap::<CallbackId, EcdsaDealingsContext>::new();
         for entry in item.ecdsa_dealings_contexts {
-            let context: EcdsaDealingsContext =
+            let pb_context =
                 try_from_option_field(entry.context, "SystemMetadata::EcdsaDealingsContext")?;
+            let context = EcdsaDealingsContext::try_from((time, pb_context))?;
             ecdsa_dealings_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
         let mut bitcoin_get_successors_contexts =
             BTreeMap::<CallbackId, BitcoinGetSuccessorsContext>::new();
         for entry in item.bitcoin_get_successors_contexts {
-            let context: BitcoinGetSuccessorsContext = try_from_option_field(
+            let pb_context = try_from_option_field(
                 entry.context,
                 "SystemMetadata::BitcoinGetSuccessorsContext",
             )?;
+            let context = BitcoinGetSuccessorsContext::try_from((time, pb_context))?;
             bitcoin_get_successors_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
@@ -268,6 +273,7 @@ pub struct SetupInitialDkgContext {
     pub nodes_in_target_subnet: BTreeSet<NodeId>,
     pub target_id: NiDkgTargetId,
     pub registry_version: RegistryVersion,
+    pub time: Time,
 }
 
 impl From<&SetupInitialDkgContext> for pb_metadata::SetupInitialDkgContext {
@@ -281,13 +287,18 @@ impl From<&SetupInitialDkgContext> for pb_metadata::SetupInitialDkgContext {
                 .collect(),
             target_id: context.target_id.to_vec(),
             registry_version: context.registry_version.get(),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
         }
     }
 }
 
-impl TryFrom<pb_metadata::SetupInitialDkgContext> for SetupInitialDkgContext {
+impl TryFrom<(Time, pb_metadata::SetupInitialDkgContext)> for SetupInitialDkgContext {
     type Error = ProxyDecodeError;
-    fn try_from(context: pb_metadata::SetupInitialDkgContext) -> Result<Self, Self::Error> {
+    fn try_from(
+        (time, context): (Time, pb_metadata::SetupInitialDkgContext),
+    ) -> Result<Self, Self::Error> {
         let mut nodes_in_target_subnet = BTreeSet::<NodeId>::new();
         for node_id in context.nodes_in_subnet {
             nodes_in_target_subnet.insert(node_id_try_from_protobuf(node_id)?);
@@ -300,6 +311,9 @@ impl TryFrom<pb_metadata::SetupInitialDkgContext> for SetupInitialDkgContext {
                 Err(_) => return Err(Self::Error::Other("target_id is not 32 bytes.".to_string())),
             },
             registry_version: RegistryVersion::from(context.registry_version),
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
         })
     }
 }
@@ -368,6 +382,7 @@ pub struct EcdsaDealingsContext {
     pub key_id: EcdsaKeyId,
     pub nodes: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
+    pub time: Time,
 }
 
 impl From<&EcdsaDealingsContext> for pb_metadata::EcdsaDealingsContext {
@@ -381,13 +396,18 @@ impl From<&EcdsaDealingsContext> for pb_metadata::EcdsaDealingsContext {
                 .map(|node_id| node_id_into_protobuf(*node_id))
                 .collect(),
             registry_version: context.registry_version.get(),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
         }
     }
 }
 
-impl TryFrom<pb_metadata::EcdsaDealingsContext> for EcdsaDealingsContext {
+impl TryFrom<(Time, pb_metadata::EcdsaDealingsContext)> for EcdsaDealingsContext {
     type Error = ProxyDecodeError;
-    fn try_from(context: pb_metadata::EcdsaDealingsContext) -> Result<Self, Self::Error> {
+    fn try_from(
+        (time, context): (Time, pb_metadata::EcdsaDealingsContext),
+    ) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "EcdsaDealingsContext::request")?;
         let key_id: EcdsaKeyId =
@@ -401,6 +421,9 @@ impl TryFrom<pb_metadata::EcdsaDealingsContext> for EcdsaDealingsContext {
             key_id,
             nodes,
             registry_version: RegistryVersion::from(context.registry_version),
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
         })
     }
 }
@@ -409,6 +432,7 @@ impl TryFrom<pb_metadata::EcdsaDealingsContext> for EcdsaDealingsContext {
 pub struct BitcoinGetSuccessorsContext {
     pub request: Request,
     pub payload: CanisterGetSuccessorsRequestInitial,
+    pub time: Time,
 }
 
 impl From<&BitcoinGetSuccessorsContext> for pb_metadata::BitcoinGetSuccessorsContext {
@@ -416,17 +440,28 @@ impl From<&BitcoinGetSuccessorsContext> for pb_metadata::BitcoinGetSuccessorsCon
         pb_metadata::BitcoinGetSuccessorsContext {
             request: Some((&context.request).into()),
             payload: Some((&context.payload).into()),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
         }
     }
 }
 
-impl TryFrom<pb_metadata::BitcoinGetSuccessorsContext> for BitcoinGetSuccessorsContext {
+impl TryFrom<(Time, pb_metadata::BitcoinGetSuccessorsContext)> for BitcoinGetSuccessorsContext {
     type Error = ProxyDecodeError;
-    fn try_from(context: pb_metadata::BitcoinGetSuccessorsContext) -> Result<Self, Self::Error> {
+    fn try_from(
+        (time, context): (Time, pb_metadata::BitcoinGetSuccessorsContext),
+    ) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "BitcoinGetSuccessorsContext::request")?;
         let payload: CanisterGetSuccessorsRequestInitial =
             try_from_option_field(context.payload, "BitcoinGetSuccessorsContext::payload")?;
-        Ok(BitcoinGetSuccessorsContext { request, payload })
+        Ok(BitcoinGetSuccessorsContext {
+            request,
+            payload,
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
     }
 }

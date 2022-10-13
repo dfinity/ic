@@ -795,6 +795,7 @@ fn insert_bitcoin_response() {
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
+            time: mock_time(),
         });
 
     let response = CanisterGetSuccessorsResponseComplete {

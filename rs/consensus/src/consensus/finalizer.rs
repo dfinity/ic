@@ -550,6 +550,7 @@ mod tests {
                 nodes_in_target_subnet: BTreeSet::new(),
                 target_id: TARGET_ID,
                 registry_version: RegistryVersion::from(1),
+                time: metadata.batch_time,
             },
         )]
         .drain(..)
