@@ -2,26 +2,39 @@ use crate::driver::test_env_api::*;
 use crate::util::*;
 use anyhow::bail;
 use candid::Principal;
+use ic_base_types::PrincipalId;
 use reqwest::Url;
 use slog::{debug, info, Logger};
 use std::time::Duration;
 
-pub(crate) fn store_message(url: &Url, msg: &str) -> Principal {
+pub(crate) fn store_message(url: &Url, effective_canister_id: PrincipalId, msg: &str) -> Principal {
     block_on(async {
         let bytes = msg.as_bytes();
         let agent = assert_create_agent(url.as_str()).await;
-        let ucan = UniversalCanister::new(&agent).await;
+        let ucan = UniversalCanister::new(&agent, effective_canister_id).await;
         // send an update call to it
         ucan.store_to_stable(0, bytes).await;
         ucan.canister_id()
     })
 }
 
-pub(crate) fn store_message_with_retries(url: &Url, msg: &str, log: &Logger) -> Principal {
+pub(crate) fn store_message_with_retries(
+    url: &Url,
+    effective_canister_id: PrincipalId,
+    msg: &str,
+    log: &Logger,
+) -> Principal {
     block_on(async {
         let bytes = msg.as_bytes();
         let agent = assert_create_agent(url.as_str()).await;
-        let ucan = UniversalCanister::new_with_retries(&agent, log, secs(300), secs(10)).await;
+        let ucan = UniversalCanister::new_with_retries(
+            &agent,
+            effective_canister_id,
+            log,
+            secs(300),
+            secs(10),
+        )
+        .await;
         // send an update call to it
         ucan.store_to_stable(0, bytes).await;
         ucan.canister_id()
@@ -114,22 +127,28 @@ async fn can_read_msg_impl(
     false
 }
 
-pub(crate) fn can_install_canister(url: &url::Url) -> Result<(), String> {
+pub(crate) fn can_install_canister(
+    url: &url::Url,
+    effective_canister_id: PrincipalId,
+) -> Result<(), String> {
     block_on(async {
         let agent = assert_create_agent(url.as_str()).await;
-        UniversalCanister::try_new(&agent).await.map(|_| ())
+        UniversalCanister::try_new(&agent, effective_canister_id)
+            .await
+            .map(|_| ())
     })
 }
 
 pub(crate) fn can_install_canister_with_retries(
     url: &url::Url,
+    effective_canister_id: PrincipalId,
     logger: &slog::Logger,
     timeout: Duration,
     backoff: Duration,
 ) {
     retry(logger.clone(), timeout, backoff, || {
         info!(logger, "Try to install canister...");
-        if let Err(e) = can_install_canister(url) {
+        if let Err(e) = can_install_canister(url, effective_canister_id) {
             bail!("Cannot install canister: {}", e);
         } else {
             info!(logger, "Installing canister is possible.");
@@ -167,6 +186,7 @@ fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
                 if install_canisters {
                     can_install_canister_with_retries(
                         &node.get_public_url(),
+                        node.effective_canister_id(),
                         &logger,
                         secs(600),
                         secs(10),

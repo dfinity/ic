@@ -147,6 +147,7 @@ pub fn malicious_inputs(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let canister_id = mgr
             .create_canister()
             .as_provisional_create_with_amount(None)
+            .with_effective_canister_id(endpoint.effective_canister_id())
             .call_and_wait(delay())
             .await
             .expect("Error creating canister")
@@ -383,7 +384,7 @@ pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &ic_fondue::pot::Con
         let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
-        let canister_b = create_and_install(&agent, &canister_b_wasm).await;
+        let canister_b = create_and_install(&agent, endpoint.effective_canister_id(), &canister_b_wasm).await;
 
         let canister_a_wasm = wabt::wat2wasm(format!(
             r#"(module
@@ -507,7 +508,7 @@ pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &ic_fondue::pot::Con
             canister_b.as_slice().len(),
             canister_b.as_slice().len(),
             escape_for_wat(&canister_b))).unwrap();
-        let canister_a = create_and_install(&agent, &canister_a_wasm).await;
+        let canister_a = create_and_install(&agent, endpoint.effective_canister_id(), &canister_a_wasm).await;
 
         let ret_val = agent.query(&canister_a, "read_cycles").call().await;
         let num_cycles_before = print_validate_num_cycles(ctx, &ret_val, "Before calling proxy()");

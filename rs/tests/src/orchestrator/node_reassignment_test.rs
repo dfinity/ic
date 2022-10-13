@@ -76,7 +76,11 @@ pub fn test(env: TestEnv) {
     // NNS nodes.
     let nns_msg = "hello world from nns!";
 
-    let nns_can_id = store_message(&node1.get_public_url(), nns_msg);
+    let nns_can_id = store_message(
+        &node1.get_public_url(),
+        node1.effective_canister_id(),
+        nns_msg,
+    );
     assert!(can_read_msg(
         log,
         &node1.get_public_url(),
@@ -96,7 +100,11 @@ pub fn test(env: TestEnv) {
     // Now we store another message on the app subnet.
     let (app_subnet, app_node) = get_app_subnet_and_node(&topo_snapshot);
     let app_msg = "hello world from app subnet!";
-    let app_can_id = store_message(&app_node.get_public_url(), app_msg);
+    let app_can_id = store_message(
+        &app_node.get_public_url(),
+        app_node.effective_canister_id(),
+        app_msg,
+    );
     assert!(can_read_msg(
         log,
         &app_node.get_public_url(),
@@ -168,7 +176,11 @@ pub fn test(env: TestEnv) {
     // Now make sure the subnets are able to store new messages
     info!(log, "Try to store new messages on NNS...");
     let nns_msg_2 = "hello again on NNS!";
-    let nns_can_id_2 = store_message(&node3.get_public_url(), nns_msg_2);
+    let nns_can_id_2 = store_message(
+        &node3.get_public_url(),
+        node3.effective_canister_id(),
+        nns_msg_2,
+    );
     assert!(can_read_msg_with_retries(
         log,
         &node4.get_public_url(),
@@ -179,7 +191,11 @@ pub fn test(env: TestEnv) {
 
     info!(log, "Try to store new messages on app subnet...");
     let app_msg_2 = "hello again on app subnet!";
-    let app_can_id_2 = store_message(&app_node.get_public_url(), app_msg_2);
+    let app_can_id_2 = store_message(
+        &app_node.get_public_url(),
+        app_node.effective_canister_id(),
+        app_msg_2,
+    );
     assert!(can_read_msg_with_retries(
         log,
         &node1.get_public_url(),

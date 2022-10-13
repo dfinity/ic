@@ -26,7 +26,12 @@ pub use inner::*;
 use std::collections::BTreeSet;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+use ic_interfaces_registry::RegistryClient;
+use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+use ic_registry_local_registry::LocalRegistry;
+use ic_registry_routing_table::CanisterIdRange;
 
 /// The [Event]s produced by the [IcManager], which are subsequently
 /// fed into the passive pipeline are either events from a replica or
@@ -184,9 +189,21 @@ impl IcManager {
             })
             .collect();
 
+        let ic_prep_state_dir = IcPrepStateDir::new(PathBuf::from(prep_working_dir.path()));
+        let local_registry: LocalRegistry = LocalRegistry::new(
+            ic_prep_state_dir.registry_local_store_path(),
+            Duration::from_millis(1000),
+        )
+        .expect("Could not create LocalRegistry from prep_working_dir.");
+        let registry_version = local_registry.get_latest_version();
+
         IcManager {
             inner: Arc::new(RwLock::new(IcManagerInner::new(procman, registry))),
             prep_working_dir: Arc::new(prep_working_dir),
+            routing_table: local_registry
+                .get_routing_table(registry_version)
+                .expect("Could not deserialize optional routing table from local registry.")
+                .expect("Optional routing table is None in local registry."),
             malicious_pids,
             logger,
             signal_receiver: Arc::new(RwLock::new(rec)),
@@ -205,6 +222,9 @@ impl IcManager {
         let guard = self.inner.read().unwrap();
         let endpoints = guard.procman.configs.iter();
 
+        let ic_prep_state_dir =
+            IcPrepStateDir::new(PathBuf::from(self.prep_working_dir.deref().path()));
+
         let to_ic_endpoint = |(pid, nc): (&Pid, &NodeCommand)| {
             let addr = if nc.http_addr.ip().is_ipv4() {
                 format!("{}", nc.http_addr.ip())
@@ -216,6 +236,15 @@ impl IcManager {
             let metrics_url = Some(
                 Url::parse(&format!("http://{}:{}/", addr, nc.metrics_port)).expect("Can't fail"),
             );
+
+            let canister_ranges: Vec<CanisterIdRange> = self
+                .routing_table
+                .iter()
+                .filter(|(_, sub_id)| sub_id.get() == nc.subnet_id.get())
+                .map(|(ran, _)| *ran)
+                .collect();
+            assert!(!canister_ranges.is_empty());
+
             IcEndpoint {
                 runtime_descriptor: RuntimeDescriptor::Process(*pid),
                 url,
@@ -224,6 +253,7 @@ impl IcManager {
                 subnet: Some(IcSubnet {
                     id: nc.subnet_id,
                     type_of: nc.initial_subnet_type,
+                    canister_ranges,
                 }),
                 started_at: Instant::now(),
                 node_id: nc.node_id,
@@ -240,9 +270,7 @@ impl IcManager {
                 .filter(|(_, nc)| nc.is_malicious)
                 .map(to_ic_endpoint)
                 .collect(),
-            ic_prep_working_dir: Some(IcPrepStateDir::new(PathBuf::from(
-                self.prep_working_dir.deref().path(),
-            ))),
+            ic_prep_working_dir: Some(ic_prep_state_dir),
         }
     }
 }

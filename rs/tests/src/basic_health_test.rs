@@ -75,9 +75,11 @@ pub fn test(env: TestEnv) {
         .iter()
         .map(|node| {
             let inner_log = log.clone();
-            node.with_default_agent(|agent| async move {
+            let effective_canister_id = node.effective_canister_id();
+            node.with_default_agent(move |agent| async move {
                 let ucan = UniversalCanister::new_with_retries(
                     &agent,
+                    effective_canister_id,
                     &inner_log,
                     READY_WAIT_TIMEOUT,
                     RETRY_BACKOFF,

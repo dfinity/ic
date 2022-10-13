@@ -33,7 +33,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             debug!(ctx.logger, "Selected replica"; "url" => format!("{}", endpoint.url));
 
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             debug!(
                 logger,

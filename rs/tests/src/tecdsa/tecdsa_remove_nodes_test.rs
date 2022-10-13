@@ -73,7 +73,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         info!(logger, "Asserting endpoint reachability");
         assert_endpoints_health(endpoints.as_slice(), EndpointsStatus::AllHealthy).await;
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
-        let uni_can = UniversalCanister::new(&agent).await;
+        let uni_can = UniversalCanister::new(&agent, endpoints[0].effective_canister_id()).await;
         info!(logger, "Getting public key");
         let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
             .await

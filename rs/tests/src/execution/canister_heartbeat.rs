@@ -23,12 +23,16 @@ pub fn canister_heartbeat_is_called_at_regular_intervals(
             let nns_endpoint = util::get_random_nns_node_endpoint(&handle, &mut rng);
             nns_endpoint.assert_ready(ctx).await;
             let agent_nns = util::assert_create_agent(nns_endpoint.url.as_str()).await;
-            let canister_on_nns = util::UniversalCanister::new(&agent_nns).await;
+            let canister_on_nns =
+                util::UniversalCanister::new(&agent_nns, nns_endpoint.effective_canister_id())
+                    .await;
 
             let app_endpoint = util::get_random_application_node_endpoint(&handle, &mut rng);
             app_endpoint.assert_ready(ctx).await;
             let agent_app = util::assert_create_agent(app_endpoint.url.as_str()).await;
-            let canister_on_app = util::UniversalCanister::new(&agent_app).await;
+            let canister_on_app =
+                util::UniversalCanister::new(&agent_app, app_endpoint.effective_canister_id())
+                    .await;
 
             // Set the heartbeat of the canister to store a character in memory.
             canister_on_nns
@@ -73,7 +77,8 @@ pub fn stopping_a_canister_with_a_heartbeat_succeeds(
 
             // Create and then stop the canister.
             // NOTE: The universal canister exposes a heartbeat.
-            let canister = util::UniversalCanister::new(&agent).await;
+            let canister =
+                util::UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let mgr = ManagementCanister::create(&agent);
             mgr.stop_canister(&canister.canister_id())
                 .call_and_wait(util::delay())
@@ -95,8 +100,10 @@ pub fn canister_heartbeat_can_call_another_canister(
             endpoint.assert_ready(ctx).await;
             let agent = util::assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister_a = util::UniversalCanister::new(&agent).await;
-            let canister_b = util::UniversalCanister::new(&agent).await;
+            let canister_a =
+                util::UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_b =
+                util::UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // Set the heartbeat of canister A to call canister B and store a character in
             // canister B's memory.
@@ -151,9 +158,19 @@ pub fn canister_heartbeat_can_call_multiple_canisters_xnet(
                 util::assert_create_agent(endpoint_application.url.as_str()).await;
 
             // Canisters are installed across different subnets to test xnet.
-            let canister_a = util::UniversalCanister::new(&agent_nns).await;
-            let canister_b = util::UniversalCanister::new(&agent_application).await;
-            let canister_c = util::UniversalCanister::new(&agent_application).await;
+            let canister_a =
+                util::UniversalCanister::new(&agent_nns, endpoint_nns.effective_canister_id())
+                    .await;
+            let canister_b = util::UniversalCanister::new(
+                &agent_application,
+                endpoint_application.effective_canister_id(),
+            )
+            .await;
+            let canister_c = util::UniversalCanister::new(
+                &agent_application,
+                endpoint_application.effective_canister_id(),
+            )
+            .await;
 
             canister_a
                 .update(
@@ -213,7 +230,8 @@ pub fn canister_heartbeat_cannot_reply(handle: IcHandle, ctx: &ic_fondue::pot::C
             let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = util::assert_create_agent(endpoint.url.as_str()).await;
-            let canister = util::UniversalCanister::new(&agent).await;
+            let canister =
+                util::UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // Set the heartbeat of the canister to store something in its memory then
             // reply.
@@ -249,10 +267,12 @@ pub fn canister_heartbeat_can_stop(handle: IcHandle, ctx: &ic_fondue::pot::Conte
 
             let mgr = ManagementCanister::create(&agent);
 
-            let canister_a = util::UniversalCanister::new(&agent).await;
+            let canister_a =
+                util::UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let canister_c = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait(util::delay())
                 .await
                 .unwrap()

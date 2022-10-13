@@ -155,9 +155,19 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     info!(logger, "app node URL: {}", app_node.get_public_url());
 
     info!(logger, "Ensure app subnet is functional");
-    can_install_canister_with_retries(&app_node.get_public_url(), &logger, secs(600), secs(10));
+    can_install_canister_with_retries(
+        &app_node.get_public_url(),
+        app_node.effective_canister_id(),
+        &logger,
+        secs(600),
+        secs(10),
+    );
     let msg = "subnet recovery works!";
-    let app_can_id = store_message(&app_node.get_public_url(), msg);
+    let app_can_id = store_message(
+        &app_node.get_public_url(),
+        app_node.effective_canister_id(),
+        msg,
+    );
     assert!(can_read_msg(
         &logger,
         &app_node.get_public_url(),

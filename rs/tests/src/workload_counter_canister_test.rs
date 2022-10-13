@@ -30,6 +30,7 @@ use crate::util::{
 };
 use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
 use ic_agent::{export::Principal, Agent};
+use ic_base_types::PrincipalId;
 use ic_fondue::ic_manager::IcHandle;
 use ic_prep_lib::subnet_configuration::constants;
 use ic_registry_subnet_type::SubnetType;
@@ -128,7 +129,10 @@ fn test(
         agents.push(assert_create_agent(app_endpoint.url.as_str()).await);
         let install_agent = agents[0].clone();
         for _ in 0..canister_count {
-            canisters.push(install_counter_canister(&install_agent).await);
+            canisters.push(
+                install_counter_canister(&install_agent, app_endpoint.effective_canister_id())
+                    .await,
+            );
         }
         info!(
             ctx.logger,
@@ -244,13 +248,17 @@ fn test(
     });
 }
 
-pub async fn install_counter_canister(agent: &Agent) -> Principal {
+pub async fn install_counter_canister(
+    agent: &Agent,
+    effective_canister_id: PrincipalId,
+) -> Principal {
     const COUNTER_CANISTER_WAT: &[u8] = include_bytes!("./counter.wat");
     let mgr = ManagementCanister::create(agent);
 
     let canister_id = mgr
         .create_canister()
         .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(effective_canister_id)
         .call_and_wait(delay())
         .await
         .unwrap()

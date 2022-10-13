@@ -98,7 +98,7 @@ pub fn test(env: TestEnv) {
     info!(log, "Initial run to get public key.");
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let (canister_id, public_key) = block_on(async {
-        let uni_can = UniversalCanister::new(&agent).await;
+        let uni_can = UniversalCanister::new(&agent, nns_node.effective_canister_id()).await;
         let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
             .await
             .unwrap();

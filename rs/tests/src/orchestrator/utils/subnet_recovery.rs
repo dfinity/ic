@@ -125,7 +125,13 @@ pub(crate) fn assert_subnet_is_healthy(
     let node = &subnet[0];
     node.await_status_is_healthy().unwrap();
     // make sure that state sync is completed
-    can_install_canister_with_retries(&node.get_public_url(), logger, secs(600), secs(10));
+    can_install_canister_with_retries(
+        &node.get_public_url(),
+        node.effective_canister_id(),
+        logger,
+        secs(600),
+        secs(10),
+    );
 
     info!(logger, "Ensure the old message is still readable");
     assert!(
@@ -256,7 +262,7 @@ pub(crate) fn get_canister_and_ecdsa_pub_key(
         let uni_can = if let Some(can_id) = existing_can_id {
             UniversalCanister::from_canister_id(&agent, can_id)
         } else {
-            UniversalCanister::new(&agent).await
+            UniversalCanister::new(&agent, node.effective_canister_id()).await
         };
         let public_key = get_public_key_with_logger(make_key(KEY_ID1), &uni_can, logger)
             .await

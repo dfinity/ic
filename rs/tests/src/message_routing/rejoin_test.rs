@@ -61,7 +61,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         "All nodes are ready. Installing universal canister on random node: {}...", node.url
     );
     let agent = block_on(assert_create_agent(node.url.as_str()));
-    let universal_canister = block_on(UniversalCanister::new(&agent));
+    let universal_canister = block_on(UniversalCanister::new(&agent, node.effective_canister_id()));
 
     let rejoin_node = perm.next().unwrap();
     info!(&ctx.logger, "Killing random node: {}...", rejoin_node.url);

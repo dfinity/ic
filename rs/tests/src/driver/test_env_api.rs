@@ -141,6 +141,7 @@ use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::export::Principal;
 use ic_agent::{Agent, AgentError};
+use ic_base_types::PrincipalId;
 use ic_canister_client::Agent as InternalAgent;
 use ic_canister_client::Sender;
 use ic_fondue::ic_manager::handle::READY_RESPONSE_TIMEOUT;
@@ -152,8 +153,12 @@ use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
-use ic_registry_client_helpers::node::NodeRegistry;
+use ic_registry_client_helpers::{
+    node::NodeRegistry, routing_table::RoutingTableRegistry, subnet::SubnetListRegistry,
+    subnet::SubnetRegistry,
+};
 use ic_registry_local_registry::LocalRegistry;
+use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
@@ -188,7 +193,6 @@ pub struct TopologySnapshot {
 
 impl TopologySnapshot {
     pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
-        use ic_registry_client_helpers::subnet::SubnetListRegistry;
         let registry_version = self.local_registry.get_latest_version();
         Box::new(
             self.local_registry
@@ -207,9 +211,15 @@ impl TopologySnapshot {
         )
     }
 
-    pub fn unassigned_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
+    pub fn subnet_canister_ranges(&self, sub: SubnetId) -> Vec<CanisterIdRange> {
+        let registry_version = self.local_registry.get_latest_version();
+        self.local_registry
+            .get_subnet_canister_ranges(registry_version, sub)
+            .expect("Could not deserialize optional routing table from local registry.")
+            .expect("Optional routing table is None in local registry.")
+    }
 
+    pub fn unassigned_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
         let registry_version = self.local_registry.get_latest_version();
         let assigned_nodes: HashSet<_> = self
             .local_registry
@@ -246,7 +256,6 @@ impl TopologySnapshot {
     /// This method panics if in the underlying registry, the root subnet id is
     /// not set.
     pub fn root_subnet_id(&self) -> SubnetId {
-        use ic_registry_client_helpers::subnet::SubnetRegistry;
         self.local_registry
             .get_root_subnet_id(self.registry_version)
             .expect("failed to fetch root subnet id from registry")
@@ -319,7 +328,7 @@ impl TopologySnapshot {
         Ok(Self {
             registry_version: latest_version,
             local_registry: self.local_registry.clone(),
-            ic_name: "".to_string(),
+            ic_name: self.ic_name.clone(),
             env: self.env.clone(),
         })
     }
@@ -342,8 +351,6 @@ impl SubnetSnapshot {
     }
 
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
-        use ic_registry_client_helpers::subnet::SubnetRegistry;
-
         self.local_registry
             .get_subnet_record(self.subnet_id, self.registry_version)
             .unwrap_result()
@@ -406,23 +413,7 @@ impl IcNodeSnapshot {
         })
     }
 
-    /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
-    /// install it on the target node.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the canister `name` could not be loaded, is not
-    /// a wasm module or the installation fails.
-    pub fn create_and_install_canister_with_arg(
-        &self,
-        name: &str,
-        arg: Option<Vec<u8>>,
-    ) -> Principal {
-        use ic_registry_client_helpers::{
-            routing_table::RoutingTableRegistry,
-            subnet::{SubnetListRegistry, SubnetRegistry},
-        };
-        let canister_bytes = self.test_env().load_wasm(name);
+    pub fn effective_canister_id(&self) -> PrincipalId {
         let registry_version = self.local_registry.get_latest_version();
         let subnet_id: Option<SubnetId> = self
             .local_registry
@@ -435,23 +426,36 @@ impl IcNodeSnapshot {
                     .unwrap_result()
                     .contains(&self.node_id)
             });
-        let routing_table = self
-            .local_registry
-            .get_routing_table(registry_version)
-            .unwrap()
-            .unwrap();
-        let effective_canister_id = match subnet_id {
+        match subnet_id {
             Some(subnet_id) => {
-                match routing_table
-                    .iter()
-                    .find(|(_, sub_id)| sub_id.get() == subnet_id.get())
-                {
-                    Some((range, _)) => range.start.get().into(),
-                    None => Principal::management_canister(),
+                let canister_ranges = self
+                    .local_registry
+                    .get_subnet_canister_ranges(registry_version, subnet_id)
+                    .expect("Could not deserialize optional routing table from local registry.")
+                    .expect("Optional routing table is None in local registry.");
+                match canister_ranges.get(0) {
+                    Some(range) => range.start.get(),
+                    None => PrincipalId::default(),
                 }
             }
-            None => Principal::management_canister(),
-        };
+            None => PrincipalId::default(),
+        }
+    }
+
+    /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
+    /// install it on the target node.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the canister `name` could not be loaded, is not
+    /// a wasm module or the installation fails.
+    pub fn create_and_install_canister_with_arg(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+    ) -> Principal {
+        let canister_bytes = self.test_env().load_wasm(name);
+        let effective_canister_id = self.effective_canister_id();
 
         self.with_default_agent(move |agent| async move {
             // Create a canister.
@@ -537,7 +541,6 @@ pub trait IcHandleConstructor {
 
 impl IcHandleConstructor for TestEnv {
     fn ic_handle(&self) -> Result<IcHandle> {
-        use ic_registry_client_helpers::subnet::SubnetRegistry;
         let pot_setup = PotSetup::read_attribute(self);
         let ic_setup = IcSetup::read_attribute(self);
         let ts = self.topology_snapshot();
@@ -566,6 +569,7 @@ impl IcHandleConstructor for TestEnv {
                 subnet: s.clone().map(|s| IcSubnet {
                     id: s.subnet_id,
                     type_of: s.subnet_type(),
+                    canister_ranges: ts.subnet_canister_ranges(s.subnet_id),
                 }),
                 started_at,
                 runtime_descriptor: RuntimeDescriptor::Vm(FarmInfo {
@@ -975,8 +979,6 @@ pub trait IcNodeContainer {
 
 impl IcNodeContainer for SubnetSnapshot {
     fn nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        use ic_registry_client_helpers::subnet::SubnetRegistry;
-
         let registry_version = self.registry_version;
         let node_ids = self
             .local_registry

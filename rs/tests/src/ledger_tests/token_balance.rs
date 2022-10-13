@@ -84,11 +84,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
         let agent = assert_create_agent(application_endpoint.url.as_str()).await;
         let (can1, can2, can3, can4, can5) = tokio::join!(
-            UniversalCanister::new(&agent),
-            UniversalCanister::new(&agent),
-            UniversalCanister::new(&agent),
-            UniversalCanister::new(&agent),
-            UniversalCanister::new(&agent)
+            UniversalCanister::new(&agent, application_endpoint.effective_canister_id()),
+            UniversalCanister::new(&agent, application_endpoint.effective_canister_id()),
+            UniversalCanister::new(&agent, application_endpoint.effective_canister_id()),
+            UniversalCanister::new(&agent, application_endpoint.effective_canister_id()),
+            UniversalCanister::new(&agent, application_endpoint.effective_canister_id())
         );
         let ledger = Canister::new(&nns, LEDGER_CANISTER_ID);
 

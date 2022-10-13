@@ -46,7 +46,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     });
     // Install a test canister.
     let agent = block_on(assert_create_agent(endpoints[0].url.as_str()));
-    let test_canister_id = block_on(UniversalCanister::new(&agent)).canister_id();
+    let test_canister_id = block_on(UniversalCanister::new(
+        &agent,
+        endpoints[0].effective_canister_id(),
+    ))
+    .canister_id();
     // Assert that `update` message can be sent to the test canister.
     block_on(assert_canister_update_call(true, &test_canister_id, &agent));
     // Submit a proposal to the Governance Canister to uninstall the test canister.

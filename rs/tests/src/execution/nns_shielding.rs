@@ -56,7 +56,7 @@ pub fn mint_cycles_not_supported_on_system_subnet(handle: IcHandle, ctx: &ic_fon
 
         let nns_agent = assert_create_agent(nns_endpoint.url.as_str()).await;
         let nns_canister_id: Principal =
-            create_and_install_with_cycles(&nns_agent, wasm.as_slice(), *INITIAL_CYCLES).await;
+            create_and_install_with_cycles(&nns_agent, nns_endpoint.effective_canister_id(), wasm.as_slice(), *INITIAL_CYCLES).await;
 
         let before_balance = get_balance(&nns_canister_id, &nns_agent).await;
         assert_balance_equals(
@@ -100,8 +100,13 @@ pub fn mint_cycles_not_supported_on_application_subnet(
         endpoint.assert_ready(ctx).await;
 
         let agent = assert_create_agent(endpoint.url.as_str()).await;
-        let canister_id: Principal =
-            create_and_install_with_cycles(&agent, wasm.as_slice(), initial_cycles * 3u64).await;
+        let canister_id: Principal = create_and_install_with_cycles(
+            &agent,
+            endpoint.effective_canister_id(),
+            wasm.as_slice(),
+            initial_cycles * 3u64,
+        )
+        .await;
 
         let before_balance = get_balance(&canister_id, &agent).await;
         assert!(
@@ -144,8 +149,12 @@ pub fn no_cycle_balance_limit_on_nns_subnet(handle: IcHandle, ctx: &ic_fondue::p
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-        let canister_a =
-            UniversalCanister::new_with_cycles(&agent, CYCLES_LIMIT_PER_CANISTER * 3u64).await;
+        let canister_a = UniversalCanister::new_with_cycles(
+            &agent,
+            endpoint.effective_canister_id(),
+            CYCLES_LIMIT_PER_CANISTER * 3u64,
+        )
+        .await;
 
         let balance = get_balance(&canister_a.canister_id(), &agent).await;
         assert_eq!(
@@ -218,7 +227,12 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
         verified_app_endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(verified_app_endpoint.url.as_str()).await;
 
-        let uni_can = UniversalCanister::new_with_cycles(&agent, 900_000_000_000_000_u64).await;
+        let uni_can = UniversalCanister::new_with_cycles(
+            &agent,
+            verified_app_endpoint.effective_canister_id(),
+            900_000_000_000_000_u64,
+        )
+        .await;
         let other_subnet = get_random_application_node_endpoint(&handle, &mut rng)
             .subnet_id()
             .unwrap();
@@ -260,7 +274,12 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
         app_endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(app_endpoint.url.as_str()).await;
 
-        let uni_can = UniversalCanister::new_with_cycles(&agent, 900_000_000_000_000_u64).await;
+        let uni_can = UniversalCanister::new_with_cycles(
+            &agent,
+            app_endpoint.effective_canister_id(),
+            900_000_000_000_000_u64,
+        )
+        .await;
         let other_subnet = get_random_verified_app_node_endpoint(&handle, &mut rng)
             .subnet_id()
             .unwrap();
@@ -303,7 +322,12 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
         app_endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(app_endpoint.url.as_str()).await;
 
-        let uni_can = UniversalCanister::new_with_cycles(&agent, 900_000_000_000_000_u64).await;
+        let uni_can = UniversalCanister::new_with_cycles(
+            &agent,
+            app_endpoint.effective_canister_id(),
+            900_000_000_000_000_u64,
+        )
+        .await;
         let other_subnet = get_random_verified_app_node_endpoint(&handle, &mut rng)
             .subnet_id()
             .unwrap();
@@ -355,7 +379,12 @@ pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(
         nns_endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
 
-        let uni_can = UniversalCanister::new_with_cycles(&agent, 900_000_000_000_000_u64).await;
+        let uni_can = UniversalCanister::new_with_cycles(
+            &agent,
+            nns_endpoint.effective_canister_id(),
+            900_000_000_000_000_u64,
+        )
+        .await;
         let other_subnet = get_random_non_nns_node_endpoint(&handle, &mut rng)
             .subnet_id()
             .unwrap();
@@ -390,7 +419,7 @@ pub fn app_canister_attempt_initiating_dkg_fails(handle: IcHandle, ctx: &ic_fond
         let node_ids: Vec<_> = (0..4).map(node_test_id).collect();
         let request = SetupInitialDKGArgs::new(node_ids, RegistryVersion::from(2));
 
-        let uni_can = UniversalCanister::new(&agent).await;
+        let uni_can = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
         let res = uni_can
             .forward_to(
                 &Principal::management_canister(),

@@ -15,7 +15,7 @@ pub fn is_called_if_reply_traps(handle: IcHandle, ctx: &ic_fondue::pot::Context)
 
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             assert_matches!(
                 canister
@@ -58,7 +58,7 @@ pub fn is_called_if_reject_traps(handle: IcHandle, ctx: &ic_fondue::pot::Context
             endpoint.assert_ready(ctx).await;
 
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             assert_reject(
                 canister
@@ -97,7 +97,7 @@ pub fn changes_are_discarded_if_trapped(handle: IcHandle, ctx: &ic_fondue::pot::
             endpoint.assert_ready(ctx).await;
 
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             assert_matches!(
                 canister
@@ -145,7 +145,7 @@ pub fn changes_are_discarded_in_query(handle: IcHandle, ctx: &ic_fondue::pot::Co
             endpoint.assert_ready(ctx).await;
 
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             assert_reject(
                 canister
@@ -209,8 +209,8 @@ pub fn is_called_in_query(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister_a = UniversalCanister::new(&agent).await;
-            let canister_b = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // In order to observe that `call_on_cleanup` has been called, two
             // queries are sent from A to B in parallel.

@@ -101,7 +101,9 @@ pub fn test(test_env: TestEnv) {
 
     info!(logger, "Check that creation of canisters is impossible...");
     retry(test_env.logger(), secs(600), secs(10), || {
-        if can_install_canister(&nns_node.get_public_url()).is_ok() {
+        if can_install_canister(&nns_node.get_public_url(), nns_node.effective_canister_id())
+            .is_ok()
+        {
             bail!("Waiting for a failure creating a canister!")
         } else {
             Ok(())
@@ -174,7 +176,12 @@ pub fn test(test_env: TestEnv) {
 
     info!(logger, "Write a message to a canister");
     let msg = "Hello world!";
-    let can_id = store_message_with_retries(&nodes[0].get_public_url(), msg, &logger);
+    let can_id = store_message_with_retries(
+        &nodes[0].get_public_url(),
+        nodes[0].effective_canister_id(),
+        msg,
+        &logger,
+    );
     info!(logger, "Read it on all other nodes");
     for n in &nodes {
         assert!(

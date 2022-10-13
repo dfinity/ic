@@ -210,10 +210,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(
         suite(
             "create_subnet_pre_master",
-            vec![pot(
+            vec![pot_with_setup(
                 "create_subnet",
-                nns_tests::create_subnet::pre_master_config(),
-                par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
+                nns_tests::create_subnet::pre_master_config,
+                par(vec![sys_t("create_subnet", nns_tests::create_subnet::test)]),
             )],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
@@ -335,7 +335,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 pot_with_setup(
                     "tecdsa_signature_life_cycle",
                     tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
-                    seq(vec![t(
+                    seq(vec![sys_t(
                         "test_threshold_ecdsa_life_cycle",
                         tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
                     )]),
@@ -861,10 +861,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         ledger_tests::token_fault_tolerance::test,
                     )]),
                 ),
-                pot(
+                pot_with_setup(
                     "create_subnet",
-                    nns_tests::create_subnet::hourly_config(),
-                    par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
+                    nns_tests::create_subnet::hourly_config,
+                    par(vec![sys_t("create_subnet", nns_tests::create_subnet::test)]),
                 ),
                 pot_with_setup(
                     "canister_http_correctness",

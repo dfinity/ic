@@ -178,7 +178,7 @@ async fn activate_ecdsa_signature(
     let sys_agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
 
     // Wait for key creation and verify signature (as it's done in tecdsa tests).
-    let uni_can = UniversalCanister::new(&sys_agent).await;
+    let uni_can = UniversalCanister::new(&sys_agent, sys_node.effective_canister_id()).await;
     let public_key = get_public_key_with_logger(make_key(TEST_KEY_LOCAL), &uni_can, logger)
         .await
         .unwrap();

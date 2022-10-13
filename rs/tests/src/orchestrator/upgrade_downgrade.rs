@@ -132,7 +132,11 @@ fn downgrade_upgrade_roundtrip(
     faulty_node.await_status_is_healthy().unwrap();
 
     let msg = "hello world!";
-    let can_id = store_message(&subnet_node.get_public_url(), msg);
+    let can_id = store_message(
+        &subnet_node.get_public_url(),
+        subnet_node.effective_canister_id(),
+        msg,
+    );
     assert!(can_read_msg(
         &logger,
         &subnet_node.get_public_url(),
@@ -157,7 +161,11 @@ fn downgrade_upgrade_roundtrip(
     info!(logger, "After upgrade could read message '{}'", msg);
 
     let msg_2 = "hello world after downgrade!";
-    let can_id_2 = store_message(&faulty_node.get_public_url(), msg_2);
+    let can_id_2 = store_message(
+        &faulty_node.get_public_url(),
+        faulty_node.effective_canister_id(),
+        msg_2,
+    );
     assert!(can_read_msg(
         &logger,
         &faulty_node.get_public_url(),
@@ -170,7 +178,11 @@ fn downgrade_upgrade_roundtrip(
     upgrade_to(nns_node, subnet_id, &subnet_node, branch_version, &logger);
 
     let msg_3 = "hello world after upgrade!";
-    let can_id_3 = store_message(&subnet_node.get_public_url(), msg_3);
+    let can_id_3 = store_message(
+        &subnet_node.get_public_url(),
+        subnet_node.effective_canister_id(),
+        msg_3,
+    );
 
     start_node(&logger, &faulty_node);
     assert_assigned_replica_version(&faulty_node, branch_version, env.logger());

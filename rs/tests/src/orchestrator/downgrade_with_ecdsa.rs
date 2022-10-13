@@ -121,7 +121,11 @@ fn downgrade(
     faulty_node.await_status_is_healthy().unwrap();
 
     let msg = "hello world!";
-    let can_id = store_message(&subnet_node.get_public_url(), msg);
+    let can_id = store_message(
+        &subnet_node.get_public_url(),
+        subnet_node.effective_canister_id(),
+        msg,
+    );
     assert!(can_read_msg(
         &logger,
         &subnet_node.get_public_url(),
@@ -146,7 +150,11 @@ fn downgrade(
     info!(logger, "After downgrade could read message '{}'", msg);
 
     let msg_2 = "hello world after downgrade!";
-    let can_id_2 = store_message(&faulty_node.get_public_url(), msg_2);
+    let can_id_2 = store_message(
+        &faulty_node.get_public_url(),
+        faulty_node.effective_canister_id(),
+        msg_2,
+    );
     assert!(can_read_msg(
         &logger,
         &faulty_node.get_public_url(),

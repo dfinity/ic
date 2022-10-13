@@ -1,4 +1,6 @@
 //! Contains methods and structs that support settings up the NNS.
+use crate::driver::test_env_api::HasPublicApiUrl;
+use crate::driver::test_env_api::IcNodeSnapshot;
 use crate::{
     driver::test_env_api::install_nns_canisters,
     util::{block_on, create_agent, runtime_from_url},
@@ -424,11 +426,37 @@ async fn get_replica_status(
     }
 }
 
+/// Obtain the status of a replica via its `endpoint`.
+///
+/// Eventually returns the status of the replica.
+async fn get_replica_status_from_snapshot(
+    endpoint: &IcNodeSnapshot,
+) -> Result<ic_agent::agent::status::Status, ic_agent::AgentError> {
+    match create_agent(&endpoint.get_public_url().to_string()).await {
+        Ok(agent) => agent.status().await,
+        Err(e) => Err(e),
+    }
+}
+
 /// Obtain the software version of a replica via its `endpoint`.
 ///
 /// Eventually returns the replica software version.
 pub async fn get_software_version(endpoint: &IcEndpoint) -> Option<ReplicaVersion> {
     match get_replica_status(endpoint).await {
+        Ok(status) => status
+            .impl_version
+            .map(|v| ReplicaVersion::try_from(v).unwrap()),
+        Err(_) => None,
+    }
+}
+
+/// Obtain the software version of a replica via its `endpoint`.
+///
+/// Eventually returns the replica software version.
+pub async fn get_software_version_from_snapshot(
+    endpoint: &IcNodeSnapshot,
+) -> Option<ReplicaVersion> {
+    match get_replica_status_from_snapshot(endpoint).await {
         Ok(status) => status
             .impl_version
             .map(|v| ReplicaVersion::try_from(v).unwrap()),

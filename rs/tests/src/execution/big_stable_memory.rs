@@ -12,9 +12,12 @@ pub fn can_access_big_stable_memory(handle: IcHandle, ctx: &ic_fondue::pot::Cont
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister = UniversalCanister::new_with_64bit_stable_memory(&agent)
-                .await
-                .unwrap();
+            let canister = UniversalCanister::new_with_64bit_stable_memory(
+                &agent,
+                endpoint.effective_canister_id(),
+            )
+            .await
+            .unwrap();
 
             canister
                 // Grow stable memory to 5GiB.
@@ -50,9 +53,12 @@ pub fn can_handle_out_of_bounds_access(handle: IcHandle, ctx: &ic_fondue::pot::C
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister = UniversalCanister::new_with_64bit_stable_memory(&agent)
-                .await
-                .unwrap();
+            let canister = UniversalCanister::new_with_64bit_stable_memory(
+                &agent,
+                endpoint.effective_canister_id(),
+            )
+            .await
+            .unwrap();
 
             canister
                 // Grow stable memory to 5GiB.
@@ -91,9 +97,12 @@ pub fn can_handle_overflows_when_indexing_stable_memory(
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister = UniversalCanister::new_with_64bit_stable_memory(&agent)
-                .await
-                .unwrap();
+            let canister = UniversalCanister::new_with_64bit_stable_memory(
+                &agent,
+                endpoint.effective_canister_id(),
+            )
+            .await
+            .unwrap();
 
             canister
                 // Grow stable memory to 5GiB.
@@ -133,6 +142,7 @@ pub fn can_access_big_heap_and_big_stable_memory(handle: IcHandle, ctx: &ic_fond
             let canister_id = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .unwrap()
@@ -232,7 +242,7 @@ pub fn canister_traps_if_32_bit_api_used_on_big_memory(
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
             // Create a canister that uses 32-bit stable memory.
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // Canister can use 32-bit api.
             canister

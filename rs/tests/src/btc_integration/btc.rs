@@ -190,7 +190,7 @@ pub fn get_balance(env: TestEnv) {
 
     let res = rt.block_on(async {
         let agent = assert_create_agent(app_endpoint.url.as_str()).await;
-        let canister = UniversalCanister::new(&agent).await;
+        let canister = UniversalCanister::new(&agent, app_endpoint.effective_canister_id()).await;
         retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let res = canister
                 .update(wasm().call(management::bitcoin_get_balance(

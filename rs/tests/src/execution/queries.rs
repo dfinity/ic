@@ -44,6 +44,7 @@ pub fn query_reply_sizes(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let canister_id = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .expect("Couldn't create canister with provisional API.")

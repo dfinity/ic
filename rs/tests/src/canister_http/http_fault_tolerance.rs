@@ -64,6 +64,7 @@ pub fn test(env: TestEnv) {
         let cid = mgr
             .create_canister()
             .as_provisional_create_with_amount(None)
+            .with_effective_canister_id(app_endpoint.effective_canister_id())
             .call_and_wait(util::delay())
             .await
             .expect("failed to create a canister")

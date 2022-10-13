@@ -27,6 +27,7 @@ use crate::util::{
 };
 use futures::{join, stream::FuturesUnordered, StreamExt};
 use ic_agent::{Agent, AgentError};
+use ic_base_types::PrincipalId;
 use ic_fondue::{
     ic_instance::{LegacyInternetComputer as InternetComputer, Subnet},
     ic_manager::IcHandle,
@@ -97,8 +98,17 @@ pub fn max_ingress_payload_size_test(handle: IcHandle, ctx: &ic_fondue::pot::Con
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
-        let (assist_agent, target_agent) = setup_agents(&handle, ctx).await;
-        let (_, target_unican) = setup_unicans(&assist_agent, &target_agent).await;
+        let (
+            (assist_agent, assist_effective_canister_id),
+            (target_agent, target_effective_canister_id),
+        ) = setup_agents(&handle, ctx).await;
+        let (_, target_unican) = setup_unicans(
+            &assist_agent,
+            assist_effective_canister_id,
+            &target_agent,
+            target_effective_canister_id,
+        )
+        .await;
 
         // Send a message that is supposed to fit.
         make_ingress_call(&target_unican, INGRESS_MSG_SIZE)
@@ -114,8 +124,17 @@ pub fn max_xnet_payload_size_test(handle: IcHandle, ctx: &ic_fondue::pot::Contex
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
-        let (assist_agent, target_agent) = setup_agents(&handle, ctx).await;
-        let (assist_unican, target_unican) = setup_unicans(&assist_agent, &target_agent).await;
+        let (
+            (assist_agent, assist_effective_canister_id),
+            (target_agent, target_effective_canister_id),
+        ) = setup_agents(&handle, ctx).await;
+        let (assist_unican, target_unican) = setup_unicans(
+            &assist_agent,
+            assist_effective_canister_id,
+            &target_agent,
+            target_effective_canister_id,
+        )
+        .await;
 
         // Send a message that is supposed to fit.
         make_xnet_call(&target_unican, &assist_unican, XNET_MSG_SIZE)
@@ -131,8 +150,17 @@ pub fn dual_workload_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
-        let (assist_agent, target_agent) = setup_agents(&handle, ctx).await;
-        let (assist_unican, target_unican) = setup_unicans(&assist_agent, &target_agent).await;
+        let (
+            (assist_agent, assist_effective_canister_id),
+            (target_agent, target_effective_canister_id),
+        ) = setup_agents(&handle, ctx).await;
+        let (assist_unican, target_unican) = setup_unicans(
+            &assist_agent,
+            assist_effective_canister_id,
+            &target_agent,
+            target_effective_canister_id,
+        )
+        .await;
 
         let calls = (0..DW_NUM_MSGS)
             .flat_map(|x| vec![PayloadType::XNet(x), PayloadType::Ingress(x)])
@@ -156,7 +184,10 @@ pub fn dual_workload_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     });
 }
 
-async fn setup_agents(handle: &IcHandle, ctx: &ic_fondue::pot::Context) -> (Agent, Agent) {
+async fn setup_agents(
+    handle: &IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) -> ((Agent, PrincipalId), (Agent, PrincipalId)) {
     let mut rng = ctx.rng.clone();
 
     // Choose one node from each subnet
@@ -167,20 +198,26 @@ async fn setup_agents(handle: &IcHandle, ctx: &ic_fondue::pot::Context) -> (Agen
     assert_all_ready(&[target_node, assist_node], ctx).await;
 
     // Create the agents
-    join!(
+    let (assist_agent, target_agent) = join!(
         assert_create_agent(assist_node.url.as_str()),
-        assert_create_agent(target_node.url.as_str())
+        assert_create_agent(target_node.url.as_str()),
+    );
+    (
+        (assist_agent, assist_node.effective_canister_id()),
+        (target_agent, target_node.effective_canister_id()),
     )
 }
 
 async fn setup_unicans<'a>(
     assist_agent: &'a Agent,
+    assist_effective_canister_id: PrincipalId,
     target_agent: &'a Agent,
+    target_effective_canister_id: PrincipalId,
 ) -> (Arc<UniversalCanister<'a>>, Arc<UniversalCanister<'a>>) {
     // Install a `UniversalCanister` on each
     let (assist_unican, target_unican) = join!(
-        UniversalCanister::new(assist_agent),
-        UniversalCanister::new(target_agent)
+        UniversalCanister::new(assist_agent, assist_effective_canister_id),
+        UniversalCanister::new(target_agent, target_effective_canister_id)
     );
 
     // NOTE: Since we will be making calls to these canisters in parallel, we have
