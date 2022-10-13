@@ -28,6 +28,16 @@ impl std::fmt::Display for Network {
     }
 }
 
+impl From<Network> for NetworkInRequest {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Mainnet => Self::Mainnet,
+            Network::Testnet => Self::Testnet,
+            Network::Regtest => Self::Regtest,
+        }
+    }
+}
+
 impl From<NetworkInRequest> for Network {
     fn from(network: NetworkInRequest) -> Self {
         match network {
@@ -84,10 +94,13 @@ pub enum NetworkSnakeCase {
 }
 
 /// A reference to a transaction output.
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct OutPoint {
+    /// A cryptographic hash of the transaction.
+    /// A transaction can output multiple UTXOs.
     #[serde(with = "serde_bytes")]
     pub txid: Vec<u8>,
+    /// The index of the output within the transaction.
     pub vout: u32,
 }
 
@@ -97,6 +110,20 @@ pub struct Utxo {
     pub outpoint: OutPoint,
     pub value: Satoshi,
     pub height: u32,
+}
+
+impl std::cmp::PartialOrd for Utxo {
+    fn partial_cmp(&self, other: &Utxo) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Ord for Utxo {
+    fn cmp(&self, other: &Utxo) -> std::cmp::Ordering {
+        // The output point uniquely identifies an UTXO; there is no point in
+        // comparing the other fields.
+        self.outpoint.cmp(&other.outpoint)
+    }
 }
 
 /// A filter used when requesting UTXOs.

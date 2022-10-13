@@ -4502,12 +4502,16 @@ dependencies = [
  "ic-ic00-types",
  "ic-icrc1",
  "ic-icrc1-client-cdk",
+ "ic-icrc1-ledger",
+ "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "lazy_static",
+ "ledger-canister",
  "ripemd",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]

@@ -11,6 +11,8 @@ LIB_DEPS = [
     "//rs/monitoring/metrics_encoder",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/client/cdk",
+    "//rs/rosetta-api/icrc1/ledger",
+    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
@@ -21,6 +23,7 @@ LIB_DEPS = [
     "@crate_index//:lazy_static",
     "@crate_index//:ripemd",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
 ]
 
 LIB_PROC_MACRO_DEPS = [
@@ -88,16 +91,21 @@ rust_test(
         ":ckbtc_minter.wasm",
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter.wasm)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     deps = [
         ":ckbtc_minter_lib",
         "//rs/bitcoin/types/public",
+        "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/icrc1/ledger",
+        "//rs/rosetta-api/ledger_canister",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
