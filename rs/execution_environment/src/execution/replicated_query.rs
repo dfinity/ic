@@ -55,7 +55,7 @@ pub fn execute_replicated_query(
 
     let method = WasmMethod::Query(req.method_name().to_string());
 
-    if let Err(user_error) = validate_message(&canister, &req, &method, time, round.log) {
+    if let Err(user_error) = validate_message(&canister, &method) {
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut canister.system_state,
             instruction_limit,

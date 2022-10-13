@@ -280,22 +280,9 @@ pub(crate) fn validate_method(
 
 pub(crate) fn validate_message(
     canister: &CanisterState,
-    req: &RequestOrIngress,
     wasm_method: &WasmMethod,
-    time: Time,
-    log: &ReplicaLogger,
 ) -> Result<(), UserError> {
     validate_canister(canister)?;
-
-    if let RequestOrIngress::Ingress(ingress) = req {
-        if ingress.expiry_time < time {
-            error!(log, "[EXC-BUG] Executing expired ingress message.");
-            return Err(UserError::new(
-                ErrorCode::IngressMessageTimeout,
-                "Ingress message timed out waiting to start executing.",
-            ));
-        }
-    }
 
     validate_method(wasm_method, canister)
         .map_err(|err| err.into_user_error(&canister.canister_id()))?;
