@@ -23,13 +23,13 @@ fi
 
 BUILD_MODE="${BUILD_MODE}${MALICIOUS_MODE}"
 
-bazel build --config=ci //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_gz //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_zst
+bazel build //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_gz //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_zst
 
-cp -fv "$ROOT_DIR"/$(bazel cquery --output=files //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_gz) "$BUILD_OUT"/disk-img.tar.gz
-cp -fv "$ROOT_DIR"/$(bazel cquery --output=files //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_zst) "$BUILD_OUT"/disk-img.tar.zst
+cp -fv "$ROOT_DIR"/"$(bazel cquery --output=files //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_gz)" "$BUILD_OUT"/disk-img.tar.gz
+cp -fv "$ROOT_DIR"/"$(bazel cquery --output=files //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_zst)" "$BUILD_OUT"/disk-img.tar.zst
 
 if [ -n "${CI_JOB_ID:-}" ]; then
     "$ROOT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "$BUILD_OUT"
 fi
 
-cat "$ROOT_DIR"/$(bazel cquery --output=files //ic-os/guestos:"$BUILD_MODE"_version.txt) >"$ROOT_DIR"/version.txt
+cat "$ROOT_DIR"/"$(bazel cquery --output=files //ic-os/guestos:"$BUILD_MODE"_version.txt)" >"$ROOT_DIR"/version.txt
