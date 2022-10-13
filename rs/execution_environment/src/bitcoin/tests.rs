@@ -13,7 +13,6 @@ use ic_ic00_types::{
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, EmptyBlob, Method, Payload as Ic00Payload,
     IC_00,
 };
-use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_replicated_state::bitcoin_state::BitcoinState;
 use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
@@ -32,7 +31,7 @@ const SEND_TRANSACTION_FEE_PER_BYTE: Cycles = Cycles::new(20_000_000);
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
+        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2);
 }
 
 fn calculate_send_transaction_payment(bytes: usize) -> Cycles {

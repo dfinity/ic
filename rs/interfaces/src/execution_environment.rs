@@ -114,22 +114,17 @@ impl ops::Add<&ExecutionComplexity> for &ExecutionComplexity {
 /// Note that there are situations where total available memory is smaller than
 /// the available message memory, i.e., when the memory is consumed by something
 /// other than messages.
-///
-/// This struct is designed that it can eventually replace `SubnetAvailableMemory`,
-/// which currently wraps `AvailableMemory` in an `Arc<RwLock>`. Based on how it is
-/// currently used this wrapping is not strictly necessary and one could alternatively
-/// pass a mutable reference to `AvailableMemory` in the respective places.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
-pub struct AvailableMemory {
+pub struct SubnetAvailableMemory {
     /// The total memory available on the subnet
     total_memory: i64,
     /// The memory available for messages
     message_memory: i64,
 }
 
-impl AvailableMemory {
+impl SubnetAvailableMemory {
     pub fn new(total_memory: i64, message_memory: i64) -> Self {
-        AvailableMemory {
+        SubnetAvailableMemory {
             total_memory,
             message_memory,
         }
@@ -153,31 +148,7 @@ impl AvailableMemory {
     pub fn max_available_message_memory(&self) -> i64 {
         self.total_memory.min(self.message_memory)
     }
-}
 
-impl ops::Div<i64> for AvailableMemory {
-    type Output = Self;
-
-    fn div(self, rhs: i64) -> Self::Output {
-        Self {
-            total_memory: self.total_memory / rhs,
-            message_memory: self.message_memory / rhs,
-        }
-    }
-}
-
-/// This struct is used to manage the current amount of memory available on the
-/// subnet.
-#[derive(Clone, Debug, Default)]
-pub struct SubnetAvailableMemory(AvailableMemory);
-
-impl From<AvailableMemory> for SubnetAvailableMemory {
-    fn from(available: AvailableMemory) -> Self {
-        SubnetAvailableMemory(available)
-    }
-}
-
-impl SubnetAvailableMemory {
     /// Try to use some memory capacity and fail if not enough is available
     pub fn try_decrement(
         &mut self,
@@ -187,24 +158,24 @@ impl SubnetAvailableMemory {
         debug_assert!(requested >= message_requested);
 
         let total_is_available = match i64::try_from(requested.get()) {
-            Ok(x) => x <= self.0.total_memory || x == 0,
+            Ok(x) => x <= self.total_memory || x == 0,
             Err(_) => false,
         };
         let message_is_available = match i64::try_from(message_requested.get()) {
-            Ok(x) => x <= self.0.message_memory || x == 0,
+            Ok(x) => x <= self.message_memory || x == 0,
             Err(_) => false,
         };
 
         if total_is_available && message_is_available {
-            self.0.total_memory -= requested.get() as i64;
-            self.0.message_memory -= message_requested.get() as i64;
+            self.total_memory -= requested.get() as i64;
+            self.message_memory -= message_requested.get() as i64;
             Ok(())
         } else {
             Err(SubnetAvailableMemoryError::InsufficientMemory {
                 requested_total: requested,
                 message_requested,
-                available_total: self.0.total_memory,
-                available_messages: self.0.message_memory,
+                available_total: self.total_memory,
+                available_messages: self.message_memory,
             })
         }
     }
@@ -212,24 +183,19 @@ impl SubnetAvailableMemory {
     pub fn increment(&mut self, total_amount: NumBytes, message_amount: NumBytes) {
         debug_assert!(total_amount >= message_amount);
 
-        self.0.total_memory += total_amount.get() as i64;
-        self.0.message_memory += message_amount.get() as i64;
+        self.total_memory += total_amount.get() as i64;
+        self.message_memory += message_amount.get() as i64;
     }
+}
 
-    pub fn get_total_memory(&self) -> i64 {
-        self.0.total_memory
-    }
+impl ops::Div<i64> for SubnetAvailableMemory {
+    type Output = Self;
 
-    pub fn get_message_memory(&self) -> i64 {
-        self.0.message_memory
-    }
-
-    pub fn get(&self) -> AvailableMemory {
-        self.0
-    }
-
-    pub fn set(&mut self, available: AvailableMemory) {
-        self.0 = available;
+    fn div(self, rhs: i64) -> Self::Output {
+        Self {
+            total_memory: self.total_memory / rhs,
+            message_memory: self.message_memory / rhs,
+        }
     }
 }
 
@@ -965,7 +931,7 @@ mod tests {
 
     #[test]
     fn test_available_memory() {
-        let available = AvailableMemory::new(20, 10);
+        let available = SubnetAvailableMemory::new(20, 10);
         assert_eq!(available.get_total_memory(), 20);
         assert_eq!(available.get_message_memory(), 10);
         assert_eq!(available.max_available_message_memory(), 10);
@@ -979,7 +945,7 @@ mod tests {
     #[test]
     fn test_subnet_available_memory() {
         let mut available: SubnetAvailableMemory =
-            AvailableMemory::new(1 << 30, (1 << 30) - 5).into();
+            SubnetAvailableMemory::new(1 << 30, (1 << 30) - 5);
         assert!(available
             .try_decrement(NumBytes::from(10), NumBytes::from(5))
             .is_ok());
@@ -996,7 +962,7 @@ mod tests {
             .try_decrement(NumBytes::from(1), NumBytes::from(0))
             .is_err());
 
-        let mut available: SubnetAvailableMemory = AvailableMemory::new(1 << 30, -1).into();
+        let mut available: SubnetAvailableMemory = SubnetAvailableMemory::new(1 << 30, -1);
         assert!(available
             .try_decrement(NumBytes::from(1), NumBytes::from(1))
             .is_err());
@@ -1026,10 +992,10 @@ mod tests {
             )
             .is_err());
 
-        let mut available: SubnetAvailableMemory = AvailableMemory::new(42, 43).into();
+        let mut available: SubnetAvailableMemory = SubnetAvailableMemory::new(42, 43);
         assert_eq!(available.get_total_memory(), 42);
         assert_eq!(available.get_message_memory(), 43);
-        available.set(AvailableMemory::new(44, 45));
+        available = SubnetAvailableMemory::new(44, 45);
         assert_eq!(available.get_total_memory(), 44);
         assert_eq!(available.get_message_memory(), 45);
         available.increment(NumBytes::from(1), NumBytes::from(0));

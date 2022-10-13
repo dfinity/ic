@@ -3,7 +3,7 @@ use std::{convert::TryFrom, sync::Arc};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
+use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -121,7 +121,7 @@ pub fn get_system_api(
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
-        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
+        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, SystemApi};
+use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory, SystemApi};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Global, Memory, NetworkTopology, PageMap};
@@ -118,7 +118,7 @@ impl WasmtimeInstanceBuilder {
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,
             },
-            AvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
+            SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
             Memory::default(),
             Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
             log,

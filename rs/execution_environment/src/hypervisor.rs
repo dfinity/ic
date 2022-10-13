@@ -389,7 +389,7 @@ impl Hypervisor {
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
                 execution_parameters,
-                subnet_available_memory: round_limits.subnet_available_memory.get(),
+                subnet_available_memory: round_limits.subnet_available_memory,
                 func_ref,
                 compilation_cache: Arc::clone(&self.compilation_cache),
             },

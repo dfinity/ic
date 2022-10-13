@@ -175,7 +175,7 @@ impl InstallCodeHelper {
             .system_state
             .apply_cycles_debit(self.canister.canister_id(), round.log);
 
-        let mut subnet_available_memory = round_limits.subnet_available_memory.clone();
+        let mut subnet_available_memory = round_limits.subnet_available_memory;
         subnet_available_memory.increment(self.deallocated_bytes, NumBytes::from(0));
         if let Err(err) = subnet_available_memory
             .try_decrement(self.allocated_bytes, self.allocated_message_bytes)

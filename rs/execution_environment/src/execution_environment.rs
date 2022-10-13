@@ -30,12 +30,10 @@ use ic_ic00_types::{
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
-use ic_interfaces::execution_environment::{
-    AvailableMemory, CanisterOutOfCyclesError, RegistryExecutionSettings,
-};
 use ic_interfaces::{
     execution_environment::{
-        ExecutionMode, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
+        CanisterOutOfCyclesError, ExecutionMode, HypervisorError, IngressHistoryWriter,
+        RegistryExecutionSettings, SubnetAvailableMemory,
     },
     messages::{CanisterInputMessage, RequestOrIngress},
 };
@@ -353,8 +351,8 @@ impl ExecutionEnvironment {
     }
 
     /// Look up the current amount of memory available on the subnet.
-    pub fn subnet_available_memory(&self, state: &ReplicatedState) -> AvailableMemory {
-        AvailableMemory::new(
+    pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
+        SubnetAvailableMemory::new(
             self.config.subnet_memory_capacity.get() as i64
                 - state.total_memory_taken().get() as i64,
             self.config.subnet_message_memory_capacity.get() as i64
@@ -2160,11 +2158,10 @@ impl CompilationCostHandling {
 
 /// Returns the subnet's configured memory capacity (ignoring current usage).
 pub(crate) fn subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailableMemory {
-    AvailableMemory::new(
+    SubnetAvailableMemory::new(
         config.subnet_memory_capacity.get() as i64,
         config.subnet_message_memory_capacity.get() as i64,
     )
-    .into()
 }
 
 fn get_canister_mut(

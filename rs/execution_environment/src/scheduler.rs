@@ -469,8 +469,7 @@ impl SchedulerImpl {
             let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
 
             // Update subnet available memory before taking out the canisters.
-            round_limits.subnet_available_memory =
-                self.exec_env.subnet_available_memory(&state).into();
+            round_limits.subnet_available_memory = self.exec_env.subnet_available_memory(&state);
             let canisters = state.take_canister_states();
             // Obtain the active canisters and update the collection of heap delta rate-limited canisters.
             let (active_round_schedule, rate_limited_canister_ids) = round_schedule
@@ -666,9 +665,8 @@ impl SchedulerImpl {
         // Distribute subnet available memory equaly between the threads.
         let round_limits_per_thread = RoundLimits {
             instructions: round_limits.instructions,
-            subnet_available_memory: (round_limits.subnet_available_memory.get()
-                / self.config.scheduler_cores as i64)
-                .into(),
+            subnet_available_memory: (round_limits.subnet_available_memory
+                / self.config.scheduler_cores as i64),
             compute_allocation_used: round_limits.compute_allocation_used,
         };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
@@ -689,10 +687,7 @@ impl SchedulerImpl {
                 let deterministic_time_slicing = self.deterministic_time_slicing;
                 let round_limits = RoundLimits {
                     instructions: round_limits.instructions,
-                    subnet_available_memory: round_limits_per_thread
-                        .subnet_available_memory
-                        .get()
-                        .into(),
+                    subnet_available_memory: round_limits_per_thread.subnet_available_memory,
                     compute_allocation_used: round_limits.compute_allocation_used,
                 };
                 let config = &self.config;
@@ -1218,7 +1213,7 @@ impl Scheduler for SchedulerImpl {
         // work here.
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(self.config.max_instructions_per_round / 16),
-            subnet_available_memory: self.exec_env.subnet_available_memory(&state).into(),
+            subnet_available_memory: self.exec_env.subnet_available_memory(&state),
             compute_allocation_used: state.total_compute_allocation(),
         };
 

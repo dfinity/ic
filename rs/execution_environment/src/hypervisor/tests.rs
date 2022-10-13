@@ -6,7 +6,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_ic00_types::CanisterHttpResponsePayload;
-use ic_interfaces::execution_environment::{AvailableMemory, HypervisorError};
+use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
@@ -4132,7 +4132,7 @@ fn dts_concurrent_subnet_available_change() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueLong
     );
-    test.set_subnet_available_memory(AvailableMemory::new(0, 0));
+    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0));
     while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(canister_id);
     }
@@ -4183,7 +4183,7 @@ fn system_state_apply_change_fails() {
     );
     test.induct_messages();
     test.execute_slice(b_id);
-    test.set_subnet_available_memory(AvailableMemory::new(0, 0));
+    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0));
     while test.canister_state(b_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(b_id);
     }
