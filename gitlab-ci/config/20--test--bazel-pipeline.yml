@@ -23,7 +23,7 @@
     - ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
     - "# shellcheck disable=SC2086 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
     - >
-      bazel
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel
       ${BAZEL_STARTUP_ARGS}
       ${BAZEL_COMMAND}
       --config ci
@@ -57,6 +57,13 @@ bazel-test-all:
   variables:
     BAZEL_STARTUP_ARGS: "--output_base /cache/bazel-output/${CI_CONCURRENT_ID}"
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
+
+bazel-cache-perf-test-linux:
+  extends:
+    - bazel-test-all
+    - .bazel-rules-post-master
+  needs:
+    - bazel-test-all
   
 bazel-test-all-rebuild:
   extends:
@@ -83,6 +90,13 @@ bazel-test-all-macos:
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/... //:upload_sdk"
     BAZEL_EXTRA_ARGS: "--config dev"
+
+bazel-cache-perf-test-macos:
+  extends:
+    - bazel-test-all-macos
+    - .bazel-rules-post-master
+  needs:
+    - bazel-test-all-macos
 
 bazel-cargo-test-parity:
   extends:
