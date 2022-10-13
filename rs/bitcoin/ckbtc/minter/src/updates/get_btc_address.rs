@@ -20,11 +20,6 @@ pub struct GetBtcAddressArgs {
     pub subaccount: Option<Subaccount>,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub struct GetBtcAddressResult {
-    pub address: String,
-}
-
 /// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
 fn derive_public_key(account: Account) -> ECDSAPublicKey {
     let ECDSAPublicKey {
@@ -75,7 +70,7 @@ fn network_and_public_key_to_p2wpkh(network: Network, public_key: Vec<u8>) -> St
     bech32::encode(hrp, data, Variant::Bech32).unwrap()
 }
 
-pub async fn get_btc_address(args: GetBtcAddressArgs) -> GetBtcAddressResult {
+pub async fn get_btc_address(args: GetBtcAddressArgs) -> String {
     let caller = PrincipalId(ic_cdk::caller());
     init_ecdsa_public_key().await;
     let public_key = derive_public_key(Account {
@@ -83,8 +78,7 @@ pub async fn get_btc_address(args: GetBtcAddressArgs) -> GetBtcAddressResult {
         subaccount: args.subaccount,
     })
     .public_key;
-    let address = network_and_public_key_to_p2wpkh(read_state(|s| s.btc_network), public_key);
-    GetBtcAddressResult { address }
+    network_and_public_key_to_p2wpkh(read_state(|s| s.btc_network), public_key)
 }
 
 /// Fetches the ECDSA public key of the canister

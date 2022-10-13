@@ -367,6 +367,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "minter_get_withdrawal_account_test",
                     ckbtc::minter::get_withdrawal_account_test,
                 ),
+                sys_t(
+                    "minter_check_update_balance",
+                    ckbtc::minter::check_update_balance,
+                ),
             ]),
         )],
     ));

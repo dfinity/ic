@@ -5,8 +5,9 @@ use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcErr, RetrieveBtcOk};
 use ic_ckbtc_minter::updates::{
     self,
-    get_btc_address::{GetBtcAddressArgs, GetBtcAddressResult},
+    get_btc_address::GetBtcAddressArgs,
     get_withdrawal_account::GetWithdrawalAccountResult,
+    update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
 
 #[init]
@@ -26,7 +27,7 @@ fn post_upgrade(args: UpgradeArgs) {
 
 #[candid_method(update)]
 #[update]
-async fn get_btc_address(args: GetBtcAddressArgs) -> GetBtcAddressResult {
+async fn get_btc_address(args: GetBtcAddressArgs) -> String {
     updates::get_btc_address::get_btc_address(args).await
 }
 
@@ -40,6 +41,14 @@ async fn get_withdrawal_account() -> GetWithdrawalAccountResult {
 #[update]
 async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcErr> {
     updates::retrieve_btc::retrieve_btc(args).await
+}
+
+#[candid_method(update)]
+#[update]
+async fn update_balance(
+    args: UpdateBalanceArgs,
+) -> Result<UpdateBalanceResult, UpdateBalanceError> {
+    updates::update_balance::update_balance(args).await
 }
 
 #[export_name = "canister_query http_request"]

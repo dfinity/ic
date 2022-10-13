@@ -1,38 +1,45 @@
-type AccountIdentifier = vec nat8;
-// Subaccount is an arbitrary 32-byte byte array.
-// Ledger uses subaccounts to compute the source address, which enables one
-// principal to control multiple ledger accounts.
-type Subaccount = blob;
-
-type Account = record {
-    owner : principal;
-    subaccount : opt Subaccount;
+type Account = record { owner : principal; subaccount : opt vec nat8 };
+type GetBtcAddressArgs = record { subaccount : opt vec nat8 };
+type GetWithdrawalAccountResult = record { account : Account };
+type Result = variant { Ok : RetrieveBtcOk; Err : RetrieveBtcErr };
+type Result_1 = variant { Ok : UpdateBalanceResult; Err : UpdateBalanceError };
+type RetrieveBtcArgs = record {
+  fee : opt nat64;
+  address : text;
+  amount : nat64;
 };
-
-type GetBtcAddressArgs = record {
-    subaccount: opt Subaccount;
+type RetrieveBtcErr = variant {
+  MalformedAddress : text;
+  AlreadyProcessing;
+  FeeTooLow : nat64;
+  LedgerError : TransferError;
+  AmountTooLow : nat64;
+  TooManyConcurrentRequests;
+  LedgerConnectionError : record { int32; text };
 };
-
-type GetBtcAddressResult = record {
-    address: text;
+type RetrieveBtcOk = record { block_index : nat64 };
+type TransferError = variant {
+  GenericError : record { message : text; error_code : nat };
+  TemporarilyUnavailable;
+  BadBurn : record { min_burn_amount : nat };
+  Duplicate : record { duplicate_of : nat };
+  BadFee : record { expected_fee : nat };
+  CreatedInFuture : record { ledger_time : nat64 };
+  TooOld;
+  InsufficientFunds : record { balance : nat };
 };
-
-type GetWithdrawalAccountResult = record {
-    account: Account;
+type UpdateBalanceArgs = record { subaccount : vec nat8 };
+type UpdateBalanceError = variant {
+  GenericError : record { error_message : text; error_code : nat64 };
+  TemporarilyUnavailable : text;
+  AlreadyProcessing;
+  TooManyConcurrentRequests;
+  NoNewUtxos;
 };
-
-type Network = variant {
-    Mainnet;
-    Testnet;
-    Regtest;
-};
-
-type InitArgs = record {
-    btc_network: Network;
-    ecdsa_key_name: text;
-};
-
-service : (InitArgs) -> {
-    get_btc_address : (GetBtcAddressArgs) -> (GetBtcAddressResult);
-    get_withdrawal_account: () -> (GetWithdrawalAccountResult);
+type UpdateBalanceResult = record { block_index : nat64; amount : nat64 };
+service : {
+  get_btc_address : (GetBtcAddressArgs) -> (text);
+  get_withdrawal_account : () -> (GetWithdrawalAccountResult);
+  retrieve_btc : (RetrieveBtcArgs) -> (Result);
+  update_balance : (UpdateBalanceArgs) -> (Result_1);
 }

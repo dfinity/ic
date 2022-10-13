@@ -4,6 +4,8 @@ use ic_base_types::CanisterId;
 use ic_btc_types::Network;
 use serde::Serialize;
 
+pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;
+
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct InitArgs {
     /// The bitcoin network that the minter will connect to
@@ -28,11 +30,13 @@ pub fn init(args: InitArgs) {
         btc_network: args.btc_network,
         ecdsa_key_name: args.ecdsa_key_name,
         ecdsa_public_key: None,
+        min_confirmations: DEFAULT_MIN_CONFIRMATIONS,
         update_balance_principals: Default::default(),
         retrieve_btc_principals: Default::default(),
         retrieve_btc_min_fee: args.retrieve_btc_min_fee,
         retrieve_btc_min_amount: args.retrieve_btc_min_amount,
         pending_retrieve_btc_requests: Default::default(),
         ledger_id: args.ledger_id,
+        utxos_state_addresses: Default::default(),
     });
 }

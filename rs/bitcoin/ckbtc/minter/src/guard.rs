@@ -76,9 +76,11 @@ pub fn retrieve_btc_guard(p: Principal) -> Result<Guard<RetrieveBtcUpdates>, Gua
 
 #[cfg(test)]
 mod tests {
-    use crate::guard::{GuardError, MAX_CONCURRENT};
-    use crate::state::replace_state;
-    use crate::state::CkBtcMinterState;
+    use crate::{
+        guard::{GuardError, MAX_CONCURRENT},
+        lifecycle::init::DEFAULT_MIN_CONFIRMATIONS,
+        state::{replace_state, CkBtcMinterState},
+    };
     use ic_base_types::CanisterId;
     use ic_btc_types::Network;
     use ic_cdk::export::Principal;
@@ -94,12 +96,14 @@ mod tests {
             btc_network: Network::Regtest,
             ecdsa_key_name: "".to_string(),
             ecdsa_public_key: None,
-            update_balance_principals: Default::default(),
+            min_confirmations: DEFAULT_MIN_CONFIRMATIONS,
             retrieve_btc_principals: Default::default(),
             retrieve_btc_min_fee: 0,
             retrieve_btc_min_amount: 0,
             pending_retrieve_btc_requests: Default::default(),
+            update_balance_principals: Default::default(),
             ledger_id: CanisterId::from_u64(42),
+            utxos_state_addresses: Default::default(),
         }
     }
 
