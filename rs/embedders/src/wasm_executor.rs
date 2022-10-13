@@ -19,8 +19,8 @@ use crate::{
 use crate::{CompilationCache, CompilationResult, SerializedModule};
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    AvailableMemory, HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
-    SystemApi, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
+    SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -579,7 +579,7 @@ pub fn process(
     api_type: ApiType,
     canister_current_memory_usage: NumBytes,
     execution_parameters: ExecutionParameters,
-    subnet_available_memory: AvailableMemory,
+    subnet_available_memory: SubnetAvailableMemory,
     sandbox_safe_system_state: SandboxSafeSystemState,
     embedder_cache: &EmbedderCache,
     embedder: &WasmtimeEmbedder,

@@ -4,7 +4,7 @@ use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
+use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, NetworkTopology, SystemState};
@@ -22,8 +22,8 @@ use lazy_static::lazy_static;
 use wasmtime::{Config, Engine, Module, Store, Val};
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: AvailableMemory =
-        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2);
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2);
 }
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 

@@ -11,7 +11,7 @@ use ic_ic00_types::{
     BitcoinGetBalanceArgs, CanisterHttpRequestArgs, CanisterIdRecord, EcdsaCurve, EcdsaKeyId,
     EmptyBlob, HttpMethod, Method, Payload as _, SignWithECDSAArgs, TransformFunc, TransformType,
 };
-use ic_interfaces::execution_environment::AvailableMemory;
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -374,7 +374,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Runs a test with the given `available_memory` (expected to be limited to 2
     // requests plus epsilon). Checks that the limit is enforced on application
     // subnets and ignored on system subnets.
-    let run_test = |subnet_available_memory: AvailableMemory, subnet_type| {
+    let run_test = |subnet_available_memory: SubnetAvailableMemory, subnet_type| {
         let mut test = SchedulerTestBuilder::new()
             .with_scheduler_config(SchedulerConfig {
                 scheduler_cores: 2,
@@ -442,19 +442,19 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Subnet has memory for 4 initial requests and 2 additional requests (plus
     // epsilon, for small responses).
     run_test(
-        AvailableMemory::new(MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 1 << 30),
+        SubnetAvailableMemory::new(MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 1 << 30),
         SubnetType::Application,
     );
     // Subnet has memory for 4 initial requests and 2 additional requests (plus
     // epsilon, for small responses).
     run_test(
-        AvailableMemory::new(1 << 30, MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10),
+        SubnetAvailableMemory::new(1 << 30, MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10),
         SubnetType::Application,
     );
 
     // On system subnets limits will not be enforced for local messages, so running with 0 available
     // memory should also lead to inducting messages on local subnet.
-    run_test(AvailableMemory::new(0, 0), SubnetType::System);
+    run_test(SubnetAvailableMemory::new(0, 0), SubnetType::System);
 }
 
 /// Verifies that the [`SchedulerConfig::instruction_overhead_per_message`] puts

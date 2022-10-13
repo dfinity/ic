@@ -421,7 +421,7 @@ pub fn apply_canister_state_changes(
     }) = canister_state_changes
     {
         let clean_system_state = system_state.clone();
-        let clean_subnet_available_memory = round_limits.subnet_available_memory.clone();
+        let clean_subnet_available_memory = round_limits.subnet_available_memory;
         // Everything that is passed via a mutable reference in this function
         // should be cloned and restored in case of an error.
         match try_apply_canister_state_changes(

@@ -1,5 +1,5 @@
 use ic_embedders::wasm_executor::SliceExecutionOutput;
-use ic_interfaces::execution_environment::{AvailableMemory, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{SubnetAvailableMemory, WasmExecutionOutput};
 use ic_replicated_state::{
     page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
 };
@@ -22,7 +22,7 @@ pub struct SandboxExecInput {
     pub globals: Vec<Global>,
     pub canister_current_memory_usage: NumBytes,
     pub execution_parameters: ExecutionParameters,
-    pub subnet_available_memory: AvailableMemory,
+    pub subnet_available_memory: SubnetAvailableMemory,
     pub next_wasm_memory_id: MemoryId,
     pub next_stable_memory_id: MemoryId,
     // View of the system_state that is safe for the sandboxed process to

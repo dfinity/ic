@@ -19,8 +19,8 @@ use ic_ic00_types::{
 };
 use ic_interfaces::{
     execution_environment::{
-        AvailableMemory, ExecutionMode, IngressHistoryWriter, QueryHandler,
-        RegistryExecutionSettings, SubnetAvailableMemory,
+        ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
+        SubnetAvailableMemory,
     },
     messages::CanisterInputMessage,
     messages::RequestOrIngress,
@@ -307,12 +307,12 @@ impl ExecutionTest {
             .execution_cost(num_instructions, self.subnet_size())
     }
 
-    pub fn subnet_available_memory(&self) -> AvailableMemory {
-        self.subnet_available_memory.get()
+    pub fn subnet_available_memory(&self) -> SubnetAvailableMemory {
+        self.subnet_available_memory
     }
 
-    pub fn set_subnet_available_memory(&mut self, memory: AvailableMemory) {
-        self.subnet_available_memory.set(memory)
+    pub fn set_subnet_available_memory(&mut self, memory: SubnetAvailableMemory) {
+        self.subnet_available_memory = memory
     }
 
     pub fn metrics_registry(&self) -> &MetricsRegistry {
@@ -736,7 +736,7 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            subnet_available_memory: self.subnet_available_memory.get().into(),
+            subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
         let (canister, instructions_used, result) = self.exec_env.execute_canister_heartbeat(
@@ -747,8 +747,7 @@ impl ExecutionTest {
             &mut round_limits,
             self.subnet_size(),
         );
-        self.subnet_available_memory
-            .set(round_limits.subnet_available_memory.get());
+        self.subnet_available_memory = round_limits.subnet_available_memory;
         state.put_canister_state(canister);
         if let Ok(heap_delta) = result {
             state.metadata.heap_delta_estimate += heap_delta;
@@ -798,7 +797,7 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            subnet_available_memory: self.subnet_available_memory.get().into(),
+            subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
         let result = self.exec_env.execute_canister_response(
@@ -821,8 +820,7 @@ impl ExecutionTest {
                 unreachable!("Unexpected paused execution")
             }
         };
-        self.subnet_available_memory
-            .set(round_limits.subnet_available_memory.get());
+        self.subnet_available_memory = round_limits.subnet_available_memory;
 
         state.metadata.heap_delta_estimate += heap_delta;
         self.update_execution_stats(
@@ -895,7 +893,7 @@ impl ExecutionTest {
         let maybe_canister_id = get_canister_id_if_install_code(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            subnet_available_memory: self.subnet_available_memory.get().into(),
+            subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
         let (new_state, instructions_used) = self.exec_env.execute_subnet_message(
@@ -907,8 +905,7 @@ impl ExecutionTest {
             &self.registry_settings,
             &mut round_limits,
         );
-        self.subnet_available_memory
-            .set(round_limits.subnet_available_memory.get());
+        self.subnet_available_memory = round_limits.subnet_available_memory;
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             if let Some(instructions_used) = instructions_used {
@@ -946,7 +943,7 @@ impl ExecutionTest {
         let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            subnet_available_memory: self.subnet_available_memory.get().into(),
+            subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
         for canister_id in canister_ids {
@@ -969,8 +966,7 @@ impl ExecutionTest {
                     self.subnet_size(),
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
-                self.subnet_available_memory
-                    .set(round_limits.subnet_available_memory.get());
+                self.subnet_available_memory = round_limits.subnet_available_memory;
                 if let Some(instructions_used) = result.instructions_used {
                     self.update_execution_stats(
                         canister_id,
@@ -987,8 +983,7 @@ impl ExecutionTest {
             }
             canisters.insert(canister_id, canister);
         }
-        self.subnet_available_memory
-            .set(round_limits.subnet_available_memory.get());
+        self.subnet_available_memory = round_limits.subnet_available_memory;
         state.put_canister_states(canisters);
         self.state = Some(state);
         executed_any
@@ -1021,7 +1016,7 @@ impl ExecutionTest {
                 state.put_canister_states(canisters);
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
-                    subnet_available_memory: self.subnet_available_memory.get().into(),
+                    subnet_available_memory: self.subnet_available_memory,
                     compute_allocation_used,
                 };
                 let (new_state, instructions_used) = self.exec_env.resume_install_code(
@@ -1032,8 +1027,7 @@ impl ExecutionTest {
                     self.subnet_size(),
                 );
                 state = new_state;
-                self.subnet_available_memory
-                    .set(round_limits.subnet_available_memory.get());
+                self.subnet_available_memory = round_limits.subnet_available_memory;
                 if let Some(instructions_used) = instructions_used {
                     self.update_execution_stats(
                         canister_id,
@@ -1045,7 +1039,7 @@ impl ExecutionTest {
             NextExecution::StartNew | NextExecution::ContinueLong => {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
-                    subnet_available_memory: self.subnet_available_memory.get().into(),
+                    subnet_available_memory: self.subnet_available_memory,
                     compute_allocation_used,
                 };
                 let result = execute_canister(
@@ -1058,8 +1052,7 @@ impl ExecutionTest {
                     self.subnet_size(),
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
-                self.subnet_available_memory
-                    .set(round_limits.subnet_available_memory.get());
+                self.subnet_available_memory = round_limits.subnet_available_memory;
                 if let Some(instructions_used) = result.instructions_used {
                     self.update_execution_stats(
                         canister_id,
@@ -1115,7 +1108,7 @@ impl ExecutionTest {
     /// `self.xnet_messages`.
     pub fn induct_messages(&mut self) {
         let mut state = self.state.take().unwrap();
-        let mut subnet_available_memory = self.subnet_available_memory.get().get_total_memory();
+        let mut subnet_available_memory = self.subnet_available_memory.get_total_memory();
         let max_canister_memory_size = self.exec_env.max_canister_memory_size();
         let output_messages = get_output_messages(&mut state);
         let mut canisters = state.take_canister_states();
@@ -1633,10 +1626,10 @@ impl ExecutionTestBuilder {
             execution_cost: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
-            subnet_available_memory: SubnetAvailableMemory::from(AvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new(
                 self.subnet_total_memory,
                 self.subnet_message_memory,
-            )),
+            ),
             time: mock_time(),
             instruction_limits: InstructionLimits::new(
                 deterministic_time_slicing,

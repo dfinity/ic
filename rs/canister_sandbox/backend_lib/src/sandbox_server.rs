@@ -148,7 +148,7 @@ mod tests {
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_cycles_account_manager::CyclesAccountManager;
-    use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
+    use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
@@ -245,7 +245,7 @@ mod tests {
             globals,
             canister_current_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
-            subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
+            subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
             next_wasm_memory_id,
             next_stable_memory_id,
             sandox_safe_system_state: sandbox_safe_system_state(),
@@ -269,7 +269,7 @@ mod tests {
             globals,
             canister_current_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
-            subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
+            subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
             next_wasm_memory_id: MemoryId::new(),
             next_stable_memory_id: MemoryId::new(),
             sandox_safe_system_state: sandbox_safe_system_state(),

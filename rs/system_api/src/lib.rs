@@ -8,7 +8,7 @@ pub mod system_api_empty;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionComplexity, ExecutionMode,
+    ExecutionComplexity, ExecutionMode,
     HypervisorError::{self, *},
     HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, SubnetAvailableMemory,
     SystemApi,
@@ -561,7 +561,7 @@ impl MemoryUsage {
         canister_id: CanisterId,
         limit: NumBytes,
         current_usage: NumBytes,
-        subnet_available_memory: AvailableMemory,
+        subnet_available_memory: SubnetAvailableMemory,
     ) -> Self {
         // A canister's current usage should never exceed its limit. This is
         // most probably a bug. Panicking here due to this inconsistency has the
@@ -579,7 +579,7 @@ impl MemoryUsage {
         Self {
             limit,
             current_usage,
-            subnet_available_memory: subnet_available_memory.into(),
+            subnet_available_memory,
             total_allocated_memory: NumBytes::from(0),
             allocated_message_memory: NumBytes::from(0),
             log,
@@ -726,7 +726,7 @@ impl SystemApiImpl {
         sandbox_safe_system_state: SandboxSafeSystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
-        subnet_available_memory: AvailableMemory,
+        subnet_available_memory: SubnetAvailableMemory,
         stable_memory: Memory,
         out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,

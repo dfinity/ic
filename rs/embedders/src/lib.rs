@@ -8,7 +8,7 @@ pub mod wasmtime_embedder;
 use std::{sync::Arc, time::Duration};
 
 pub use compilation_cache::CompilationCache;
-use ic_interfaces::execution_environment::AvailableMemory;
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_replicated_state::{Global, NumWasmPages, PageIndex};
 use ic_sys::PageBytes;
 use ic_system_api::{
@@ -24,7 +24,7 @@ pub struct WasmExecutionInput {
     pub sandbox_safe_system_state: SandboxSafeSystemState,
     pub canister_current_memory_usage: NumBytes,
     pub execution_parameters: ExecutionParameters,
-    pub subnet_available_memory: AvailableMemory,
+    pub subnet_available_memory: SubnetAvailableMemory,
     pub func_ref: FuncRef,
     pub compilation_cache: Arc<CompilationCache>,
 }

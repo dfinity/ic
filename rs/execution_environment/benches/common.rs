@@ -13,7 +13,7 @@ use ic_execution_environment::{
     IngressHistoryWriterImpl, RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_logger::replica_logger::no_op_logger;
@@ -48,7 +48,7 @@ pub const USER_ID: u64 = 0;
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        AvailableMemory::new(i64::MAX, i64::MAX).into();
+        SubnetAvailableMemory::new(i64::MAX, i64::MAX);
 }
 
 /// Pieces needed to execute a benchmark.
@@ -82,7 +82,7 @@ where
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
-        subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
         compute_allocation_used: 0,
     };
     let execution_state = hypervisor
@@ -164,7 +164,7 @@ where
         time: mock_time(),
         network_topology,
         execution_parameters,
-        subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
         call_origin,
         callback,
     }

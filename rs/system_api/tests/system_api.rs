@@ -3,8 +3,8 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    AvailableMemory, CanisterOutOfCyclesError, HypervisorError, HypervisorResult,
-    PerformanceCounterType, SystemApi, TrapCode,
+    CanisterOutOfCyclesError, HypervisorError, HypervisorResult, PerformanceCounterType,
+    SubnetAvailableMemory, SystemApi, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
@@ -1488,7 +1488,7 @@ fn call_perform_not_enough_cycles_resets_state() {
 fn stable_grow_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = AvailableMemory::new(subnet_available_memory_bytes, 0);
+    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
@@ -1520,7 +1520,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
     // Subnet with stable memory size above what can be represented on 32 bits.
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = AvailableMemory::new(subnet_available_memory_bytes, 0);
+    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
@@ -1563,7 +1563,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
 fn update_available_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = AvailableMemory::new(subnet_available_memory_bytes, 0);
+    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
@@ -1594,7 +1594,7 @@ fn update_available_memory_updates_subnet_available_memory() {
 
 #[test]
 fn take_execution_result_properly_frees_memory() {
-    let subnet_available_memory = AvailableMemory::new(1 << 30, 1 << 30);
+    let subnet_available_memory = SubnetAvailableMemory::new(1 << 30, 1 << 30);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
@@ -1649,7 +1649,7 @@ fn take_execution_result_properly_frees_memory() {
 #[test]
 fn push_output_request_respects_memory_limits() {
     let run_test = |subnet_available_memory_bytes, subnet_available_message_memory_bytes| {
-        let subnet_available_memory = AvailableMemory::new(
+        let subnet_available_memory = SubnetAvailableMemory::new(
             subnet_available_memory_bytes,
             subnet_available_message_memory_bytes,
         );
@@ -1747,7 +1747,8 @@ fn push_output_request_respects_memory_limits() {
 #[test]
 fn push_output_request_oversized_request_memory_limits() {
     let subnet_available_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
-    let subnet_available_memory = AvailableMemory::new(subnet_available_memory_bytes, 1 << 30);
+    let subnet_available_memory =
+        SubnetAvailableMemory::new(subnet_available_memory_bytes, 1 << 30);
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
