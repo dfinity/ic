@@ -258,7 +258,7 @@ impl<Message: Signable, C: MultiSigner<Message> + MultiSigVerifier<Message>>
 
     fn aggregate(
         &self,
-        shares: Vec<&MultiSignatureShare<Message>>,
+        mut shares: Vec<&MultiSignatureShare<Message>>,
         selector: RegistryVersion,
     ) -> CryptoResult<MultiSignature<Message>> {
         let signer_share_map = shares
@@ -266,6 +266,8 @@ impl<Message: Signable, C: MultiSigner<Message> + MultiSigVerifier<Message>>
             .map(|share| (share.signer, share.signature.clone()))
             .collect();
         let signature = self.combine_multi_sig_individuals(signer_share_map, selector)?;
+        shares.sort_unstable_by_key(|s| s.signer);
+        shares.dedup_by_key(|s| s.signer);
         let signers = shares.iter().map(|share| share.signer).collect();
         Ok(MultiSignature { signature, signers })
     }
@@ -344,7 +346,7 @@ where
 
     fn aggregate(
         &self,
-        shares: Vec<&MultiSignatureShare<CryptoHashOf<Message>>>,
+        mut shares: Vec<&MultiSignatureShare<CryptoHashOf<Message>>>,
         selector: RegistryVersion,
     ) -> CryptoResult<MultiSignature<CryptoHashOf<Message>>> {
         let signer_share_map = shares
@@ -352,6 +354,8 @@ where
             .map(|share| (share.signer, share.signature.clone()))
             .collect();
         let signature = self.combine_multi_sig_individuals(signer_share_map, selector)?;
+        shares.sort_unstable_by_key(|s| s.signer);
+        shares.dedup_by_key(|s| s.signer);
         let signers = shares.iter().map(|share| share.signer).collect();
         Ok(MultiSignature { signature, signers })
     }
@@ -481,3 +485,89 @@ pub trait ConsensusCrypto:
 }
 
 impl<C: Crypto + Send + Sync> ConsensusCrypto for C {}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+    use ic_test_utilities::types::ids::node_test_id;
+    use ic_types::messages::MessageId;
+
+    struct AggregateImpl {}
+    /// Fake Aggregate implementation
+    impl MultiSigner<MessageId> for AggregateImpl {
+        fn sign_multi(
+            &self,
+            _message: &MessageId,
+            _signer: NodeId,
+            _registry_version: RegistryVersion,
+        ) -> CryptoResult<IndividualMultiSigOf<MessageId>> {
+            Ok(IndividualMultiSigOf::from(IndividualMultiSig(vec![])))
+        }
+    }
+    impl MultiSigVerifier<MessageId> for AggregateImpl {
+        fn verify_multi_sig_individual(
+            &self,
+            _signature: &IndividualMultiSigOf<MessageId>,
+            _message: &MessageId,
+            _signer: NodeId,
+            _registry_version: RegistryVersion,
+        ) -> CryptoResult<()> {
+            Ok(())
+        }
+        fn combine_multi_sig_individuals(
+            &self,
+            _signatures: BTreeMap<NodeId, IndividualMultiSigOf<MessageId>>,
+            _registry_version: RegistryVersion,
+        ) -> CryptoResult<CombinedMultiSigOf<MessageId>> {
+            Ok(CombinedMultiSigOf::from(CombinedMultiSig(vec![])))
+        }
+        fn verify_multi_sig_combined(
+            &self,
+            _signature: &CombinedMultiSigOf<MessageId>,
+            _message: &MessageId,
+            _signers: BTreeSet<NodeId>,
+            _registry_version: RegistryVersion,
+        ) -> CryptoResult<()> {
+            Ok(())
+        }
+    }
+
+    /// Assert that the MultiSignature in aggregate() does not
+    /// contain duplicate signers.
+    #[test]
+    fn test_deduplicate_signers_aggregate() {
+        let m: MessageId = [0u8; 32].into();
+        let s1 = fake_share(0, m.clone(), vec![1]);
+        let s2 = fake_share(0, m.clone(), vec![2]);
+        let s3 = fake_share(1, m, vec![1]);
+        // Block::new(id, payload, height, rank, context);
+
+        let x = AggregateImpl {};
+        let multisig = x
+            .aggregate(
+                vec![&s1.signature, &s2.signature, &s3.signature],
+                RegistryVersion::from(1),
+            )
+            .unwrap();
+
+        // the duplicate signers needed to be removed
+        assert_eq!(multisig.signers.len(), 2);
+        assert!(multisig.signers.contains(&s1.signature.signer));
+        assert!(multisig.signers.contains(&s2.signature.signer));
+    }
+
+    fn fake_share<C: Eq + Ord + Clone>(
+        signer_id: u64,
+        content: C,
+        sig: Vec<u8>,
+    ) -> Signed<C, MultiSignatureShare<C>> {
+        let signer = node_test_id(signer_id);
+        let signature = MultiSignatureShare {
+            signature: IndividualMultiSigOf::new(IndividualMultiSig(sig)),
+            signer,
+        };
+        Signed { content, signature }
+    }
+}
