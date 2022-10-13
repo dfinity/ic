@@ -1,14 +1,9 @@
 use clap::Parser;
-use ic_base_types::NodeId;
-use ic_fondue::ic_manager::{IcEndpoint, IcManagerSettings, IcSubnet, RuntimeDescriptor};
+use ic_fondue::ic_manager::IcManagerSettings;
 use ic_fondue::pot::execution::Config as ExecConfig;
 use ic_fondue::pot::Config as PotConfig;
-use ic_registry_subnet_type::SubnetType;
-use ic_types::{PrincipalId, SubnetId};
 use std::path::PathBuf;
-use std::str::FromStr;
-use std::time::{Duration, Instant};
-use url::Url;
+use std::time::Duration;
 
 impl Options {
     /// Creates a [ic_fondue::pot::Config] according to the command line options
@@ -49,38 +44,7 @@ impl Options {
                     p
                 })
                 .or(settings.tee_replica_logs_base_dir),
-            existing_endpoints: if let Some(urls) = &self.endpoint_urls {
-                let mut endpoints = Vec::new();
-                for info in urls.split(',') {
-                    let parts: Vec<&str> = info.split('/').collect();
-                    let subnet_type = parts[0];
-                    let subnet_id = SubnetId::from(
-                        PrincipalId::from_str(parts[1])
-                            .expect("cannot parse subnet id as principal"),
-                    );
-                    let subnet_addr = parts[2];
-                    endpoints.push(IcEndpoint {
-                        runtime_descriptor: RuntimeDescriptor::Unknown,
-                        url: Url::parse(&format!("http://{}", subnet_addr)).unwrap(),
-                        is_root_subnet: subnet_type == "nns",
-                        subnet: Some(IcSubnet {
-                            id: subnet_id,
-                            type_of: if subnet_type == "nns" {
-                                SubnetType::System
-                            } else {
-                                SubnetType::Application
-                            },
-                        }),
-                        metrics_url: None,
-                        started_at: Instant::now(),
-                        // this interface is deprecated and that's why we use a fake id here
-                        node_id: NodeId::from(PrincipalId::new_node_test_id(0)),
-                    })
-                }
-                Some(endpoints)
-            } else {
-                None
-            },
+            existing_endpoints: None,
         }
     }
 
@@ -132,12 +96,6 @@ Verbosity control. Using -v makes the tests a little chatty while
         help = "Saves the logs of every replica to a dedicated file, unique for corresponding pot and channel."
     )]
     pub tee_replica_logs_base_dir: Option<PathBuf>,
-
-    #[clap(
-        long = "endpoint-urls",
-        help = "If specified, execute eligible system tests against a running IC."
-    )]
-    pub endpoint_urls: Option<String>,
 
     #[clap(
         long = "timeout",

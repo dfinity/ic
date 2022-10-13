@@ -94,7 +94,11 @@ pub fn test(env: TestEnv) {
 
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";
-    let app_can_id = store_message(&upload_node.get_public_url(), msg);
+    let app_can_id = store_message(
+        &upload_node.get_public_url(),
+        upload_node.effective_canister_id(),
+        msg,
+    );
     assert!(can_read_msg(
         &logger,
         &upload_node.get_public_url(),
@@ -196,7 +200,13 @@ pub fn test(env: TestEnv) {
     upload_node.await_status_is_healthy().unwrap();
 
     info!(logger, "Wait for state sync to complete");
-    can_install_canister_with_retries(&upload_node.get_public_url(), &logger, secs(600), secs(10));
+    can_install_canister_with_retries(
+        &upload_node.get_public_url(),
+        upload_node.effective_canister_id(),
+        &logger,
+        secs(600),
+        secs(10),
+    );
 
     info!(logger, "Ensure the old message is still readable");
     assert!(can_read_msg(
@@ -210,7 +220,19 @@ pub fn test(env: TestEnv) {
         logger,
         "Ensure that the subnet is accepting updates after the recovery"
     );
-    let new_app_can_id = store_message(&upload_node.get_public_url(), new_msg);
+    let topo_snapshot = topo_snapshot
+        .block_for_newer_registry_version()
+        .expect("Could not obtain updated registry.");
+    let upload_node = topo_snapshot
+        .subnets()
+        .flat_map(|s| s.nodes())
+        .find(|n| n.node_id == upload_node.node_id)
+        .expect("Could not find upload_node in updated registry.");
+    let new_app_can_id = store_message(
+        &upload_node.get_public_url(),
+        upload_node.effective_canister_id(),
+        new_msg,
+    );
     assert!(can_read_msg(
         &logger,
         &upload_node.get_public_url(),

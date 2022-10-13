@@ -82,24 +82,31 @@ pub struct UniversalCanister<'a> {
 impl<'a> UniversalCanister<'a> {
     /// Initializes a [UniversalCanister] using the provided [Agent] and
     /// allocates some stable memory at canister installation.
-    pub async fn new(agent: &'a Agent) -> UniversalCanister<'a> {
-        Self::new_with_params(agent, None, None, None)
+    pub async fn new(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+    ) -> UniversalCanister<'a> {
+        Self::new_with_params(agent, effective_canister_id, None, None, None)
             .await
             .expect("Could not create universal canister.")
     }
 
-    pub async fn try_new(agent: &'a Agent) -> Result<UniversalCanister<'a>, String> {
-        Self::new_with_params(agent, None, None, None).await
+    pub async fn try_new(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+    ) -> Result<UniversalCanister<'a>, String> {
+        Self::new_with_params(agent, effective_canister_id, None, None, None).await
     }
 
     pub async fn new_with_retries(
         agent: &'a Agent,
+        effective_canister_id: PrincipalId,
         log: &slog::Logger,
         timeout: Duration,
         backoff: Duration,
     ) -> UniversalCanister<'a> {
         retry_async(log, timeout, backoff, || async {
-            match Self::new_with_params(agent, None, None, None).await {
+            match Self::new_with_params(agent, effective_canister_id, None, None, None).await {
                 Ok(c) => Ok(c),
                 Err(e) => anyhow::bail!(e),
             }
@@ -110,6 +117,7 @@ impl<'a> UniversalCanister<'a> {
 
     pub async fn new_with_params(
         agent: &'a Agent,
+        effective_canister_id: PrincipalId,
         compute_allocation: Option<u64>,
         cycles: Option<u128>,
         pages: Option<u32>,
@@ -125,6 +133,7 @@ impl<'a> UniversalCanister<'a> {
             .create_canister()
             .with_optional_compute_allocation(compute_allocation)
             .as_provisional_create_with_amount(cycles)
+            .with_effective_canister_id(effective_canister_id)
             .call_and_wait(delay())
             .await
             .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
@@ -141,6 +150,7 @@ impl<'a> UniversalCanister<'a> {
 
     pub async fn new_with_cycles<C: Into<u128>>(
         agent: &'a Agent,
+        effective_canister_id: PrincipalId,
         cycles: C,
     ) -> UniversalCanister<'a> {
         let payload = universal_canister_argument_builder().stable_grow(1).build();
@@ -150,6 +160,7 @@ impl<'a> UniversalCanister<'a> {
         let canister_id = mgr
             .create_canister()
             .as_provisional_create_with_amount(Some(cycles.into()))
+            .with_effective_canister_id(effective_canister_id)
             .call_and_wait(delay())
             .await
             .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
@@ -167,6 +178,7 @@ impl<'a> UniversalCanister<'a> {
 
     pub async fn new_with_64bit_stable_memory(
         agent: &'a Agent,
+        effective_canister_id: PrincipalId,
     ) -> Result<UniversalCanister<'a>, String> {
         let payload = universal_canister_argument_builder()
             .stable64_grow(1)
@@ -177,6 +189,7 @@ impl<'a> UniversalCanister<'a> {
         let canister_id = mgr
             .create_canister()
             .as_provisional_create_with_amount(None)
+            .with_effective_canister_id(effective_canister_id)
             .call_and_wait(delay())
             .await
             .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
@@ -687,7 +700,7 @@ pub fn get_unassinged_nodes_endpoints(handle: &IcHandle) -> Vec<&IcEndpoint> {
 // - We retrieve the saved string by sending `query` message to a canister
 pub(crate) async fn assert_subnet_can_make_progress(message: &[u8], endpoint: &IcEndpoint) {
     let agent = assert_create_agent(endpoint.url.as_str()).await;
-    let universal_canister = UniversalCanister::new(&agent).await;
+    let universal_canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
     universal_canister.store_to_stable(0, message).await;
     assert_eq!(
         universal_canister
@@ -794,13 +807,24 @@ pub(crate) fn assert_http_submit_fails(
     }
 }
 
-pub(crate) async fn create_and_install(agent: &Agent, canister_wasm: &[u8]) -> Principal {
+pub(crate) async fn create_and_install(
+    agent: &Agent,
+    effective_canister_id: PrincipalId,
+    canister_wasm: &[u8],
+) -> Principal {
     // Initialize the canister with a healthy amount of cycles.
-    create_and_install_with_cycles(agent, canister_wasm, CYCLES_LIMIT_PER_CANISTER).await
+    create_and_install_with_cycles(
+        agent,
+        effective_canister_id,
+        canister_wasm,
+        CYCLES_LIMIT_PER_CANISTER,
+    )
+    .await
 }
 
 pub(crate) async fn create_and_install_with_cycles(
     agent: &Agent,
+    effective_canister_id: PrincipalId,
     canister_wasm: &[u8],
     amount: Cycles,
 ) -> Principal {
@@ -808,6 +832,7 @@ pub(crate) async fn create_and_install_with_cycles(
     let canister_id = mgr
         .create_canister()
         .as_provisional_create_with_amount(Some(amount.into()))
+        .with_effective_canister_id(effective_canister_id)
         .call_and_wait(delay())
         .await
         .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))

@@ -71,7 +71,8 @@ pub fn create_canister_via_canister_succeeds(handle: IcHandle, ctx: &ic_fondue::
 
             // Create a canister for the user using the provisional API.
             // This universal canister acts as the user's wallet canister.
-            let wallet_canister = UniversalCanister::new(&agent).await;
+            let wallet_canister =
+                UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // User requests from its wallet to create a new canister.
             let canister_id = create_canister_via_canister(&wallet_canister)
@@ -109,7 +110,7 @@ pub fn create_canister_with_controller_and_controllers_fails(
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister_a = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             assert_reject(
                 canister_a
@@ -147,7 +148,7 @@ pub fn update_settings_with_controller_and_controllers_fails(
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister_a = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             let canister_b = canister_a
                 .update(wasm().call(management::create_canister(
@@ -186,7 +187,7 @@ pub fn create_canister_with_one_controller(handle: IcHandle, ctx: &ic_fondue::po
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             let canister_b = canister_a
                 .update(
@@ -236,8 +237,8 @@ pub fn update_settings_multiple_controllers(handle: IcHandle, ctx: &ic_fondue::p
                 .await
                 .unwrap();
             let mgr = ManagementCanister::create(&agent);
-            let canister_a = UniversalCanister::new(&agent).await;
-            let canister_b = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // A creates C
             let canister_c = canister_a
@@ -361,7 +362,7 @@ pub fn create_canister_with_no_controllers(handle: IcHandle, ctx: &ic_fondue::po
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             let canister_b = canister_a
                 .update(
@@ -399,8 +400,8 @@ pub fn create_canister_with_multiple_controllers(handle: IcHandle, ctx: &ic_fond
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
-            let canister_b = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             let controllers = vec![canister_a.canister_id(), canister_b.canister_id()];
 
@@ -480,12 +481,16 @@ pub fn create_canister_with_too_many_controllers_fails(
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let mut controllers = vec![];
 
             // Setting more than maximum number of controllers allowed.
             for _ in 0..15 {
-                controllers.push(UniversalCanister::new(&agent).await.canister_id())
+                controllers.push(
+                    UniversalCanister::new(&agent, endpoint.effective_canister_id())
+                        .await
+                        .canister_id(),
+                )
             }
 
             // Canister A creates C with multiple controllers
@@ -520,7 +525,8 @@ pub fn managing_a_canister_with_wrong_controller_fails(
                 .unwrap();
 
             // Create a canister for the user using the provisional API.
-            let wallet_canister = UniversalCanister::new(&agent1).await;
+            let wallet_canister =
+                UniversalCanister::new(&agent1, endpoint.effective_canister_id()).await;
 
             // User2 tries to manage the canister and fails.
             let user2 = random_ed25519_identity();
@@ -585,7 +591,7 @@ pub fn delete_stopped_canister_succeeds(handle: IcHandle, ctx: &ic_fondue::pot::
             let mgr = ManagementCanister::create(&agent);
 
             // Create a canister for the user using the provisional API.
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // Stop the canister
             mgr.stop_canister(&canister.canister_id())
@@ -621,7 +627,7 @@ pub fn delete_running_canister_fails(handle: IcHandle, ctx: &ic_fondue::pot::Con
             let mgr = ManagementCanister::create(&agent);
 
             // Create a canister for the user using the provisional API.
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // Delete the canister.
             let res = mgr
@@ -653,6 +659,7 @@ pub fn canister_large_wasm_small_memory_allocation(
             let canister_id = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .with_memory_allocation(1u64)
                 .call_and_wait(delay())
                 .await
@@ -695,6 +702,7 @@ pub fn canister_large_initial_memory_small_memory_allocation(
             let canister_id = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .expect("Couldn't create canister with provisional API.")
@@ -741,7 +749,7 @@ pub fn canister_can_manage_other_canister(handle: IcHandle, ctx: &ic_fondue::pot
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister_a = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             let canister_b = canister_a
                 .update(wasm().call(management::create_canister(
@@ -790,7 +798,7 @@ pub fn canister_can_manage_other_canister_batched(handle: IcHandle, ctx: &ic_fon
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister_a = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let canister_b = canister_a
                 .update(wasm().call(management::create_canister(
                     Cycles::from(2_000_000_000_000u64).into_parts(),
@@ -855,6 +863,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         let cans = join_all((0..app_sched_cores).map(|_| {
             UniversalCanister::new_with_params(
                 &agent,
+                endpoint.effective_canister_id(),
                 MAX_COMP_ALLOC,
                 Some(std::u64::MAX as u128),
                 None,
@@ -871,6 +880,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         // Installing the app_sched_cores + 1st canister should fail.
         let can = UniversalCanister::new_with_params(
             &agent,
+            endpoint.effective_canister_id(),
             MAX_COMP_ALLOC,
             Some(std::u64::MAX as u128),
             None,
@@ -900,10 +910,15 @@ pub fn total_compute_allocation_cannot_be_exceeded(
             .for_each(|x| x.expect("Could not delete canister."));
 
         // Create universal canister with 'best effort' compute allocation of `0`.
-        let uni_can =
-            UniversalCanister::new_with_params(&agent, Some(0), Some(std::u64::MAX as u128), None)
-                .await
-                .expect("Could not create and install universal canister.");
+        let uni_can = UniversalCanister::new_with_params(
+            &agent,
+            endpoint.effective_canister_id(),
+            Some(0),
+            Some(std::u64::MAX as u128),
+            None,
+        )
+        .await
+        .expect("Could not create and install universal canister.");
         let arbitrary_bytes = b";ioapusdvzn,x";
 
         async fn install_canister(
@@ -970,6 +985,7 @@ pub fn canisters_with_low_balance_are_deallocated(handle: IcHandle, ctx: &ic_fon
             let canister_id = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(Some(0))
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .expect("Couldn't create canister with provisional API.")
@@ -1020,7 +1036,12 @@ pub fn canisters_are_deallocated_when_their_balance_falls(
             let create_canister_cycles = 2_000_000_000_000;
             let transfer_cycles = 8_000_000_000_000;
 
-            let canister_a = UniversalCanister::new_with_cycles(&agent, initial_cycles).await;
+            let canister_a = UniversalCanister::new_with_cycles(
+                &agent,
+                endpoint.effective_canister_id(),
+                initial_cycles,
+            )
+            .await;
 
             // Canister A created canister B with some cycles on it.
             let canister_b = create_canister_via_canister_with_cycles(
@@ -1073,7 +1094,7 @@ fn create_canister_test(handle: IcHandle, ctx: &ic_fondue::pot::Context, payload
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister_a = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             canister_a
                 .forward_with_cycles_to(
@@ -1146,6 +1167,7 @@ pub fn provisional_create_canister_with_no_settings(
             let mgr = ManagementCanister::create(&agent);
             mgr.create_canister()
                 .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .unwrap_or_else(|err| {
@@ -1164,7 +1186,7 @@ pub fn create_canister_with_freezing_threshold(handle: IcHandle, ctx: &ic_fondue
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             for valid_value in [u64::MAX, 0].iter() {
                 // Create the canister with the freezing threshold set.
@@ -1226,7 +1248,7 @@ pub fn create_canister_with_invalid_freezing_threshold_fails(
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             for invalid_value in [
                 candid::Nat::from(u128::MAX),
@@ -1269,8 +1291,14 @@ pub fn controller_and_controllee_on_different_subnets(
             endpoint_1.assert_ready(ctx).await;
 
             let combinations = vec![
-                (endpoint_0.url.clone(), endpoint_1.url.clone()),
-                (endpoint_1.url.clone(), endpoint_0.url.clone()),
+                (
+                    (endpoint_0.url.clone(), endpoint_0.effective_canister_id()),
+                    (endpoint_1.url.clone(), endpoint_1.effective_canister_id()),
+                ),
+                (
+                    (endpoint_1.url.clone(), endpoint_1.effective_canister_id()),
+                    (endpoint_0.url.clone(), endpoint_0.effective_canister_id()),
+                ),
             ];
 
             async fn install_via_cr(
@@ -1286,12 +1314,12 @@ pub fn controller_and_controllee_on_different_subnets(
                 .await
             }
 
-            for (cr, ce) in combinations {
+            for ((cr, cr_ecid), (ce, ce_ecid)) in combinations {
                 let controller_agent = assert_create_agent(cr.as_str()).await;
                 let controllee_agent = assert_create_agent(ce.as_str()).await;
 
-                let controller = UniversalCanister::new(&controller_agent).await;
-                let controllee = UniversalCanister::new(&controllee_agent).await;
+                let controller = UniversalCanister::new(&controller_agent, cr_ecid).await;
+                let controllee = UniversalCanister::new(&controllee_agent, ce_ecid).await;
 
                 // before setting the controller, this call must fail.
                 assert_reject(
@@ -1341,8 +1369,18 @@ pub fn refunds_after_uninstall_are_refunded(handle: IcHandle, ctx: &ic_fondue::p
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-            let canister_a = UniversalCanister::new_with_cycles(&agent, 100u64).await;
-            let canister_b = UniversalCanister::new_with_cycles(&agent, 100u64).await;
+            let canister_a = UniversalCanister::new_with_cycles(
+                &agent,
+                endpoint.effective_canister_id(),
+                100u64,
+            )
+            .await;
+            let canister_b = UniversalCanister::new_with_cycles(
+                &agent,
+                endpoint.effective_canister_id(),
+                100u64,
+            )
+            .await;
 
             let a_balance = get_balance(&canister_a.canister_id(), &agent).await;
             let b_balance = get_balance(&canister_b.canister_id(), &agent).await;
@@ -1414,20 +1452,23 @@ pub fn creating_canisters_fails_if_limit_of_allowed_canisters_is_reached(
             // Create 3 canisters when 3 are allowed, should succeed.
             mgr.create_canister()
                 .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .unwrap();
             mgr.create_canister()
                 .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .unwrap();
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // Attempt to create a fourth canister when only 3 are allowed, should fail.
             let res = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(endpoint.effective_canister_id())
                 .call_and_wait(delay())
                 .await;
             assert_reject(res, RejectCode::SysFatal);

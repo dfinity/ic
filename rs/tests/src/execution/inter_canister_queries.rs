@@ -33,8 +33,13 @@ pub fn cannot_query_xnet_canister(handle: IcHandle, ctx: &ic_fondue::pot::Contex
             endpoint_application.assert_ready(ctx).await;
             let agent_application = assert_create_agent(endpoint_application.url.as_str()).await;
 
-            let canister_a = UniversalCanister::new(&agent_nns).await;
-            let canister_b = UniversalCanister::new(&agent_application).await;
+            let canister_a =
+                UniversalCanister::new(&agent_nns, endpoint_nns.effective_canister_id()).await;
+            let canister_b = UniversalCanister::new(
+                &agent_application,
+                endpoint_application.effective_canister_id(),
+            )
+            .await;
 
             let res = canister_a
                 .query(wasm().inter_query(canister_b.canister_id(), call_args()))
@@ -53,7 +58,7 @@ pub fn simple_query(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let arbitrary_bytes = b"l49sdk";
             assert_eq!(
                 canister
@@ -75,7 +80,7 @@ pub fn self_loop_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let res = canister
                 .query(wasm().inter_query(canister.canister_id(), call_args()))
                 .await;
@@ -93,8 +98,8 @@ pub fn canisters_loop_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
-            let canister_b = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let res = canister_a
                 .query(
                     wasm().inter_query(
@@ -119,8 +124,8 @@ pub fn intermediate_canister_does_not_reply(handle: IcHandle, ctx: &ic_fondue::p
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
-            let canister_b = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let res = canister_a
                 .query(
                     wasm().inter_query(
@@ -146,8 +151,8 @@ pub fn query_two_canisters(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
-            let canister_b = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let arbitrary_bytes = b";ioapusdvzn,x";
             assert_eq!(
                 canister_a
@@ -173,9 +178,9 @@ pub fn query_three_canisters(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
-            let canister_b = UniversalCanister::new(&agent).await;
-            let canister_c = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_c = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let arbitrary_bytes = b";ioapusdvzn,x";
             assert_eq!(
                 canister_a
@@ -203,7 +208,7 @@ pub fn canister_queries_non_existent(handle: IcHandle, ctx: &ic_fondue::pot::Con
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let non_existent = CanisterId::from(12345);
             let res = canister_a
                 .query(wasm().inter_query(non_existent, call_args()))
@@ -223,8 +228,8 @@ pub fn canister_queries_does_not_reply(handle: IcHandle, ctx: &ic_fondue::pot::C
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent).await;
-            let canister_b = UniversalCanister::new(&agent).await;
+            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             let res = canister_a
                 .query(wasm().inter_query(
                     canister_b.canister_id(),
@@ -266,7 +271,7 @@ endpoint.assert_ready(ctx).await;
               (export "canister_query hi" (func $hi)))"#,
             )
                 .unwrap();
-            let canister_b = create_and_install(&agent, &canister_b_wasm).await;
+            let canister_b = create_and_install(&agent, endpoint.effective_canister_id(), &canister_b_wasm).await;
 
             let canister_a_wasm = wabt::wat2wasm(format!(
                 r#"(module
@@ -338,7 +343,7 @@ endpoint.assert_ready(ctx).await;
                 canister_b.as_slice().len(),
                 canister_b.as_slice().len(),
                 escape_for_wat(&canister_b))).unwrap();
-            let canister_a = create_and_install(&agent, &canister_a_wasm).await;
+            let canister_a = create_and_install(&agent, endpoint.effective_canister_id(), &canister_a_wasm).await;
             let result = agent.query(&canister_a, "hi").with_arg(vec![5]).call().await.unwrap();
             assert_eq!(result, vec![5]);
         }

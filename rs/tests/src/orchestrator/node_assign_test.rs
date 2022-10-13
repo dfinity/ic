@@ -130,7 +130,10 @@ pub fn test(env: TestEnv) {
     // `update` messages).
     info!(logger, "Creating a canister using selected app node");
     let agent = block_on(assert_create_agent(app_node.get_public_url().as_str()));
-    let universal_canister = block_on(UniversalCanister::new(&agent));
+    let universal_canister = block_on(UniversalCanister::new(
+        &agent,
+        app_node.effective_canister_id(),
+    ));
 
     // Assert that `update` call to the canister succeeds.
     info!(logger, "Assert that update call to the canister succeeds");

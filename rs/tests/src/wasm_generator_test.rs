@@ -3,6 +3,7 @@ use crate::util;
 use candid::Encode;
 use ic_agent::export::Principal;
 use ic_agent::Agent;
+use ic_base_types::PrincipalId;
 use ic_fondue::ic_manager::IcHandle;
 use ic_fondue::{self};
 use ic_registry_subnet_type::SubnetType;
@@ -39,8 +40,12 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
         for p in can_paths {
             info!(ctx.logger, "Installing canister {:?}..", p);
-            let cid =
-                install_random_canister(&agent, &p.expect("canister path incorrect").path()).await;
+            let cid = install_random_canister(
+                &agent,
+                node.effective_canister_id(),
+                &p.expect("canister path incorrect").path(),
+            )
+            .await;
             info!(ctx.logger, "Send query to canister");
             // Verify that the compute function exported by the installed canister can be
             // called.
@@ -54,7 +59,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     });
 }
 
-async fn install_random_canister(agent: &Agent, canister_path: &Path) -> Principal {
+async fn install_random_canister(
+    agent: &Agent,
+    effective_canister_id: PrincipalId,
+    canister_path: &Path,
+) -> Principal {
     let random_canister: Vec<u8> =
         fs::read(&canister_path).expect("could not load random canister");
 
@@ -62,6 +71,7 @@ async fn install_random_canister(agent: &Agent, canister_path: &Path) -> Princip
     let cid = mgr
         .create_canister()
         .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(effective_canister_id)
         .call_and_wait(util::delay())
         .await
         .expect("failed to create a canister")

@@ -94,7 +94,14 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let re_seed: [u8; 32] = rng.gen();
         let mut rng = rand_chacha::ChaCha8Rng::from_seed(re_seed);
 
-        let plan = populate_plan(&rt, &agent, &plan, &mut rng).await;
+        let plan = populate_plan(
+            &rt,
+            &agent,
+            root_endpoint.effective_canister_id(),
+            &plan,
+            &mut rng,
+        )
+        .await;
         info!(ctx.logger, "populated plan is {:?}", plan);
 
         // convert the test plan to actions
@@ -109,6 +116,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
 mod holder {
     use canister_test::{Canister, Runtime, Wasm};
+    use ic_base_types::PrincipalId;
     use ic_types::CanisterId;
     use ic_utils::interfaces::ManagementCanister;
     use std::convert::TryFrom;
@@ -116,12 +124,17 @@ mod holder {
     const HOLDER_CANISTER_WASM: &[u8] = include_bytes!("./transaction_ledger_correctness.wasm");
 
     #[allow(clippy::needless_lifetimes)]
-    pub async fn new<'a>(rt: &'a Runtime, agent: &ic_agent::Agent) -> Canister<'a> {
+    pub async fn new<'a>(
+        rt: &'a Runtime,
+        agent: &ic_agent::Agent,
+        effective_canister_id: PrincipalId,
+    ) -> Canister<'a> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
         let canister_id = mgr
             .create_canister()
             .as_provisional_create_with_amount(None)
+            .with_effective_canister_id(effective_canister_id)
             .call_and_wait(delay())
             .await
             .unwrap()
@@ -351,25 +364,26 @@ fn funds(ptr: &Result<PrincipalId, u32>, plan: &Plan) -> Tokens {
 async fn populate_plan(
     app_rt: &Runtime,
     agent: &Agent,
+    effective_canister_id: PrincipalId,
     plan: &Plan,
     rng: &mut rand_chacha::ChaCha8Rng,
 ) -> Plan {
     match plan {
         Plan::Empty => Plan::Empty,
         Plan::IdentityAccount(Err(_), tail) => {
-            let tail = populate_plan(app_rt, agent, tail, rng).await;
+            let tail = populate_plan(app_rt, agent, effective_canister_id, tail, rng).await;
             let keypair = Ed25519KeyPair::generate(rng);
             Plan::IdentityAccount(Ok((keypair.secret_key, keypair.public_key)), Box::new(tail))
         }
         Plan::CanisterAccount(Err(_), tail) => {
             let (tail, can) = tokio::join!(
-                populate_plan(app_rt, agent, tail, rng),
-                holder::new(app_rt, agent)
+                populate_plan(app_rt, agent, effective_canister_id, tail, rng),
+                holder::new(app_rt, agent, effective_canister_id)
             );
             Plan::CanisterAccount(Ok(can.canister_id().get()), Box::new(tail))
         }
         Plan::Transfer((Err(from), amount, to), itail) => {
-            let otail = populate_plan(app_rt, agent, itail, rng).await;
+            let otail = populate_plan(app_rt, agent, effective_canister_id, itail, rng).await;
             let from0 = link0(&Err(*from), itail, &otail);
             let to = link(to, itail, &otail);
             Plan::Transfer((Ok(from0), *amount, to), Box::new(otail))

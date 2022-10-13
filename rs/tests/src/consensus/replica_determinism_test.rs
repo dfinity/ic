@@ -52,7 +52,8 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         async move {
             malicious_endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(malicious_endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister =
+                UniversalCanister::new(&agent, malicious_endpoint.effective_canister_id()).await;
 
             // After N update&query requests the height of a subnet is >= N.
             // Thus, if N = FAULT_HEIGHT, it's guaranteed that divergence happens along the

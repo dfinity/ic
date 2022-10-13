@@ -44,12 +44,15 @@ use ic_registry_subnet_type::SubnetType;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
+use ic_registry_routing_table::RoutingTable;
+
 #[derive(Clone)]
 pub struct IcManager {
     pub(crate) inner: Arc<RwLock<IcManagerInner>>,
     /// The working dir used by ic-prep. This dir is deleted as soon as
     /// `IcManager` goes out of scope.
     pub prep_working_dir: Arc<TempDir>,
+    pub routing_table: RoutingTable,
     /// Tracks the PIDs of the nodes that were configured with malicious
     /// behavior. Currently, this is initialized in `start()` and does *not*
     /// change during the test.

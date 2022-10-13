@@ -92,7 +92,8 @@ pub fn test(mut handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
 
-            let canister = UniversalCanister::new(&agent).await;
+            let canister =
+                UniversalCanister::new(&agent, malicious_node.effective_canister_id()).await;
 
             // Set some random data in the canister's memory.
             agent

@@ -141,6 +141,7 @@ pub fn create_proxy_canister<'a>(
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let proxy_canister_id = rt.block_on(create_and_install(
         &node.build_default_agent(),
+        node.effective_canister_id(),
         &env.load_wasm("proxy_canister.wasm"),
     ));
     info!(

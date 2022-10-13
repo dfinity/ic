@@ -23,6 +23,7 @@ end::catalog[] */
 
 use crate::util::*;
 use ic_agent::export::Principal;
+use ic_base_types::PrincipalId;
 use ic_fondue::{
     ic_instance::{LegacyInternetComputer as InternetComputer, Subnet},
     ic_manager::IcHandle,
@@ -69,8 +70,13 @@ pub fn test(mut handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     debug!(ctx.logger, "tokio::runtime successful start");
 
-    let (last_pulled_msg, last_pushed_msg) =
-        rt.block_on(do_the_work(&ctx.logger, &mut rng, &n1.url, &n2.url));
+    let (last_pulled_msg, last_pushed_msg) = rt.block_on(do_the_work(
+        &ctx.logger,
+        &mut rng,
+        &n1.url,
+        n1.effective_canister_id(),
+        &n2.url,
+    ));
     assert_eq!(last_pulled_msg, last_pushed_msg);
 }
 
@@ -80,10 +86,12 @@ async fn do_the_work<R: Rng>(
     logger: &Logger,
     rng: &mut R,
     n1: &Url,
+    n1_effective_canister_id: PrincipalId,
     n2: &Url,
 ) -> (Vec<u8>, Vec<u8>) {
     debug!(logger, "Starting do_the_work");
-    let (rs, last_pushed_msg, ucan) = push_messages_to(logger, rng, n1).await;
+    let (rs, last_pushed_msg, ucan) =
+        push_messages_to(logger, rng, n1, n1_effective_canister_id).await;
     let last_pulled_msg = pull_message_from(logger, rs, n2, ucan).await;
     (last_pulled_msg, last_pushed_msg.to_vec())
 }
@@ -92,11 +100,12 @@ async fn push_messages_to<R: Rng>(
     logger: &Logger,
     rng: &mut R,
     url: &Url,
+    effective_canister_id: PrincipalId,
 ) -> (u32, [u8; MSG_LEN], Principal) {
     debug!(logger, "Creating the agent");
     let agent = assert_create_agent(url.as_str()).await;
     debug!(logger, "Preparing to install universal canister");
-    let can = UniversalCanister::new(&agent).await;
+    let can = UniversalCanister::new(&agent, effective_canister_id).await;
     info!(
         logger,
         "Installed universal canister";

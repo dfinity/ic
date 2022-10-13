@@ -36,6 +36,7 @@ use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
 use garcon::Delay;
 use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
+use ic_base_types::PrincipalId;
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
@@ -109,7 +110,7 @@ fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32),
     Ok((output, channel.exit_status()?))
 }
 
-fn get_install_url(env: &TestEnv) -> Result<url::Url, Error> {
+fn get_install_url(env: &TestEnv) -> Result<(url::Url, PrincipalId), Error> {
     let subnet = env
         .topology_snapshot()
         .subnets()
@@ -121,11 +122,12 @@ fn get_install_url(env: &TestEnv) -> Result<url::Url, Error> {
         .next()
         .ok_or_else(|| anyhow!("missing node"))?;
 
-    Ok(node.get_public_url())
+    Ok((node.get_public_url(), node.effective_canister_id()))
 }
 
 async fn create_canister(
     agent: &Agent,
+    effective_canister_id: PrincipalId,
     canister_bytes: &[u8],
     arg: Option<Vec<u8>>,
 ) -> Result<Principal, String> {
@@ -134,6 +136,7 @@ async fn create_canister(
     let canister_id = mgr
         .create_canister()
         .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(effective_canister_id)
         .call_and_wait(delay())
         .await
         .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
@@ -249,10 +252,10 @@ pub fn canister_test(env: TestEnv) {
 
     let mut panic_handler = PanicHandler::new(env.clone());
 
-    let mut install_url = None;
+    let mut install_node = None;
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
-            install_url = Some(node.get_public_url());
+            install_node = Some((node.get_public_url(), node.effective_canister_id()));
         }
     }
 
@@ -266,12 +269,12 @@ pub fn canister_test(env: TestEnv) {
 
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
-        let agent = assert_create_agent(install_url.unwrap().as_str()).await;
+        let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
         let counter_canister = env.load_wasm("counter.wat");
 
         info!(&logger, "installing canister");
-        let canister_id = create_canister(&agent, &counter_canister, None)
+        let canister_id = create_canister(&agent, install_node.unwrap().1, &counter_canister, None)
             .await
             .expect("Could not create counter canister");
 
@@ -323,10 +326,10 @@ pub fn http_canister_test(env: TestEnv) {
 
     let mut panic_handler = PanicHandler::new(env.clone());
 
-    let mut install_url = None;
+    let mut install_node = None;
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
-            install_url = Some(node.get_public_url());
+            install_node = Some((node.get_public_url(), node.effective_canister_id()));
         }
     }
 
@@ -340,14 +343,19 @@ pub fn http_canister_test(env: TestEnv) {
 
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
-        let agent = assert_create_agent(install_url.unwrap().as_str()).await;
+        let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
         let http_counter_canister = env.load_wasm("http_counter.wasm");
 
         info!(&logger, "installing canister");
-        let canister_id = create_canister(&agent, &http_counter_canister, None)
-            .await
-            .expect("Could not create http_counter canister");
+        let canister_id = create_canister(
+            &agent,
+            install_node.unwrap().1,
+            &http_counter_canister,
+            None,
+        )
+        .await
+        .expect("Could not create http_counter canister");
 
         info!(&logger, "created canister={canister_id}");
 
@@ -488,10 +496,10 @@ pub fn denylist_test(env: TestEnv) {
 
     let mut panic_handler = PanicHandler::new(env.clone());
 
-    let mut install_url = None;
+    let mut install_node = None;
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
-            install_url = Some(node.get_public_url());
+            install_node = Some((node.get_public_url(), node.effective_canister_id()));
         }
     }
 
@@ -504,12 +512,12 @@ pub fn denylist_test(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         info!(&logger, "creating replica agent");
-        let agent = assert_create_agent(install_url.unwrap().as_str()).await;
+        let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
         let http_counter_canister = env.load_wasm("http_counter.wasm");
 
         info!(&logger, "installing canister");
-        let canister_id = create_canister(&agent, &http_counter_canister, None)
+        let canister_id = create_canister(&agent, install_node.unwrap().1, &http_counter_canister, None)
             .await
             .expect("Could not create http_counter canister");
 
@@ -576,10 +584,10 @@ pub fn canister_allowlist_test(env: TestEnv) {
 
     let mut panic_handler = PanicHandler::new(env.clone());
 
-    let mut install_url = None;
+    let mut install_node = None;
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
-            install_url = Some(node.get_public_url());
+            install_node = Some((node.get_public_url(), node.effective_canister_id()));
         }
     }
 
@@ -592,12 +600,12 @@ pub fn canister_allowlist_test(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         info!(&logger, "creating replica agent");
-        let agent = assert_create_agent(install_url.unwrap().as_str()).await;
+        let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
         let http_counter_canister = env.load_wasm("http_counter.wasm");
 
         info!(&logger, "installing canister");
-        let canister_id = create_canister(&agent, &http_counter_canister, None)
+        let canister_id = create_canister(&agent, install_node.unwrap().1, &http_counter_canister, None)
             .await
             .expect("Could not create http_counter canister");
 
@@ -1343,7 +1351,8 @@ pub fn direct_to_replica_test(env: TestEnv) {
         .build()
         .expect("failed to build http client");
 
-    let install_url = get_install_url(&env).expect("failed to get install url");
+    let (install_url, effective_canister_id) =
+        get_install_url(&env).expect("failed to get install url");
 
     let rt = Runtime::new().expect("failed to create tokio runtime");
 
@@ -1396,7 +1405,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             let wasm = env.load_wasm("counter.wat");
 
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, &wasm, None)
+            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
                 .await
                 .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
@@ -1439,7 +1448,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             let wasm = env.load_wasm("counter.wat");
 
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, &wasm, None)
+            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
                 .await
                 .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
@@ -1521,7 +1530,8 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
         .build()
         .expect("failed to build http client");
 
-    let install_url = get_install_url(&env).expect("failed to get install url");
+    let (install_url, effective_canister_id) =
+        get_install_url(&env).expect("failed to get install url");
 
     let rt = Runtime::new().expect("failed to create tokio runtime");
 
@@ -1534,7 +1544,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             let wasm = env.load_wasm("counter.wat");
 
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, &wasm, None)
+            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
                 .await
                 .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
@@ -1671,7 +1681,8 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
         .build()
         .expect("failed to build http client");
 
-    let install_url = get_install_url(&env).expect("failed to get install url");
+    let (install_url, effective_canister_id) =
+        get_install_url(&env).expect("failed to get install url");
 
     let rt = Runtime::new().expect("failed to create tokio runtime");
 
@@ -1727,7 +1738,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             let wasm = env.load_wasm("counter.wat");
 
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, &wasm, None)
+            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
                 .await
                 .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
@@ -1773,7 +1784,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             let wasm = env.load_wasm("counter.wat");
 
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, &wasm, None)
+            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
                 .await
                 .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 

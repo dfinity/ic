@@ -20,11 +20,16 @@ pub fn can_transfer_cycles_from_a_canister_to_another(
 
             // Create a canister, called "Alice", using the provisional API. Alice will
             // receive some cycles.
-            let alice = UniversalCanister::new_with_cycles(&agent, 100_000_000u64).await;
+            let alice = UniversalCanister::new_with_cycles(
+                &agent,
+                endpoint.effective_canister_id(),
+                100_000_000u64,
+            )
+            .await;
 
             // Create a canister, called "Bob", using the provisional API. Bob will send
             // some cycles to Alice.
-            let bob = UniversalCanister::new(&agent).await;
+            let bob = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             let initial_alice_balance = get_balance(&alice.canister_id(), &agent).await;
             let initial_bob_balance = get_balance(&bob.canister_id(), &agent).await;
@@ -72,7 +77,12 @@ pub fn trapping_with_large_blob_does_not_cause_cycles_underflow(
             endpoint.assert_ready(ctx).await;
 
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new_with_cycles(&agent, initial_balance).await;
+            let canister = UniversalCanister::new_with_cycles(
+                &agent,
+                endpoint.effective_canister_id(),
+                initial_balance,
+            )
+            .await;
 
             assert_reject(
                 canister
@@ -104,7 +114,12 @@ pub fn rejecting_with_large_blob_does_not_cause_cycles_underflow(
             endpoint.assert_ready(ctx).await;
 
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new_with_cycles(&agent, initial_balance).await;
+            let canister = UniversalCanister::new_with_cycles(
+                &agent,
+                endpoint.effective_canister_id(),
+                initial_balance,
+            )
+            .await;
 
             assert_reject(
                 canister

@@ -44,7 +44,8 @@ pub fn canister_accepts_ingress_by_default(handle: IcHandle, ctx: &ic_fondue::po
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_id = create_and_install(&agent, &wasm_module).await;
+            let canister_id =
+                create_and_install(&agent, endpoint.effective_canister_id(), &wasm_module).await;
 
             // Now send the canister an ingress message.  It should succeed.
             agent
@@ -68,7 +69,7 @@ pub fn empty_canister_inspect_rejects_all_messages(
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
             canister
                 .update(wasm().set_inspect_message(wasm().noop()).reply())
                 .await
@@ -96,7 +97,7 @@ pub fn canister_can_accept_ingress(handle: IcHandle, ctx: &ic_fondue::pot::Conte
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // Explicitly accepts all ingress messages.
             canister
@@ -145,7 +146,8 @@ pub fn canister_only_accepts_ingress_with_payload(handle: IcHandle, ctx: &ic_fon
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_id = create_and_install(&agent, &wasm_module).await;
+            let canister_id =
+                create_and_install(&agent, endpoint.effective_canister_id(), &wasm_module).await;
 
             // Send the canister an ingress message without payload.  It should fail.
             assert_http_submit_fails(
@@ -179,7 +181,7 @@ pub fn canister_rejects_ingress_only_from_one_caller(
             let agent1 = agent_with_identity(endpoint.url.as_str(), user1)
                 .await
                 .unwrap();
-            let canister = UniversalCanister::new(&agent1).await;
+            let canister = UniversalCanister::new(&agent1, endpoint.effective_canister_id()).await;
 
             // Explicitly accepts all ingress messages except of those from user 1.
             canister
@@ -234,8 +236,12 @@ pub fn message_to_canister_with_not_enough_balance_is_rejected(
 
             // A canister is created with just the freeze balance reserve. An ingress
             // message to it should get rejected.
-            let canister =
-                UniversalCanister::new_with_cycles(&agent, CANISTER_FREEZE_BALANCE_RESERVE).await;
+            let canister = UniversalCanister::new_with_cycles(
+                &agent,
+                endpoint.effective_canister_id(),
+                CANISTER_FREEZE_BALANCE_RESERVE,
+            )
+            .await;
 
             assert_http_submit_fails(
                 agent.update(&canister.canister_id(), "update").call().await,

@@ -32,6 +32,7 @@ use rand::Rng;
 
 use crate::util::*;
 use candid::{Decode, Encode};
+use ic_base_types::PrincipalId;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 
@@ -68,7 +69,7 @@ async fn do_the_work(logger: &Logger, mgr: &mut IcManager, ctx: &ic_fondue::pot:
     node.assert_ready(ctx).await;
 
     let agent = assert_create_agent(node.url.as_str()).await;
-    let canister_id = install_canister(&agent).await;
+    let canister_id = install_canister(&agent, node.effective_canister_id()).await;
 
     let mut should_match = 0;
     for i in 0..MAX_NODES {
@@ -90,12 +91,13 @@ async fn do_the_work(logger: &Logger, mgr: &mut IcManager, ctx: &ic_fondue::pot:
     }
 }
 
-async fn install_canister(agent: &Agent) -> Principal {
+async fn install_canister(agent: &Agent, effective_canister_id: PrincipalId) -> Principal {
     // Create a canister.
     let mgr = ManagementCanister::create(agent);
     let canister_id = mgr
         .create_canister()
         .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(effective_canister_id)
         .call_and_wait(delay())
         .await
         .unwrap()

@@ -57,6 +57,7 @@ impl IcHandleConstructor for TestEnv {
                 subnet: s.clone().map(|s| IcSubnet {
                     id: s.subnet_id,
                     type_of: s.subnet_type(),
+                    canister_ranges: ts.subnet_canister_ranges(s.subnet_id),
                 }),
                 started_at,
                 runtime_descriptor: RuntimeDescriptor::Vm(FarmInfo {

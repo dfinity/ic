@@ -15,7 +15,7 @@ pub fn test_raw_rand_api(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent).await;
+            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
 
             // Calling raw_rand as a query fails.
             let result_query = canister

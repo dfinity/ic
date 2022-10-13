@@ -6,7 +6,9 @@ use url::{Host, Url};
 use crate::iterator::{InfStreamOf, PermOf};
 use crate::pot;
 use anyhow::Result;
+use ic_base_types::PrincipalId;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::SubnetId;
@@ -61,6 +63,7 @@ pub struct FarmInfo {
 pub struct IcSubnet {
     pub id: SubnetId,
     pub type_of: SubnetType,
+    pub canister_ranges: Vec<CanisterIdRange>,
 }
 
 pub type PrivateKeyFileContent = Vec<u8>;
@@ -310,6 +313,16 @@ impl<'a> IcEndpoint {
         self.subnet.as_ref().map(|s| s.id)
     }
 
+    pub fn effective_canister_id(&self) -> PrincipalId {
+        match &self.subnet {
+            None => PrincipalId::default(),
+            Some(ic_subnet) => match ic_subnet.canister_ranges.get(0) {
+                None => PrincipalId::default(),
+                Some(ran) => ran.start.into(),
+            },
+        }
+    }
+
     /// Creates a new instance of this IcEndpoint structure with the subnet
     /// `subnet` and the `started_at` instant set to `Instant::now()`.
     pub fn recreate_with_subnet(&self, subnet: IcSubnet) -> IcEndpoint {
@@ -345,6 +358,7 @@ mod tests {
             subnet: Some(IcSubnet {
                 id: subnet_test_id(1),
                 type_of: SubnetType::Application,
+                canister_ranges: vec![],
             }),
             started_at: Instant::now(),
             node_id: node_test_id(1),
