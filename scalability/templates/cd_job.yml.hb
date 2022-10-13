@@ -21,6 +21,9 @@
 
       $SHELL_WRAPPER pipenv run experiments/{{benchmark_path}} --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET
 
+      # Critical experiment runs passed, disable strict failure mode
+      set +eo pipefail
+      
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       {{#if is_max_capacity_run}}
