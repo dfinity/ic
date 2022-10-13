@@ -88,7 +88,7 @@ pub fn execute_update(
         canister_id: clean_canister.canister_id(),
     };
 
-    let helper = match UpdateHelper::new(&clean_canister, &original, &round) {
+    let helper = match UpdateHelper::new(&clean_canister, &original) {
         Ok(helper) => helper,
         Err(err) => {
             return finish_err(
@@ -223,20 +223,10 @@ struct UpdateHelper {
 
 impl UpdateHelper {
     /// Applies the initial state changes and performs the initial validation.
-    fn new(
-        clean_canister: &CanisterState,
-        original: &OriginalContext,
-        round: &RoundContext,
-    ) -> Result<Self, UserError> {
+    fn new(clean_canister: &CanisterState, original: &OriginalContext) -> Result<Self, UserError> {
         let mut canister = clean_canister.clone();
 
-        validate_message(
-            &canister,
-            &original.message,
-            &original.method,
-            original.time,
-            round.log,
-        )?;
+        validate_message(&canister, &original.method)?;
 
         let call_context_id = canister
             .system_state
@@ -272,10 +262,9 @@ impl UpdateHelper {
     fn resume(
         clean_canister: &CanisterState,
         original: &OriginalContext,
-        round: &RoundContext,
         paused: PausedUpdateHelper,
     ) -> Result<Self, UserError> {
-        let helper = Self::new(clean_canister, original, round)?;
+        let helper = Self::new(clean_canister, original)?;
         if helper.initial_cycles_balance != paused.initial_cycles_balance {
             let msg = "Mismatch in cycles balance when resuming an update call".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
@@ -418,31 +407,30 @@ impl PausedExecution for PausedCallExecution {
             self.original.method,
             clean_canister.canister_id(),
         );
-        let helper =
-            match UpdateHelper::resume(&clean_canister, &self.original, &round, self.paused_helper)
-            {
-                Ok(helper) => helper,
-                Err(err) => {
-                    info!(
-                        round.log,
-                        "[DTS] Failed to resume {:?} execution of canister {}: {:?}.",
-                        self.original.method,
-                        clean_canister.canister_id(),
-                        err,
-                    );
-                    self.paused_wasm_execution.abort();
-                    return finish_err(
-                        clean_canister,
-                        self.original
-                            .execution_parameters
-                            .instruction_limits
-                            .message(),
-                        err,
-                        self.original,
-                        round,
-                    );
-                }
-            };
+        let helper = match UpdateHelper::resume(&clean_canister, &self.original, self.paused_helper)
+        {
+            Ok(helper) => helper,
+            Err(err) => {
+                info!(
+                    round.log,
+                    "[DTS] Failed to resume {:?} execution of canister {}: {:?}.",
+                    self.original.method,
+                    clean_canister.canister_id(),
+                    err,
+                );
+                self.paused_wasm_execution.abort();
+                return finish_err(
+                    clean_canister,
+                    self.original
+                        .execution_parameters
+                        .instruction_limits
+                        .message(),
+                    err,
+                    self.original,
+                    round,
+                );
+            }
+        };
 
         let execution_state = helper.canister().execution_state.as_ref().unwrap();
         let result = self.paused_wasm_execution.resume(execution_state);
