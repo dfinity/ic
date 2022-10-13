@@ -9,9 +9,8 @@ if (($# < 1)); then
 fi
 
 function disk_image_exists() {
-    local GIT_SHA=$1
-
-    URLS=(
+    local -r GIT_SHA=$1
+    local -r URLS=(
         "https://download.dfinity.systems/blessed/ic/${GIT_SHA}/guest-os/disk-img/disk-img.tar.gz"
         "https://download.dfinity.systems/blessed/ic/${GIT_SHA}/guest-os/disk-img/disk-img.tar.zst"
         "https://download.dfinity.systems/ic/${GIT_SHA}/guest-os/disk-img.tar.gz"
@@ -20,8 +19,14 @@ function disk_image_exists() {
         "https://download.dfinity.systems/ic/${GIT_SHA}/guest-os/disk-img/disk-img.tar.zst"
     )
 
+    PIDS=()
     for url in ${URLS[@]}; do
-        curl -sL -I --fail "${url}" -o /dev/null
+        curl -sL -I --fail "${url}" -o /dev/null &
+        PIDS+=("$!")
+    done
+
+    for pid in ${PIDS[@]}; do
+        wait "${pid}"
         if [[ "$?" == "0" ]]; then
             return 0
         fi
@@ -38,13 +43,13 @@ if [[ $branch_name =~ ^origin\/ ]]; then
     git fetch origin "${branch_name//origin\//}"
 fi
 
-for git_sha in $(git log --format=format:%H "$branch_name" --max-count=50); do
-    test "$count" = 0 && exit 0
-    if disk_image_exists "$git_sha"; then
-        echo "$git_sha"
+for git_sha in $(git log --format=format:%H "${branch_name}" --max-count=50); do
+    test "${count}" = 0 && exit 0
+    if disk_image_exists "${git_sha}"; then
+        echo "${git_sha}"
         count=$((count - 1))
     fi
 done
 
-echo >&2 "No artifacts could be found for <branch_name>"
+echo >&2 "No artifacts could be found for <${branch_name}>"
 exit 1
