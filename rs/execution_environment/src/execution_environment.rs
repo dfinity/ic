@@ -1607,6 +1607,7 @@ impl ExecutionEnvironment {
                         nodes_in_target_subnet,
                         target_id: NiDkgTargetId::new(target_id),
                         registry_version: settings.get_registry_version(),
+                        time: state.time(),
                     });
                 Ok(())
             }
@@ -1731,6 +1732,7 @@ impl ExecutionEnvironment {
                 key_id: args.key_id,
                 nodes,
                 registry_version,
+                time: state.time(),
             });
         Ok(())
     }

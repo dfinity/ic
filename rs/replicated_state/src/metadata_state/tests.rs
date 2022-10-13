@@ -484,7 +484,8 @@ fn subnet_call_contexts_deserialization() {
 
     let system_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&system_call_context_manager).into();
     let deserialized_system_call_context_manager: SubnetCallContextManager =
-        system_call_context_manager_proto.try_into().unwrap();
+        SubnetCallContextManager::try_from((mock_time(), system_call_context_manager_proto))
+            .unwrap();
 
     assert_eq!(
         deserialized_system_call_context_manager

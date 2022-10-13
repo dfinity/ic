@@ -1,4 +1,9 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Time {
+    #[prost(uint64, tag = "1")]
+    pub time_nanos: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeTopology {
     #[prost(string, tag = "1")]
     pub ip_address: ::prost::alloc::string::String,
@@ -72,6 +77,8 @@ pub struct SetupInitialDkgContext {
     pub target_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub registry_version: u64,
+    #[prost(message, optional, tag = "6")]
+    pub time: ::core::option::Option<Time>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContextTree {
@@ -145,6 +152,8 @@ pub struct EcdsaDealingsContext {
     pub registry_version: u64,
     #[prost(message, optional, tag = "5")]
     pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
+    #[prost(message, optional, tag = "6")]
+    pub time: ::core::option::Option<Time>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaDealingsContextTree {
@@ -161,6 +170,8 @@ pub struct BitcoinGetSuccessorsContext {
     pub payload: ::core::option::Option<
         super::super::super::bitcoin::v1::CanisterGetSuccessorsRequestInitial,
     >,
+    #[prost(message, optional, tag = "3")]
+    pub time: ::core::option::Option<Time>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinGetSuccessorsContextTree {

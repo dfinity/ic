@@ -1070,6 +1070,7 @@ fn process_subnet_call_context(
             nodes_in_target_subnet,
             target_id,
             registry_version,
+            time: _,
         } = context;
 
         // if we haven't reached the required registry version yet, skip this context
@@ -2195,6 +2196,7 @@ mod tests {
                     nodes_in_target_subnet,
                     target_id,
                     registry_version,
+                    time: state.time(),
                 });
         }
 
