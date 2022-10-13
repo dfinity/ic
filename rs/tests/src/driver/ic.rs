@@ -5,7 +5,7 @@ use super::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::driver_setup::IcSetup;
 use crate::driver::farm::Farm;
 use crate::driver::test_env_api::HasRegistryLocalStore;
-use crate::driver::test_setup::PotSetup;
+use crate::driver::test_setup::GroupSetup;
 use anyhow::Result;
 use ic_fondue::ic_instance::node_software_version::NodeSoftwareVersion;
 use ic_prep_lib::node::NodeSecretKeyStore;
@@ -151,7 +151,7 @@ impl InternetComputer {
         self.create_secret_key_stores(tempdir.path())?;
         let logger = env.logger();
         let ic_setup = IcSetup::read_attribute(env);
-        let pot_setup = PotSetup::read_attribute(env);
+        let pot_setup = GroupSetup::read_attribute(env);
         let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
         let group_name: String = pot_setup.farm_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;

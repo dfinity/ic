@@ -6,7 +6,7 @@ use crate::driver::{
     farm::{Farm, GroupSpec},
     pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet},
     test_env::{HasTestPath, TestEnv, TestEnvAttribute},
-    test_setup::PotSetup,
+    test_setup::GroupSetup,
 };
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, RecvTimeoutError, Sender};
@@ -91,9 +91,9 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: &TestPath) -> Result<()
         .write_test_path(&pot_path)
         .expect("Could not write the pot test path");
 
-    PotSetup {
+    GroupSetup {
         farm_group_name: group_name.clone(),
-        pot_timeout: pot.pot_timeout.unwrap_or(ctx.pot_timeout),
+        group_timeout: pot.pot_timeout.unwrap_or(ctx.pot_timeout),
         artifact_path: ctx.artifacts_path.clone(),
         default_vm_resources: pot.default_vm_resources,
     }
@@ -166,13 +166,13 @@ fn create_group_for_pot_and_spawn_keepalive_thread(
     pot: &Pot,
     logger: &Logger,
 ) -> Result<(JoinHandle<()>, Sender<()>)> {
-    let pot_setup = PotSetup::read_attribute(env);
+    let pot_setup = GroupSetup::read_attribute(env);
     let ic_setup = IcSetup::read_attribute(env);
     let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
     info!(logger, "creating group '{}'", &pot_setup.farm_group_name);
     farm.create_group(
         &pot_setup.farm_group_name,
-        pot_setup.pot_timeout,
+        pot_setup.group_timeout,
         GroupSpec {
             vm_allocation: pot.vm_allocation.clone(),
             required_host_features: pot.required_host_features.clone(),

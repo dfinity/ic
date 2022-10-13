@@ -11,7 +11,7 @@ use super::test_env_api::{
     get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, ADMIN,
     READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
-use crate::driver::test_setup::PotSetup;
+use crate::driver::test_setup::GroupSetup;
 use anyhow::{bail, Result};
 use slog::info;
 use ssh2::Session;
@@ -86,7 +86,7 @@ impl UniversalVm {
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         let ic_setup = IcSetup::read_attribute(env);
-        let pot_setup = PotSetup::read_attribute(env);
+        let pot_setup = GroupSetup::read_attribute(env);
         let logger = env.logger();
         let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
         let res_request =

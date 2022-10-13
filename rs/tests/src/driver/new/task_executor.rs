@@ -15,7 +15,7 @@ impl TaskExecutor {
             let test_name = task.name();
 
             let mut child = Command::new(ctx.exec_path.clone())
-                .arg("--working-dir")
+                .arg("--working-dir") // TODO: rename as --group-dir
                 .arg(ctx.group_dir().as_os_str())
                 .arg("spawn-child")
                 .arg(test_name.as_str())

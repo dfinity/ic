@@ -185,6 +185,10 @@ system_test(
     name = "basic_health_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "short",
+    # test_timeout = "short",
     deps = DEPENDENCIES + [":tests"],
+    # The below code should be uncommented after https://gitlab.com/dfinity-lab/public/ic/-/merge_requests/8072 is merged
+    # runtime_deps = [
+    #     "//ic/ic-os/guestos:scripts/build-bootstrap-config-image.sh"
+    # ],
 )

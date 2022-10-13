@@ -10,19 +10,42 @@ use std::time::Instant;
 
 use super::ic::VmResources;
 
-#[derive(Deserialize, Serialize)]
-pub struct PotSetup {
+#[derive(Deserialize, Serialize, Default)]
+pub struct GroupSetup {
     pub farm_group_name: String,
-    /// For now, the pot timeout strictly translates to the corresponding group
+    /// For now, the group timeout strictly translates to the corresponding group
     /// TTL.
-    pub pot_timeout: Duration,
+    pub group_timeout: Duration,
     pub artifact_path: Option<PathBuf>,
     pub default_vm_resources: Option<VmResources>,
 }
 
-impl TestEnvAttribute for PotSetup {
+impl GroupSetup {
+    // CI
+    // old: hourly__node_reassignment_pot-3099270401
+    // new: hourly__node_reassignment-3099270401
+
+    // Local
+    // old: boundary_nodes_pre_master__boundary_nodes_pot-username-zh1-spm99_zh7_dfinity_network-2784039865
+    // new:
+    pub fn from_bazel_env() -> Self {
+        // binary_name-timestamp
+        let mut res = Self::default();
+        let exec_path = std::env::current_exe().expect("could not acquire parent process path");
+        let fname = exec_path.file_name().unwrap().to_str().unwrap();
+        let time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("bad things")
+            .as_millis();
+        res.farm_group_name = format!("{}--{:?}", fname, time);
+        res.group_timeout = Duration::from_secs(15 * 60);
+        res
+    }
+}
+
+impl TestEnvAttribute for GroupSetup {
     fn attribute_name() -> String {
-        "pot_setup".to_string()
+        "group_setup".to_string()
     }
 }
 
@@ -32,7 +55,7 @@ pub trait IcHandleConstructor {
 
 impl IcHandleConstructor for TestEnv {
     fn ic_handle(&self) -> Result<IcHandle> {
-        let pot_setup = PotSetup::read_attribute(self);
+        let group_setup = GroupSetup::read_attribute(self);
         let ic_setup = IcSetup::read_attribute(self);
         let ts = self.topology_snapshot();
 
@@ -61,7 +84,7 @@ impl IcHandleConstructor for TestEnv {
                 }),
                 started_at,
                 runtime_descriptor: RuntimeDescriptor::Vm(FarmInfo {
-                    group_name: pot_setup.farm_group_name.clone(),
+                    group_name: group_setup.farm_group_name.clone(),
                     vm_name: n.node_id.to_string(),
                     url: ic_setup.farm_base_url.clone(),
                 }),
