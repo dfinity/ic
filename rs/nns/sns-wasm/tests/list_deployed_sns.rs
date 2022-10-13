@@ -1,4 +1,5 @@
 use canister_test::Project;
+use ic_base_types::CanisterId;
 use ic_nns_test_utils::sns_wasm;
 use ic_nns_test_utils::state_test_helpers::set_up_universal_canister;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -12,7 +13,10 @@ use ic_nns_constants::SNS_WASM_CANISTER_ID;
 fn list_deployed_snses_lists_created_sns_instances() {
     let wasm = Project::cargo_bin_maybe_from_env("sns-wasm-canister", &[]);
 
-    let machine = set_up_state_machine_with_nns();
+    // The canister id the wallet canister will have.
+    let wallet_canister_id = CanisterId::from_u64(11);
+
+    let machine = set_up_state_machine_with_nns(vec![wallet_canister_id.into()]);
 
     // Enough cycles for 2 SNS deploys
     let wallet_canister =

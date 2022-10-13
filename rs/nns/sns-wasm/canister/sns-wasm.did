@@ -17,6 +17,9 @@ type FractionalDeveloperVotingPower = record {
   airdrop_distribution : opt AirdropDistribution;
   swap_distribution : opt SwapDistribution;
 };
+type GetAllowedPrincipalsResponse = record {
+  allowed_principals : vec principal;
+};
 type GetNextSnsVersionRequest = record { current_version : opt SnsVersion };
 type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
 type GetSnsSubnetIdsResponse = record { sns_subnet_ids : vec principal };
@@ -65,6 +68,7 @@ type SnsVersion = record {
 };
 type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
 type SnsWasmCanisterInitPayload = record {
+  allowed_principals : vec principal;
   access_controls_enabled : bool;
   sns_subnet_ids : vec principal;
 };
@@ -74,6 +78,17 @@ type SwapDistribution = record {
   initial_swap_amount_e8s : nat64;
 };
 type TreasuryDistribution = record { total_e8s : nat64 };
+type UpdateAllowedPrincipalsRequest = record {
+  added_principals : vec principal;
+  removed_principals : vec principal;
+};
+type UpdateAllowedPrincipalsResponse = record {
+  update_allowed_principals_result : opt UpdateAllowedPrincipalsResult;
+};
+type UpdateAllowedPrincipalsResult = variant {
+  Error : SnsWasmError;
+  AllowedPrincipals : GetAllowedPrincipalsResponse;
+};
 type UpdateSnsSubnetListRequest = record {
   sns_subnet_ids_to_add : vec principal;
   sns_subnet_ids_to_remove : vec principal;
@@ -82,6 +97,7 @@ type UpdateSnsSubnetListResponse = record { error : opt SnsWasmError };
 service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasmRequest) -> (AddWasmResponse);
   deploy_new_sns : (DeployNewSnsRequest) -> (DeployNewSnsResponse);
+  get_allowed_principals : (record {}) -> (GetAllowedPrincipalsResponse) query;
   get_latest_sns_version_pretty : (null) -> (vec record { text; text }) query;
   get_next_sns_version : (GetNextSnsVersionRequest) -> (
       GetNextSnsVersionResponse,
@@ -89,6 +105,9 @@ service : (SnsWasmCanisterInitPayload) -> {
   get_sns_subnet_ids : (record {}) -> (GetSnsSubnetIdsResponse) query;
   get_wasm : (GetWasmRequest) -> (GetWasmResponse) query;
   list_deployed_snses : (record {}) -> (ListDeployedSnsesResponse) query;
+  update_allowed_principals : (UpdateAllowedPrincipalsRequest) -> (
+      UpdateAllowedPrincipalsResponse,
+    );
   update_sns_subnet_list : (UpdateSnsSubnetListRequest) -> (
       UpdateSnsSubnetListResponse,
     );

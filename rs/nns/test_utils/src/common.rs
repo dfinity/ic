@@ -5,7 +5,7 @@ use core::{
     time::Duration,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use ic_base_types::SubnetId;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
@@ -181,6 +181,14 @@ impl NnsInitPayloadsBuilder {
     pub fn with_sns_wasm_access_controls(&mut self, access_controls_enabled: bool) -> &mut Self {
         self.sns_wasms
             .with_access_controls_enabled(access_controls_enabled);
+        self
+    }
+
+    pub fn with_sns_wasm_allowed_principals(
+        &mut self,
+        allowed_principals: Vec<PrincipalId>,
+    ) -> &mut Self {
+        self.sns_wasms.with_allowed_principals(allowed_principals);
         self
     }
 

@@ -12,7 +12,7 @@ use common::set_up_state_machine_with_nns;
 fn test_sns_wasm_upgrade() {
     let wasm = Project::cargo_bin_maybe_from_env("sns-wasm-canister", &[]);
 
-    let machine = set_up_state_machine_with_nns();
+    let machine = set_up_state_machine_with_nns(vec![]);
 
     let sns_wasm = smallest_valid_wasm();
     let expected_hash = sns_wasm.sha256_hash();

@@ -2470,6 +2470,8 @@ pub enum NnsFunction {
     ChangeSubnetTypeAssignment = 33,
     /// Update the list of SNS subnet IDs that SNS WASM will deploy SNS instances to.
     UpdateSnsWasmSnsSubnetIds = 34,
+    /// Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
+    UpdateAllowedPrincipals = 35,
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.

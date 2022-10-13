@@ -240,16 +240,57 @@ pub struct GetNextSnsVersionResponse {
 )]
 pub struct UpdateAllowedPrincipalsRequest {
     #[prost(message, repeated, tag = "1")]
-    pub add: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    pub added_principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(message, repeated, tag = "2")]
-    pub remove: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    pub removed_principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
 /// The response type returned by update_allowed_principals.
-/// Returns the allowed principals after the update.
+/// Returns the allowed principals after the update or an error.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
 )]
 pub struct UpdateAllowedPrincipalsResponse {
+    #[prost(
+        oneof = "update_allowed_principals_response::UpdateAllowedPrincipalsResult",
+        tags = "1, 2"
+    )]
+    pub update_allowed_principals_result:
+        ::core::option::Option<update_allowed_principals_response::UpdateAllowedPrincipalsResult>,
+}
+/// Nested message and enum types in `UpdateAllowedPrincipalsResponse`.
+pub mod update_allowed_principals_response {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct AllowedPrincipals {
+        #[prost(message, repeated, tag = "1")]
+        pub allowed_principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    }
+    #[derive(
+        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Oneof,
+    )]
+    pub enum UpdateAllowedPrincipalsResult {
+        #[prost(message, tag = "1")]
+        Error(super::SnsWasmError),
+        #[prost(message, tag = "2")]
+        AllowedPrincipals(AllowedPrincipals),
+    }
+}
+/// The request type for get_allowed_principals.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct GetAllowedPrincipalsRequest {}
+/// The response type for get_allowed_principals.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct GetAllowedPrincipalsResponse {
     #[prost(message, repeated, tag = "1")]
     pub allowed_principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }

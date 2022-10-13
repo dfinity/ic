@@ -172,14 +172,28 @@ message GetNextSnsVersionResponse {
 
 // The request type accepted by update_allowed_principals.
 message UpdateAllowedPrincipalsRequest {
-  repeated ic_base_types.pb.v1.PrincipalId add = 1;
+  repeated ic_base_types.pb.v1.PrincipalId added_principals = 1;
 
-  repeated ic_base_types.pb.v1.PrincipalId remove = 2;
+  repeated ic_base_types.pb.v1.PrincipalId removed_principals = 2;
 }
 
 // The response type returned by update_allowed_principals.
-// Returns the allowed principals after the update.
+// Returns the allowed principals after the update or an error.
 message UpdateAllowedPrincipalsResponse {
+  message AllowedPrincipals {
+    repeated ic_base_types.pb.v1.PrincipalId allowed_principals = 1;
+  }
+  oneof update_allowed_principals_result {
+    SnsWasmError error = 1;
+    AllowedPrincipals allowed_principals = 2;
+  }
+}
+
+// The request type for get_allowed_principals.
+message GetAllowedPrincipalsRequest {}
+
+// The response type for get_allowed_principals.
+message GetAllowedPrincipalsResponse {
   repeated ic_base_types.pb.v1.PrincipalId allowed_principals = 1;
 }
 

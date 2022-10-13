@@ -1,8 +1,8 @@
 use crate::pb::v1::{
-    add_wasm_response, AddWasmResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-    SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
-    SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListResponse,
-    UpgradePath as StableUpgradePath,
+    add_wasm_response, update_allowed_principals_response, AddWasmResponse,
+    GetNextSnsVersionRequest, GetNextSnsVersionResponse, SnsCanisterIds, SnsCanisterType,
+    SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
+    UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
 };
 use crate::sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath};
 use crate::stable_memory::SnsWasmStableMemory;
@@ -31,6 +31,18 @@ impl AddWasmResponse {
     pub fn error(message: String) -> Self {
         Self {
             result: Some(add_wasm_response::Result::Error(SnsWasmError { message })),
+        }
+    }
+}
+
+impl UpdateAllowedPrincipalsResponse {
+    pub fn error(message: String) -> Self {
+        Self {
+            update_allowed_principals_result: Some(
+                update_allowed_principals_response::UpdateAllowedPrincipalsResult::Error(
+                    SnsWasmError { message },
+                ),
+            ),
         }
     }
 }
