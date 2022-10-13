@@ -17,9 +17,11 @@ use ic_sns_wasm::canister_stable_memory::CanisterStableMemory;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
-    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsRequest,
-    GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest,
-    ListDeployedSnsesResponse, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+    GetAllowedPrincipalsRequest, GetAllowedPrincipalsResponse, GetNextSnsVersionRequest,
+    GetNextSnsVersionResponse, GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmRequest,
+    GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
+    UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListRequest,
+    UpdateSnsSubnetListResponse,
 };
 use ic_sns_wasm::sns_wasm::SnsWasmCanister;
 use ic_types::{CanisterId, Cycles};
@@ -279,6 +281,8 @@ fn canister_init_(init_payload: SnsWasmCanisterInitPayload) {
         c.borrow_mut().set_sns_subnets(init_payload.sns_subnet_ids);
         c.borrow_mut()
             .set_access_controls_enabled(init_payload.access_controls_enabled);
+        c.borrow_mut()
+            .set_allowed_principals(init_payload.allowed_principals);
         c.borrow().initialize_stable_memory();
     })
 }
@@ -361,7 +365,7 @@ fn deploy_new_sns() {
 
 #[candid_method(update, rename = "deploy_new_sns")]
 async fn deploy_new_sns_(deploy_new_sns: DeployNewSnsRequest) -> DeployNewSnsResponse {
-    SnsWasmCanister::deploy_new_sns(&SNS_WASM, &canister_api(), deploy_new_sns).await
+    SnsWasmCanister::deploy_new_sns(&SNS_WASM, &canister_api(), deploy_new_sns, caller()).await
 }
 
 #[export_name = "canister_query list_deployed_snses"]
@@ -372,6 +376,32 @@ fn list_deployed_snses() {
 #[candid_method(query, rename = "list_deployed_snses")]
 fn list_deployed_snses_(request: ListDeployedSnsesRequest) -> ListDeployedSnsesResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().list_deployed_snses(request))
+}
+
+#[export_name = "canister_update update_allowed_principals"]
+fn update_allowed_principals() {
+    over(candid_one, update_allowed_principals_)
+}
+
+#[candid_method(update, rename = "update_allowed_principals")]
+fn update_allowed_principals_(
+    request: UpdateAllowedPrincipalsRequest,
+) -> UpdateAllowedPrincipalsResponse {
+    SNS_WASM.with(|sns_wasm| {
+        sns_wasm
+            .borrow_mut()
+            .update_allowed_principals(request, caller())
+    })
+}
+
+#[export_name = "canister_query get_allowed_principals"]
+fn get_allowed_principals() {
+    over(candid_one, get_allowed_principals_)
+}
+
+#[candid_method(query, rename = "get_allowed_principals")]
+fn get_allowed_principals_(_request: GetAllowedPrincipalsRequest) -> GetAllowedPrincipalsResponse {
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_allowed_principals())
 }
 
 /// Add or remove SNS subnet IDs from the list of subnet IDs that SNS instances will be deployed to

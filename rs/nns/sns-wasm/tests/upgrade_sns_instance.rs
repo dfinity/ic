@@ -62,6 +62,9 @@ fn upgrade_governance_sns_canister_via_sns_wasms() {
 }
 
 fn run_upgrade_test(canister_type: SnsCanisterType) {
+    // The canister id the wallet canister will have.
+    let wallet_canister_id = CanisterId::from_u64(11);
+
     // We don't want the underlying warnings of the StateMachine
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachine::new();
@@ -70,6 +73,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .with_sns_dedicated_subnets(machine.get_subnet_ids())
+        .with_sns_wasm_allowed_principals(vec![wallet_canister_id.into()])
         .build();
 
     setup_nns_canisters(&machine, nns_init_payload);

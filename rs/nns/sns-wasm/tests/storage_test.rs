@@ -7,7 +7,7 @@ use common::set_up_state_machine_with_nns;
 
 #[test]
 fn test_basic_storage() {
-    let machine = set_up_state_machine_with_nns();
+    let machine = set_up_state_machine_with_nns(vec![]);
 
     let sns_wasm = smallest_valid_wasm();
     let expected_hash = sns_wasm.sha256_hash();

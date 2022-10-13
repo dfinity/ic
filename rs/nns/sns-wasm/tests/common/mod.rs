@@ -1,12 +1,12 @@
 use candid::Encode;
 use canister_test::Project;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_test_utils::common::{NnsInitPayloads, NnsInitPayloadsBuilder};
 use ic_nns_test_utils::state_test_helpers::{self, create_canister, setup_nns_canisters};
 use ic_state_machine_tests::StateMachine;
 
 /// Create a `StateMachine` with NNS installed
-pub fn set_up_state_machine_with_nns() -> StateMachine {
+pub fn set_up_state_machine_with_nns(allowed_principals: Vec<PrincipalId>) -> StateMachine {
     // We don't want the underlying warnings of the StateMachine
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachine::new();
@@ -16,6 +16,7 @@ pub fn set_up_state_machine_with_nns() -> StateMachine {
         .with_test_neurons()
         .with_sns_dedicated_subnets(machine.get_subnet_ids())
         .with_sns_wasm_access_controls(true)
+        .with_sns_wasm_allowed_principals(allowed_principals)
         .build();
 
     setup_nns_canisters(&machine, nns_init_payload);

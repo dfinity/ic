@@ -45,6 +45,9 @@ fn test_canisters_are_created_and_installed() {
             Runtime::Local(ref r) => r.registry_client.clone(),
         };
 
+        // The id the universal canister created below will have.
+        let universal_canister_id = CanisterId::from_u64(11);
+
         let subnet_list_record = decode_registry_value::<SubnetListRecord>(
             fake_registry_client
                 .get_value(
@@ -62,6 +65,7 @@ fn test_canisters_are_created_and_installed() {
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()
             .with_sns_dedicated_subnets(vec![system_subnet_id])
+            .with_sns_wasm_allowed_principals(vec![universal_canister_id.into()])
             .build();
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 
@@ -135,6 +139,8 @@ fn test_canisters_are_created_and_installed() {
         };
         nns_canisters.add_wasm(request).await;
 
+        // This canister will have id = universal_canister_id.
+        // It has to be set up after the other canisters.
         let wallet_with_unlimited_cycles = set_up_universal_canister(&runtime).await;
 
         let result = try_call_with_cycles_via_universal_canister(
@@ -284,7 +290,10 @@ fn test_canisters_are_created_and_installed() {
 /// simulate failures executing basic IC00 operations
 #[test]
 fn test_deploy_cleanup_on_wasm_install_failure() {
-    let machine = set_up_state_machine_with_nns();
+    // The canister id the wallet canister will have.
+    let wallet_canister_id = CanisterId::from_u64(11);
+
+    let machine = set_up_state_machine_with_nns(vec![wallet_canister_id.into()]);
 
     // Enough cycles one SNS deploy
     let wallet_canister = state_test_helpers::set_up_universal_canister(
@@ -339,7 +348,10 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
 
 #[test]
 fn test_deploy_adds_cycles_to_target_canisters() {
-    let machine = set_up_state_machine_with_nns();
+    // The canister id the wallet canister will have.
+    let wallet_canister_id = CanisterId::from_u64(11);
+
+    let machine = set_up_state_machine_with_nns(vec![wallet_canister_id.into()]);
 
     // Enough cycles one SNS deploy
     let wallet_canister = state_test_helpers::set_up_universal_canister(

@@ -1,12 +1,14 @@
 use crate::canister_api::CanisterApi;
 use crate::pb::hash_to_hex_string;
+use crate::pb::v1::update_allowed_principals_response::AllowedPrincipals;
 use crate::pb::v1::{
-    add_wasm_response, AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
-    DeployedSns, GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsResponse,
-    GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
-    SnsCanisterIds, SnsCanisterType, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex,
-    StableCanisterState, UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
-    UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+    add_wasm_response, update_allowed_principals_response, AddWasmRequest, AddWasmResponse,
+    DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, GetAllowedPrincipalsResponse,
+    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsResponse, GetWasmRequest,
+    GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterIds,
+    SnsCanisterType, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
+    UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListRequest,
+    UpdateSnsSubnetListResponse,
 };
 use crate::stable_memory::SnsWasmStableMemory;
 use candid::Encode;
@@ -14,7 +16,7 @@ use candid::Encode;
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
-use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
@@ -189,6 +191,10 @@ where
         self.access_controls_enabled = access_controls_enabled;
     }
 
+    pub fn set_allowed_principals(&mut self, allowed_principals: Vec<PrincipalId>) {
+        self.allowed_principals = allowed_principals;
+    }
+
     /// Initialize stable memory. Should only be called on canister init.
     pub fn initialize_stable_memory(&self) {
         self.stable_memory
@@ -302,7 +308,14 @@ where
         thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
         canister_api: &impl CanisterApi,
         deploy_new_sns_payload: DeployNewSnsRequest,
+        caller: PrincipalId,
     ) -> DeployNewSnsResponse {
+        if !thread_safe_sns.with(|sns_wasm| sns_wasm.borrow().allowed_to_deploy_sns(caller)) {
+            return validation_deploy_error(
+                "Caller is not in allowed principals list. Cannot deploy an sns.".to_string(),
+            )
+            .into();
+        }
         match Self::do_deploy_new_sns(thread_safe_sns, canister_api, deploy_new_sns_payload).await {
             Ok((subnet_id, canisters)) => DeployNewSnsResponse {
                 subnet_id: Some(subnet_id.get()),
@@ -316,6 +329,10 @@ where
             // The rest are conversions as no additional processing is needed
             Err(e) => e.into(),
         }
+    }
+
+    pub fn allowed_to_deploy_sns(&self, caller: PrincipalId) -> bool {
+        self.allowed_principals.contains(&caller)
     }
 
     async fn do_deploy_new_sns(
@@ -868,15 +885,22 @@ where
     pub fn update_allowed_principals(
         &mut self,
         update_allowed_principals_request: UpdateAllowedPrincipalsRequest,
+        caller: PrincipalId,
     ) -> UpdateAllowedPrincipalsResponse {
+        if caller != GOVERNANCE_CANISTER_ID.into() {
+            return UpdateAllowedPrincipalsResponse::error(
+                "Only Governance can call update_allowed_principals".to_string(),
+            );
+        }
         let remove_set: HashSet<PrincipalId> = update_allowed_principals_request
-            .remove
+            .removed_principals
             .into_iter()
             .collect();
 
-        let add_set: HashSet<PrincipalId> =
-            update_allowed_principals_request.add.into_iter().collect();
-
+        let add_set: HashSet<PrincipalId> = update_allowed_principals_request
+            .added_principals
+            .into_iter()
+            .collect();
         let current_set: HashSet<PrincipalId> =
             self.allowed_principals.clone().into_iter().collect();
 
@@ -886,11 +910,22 @@ where
             .collect::<HashSet<PrincipalId>>()
             .difference(&remove_set)
             .copied()
-            .collect::<Vec<PrincipalId>>()
-            .into_iter()
             .collect();
 
         UpdateAllowedPrincipalsResponse {
+            update_allowed_principals_result: Some(
+                update_allowed_principals_response::UpdateAllowedPrincipalsResult::AllowedPrincipals(
+                    AllowedPrincipals {
+                        allowed_principals: self.allowed_principals.clone(),
+                    },
+                ),
+            ),
+        }
+    }
+
+    // Get the list of principals allowed to deploy an sns.
+    pub fn get_allowed_principals(&self) -> GetAllowedPrincipalsResponse {
+        GetAllowedPrincipalsResponse {
             allowed_principals: self.allowed_principals.clone(),
         }
     }
@@ -985,9 +1020,10 @@ mod test {
     use ic_base_types::PrincipalId;
     use ic_crypto_sha::Sha256;
     use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
-    use ic_nns_constants::ROOT_CANISTER_ID;
+    use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
     use ic_sns_init::pb::v1::SnsInitPayload;
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
+    use maplit::hashset;
     use pretty_assertions::{assert_eq, assert_ne};
     use std::sync::{Arc, Mutex};
     use std::vec;
@@ -1155,12 +1191,6 @@ mod test {
         let state = SnsWasmCanister::new();
         state.initialize_stable_memory();
         state
-    }
-
-    /// Constructs a test principal id from an integer.
-    /// Convenience function to make creating neurons more concise.
-    pub fn principal(i: u64) -> PrincipalId {
-        PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
     }
 
     /// Add some placeholder wasms with different values so we can test
@@ -1376,51 +1406,84 @@ mod test {
     fn test_update_allowed_principals() {
         let mut canister = new_wasm_canister();
 
-        let update_allowed_principals_response_1 =
-            canister.update_allowed_principals(UpdateAllowedPrincipalsRequest {
-                add: vec![principal(1), principal(2), principal(3)],
-                remove: vec![],
-            });
-
-        let expected_1: HashSet<PrincipalId> = vec![principal(1), principal(2), principal(3)]
-            .into_iter()
-            .collect();
-
-        assert!(
-            expected_1
-                .symmetric_difference(
-                    &update_allowed_principals_response_1
-                        .allowed_principals
-                        .iter()
-                        .copied()
-                        .collect()
-                )
-                .count()
-                == 0
+        let update_allowed_principals_response_1 = canister.update_allowed_principals(
+            UpdateAllowedPrincipalsRequest {
+                added_principals: vec![
+                    PrincipalId::new_user_test_id(1),
+                    PrincipalId::new_user_test_id(2),
+                    PrincipalId::new_user_test_id(3),
+                ],
+                removed_principals: vec![],
+            },
+            GOVERNANCE_CANISTER_ID.into(),
         );
 
-        let update_allowed_principals_response_2 =
-            canister.update_allowed_principals(UpdateAllowedPrincipalsRequest {
-                add: vec![principal(1), principal(4), principal(5)],
-                remove: vec![principal(2)],
-            });
+        let expected_1 = hashset! {
+            PrincipalId::new_user_test_id(1),
+            PrincipalId::new_user_test_id(2),
+            PrincipalId::new_user_test_id(3),
+        };
 
-        let expected_2: HashSet<PrincipalId> =
-            vec![principal(1), principal(3), principal(4), principal(5)]
-                .into_iter()
-                .collect();
+        match update_allowed_principals_response_1.update_allowed_principals_result {
+            Some(update_allowed_principals_response::UpdateAllowedPrincipalsResult::AllowedPrincipals(
+                allowed_principals,
+            )) => assert_eq!(
+                expected_1
+                    .symmetric_difference(
+                        &allowed_principals
+                            .allowed_principals
+                            .iter()
+                            .copied()
+                            .collect()
+                    )
+                    .collect::<HashSet<&PrincipalId>>(),
+                HashSet::new()
+            ),
+            _ => panic!(
+                "Error: update_allowed_principals_response = {:#?}",
+                update_allowed_principals_response_1
+            ),
+        }
 
-        assert!(
-            expected_2
-                .symmetric_difference(
-                    &update_allowed_principals_response_2
-                        .allowed_principals
-                        .into_iter()
-                        .collect()
-                )
-                .count()
-                == 0
+        let update_allowed_principals_response_2 = canister.update_allowed_principals(
+            UpdateAllowedPrincipalsRequest {
+                added_principals: vec![
+                    PrincipalId::new_user_test_id(1),
+                    PrincipalId::new_user_test_id(4),
+                    PrincipalId::new_user_test_id(5),
+                ],
+                removed_principals: vec![PrincipalId::new_user_test_id(2)],
+            },
+            GOVERNANCE_CANISTER_ID.into(),
         );
+
+        let expected_2 = hashset! {
+            PrincipalId::new_user_test_id(1),
+            PrincipalId::new_user_test_id(3),
+            PrincipalId::new_user_test_id(4),
+            PrincipalId::new_user_test_id(5),
+        };
+
+        match update_allowed_principals_response_2.update_allowed_principals_result {
+            Some(update_allowed_principals_response::UpdateAllowedPrincipalsResult::AllowedPrincipals(
+                allowed_principals,
+            )) => assert_eq!(
+                expected_2
+                    .symmetric_difference(
+                        &allowed_principals
+                            .allowed_principals
+                            .iter()
+                            .copied()
+                            .collect()
+                    )
+                    .collect::<HashSet<&PrincipalId>>(),
+                HashSet::new()
+            ),
+            _ => panic!(
+                "Error: update_allowed_principals_response = {:#?}",
+                update_allowed_principals_response_2
+            ),
+        }
 
         assert!(
             expected_2
@@ -1975,6 +2038,15 @@ mod test {
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
+        CANISTER_WRAPPER.with(|sns_wasm| {
+            sns_wasm.borrow_mut().update_allowed_principals(
+                UpdateAllowedPrincipalsRequest {
+                    added_principals: vec![PrincipalId::new_user_test_id(1)],
+                    removed_principals: vec![],
+                },
+                GOVERNANCE_CANISTER_ID.into(),
+            )
+        });
 
         CANISTER_WRAPPER.with(|c| {
             if available_subnet.is_some() {
@@ -1990,6 +2062,7 @@ mod test {
             &CANISTER_WRAPPER,
             &canister_api,
             DeployNewSnsRequest { sns_init_payload },
+            PrincipalId::new_user_test_id(1),
         )
         .await;
 
@@ -2014,6 +2087,15 @@ mod test {
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
+        CANISTER_WRAPPER.with(|sns_wasm| {
+            sns_wasm.borrow_mut().update_allowed_principals(
+                UpdateAllowedPrincipalsRequest {
+                    added_principals: vec![PrincipalId::new_user_test_id(1)],
+                    removed_principals: vec![],
+                },
+                GOVERNANCE_CANISTER_ID.into(),
+            )
+        });
 
         let test_id = subnet_test_id(1);
         let deployed_version = CANISTER_WRAPPER.with(|c| {
@@ -2032,6 +2114,7 @@ mod test {
             DeployNewSnsRequest {
                 sns_init_payload: Some(init_payload.clone()),
             },
+            PrincipalId::new_user_test_id(1),
         )
         .await;
 
@@ -2187,6 +2270,16 @@ mod test {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
 
+        CANISTER_WRAPPER.with(|sns_wasm| {
+            sns_wasm.borrow_mut().update_allowed_principals(
+                UpdateAllowedPrincipalsRequest {
+                    added_principals: vec![PrincipalId::new_user_test_id(1)],
+                    removed_principals: vec![],
+                },
+                GOVERNANCE_CANISTER_ID.into(),
+            )
+        });
+
         CANISTER_WRAPPER.with(|c| {
             c.borrow_mut().set_sns_subnets(vec![test_id]);
             add_mock_wasms(&mut c.borrow_mut());
@@ -2198,6 +2291,7 @@ mod test {
             DeployNewSnsRequest {
                 sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
             },
+            PrincipalId::new_user_test_id(1),
         )
         .await
         .canisters
@@ -2213,6 +2307,7 @@ mod test {
             DeployNewSnsRequest {
                 sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
             },
+            PrincipalId::new_user_test_id(1),
         )
         .await;
 

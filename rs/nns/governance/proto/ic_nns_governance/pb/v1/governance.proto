@@ -507,6 +507,8 @@ enum NnsFunction {
   NNS_FUNCTION_CHANGE_SUBNET_TYPE_ASSIGNMENT = 33;
   // Update the list of SNS subnet IDs that SNS WASM will deploy SNS instances to.
   NNS_FUNCTION_UPDATE_SNS_WASM_SNS_SUBNET_IDS = 34;
+  // Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
+  NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS = 35;
 }
 
 // Payload of a proposal that calls a function on another NNS
