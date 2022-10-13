@@ -110,11 +110,14 @@ pub struct InputOutputQueue {
     #[prost(uint64, tag = "4")]
     pub num_slots_reserved: u64,
     /// Ordered ranges of messages having the same request deadline. Each range
-    /// is represented as a deadline and its end index (the queue index just past
-    /// the last request where the deadline applies). Both the deadlines and queue
-    /// indices are strictly increasing.
+    /// is represented as a deadline and its end index (the `QueueIndex` just
+    /// past the last request where the deadline applies). Both the deadlines and
+    /// queue indices are strictly increasing.
     #[prost(message, repeated, tag = "5")]
     pub deadline_range_ends: ::prost::alloc::vec::Vec<MessageDeadline>,
+    /// Queue index from which request timing out will resume.
+    #[prost(uint64, tag = "6")]
+    pub timeout_index: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueueEntry {
@@ -129,14 +132,15 @@ pub struct CanisterQueues {
     pub ingress_queue: ::prost::alloc::vec::Vec<super::super::ingress::v1::Ingress>,
     #[prost(message, repeated, tag = "3")]
     pub input_queues: ::prost::alloc::vec::Vec<QueueEntry>,
-    /// Upgrade: input_schedule is mapped to local_subnet_input_schedule
+    /// Upgrade: input_schedule is mapped to local_subnet_input_schedule.
     #[prost(message, repeated, tag = "4")]
     pub input_schedule: ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "5")]
     pub output_queues: ::prost::alloc::vec::Vec<QueueEntry>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]
     pub next_input_queue: i32,
-    /// Downgrade: both queues are mapped back to input_schedule in the current release
+    /// Downgrade: both queues are mapped back to input_schedule in the current
+    /// release.
     #[prost(message, repeated, tag = "7")]
     pub local_subnet_input_schedule:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,

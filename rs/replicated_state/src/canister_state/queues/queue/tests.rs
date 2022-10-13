@@ -443,28 +443,15 @@ proptest! {
             }
         }
 
+        // `ref_q` and `q` must be the same after popping all messages from the
+        // time outed section, except `timeout_index` was not updated since we
+        // never timed out anything for `ref_q`.
+        ref_q.timeout_index = q.timeout_index;
         prop_assert_eq!(ref_q, q);
     }
 }
 
 proptest! {
-    /// Check timing out requests on two queues, where one undergoes a serialize/
-    /// deserialize roundtrip first and comparing. Since `timeout_index` is not
-    /// persisted, the roundtrip will reset it.
-    #[test]
-    fn output_queue_time_out_requests_with_index_reset(
-        (time, q) in arb_output_queue()
-        .prop_flat_map(|q| (arb_time_for_output_queue_timeouts(&q), Just(q)))
-    ) {
-        let mut ref_q = q.clone();
-
-        // Do a roundtrip conversion which will reset the timeout_index.
-        let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-        let mut q: OutputQueue = proto_queue.try_into().expect("bad conversion");
-
-        prop_assert!(ref_q.time_out_requests(time).eq(q.time_out_requests(time)));
-    }
-
     /// Check whether the conversion to and from the protobuf version
     /// works for arbitrary output queues.
     #[test]
