@@ -117,5 +117,6 @@ rust_bench(
         "//rs/types/error_types",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:maplit",
     ],
 )

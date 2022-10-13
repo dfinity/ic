@@ -10,11 +10,15 @@ use ic_crypto_tree_hash::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    metadata_state::Stream, testing::ReplicatedStateTesting, ReplicatedState,
+    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
+    metadata_state::Stream,
+    testing::ReplicatedStateTesting,
+    ReplicatedState,
 };
 use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_state};
 use ic_test_utilities::{
     mock_time,
+    state::get_initial_state,
     types::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
         messages::{RequestBuilder, ResponseBuilder},
@@ -25,6 +29,7 @@ use ic_types::{
     xnet::StreamIndex,
     Cycles,
 };
+use maplit::btreemap;
 use std::convert::TryFrom;
 
 fn bench_traversal(c: &mut Criterion<ProcessTime>) {
@@ -209,6 +214,21 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
         b.iter(|| {
             black_box(hash_tree.witness::<MixedHashTree>(&data_tree_100_statuses));
         });
+    });
+
+    let state_100_custom_sections = {
+        let mut state = get_initial_state(/*num_canisters=*/ 100u64, 0);
+        assert_eq!(state.canister_states.len(), 100);
+        for canister in state.canister_states.values_mut() {
+            canister.execution_state.as_mut().unwrap().metadata = WasmMetadata::new(btreemap! {
+                "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1u8; 1 << 20]),
+            });
+        }
+        state
+    };
+
+    c.bench_function("traverse/hash_custom_sections/100", |b| {
+        b.iter(|| black_box(hash_lazy_tree(&LazyTree::from(&state_100_custom_sections))));
     });
 
     let mut group = c.benchmark_group("drop_tree");
