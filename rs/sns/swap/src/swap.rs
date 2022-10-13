@@ -1351,7 +1351,7 @@ impl Params {
         }
 
         if self.neuron_basket_construction_parameters.is_none() {
-            return Err("participant_neuron_basket must be provided".to_string());
+            return Err("neuron_basket_construction_parameters must be provided".to_string());
         }
 
         let neuron_basket = self
