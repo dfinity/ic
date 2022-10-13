@@ -228,8 +228,9 @@ impl TryFrom<pb::CanisterHttpPayload> for CanisterHttpPayload {
 
 impl CountBytes for CanisterHttpPayload {
     fn count_bytes(&self) -> usize {
-        // TODO: Include timeout sizes here too
-        self.responses.iter().map(CountBytes::count_bytes).sum()
+        let timeouts_size: usize = self.timeouts.iter().map(CountBytes::count_bytes).sum();
+        let response_size: usize = self.responses.iter().map(CountBytes::count_bytes).sum();
+        timeouts_size + response_size
     }
 }
 

@@ -326,9 +326,9 @@ fn group_shares_by_callback_id<'a, Shares: Iterator<Item = &'a CanisterHttpRespo
     > = BTreeMap::new();
     for share in shares {
         map.entry(share.content.id)
-            .or_insert_with(|| BTreeMap::new())
+            .or_insert(BTreeMap::new())
             .entry(share.content.clone())
-            .or_insert_with(|| vec![])
+            .or_insert(Vec::new())
             .push(share);
     }
     map
@@ -482,31 +482,11 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
 
             // Select from the response candidates those that will fit into the
             // payload.
-
             let mut accumulated_size = 0;
             let mut candidates = vec![];
             let mut unique_includable_responses = 0;
             let mut responses_included = 0;
-
-            for (metadata, shares, content) in responses {
-                unique_includable_responses += 1;
-                // FIXME: This MUST be the same size calculation as
-                // CanisterHttpResponseWithConsensus::count_bytes. This
-                // should be explicit in the code
-                let candidate_size = size_of::<CanisterHttpResponseProof>() + content.count_bytes();
-                if NumBytes::new((accumulated_size + candidate_size) as u64) < byte_limit {
-                    responses_included += 1;
-                    if responses_included > CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                        break;
-                    }
-
-                    candidates.push((metadata.clone(), shares, content));
-
-                    accumulated_size += candidate_size;
-                }
-            }
-
-            self.metrics.unique_responses.set(unique_responses_count);
+            let mut timeouts_included = 0;
 
             // Check the state for timeouts NOTE: We can not use the existing
             // timed out artifacts for this task, since we don't have consensus
@@ -527,17 +507,42 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                     .canister_http_request_contexts
                     .iter()
                 {
-                    // TODO: Account for size of timeouts
-                    // Check for timed out requests and include them into the block
-                    // if they have not been delivered yet
-                    if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time
+                    unique_includable_responses += 1;
+                    let candidate_size = callback_id.count_bytes();
+                    let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                    if size >= byte_limit {
+                        // All timeouts have the same size, so we can stop iterating.
+                        break;
+                    } else if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL
+                        < validation_context.time
                         && !delivered_ids.contains(callback_id)
                     {
+                        timeouts_included += 1;
                         timeouts.push(*callback_id);
+                        accumulated_size += candidate_size;
                     }
                 }
             }
 
+            for (metadata, shares, content) in responses {
+                unique_includable_responses += 1;
+                // FIXME: This MUST be the same size calculation as
+                // CanisterHttpResponseWithConsensus::count_bytes. This
+                // should be explicit in the code
+                let candidate_size = size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                if size < byte_limit {
+                    if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                        break;
+                    }
+                    candidates.push((metadata.clone(), shares, content));
+                    responses_included += 1;
+                    accumulated_size += candidate_size;
+                }
+            }
+
+            self.metrics.included_timeouts.set(timeouts_included);
+            self.metrics.unique_responses.set(unique_responses_count);
             self.metrics
                 .unique_includable_responses
                 .set(unique_includable_responses);
@@ -809,6 +814,9 @@ struct CanisterHttpPayloadBuilderMetrics {
     /// attempt to create a block for which there are shares in the pool. In
     /// particular, these responses have met the threshold for inclusion.
     unique_includable_responses: IntGauge,
+    /// The number of timeouts that have met the threshold for inclusion in
+    /// the block.
+    included_timeouts: IntGauge,
 }
 
 impl CanisterHttpPayloadBuilderMetrics {
@@ -836,6 +844,10 @@ impl CanisterHttpPayloadBuilderMetrics {
             unique_includable_responses: metrics_registry.int_gauge(
                 "canister_http_unique_includable_responses",
                 "The total number of unique responses that could be included in a block"
+            ),
+            included_timeouts: metrics_registry.int_gauge(
+                "canister_http_unique_timeouts",
+                "The number of timeouts that could be included in a block"
             )
         }
     }
@@ -855,16 +867,101 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::SubnetFeatures;
     use ic_test_utilities::{
         mock_time,
-        types::ids::{canister_test_id, node_test_id, subnet_test_id},
+        state_manager::RefMockStateManager,
+        types::{
+            ids::{canister_test_id, node_test_id, subnet_test_id},
+            messages::RequestBuilder,
+        },
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::{
-        canister_http::CanisterHttpResponseContent,
+        canister_http::{
+            CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponseContent,
+        },
         crypto::{BasicSig, BasicSigOf},
         signature::BasicSignatureBatch,
         time::UNIX_EPOCH,
+        Time,
     };
     use std::{collections::BTreeMap, ops::DerefMut, time::Duration};
+
+    /// Submit a group of requests (50% timeouts, 100% other), so that the total
+    /// request count exceeds the capacity of a single payload.
+    ///         
+    /// Expect: Timeout requests are given priority, so they are included in the
+    ///         payload. That means that 50% of the payload should consist of timeouts
+    ///         while the rest is filled with the remaining requests.
+    #[test]
+    fn timeout_priority() {
+        // the time used for the validation context.
+        let context_time = mock_time() + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1);
+        let mut init_state = ic_test_utilities::state::get_initial_state(0, 0);
+
+        let response_count = 10;
+        let timeout_count = 100;
+
+        test_config_with_http_feature(4, |mut payload_builder, canister_http_pool| {
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+                // add 100% capacity of normal (non-timeout) requests to the pool
+                for i in 0..response_count {
+                    let (response, metadata) = test_response_and_metadata_with_timeout(
+                        i as u64,
+                        context_time + Duration::from_secs(10),
+                    );
+                    let shares = metadata_to_shares(4, &metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(pool_access.deref_mut(), shares[1..4].to_vec());
+                }
+                // Fill 50% of a single blocks maximum request capacity with timeouts
+                for i in 0..timeout_count {
+                    let k = CallbackId::from(i + 2 * (response_count as u64) + 1);
+                    let v = CanisterHttpRequestContext {
+                        request: RequestBuilder::default().build(),
+                        url: String::new(),
+                        max_response_bytes: None,
+                        headers: vec![],
+                        body: None,
+                        http_method: CanisterHttpMethod::GET,
+                        transform_method_name: None,
+                        // this is the important one
+                        time: mock_time(),
+                    };
+                    init_state
+                        .metadata
+                        .subnet_call_context_manager
+                        .canister_http_request_contexts
+                        .insert(k, v);
+                }
+
+                let state_manager = Arc::new(RefMockStateManager::default());
+                state_manager
+                    .get_mut()
+                    .expect_get_state_at()
+                    .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                        Height::new(0),
+                        Arc::new(init_state),
+                    )));
+                payload_builder.state_manager = state_manager;
+            }
+
+            let validation_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: mock_time() + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+            };
+
+            // Build a payload
+            let payload = payload_builder.get_canister_http_payload(
+                Height::new(1),
+                &validation_context,
+                &[],
+                NumBytes::new(1024),
+            );
+            // Responses get evicted, and timeouts fill most of the available space
+            assert!(payload.timeouts.len() == timeout_count as usize);
+        });
+    }
 
     /// Check that a single well formed request with shares makes it through the block maker
     #[test]
@@ -1416,7 +1513,8 @@ mod tests {
         });
     }
 
-    /// Build some test metadata and response, which is valid and can be used in different tests
+    /// Build some test metadata and response, which is valid and can be used in
+    /// different tests
     fn test_response_and_metadata(
         callback_id: u64,
     ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
@@ -1426,18 +1524,40 @@ mod tests {
         )
     }
 
+    /// Create response and metadata objects, with specified callback AND timeout
+    fn test_response_and_metadata_with_timeout(
+        callback_id: u64,
+        timeout: Time,
+    ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
+        test_response_and_metadata_full(
+            callback_id,
+            timeout,
+            CanisterHttpResponseContent::Success(b"abc".to_vec()),
+        )
+    }
+
+    /// Create response and metadata with a specified content, with
+    /// a 10-second timeout default.
     fn test_response_and_metadata_with_content(
         callback_id: u64,
+        content: CanisterHttpResponseContent,
+    ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
+        test_response_and_metadata_full(callback_id, mock_time() + Duration::from_secs(10), content)
+    }
+
+    ///
+    fn test_response_and_metadata_full(
+        callback_id: u64,
+        timeout: Time,
         content: CanisterHttpResponseContent,
     ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
         // Build a response
         let response = CanisterHttpResponse {
             id: CallbackId::new(callback_id),
-            timeout: mock_time() + Duration::from_secs(10),
+            timeout,
             canister_id: canister_test_id(0),
             content,
         };
-
         // Create metadata of response
         let metadata = CanisterHttpResponseMetadata {
             id: response.id,
@@ -1445,10 +1565,8 @@ mod tests {
             content_hash: crypto_hash(&response),
             registry_version: RegistryVersion::new(1),
         };
-
         (response, metadata)
     }
-
     /// Replicates the behaviour of receiving and successfully validating a share over the network
     fn add_received_shares_to_pool(
         pool: &mut dyn MutableCanisterHttpPool,
