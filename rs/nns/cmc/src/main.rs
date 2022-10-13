@@ -631,16 +631,6 @@ fn get_icp_xdr_conversion_rate_() {
 
 #[export_name = "canister_update set_icp_xdr_conversion_rate"]
 fn set_icp_xdr_conversion_rate_() {
-    let caller = caller();
-
-    assert_eq!(
-        caller,
-        GOVERNANCE_CANISTER_ID.into(),
-        "{} is not authorized to call this method: {}",
-        caller,
-        "set_icp_xdr_conversion_rate"
-    );
-
     over(
         candid_one,
         |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
