@@ -3,10 +3,6 @@ guest-os-diskimg:
   extends:
     - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
-  tags:
-    - dfinity
-    - ubuntu
-    - zh
   stage: guest-os-build
   variables:
       BUILD_EXTRA_ARGS: ""
