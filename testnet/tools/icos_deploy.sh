@@ -179,7 +179,7 @@ mkdir -p "${BN_MEDIA_PATH}"
 "${INVENTORY}" --list >"${BN_MEDIA_PATH}/list.json"
 
 # Check if hosts.ini has boundary nodes
-if jq -e '.boundary.hosts | length == 0' >/dev/null <"${BN_MEDIA_PATH}/list.json"; then
+if jq <"${BN_MEDIA_PATH}/list.json" -e '.boundary.hosts | length == 0' >/dev/null; then
     USE_BOUNDARY_NODES="false"
 fi
 
@@ -244,14 +244,22 @@ if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
     COMMAND=$(
         cat <<EOF
 set -x
+$(declare -f err)
 
-HOSTS=$(jq -r '(.physical_hosts.hosts // [])[]' <"${BN_MEDIA_PATH}/list.json")
+HOSTS=($(jq <"${BN_MEDIA_PATH}/list.json" -r '(.physical_hosts.hosts // [])[]'))
+CERT_NAME=$(jq <"${BN_MEDIA_PATH}/list.json" -r '.boundary.vars.cert_name // empty')
+
 mkdir "${BN_MEDIA_PATH}/certs"
-for HOST in "\${HOSTS[@]}"; do
-    if scp -r "\${HOST}:/etc/letsencrypt/live/testnet.dfinity.network/*" "${BN_MEDIA_PATH}/certs/"; then
-        break
-    fi
-done
+if [[ -z \${CERT_NAME+x} ]]; then
+    err "'.boundary.vars.cert_name' was not defined"
+else
+    (for HOST in "\${HOSTS[@]}"; do
+        scp -r "\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
+    done) || {
+        err "failed to find certificate \${CERT_NAME}"
+        exit 1
+    }
+fi
 
 "${REPO_ROOT}"/ic-os/boundary-guestos/scripts/build-deployment.sh \
     --input="${MEDIA_PATH}/${deployment}.json" \
@@ -295,7 +303,7 @@ if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
         exit $(tail -1 "${BOUNDARY_OUT}" | sed -re "s/.*=\"([0-9]+).*/\1/")
     fi
 
-    DOMAIN=$(jq -r '.bn_vars.domain // empty' <"${MEDIA_PATH}/${deployment}.json")
+    DOMAIN=$(jq <"${MEDIA_PATH}/${deployment}.json" -r '.bn_vars.domain // empty')
 fi
 
 rm -rf "${TMPDIR}"
