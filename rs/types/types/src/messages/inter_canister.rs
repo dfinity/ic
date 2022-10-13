@@ -24,6 +24,12 @@ pub struct CallbackIdTag;
 /// callbacks.
 pub type CallbackId = Id<CallbackIdTag, u64>;
 
+impl CountBytes for CallbackId {
+    fn count_bytes(&self) -> usize {
+        size_of::<CallbackId>()
+    }
+}
+
 pub enum CallContextIdTag {}
 /// Identifies an incoming call.
 pub type CallContextId = Id<CallContextIdTag, u64>;
