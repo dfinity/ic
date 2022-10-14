@@ -13,7 +13,7 @@ rosetta-release:
 
       # - Query the current rosetta version
       bazel build //rs/rosetta-api:version
-      readonly ROSETTA_RELEASE_VERSION=$(cat $(bazel cquery --output=files //rs/rosetta-api:version))
+      readonly ROSETTA_RELEASE_VERSION="$(cat "$(bazel cquery --output=files //rs/rosetta-api:version)")"
       readonly VERSION_TAG="v$ROSETTA_RELEASE_VERSION"
 
       # - Abort the release if the image with that version was already published.
