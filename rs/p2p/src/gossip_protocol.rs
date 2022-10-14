@@ -52,8 +52,10 @@
 //! the current height.
 
 use crate::{
-    download_management::{DownloadManager, DownloadManagerImpl},
-    metrics::GossipMetrics,
+    artifact_download_list::ArtifactDownloadListImpl,
+    download_prioritization::{DownloadPrioritizer, DownloadPrioritizerImpl},
+    metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics, GossipMetrics},
+    peer_context::PeerContextMap,
     use_gossip_malicious_behavior_on_chunk_request,
     utils::TransportChannelIdMapper,
     P2PError, P2PErrorCode, P2PResult,
@@ -63,10 +65,10 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::{info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::p2p::v1::gossip_chunk::Response;
 use ic_protobuf::p2p::v1::gossip_message::Body;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
+use ic_protobuf::{p2p::v1 as pb, registry::subnet::v1::GossipConfig};
 use ic_types::{
     artifact::{ArtifactFilter, ArtifactId},
     chunkable::{ArtifactChunk, ArtifactChunkData, ChunkId},
@@ -78,9 +80,14 @@ use ic_types::{
 
 use bincode::{deserialize, serialize};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
+use lru::LruCache;
+use parking_lot::{Mutex, RwLock};
 use phantom_newtype::AmountOf;
-use std::convert::{TryFrom, TryInto};
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+};
+use std::{sync::Arc, time::Instant};
 
 /// The main *Gossip* trait, specifying the P2P gossip functionality.
 pub trait Gossip {
@@ -99,7 +106,7 @@ pub trait Gossip {
 
     /// The method handles the given advert received from the peer
     /// with the given node ID.
-    fn on_advert(&self, gossip_advert: Self::GossipAdvert, peer_id: Self::NodeId);
+    fn on_gossip_advert(&self, gossip_advert: Self::GossipAdvert, peer_id: Self::NodeId);
 
     /// The method handles the given chunk request received from the
     /// peer with the given node ID.
@@ -109,14 +116,14 @@ pub trait Gossip {
     /// under construction.
     ///
     /// Once the download is complete, the artifact is handed over to
-    /// the artifact manager.
-    fn on_chunk(&self, gossip_chunk: Self::GossipChunk, peer_id: Self::NodeId);
+    /// the artifact manager.DownloadPrioritizer
+    fn on_gossip_chunk(&self, gossip_chunk: Self::GossipChunk, peer_id: Self::NodeId);
 
     /// The method broadcasts the given advert to other peers.
     fn broadcast_advert(&self, advert_request: Self::GossipAdvertSendRequest);
 
     /// The method reacts to a retransmission request from another peer.
-    fn on_retransmission_request(
+    fn on_gossip_retransmission_request(
         &self,
         gossip_request: Self::GossipRetransmissionRequest,
         node_id: Self::NodeId,
@@ -133,7 +140,7 @@ pub trait Gossip {
     fn on_peer_up(&self, peer_id: NodeId);
     fn on_peer_down(&self, peer_id: NodeId);
     /// The method is called periodically from a dedicated thread.
-    fn on_timer(&self);
+    fn on_gossip_timer(&self);
 }
 
 /// A request for an artifact sent to the peer.
@@ -221,18 +228,51 @@ impl From<&GossipMessage> for TransportChannelId {
     }
 }
 
+/// The cache used to check if a certain artifact has been received recently.
+pub(crate) type ReceiveCheckCache = LruCache<CryptoHash, ()>;
+
 /// The canonical implementation of the `GossipMessage` trait.
-pub struct GossipImpl {
-    /// The download manager used to initiate and track downloads.
-    download_manager: DownloadManagerImpl,
+pub(crate) struct GossipImpl {
     /// The artifact manager used to handle received artifacts.
-    artifact_manager: Arc<dyn ArtifactManager>,
+    pub artifact_manager: Arc<dyn ArtifactManager>,
     /// The replica logger.
-    log: ReplicaLogger,
+    pub log: ReplicaLogger,
     /// The *Gossip* metrics.
-    metrics: GossipMetrics,
+    pub gossip_metrics: GossipMetrics,
     /// Flags for malicious behavior used in testing.
-    malicious_flags: MaliciousFlags,
+    pub malicious_flags: MaliciousFlags,
+
+    /// The node ID of the peer.
+    pub node_id: NodeId,
+    /// The subnet ID.
+    pub subnet_id: SubnetId,
+    /// The registry client.
+    pub registry_client: Arc<dyn RegistryClient>,
+    /// The consensus pool cache.
+    pub consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    /// The download prioritizer.
+    pub prioritizer: Arc<dyn DownloadPrioritizer>,
+    /// The peer manager.
+    pub current_peers: Mutex<PeerContextMap>,
+    /// The underlying *Transport* layer.
+    pub transport: Arc<dyn Transport>,
+    /// The flow mapper.
+    pub transport_channel_mapper: TransportChannelIdMapper,
+    /// The list of artifacts that is under construction.
+    pub artifacts_under_construction: RwLock<ArtifactDownloadListImpl>,
+    /// The download management metrics.
+    pub metrics: DownloadManagementMetrics,
+    /// The *Gossip* configuration.
+    pub gossip_config: GossipConfig,
+    /// The cache that is used to check if an artifact has been downloaded
+    /// recently.
+    pub receive_check_caches: RwLock<HashMap<NodeId, ReceiveCheckCache>>,
+    /// The priority function invocation time.
+    pub pfn_invocation_instant: Mutex<Instant>,
+    /// The last registry refresh time.
+    pub registry_refresh_instant: Mutex<Instant>,
+    /// The last retransmission request time.
+    pub retransmission_request_instant: Mutex<Instant>,
 }
 
 impl GossipImpl {
@@ -254,24 +294,34 @@ impl GossipImpl {
         metrics_registry: &MetricsRegistry,
         malicious_flags: MaliciousFlags,
     ) -> Self {
-        let download_manager = DownloadManagerImpl::new(
+        let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
+            artifact_manager.as_ref(),
+            DownloadPrioritizerMetrics::new(metrics_registry),
+        ));
+        let gossip_config = crate::fetch_gossip_config(registry_client.clone(), subnet_id);
+        let gossip = GossipImpl {
+            malicious_flags,
+            artifact_manager,
+            log: log.clone(),
+            gossip_metrics: GossipMetrics::new(metrics_registry),
             node_id,
             subnet_id,
             consensus_pool_cache,
-            registry_client.clone(),
-            artifact_manager.clone(),
-            transport.clone(),
-            TransportChannelIdMapper::new(transport_channels),
-            log.clone(),
-            metrics_registry,
-        );
-        GossipImpl {
-            malicious_flags,
-            download_manager,
-            artifact_manager,
-            log,
-            metrics: GossipMetrics::new(metrics_registry),
-        }
+            prioritizer,
+            current_peers: Mutex::new(PeerContextMap::default()),
+            registry_client,
+            transport,
+            transport_channel_mapper: TransportChannelIdMapper::new(transport_channels),
+            artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::new(log)),
+            metrics: DownloadManagementMetrics::new(metrics_registry),
+            gossip_config,
+            receive_check_caches: RwLock::new(HashMap::new()),
+            pfn_invocation_instant: Mutex::new(Instant::now()),
+            registry_refresh_instant: Mutex::new(Instant::now()),
+            retransmission_request_instant: Mutex::new(Instant::now()),
+        };
+        gossip.refresh_registry();
+        gossip
     }
 
     /// The method returns the artifact chunk matching the given chunk request
@@ -280,14 +330,14 @@ impl GossipImpl {
         self.artifact_manager
             .get_validated_by_identifier(&gossip_request.artifact_id)
             .ok_or_else(|| {
-                self.metrics.chunk_req_not_found.inc();
+                self.gossip_metrics.chunk_req_not_found.inc();
                 P2PError {
                     p2p_error_code: P2PErrorCode::NotFound,
                 }
             })?
             .get_chunk(gossip_request.chunk_id)
             .ok_or_else(|| {
-                self.metrics.chunk_req_not_found.inc();
+                self.gossip_metrics.chunk_req_not_found.inc();
                 P2PError {
                     p2p_error_code: P2PErrorCode::NotFound,
                 }
@@ -314,13 +364,11 @@ impl GossipImpl {
                     p2p_error_code: P2PErrorCode::NotFound,
                 }),
             };
-            self.download_manager
-                .send_chunk_to_peer(chunk_not_found, node_id);
+            self.send_chunk_to_peer(chunk_not_found, node_id);
         } else if self.malicious_flags.maliciously_gossip_send_many_artifacts {
             warn!(self.log, "Malicious behavior: sending too many artifacts");
             for _n in 1..10000 {
-                self.download_manager
-                    .send_chunk_to_peer(gossip_chunk.clone(), node_id);
+                self.send_chunk_to_peer(gossip_chunk.clone(), node_id);
             }
         } else if self
             .malicious_flags
@@ -342,8 +390,7 @@ impl GossipImpl {
                 chunk_id,
                 artifact_chunk,
             };
-            self.download_manager
-                .send_chunk_to_peer(invalid_chunk, node_id);
+            self.send_chunk_to_peer(invalid_chunk, node_id);
         } else {
             warn!(self.log, "Malicious behavior: This should never happen!");
         }
@@ -365,7 +412,7 @@ impl Gossip for GossipImpl {
     /// Adverts for artifacts that have been downloaded before are
     /// dropped.  If the artifact is not available locally, the advert
     /// is added to this peer's advert list.
-    fn on_advert(&self, gossip_advert: GossipAdvert, peer_id: NodeId) {
+    fn on_gossip_advert(&self, gossip_advert: GossipAdvert, peer_id: NodeId) {
         if self
             .artifact_manager
             .has_artifact(&gossip_advert.artifact_id)
@@ -374,9 +421,9 @@ impl Gossip for GossipImpl {
         }
 
         // The download manager handles the received advert.
-        self.download_manager.on_advert(gossip_advert, peer_id);
+        self.on_advert(gossip_advert, peer_id);
         // The next download is triggered for the given peer ID.
-        let _ = self.download_manager.download_next(peer_id);
+        let _ = self.download_next(peer_id);
     }
 
     /// The method handles the given chunk request received from the peer with
@@ -398,22 +445,21 @@ impl Gossip for GossipImpl {
             self,
             self.malicious_behavior_on_chunk_request(gossip_chunk, node_id),
             {
-                self.download_manager
-                    .send_chunk_to_peer(gossip_chunk, node_id);
+                self.send_chunk_to_peer(gossip_chunk, node_id);
             }
         );
     }
 
     /// The method adds the given chunk to the corresponding artifact
     /// under construction.
-    fn on_chunk(&self, gossip_chunk: GossipChunk, peer_id: NodeId) {
-        self.download_manager.on_chunk(gossip_chunk, peer_id);
-        let _ = self.download_manager.download_next(peer_id);
+    fn on_gossip_chunk(&self, gossip_chunk: GossipChunk, peer_id: NodeId) {
+        self.on_chunk(gossip_chunk, peer_id);
+        let _ = self.download_next(peer_id);
     }
 
     /// The method broadcasts the given advert to other peers.
     fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest) {
-        self.download_manager.send_advert_to_peers(advert_request);
+        self.send_advert_to_peers(advert_request);
     }
 
     /// The method reacts to a retransmission request from another
@@ -421,24 +467,22 @@ impl Gossip for GossipImpl {
     ///
     /// All validated artifacts that pass the given filter are
     /// collected and sent to the peer.
-    fn on_retransmission_request(
+    fn on_gossip_retransmission_request(
         &self,
         gossip_retransmission_request: GossipRetransmissionRequest,
         peer_id: NodeId,
     ) {
-        let _ = self
-            .download_manager
-            .on_retransmission_request(&gossip_retransmission_request, peer_id);
+        let _ = self.on_retransmission_request(&gossip_retransmission_request, peer_id);
     }
 
     fn on_peer_up(&self, peer_id: NodeId) {
         info!(self.log, "Peer is up: {:?}", peer_id);
-        self.download_manager.peer_connection_up(peer_id)
+        self.peer_connection_up(peer_id)
     }
 
     fn on_peer_down(&self, peer_id: NodeId) {
         info!(self.log, "Peer is down: {:?}", peer_id);
-        self.download_manager.peer_connection_down(peer_id)
+        self.peer_connection_down(peer_id)
     }
 
     /// The method is called on a periodic timer event.
@@ -454,8 +498,8 @@ impl Gossip for GossipImpl {
     ///
     /// In short, the method is a catch-all for a periodic and
     /// holistic refresh of IC state.
-    fn on_timer(&self) {
-        self.download_manager.on_timer();
+    fn on_gossip_timer(&self) {
+        self.on_timer();
     }
 }
 

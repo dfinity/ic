@@ -357,7 +357,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                 match gossip_message {
                     GossipMessage::Advert(msg) => {
                         let consume_fn = move |item, peer_id| {
-                            c_gossip.on_advert(item, peer_id);
+                            c_gossip.on_gossip_advert(item, peer_id);
                         };
                         let advert = self.advert.clone();
                         Box::pin(async move {
@@ -377,7 +377,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                     }
                     GossipMessage::Chunk(msg) => {
                         let consume_fn = move |item, peer_id| {
-                            c_gossip.on_chunk(item, peer_id);
+                            c_gossip.on_gossip_chunk(item, peer_id);
                         };
                         let chunk = self.chunk.clone();
                         Box::pin(async move {
@@ -387,7 +387,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                     }
                     GossipMessage::RetransmissionRequest(msg) => {
                         let consume_fn = move |item, peer_id| {
-                            c_gossip.on_retransmission_request(item, peer_id);
+                            c_gossip.on_gossip_retransmission_request(item, peer_id);
                         };
                         let retransmission = self.retransmission.clone();
                         Box::pin(async move {
@@ -449,7 +449,7 @@ impl P2PThreadJoiner {
                 let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
                 while !killed_c.load(SeqCst) {
                     std::thread::sleep(timer_duration);
-                    gossip.on_timer();
+                    gossip.on_gossip_timer();
                 }
             })
             .unwrap();
@@ -627,7 +627,7 @@ pub mod tests {
         type NodeId = NodeId;
 
         /// The method is called when an advert is received.
-        fn on_advert(&self, _gossip_advert: Self::GossipAdvert, peer_id: Self::NodeId) {
+        fn on_gossip_advert(&self, _gossip_advert: Self::GossipAdvert, peer_id: Self::NodeId) {
             std::thread::sleep(self.advert_processing_delay);
             TestGossip::increment_or_set(&self.num_adverts, peer_id);
         }
@@ -638,7 +638,7 @@ pub mod tests {
         }
 
         /// The method is called when a chunk is received.
-        fn on_chunk(&self, _gossip_artifact: Self::GossipChunk, peer_id: Self::NodeId) {
+        fn on_gossip_chunk(&self, _gossip_artifact: Self::GossipChunk, peer_id: Self::NodeId) {
             TestGossip::increment_or_set(&self.num_chunks, peer_id);
         }
 
@@ -648,7 +648,7 @@ pub mod tests {
         }
 
         /// The method is called when a re-transmission request is received.
-        fn on_retransmission_request(
+        fn on_gossip_retransmission_request(
             &self,
             _gossip_request: GossipRetransmissionRequest,
             _node_id: NodeId,
@@ -664,7 +664,7 @@ pub mod tests {
             TestGossip::increment_or_set(&self.num_changes, peer_id);
         }
 
-        fn on_timer(&self) {
+        fn on_gossip_timer(&self) {
             // Do nothing
         }
     }
