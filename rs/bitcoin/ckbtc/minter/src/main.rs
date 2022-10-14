@@ -1,6 +1,6 @@
 use candid::candid_method;
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, update};
-use ic_ckbtc_minter::lifecycle::{self, init::InitArgs, upgrade::UpgradeArgs};
+use ic_ckbtc_minter::lifecycle::{self, init::InitArgs};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcErr, RetrieveBtcOk};
 use ic_ckbtc_minter::updates::{
@@ -21,8 +21,8 @@ fn pre_upgrade() {
 }
 
 #[post_upgrade]
-fn post_upgrade(args: UpgradeArgs) {
-    lifecycle::upgrade::post_upgrade(args)
+fn post_upgrade() {
+    lifecycle::upgrade::post_upgrade()
 }
 
 #[candid_method(update)]

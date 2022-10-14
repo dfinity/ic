@@ -4492,6 +4492,7 @@ dependencies = [
  "bech32 0.9.0",
  "candid",
  "canister-test",
+ "ciborium",
  "dfn_http_metrics",
  "hex",
  "ic-base-types",
