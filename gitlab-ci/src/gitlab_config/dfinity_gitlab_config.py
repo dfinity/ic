@@ -438,8 +438,11 @@ exit 0
             raise ValueError("\n".join(errors))
 
     def _bash_lint_job(self, job_name: str):
-        logging.info("linting job '%s' with bash linter", job_name)
-        return self._bash_linter(job_name, self.ci_job_script(job_name))
+        try:
+            self._bash_linter(job_name, self.ci_job_script(job_name))
+        except Exception as e:
+            logging.error("Failed to lint job '%s'", job_name)
+            raise e
 
     def _ci_cfg_lint_with_bash_linter(self, verbose=False):
         if verbose:

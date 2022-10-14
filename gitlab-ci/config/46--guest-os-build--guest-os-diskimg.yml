@@ -1,7 +1,7 @@
 guest-os-diskimg:
   needs: []
   extends:
-    - .ubuntu-docker-k8s-protected
+    - .bazel-build-k8s
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   variables:

@@ -30,9 +30,10 @@ cargo-build-release-darwin:
 
 cargo-build-release-linux-native:
   extends:
-    - .cargo-build-docker-protected
+    - .bazel-build-k8s
     - .rules-parent-pipeline-autorun-on-trigger
-    - .ic-build-image
+  stage: cargo-build
+  needs: []
   variables:
     ARTIFACT_EXT: ""
   artifacts:

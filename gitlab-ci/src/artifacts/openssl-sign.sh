@@ -20,23 +20,3 @@ rm -f SHA256SUMS sign-input.txt sign.sig sign.sig.bin
     GLOBIGNORE="SHA256SUMS"
     shasum --algorithm 256 --binary * | tee SHA256SUMS
 )
-
-# Always produce at least empty signature files as bazel needs to know output artifacts in advance.
-touch sign-input.txt sign.sig sign.sig.bin
-
-if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ] && [ ! -e /openssl/private.pem ]; then
-    echo "Not doing anything as /openssl/private.pem doesn't exist. [NOT on protected branch]"
-    exit 0
-fi
-
-cp SHA256SUMS sign-input.txt
-VERSION="${VERSION:-$(git rev-parse --verify HEAD)}"
-echo "$VERSION" >>sign-input.txt
-
-openssl dgst -sha256 -hex -sign /openssl/private.pem -out "sign.sig" sign-input.txt
-
-echo "CI_COMMIT_REF_PROTECTED: ${CI_COMMIT_REF_PROTECTED:-}"
-if [[ "${CI_COMMIT_REF_PROTECTED:-}" == "true" ]]; then
-    # On protected branches ensure that signatures we just created can be verified
-    "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/openssl-verify.sh .
-fi
