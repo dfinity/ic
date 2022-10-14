@@ -16,8 +16,10 @@ Each experiment has an entry point.  `run_experiment_*.py` for a spot run, or `m
 
 When running benchmarks, the tool collects all measurements and metrics, most of them are collected for each iteration the benchmark is running, which will be used to generate summary report that includes iteration measurements. The reports are HTML reports, and they contain rich content (such as flamegraphs), but they also contain links to existing material such as existing Grafana dashboards.
 
-Report generation (generate_report.py) is decoupled from the benchmark runs. It can be invoked by supplying the `base_dir` directory which is the root of previous experiment run artifacts are generated into, the `git_revision` of IC the experiment was executed on, and the `timestamp` the experiment is marked with. `results`, `git_revision` and `timestamp` will be concatenated to form the full artifact directory of the previous experiment run. An example of generating report command will look like:
-```common/generate_report.py --base_dir "results/" --git_revision 9f8390a49caaf43b1bd5a9d3e566ec4837b687eb --timestamp 1651766562```
+Report generation (`generate_report.py`) is decoupled from the benchmark runs. It can be invoked by supplying the `base_dir` directory which is the root of previous experiment run artifacts are generated into, the `git_revision` of IC the experiment was executed on, and the `timestamp` the experiment is marked with. `results`, `git_revision` and `timestamp` will be concatenated to form the full artifact directory of the previous experiment run. An example of generating report command will look like:
+```
+common/generate_report.py --base_dir "results/" --git_revision 9f8390a49caaf43b1bd5a9d3e566ec4837b687eb --timestamp 1651766562
+```
 In this example, `generate_report.py` script will compile the report from artifacts in directory of `scalability/results/9f8390a49caaf43b1bd5a9d3e566ec4837b687eb/1651766562`.  Please note, always trigger your scripts from `scalability/` folder as the root.
 
 The code is as follows:
