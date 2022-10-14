@@ -5,7 +5,6 @@ use ic_btc_types::{
     UtxosFilterInRequest,
 };
 use ic_cdk::api::call::call_with_payment;
-
 use ic_icrc1::{
     endpoints::{TransferArg, TransferError},
     Account, Subaccount,
@@ -33,7 +32,6 @@ pub struct UpdateBalanceResult {
     pub amount: u64,
     pub block_index: u64,
 }
-
 enum ErrorCode {
     ConfigurationError = 1,
 }

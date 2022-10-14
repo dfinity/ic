@@ -76,3 +76,12 @@ fn test_install_ckbtc_minter_canister() {
     let ledger_id = install_ledger(&env);
     install_minter(&env, ledger_id);
 }
+
+#[test]
+fn test_upgrade() {
+    let env = StateMachine::new();
+    let ledger_id = install_ledger(&env);
+    let minter_id = install_minter(&env, ledger_id);
+    env.upgrade_canister(minter_id, minter_wasm(), Encode!().unwrap())
+        .expect("Failed to upgrade the minter canister");
+}

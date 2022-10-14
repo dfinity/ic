@@ -94,7 +94,9 @@ pub enum NetworkSnakeCase {
 }
 
 /// A reference to a transaction output.
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+)]
 pub struct OutPoint {
     /// A cryptographic hash of the transaction.
     /// A transaction can output multiple UTXOs.
@@ -105,7 +107,7 @@ pub struct OutPoint {
 }
 
 /// An unspent transaction output.
-#[derive(CandidType, Debug, Deserialize, PartialEq, Clone, Hash, Eq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Serialize, Clone, Hash, Eq)]
 pub struct Utxo {
     pub outpoint: OutPoint,
     pub value: Satoshi,

@@ -9,16 +9,17 @@ use std::{
 };
 
 use crate::ECDSAPublicKey;
-use candid::Principal;
+use candid::{Deserialize, Principal};
 use ic_base_types::CanisterId;
 use ic_btc_types::{Address, Network, Utxo};
+use serde::Serialize;
 
 thread_local! {
     static __STATE: RefCell<Option<CkBtcMinterState>> = RefCell::default();
 }
 
 // A pending retrieve btc request
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RetrieveBtcRequest {
     pub amount: u64,
     pub address: String,
@@ -29,7 +30,7 @@ pub struct RetrieveBtcRequest {
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Deserialize, Serialize)]
 pub struct CkBtcMinterState {
     /// The bitcoin network that the minter will connect to
     pub btc_network: Network,
