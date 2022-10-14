@@ -596,6 +596,12 @@ impl SystemMetadata {
             // committing each state.
             prev_state_hash: Default::default(),
             state_sync_version: 0,
+            // NB. State manager relies on the root hash of the hash tree
+            // corresponding to the initial state to be a constant.  Thus we fix
+            // the certification version that we use for the initial state. If
+            // we used CURRENT_CERTIFICATION_VERSION here, the state hash would
+            // NOT guaranteed to be constant, potentially leading to
+            // hard-to-track bugs in state manager.
             certification_version: CertificationVersion::V0,
             heap_delta_estimate: NumBytes::from(0),
             time_of_last_allocation_charge: UNIX_EPOCH,

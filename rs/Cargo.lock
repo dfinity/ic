@@ -8119,6 +8119,7 @@ dependencies = [
  "ic-btc-types",
  "ic-btc-types-internal",
  "ic-canonical-state",
+ "ic-certification-version",
  "ic-config",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
