@@ -184,7 +184,10 @@ impl Default for State {
             minting_account_id: None,
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
-            icp_xdr_conversion_rate: None,
+            icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
+                timestamp_seconds: 1620633600,    // 10 May 2021 10:00:00 AM CEST
+                xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
+            }),
             average_icp_xdr_conversion_rate: None,
             recent_icp_xdr_rates: Some(vec![
                 IcpXdrConversionRate::default();
@@ -1856,7 +1859,19 @@ mod tests {
     }
 
     #[test]
-    // The function tests if the average ICP/XDR price is computed correctly.
+    /// The function verifies that a default ICP/XDR conversion rate is set.
+    fn test_default_icp_xdr_conversion_rate() {
+        let state = State::default();
+        let conversion_rate = state.icp_xdr_conversion_rate;
+        let default_rate = IcpXdrConversionRate {
+            timestamp_seconds: 1620633600,
+            xdr_permyriad_per_icp: 1_000_000,
+        };
+        assert!(matches!(conversion_rate, Some(rate) if rate == default_rate));
+    }
+
+    #[test]
+    /// The function tests if the average ICP/XDR conversion rate is computed correctly.
     fn test_average_icp_xdr_price_with_sample_rates() {
         init_test_state();
 
@@ -1881,8 +1896,8 @@ mod tests {
     }
 
     #[test]
-    // The function tests if the average ICP/XDR price is computed correctly for
-    // random input.
+    /// The function tests if the average ICP/XDR conversion rate is computed correctly for
+    /// random input.
     fn test_random_average_icp_xdr_price() {
         init_test_state();
 
@@ -1933,7 +1948,7 @@ mod tests {
     }
 
     #[test]
-    // The function tests if the maturity modulation is computed correctly using sample rates.
+    /// The function tests if the maturity modulation is computed correctly using sample rates.
     fn test_maturity_modulation_with_sample_rates() {
         init_test_state();
 
@@ -1956,8 +1971,8 @@ mod tests {
     }
 
     #[test]
-    // The function tests if the maturity modulation is computed correctly for
-    // random input.
+    /// The function tests if the maturity modulation is computed correctly for
+    /// random input.
     fn test_random_maturity_modulation() {
         init_test_state();
 
