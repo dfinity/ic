@@ -4,7 +4,7 @@ package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
     "//rs/crypto/getrandom_for_wasm",
-    "@crate_index//:bls12_381",
+    "@crate_index//:ic_bls12_381",
     "@crate_index//:hex",
     "@crate_index//:lazy_static",
     "@crate_index//:pairing",
@@ -26,9 +26,12 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEV_DEPENDENCIES = []
 
+ALIASES = {}
+
 rust_library(
     name = "type",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_internal_bls12_381_type",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
