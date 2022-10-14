@@ -5,6 +5,7 @@ use ic_canonical_state::{
     hash_tree::{crypto_hash_lazy_tree, hash_lazy_tree},
     lazy_tree::LazyTree,
 };
+use ic_certification_version::CURRENT_CERTIFICATION_VERSION;
 use ic_crypto_tree_hash::{
     flatmap, FlatMap, Label, LabeledTree, MixedHashTree, WitnessGenerator, WitnessGeneratorImpl,
 };
@@ -218,6 +219,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
 
     let state_100_custom_sections = {
         let mut state = get_initial_state(/*num_canisters=*/ 100u64, 0);
+        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         assert_eq!(state.canister_states.len(), 100);
         for canister in state.canister_states.values_mut() {
             canister.execution_state.as_mut().unwrap().metadata = WasmMetadata::new(btreemap! {

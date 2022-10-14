@@ -110,6 +110,7 @@ rust_bench(
     deps = [
         ":state_manager",
         "//rs/canonical_state",
+        "//rs/canonical_state/certification_version",
         "//rs/criterion_time",
         "//rs/crypto/tree_hash",
         "//rs/registry/subnet_type",
