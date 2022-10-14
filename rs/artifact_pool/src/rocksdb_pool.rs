@@ -7,7 +7,6 @@ use bincode::{deserialize, serialize};
 use byteorder::{BigEndian, ReadBytesExt};
 use ic_config::artifact_pool::RocksDBConfig;
 
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::artifact_pool::ValidatedArtifact;
 use ic_interfaces::consensus_pool::{
     HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
@@ -22,8 +21,8 @@ use ic_types::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg::Dealings,
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
-        Finalization, FinalizationShare, HasHeight, Notarization, NotarizationShare, Payload,
-        RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        ConsensusMessageHashable, Finalization, FinalizationShare, HasHeight, Notarization,
+        NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
     crypto::CryptoHashable,
     Height, Time,

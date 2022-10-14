@@ -13,7 +13,6 @@ http = "0.2.1"
 ic-async-utils = { path = "../async_utils" }
 ic-canister-client = { path = "../canister_client" }
 ic-config = { path = "../config" }
-ic-consensus-message = { path = "../consensus/message" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }

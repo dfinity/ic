@@ -613,7 +613,6 @@ fn resolve_sig_inputs_refs(
 mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
-    use ic_ecdsa_object::EcdsaObject;
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_interfaces::ecdsa::MutableEcdsaPool;
     use ic_interfaces::time_source::TimeSource;

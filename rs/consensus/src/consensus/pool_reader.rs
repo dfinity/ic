@@ -1,7 +1,6 @@
 //! Wrapper to read the consensus pool
 
 use crate::consensus::utils::{lookup_replica_version, registry_version_at_height};
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::consensus_pool::*;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;

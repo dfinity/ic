@@ -17,7 +17,6 @@ use ic_consensus::consensus::{
     payload_builder::{PayloadBuilder, PayloadBuilderImpl},
     pool_reader::PoolReader,
 };
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_ic00_types::IC_00;

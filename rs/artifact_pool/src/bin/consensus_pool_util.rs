@@ -4,12 +4,11 @@ use ic_artifact_pool::{
     consensus_pool::{PoolSectionOps, UncachedConsensusPoolImpl},
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::consensus_pool::*;
 use ic_logger::{LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    consensus::{certification::CertificationMessage, CatchUpPackage},
+    consensus::{certification::CertificationMessage, CatchUpPackage, ConsensusMessageHashable},
     time::current_time,
 };
 use prost::Message;

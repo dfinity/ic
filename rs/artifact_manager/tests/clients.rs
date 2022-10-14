@@ -4,7 +4,6 @@ mod setup;
 
 use assert_matches::assert_matches;
 use ic_artifact_manager::artifact::ConsensusArtifact;
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{artifact_manager::OnArtifactError, artifact_pool::ArtifactPoolError};
 use ic_test_utilities::{
     consensus::{fake::*, make_genesis},

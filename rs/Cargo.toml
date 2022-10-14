@@ -36,8 +36,6 @@ members = [
   "certification/test-utils",
   "config",
   "consensus",
-  "consensus/message",
-  "consensus/ecdsa_object",
   "constants",
   "criterion_time",
   "crypto",

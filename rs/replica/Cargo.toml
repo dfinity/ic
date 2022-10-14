@@ -14,7 +14,6 @@ ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-canister-http-adapter-client = { path = "../canister_http/client" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
-ic-consensus-message = { path = "../consensus/message" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }

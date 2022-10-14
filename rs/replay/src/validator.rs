@@ -6,7 +6,6 @@ use ic_consensus::consensus::{
     dkg_key_manager::DkgKeyManager, pool_reader::PoolReader, validator::Validator, ConsensusCrypto,
     Membership, ValidatorMetrics,
 };
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus_pool::{
@@ -22,7 +21,10 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::ConsensusMessageId,
-    consensus::{Block, CatchUpPackage, ConsensusMessage, ConsensusMessageHash, HasBlockHash},
+    consensus::{
+        Block, CatchUpPackage, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable,
+        HasBlockHash,
+    },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
     Height, NodeId, SubnetId,

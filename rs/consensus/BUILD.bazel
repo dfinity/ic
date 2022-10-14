@@ -6,7 +6,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
-    "//rs/consensus/message",
     "//rs/crypto",
     "//rs/crypto/prng",
     "//rs/crypto/test_utils/canister_threshold_sigs",
@@ -40,7 +39,6 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/bitcoin/types/internal",
-    "//rs/consensus/ecdsa_object",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/ingress_manager",

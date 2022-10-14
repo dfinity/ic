@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/canister_http/client",
     "//rs/config",
     "//rs/consensus",
-    "//rs/consensus/message",
     "//rs/crypto",
     "//rs/crypto/sha",
     "//rs/crypto/tls_interfaces",

@@ -15,7 +15,6 @@ rust_library(
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/consensus",
-        "//rs/consensus/message",
         "//rs/constants",
         "//rs/crypto",
         "//rs/crypto/internal/crypto_lib/types",

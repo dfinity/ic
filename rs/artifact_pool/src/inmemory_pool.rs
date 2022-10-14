@@ -2,7 +2,6 @@ use crate::{
     consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps},
     height_index::{HeightIndex, Indexes, SelectIndex},
 };
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
     artifact_pool::{HasTimestamp, IntoInner},
     consensus_pool::{HeightIndexedPool, HeightRange, OnlyError, PoolSection},

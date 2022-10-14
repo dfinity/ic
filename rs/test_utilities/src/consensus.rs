@@ -5,7 +5,6 @@ use mockall::*;
 
 use crate::crypto::empty_ni_dkg_transcripts_with_committee;
 use ic_base_types::RegistryVersion;
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
     consensus::*,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache},
@@ -18,8 +17,9 @@ use ic_types::{
     artifact::*,
     batch::ValidationContext,
     consensus::{
-        catchup::CUPWithOriginalProtobuf, dkg, Block, CatchUpContent, CatchUpPackage, HasHeight,
-        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
+        catchup::CUPWithOriginalProtobuf, dkg, Block, CatchUpContent, CatchUpPackage,
+        ConsensusMessageHashable, HasHeight, HashedBlock, HashedRandomBeacon, Payload,
+        RandomBeaconContent, Rank,
     },
     crypto::{
         threshold_sig::ni_dkg::NiDkgTag, CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash,

@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
     "//rs/config",
     "//rs/consensus",
-    "//rs/consensus/message",
     "//rs/crypto",
     "//rs/crypto/utils/threshold_sig",
     "//rs/crypto/utils/threshold_sig_der",

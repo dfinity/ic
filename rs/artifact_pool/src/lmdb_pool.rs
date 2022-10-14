@@ -2,8 +2,6 @@ use crate::consensus_pool::{InitializablePoolSection, PoolSectionOp, PoolSection
 use crate::lmdb_iterator::{LMDBEcdsaIterator, LMDBIterator};
 use crate::metrics::EcdsaPoolMetrics;
 use ic_config::artifact_pool::LMDBConfig;
-use ic_consensus_message::ConsensusMessageHashable;
-use ic_ecdsa_object::ecdsa_msg_id;
 use ic_interfaces::{
     artifact_pool::ValidatedArtifact,
     consensus_pool::{
@@ -22,12 +20,13 @@ use ic_types::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
         ecdsa::{
-            EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefix,
-            EcdsaPrefixOf, EcdsaSigShare,
+            ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
+            EcdsaPrefix, EcdsaPrefixOf, EcdsaSigShare,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
-        ConsensusMessageHash, Finalization, FinalizationShare, HasHeight, Notarization,
-        NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        ConsensusMessageHash, ConsensusMessageHashable, Finalization, FinalizationShare, HasHeight,
+        Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
+        RandomTapeShare,
     },
     crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
     crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
