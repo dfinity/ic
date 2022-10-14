@@ -398,7 +398,7 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_test_utilities::with_test_replica_logger;
+    use ic_test_utilities_logger::with_test_replica_logger;
 
     #[test]
     fn default_http_config_endpoint_succeeds() {

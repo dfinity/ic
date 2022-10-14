@@ -224,8 +224,8 @@ pub(crate) mod tests {
         state::ReplicatedStateBuilder,
         state_manager::MockStateManager,
         types::ids::{node_test_id, subnet_test_id},
-        with_test_replica_logger,
     };
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
     use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
     use std::sync::{Arc, RwLockWriteGuard};

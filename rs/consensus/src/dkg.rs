@@ -1560,8 +1560,8 @@ mod tests {
         state_manager::RefMockStateManager,
         types::ids::{node_test_id, subnet_test_id},
         types::messages::RequestBuilder,
-        with_test_replica_logger,
     };
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::{
         batch::BatchPayload,

@@ -1040,8 +1040,8 @@ mod tests {
         notification::{Notification, WaitResult},
         state_manager::MockStateManager,
         types::batch::BatchBuilder,
-        with_test_replica_logger,
     };
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
     use std::sync::Arc;
     use std::time::Duration;

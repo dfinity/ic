@@ -13,8 +13,8 @@ use ic_test_utilities::{
         ids::{canister_test_id, subnet_test_id, user_test_id},
         messages::SignedIngressBuilder,
     },
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
     messages::{extract_effective_canister_id, SignedIngressContent},
     nominal_cycles::NominalCycles,

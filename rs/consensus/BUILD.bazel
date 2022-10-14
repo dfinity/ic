@@ -50,6 +50,7 @@ DEV_DEPENDENCIES = [
     "//rs/state_manager",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",

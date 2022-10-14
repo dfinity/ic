@@ -683,8 +683,8 @@ mod tests {
             ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
             messages::IngressBuilder,
         },
-        with_test_replica_logger,
     };
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
     use ic_types::messages::StopCanisterContext;
     use ic_types::{CanisterId, Cycles, ExecutionRound, Height};

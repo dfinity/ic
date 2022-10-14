@@ -451,7 +451,7 @@ pub mod test {
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::types::ids::subnet_test_id;
-    use ic_test_utilities::with_test_replica_logger;
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{
         crypto::{CryptoHash, CryptoHashOf},
         messages::CallbackId,

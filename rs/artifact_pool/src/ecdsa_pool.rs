@@ -456,8 +456,8 @@ mod tests {
         dummy_idkg_dealing_for_tests, dummy_idkg_transcript_id_for_tests,
     };
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
-    use ic_test_utilities::with_test_replica_logger;
     use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::dealing_support_prefix;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};

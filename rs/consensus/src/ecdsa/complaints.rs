@@ -957,8 +957,8 @@ mod tests {
     use ic_interfaces::ecdsa::MutableEcdsaPool;
     use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_test_utilities::with_test_replica_logger;
     use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::TranscriptRef;
     use ic_types::Height;
 

@@ -56,5 +56,5 @@ url = "2.1.1"
 [dev-dependencies]
 assert_cmd = "0.12"
 ic-registry-client-fake = { path = "../registry/fake" }
-ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-logger = { path = "../test_utilities/logger" }
 wait-timeout = "0.2.0"

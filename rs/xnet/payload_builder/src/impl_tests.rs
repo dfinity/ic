@@ -12,8 +12,8 @@ use ic_test_utilities::{
     crypto::fake_tls_handshake::FakeTlsHandshake,
     state_manager::FakeStateManager,
     types::ids::{subnet_test_id, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5},
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use maplit::btreemap;
 
 #[tokio::test]

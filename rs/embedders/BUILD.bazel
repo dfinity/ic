@@ -38,6 +38,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/test_utilities",
+    "//rs/test_utilities/logger",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:insta",

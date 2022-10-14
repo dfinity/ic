@@ -15,8 +15,8 @@ use ic_test_utilities::{
         ids::{canister_test_id, user_test_id, SUBNET_27, SUBNET_42},
         messages::RequestBuilder,
     },
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
     MetricVec,

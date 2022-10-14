@@ -17,8 +17,8 @@ use ic_test_utilities::{
     consensus::fake::{Fake, FakeVerifier},
     state::{initial_execution_state, new_canister_state},
     types::ids::{subnet_test_id, user_test_id},
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
     artifact::{Artifact, StateSyncMessage},

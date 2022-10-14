@@ -1,4 +1,3 @@
-pub use ic_test_utilities_logger::{with_test_logger, with_test_replica_logger};
 pub use ic_universal_canister as universal_canister;
 pub use util::mock_time;
 pub use util::with_timeout;

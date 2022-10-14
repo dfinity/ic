@@ -164,7 +164,7 @@ where
         &mut IngressManager,
     ),
 {
-    ic_test_utilities::with_test_replica_logger(|log| {
+    ic_test_utilities_logger::with_test_replica_logger(|log| {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             // Set initial time to non-zero

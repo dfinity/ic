@@ -32,6 +32,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/replicated_state",
     "//rs/test_utilities",
+    "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
     "@crate_index//:bytes",
