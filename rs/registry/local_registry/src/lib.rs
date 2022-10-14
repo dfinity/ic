@@ -45,11 +45,6 @@ pub struct LocalRegistry {
     // threshold public key of the root subnet changes.
     cached_registry_canister: RwLock<(RootSubnetInfo, RegistryCanister)>,
     query_timeout: Duration,
-    tokio_runtime_handle: tokio::runtime::Handle,
-    // In case the LocalRegistry was not created with a handle to an external
-    // tokio Runtime, LocalRegistry must take ownership of its own tokio
-    // runtime.
-    tokio_runtime: Option<tokio::runtime::Runtime>,
 }
 
 impl LocalRegistry {
@@ -69,27 +64,6 @@ impl LocalRegistry {
     pub fn new<P: AsRef<Path>>(
         local_store_path: P,
         query_timeout: Duration,
-    ) -> Result<Self, LocalRegistryError> {
-        let tokio_runtime =
-            tokio::runtime::Runtime::new().expect("Could not instantiate tokio runtime");
-        let mut s = Self::new_with_runtime_handle(
-            local_store_path,
-            query_timeout,
-            tokio_runtime.handle().clone(),
-        )?;
-
-        // We need to hold on to a tokio runtime.
-        s.tokio_runtime = Some(tokio_runtime);
-        Ok(s)
-    }
-
-    /// Same as [new].
-    ///
-    /// `tokio_runtime_handle` will be used to handle asynchronous code paths.
-    pub fn new_with_runtime_handle<P: AsRef<Path>>(
-        local_store_path: P,
-        query_timeout: Duration,
-        tokio_runtime_handle: tokio::runtime::Handle,
     ) -> Result<Self, LocalRegistryError> {
         let local_store_reader = Arc::new(LocalStoreImpl::new(local_store_path.as_ref()));
         let local_store_writer = LocalStoreImpl::new(local_store_path.as_ref());
@@ -111,8 +85,6 @@ impl LocalRegistry {
             local_store_writer,
             cached_registry_canister,
             query_timeout,
-            tokio_runtime_handle,
-            tokio_runtime: None,
         })
     }
 
@@ -121,7 +93,7 @@ impl LocalRegistry {
     ///
     /// *Note*: If called concurrently, updates to the certified time might be
     /// stored out of order.
-    pub fn sync_with_nns(&self) -> Result<(), LocalRegistryError> {
+    pub async fn sync_with_nns(&self) -> Result<(), LocalRegistryError> {
         // The changelog entry for a given registry version never changes. As
         // the local store overwrites existing versions atomically, it follows
         // that even if multiple threads call this function concurrently,
@@ -129,12 +101,13 @@ impl LocalRegistry {
         let latest_cached_version = self.registry_cache.get_latest_version();
         let (mut raw_changelog, certified_time) = {
             let guard = self.cached_registry_canister.read().unwrap();
-            let (raw_changelog, _, t) = self
-                .tokio_runtime_handle
-                .block_on(guard.1.get_certified_changes_since(
+            let (raw_changelog, _, t) = guard
+                .1
+                .get_certified_changes_since(
                     latest_cached_version.get(),
                     &guard.0.urls_and_pubkey.1,
-                ))
+                )
+                .await
                 .map_err(LocalRegistryError::from)?;
             (raw_changelog, t)
         };

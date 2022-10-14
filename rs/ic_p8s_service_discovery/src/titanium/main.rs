@@ -79,6 +79,7 @@ fn main() -> Result<()> {
         let (stop_signal_sender, stop_signal_rcv) = crossbeam::channel::bounded::<()>(0);
         let poll_loop = make_poll_loop(
             log.clone(),
+            rt.handle().clone(),
             ic_discovery,
             stop_signal_rcv,
             cli_args.poll_interval,
@@ -126,6 +127,7 @@ fn main() -> Result<()> {
 
 fn make_poll_loop(
     log: slog::Logger,
+    rt: tokio::runtime::Handle,
     ic_discovery: Arc<IcServiceDiscoveryImpl>,
     stop_signal: Receiver<()>,
     poll_interval: Duration,
@@ -151,7 +153,7 @@ fn make_poll_loop(
             }
             info!(log, "Update registries");
             let timer = metrics.registries_update_latency_seconds.start_timer();
-            if let Err(e) = ic_discovery.update_registries() {
+            if let Err(e) = rt.block_on(ic_discovery.update_registries()) {
                 warn!(
                     log,
                     "Failed to sync registry @ interval {:?}: {:?}", tick, e

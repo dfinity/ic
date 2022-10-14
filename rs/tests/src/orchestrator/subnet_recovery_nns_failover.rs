@@ -33,6 +33,7 @@ use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
     can_install_canister_with_retries, can_read_msg, cannot_store_msg, store_message,
 };
+use crate::util::block_on;
 use ic_recovery::file_sync_helper;
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
@@ -287,8 +288,7 @@ pub fn test(env: TestEnv) {
         logger,
         "Ensure that the subnet is accepting updates after the recovery"
     );
-    let topo_restore_ic = topo_restore_ic
-        .block_for_newer_registry_version()
+    let topo_restore_ic = block_on(topo_restore_ic.block_for_newer_registry_version())
         .expect("Could not obtain updated registry.");
     let upload_node = topo_restore_ic
         .subnets()

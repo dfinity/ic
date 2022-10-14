@@ -116,8 +116,7 @@ pub fn test(env: TestEnv) {
 
     // Wait for registry update
     info!(logger, "Waiting for registry update");
-    topo_snapshot
-        .block_for_newer_registry_version()
+    block_on(topo_snapshot.block_for_newer_registry_version())
         .expect("Could not block for newer registry version");
 
     // Assert that new nodes are reachable (via http call).

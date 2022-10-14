@@ -235,10 +235,8 @@ pub(crate) fn enable_ecdsa_and_create_subnet(
         .await;
     });
 
-    let topology_snapshot = env
-        .topology_snapshot()
-        .block_for_newer_registry_version()
-        .unwrap();
+    let topology_snapshot =
+        block_on(env.topology_snapshot().block_for_newer_registry_version()).unwrap();
 
     let app_subnet = topology_snapshot
         .subnets()

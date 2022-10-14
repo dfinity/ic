@@ -284,9 +284,9 @@ impl TopologySnapshot {
     ///
     /// As the test driver does not implement timeouts on the test level, this
     /// method blocks for a duration of 180 seconds at maximum.
-    pub fn block_for_newer_registry_version(&self) -> Result<TopologySnapshot> {
+    pub async fn block_for_newer_registry_version(&self) -> Result<TopologySnapshot> {
         let minimum_version = self.local_registry.get_latest_version() + RegistryVersion::from(1);
-        self.block_for_min_registry_version(minimum_version)
+        self.block_for_min_registry_version(minimum_version).await
     }
 
     /// This method blocks and repeatedly fetches updates from the registry
@@ -303,7 +303,7 @@ impl TopologySnapshot {
     ///
     /// As the test driver does not implement timeouts on the test level, this
     /// method blocks for a duration of 180 seconds at maximum.
-    pub fn block_for_min_registry_version(
+    pub async fn block_for_min_registry_version(
         &self,
         min_version: RegistryVersion,
     ) -> Result<TopologySnapshot> {
@@ -311,8 +311,8 @@ impl TopologySnapshot {
         let backoff = Duration::from_secs(2);
         let mut latest_version = self.local_registry.get_latest_version();
         if min_version > latest_version {
-            latest_version = retry(self.env.logger(), duration, backoff, || {
-                self.local_registry.sync_with_nns()?;
+            latest_version = retry_async(&self.env.logger(), duration, backoff, || async move {
+                self.local_registry.sync_with_nns().await?;
                 let latest_version = self.local_registry.get_latest_version();
                 if latest_version >= min_version {
                     Ok(latest_version)
@@ -323,7 +323,8 @@ impl TopologySnapshot {
                         min_version
                     )
                 }
-            })?;
+            })
+            .await?;
         }
         Ok(Self {
             registry_version: latest_version,

@@ -111,15 +111,14 @@ impl IcServiceDiscoveryImpl {
     ///
     /// If all updates succeed, returns `Ok(())`. Otherwise an error is returned
     /// containing all failed update attempts.
-    pub fn update_registries(&self) -> Result<(), IcServiceDiscoveryError> {
+    pub async fn update_registries(&self) -> Result<(), IcServiceDiscoveryError> {
         let cache = self.registries.read().unwrap();
-        let failures = cache.iter().fold(vec![], |mut a, (ic_name, registry)| {
-            if let Err(e) = registry.sync_with_nns() {
-                a.push((ic_name.to_string(), e));
+        let mut failures = vec![];
+        for (ic_name, registry) in cache.iter() {
+            if let Err(e) = registry.sync_with_nns().await {
+                failures.push((ic_name.to_string(), e));
             }
-            a
-        });
-
+        }
         if !failures.is_empty() {
             return Err(IcServiceDiscoveryError::SyncWithNnsFailed { failures });
         }
@@ -147,9 +146,6 @@ impl IcServiceDiscoveryImpl {
             }
             let ic_name = path.file_name().to_str().unwrap().to_string();
             if let Entry::Vacant(e) = registries_lock_guard.entry(ic_name) {
-                // The LocalRegistry needs to be updated to accept a
-                // tokio::runtime::Handle. For now we accept that each
-                // LocalRegistry will allocate it's own tokio-runtime.
                 let ic_registry = LocalRegistry::new(path.path(), self.registry_query_timeout)?;
                 e.insert(ic_registry);
             }

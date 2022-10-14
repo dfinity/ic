@@ -267,8 +267,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     }
 
     info!(logger, "Blocking for newer registry version");
-    env.topology_snapshot()
-        .block_for_newer_registry_version()
+    block_on(env.topology_snapshot().block_for_newer_registry_version())
         .expect("Could not block for newer registry version");
 
     print_app_and_unassigned_nodes(&env, &logger);
