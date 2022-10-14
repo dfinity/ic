@@ -10,8 +10,8 @@ use ic_test_utilities::{
         ids::{canister_test_id, SUBNET_6, SUBNET_7},
         messages::RequestBuilder,
     },
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
 };

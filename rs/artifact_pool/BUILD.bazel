@@ -46,6 +46,7 @@ DEV_DEPENDENCIES = [
     "//rs/constants",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
     "//rs/types/ic00_types",
     "@crate_index//:criterion",

@@ -397,8 +397,9 @@ mod tests {
     use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::{
         mock_time, types::ids::node_test_id, types::messages::SignedIngressBuilder,
-        with_test_replica_logger, FastForwardTimeSource,
+        FastForwardTimeSource,
     };
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::artifact::IngressMessageAttribute;
     use rand::Rng;
     use std::time::Duration;

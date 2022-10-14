@@ -58,6 +58,7 @@ DEV_DEPENDENCIES = [
     "//rs/bitcoin/test-utils",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
+    "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",
     "//rs/types/types_test_utils",
     "//rs/universal_canister/lib",

@@ -28,8 +28,9 @@ use ic_replica::setup::setup_crypto_provider;
 use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_test_utilities::{
     types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
-    universal_canister::UNIVERSAL_CANISTER_WASM, with_test_replica_logger,
+    universal_canister::UNIVERSAL_CANISTER_WASM,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},

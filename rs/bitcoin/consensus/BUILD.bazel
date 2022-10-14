@@ -25,6 +25,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/test_utilities",
+    "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
 ]
 

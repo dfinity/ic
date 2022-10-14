@@ -3,7 +3,8 @@ use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{flat_map::FlatMap, Label, LabeledTree};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
-use ic_test_utilities::{state::arb_stream_slice, with_test_replica_logger};
+use ic_test_utilities::state::arb_stream_slice;
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{metric_vec, HistogramStats};
 use ic_types::{
     xnet::{CertifiedStreamSlice, StreamIndex},

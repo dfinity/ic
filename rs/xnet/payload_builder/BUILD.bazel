@@ -43,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/state_manager",
     "//rs/test_utilities",
+    "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
     "@crate_index//:assert_matches",

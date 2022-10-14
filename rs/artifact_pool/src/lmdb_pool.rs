@@ -1734,7 +1734,7 @@ mod tests {
         consensus_pool::MutablePoolSection,
         test_utils::{fake_random_beacon, random_beacon_ops, PoolTestHelper},
     };
-    use ic_test_utilities::with_test_replica_logger;
+    use ic_test_utilities_logger::with_test_replica_logger;
     use std::{panic, path::PathBuf};
 
     #[test]

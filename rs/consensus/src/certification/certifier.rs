@@ -595,7 +595,7 @@ mod tests {
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_test_utilities::consensus::fake::*;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
-    use ic_test_utilities::with_test_replica_logger;
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::artifact::CertificationMessageId;
     use ic_types::consensus::certification::CertificationMessageHash;
     use ic_types::{

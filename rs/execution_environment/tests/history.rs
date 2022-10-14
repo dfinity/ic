@@ -10,8 +10,8 @@ use ic_test_utilities::{
     mock_time,
     state_manager::MockStateManager,
     types::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     Height,

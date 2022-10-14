@@ -8,8 +8,8 @@ use ic_test_utilities::{
     crypto::fake_tls_handshake::FakeTlsHandshake,
     state_manager::{FakeStateManager, MockStateManager},
     types::ids::{SUBNET_1, SUBNET_2},
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec,
     HistogramStats, MetricVec,

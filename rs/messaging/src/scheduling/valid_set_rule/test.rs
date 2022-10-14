@@ -18,8 +18,8 @@ use ic_test_utilities::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
         messages::SignedIngressBuilder,
     },
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter_vec, metric_vec, nonzero_values, HistogramStats,
     MetricVec,

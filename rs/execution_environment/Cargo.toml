@@ -61,6 +61,7 @@ ic-btc-test-utils = { path = "../bitcoin/test-utils" }
 ic-btc-types = { path = "../bitcoin/types/public" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }

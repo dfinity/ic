@@ -20,4 +20,5 @@ slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debu
 [dev-dependencies]
 ic-constants = { path = "../constants" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-wasm-types = { path = "../types/wasm_types" }

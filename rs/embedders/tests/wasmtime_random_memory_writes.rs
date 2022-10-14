@@ -15,8 +15,8 @@ use ic_test_utilities::{
     mock_time,
     state::SystemStateBuilder,
     types::ids::{call_context_test_id, user_test_id},
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,

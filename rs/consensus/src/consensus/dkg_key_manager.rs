@@ -521,8 +521,8 @@ mod tests {
     use ic_test_utilities::{
         crypto::CryptoReturningOk,
         types::ids::{node_test_id, subnet_test_id},
-        with_test_replica_logger,
     };
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
 
     #[test]

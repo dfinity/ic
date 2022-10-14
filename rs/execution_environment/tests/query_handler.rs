@@ -10,8 +10,8 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
     types::ids::{subnet_test_id, user_test_id},
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{messages::UserQuery, CanisterId, SubnetId};
 use maplit::btreemap;
 use std::{convert::TryFrom, sync::Arc};

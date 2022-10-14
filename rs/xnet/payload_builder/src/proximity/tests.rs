@@ -1,6 +1,6 @@
 use super::super::test_fixtures::*;
 use super::*;
-use ic_test_utilities::with_test_replica_logger;
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_gauge_vec, fetch_int_counter, metric_vec, MetricVec};
 
 /// Asserts that `proximity_map.pick_node()` will pick `expected_node` for all

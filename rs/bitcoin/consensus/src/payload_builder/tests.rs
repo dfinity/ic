@@ -13,8 +13,8 @@ use ic_test_utilities::{
     bitcoin_adapter_client::MockBitcoinAdapterClient, mock_time,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::ReplicatedStateBuilder, state_manager::MockStateManager, types::ids::subnet_test_id,
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{batch::ValidationContext, Height, NumBytes, RegistryVersion, SubnetId};
 use std::{str::FromStr, sync::Arc};

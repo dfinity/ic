@@ -20,6 +20,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//rs/constants",
     "//rs/test_utilities",
+    "//rs/test_utilities/logger",
     "//rs/types/wasm_types",
 ]
 

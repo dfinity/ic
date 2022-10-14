@@ -16,8 +16,8 @@ use ic_test_utilities::{
     types::batch::{BatchBuilder, IngressPayloadBuilder, PayloadBuilder},
     types::ids::subnet_test_id,
     types::messages::SignedIngressBuilder,
-    with_test_replica_logger,
 };
+use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::messages::SignedIngress;
 use ic_types::{Height, PrincipalId, SubnetId};

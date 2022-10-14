@@ -80,7 +80,7 @@ rust_test(
     crate = ":lib",
     deps = [
         "//rs/registry/fake",
-        "//rs/test_utilities",
+        "//rs/test_utilities/logger",
         "@crate_index//:assert_cmd",
         "@crate_index//:wait-timeout",
     ],
