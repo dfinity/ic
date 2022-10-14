@@ -3862,9 +3862,7 @@ dependencies = [
  "crossbeam-channel 0.5.6",
  "ic-artifact-pool",
  "ic-config",
- "ic-consensus-message",
  "ic-constants",
- "ic-ecdsa-object",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
@@ -3885,10 +3883,8 @@ dependencies = [
  "clap 3.2.14",
  "criterion",
  "ic-config",
- "ic-consensus-message",
  "ic-constants",
  "ic-crypto",
- "ic-ecdsa-object",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-logger",
@@ -4546,13 +4542,11 @@ dependencies = [
  "ic-artifact-pool",
  "ic-btc-types-internal",
  "ic-config",
- "ic-consensus-message",
  "ic-constants",
  "ic-crypto",
  "ic-crypto-prng",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-cycles-account-manager",
- "ic-ecdsa-object",
  "ic-error-types",
  "ic-execution-environment",
  "ic-ic00-types",
@@ -4596,14 +4590,6 @@ dependencies = [
  "strum 0.23.0",
  "strum_macros 0.23.1",
  "tempfile",
-]
-
-[[package]]
-name = "ic-consensus-message"
-version = "0.8.0"
-dependencies = [
- "ic-interfaces",
- "ic-types",
 ]
 
 [[package]]
@@ -5490,14 +5476,6 @@ dependencies = [
  "slog",
  "slog-term",
  "tokio",
-]
-
-[[package]]
-name = "ic-ecdsa-object"
-version = "0.8.0"
-dependencies = [
- "ic-interfaces",
- "ic-types",
 ]
 
 [[package]]
@@ -6670,7 +6648,6 @@ dependencies = [
  "ic-artifact-manager",
  "ic-canister-http-adapter-client",
  "ic-config",
- "ic-consensus-message",
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-interfaces",
@@ -7211,7 +7188,6 @@ dependencies = [
  "ic-canister-sandbox-launcher",
  "ic-config",
  "ic-consensus",
- "ic-consensus-message",
  "ic-crypto",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
@@ -7272,7 +7248,6 @@ dependencies = [
  "ic-canister-http-adapter-client",
  "ic-config",
  "ic-consensus",
- "ic-consensus-message",
  "ic-crypto",
  "ic-crypto-sha",
  "ic-crypto-tls-interfaces",
@@ -8238,7 +8213,6 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus",
- "ic-consensus-message",
  "ic-crypto",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -8279,7 +8253,6 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-config",
  "ic-consensus",
- "ic-consensus-message",
  "ic-constants",
  "ic-crypto",
  "ic-crypto-internal-types",
@@ -10515,7 +10488,6 @@ dependencies = [
  "ic-canister-client",
  "ic-config",
  "ic-consensus",
- "ic-consensus-message",
  "ic-crypto",
  "ic-crypto-sha",
  "ic-crypto-tls-interfaces",

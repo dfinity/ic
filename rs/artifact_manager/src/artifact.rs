@@ -1,11 +1,14 @@
 //! The module contains implementations for different artifact kinds.
 
-use ic_consensus_message::ConsensusMessageHashable;
-use ic_ecdsa_object::ecdsa_msg_id;
 use ic_types::{
-    artifact::*, canister_http::CanisterHttpResponseAttribute,
-    canister_http::CanisterHttpResponseShare, consensus::certification::CertificationMessageHash,
-    consensus::ecdsa::EcdsaMessageAttribute, crypto::CryptoHashOf, messages::SignedRequestBytes,
+    artifact::*,
+    canister_http::CanisterHttpResponseAttribute,
+    canister_http::CanisterHttpResponseShare,
+    consensus::certification::CertificationMessageHash,
+    consensus::ecdsa::{ecdsa_msg_id, EcdsaMessageAttribute},
+    consensus::ConsensusMessageHashable,
+    crypto::CryptoHashOf,
+    messages::SignedRequestBytes,
     CountBytes,
 };
 use serde::{Deserialize, Serialize};

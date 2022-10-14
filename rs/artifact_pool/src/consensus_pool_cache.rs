@@ -374,7 +374,6 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_consensus_message::ConsensusMessageHashable;
     use ic_ic00_types::EcdsaKeyId;
     use ic_interfaces::consensus_pool::HEIGHT_CONSIDERED_BEHIND;
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};

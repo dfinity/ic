@@ -5,9 +5,7 @@ edition = "2021"
 
 [dependencies]
 bincode = "1.2.1"
-ic-consensus-message = { path = "../consensus/message" }
 ic-constants = { path = "../constants" }
-ic-ecdsa-object = { path = "../consensus/ecdsa_object" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }

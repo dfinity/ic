@@ -1,8 +1,0 @@
-[package]
-name = "ic-ecdsa-object"
-version = "0.8.0"
-edition = "2021"
-
-[dependencies]
-ic-interfaces = { path = "../../interfaces" }
-ic-types = { path = "../../types/types" }

@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
-ic-consensus-message = { path = "./message" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
@@ -46,7 +45,6 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-config = { path = "../config" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
-ic-ecdsa-object = { path = "./ecdsa_object" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-messaging = { path = "../messaging" }

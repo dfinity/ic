@@ -35,7 +35,6 @@ tower = "0.4.12"
 
 [dev-dependencies]
 ic-canister-http-adapter-client = { path = "../canister_http/client" }
-ic-consensus-message = { path = "../consensus/message" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces-transport-mocks = { path = "../interfaces/transport/mocks" }

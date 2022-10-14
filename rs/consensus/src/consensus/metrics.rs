@@ -1,5 +1,4 @@
 use crate::consensus::{pool_reader::PoolReader, utils::get_block_hash_string};
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -8,7 +7,7 @@ use ic_types::{
     batch::Batch,
     consensus::{
         ecdsa::{CompletedReshareRequest, CompletedSignature, EcdsaPayload, KeyTranscriptCreation},
-        Block, BlockProposal, HasHeight, HasRank,
+        Block, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
     CountBytes,
 };

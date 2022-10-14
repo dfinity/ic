@@ -9,7 +9,6 @@
 
 use crate::metrics::{EcdsaPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_ecdsa_object::ecdsa_msg_id;
 use ic_interfaces::artifact_pool::{IntoInner, UnvalidatedArtifact};
 use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
@@ -21,8 +20,8 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
 use ic_types::consensus::ecdsa::{
-    EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare,
-    EcdsaStats, EcdsaStatsNoOp,
+    ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefixOf,
+    EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
 };
 use ic_types::consensus::BlockPayload;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
@@ -448,7 +447,6 @@ impl EcdsaGossipPool for EcdsaPoolImpl {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_ecdsa_object::EcdsaObject;
     use ic_interfaces::time_source::TimeSource;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::consensus::fake::*;
@@ -458,7 +456,7 @@ mod tests {
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
     use ic_test_utilities::FastForwardTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::consensus::ecdsa::dealing_support_prefix;
+    use ic_types::consensus::ecdsa::{dealing_support_prefix, EcdsaObject};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::signature::BasicSignature;

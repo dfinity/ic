@@ -1416,13 +1416,13 @@ impl TranscriptState {
 mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
-    use ic_ecdsa_object::EcdsaObject;
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_interfaces::ecdsa::MutableEcdsaPool;
     use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_test_utilities::FastForwardTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::consensus::ecdsa::EcdsaObject;
     use ic_types::crypto::CryptoHash;
     use ic_types::Height;
 

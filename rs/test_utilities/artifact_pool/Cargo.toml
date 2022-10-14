@@ -7,7 +7,6 @@ edition = "2021"
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
-ic-consensus-message = { path = "../../consensus/message" }
 ic-crypto = { path = "../../crypto" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }

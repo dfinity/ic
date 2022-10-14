@@ -1,7 +1,6 @@
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
 use ic_consensus::consensus::{dkg_key_manager::DkgKeyManager, pool_reader::PoolReader};
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus_pool::{ChangeAction, MutableConsensusPool},
@@ -13,7 +12,8 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::{
-        BlockProposal, CatchUpPackage, Finalization, Notarization, RandomBeacon, RandomTape,
+        BlockProposal, CatchUpPackage, ConsensusMessageHashable, Finalization, Notarization,
+        RandomBeacon, RandomTape,
     },
     Height, RegistryVersion, SubnetId,
 };

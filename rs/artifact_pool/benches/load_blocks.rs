@@ -3,7 +3,6 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, MutableConsensusPool};
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::FastForwardTimeSource;
@@ -14,7 +13,7 @@ use ic_test_utilities::{
 };
 use ic_types::{
     batch::{BatchPayload, IngressPayload},
-    consensus::{dkg, Block, BlockProposal, HasHeight, Payload, Rank},
+    consensus::{dkg, Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
     Height,
 };
 

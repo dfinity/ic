@@ -8,7 +8,6 @@
 //! the tests in this module can be used to test the Pool implementation.
 
 use crate::consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps};
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::consensus_pool::{
     HeightIndexedPool, HeightRange, PoolSection, ValidatedConsensusArtifact,
 };
@@ -21,9 +20,10 @@ use ic_test_utilities::{
 use ic_types::{
     artifact::{ConsensusMessage, ConsensusMessageId},
     consensus::{
-        dkg::Summary, Block, BlockPayload, BlockProposal, Finalization, FinalizationContent,
-        FinalizationShare, Notarization, NotarizationContent, NotarizationShare, RandomBeacon,
-        RandomBeaconContent, RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
+        dkg::Summary, Block, BlockPayload, BlockProposal, ConsensusMessageHashable, Finalization,
+        FinalizationContent, FinalizationShare, Notarization, NotarizationContent,
+        NotarizationShare, RandomBeacon, RandomBeaconContent, RandomBeaconShare, RandomTape,
+        RandomTapeContent, RandomTapeShare,
     },
     crypto::{ThresholdSigShare, ThresholdSigShareOf},
     signature::*,

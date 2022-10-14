@@ -39,7 +39,6 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/canister_http/client",
-    "//rs/consensus/message",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/interfaces/transport/mocks",
