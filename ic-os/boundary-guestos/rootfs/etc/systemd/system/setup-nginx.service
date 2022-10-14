@@ -2,11 +2,7 @@
 Description=Setup variable files (e.g. domain) for nginx
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Before=nginx.service
-
-[Install]
-RequiredBy=nginx.service
-WantedBy=multi-user.target
+Requires=bootstrap-ic-node.service
 
 [Service]
 Type=oneshot

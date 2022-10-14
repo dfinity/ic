@@ -2,6 +2,8 @@
 Description=ICX Proxy Service
 After=network-online.target
 Wants=network-online.target
+After=setup-icx-proxy.service
+BindsTo=setup-icx-proxy.service
 
 [Service]
 User=root

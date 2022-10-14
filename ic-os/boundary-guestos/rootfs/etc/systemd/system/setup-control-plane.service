@@ -2,11 +2,7 @@
 Description=Setup control-plane
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Before=control-plane.service
-
-[Install]
-RequiredBy=control-plane.service
-WantedBy=multi-user.target
+Requires=bootstrap-ic-node.service
 
 [Service]
 Type=oneshot

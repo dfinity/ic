@@ -1,16 +1,13 @@
 #!/bin/bash
 
 set -euox pipefail
+source '/opt/ic/bin/exec_condition.shlib'
 
 readonly BOOT_DIR='/boot/config'
 readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
 
 readonly RUN_DIR='/run/ic-node/etc/default'
 readonly ENV_FILE="${RUN_DIR}/denylist-updater"
-
-function err() {
-    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
-}
 
 # Read the config variables. The files must be of the form
 # "key=value" for each line with a specific set of keys permissible (see
@@ -35,14 +32,14 @@ function read_variables() {
 }
 
 function generate_denylist_updater_config() {
-    mkdir -p "${RUN_DIR}"
-
     # skip the ENV_FILE to disable the updater
     if [[ -z "${DENYLIST_URL:-}" ]]; then
         echo "denylist url not set, disabling denylist updater"
+        disable
         return
     fi
 
+    mkdir -p "${RUN_DIR}"
     cat >"${ENV_FILE}" <<EOF
 DENYLIST_URL=${DENYLIST_URL}
 EOF

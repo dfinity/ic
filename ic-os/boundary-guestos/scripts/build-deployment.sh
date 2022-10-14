@@ -314,18 +314,12 @@ function generate_prober_config() {
 
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
 
-            mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/prober"
+            mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
 
-            # copy prober identity
-            if [[ -f "${PROBER_IDENTITY:-}" ]]; then
+            # copy prober identity if enabled
+            if [[ -f "${PROBER_IDENTITY:-}" && "${prober:-}" == "true" ]]; then
                 echo "Using prober identity ${PROBER_IDENTITY}"
-                cp "${PROBER_IDENTITY}" "${CONFIG_DIR}/${NODE_PREFIX}/prober/identity.pem"
-            fi
-
-            # enable/disable prober
-            if [ "${prober:-}" != "true" ]; then
-                echo "Disabling prober"
-                touch "${CONFIG_DIR}/${NODE_PREFIX}/prober/prober.disabled"
+                cp "${PROBER_IDENTITY}" "${CONFIG_DIR}/${NODE_PREFIX}/prober_identity.pem"
             fi
         fi
     done

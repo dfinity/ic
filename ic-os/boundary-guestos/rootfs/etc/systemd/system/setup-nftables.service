@@ -2,11 +2,7 @@
 Description=Setup variable files for nftables
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Before=nftables.service
-
-[Install]
-RequiredBy=nftables.service
-WantedBy=multi-user.target
+Requires=bootstrap-ic-node.service
 
 [Service]
 Type=oneshot

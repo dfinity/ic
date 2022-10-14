@@ -1,0 +1,5 @@
+# This file should only be `source`d at the beginning of a script.
+
+function err() {
+    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
+}

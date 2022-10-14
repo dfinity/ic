@@ -60,7 +60,7 @@ function process_bootstrap() {
     # stash a couple of things away to config store
     FILES=(
         bn_vars.conf network.conf nns.conf
-        nns_public_key.pem denylist.map
+        nns_public_key.pem denylist.map prober_identity.pem
     )
     for FILE in ${FILES[@]}; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
@@ -74,7 +74,6 @@ function process_bootstrap() {
         buildinfo
         certs
         geolite2_dbs
-        prober
     )
 
     for DIR in "${DIRS[@]}"; do

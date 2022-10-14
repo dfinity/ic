@@ -2,11 +2,7 @@
 Description=Setup ic-registry-replicator
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Before=ic-registry-replicator.service
-
-[Install]
-RequiredBy=ic-registry-replicator.service
-WantedBy=multi-user.target
+Requires=bootstrap-ic-node.service
 
 [Service]
 Type=oneshot

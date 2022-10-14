@@ -2,6 +2,8 @@
 Description=Boundary Node Control Plane
 After=network-online.target
 Wants=network-online.target
+After=setup-control-plane.service
+BindsTo=setup-control-plane.service
 
 [Service]
 LogRateLimitIntervalSec=1ms

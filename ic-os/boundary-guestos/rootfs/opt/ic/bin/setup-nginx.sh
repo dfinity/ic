@@ -1,14 +1,11 @@
 #!/bin/bash
 
 set -euox pipefail
+source '/opt/ic/bin/helpers.shlib'
 
 readonly BOOT_DIR='/boot/config'
 
 readonly RUN_DIR='/run/ic-node/etc/nginx'
-
-function err() {
-    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
-}
 
 function read_variables() {
     local -r BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
