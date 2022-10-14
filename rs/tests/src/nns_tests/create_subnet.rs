@@ -162,24 +162,24 @@ pub fn test(env: TestEnv) {
 
     info!(log, "created application subnet with ID {}", new_subnet_id);
 
-    let topology_snapshot = topology_snapshot
-        .block_for_newer_registry_version()
-        .expect("Could not obtain updated registry.");
-    let new_subnet = topology_snapshot
-        .subnets()
-        .find(|subnet| subnet.subnet_id == new_subnet_id)
-        .expect("Could not find newly created subnet.");
-    new_subnet
-        .nodes()
-        .for_each(|node| node.await_status_is_healthy().unwrap());
-    let newly_assigned_endpoint = new_subnet
-        .nodes()
-        .next()
-        .expect("Could not find any node in newly created subnet.");
-
     // [Phase III] install a canister onto that subnet and check that it is
     // operational
     block_on(async move {
+        let topology_snapshot = topology_snapshot
+            .block_for_newer_registry_version()
+            .await
+            .expect("Could not obtain updated registry.");
+        let new_subnet = topology_snapshot
+            .subnets()
+            .find(|subnet| subnet.subnet_id == new_subnet_id)
+            .expect("Could not find newly created subnet.");
+        new_subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap());
+        let newly_assigned_endpoint = new_subnet
+            .nodes()
+            .next()
+            .expect("Could not find any node in newly created subnet.");
         let agent = assert_create_agent(newly_assigned_endpoint.get_public_url().as_str()).await;
         info!(
             log,

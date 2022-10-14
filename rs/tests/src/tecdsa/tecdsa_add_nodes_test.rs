@@ -126,20 +126,21 @@ pub fn test(env: TestEnv) {
         proposal_id,
     ));
     info!(log, "Waiting for registry update.");
-    topology_snapshot
-        .block_for_newer_registry_version()
-        .expect("Could not block for newer registry version");
-    info!(log, "Asserting nodes membership has changed.");
-    // Get a new snapshot.
-    let topology_snapshot = env.topology_snapshot();
-    assert!(topology_snapshot.unassigned_nodes().next().is_none());
-    assert_eq!(
-        topology_snapshot.root_subnet().nodes().count(),
-        UNASSIGNED_NODES_COUNT as usize + NODES_COUNT
-    );
-    info!(log, "Run through ecdsa signature test.");
-    let message_hash = [0xabu8; 32];
     block_on(async {
+        topology_snapshot
+            .block_for_newer_registry_version()
+            .await
+            .expect("Could not block for newer registry version");
+        info!(log, "Asserting nodes membership has changed.");
+        // Get a new snapshot.
+        let topology_snapshot = env.topology_snapshot();
+        assert!(topology_snapshot.unassigned_nodes().next().is_none());
+        assert_eq!(
+            topology_snapshot.root_subnet().nodes().count(),
+            UNASSIGNED_NODES_COUNT as usize + NODES_COUNT
+        );
+        info!(log, "Run through ecdsa signature test.");
+        let message_hash = [0xabu8; 32];
         let uni_can = UniversalCanister::from_canister_id(&agent, canister_id);
         let public_key_ = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
             .await

@@ -822,11 +822,9 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         };
         execute_update_subnet_proposal(&governance, proposal_payload).await;
 
-        tokio::task::spawn_blocking(move || {
-            let topology_snapshot = env.topology_snapshot().block_for_newer_registry_version().expect("Could not obtain updated registry.");
-            let new_subnet = topology_snapshot.subnets().find(|s| s.subnet_id == new_subnet_id).expect("Could not find newly created subnet.");
-            new_subnet.nodes().for_each(|node| node.await_status_is_healthy().unwrap());
-        }).await.unwrap();
+        let topology_snapshot = env.topology_snapshot().block_for_newer_registry_version().await.expect("Could not obtain updated registry.");
+        let new_subnet = topology_snapshot.subnets().find(|s| s.subnet_id == new_subnet_id).expect("Could not find newly created subnet.");
+        new_subnet.nodes().for_each(|node| node.await_status_is_healthy().unwrap());
 
         let new_public_key = get_public_key_with_logger(make_key(KEY_ID2), &uni_can, log)
             .await
