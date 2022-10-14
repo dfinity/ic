@@ -38,7 +38,7 @@ fn test_set_icp_xdr_conversion_rate() {
 
         let payload = UpdateIcpXdrConversionRatePayload {
             data_source: "test_set_icp_xdr_conversion_rate".to_string(),
-            timestamp_seconds: 10,
+            timestamp_seconds: 1665782922,
             xdr_permyriad_per_icp: 200,
         };
 
@@ -106,7 +106,7 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
 
         let payload = UpdateIcpXdrConversionRatePayload {
             data_source: "test_set_icp_xdr_conversion_rate".to_string(),
-            timestamp_seconds: 10,
+            timestamp_seconds: 1665782922,
             xdr_permyriad_per_icp: 20_000,
         };
 
