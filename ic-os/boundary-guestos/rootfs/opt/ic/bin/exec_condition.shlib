@@ -1,0 +1,52 @@
+# This file should only be `source`d at the beginning of a script.
+#
+# This will "sandbox" a script so that any syntax errors or the like will
+# result in an `exit 255`` and mark the unit as failed, while also providing a
+# nice `disable` helper skip the unit.
+
+source '/opt/ic/bin/helpers.shlib'
+
+function setup_exec_condition() {
+    # Suspect xtrace to not pollute the logs
+    set +x
+
+    # If we're the outer script, setup the "sandbox"
+    if [[ -z "${OUTER:-}" ]]; then
+        # Prepare for the disable signal
+        DISABLED=0
+        trap 'DISABLED=1' HUP
+
+        # Sandbox
+        set +e
+        OUTER=${BASHPID} $0
+        RET=$?
+        set -e
+
+        # Turn bash failures into unit failures
+        if [[ "${RET}" != 0 ]]; then
+            exit 255
+        fi
+
+        # Return any signals
+        exit ${DISABLED}
+    fi
+
+    # use single quotes to delay variable expansion
+    DISABLED=
+    trap '[[ -z ${DISABLED} ]] || kill -SIGHUP ${OUTER}' EXIT
+
+    # Re-enable xtrace
+    [[ $- == $1 ]] || set -x
+}
+
+setup_exec_condition $-
+
+# Indicate that we should cleanly disable the service
+function disable() {
+    DISABLED=1
+}
+
+# Indicate that we should cleanly enable the service (the default)
+function enabled() {
+    DISABLED=
+}

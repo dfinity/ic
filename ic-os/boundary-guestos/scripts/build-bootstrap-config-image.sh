@@ -304,12 +304,9 @@ ipv6_monitoring_ips=${IPV6_MONITORING_IPS}
 EOF
 
     # setup the prober identity
-    mkdir -p "${BOOTSTRAP_TMPDIR}/prober"
     if [[ -n "${PROBER_IDENTITY:-}" ]]; then
         echo "Using prober identity ${PROBER_IDENTITY}"
-        cp "${PROBER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/prober/identity.pem"
-    else
-        touch "${BOOTSTRAP_TMPDIR}/prober/prober.disabled"
+        cp "${PROBER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/prober_identity.pem"
     fi
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .

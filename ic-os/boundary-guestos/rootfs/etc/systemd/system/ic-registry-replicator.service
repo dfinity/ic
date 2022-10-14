@@ -2,6 +2,8 @@
 Description=IC Regsitry Replicator
 After=network-online.target
 Wants=network-online.target
+After=setup-ic-registry-replicator.service
+BindsTo=setup-ic-registry-replicator.service
 
 [Service]
 LogRateLimitIntervalSec=1ms

@@ -3,6 +3,7 @@
 # configuration store.
 
 set -euox pipefail
+source '/opt/ic/bin/helpers.shlib'
 
 readonly BOOT_DIR='/boot/config'
 readonly NETWORK_CONFIG="${BOOT_DIR}/network.conf"
@@ -13,10 +14,6 @@ readonly IPV4_NETWORK="${SYSTEMD_NETWORK}/enp2s0.network"
 
 HAS_IPV6=false
 HAS_IPV4=false
-
-function err() {
-    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
-}
 
 # Read the network config variables from file. The file must be of the form
 # "key=value" for each line with a specific set of keys permissible (see code

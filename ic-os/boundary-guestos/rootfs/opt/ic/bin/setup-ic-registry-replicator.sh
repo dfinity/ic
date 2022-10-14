@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -euox pipefail
+source '/opt/ic/bin/helpers.shlib'
 
 readonly BOOT_DIR='/boot/config'
 readonly NNS_CONFIG="${BOOT_DIR}/nns.conf"
@@ -8,10 +9,6 @@ readonly NNS_PEM="${BOOT_DIR}/nns_public_key.pem"
 
 readonly RUN_DIR='/run/ic-node/etc/default'
 readonly ENV_FILE="${RUN_DIR}/ic-registry-replicator"
-
-function err() {
-    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
-}
 
 # Read the config variables. The files must be of the form
 # "key=value" for each line with a specific set of keys permissible (see

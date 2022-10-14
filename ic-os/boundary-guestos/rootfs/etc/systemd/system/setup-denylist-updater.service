@@ -2,13 +2,10 @@
 Description=Set variable files (i.e. DENYLIST_URL) for denylist-updater
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Before=denylist-updater.service
-
-[Install]
-RequiredBy=denylist-updater.service
-WantedBy=multi-user.target
+Requires=bootstrap-ic-node.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/setup-denylist-updater.sh
+ExecCondition=/opt/ic/bin/setup-denylist-updater.sh
+ExecStart=/usr/bin/true

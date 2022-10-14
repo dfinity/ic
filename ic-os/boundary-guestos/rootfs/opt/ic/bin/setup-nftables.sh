@@ -3,6 +3,7 @@
 # configuration store.
 
 set -euox pipefail
+source '/opt/ic/bin/helpers.shlib'
 
 readonly BOOT_DIR='/boot/config'
 readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
@@ -16,10 +17,6 @@ ipv4_http_ips=("0.0.0.0/32")
 ipv6_http_ips=("::/128")
 ipv6_debug_ips=("::/128")
 ipv6_monitoring_ips=("::/128")
-
-function err() {
-    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
-}
 
 function csv() {
     local -r arr=("$@")
