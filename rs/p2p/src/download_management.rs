@@ -67,157 +67,46 @@
 extern crate lru;
 
 use crate::{
-    artifact_download_list::{ArtifactDownloadList, ArtifactDownloadListImpl},
-    download_prioritization::{
-        AdvertTracker, AdvertTrackerFinalAction, DownloadAttemptTracker, DownloadPrioritizer,
-        DownloadPrioritizerImpl,
-    },
+    artifact_download_list::ArtifactDownloadList,
+    download_prioritization::{AdvertTracker, AdvertTrackerFinalAction, DownloadAttemptTracker},
     gossip_protocol::{
-        GossipAdvertAction, GossipAdvertSendRequest, GossipChunk, GossipChunkRequest,
-        GossipMessage, GossipRetransmissionRequest, Percentage,
+        GossipAdvertAction, GossipAdvertSendRequest, GossipChunk, GossipChunkRequest, GossipImpl,
+        GossipMessage, GossipRetransmissionRequest, Percentage, ReceiveCheckCache,
     },
-    metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics},
     peer_context::{
         GossipChunkRequestTracker, GossipChunkRequestTrackerKey, PeerContext, PeerContextMap,
     },
-    utils::TransportChannelIdMapper,
     P2PError, P2PErrorCode, P2PResult,
 };
 use ic_interfaces::{
-    artifact_manager::{ArtifactManager, OnArtifactError::ArtifactPoolError},
+    artifact_manager::OnArtifactError::ArtifactPoolError,
     artifact_pool::ArtifactPoolError::ArtifactReplicaVersionError,
-    consensus_pool::ConsensusPoolCache,
 };
-use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_transport::{Transport, TransportChannelId, TransportError, TransportPayload};
-use ic_logger::{error, info, trace, warn, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
-use ic_protobuf::{
-    p2p::v1 as pb, proxy::ProtoProxy, registry::node::v1::NodeRecord,
-    registry::subnet::v1::GossipConfig,
-};
+use ic_interfaces_transport::{TransportChannelId, TransportError, TransportPayload};
+use ic_logger::{error, info, trace, warn};
+use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::node::v1::NodeRecord};
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
 use ic_types::{
     artifact::{Artifact, ArtifactId, ArtifactTag},
     chunkable::{ArtifactErrorCode, ChunkId},
     crypto::CryptoHash,
     p2p::GossipAdvert,
-    NodeId, RegistryVersion, SubnetId,
+    NodeId, RegistryVersion,
 };
-use lru::LruCache;
-use parking_lot::{Mutex, RwLock};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     error::Error,
     net::{IpAddr, SocketAddr},
     ops::DerefMut,
     str::FromStr,
-    sync::Arc,
     time::{Instant, SystemTime},
 };
 
-/// The download manager maintains data structures on adverts and download state
-/// per peer.
-pub(crate) trait DownloadManager {
-    /// The method sends adverts to peers.
-    fn send_advert_to_peers(&self, advert_request: GossipAdvertSendRequest);
-
-    /// The method reacts to an advert received from the peer with the given
-    /// node ID.
-    fn on_advert(&self, gossip_advert: GossipAdvert, peer_id: NodeId);
-
-    /// The method downloads chunks for adverts with the highest priority from
-    /// the given peer.
-    fn download_next(&self, peer_id: NodeId) -> Result<(), Box<dyn Error>>;
-
-    /// The method sends a chunk to the peer with the given node ID.
-    fn send_chunk_to_peer(&self, gossip_chunk: GossipChunk, peer_id: NodeId);
-
-    /// The method reacts to a chunk received from the peer with the given node
-    /// ID.
-    fn on_chunk(&self, gossip_chunk: GossipChunk, peer_id: NodeId);
-
-    /// The method reacts to a disconnect event event for the peer with the
-    /// given node ID.
-    fn peer_connection_down(&self, peer_id: NodeId);
-
-    /// The method reacts to a connect event event for the peer with the given
-    /// node ID.
-    fn peer_connection_up(&self, peer_id: NodeId);
-
-    /// The method reacts to a retransmission request.
-    ///
-    /// It collects adverts of all validated artifacts for the requested filter
-    /// and sends them to the peer.
-    fn on_retransmission_request(
-        &self,
-        gossip_re_request: &GossipRetransmissionRequest,
-        peer_id: NodeId,
-    ) -> P2PResult<()>;
-
-    /// The method sends a retransmission request to the peer with the given
-    /// node ID.
-    fn send_retransmission_request(&self, peer_id: NodeId);
-
-    /// The method is invoked periodically by the gossip component to perform
-    /// p2p book keeping tasks.
-    ///
-    /// These tasks include the following:
-    ///
-    /// a) Call 'download_next' for all peers when the priority function
-    /// changes.</br>
-    /// b) Check for chunk download timeouts.</br>
-    /// c) Poll the registry for subnet membership changes.
-    fn on_timer(&self);
-}
-
-/// The cache used to check if a certain artifact has been received recently.
-type ReceiveCheckCache = LruCache<CryptoHash, ()>;
-
-/// An implementation of the `DownloadManager` trait.
-pub(crate) struct DownloadManagerImpl {
-    /// The node ID of the peer.
-    node_id: NodeId,
-    /// The subnet ID.
-    subnet_id: SubnetId,
-    /// The registry client.
-    registry_client: Arc<dyn RegistryClient>,
-    /// The artifact manager.
-    artifact_manager: Arc<dyn ArtifactManager>,
-    /// The consensus pool cache.
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    /// The download prioritizer.
-    prioritizer: Arc<dyn DownloadPrioritizer>,
-    /// The peer manager.
-    current_peers: Mutex<PeerContextMap>,
-    /// The underlying *Transport* layer.
-    transport: Arc<dyn Transport>,
-    /// The flow mapper.
-    transport_channel_mapper: TransportChannelIdMapper,
-    /// The list of artifacts that is under construction.
-    artifacts_under_construction: RwLock<ArtifactDownloadListImpl>,
-    /// The logger.
-    log: ReplicaLogger,
-    /// The download management metrics.
-    metrics: DownloadManagementMetrics,
-    /// The *Gossip* configuration.
-    gossip_config: GossipConfig,
-    /// The cache that is used to check if an artifact has been downloaded
-    /// recently.
-    receive_check_caches: RwLock<HashMap<NodeId, ReceiveCheckCache>>,
-    /// The priority function invocation time.
-    pfn_invocation_instant: Mutex<Instant>,
-    /// The last registry refresh time.
-    registry_refresh_instant: Mutex<Instant>,
-    /// The last retransmission request time.
-    retransmission_request_instant: Mutex<Instant>,
-}
-
 /// `DownloadManagerImpl` implements the `DownloadManager` trait.
-impl DownloadManager for DownloadManagerImpl {
+impl GossipImpl {
     /// The method sends adverts to peers.
-    fn send_advert_to_peers(&self, advert_request: GossipAdvertSendRequest) {
+    pub fn send_advert_to_peers(&self, advert_request: GossipAdvertSendRequest) {
         let (peers, label) = match advert_request.action {
             GossipAdvertAction::SendToAllPeers => (self.get_current_peer_ids(), "all_peers"),
             GossipAdvertAction::SendToRandomSubset(percentage) => (
@@ -234,7 +123,7 @@ impl DownloadManager for DownloadManagerImpl {
 
     /// The method downloads chunks for adverts with the highest priority from
     /// the given peer.
-    fn on_advert(&self, gossip_advert: GossipAdvert, peer_id: NodeId) {
+    pub fn on_advert(&self, gossip_advert: GossipAdvert, peer_id: NodeId) {
         // The precondition ensured by gossip_protocol.on_advert() is that
         // the corresponding artifact is not in the artifact pool.
         // Check if we have seen this artifact before:
@@ -283,7 +172,7 @@ impl DownloadManager for DownloadManagerImpl {
     /// allowed, a bad peer could otherwise maintain a "monopoly" on
     /// providing the node with a particular artifact and prevent the
     /// node from ever receiving it.
-    fn download_next(&self, peer_id: NodeId) -> Result<(), Box<dyn Error>> {
+    pub fn download_next(&self, peer_id: NodeId) -> Result<(), Box<dyn Error>> {
         self.metrics.download_next_calls.inc();
         let start_time = Instant::now();
         let gossip_requests = self.download_next_compute_work(peer_id)?;
@@ -295,7 +184,7 @@ impl DownloadManager for DownloadManagerImpl {
     }
 
     /// The method sends a chunk to the peer with the given node ID.
-    fn send_chunk_to_peer(&self, gossip_chunk: GossipChunk, peer_id: NodeId) {
+    pub fn send_chunk_to_peer(&self, gossip_chunk: GossipChunk, peer_id: NodeId) {
         trace!(
             self.log,
             "Node-{:?} sent chunk data  ->{:?} {:?}",
@@ -318,7 +207,7 @@ impl DownloadManager for DownloadManagerImpl {
 
     /// The method reacts to a chunk received from the peer with the given node
     /// ID.
-    fn on_chunk(&self, gossip_chunk: GossipChunk, peer_id: NodeId) {
+    pub fn on_chunk(&self, gossip_chunk: GossipChunk, peer_id: NodeId) {
         trace!(
             self.log,
             "Node-{:?} received chunk from Node-{:?} ->{:?}",
@@ -567,7 +456,7 @@ impl DownloadManager for DownloadManagerImpl {
 
     /// The method reacts to a disconnect event event for the peer with the
     /// given node ID.
-    fn peer_connection_down(&self, peer_id: NodeId) {
+    pub fn peer_connection_down(&self, peer_id: NodeId) {
         self.metrics.connection_down_events.inc();
         let now = SystemTime::now();
         let mut current_peers = self.current_peers.lock();
@@ -584,7 +473,7 @@ impl DownloadManager for DownloadManagerImpl {
 
     /// The method reacts to a connect event event for the peer with the given
     /// node ID.
-    fn peer_connection_up(&self, peer_id: NodeId) {
+    pub fn peer_connection_up(&self, peer_id: NodeId) {
         self.metrics.connection_up_events.inc();
         let _now = SystemTime::now();
 
@@ -625,7 +514,7 @@ impl DownloadManager for DownloadManagerImpl {
     }
 
     /// The method reacts to a retransmission request.
-    fn on_retransmission_request(
+    pub fn on_retransmission_request(
         &self,
         gossip_re_request: &GossipRetransmissionRequest,
         peer_id: NodeId,
@@ -672,7 +561,7 @@ impl DownloadManager for DownloadManagerImpl {
 
     /// The method sends a retransmission request to the peer with the given
     /// node ID.
-    fn send_retransmission_request(&self, peer_id: NodeId) {
+    pub fn send_retransmission_request(&self, peer_id: NodeId) {
         let filter = self.artifact_manager.get_filter();
         let message = GossipMessage::RetransmissionRequest(GossipRetransmissionRequest { filter });
         let transport_channel = self.transport_channel_mapper.map(&message);
@@ -695,7 +584,7 @@ impl DownloadManager for DownloadManagerImpl {
 
     /// The method is invoked periodically by the *Gossip* component to perform
     /// P2P book keeping tasks.
-    fn on_timer(&self) {
+    pub fn on_timer(&self) {
         let (update_priority_fns, retransmission_request, refresh_registry) =
             self.get_timer_tasks();
         if update_priority_fns {
@@ -742,52 +631,6 @@ impl DownloadManager for DownloadManagerImpl {
         for peer_id in peer_ids {
             let _ = self.download_next(peer_id);
         }
-    }
-}
-
-impl DownloadManagerImpl {
-    /// The constructor creates a DownloadManagerImpl instance.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        node_id: NodeId,
-        subnet_id: SubnetId,
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        registry_client: Arc<dyn RegistryClient>,
-        artifact_manager: Arc<dyn ArtifactManager>,
-        transport: Arc<dyn Transport>,
-        transport_channel_mapper: TransportChannelIdMapper,
-        log: ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
-    ) -> Self {
-        let gossip_config = crate::fetch_gossip_config(registry_client.clone(), subnet_id);
-        let current_peers = Mutex::new(PeerContextMap::default());
-
-        let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
-            artifact_manager.as_ref(),
-            DownloadPrioritizerMetrics::new(metrics_registry),
-        ));
-
-        let download_manager = DownloadManagerImpl {
-            node_id,
-            subnet_id,
-            registry_client,
-            artifact_manager,
-            consensus_pool_cache,
-            prioritizer,
-            current_peers,
-            transport: transport.clone(),
-            transport_channel_mapper,
-            artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::new(log.clone())),
-            log,
-            metrics: DownloadManagementMetrics::new(metrics_registry),
-            gossip_config,
-            receive_check_caches: RwLock::new(HashMap::new()),
-            pfn_invocation_instant: Mutex::new(Instant::now()),
-            registry_refresh_instant: Mutex::new(Instant::now()),
-            retransmission_request_instant: Mutex::new(Instant::now()),
-        };
-        download_manager.refresh_registry();
-        download_manager
     }
 
     fn get_current_peer_ids(&self) -> Vec<NodeId> {
@@ -1392,8 +1235,10 @@ pub mod tests {
     use super::*;
     use crate::download_prioritization::DownloadPrioritizerError;
     use crate::gossip_protocol::Percentage;
-    use ic_interfaces::artifact_manager::OnArtifactError;
-    use ic_logger::LoggerImpl;
+    use ic_interfaces::artifact_manager::{ArtifactManager, OnArtifactError};
+    use ic_interfaces::consensus_pool::ConsensusPoolCache;
+    use ic_interfaces_registry::RegistryClient;
+    use ic_logger::{LoggerImpl, ReplicaLogger};
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::node::v1::{
         connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint,
@@ -1414,7 +1259,9 @@ pub mod tests {
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         {CryptoHash, CryptoHashOf},
     };
+    use ic_types::malicious_flags::MaliciousFlags;
     use ic_types::signature::BasicSignature;
+    use ic_types::SubnetId;
     use ic_types::{
         artifact,
         artifact::{Artifact, ArtifactAttribute, ArtifactPriorityFn, Priority},
@@ -1580,13 +1427,13 @@ pub mod tests {
         ThreadPort::new(node_test_id(instance_id as u64), hub, log, rt_handle)
     }
 
-    fn new_test_download_manager_with_registry(
+    fn new_test_gossip_impl_with_registry(
         num_replicas: u32,
         logger: &LoggerImpl,
         registry_client: Arc<dyn RegistryClient>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         rt_handle: tokio::runtime::Handle,
-    ) -> DownloadManagerImpl {
+    ) -> GossipImpl {
         let log: ReplicaLogger = logger.root.clone().into();
         let artifact_manager = TestArtifactManager {
             quota: 2 * 1024 * 1024 * 1024,
@@ -1611,28 +1458,28 @@ pub mod tests {
         let metrics_registry = MetricsRegistry::new();
 
         let transport_channels = vec![TransportChannelId::from(0)];
-        let transport_channel_mapper = TransportChannelIdMapper::new(transport_channels);
 
         // Create fake peers.
         let artifact_manager = Arc::new(artifact_manager);
-        DownloadManagerImpl::new(
+        GossipImpl::new(
             node_test_id(0),
             subnet_test_id(0),
             consensus_pool_cache,
             registry_client,
             artifact_manager,
             tp,
-            transport_channel_mapper,
+            transport_channels,
             log,
             &metrics_registry,
+            MaliciousFlags::default(),
         )
     }
 
-    fn new_test_download_manager(
+    fn new_test_gossip(
         num_replicas: u32,
         logger: &LoggerImpl,
         rt_handle: tokio::runtime::Handle,
-    ) -> DownloadManagerImpl {
+    ) -> GossipImpl {
         let allocated_ports = allocate_ports("127.0.0.1", num_replicas as u16)
             .expect("Port allocation for test failed");
         let node_port_allocation: Vec<u16> = allocated_ports.iter().map(|np| np.port).collect();
@@ -1649,7 +1496,7 @@ pub mod tests {
             .returning(move || RegistryVersion::from(1));
         let consensus_pool_cache = Arc::new(mock_consensus_cache);
 
-        new_test_download_manager_with_registry(
+        new_test_gossip_impl_with_registry(
             num_replicas,
             logger,
             registry_client,
@@ -1659,11 +1506,7 @@ pub mod tests {
     }
 
     /// The function adds the given number of adverts to the download manager.
-    fn test_add_adverts(
-        download_manager: &impl DownloadManager,
-        range: Range<u32>,
-        node_id: NodeId,
-    ) {
+    fn test_add_adverts(gossip: &GossipImpl, range: Range<u32>, node_id: NodeId) {
         for advert_id in range {
             let gossip_advert = GossipAdvert {
                 artifact_id: ArtifactId::FileTreeSync(advert_id.to_string()),
@@ -1671,20 +1514,19 @@ pub mod tests {
                 size: 0,
                 integrity_hash: CryptoHash(Vec::from(advert_id.to_be_bytes())),
             };
-            download_manager.on_advert(gossip_advert, node_id)
+            gossip.on_advert(gossip_advert, node_id)
         }
     }
 
     /// The functions tests that the peer context drops all requests after a
     /// time-out.
-    fn test_timeout_peer(download_manager: &DownloadManagerImpl, node_id: &NodeId) {
-        let sleep_duration = std::time::Duration::from_millis(
-            (download_manager.gossip_config.max_chunk_wait_ms * 2) as u64,
-        );
+    fn test_timeout_peer(gossip: &GossipImpl, node_id: &NodeId) {
+        let sleep_duration =
+            std::time::Duration::from_millis((gossip.gossip_config.max_chunk_wait_ms * 2) as u64);
         std::thread::sleep(sleep_duration);
-        let mut current_peers = download_manager.current_peers.lock();
+        let mut current_peers = gossip.current_peers.lock();
         let peer_context = current_peers.get_mut(node_id).unwrap();
-        download_manager.process_timed_out_requests(node_id, peer_context);
+        gossip.process_timed_out_requests(node_id, peer_context);
         assert_eq!(peer_context.requested.len(), 0);
     }
 
@@ -1721,7 +1563,7 @@ pub mod tests {
             .returning(move || consensus_registry_client.get_latest_version());
         let consensus_pool_cache = Arc::new(mock_consensus_cache);
 
-        let download_manager = new_test_download_manager_with_registry(
+        let gossip = new_test_gossip_impl_with_registry(
             num_replicas,
             &logger,
             Arc::clone(&registry_client) as Arc<_>,
@@ -1749,10 +1591,10 @@ pub mod tests {
         assert_eq!((num_replicas - 1) as usize, node_records.len());
 
         // Get removed node
-        let peers = download_manager.get_current_peer_ids();
+        let peers = gossip.get_current_peer_ids();
         let nodes: HashSet<NodeId> = node_records.iter().map(|node_id| node_id.0).collect();
         let mut removed_peer = node_test_id(10);
-        let iter_peers = download_manager.get_current_peer_ids();
+        let iter_peers = gossip.get_current_peer_ids();
         for peer in iter_peers.into_iter() {
             if !nodes.contains(&peer) {
                 removed_peer = peer;
@@ -1764,19 +1606,19 @@ pub mod tests {
         assert_eq!(num_peers as usize, peers.len());
 
         // Add adverts from the peer that is removed in the latest registry version
-        test_add_adverts(&download_manager, 0..5, removed_peer);
+        test_add_adverts(&gossip, 0..5, removed_peer);
 
         // Refresh registry to get latest version.
-        download_manager.refresh_registry();
+        gossip.refresh_registry();
         // Assert number of peers has been decreased by one.
         assert_eq!(
             (num_peers - 1) as usize,
-            download_manager.get_current_peer_ids().len()
+            gossip.get_current_peer_ids().len()
         );
 
         // Validate adverts from the removed_peer are no longer present.
         for advert_id in 0..5 {
-            let advert = download_manager.prioritizer.get_advert_from_peer(
+            let advert = gossip.prioritizer.get_advert_from_peer(
                 &ArtifactId::FileTreeSync(advert_id.to_string()),
                 &CryptoHash(vec![u8::try_from(advert_id).unwrap()]),
                 &removed_peer,
@@ -1785,9 +1627,9 @@ pub mod tests {
         }
 
         // Validate adverts added from removed_peer are rejected
-        test_add_adverts(&download_manager, 0..5, removed_peer);
+        test_add_adverts(&gossip, 0..5, removed_peer);
         for advert_id in 0..5 {
-            let advert = download_manager.prioritizer.get_advert_from_peer(
+            let advert = gossip.prioritizer.get_advert_from_peer(
                 &ArtifactId::FileTreeSync(advert_id.to_string()),
                 &CryptoHash(vec![u8::try_from(advert_id).unwrap()]),
                 &removed_peer,
@@ -1799,9 +1641,8 @@ pub mod tests {
     #[tokio::test]
     async fn download_manager_add_adverts() {
         let logger = p2p_test_setup_logger();
-        let download_manager =
-            new_test_download_manager(2, &logger, tokio::runtime::Handle::current());
-        test_add_adverts(&download_manager, 0..1000, node_test_id(1));
+        let gossip = new_test_gossip(2, &logger, tokio::runtime::Handle::current());
+        test_add_adverts(&gossip, 0..1000, node_test_id(1));
     }
 
     /// This function asserts that the chunks to be downloaded is correctly
@@ -1811,19 +1652,14 @@ pub mod tests {
     async fn download_manager_compute_work_basic() {
         let logger = p2p_test_setup_logger();
         let num_replicas = 2;
-        let download_manager =
-            new_test_download_manager(num_replicas, &logger, tokio::runtime::Handle::current());
-        test_add_adverts(
-            &download_manager,
-            0..1000,
-            node_test_id(num_replicas as u64 - 1),
-        );
-        let chunks_to_be_downloaded = download_manager
+        let gossip = new_test_gossip(num_replicas, &logger, tokio::runtime::Handle::current());
+        test_add_adverts(&gossip, 0..1000, node_test_id(num_replicas as u64 - 1));
+        let chunks_to_be_downloaded = gossip
             .download_next_compute_work(node_test_id(num_replicas as u64 - 1))
             .unwrap();
         assert_eq!(
             chunks_to_be_downloaded.len(),
-            download_manager.gossip_config.max_artifact_streams_per_peer as usize
+            gossip.gossip_config.max_artifact_streams_per_peer as usize
         );
         for (i, chunk_req) in chunks_to_be_downloaded.iter().enumerate() {
             assert_eq!(
@@ -1847,15 +1683,12 @@ pub mod tests {
         // The total number of replicas is 4 in this test.
         let num_replicas = 4;
         let logger = p2p_test_setup_logger();
-        let mut download_manager =
-            new_test_download_manager(num_replicas, &logger, tokio::runtime::Handle::current());
-        download_manager.gossip_config.max_chunk_wait_ms = 1000;
+        let mut gossip = new_test_gossip(num_replicas, &logger, tokio::runtime::Handle::current());
+        gossip.gossip_config.max_chunk_wait_ms = 1000;
 
         let test_assert_compute_work_len =
-            |download_manager: &DownloadManagerImpl, node_id, compute_work_count: usize| {
-                let chunks_to_be_downloaded = download_manager
-                    .download_next_compute_work(node_id)
-                    .unwrap();
+            |gossip: &GossipImpl, node_id, compute_work_count: usize| {
+                let chunks_to_be_downloaded = gossip.download_next_compute_work(node_id).unwrap();
                 assert_eq!(chunks_to_be_downloaded.len(), compute_work_count);
                 for (i, chunk_req) in chunks_to_be_downloaded.iter().enumerate() {
                     assert_eq!(
@@ -1865,36 +1698,27 @@ pub mod tests {
                     assert_eq!(chunk_req.chunk_id, ChunkId::from(0));
                 }
             };
-        let request_queue_size =
-            download_manager.gossip_config.max_artifact_streams_per_peer as usize;
+        let request_queue_size = gossip.gossip_config.max_artifact_streams_per_peer as usize;
 
         // Skip the first peer at index 0 as it is the requesting node.
         for peer_id in 1..num_replicas {
             test_add_adverts(
-                &download_manager,
+                &gossip,
                 0..request_queue_size as u32,
                 node_test_id(peer_id as u64),
             );
         }
 
         for peer_id in 1..num_replicas {
-            test_assert_compute_work_len(
-                &download_manager,
-                node_test_id(peer_id as u64),
-                request_queue_size,
-            );
+            test_assert_compute_work_len(&gossip, node_test_id(peer_id as u64), request_queue_size);
             for other_peer in 1..num_replicas {
                 if other_peer != peer_id {
-                    test_assert_compute_work_len(
-                        &download_manager,
-                        node_test_id(other_peer as u64),
-                        0,
-                    );
+                    test_assert_compute_work_len(&gossip, node_test_id(other_peer as u64), 0);
                 }
             }
-            test_timeout_peer(&download_manager, &node_test_id(peer_id as u64));
+            test_timeout_peer(&gossip, &node_test_id(peer_id as u64));
             if peer_id != num_replicas - 1 {
-                test_assert_compute_work_len(&download_manager, node_test_id(peer_id as u64), 0);
+                test_assert_compute_work_len(&gossip, node_test_id(peer_id as u64), 0);
             }
         }
 
@@ -1902,7 +1726,7 @@ pub mod tests {
         // exhausted and download attempts can start afresh.
         for advert_id in 0..request_queue_size as u32 {
             let artifact_id = ArtifactId::FileTreeSync(advert_id.to_string());
-            let advert_tracker = download_manager
+            let advert_tracker = gossip
                 .prioritizer
                 .get_advert_tracker(
                     &artifact_id,
@@ -1926,52 +1750,45 @@ pub mod tests {
         // There are 3 nodes in total, Node 1 and 2 are actively used in the test.
         let num_replicas = 3;
         let logger = p2p_test_setup_logger();
-        let mut download_manager =
-            new_test_download_manager(num_replicas, &logger, tokio::runtime::Handle::current());
-        download_manager.gossip_config.max_artifact_streams_per_peer = 1;
-        download_manager.gossip_config.max_chunk_wait_ms = 1000;
+        let mut gossip = new_test_gossip(num_replicas, &logger, tokio::runtime::Handle::current());
+        gossip.gossip_config.max_artifact_streams_per_peer = 1;
+        gossip.gossip_config.max_chunk_wait_ms = 1000;
         let advert_range = 1..num_replicas as u32;
         // Node 1 and 2 both advertise advert 1 and 2.
         for i in 1..num_replicas {
-            test_add_adverts(
-                &download_manager,
-                advert_range.clone(),
-                node_test_id(i as u64),
-            )
+            test_add_adverts(&gossip, advert_range.clone(), node_test_id(i as u64))
         }
 
         // Advert 1 and 2 are now being downloaded by node 1 and 2.
         for i in 1..num_replicas {
-            let chunks_to_be_downloaded = download_manager
+            let chunks_to_be_downloaded = gossip
                 .download_next_compute_work(node_test_id(i as u64))
                 .unwrap();
             assert_eq!(
                 chunks_to_be_downloaded.len(),
-                download_manager.gossip_config.max_artifact_streams_per_peer as usize
+                gossip.gossip_config.max_artifact_streams_per_peer as usize
             );
         }
 
         // Time out the artifact as well as the chunks.
-        let sleep_duration = std::time::Duration::from_millis(
-            (download_manager.gossip_config.max_chunk_wait_ms * 2) as u64,
-        );
+        let sleep_duration =
+            std::time::Duration::from_millis((gossip.gossip_config.max_chunk_wait_ms * 2) as u64);
         std::thread::sleep(sleep_duration);
 
         // Node 1 and 2 now both have moved forward and advertise advert 3 and
         // 4 while advert 1 and 2 have timed out.
         for i in 1..num_replicas {
-            test_add_adverts(&download_manager, 3..5, node_test_id(i as u64))
+            test_add_adverts(&gossip, 3..5, node_test_id(i as u64))
         }
 
         // Test that chunks have timed out.
         for i in 1..num_replicas {
-            test_timeout_peer(&download_manager, &node_test_id(i as u64))
+            test_timeout_peer(&gossip, &node_test_id(i as u64))
         }
         // Test that artifacts also have timed out.
-        download_manager.process_timed_out_artifacts();
+        gossip.process_timed_out_artifacts();
         {
-            let mut artifacts_under_construction =
-                download_manager.artifacts_under_construction.write();
+            let mut artifacts_under_construction = gossip.artifacts_under_construction.write();
 
             for i in advert_range {
                 assert!(artifacts_under_construction
@@ -1983,18 +1800,17 @@ pub mod tests {
         // After advert 1 and 2 have timed out, the download manager must start
         // downloading the next artifacts 3 and 4 now.
         for i in 1..num_replicas {
-            let chunks_to_be_downloaded = download_manager
+            let chunks_to_be_downloaded = gossip
                 .download_next_compute_work(node_test_id(i as u64))
                 .unwrap();
             assert_eq!(
                 chunks_to_be_downloaded.len(),
-                download_manager.gossip_config.max_artifact_streams_per_peer as usize
+                gossip.gossip_config.max_artifact_streams_per_peer as usize
             );
         }
 
         {
-            let mut artifacts_under_construction =
-                download_manager.artifacts_under_construction.write();
+            let mut artifacts_under_construction = gossip.artifacts_under_construction.write();
             // Advert 1 and 2 timed out, so check adverts starting from 3 exists.
             for counter in 1u32..3 {
                 assert!(artifacts_under_construction
@@ -2017,10 +1833,9 @@ pub mod tests {
         // Each peer has 20 download slots available for transport.
         let num_peers = 3;
         let logger = p2p_test_setup_logger();
-        let mut download_manager =
-            new_test_download_manager(num_peers, &logger, tokio::runtime::Handle::current());
-        let request_queue_size = download_manager.gossip_config.max_artifact_streams_per_peer;
-        download_manager.artifact_manager = Arc::new(TestArtifactManager {
+        let mut gossip = new_test_gossip(num_peers, &logger, tokio::runtime::Handle::current());
+        let request_queue_size = gossip.gossip_config.max_artifact_streams_per_peer;
+        gossip.artifact_manager = Arc::new(TestArtifactManager {
             quota: 2 * 1024 * 1024 * 1024,
             num_chunks: request_queue_size * num_peers,
         });
@@ -2029,10 +1844,8 @@ pub mod tests {
         //  Node 1 downloads the chunks 0-19.
         //  Node 2 downloads the chunks 20-39.
         let test_assert_compute_work_is_striped =
-            |download_manager: &DownloadManagerImpl, node_id: NodeId, compute_work_count: u64| {
-                let chunks_to_be_downloaded = download_manager
-                    .download_next_compute_work(node_id)
-                    .unwrap();
+            |gossip: &GossipImpl, node_id: NodeId, compute_work_count: u64| {
+                let chunks_to_be_downloaded = gossip.download_next_compute_work(node_id).unwrap();
                 assert_eq!(chunks_to_be_downloaded.len() as u64, compute_work_count);
                 for (i, chunk_req) in chunks_to_be_downloaded.iter().enumerate() {
                     assert_eq!(
@@ -2047,12 +1860,12 @@ pub mod tests {
 
         // Advertise the artifact from all peers.
         for i in 1..num_peers {
-            test_add_adverts(&download_manager, 0..1, node_test_id(i as u64))
+            test_add_adverts(&gossip, 0..1, node_test_id(i as u64))
         }
 
         for i in 1..num_peers {
             test_assert_compute_work_is_striped(
-                &download_manager,
+                &gossip,
                 node_test_id(i as u64),
                 request_queue_size as u64,
             );
@@ -2135,10 +1948,9 @@ pub mod tests {
     async fn receive_check_test() {
         // Initialize the logger and download manager for the test.
         let logger = p2p_test_setup_logger();
-        let download_manager =
-            new_test_download_manager(2, &logger, tokio::runtime::Handle::current());
+        let gossip = new_test_gossip(2, &logger, tokio::runtime::Handle::current());
         let node_id = node_test_id(1);
-        let max_adverts = download_manager.gossip_config.max_artifact_streams_per_peer;
+        let max_adverts = gossip.gossip_config.max_artifact_streams_per_peer;
         let mut adverts = receive_check_test_create_adverts(0..max_adverts);
         let msg = receive_check_test_create_message(0);
         let artifact_id = ArtifactId::DkgMessage(CryptoHashOf::from(
@@ -2149,11 +1961,9 @@ pub mod tests {
         }
 
         for gossip_advert in &adverts {
-            download_manager.on_advert(gossip_advert.clone(), node_id);
+            gossip.on_advert(gossip_advert.clone(), node_id);
         }
-        let chunks_to_be_downloaded = download_manager
-            .download_next_compute_work(node_id)
-            .unwrap();
+        let chunks_to_be_downloaded = gossip.download_next_compute_work(node_id).unwrap();
 
         // Add the chunk(s).
         for (index, chunk_req) in chunks_to_be_downloaded.iter().enumerate() {
@@ -2173,12 +1983,12 @@ pub mod tests {
                 chunk_req.integrity_hash.clone(),
             );
 
-            download_manager.on_chunk(gossip_chunk, node_id);
+            gossip.on_chunk(gossip_chunk, node_id);
         }
 
         // Test that the cache contains the artifact(s).
         {
-            let receive_check_caches = download_manager.receive_check_caches.read();
+            let receive_check_caches = gossip.receive_check_caches.read();
             let cache = &receive_check_caches.get(&node_id).unwrap();
             for gossip_advert in &adverts {
                 assert!(cache.contains(&gossip_advert.integrity_hash));
@@ -2187,11 +1997,9 @@ pub mod tests {
 
         // Test that the artifact is ignored when providing the same adverts again.
         for gossip_advert in &adverts {
-            download_manager.on_advert(gossip_advert.clone(), node_id);
+            gossip.on_advert(gossip_advert.clone(), node_id);
         }
-        let new_chunks_to_be_downloaded = download_manager
-            .download_next_compute_work(node_id)
-            .unwrap();
+        let new_chunks_to_be_downloaded = gossip.download_next_compute_work(node_id).unwrap();
 
         assert!(new_chunks_to_be_downloaded.is_empty());
     }
@@ -2202,17 +2010,14 @@ pub mod tests {
     async fn integrity_hash_test() {
         // Initialize the logger and download manager for the test.
         let logger = p2p_test_setup_logger();
-        let download_manager =
-            new_test_download_manager(2, &logger, tokio::runtime::Handle::current());
+        let gossip = new_test_gossip(2, &logger, tokio::runtime::Handle::current());
         let node_id = node_test_id(1);
         let max_adverts = 20;
         let adverts = receive_check_test_create_adverts(0..max_adverts);
         for gossip_advert in &adverts {
-            download_manager.on_advert(gossip_advert.clone(), node_id);
+            gossip.on_advert(gossip_advert.clone(), node_id);
         }
-        let chunks_to_be_downloaded = download_manager
-            .download_next_compute_work(node_id)
-            .unwrap();
+        let chunks_to_be_downloaded = gossip.download_next_compute_work(node_id).unwrap();
 
         // Add the chunks with incorrect integrity hash
         for (i, chunk_req) in adverts.iter().enumerate() {
@@ -2224,13 +2029,13 @@ pub mod tests {
                 chunk_req.integrity_hash.clone(),
             );
 
-            download_manager.on_chunk(gossip_chunk, node_id);
+            gossip.on_chunk(gossip_chunk, node_id);
         }
 
         // Validate that the cache does not contain the artifacts since we put chunks
         // with incorrect integrity hashes
         {
-            let receive_check_caches = download_manager.receive_check_caches.read();
+            let receive_check_caches = gossip.receive_check_caches.read();
             let cache = &receive_check_caches.get(&node_id).unwrap();
             for gossip_advert in &adverts {
                 assert!(!cache.contains(&gossip_advert.integrity_hash));
@@ -2241,7 +2046,7 @@ pub mod tests {
         // length of the adverts in the incorrect integrity hash bucket
         assert_eq!(
             adverts.len(),
-            download_manager.metrics.integrity_hash_check_failed.get() as usize
+            gossip.metrics.integrity_hash_check_failed.get() as usize
         );
     }
     #[test]
