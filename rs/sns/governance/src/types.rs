@@ -301,12 +301,12 @@ impl NervousSystemParameters {
     /// This is an upper bound for `max_dissolve_delay_bonus_percentage`. High values
     /// may improve the incentives when voting, but too-high values may also lead
     /// to an over-concentration of voting power. The value used by the NNS is 100.
-    pub const MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING: u64 = 1000;
+    pub const MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING: u64 = 900;
 
     /// This is an upper bound for `max_age_bonus_percentage`. High values
     /// may improve the incentives when voting, but too-high values may also lead
     /// to an over-concentration of voting power. The value used by the NNS is 25.
-    pub const MAX_AGE_BONUS_PERCENTAGE_CEILING: u64 = 500;
+    pub const MAX_AGE_BONUS_PERCENTAGE_CEILING: u64 = 400;
 
     pub fn with_default_values() -> Self {
         Self {
