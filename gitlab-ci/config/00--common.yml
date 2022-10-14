@@ -251,6 +251,22 @@ after_script:
     - dfinity
     - ubuntu
 
+.bazel-build-k8s:
+  extends:
+    - .ubuntu-docker-k8s
+    # Replace with below bazel image once gen cargo pipeline is purged.
+    - .ic-build-image
+    # - .ic-build-bazel-image
+  tags:
+    - dfinity
+    - ubuntu
+    # Run in ZH since BuildFarm is in ZH
+    - zh
+  variables:
+    BAZEL_STARTUP_ARGS: "--output_base=/cache/bazel-output/${CI_CONCURRENT_ID}"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
+    BAZEL_CI_CONFIG: "--config=ci"
+
 .ubuntu-nix-docker:
   extends:
     - .nix-build-env-base

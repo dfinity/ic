@@ -57,7 +57,6 @@ ls -lah "${BUILD_OUT}"
 
 if is_ci_job; then
     "$REPO_ROOT"/gitlab-ci/src/artifacts/openssl-sign.sh "${BUILD_OUT}"
-
     buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
         "$REPO_ROOT"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "${BUILD_OUT}" "${UPLOAD_TARGET}"
 fi

@@ -19,6 +19,7 @@ out_dir="$CARGO_TARGET_DIR/$CARGO_BUILD_TARGET/release"
 cd "$ROOT_DIR"
 mkdir -p "$out_dir"
 
-bazel build "$1" | sed --unbuffered 's/\(.*Streaming build results to:.*\)/\o33[92m\1\o33[0m/'
+# shellcheck disable=SC2086
+bazel ${BAZEL_STARTUP_ARGS:-} build ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} "$1" | sed --unbuffered 's/\(.*Streaming build results to:.*\)/\o33[92m\1\o33[0m/'
 
-cp -fv $(bazel cquery --output=files "$1") "$out_dir"
+cp -fv $(bazel ${BAZEL_STARTUP_ARGS:-} cquery ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} --output=files "$1") "$out_dir"

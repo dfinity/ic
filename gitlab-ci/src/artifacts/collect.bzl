@@ -26,7 +26,7 @@ def _collect_artifacts_impl(ctx):
         out.append(out_archive)
 
     if not "malicious" in ctx.label.name:  # Never sign anything malicious.
-        out_sig = [ctx.actions.declare_file(ctx.label.name + "/" + f) for f in ["SHA256SUMS", "sign-input.txt", "sign.sig", "sign.sig.bin"]]
+        out_sig = [ctx.actions.declare_file(ctx.label.name + "/" + f) for f in ["SHA256SUMS"]]
         ctx.actions.run(
             executable = ctx.executable._openssl_sign,
             arguments = [out[0].dirname],
