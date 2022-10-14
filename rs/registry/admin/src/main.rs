@@ -3065,6 +3065,7 @@ async fn main() {
             SubCommand::ProposeToStopCanister(_) => (),
             SubCommand::ProposeToStartCanister(_) => (),
             SubCommand::ProposeToRerouteCanisterRanges(_) => (),
+            SubCommand::ProposeXdrIcpConversionRate(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
