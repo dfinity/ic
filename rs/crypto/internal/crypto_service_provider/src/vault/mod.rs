@@ -1,6 +1,7 @@
+use crate::secret_key_store::{panic_due_to_duplicated_key_id, SecretKeyStoreError};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
+    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
 };
 use ic_types::crypto::CryptoError;
 
@@ -63,6 +64,9 @@ impl From<CspBasicSignatureKeygenError> for CryptoError {
                     message: format!("Internal error: {}", internal_error),
                 }
             }
+            CspBasicSignatureKeygenError::DuplicateKeyId { key_id } => {
+                panic_due_to_duplicated_key_id(key_id)
+            }
         }
     }
 }
@@ -122,6 +126,9 @@ impl From<CspMultiSignatureKeygenError> for CryptoError {
                     message: internal_error,
                 }
             }
+            CspMultiSignatureKeygenError::DuplicateKeyId { key_id } => {
+                panic_due_to_duplicated_key_id(key_id)
+            }
         }
     }
 }
@@ -131,6 +138,36 @@ impl From<CspSecretKeyStoreContainsError> for CryptoError {
         match e {
             CspSecretKeyStoreContainsError::InternalError { internal_error } => {
                 CryptoError::InternalError { internal_error }
+            }
+        }
+    }
+}
+
+impl From<SecretKeyStoreError> for CspBasicSignatureKeygenError {
+    fn from(err: SecretKeyStoreError) -> Self {
+        match err {
+            SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                CspBasicSignatureKeygenError::DuplicateKeyId { key_id }
+            }
+        }
+    }
+}
+
+impl From<SecretKeyStoreError> for CspMultiSignatureKeygenError {
+    fn from(err: SecretKeyStoreError) -> Self {
+        match err {
+            SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                CspMultiSignatureKeygenError::DuplicateKeyId { key_id }
+            }
+        }
+    }
+}
+
+impl From<SecretKeyStoreError> for CspTlsKeygenError {
+    fn from(err: SecretKeyStoreError) -> Self {
+        match err {
+            SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                CspTlsKeygenError::DuplicateKeyId { key_id }
             }
         }
     }

@@ -50,6 +50,7 @@ pub enum CspBasicSignatureError {
 pub enum CspBasicSignatureKeygenError {
     UnsupportedAlgorithm { algorithm: AlgorithmId },
     InternalError { internal_error: String },
+    DuplicateKeyId { key_id: KeyId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -83,6 +84,9 @@ pub enum CspMultiSignatureKeygenError {
     InternalError {
         internal_error: String,
     },
+    DuplicateKeyId {
+        key_id: KeyId,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -101,6 +105,7 @@ pub enum CspSecretKeyStoreContainsError {
 pub enum CspTlsKeygenError {
     InvalidNotAfterDate { message: String, not_after: String },
     InternalError { internal_error: String },
+    DuplicateKeyId { key_id: KeyId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

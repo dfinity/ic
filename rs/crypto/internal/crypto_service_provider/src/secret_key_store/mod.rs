@@ -112,3 +112,11 @@ impl fmt::Display for SecretKeyStoreError {
         }
     }
 }
+
+/// Panic with a message containing the duplicated [crate::key_id::KeyId].
+///
+/// It's acceptable to panic when the type of key generation leading to this duplicated key
+/// happens only a single time during node creation, and in particular *not* while a node is running.
+pub fn panic_due_to_duplicated_key_id(key_id: KeyId) -> ! {
+    panic!("A key with ID {} has already been inserted.", key_id)
+}

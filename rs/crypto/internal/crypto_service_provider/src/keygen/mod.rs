@@ -14,6 +14,7 @@ use ic_types::crypto::{AlgorithmId, CryptoError};
 use ic_types::NodeId;
 use std::convert::TryFrom;
 
+use crate::secret_key_store::panic_due_to_duplicated_key_id;
 pub use tls_keygen::tls_cert_hash_as_key_id;
 
 const KEY_ID_DOMAIN: &str = "ic-key-id";
@@ -64,6 +65,9 @@ impl CspKeyGenerator for Csp {
                     } => CryptoError::InternalError {
                         internal_error: msg,
                     },
+                    CspTlsKeygenError::DuplicateKeyId { key_id } => {
+                        panic_due_to_duplicated_key_id(key_id)
+                    }
                 })?;
         Ok(cert)
     }

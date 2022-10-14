@@ -6,7 +6,7 @@ mod public_seed;
 mod secret_key_store;
 mod tecdsa;
 #[cfg(test)]
-mod test_utils;
+pub(crate) mod test_utils;
 #[cfg(test)]
 mod tests;
 mod threshold_sig;
@@ -28,6 +28,12 @@ use std::sync::Arc;
 
 /// An implementation of `CspVault`-trait that runs in-process
 /// and uses local secret key stores.
+///
+/// # Remarks
+///
+/// Public methods of this struct may be called by implementers of the
+/// [crate::vault::remote_csp_vault::TarpcCspVault] trait in a separate
+/// thread. Panicking should therefore be avoided not to kill that thread.
 pub struct LocalCspVault<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> {
     // CSPRNG stands for cryptographically secure random number generator.
     csprng: CspRwLock<R>,
@@ -136,13 +142,11 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         self.canister_secret_key_store.read()
     }
 
-    fn store_secret_key_or_panic(&self, csp_secret_key: CspSecretKey, key_id: KeyId) {
-        let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
-        match &result {
-            Ok(()) => {}
-            Err(SecretKeyStoreError::DuplicateKeyId(key_id)) => {
-                panic!("A key with ID {} has already been inserted", key_id);
-            }
-        };
+    fn store_secret_key(
+        &self,
+        csp_secret_key: CspSecretKey,
+        key_id: KeyId,
+    ) -> Result<(), SecretKeyStoreError> {
+        self.sks_write_lock().insert(key_id, csp_secret_key, None)
     }
 }

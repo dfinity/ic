@@ -76,7 +76,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
             }),
         }?;
         let sk_id = public_key_hash_as_key_id(&pk);
-        self.store_secret_key_or_panic(sk, sk_id);
+        self.store_secret_key(sk, sk_id)?;
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
             MetricsScope::Local,

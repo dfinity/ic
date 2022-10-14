@@ -3,6 +3,7 @@ use crate::key_id::KeyId;
 use crate::keygen::tls_cert_hash_as_key_id;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::CspPublicKey;
+use crate::vault::api::CspTlsKeygenError;
 use crate::vault::api::{CspTlsSignError, CspVault};
 use crate::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
@@ -28,6 +29,18 @@ pub fn should_insert_secret_key_into_key_store(csp_vault: Arc<dyn CspVault>) {
         .expect("Generation of TLS keys failed.");
     assert_eq!(key_id, tls_cert_hash_as_key_id(&cert));
     assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
+}
+
+pub fn should_fail_if_secret_key_insertion_yields_duplicate_error(
+    csp_vault: Arc<dyn CspVault>,
+    duplicated_key_id: &KeyId,
+) {
+    let result = csp_vault.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+
+    assert!(matches!(
+        result,
+        Err(CspTlsKeygenError::DuplicateKeyId { key_id }) if key_id ==  *duplicated_key_id
+    ));
 }
 
 pub fn should_return_der_encoded_self_signed_certificate(csp_vault: Arc<dyn CspVault>) {

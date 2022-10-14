@@ -50,7 +50,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
 
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");
-        let key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key);
+        let key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key)?;
         self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
             MetricsScope::Local,
@@ -135,13 +135,13 @@ fn ed25519_secret_key_bytes_from_der(
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     LocalCspVault<R, S, C>
 {
-    pub(super) fn store_tls_secret_key(
+    fn store_tls_secret_key(
         &self,
         cert: &TlsPublicKeyCert,
         secret_key: TlsEd25519SecretKeyDerBytes,
-    ) -> KeyId {
+    ) -> Result<KeyId, CspTlsKeygenError> {
         let key_id = tls_cert_hash_as_key_id(cert);
-        self.store_secret_key_or_panic(CspSecretKey::TlsEd25519(secret_key), key_id);
-        key_id
+        self.store_secret_key(CspSecretKey::TlsEd25519(secret_key), key_id)?;
+        Ok(key_id)
     }
 }
