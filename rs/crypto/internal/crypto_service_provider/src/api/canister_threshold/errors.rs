@@ -1,4 +1,6 @@
 //! Errors encountered during CSP canister threshold signature operations.
+use crate::secret_key_store::SecretKeyStoreError;
+use crate::KeyId;
 use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaError;
 use ic_types::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
@@ -10,6 +12,7 @@ pub enum CspCreateMEGaKeyError {
     FailedKeyGeneration(ThresholdEcdsaError),
     SerializationError(ThresholdEcdsaError),
     CspServerError { internal_error: String },
+    DuplicateKeyId { key_id: KeyId },
 }
 
 impl std::fmt::Display for CspCreateMEGaKeyError {
@@ -35,6 +38,19 @@ impl std::fmt::Display for CspCreateMEGaKeyError {
                 "Error creating MEGa keypair: CSP server operation failed: {:?}",
                 internal_error
             ),
+            Self::DuplicateKeyId { key_id } => {
+                write!(f, "A key with ID {} has already been inserted", key_id)
+            }
+        }
+    }
+}
+
+impl From<SecretKeyStoreError> for CspCreateMEGaKeyError {
+    fn from(err: SecretKeyStoreError) -> Self {
+        match err {
+            SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                CspCreateMEGaKeyError::DuplicateKeyId { key_id }
+            }
         }
     }
 }

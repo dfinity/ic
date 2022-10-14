@@ -3,16 +3,18 @@ use crate::key_id::KeyId;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
-    BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
-    CspMultiSignatureError, CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
-    CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault,
-    MultiSignatureCspVault, NiDkgCspVault, PublicRandomSeedGenerator,
-    PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
-    ThresholdSignatureCspVault,
+    BasicSignatureCspVault, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
+    PublicRandomSeedGenerator, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
+    ThresholdSignatureCspVault, TlsHandshakeCspVault,
+};
+use crate::vault::api::{
+    CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
+    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError,
+    CspTlsKeygenError, CspTlsSignError, PublicRandomSeedGeneratorError,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::remote_csp_vault::TarpcCspVault;
-use crate::{TlsHandshakeCspVault, CANISTER_SKS_DATA_FILENAME, SKS_DATA_FILENAME};
+use crate::{SecretKeyStore, CANISTER_SKS_DATA_FILENAME, SKS_DATA_FILENAME};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
@@ -31,6 +33,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
@@ -40,6 +43,7 @@ use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use rand::rngs::OsRng;
+use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -53,8 +57,12 @@ use tokio::net::UnixListener;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
 /// Crypto service provider (CSP) vault server based on the tarpc RPC framework.
-pub struct TarpcCspVaultServerImpl {
-    local_csp_vault: Arc<LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>,
+pub struct TarpcCspVaultServerImpl<
+    R: Rng + CryptoRng + Send + Sync,
+    S: SecretKeyStore,
+    C: SecretKeyStore,
+> {
+    local_csp_vault: Arc<LocalCspVault<R, S, C>>,
     listener: UnixListener,
     thread_pool: ThreadPool,
     #[allow(unused)]
@@ -68,9 +76,12 @@ pub struct TarpcCspVaultServerImpl {
 /// creates a pool handle whose behavior is similar to `Arc`][1].
 ///
 /// [1]: https://docs.rs/threadpool/1.8.1/threadpool/struct.ThreadPool.html#impl-Clone
-#[derive(Clone)]
-struct TarpcCspVaultServerWorker {
-    local_csp_vault: Arc<LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>,
+struct TarpcCspVaultServerWorker<
+    R: Rng + CryptoRng + Send + Sync,
+    S: SecretKeyStore,
+    C: SecretKeyStore,
+> {
+    local_csp_vault: Arc<LocalCspVault<R, S, C>>,
     thread_pool_handle: ThreadPool,
 }
 
@@ -97,8 +108,24 @@ where
     rx.await.expect("the sender was dropped")
 }
 
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Clone
+    for TarpcCspVaultServerWorker<R, S, C>
+{
+    fn clone(&self) -> Self {
+        Self {
+            local_csp_vault: Arc::clone(&self.local_csp_vault),
+            thread_pool_handle: self.thread_pool_handle.clone(),
+        }
+    }
+}
+
 #[tarpc::server]
-impl TarpcCspVault for TarpcCspVaultServerWorker {
+impl<
+        R: Rng + CryptoRng + Send + Sync + 'static,
+        S: SecretKeyStore + 'static,
+        C: SecretKeyStore + 'static,
+    > TarpcCspVault for TarpcCspVaultServerWorker<R, S, C>
+{
     // `BasicSignatureCspVault`-methods.
     async fn sign(
         self,
@@ -464,7 +491,7 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
     }
 }
 
-impl TarpcCspVaultServerImpl {
+impl TarpcCspVaultServerImpl<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     pub fn new(
         sks_dir: &Path,
         listener: UnixListener,
@@ -484,11 +511,37 @@ impl TarpcCspVaultServerImpl {
             metrics,
             new_logger!(&logger),
         ));
+        Self::new_with_local_csp_vault(local_csp_server, listener, logger)
+    }
+}
+
+impl<
+        R: Rng + CryptoRng + Send + Sync + 'static,
+        S: SecretKeyStore + 'static,
+        C: SecretKeyStore + 'static,
+    > TarpcCspVaultServerImpl<R, S, C>
+{
+    /// Creates a remote CSP vault server for testing.
+    ///
+    /// Note: This MUST NOT be used in production as the secrecy of the secret
+    /// key store is not guaranteed.
+    pub fn new_for_test(
+        local_csp_vault: Arc<LocalCspVault<R, S, C>>,
+        listener: UnixListener,
+    ) -> Self {
+        Self::new_with_local_csp_vault(local_csp_vault, listener, no_op_logger())
+    }
+
+    fn new_with_local_csp_vault(
+        local_csp_vault: Arc<LocalCspVault<R, S, C>>,
+        listener: UnixListener,
+        logger: ReplicaLogger,
+    ) -> Self {
         let thread_pool = threadpool::Builder::new()
             .thread_name("ic-crypto-csp".to_string())
             .build(); // defaults the number of threads to the number of CPUs
         Self {
-            local_csp_vault: local_csp_server,
+            local_csp_vault,
             listener,
             thread_pool,
             logger,

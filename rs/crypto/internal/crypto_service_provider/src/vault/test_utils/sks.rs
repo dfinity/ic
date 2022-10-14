@@ -1,6 +1,13 @@
+use crate::secret_key_store::test_utils::MockSecretKeyStore;
+use crate::secret_key_store::test_utils::TempSecretKeyStore;
+use crate::secret_key_store::SecretKeyStoreError;
+use crate::types::CspSecretKey;
 use crate::vault::api::CspVault;
+use crate::{KeyId, SecretKeyStore};
+use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::node_test_id;
+use openssl::pkey::PKey;
 use std::sync::Arc;
 
 const NODE_1: u64 = 4241;
@@ -87,4 +94,38 @@ pub fn sks_should_contain_tls_keys_only_after_generation(
         !csp_vault1.sks_contains(&key_id2).expect("SKS call failed"),
         "Key first CSP should not contain the TLS keys of the second."
     );
+}
+
+pub fn secret_key_store_with_error_on_insert(duplicated_key_id: KeyId) -> impl SecretKeyStore {
+    let mut sks_returning_error_on_insert = MockSecretKeyStore::new();
+    sks_returning_error_on_insert
+        .expect_insert()
+        .times(1)
+        .return_const(Err(SecretKeyStoreError::DuplicateKeyId(duplicated_key_id)));
+    sks_returning_error_on_insert
+}
+
+pub fn secret_key_store_containing_key_with_invalid_encoding(key_id: KeyId) -> impl SecretKeyStore {
+    let mut key_store = TempSecretKeyStore::new();
+    let secret_key_with_invalid_der = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
+        bytes: b"invalid DER encoding".to_vec(),
+    });
+    assert!(key_store
+        .insert(key_id, secret_key_with_invalid_der, None)
+        .is_ok());
+    key_store
+}
+
+pub fn secret_key_store_containing_key_with_invalid_length(key_id: KeyId) -> impl SecretKeyStore {
+    let mut key_store = TempSecretKeyStore::new();
+    let secret_key_with_invalid_length = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
+        bytes: PKey::generate_ed448()
+            .expect("failed to create Ed2448 key pair")
+            .private_key_to_der()
+            .expect("failed to serialize Ed2448 key to DER"),
+    });
+    assert!(key_store
+        .insert(key_id, secret_key_with_invalid_length, None)
+        .is_ok());
+    key_store
 }

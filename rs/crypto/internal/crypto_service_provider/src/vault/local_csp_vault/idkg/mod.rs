@@ -268,13 +268,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         let private_key_bytes = MEGaPrivateKeyK256Bytes::try_from(&private_key)
             .map_err(CspCreateMEGaKeyError::SerializationError)?;
 
-        self.store_secret_key_or_panic(
+        self.store_secret_key(
             CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
                 public_key: public_key_bytes,
                 private_key: private_key_bytes,
             }),
             mega_key_id(&public_key),
-        );
+        )?;
 
         self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
