@@ -3739,13 +3739,6 @@ impl Governance {
             ));
         }
 
-        if parent_neuron.maturity_e8s_equivalent > transaction_fee_e8s {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                &"Neuron has disbursable rewards. Must spawn or disburse before disbursing to neuron.".to_string(),
-            ));
-        }
-
         // Validate that if a child neuron controller was provided, it is a valid
         // principal.
         let child_controller = &disburse_to_neuron
