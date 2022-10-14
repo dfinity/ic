@@ -65,7 +65,7 @@ const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(
 // If deterministic time slicing is disabled, then this limit is ignored and
 // `MAX_INSTRUCTIONS_PER_INSTALL_CODE` is used for execution of the
 // single slice.
-const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions = NumInstructions::new(2 * B);
+const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions = NumInstructions::new(40 * 5 * B);
 
 // The factor to bump the instruction limit for system subnets.
 const SYSTEM_SUBNET_FACTOR: u64 = 10;
