@@ -117,7 +117,8 @@ def external_crates_repository(name, annotations):
             "bitflags": crate.spec(
                 version = "^1.2.1",
             ),
-            "bls12_381": crate.spec(
+            "ic_bls12_381": crate.spec(
+                version = "^0.7.1",
                 features = [
                     "alloc",
                     "experimental",

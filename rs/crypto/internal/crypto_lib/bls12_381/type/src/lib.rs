@@ -6,7 +6,7 @@
 #![warn(future_incompatible)]
 #![allow(clippy::needless_range_loop)]
 
-use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
+use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use pairing::group::{ff::Field, Group};
 use paste::paste;
 use rand::{CryptoRng, RngCore};
@@ -40,7 +40,7 @@ pub enum PairingInvalidScalar {
 /// An integer of the order of the groups G1/G2/Gt
 #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
 pub struct Scalar {
-    value: bls12_381::Scalar,
+    value: ic_bls12_381::Scalar,
 }
 
 impl Ord for Scalar {
@@ -76,19 +76,19 @@ impl Scalar {
     pub const BYTES: usize = 32;
 
     /// Create a new Scalar from the inner type
-    pub(crate) fn new(value: bls12_381::Scalar) -> Self {
+    pub(crate) fn new(value: ic_bls12_381::Scalar) -> Self {
         Self { value }
     }
 
     /// Return the inner value
-    pub(crate) fn inner(&self) -> &bls12_381::Scalar {
+    pub(crate) fn inner(&self) -> &ic_bls12_381::Scalar {
         &self.value
     }
 
     /// Create a scalar from a small integer value
     pub fn from_u64(v: u64) -> Self {
         let value: [u64; 4] = [v, 0, 0, 0];
-        Self::new(bls12_381::Scalar::from_raw(value))
+        Self::new(ic_bls12_381::Scalar::from_raw(value))
     }
 
     /// Create a scalar from a small integer value
@@ -169,7 +169,7 @@ impl Scalar {
             rbuf[j] = bytes[62 - j].reverse_bits();
         }
 
-        let mut val = Self::new(bls12_381::Scalar::from_bytes_wide(&rbuf));
+        let mut val = Self::new(ic_bls12_381::Scalar::from_bytes_wide(&rbuf));
 
         for _ in 0..6 {
             val = val.double();
@@ -181,12 +181,12 @@ impl Scalar {
 
     /// Return the scalar 0
     pub fn zero() -> Self {
-        Self::new(bls12_381::Scalar::zero())
+        Self::new(ic_bls12_381::Scalar::zero())
     }
 
     /// Return the scalar 1
     pub fn one() -> Self {
-        Self::new(bls12_381::Scalar::one())
+        Self::new(ic_bls12_381::Scalar::one())
     }
 
     /// Return true iff this value is zero
@@ -274,7 +274,7 @@ impl Scalar {
             le_bytes[i] = bytes[Self::BYTES - i - 1];
         }
         // le_bytes[32..64] left as zero
-        Self::new(bls12_381::Scalar::from_bytes_wide(&le_bytes))
+        Self::new(ic_bls12_381::Scalar::from_bytes_wide(&le_bytes))
     }
 
     /// Deserialize a scalar from a big-endian byte string
@@ -284,7 +284,7 @@ impl Scalar {
             .try_into()
             .map_err(|_| PairingInvalidScalar::InvalidScalar)?;
         bytes.reverse();
-        let scalar = bls12_381::Scalar::from_bytes(&bytes);
+        let scalar = ic_bls12_381::Scalar::from_bytes(&bytes);
         ctoption_ok_or!(scalar, PairingInvalidScalar::InvalidScalar)
     }
 
@@ -381,7 +381,7 @@ impl Scalar {
         let b = other.serialize();
 
         /*
-        bls12_381::Scalar does not implement comparisons natively.
+        ic_bls12_381::Scalar does not implement comparisons natively.
 
         Perform this operation by comparing the serializations of the Scalar
         instead.
@@ -556,15 +556,15 @@ macro_rules! define_affine_and_projective_types {
     ( $affine:ident, $projective:ident, $size:expr ) => {
         paste! {
             lazy_static::lazy_static! {
-                static ref [<$affine:upper _GENERATOR>] : $affine = $affine::new(bls12_381::$affine::generator());
-                static ref [<$affine:upper _IDENTITY>] : $affine = $affine::new(bls12_381::$affine::identity());
+                static ref [<$affine:upper _GENERATOR>] : $affine = $affine::new(ic_bls12_381::$affine::generator());
+                static ref [<$affine:upper _IDENTITY>] : $affine = $affine::new(ic_bls12_381::$affine::identity());
             }
         }
 
         /// An element of the group in affine form
         #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
         pub struct $affine {
-            value: bls12_381::$affine
+            value: ic_bls12_381::$affine
         }
 
         impl $affine {
@@ -572,12 +572,12 @@ macro_rules! define_affine_and_projective_types {
             pub const BYTES: usize = $size;
 
             /// Create a struct from the inner type
-            pub(crate) fn new(value: bls12_381::$affine) -> Self {
+            pub(crate) fn new(value: ic_bls12_381::$affine) -> Self {
                 Self { value }
             }
 
             /// Return the inner value
-            pub(crate) fn inner(&self) -> &bls12_381::$affine {
+            pub(crate) fn inner(&self) -> &ic_bls12_381::$affine {
                 &self.value
             }
 
@@ -612,7 +612,7 @@ macro_rules! define_affine_and_projective_types {
                 let bytes : &[u8; Self::BYTES] = bytes.as_ref()
                     .try_into()
                     .map_err(|_| PairingInvalidPoint::InvalidPoint)?;
-                let pt = bls12_381::$affine::from_compressed(bytes);
+                let pt = ic_bls12_381::$affine::from_compressed(bytes);
                 ctoption_ok_or!(pt, PairingInvalidPoint::InvalidPoint)
             }
 
@@ -639,7 +639,7 @@ macro_rules! define_affine_and_projective_types {
                 let bytes : &[u8; Self::BYTES] = bytes.as_ref()
                     .try_into()
                     .map_err(|_| PairingInvalidPoint::InvalidPoint)?;
-                let pt = bls12_381::$affine::from_compressed_unchecked(bytes);
+                let pt = ic_bls12_381::$affine::from_compressed_unchecked(bytes);
                 ctoption_ok_or!(pt, PairingInvalidPoint::InvalidPoint)
             }
 
@@ -675,15 +675,15 @@ macro_rules! define_affine_and_projective_types {
 
         paste! {
             lazy_static::lazy_static! {
-                static ref [<$projective:upper _GENERATOR>] : $projective = $projective::new(bls12_381::$projective::generator());
-                static ref [<$projective:upper _IDENTITY>] : $projective = $projective::new(bls12_381::$projective::identity());
+                static ref [<$projective:upper _GENERATOR>] : $projective = $projective::new(ic_bls12_381::$projective::generator());
+                static ref [<$projective:upper _IDENTITY>] : $projective = $projective::new(ic_bls12_381::$projective::identity());
             }
         }
 
         /// An element of the group in projective form
         #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
         pub struct $projective {
-            value: bls12_381::$projective
+            value: ic_bls12_381::$projective
         }
 
         impl $projective {
@@ -691,12 +691,12 @@ macro_rules! define_affine_and_projective_types {
             pub const BYTES: usize = $size;
 
             /// Create a new struct from the inner type
-            pub(crate) fn new(value: bls12_381::$projective) -> Self {
+            pub(crate) fn new(value: ic_bls12_381::$projective) -> Self {
                 Self { value }
             }
 
             /// Return the inner value
-            pub(crate) fn inner(&self) -> &bls12_381::$projective {
+            pub(crate) fn inner(&self) -> &ic_bls12_381::$projective {
                 &self.value
             }
 
@@ -708,7 +708,7 @@ macro_rules! define_affine_and_projective_types {
             /// If index is out of range, returns the identity element
             pub(crate) fn ct_select(from: &[Self], index: usize) -> Self {
                 use subtle::{ConditionallySelectable, ConstantTimeEq};
-                let mut val = bls12_381::$projective::identity();
+                let mut val = ic_bls12_381::$projective::identity();
 
                 for v in 0..from.len() {
                     val.conditional_assign(from[v].inner(), usize::ct_eq(&v, &index));
@@ -724,7 +724,7 @@ macro_rules! define_affine_and_projective_types {
 
             /// Sum some points
             pub fn sum(pts: &[Self]) -> Self {
-                let mut sum = bls12_381::$projective::identity();
+                let mut sum = ic_bls12_381::$projective::identity();
                 for pt in pts {
                     sum += pt.inner();
                 }
@@ -782,7 +782,7 @@ macro_rules! define_affine_and_projective_types {
             /// * `input` - the input which will be hashed
             pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
                 let pt =
-                    <bls12_381::$projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(
+                    <ic_bls12_381::$projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(
                         input, domain_sep,
                     );
                 Self::new(pt)
@@ -1132,12 +1132,12 @@ impl_debug_using_serialize_for!(G2Projective);
 /// An element of the group Gt
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Gt {
-    value: bls12_381::Gt,
+    value: ic_bls12_381::Gt,
 }
 
 lazy_static::lazy_static! {
-    static ref GT_GENERATOR : Gt = Gt::new(bls12_381::Gt::generator());
-    static ref GT_IDENTITY : Gt = Gt::new(bls12_381::Gt::identity());
+    static ref GT_GENERATOR : Gt = Gt::new(ic_bls12_381::Gt::generator());
+    static ref GT_IDENTITY : Gt = Gt::new(ic_bls12_381::Gt::identity());
 }
 
 impl Gt {
@@ -1145,11 +1145,11 @@ impl Gt {
     pub const BYTES: usize = 576;
 
     /// Create a new Gt from the inner type
-    pub(crate) fn new(value: bls12_381::Gt) -> Self {
+    pub(crate) fn new(value: ic_bls12_381::Gt) -> Self {
         Self { value }
     }
 
-    pub(crate) fn inner(&self) -> &bls12_381::Gt {
+    pub(crate) fn inner(&self) -> &ic_bls12_381::Gt {
         &self.value
     }
 
@@ -1165,7 +1165,7 @@ impl Gt {
 
     /// Compute the pairing function e(g1,g2) -> gt
     pub fn pairing(g1: &G1Affine, g2: &G2Affine) -> Self {
-        Self::new(bls12_381::pairing(&g1.value, &g2.value))
+        Self::new(ic_bls12_381::pairing(&g1.value, &g2.value))
     }
 
     /// Perform multi-pairing computation
@@ -1178,7 +1178,7 @@ impl Gt {
             inners.push((g1.inner(), g2.inner()));
         }
 
-        Self::new(bls12_381::multi_miller_loop(&inners).final_exponentiation())
+        Self::new(ic_bls12_381::multi_miller_loop(&inners).final_exponentiation())
     }
 
     /// Return true if this is the identity element
@@ -1207,7 +1207,7 @@ declare_mul_scalar_ops_for!(Gt);
 /// An element of the group G2 prepared for the Miller loop
 #[derive(Clone, Debug)]
 pub struct G2Prepared {
-    value: bls12_381::G2Prepared,
+    value: ic_bls12_381::G2Prepared,
 }
 
 lazy_static::lazy_static! {
@@ -1217,11 +1217,11 @@ lazy_static::lazy_static! {
 
 impl G2Prepared {
     /// Create a new G2Prepared from the inner type
-    pub(crate) fn new(value: bls12_381::G2Prepared) -> Self {
+    pub(crate) fn new(value: ic_bls12_381::G2Prepared) -> Self {
         Self { value }
     }
 
-    pub(crate) fn inner(&self) -> &bls12_381::G2Prepared {
+    pub(crate) fn inner(&self) -> &ic_bls12_381::G2Prepared {
         &self.value
     }
 
