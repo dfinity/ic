@@ -5,7 +5,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
+    assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes,
+    NervousSystemError, E8,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
@@ -70,8 +71,11 @@ fn init() -> Init {
         icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
         sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
         fallback_controller_principal_ids: vec![i2principal_id_string(1230578)],
+        // Similar to, but different from values used in NNS.
+        transaction_fee_e8s: Some(12_345),
+        neuron_minimum_stake_e8s: Some(123_456_789),
     };
-    assert!(result.validate().is_ok(), "{result:#?}");
+    assert_is_ok!(result.validate());
     result
 }
 
@@ -152,7 +156,25 @@ fn verify_participant_balances(
 fn fallback_controller_principal_ids_must_not_be_empty() {
     let mut init = init();
     init.fallback_controller_principal_ids.clear();
-    assert!(init.validate().is_err(), "{init:#?}");
+    assert!(init.validate().is_err(), "{:#?}", init);
+}
+
+#[test]
+fn neuron_minimum_stake_e8s_is_required() {
+    let init = Init {
+        neuron_minimum_stake_e8s: None,
+        ..init()
+    };
+    assert_is_err!(init.validate());
+}
+
+#[test]
+fn transaction_fee_e8s_is_required() {
+    let init = Init {
+        transaction_fee_e8s: None,
+        ..init()
+    };
+    assert_is_err!(init.validate());
 }
 
 /// Expectation of one call on the mock Ledger.
@@ -418,7 +440,6 @@ fn test_min_icp() {
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Lifecycle::Aborted);
     {
-        let fee = 1152;
         // "Sweep" all ICP, which should go back to the buyers.
         let SweepResult {
             success,
@@ -427,11 +448,10 @@ fn test_min_icp() {
         } = swap
             .sweep_icp(
                 now_fn,
-                Tokens::from_e8s(fee),
                 &mock_stub(vec![
                     LedgerExpect::TransferFunds(
-                        2 * E8 - fee,
-                        fee,
+                        2 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                        DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
                         Account {
                             owner: *TEST_USER2_PRINCIPAL,
@@ -441,8 +461,8 @@ fn test_min_icp() {
                         Ok(1066),
                     ),
                     LedgerExpect::TransferFunds(
-                        2 * E8 - fee,
-                        fee,
+                        2 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                        DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
                         Account {
                             owner: *TEST_USER1_PRINCIPAL,
@@ -831,11 +851,10 @@ fn test_scenario_happy() {
         } = swap
             .sweep_icp(
                 now_fn,
-                Tokens::from_e8s(1),
                 &mock_stub(vec![
                     LedgerExpect::TransferFunds(
-                        600 * E8 - 1,
-                        1,
+                        600 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                        DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
                         Account {
                             owner: SNS_GOVERNANCE_CANISTER_ID.get(),
@@ -845,8 +864,8 @@ fn test_scenario_happy() {
                         Err(77),
                     ),
                     LedgerExpect::TransferFunds(
-                        400 * E8 - 1,
-                        1,
+                        400 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                        DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&*TEST_USER3_PRINCIPAL)),
                         Account {
                             owner: SNS_GOVERNANCE_CANISTER_ID.get(),
@@ -856,8 +875,8 @@ fn test_scenario_happy() {
                         Ok(1066),
                     ),
                     LedgerExpect::TransferFunds(
-                        900 * E8 - 1,
-                        1,
+                        900 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                        DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
                         Account {
                             owner: SNS_GOVERNANCE_CANISTER_ID.get(),
@@ -880,10 +899,9 @@ fn test_scenario_happy() {
         } = swap
             .sweep_icp(
                 now_fn,
-                Tokens::from_e8s(2),
                 &mock_stub(vec![LedgerExpect::TransferFunds(
-                    600 * E8 - 2,
-                    2,
+                    600 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                    DEFAULT_TRANSFER_FEE.get_e8s(),
                     Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
                     Account {
                         owner: SNS_GOVERNANCE_CANISTER_ID.get(),
@@ -914,42 +932,45 @@ fn test_scenario_happy() {
                 )),
             }
         }
-        fn neuron_basket_transfer_fund_calls(
-            amount_sns_tokens_e8s: u64,
-            count: u64,
-            investor_type: Investor,
-        ) -> Vec<LedgerExpect> {
-            let split_amount_e8s = Swap::split(amount_sns_tokens_e8s, count);
 
-            let starting_memo = match investor_type {
-                Investor::CommunityFund(starting_memo) => starting_memo,
-                Investor::Direct(_) => 0,
+        let sns_transaction_fee_e8s = *swap
+            .init()
+            .transaction_fee_e8s
+            .as_ref()
+            .expect("Transaction fee not known.");
+        let neuron_basket_transfer_fund_calls =
+            |amount_sns_tokens_e8s: u64, count: u64, investor: Investor| -> Vec<LedgerExpect> {
+                let split_amount = Swap::split(amount_sns_tokens_e8s, count);
+
+                let starting_memo = match investor {
+                    Investor::CommunityFund(starting_memo) => starting_memo,
+                    Investor::Direct(_) => 0,
+                };
+
+                split_amount
+                    .iter()
+                    .enumerate()
+                    .map(|(ledger_account_memo, amount)| {
+                        let to = match investor {
+                            Investor::CommunityFund(_) => {
+                                cf(starting_memo + ledger_account_memo as u64)
+                            }
+                            Investor::Direct(principal_id) => {
+                                dst(principal_id, ledger_account_memo as u64)
+                            }
+                        };
+
+                        LedgerExpect::TransferFunds(
+                            amount - sns_transaction_fee_e8s,
+                            /* fees */ sns_transaction_fee_e8s,
+                            /* Subaccount */ None,
+                            to,
+                            /* memo */ 0,
+                            /* Block height */ Ok(1066),
+                        )
+                    })
+                    .collect()
             };
-
-            split_amount_e8s
-                .iter()
-                .enumerate()
-                .map(|(ledger_account_memo, amount)| {
-                    let to = match investor_type {
-                        Investor::CommunityFund(_) => {
-                            cf(starting_memo + ledger_account_memo as u64)
-                        }
-                        Investor::Direct(principal_id) => {
-                            dst(principal_id, ledger_account_memo as u64)
-                        }
-                    };
-
-                    LedgerExpect::TransferFunds(
-                        amount - 1,
-                        /* fees */ 1,
-                        /* Subaccount */ None,
-                        to,
-                        /* memo */ 0,
-                        /* Block height */ Ok(1066),
-                    )
-                })
-                .collect()
-        }
 
         let neurons_per_investor = params
             .neuron_basket_construction_parameters
@@ -994,7 +1015,7 @@ fn test_scenario_happy() {
             failure,
             skipped,
         } = swap
-            .sweep_sns(now_fn, Tokens::from_e8s(1), &mock_stub(mock_ledger_calls))
+            .sweep_sns(now_fn, &mock_stub(mock_ledger_calls))
             .now_or_never()
             .unwrap();
         assert_eq!(skipped, 0);
@@ -1184,12 +1205,8 @@ async fn test_finalize_swap_ok() {
     let sns_ledger: SpyLedger = SpyLedger::new(Arc::clone(&sns_ledger_calls));
 
     let init = Init {
-        nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
-        icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
-        sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
-        sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
-        sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
         fallback_controller_principal_ids: vec![i2principal_id_string(4242)],
+        ..init()
     };
     let params = Params {
         max_icp_e8s: 100,
@@ -1206,7 +1223,7 @@ async fn test_finalize_swap_ok() {
     };
     let mut swap = Swap {
         lifecycle: Open as i32,
-        init: Some(init),
+        init: Some(init.clone()),
         params: Some(params.clone()),
         buyers: btreemap! {
             i2principal_id_string(1001) => BuyerState::new(50 * E8),
@@ -1321,27 +1338,43 @@ async fn test_finalize_swap_ok() {
     }
 
     // Assert that ICP and SNS tokens were sent.
-    const FEE_E8S: u64 = 10_000;
+    let sns_transaction_fee_e8s = *swap
+        .init()
+        .transaction_fee_e8s
+        .as_ref()
+        .expect("Transaction fee not known.");
     let icp_ledger_calls = icp_ledger_calls
         .lock()
         .unwrap()
         .iter()
         .cloned()
         .collect::<Vec<LedgerCall>>();
+    assert_eq!(icp_ledger_calls.len(), 3, "{:#?}", icp_ledger_calls);
+    for call in icp_ledger_calls.iter() {
+        let (fee_e8s, memo) = match call {
+            LedgerCall::TransferFunds { fee_e8s, memo, .. } => (fee_e8s, memo),
+            _ => panic!("Expected transfer call, but was {:#?}.", call),
+        };
+
+        assert_eq!(*fee_e8s, DEFAULT_TRANSFER_FEE.get_e8s(), "{:#?}", call);
+        assert_eq!(*memo, 0, "{:#?}", call);
+    }
+
     let sns_ledger_calls = sns_ledger_calls
         .lock()
         .unwrap()
         .iter()
         .cloned()
         .collect::<Vec<LedgerCall>>();
-    assert_eq!(icp_ledger_calls.len() + sns_ledger_calls.len(), 12);
-    for t in icp_ledger_calls.iter().chain(sns_ledger_calls.iter()) {
-        if let LedgerCall::TransferFunds { fee_e8s, memo, .. } = t {
-            assert_eq!(*fee_e8s, FEE_E8S, "{t:#?}");
-            assert_eq!(*memo, 0, "{t:#?}");
-        } else {
-            panic!("Expected transfer");
-        }
+    assert_eq!(sns_ledger_calls.len(), 9, "{:#?}", sns_ledger_calls);
+    for call in sns_ledger_calls.iter() {
+        let (fee_e8s, memo) = match call {
+            LedgerCall::TransferFunds { fee_e8s, memo, .. } => (fee_e8s, memo),
+            _ => panic!("Expected transfer call, but was {:#?}.", call),
+        };
+
+        assert_eq!(*fee_e8s, sns_transaction_fee_e8s, "{:#?}", call);
+        assert_eq!(*memo, 0, "{:#?}", call);
     }
 
     // ICP should be sent to SNS governance (from various swap subaccounts.)
@@ -1359,10 +1392,10 @@ async fn test_finalize_swap_ok() {
         let from_subaccount = Some(principal_to_subaccount(
             &PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap(),
         ));
-        let amount_e8s = icp_amount * E8 - FEE_E8S;
+        let amount_e8s = icp_amount * E8 - DEFAULT_TRANSFER_FEE.get_e8s();
         LedgerCall::TransferFunds {
             amount_e8s,
-            fee_e8s: FEE_E8S,
+            fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
             from_subaccount,
             to: expected_to.clone(),
             memo: 0,
@@ -1373,34 +1406,31 @@ async fn test_finalize_swap_ok() {
     let mut actual_icp_ledger_calls = icp_ledger_calls;
     actual_icp_ledger_calls.sort();
     assert_eq!(actual_icp_ledger_calls, expected_icp_ledger_calls);
-    fn neuron_basket_transfer_fund_calls(
-        amount_sns_tokens_e8s: u64,
-        count: u64,
-        buyer: u64,
-    ) -> Vec<LedgerCall> {
-        let buyer_principal_id = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
-        let split_amount = Swap::split(amount_sns_tokens_e8s, count);
-        split_amount
-            .iter()
-            .enumerate()
-            .map(|(ledger_account_memo, amount)| {
-                let to = Account {
-                    owner: SNS_GOVERNANCE_CANISTER_ID.into(),
-                    subaccount: Some(compute_neuron_staking_subaccount_bytes(
-                        buyer_principal_id,
-                        ledger_account_memo as u64,
-                    )),
-                };
-                LedgerCall::TransferFunds {
-                    amount_e8s: amount - FEE_E8S,
-                    fee_e8s: FEE_E8S,
-                    from_subaccount: None,
-                    to,
-                    memo: 0,
-                }
-            })
-            .collect()
-    }
+    let neuron_basket_transfer_fund_calls =
+        |amount_sns_tokens_e8s: u64, count: u64, buyer: u64| -> Vec<LedgerCall> {
+            let buyer_principal_id = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
+            let split_amount = Swap::split(amount_sns_tokens_e8s, count);
+            split_amount
+                .iter()
+                .enumerate()
+                .map(|(ledger_account_memo, amount)| {
+                    let to = Account {
+                        owner: SNS_GOVERNANCE_CANISTER_ID.into(),
+                        subaccount: Some(compute_neuron_staking_subaccount_bytes(
+                            buyer_principal_id,
+                            ledger_account_memo as u64,
+                        )),
+                    };
+                    LedgerCall::TransferFunds {
+                        amount_e8s: amount - sns_transaction_fee_e8s,
+                        fee_e8s: sns_transaction_fee_e8s,
+                        from_subaccount: None,
+                        to,
+                        memo: 0,
+                    }
+                })
+                .collect()
+        };
 
     let count = params
         .neuron_basket_construction_parameters
@@ -1443,12 +1473,8 @@ async fn test_finalize_swap_abort() {
     let sns_ledger: SpyLedger = SpyLedger::new(Arc::clone(&sns_ledger_calls));
 
     let init = Init {
-        nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
-        icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
-        sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
-        sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
-        sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
         fallback_controller_principal_ids: vec![i2principal_id_string(4242)],
+        ..init()
     };
     let params = Params {
         // This absurdly large number ensures that the swap reaches the Aborted state.
@@ -1651,14 +1677,13 @@ fn test_error_refund() {
             .amount_icp_e8s(),
         6 * E8
     );
-    let fee = 1234;
     // Refund must fail as the swap is not committed or aborted.
     {
         match swap
             .error_refund_icp(
                 *TEST_USER2_PRINCIPAL,
                 Tokens::from_e8s(10 * E8),
-                Tokens::from_e8s(fee),
+                DEFAULT_TRANSFER_FEE,
                 &mock_stub(vec![]),
             )
             .now_or_never()
@@ -1684,10 +1709,10 @@ fn test_error_refund() {
         .error_refund_icp(
             *TEST_USER2_PRINCIPAL,
             Tokens::from_e8s(10 * E8),
-            Tokens::from_e8s(fee),
+            DEFAULT_TRANSFER_FEE,
             &mock_stub(vec![LedgerExpect::TransferFunds(
-                10 * E8 - fee,
-                fee,
+                10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                DEFAULT_TRANSFER_FEE.get_e8s(),
                 Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone())),
                 Account {
                     owner: *TEST_USER2_PRINCIPAL,
@@ -1709,10 +1734,10 @@ fn test_error_refund() {
         .error_refund_icp(
             *TEST_USER3_PRINCIPAL,
             Tokens::from_e8s(10 * E8),
-            Tokens::from_e8s(fee),
+            DEFAULT_TRANSFER_FEE,
             &mock_stub(vec![LedgerExpect::TransferFunds(
-                10 * E8 - fee,
-                fee,
+                10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                DEFAULT_TRANSFER_FEE.get_e8s(),
                 Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL.clone())),
                 Account {
                     owner: *TEST_USER3_PRINCIPAL,
@@ -1735,7 +1760,7 @@ fn test_error_refund() {
         .error_refund_icp(
             *TEST_USER1_PRINCIPAL,
             Tokens::from_e8s(10 * E8),
-            Tokens::from_e8s(fee),
+            DEFAULT_TRANSFER_FEE,
             &mock_stub(vec![]),
         )
         .now_or_never()
@@ -1752,10 +1777,9 @@ fn test_error_refund() {
     } = swap
         .sweep_icp(
             now_fn,
-            Tokens::from_e8s(fee),
             &mock_stub(vec![LedgerExpect::TransferFunds(
-                6 * E8 - fee,
-                fee,
+                6 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                DEFAULT_TRANSFER_FEE.get_e8s(),
                 Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
                 Account {
                     owner: SNS_GOVERNANCE_CANISTER_ID.get(),
@@ -1781,10 +1805,10 @@ fn test_error_refund() {
         .error_refund_icp(
             *TEST_USER1_PRINCIPAL,
             Tokens::from_e8s(10 * E8),
-            Tokens::from_e8s(fee),
+            DEFAULT_TRANSFER_FEE,
             &mock_stub(vec![LedgerExpect::TransferFunds(
-                10 * E8 - fee,
-                fee,
+                10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                DEFAULT_TRANSFER_FEE.get_e8s(),
                 Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
                 Account {
                     owner: *TEST_USER1_PRINCIPAL,

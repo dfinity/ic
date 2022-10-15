@@ -15,8 +15,10 @@ use ic_crypto_sha::Sha256;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
+use ic_nns_common::{
+    pb::v1::{NeuronId, ProposalId},
+    types::UpdateIcpXdrConversionRatePayload,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_nns_governance::{
@@ -82,6 +84,7 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::iter::{self, once};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
@@ -10669,10 +10672,14 @@ fn test_open_sns_token_swap_proposal() {
 
     #[allow(clippy::type_complexity)]
     struct MockEnvironment<'a> {
-        expected_call_canister_method_calls: VecDeque<(
-            ExpectedCallCanisterMethodCallArguments<'a>,
-            Result<Vec<u8>, (Option<i32>, String)>,
-        )>,
+        expected_call_canister_method_calls: Arc<
+            Mutex<
+                VecDeque<(
+                    ExpectedCallCanisterMethodCallArguments<'a>,
+                    Result<Vec<u8>, (Option<i32>, String)>,
+                )>,
+            >,
+        >,
     }
 
     #[async_trait]
@@ -10685,6 +10692,8 @@ fn test_open_sns_token_swap_proposal() {
         ) -> Result<Vec<u8>, (Option<i32>, String)> {
             let (expected_arguments, result) = self
                 .expected_call_canister_method_calls
+                .lock()
+                .unwrap()
                 .pop_front()
                 .unwrap();
 
@@ -10725,17 +10734,6 @@ fn test_open_sns_token_swap_proposal() {
 
         fn heap_growth_potential(&self) -> HeapGrowthPotential {
             HeapGrowthPotential::NoIssue
-        }
-    }
-
-    // Require that all expected calls were made.
-    impl Drop for MockEnvironment<'_> {
-        fn drop(&mut self) {
-            assert!(
-                self.expected_call_canister_method_calls.is_empty(),
-                "{:#?}",
-                self.expected_call_canister_method_calls,
-            );
         }
     }
 
@@ -10808,17 +10806,18 @@ fn test_open_sns_token_swap_proposal() {
         ..Default::default()
     };
 
+    let community_fund_investment_e8s = 61;
     let mut cf_participants = vec![
         sns_swap_pb::CfParticipant {
             hotkey_principal: principal(1).to_string(),
             cf_neurons: vec![
                 sns_swap_pb::CfNeuron {
                     nns_neuron_id: 1,
-                    amount_icp_e8s: 42 * 60 / 100,
+                    amount_icp_e8s: community_fund_investment_e8s * 60 / 100,
                 },
                 sns_swap_pb::CfNeuron {
                     nns_neuron_id: 2,
-                    amount_icp_e8s: 42 * 10 / 100,
+                    amount_icp_e8s: community_fund_investment_e8s * 10 / 100,
                 },
             ],
         },
@@ -10826,27 +10825,27 @@ fn test_open_sns_token_swap_proposal() {
             hotkey_principal: principal(2).to_string(),
             cf_neurons: vec![sns_swap_pb::CfNeuron {
                 nns_neuron_id: 3,
-                amount_icp_e8s: 42 * 30 / 100,
+                amount_icp_e8s: community_fund_investment_e8s * 30 / 100,
             }],
         },
     ];
     cf_participants.sort_by(|p1, p2| p1.hotkey_principal.cmp(&p2.hotkey_principal));
-    let expected_call_canister_method_calls = [(
-        ExpectedCallCanisterMethodCallArguments {
-            target: CanisterId::try_from(target_swap_canister_id).unwrap(),
-            method_name: "open",
-            request: Encode!(&sns_swap_pb::OpenRequest {
-                params: Some(params.clone()),
-                cf_participants: cf_participants.clone(),
-                open_sns_token_swap_proposal_id: Some(1),
-            })
-            .unwrap(),
-        },
-        Ok(Encode!(&sns_swap_pb::SetOpenTimeWindowResponse {}).unwrap()),
-    )]
-    .iter()
-    .cloned()
-    .collect();
+    let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
+        [(
+            ExpectedCallCanisterMethodCallArguments {
+                target: CanisterId::try_from(target_swap_canister_id).unwrap(),
+                method_name: "open",
+                request: Encode!(&sns_swap_pb::OpenRequest {
+                    params: Some(params.clone()),
+                    cf_participants: cf_participants.clone(),
+                    open_sns_token_swap_proposal_id: Some(1),
+                })
+                .unwrap(),
+            },
+            Ok(Encode!(&sns_swap_pb::SetOpenTimeWindowResponse {}).unwrap()),
+        )]
+        .into(),
+    ));
 
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
@@ -10855,7 +10854,7 @@ fn test_open_sns_token_swap_proposal() {
         // execution of the proposal will cause governance to call out to the
         // swap canister.
         Box::new(MockEnvironment {
-            expected_call_canister_method_calls,
+            expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
@@ -10871,7 +10870,7 @@ fn test_open_sns_token_swap_proposal() {
             action: Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
                 target_swap_canister_id: Some(target_swap_canister_id),
                 params: Some(params),
-                community_fund_investment_e8s: Some(42),
+                community_fund_investment_e8s: Some(community_fund_investment_e8s),
             })),
             ..Default::default()
         },
@@ -10881,6 +10880,14 @@ fn test_open_sns_token_swap_proposal() {
     // Step 3: Inspect results.
 
     // Step 3.1: Make sure expected canister call(s) take place.
+    assert!(
+        expected_call_canister_method_calls
+            .lock()
+            .unwrap()
+            .is_empty(),
+        "Calls that should have been made, but were not: {:#?}",
+        expected_call_canister_method_calls,
+    );
 
     // Step 3.2: Inspect the proposal. In particular, look at its execution status.
     assert_eq!(gov.proto.proposals.len(), 1, "{:#?}", gov.proto.proposals);

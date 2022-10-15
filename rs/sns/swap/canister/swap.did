@@ -54,7 +54,9 @@ type GovernanceError = record { error_message : text; error_type : int32 };
 type Init = record {
   sns_root_canister_id : text;
   fallback_controller_principal_ids : vec text;
+  neuron_minimum_stake_e8s : opt nat64;
   nns_governance_canister_id : text;
+  transaction_fee_e8s : opt nat64;
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
   sns_governance_canister_id : text;

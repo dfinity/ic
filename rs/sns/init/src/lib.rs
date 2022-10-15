@@ -272,6 +272,9 @@ impl SnsInitPayload {
             icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
 
             fallback_controller_principal_ids: self.fallback_controller_principal_ids.clone(),
+
+            transaction_fee_e8s: self.transaction_fee_e8s,
+            neuron_minimum_stake_e8s: self.neuron_minimum_stake_e8s,
         }
     }
 

@@ -42,6 +42,7 @@ ic-sns-governance = { path = "../governance" }
 # ic-sns-root = { path = "../root" }
 
 lazy_static = "1.4.0"
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"
 rand = "0.8"
@@ -73,7 +74,6 @@ ic-nns-common = { path = "../../nns/common" }
 ic-nervous-system-common-test-keys = {path = "../../nervous_system/common/test_keys"}
 ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 futures = "0.3.13"
 maplit = "1.0.2"
 tempfile = "3.1.0"

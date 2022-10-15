@@ -173,6 +173,7 @@ impl Scenario {
     ///
     ///   1. The swap canister is funded (with the provided number of SNS tokens).
     ///   2. The canister_id fields are populated.
+    ///   3. TEST_USER1 is the original owner of the dapp canister.
     ///
     /// The dapp canister is owned by TEST_USER1.
     pub fn new(state_machine: &mut StateMachine, sns_tokens: Tokens) -> Self {
@@ -230,6 +231,8 @@ impl Scenario {
         let mut configuration = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(swap_canister_account_identifier, sns_tokens)
             .build();
+        configuration.swap.fallback_controller_principal_ids =
+            vec![TEST_USER1_PRINCIPAL.to_string()];
         populate_canister_ids(
             root_canister_id,
             governance_canister_id,
@@ -254,6 +257,11 @@ impl Scenario {
     ///
     /// (The dapp canister is not touched).
     pub fn init_all_canisters(&self, state_machine: &mut StateMachine) {
+        println!(
+            "Initializing SNS canisters as follows:\n{:#?}",
+            self.configuration,
+        );
+
         init_canister(
             state_machine,
             self.root_canister_id,
@@ -277,6 +285,22 @@ impl Scenario {
             self.swap_canister_id,
             SnsCanisterType::Swap,
             &self.configuration.swap,
+        );
+
+        // TEST_USER1 relinquishes control of the dapp to SNS root (and tells
+        // SNS root about it).
+        set_controllers(
+            state_machine,
+            *TEST_USER1_PRINCIPAL,
+            self.dapp_canister_id,
+            vec![self.root_canister_id.into()],
+        );
+        sns_root_register_dapp_canister(
+            state_machine,
+            self.root_canister_id,
+            &RegisterDappCanisterRequest {
+                canister_id: Some(self.dapp_canister_id.into()),
+            },
         );
     }
 }
@@ -315,7 +339,8 @@ fn make_account(seed: u64) -> ic_base_types::PrincipalId {
 ///
 /// Begins a swap.
 ///
-/// TEST_USER2 has 100 ICP that they can use to buy into the swap, as well as any accounts listed in `accounts`.
+/// TEST_USER2 has 100 ICP that they can use to buy into the swap, as well as
+/// any accounts listed in `accounts`.
 fn begin_swap(
     state_machine: &mut StateMachine,
     accounts: &[ic_base_types::PrincipalId],
@@ -374,37 +399,12 @@ fn begin_swap(
     );
     setup_nns_canisters(state_machine, nns_init_payloads);
 
-    // Create, configure, and init canisters.
-    let mut scenario = Scenario::new(
+    // Create, configure, and init SNS canisters.
+    let scenario = Scenario::new(
         state_machine,
         Tokens::from_tokens(100 * num_accounts * neuron_basket_count).unwrap(),
     );
-    // Fill in more swap parameters.
-    {
-        let swap = &mut scenario.configuration.swap;
-
-        // In case of failure, restore TEST_USER1 as the controller of the dapp.
-        swap.fallback_controller_principal_ids = vec![TEST_USER1_PRINCIPAL.to_string()];
-
-        swap.validate()
-            .unwrap_or_else(|err| panic!("Swap init arg: {:#?} invalid because {:?}", swap, err));
-    }
     scenario.init_all_canisters(state_machine);
-
-    // TEST_USER1 relinquishes control of the dapp to SNS root (and tells SNS root about it).
-    set_controllers(
-        state_machine,
-        *TEST_USER1_PRINCIPAL,
-        scenario.dapp_canister_id,
-        vec![scenario.root_canister_id.into()],
-    );
-    sns_root_register_dapp_canister(
-        state_machine,
-        scenario.root_canister_id,
-        &RegisterDappCanisterRequest {
-            canister_id: Some(scenario.dapp_canister_id.into()),
-        },
-    );
 
     // Propose that a swap be scheduled to start 3 days from now, and last for
     // 10 days.
