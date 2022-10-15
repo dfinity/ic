@@ -23,8 +23,8 @@ use ic_sns_governance::{
         claim_swap_neurons_request::NeuronParameters, governance, ClaimSwapNeuronsRequest,
         ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
     },
-    types::DEFAULT_TRANSFER_FEE,
 };
+use ledger_canister::DEFAULT_TRANSFER_FEE;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::str::FromStr;
@@ -663,9 +663,7 @@ impl Swap {
         );
         let swap_is_committed = lifecycle == Lifecycle::Committed;
 
-        let sweep_icp = self
-            .sweep_icp(now_fn, DEFAULT_TRANSFER_FEE, icp_ledger)
-            .await;
+        let sweep_icp = self.sweep_icp(now_fn, icp_ledger).await;
 
         let settle_community_fund_participation_result = Some({
             use settle_community_fund_participation::{Aborted, Committed, Result};
@@ -701,9 +699,7 @@ impl Swap {
             };
         }
 
-        let sweep_sns = self
-            .sweep_sns(now_fn, DEFAULT_TRANSFER_FEE, sns_ledger)
-            .await;
+        let sweep_sns = self.sweep_sns(now_fn, sns_ledger).await;
 
         let create_neuron = self
             .claim_neurons(sns_governance_client, DEFAULT_TRANSFER_FEE)
@@ -936,7 +932,6 @@ impl Swap {
     pub async fn sweep_icp(
         &mut self,
         now_fn: fn(bool) -> u64,
-        fee: Tokens,
         icp_ledger: &dyn Ledger,
     ) -> SweepResult {
         let lifecycle = self.lifecycle();
@@ -973,7 +968,13 @@ impl Swap {
                 .icp
                 .as_mut()
                 .unwrap()
-                .transfer_helper(now_fn, fee, Some(subaccount), &dst, icp_ledger)
+                .transfer_helper(
+                    now_fn,
+                    DEFAULT_TRANSFER_FEE,
+                    Some(subaccount),
+                    &dst,
+                    icp_ledger,
+                )
                 .await;
             match result {
                 TransferResult::AmountTooSmall | TransferResult::AlreadyStarted => {
@@ -1004,12 +1005,16 @@ impl Swap {
     pub async fn sweep_sns(
         &mut self,
         now_fn: fn(bool) -> u64,
-        fee: Tokens,
         sns_ledger: &dyn Ledger,
     ) -> SweepResult {
         assert!(self.lifecycle() == Lifecycle::Committed);
         let sns_governance = self.init().sns_governance();
         let nns_governance = self.init().nns_governance();
+        let sns_transaction_fee_e8s = Tokens::from_e8s(
+            self.init()
+                .transaction_fee_e8s
+                .expect("Transfer fee not known."),
+        );
         let mut skipped: u32 = 0;
         let mut success: u32 = 0;
         let mut failure: u32 = 0;
@@ -1061,7 +1066,11 @@ impl Swap {
                 .as_mut()
                 .unwrap()
                 .transfer_helper(
-                    now_fn, fee, /* src_subaccount= */ None, &dst, sns_ledger,
+                    now_fn,
+                    sns_transaction_fee_e8s,
+                    /* src_subaccount= */ None,
+                    &dst,
+                    sns_ledger,
                 )
                 .await;
             match result {
@@ -1126,11 +1135,15 @@ impl Swap {
         if !Lifecycle::is_valid(self.lifecycle) {
             return Err(format!("Invalid lifecycle {}", self.lifecycle));
         }
-        if let Some(init) = &self.init {
-            init.validate()?;
-        } else {
-            return Err("Missing 'init'.".to_string());
-        }
+
+        let init = match &self.init {
+            Some(init) => init,
+            None => {
+                return Err("Missing 'init'.".to_string());
+            }
+        };
+        init.validate()?;
+
         if let Some(params) = &self.params {
             params.validate()?;
         }
@@ -1286,6 +1299,20 @@ impl Init {
         for fc in &self.fallback_controller_principal_ids {
             validate_principal(fc)?;
         }
+
+        if self.transaction_fee_e8s.is_none() {
+            return Err("transaction_fee_e8s is required.".to_string());
+        }
+        // The value itself is not checked; only that it is supplied. Needs to
+        // match the value in SNS ledger though.
+
+        if self.neuron_minimum_stake_e8s.is_none() {
+            return Err("neuron_minimum_stake_e8s is required.".to_string());
+        }
+        // As with transaction_fee_e8s, the value itself is not checked; only
+        // that it is supplied. Needs to match the value in SNS governance
+        // though.
+
         Ok(())
     }
 }

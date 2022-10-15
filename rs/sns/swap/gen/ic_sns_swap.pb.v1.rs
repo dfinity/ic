@@ -198,6 +198,14 @@ pub struct Init {
     /// principals. Must not be empty.
     #[prost(string, repeated, tag = "11")]
     pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Same as SNS ledger. Must hold the same value as SNS ledger. Whether the
+    /// values match is not checked. If they don't match things will break.
+    #[prost(uint64, optional, tag = "13")]
+    pub transaction_fee_e8s: ::core::option::Option<u64>,
+    /// Same as SNS governance. Must hold the same value as SNS governance. Whether
+    /// the values match is not checked. If they don't match things will break.
+    #[prost(uint64, optional, tag = "14")]
+    pub neuron_minimum_stake_e8s: ::core::option::Option<u64>,
 }
 /// Represents one NNS neuron from the community fund participating in this swap.
 #[derive(

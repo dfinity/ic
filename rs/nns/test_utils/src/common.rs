@@ -28,7 +28,7 @@ use std::convert::TryInto;
 use std::path::Path;
 
 /// Payloads for all the canisters that exist at genesis.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NnsInitPayloads {
     pub registry: RegistryCanisterInitPayload,
     pub governance: Governance,

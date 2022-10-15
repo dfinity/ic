@@ -209,12 +209,30 @@ impl SnsTestsInitPayloadBuilder {
     }
 
     pub fn build(&mut self) -> SnsCanisterInitPayloads {
+        let governance = self.governance.build();
+
+        let ledger = self.ledger.clone();
+
+        let mut swap = self.swap.clone();
+        swap.transaction_fee_e8s = Some(ledger.transfer_fee);
+        swap.neuron_minimum_stake_e8s = Some(
+            governance
+                .parameters
+                .as_ref()
+                .unwrap()
+                .neuron_minimum_stake_e8s
+                .unwrap(),
+        );
+
+        let root = self.root.clone();
+        let index = self.index.clone();
+
         SnsCanisterInitPayloads {
-            governance: self.governance.build(),
-            ledger: self.ledger.clone(),
-            root: self.root.clone(),
-            swap: self.swap.clone(),
-            index: self.index.clone(),
+            governance,
+            ledger,
+            root,
+            swap,
+            index,
         }
     }
 }

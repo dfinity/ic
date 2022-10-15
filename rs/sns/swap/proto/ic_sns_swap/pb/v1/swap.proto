@@ -222,6 +222,14 @@ message Init {
   // If the swap is aborted, control of the canister(s) should be set to these
   // principals. Must not be empty.
   repeated string fallback_controller_principal_ids = 11;
+
+  // Same as SNS ledger. Must hold the same value as SNS ledger. Whether the
+  // values match is not checked. If they don't match things will break.
+  optional uint64 transaction_fee_e8s = 13;
+
+  // Same as SNS governance. Must hold the same value as SNS governance. Whether
+  // the values match is not checked. If they don't match things will break.
+  optional uint64 neuron_minimum_stake_e8s = 14;
 }
 
 // Represents one NNS neuron from the community fund participating in this swap.
