@@ -174,7 +174,7 @@ container_push(
     name = "push_rosetta_image",
     format = "Docker",
     image = ":rosetta_image",
-    registry = "hub.docker.com",
+    registry = "index.docker.io",
     repository = "dfinity/rosetta-api",
     tag = "{BUILD_EMBED_LABEL}",
     tags = ["manual"],
