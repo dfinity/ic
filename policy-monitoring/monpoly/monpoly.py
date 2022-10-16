@@ -89,8 +89,11 @@ class Monpoly:
     # The absolute minumum of the output-stream-draining timeout in [finalize].
     MIN_DRAIN_TIMEOUT = 4.0  # seconds
 
+    # The absolute maximum of the output-stream-draining timeout in [finalize].
+    MAX_DRAIN_TIMEOUT = 60.0  # seconds
+
     # After 1/LARGE_INPUT_FACTOR calls to [submit], the output-stream-draining
-    #  timeout in [finalize] reaches its absolute maximum, [_hard_timeout].
+    #  timeout in [finalize] reaches its absolute maximum, [MAX_DRAIN_TIMEOUT].
     LARGE_INPUT_FACTOR = 1 / 10_000
 
     # Prefix used to identify final reports from running "time -v monpoly".
@@ -256,7 +259,6 @@ class Monpoly:
         local_sig_file: str,
         local_formula: str,
         docker=True,
-        hard_timeout=7.0,
     ) -> Tuple[str, ...]:
 
         var_list: Optional[List[str]] = None
@@ -285,7 +287,6 @@ class Monpoly:
             error_handler=error_h,
             exit_handler=exit_h,
             docker=docker,
-            hard_timeout=hard_timeout,
             extra_options=("-check",),
         ):
             pass
@@ -310,7 +311,6 @@ class Monpoly:
         exit_handler: Callable[[ExitHandlerParams], None],
         stop_at_first_viol=True,
         docker=True,
-        hard_timeout=10.0,
         extra_options=(),
         stat: Optional[Dict[str, Any]] = None,
         reprodir: Optional[str] = None,
@@ -330,8 +330,6 @@ class Monpoly:
         self.local_sig_file = local_sig_file
         self.local_formula = local_formula
 
-        assert Monpoly.MIN_DRAIN_TIMEOUT <= hard_timeout, f"hard_timeout must be ≥ {Monpoly.MIN_DRAIN_TIMEOUT}"
-        self._hard_timeout = hard_timeout
         self._extra_options = extra_options
 
         self.__start_time = None
@@ -472,7 +470,7 @@ class Monpoly:
 
         self.__start_time = datetime.now()
 
-        cmd = self._cmd(with_rss=(self.stat is not None))
+        cmd = self._cmd(with_rss=(self.stat is not None), stop_at_first_viol=(self.stop_at_first_viol))
         self.print(f"Starting Monpoly via command: {' '.join(cmd)}")
 
         self._proc = subprocess.Popen(
@@ -546,7 +544,7 @@ class Monpoly:
         new_timeout = timeout - (datetime.now() - first_start).total_seconds()
         self._stderr_listener_thread.join(timeout=new_timeout)
 
-    def finalize(self, term_timeout=5.0) -> Optional[int]:
+    def finalize(self, termination_timeout=5.0) -> Optional[int]:
 
         assert self._proc is not None, "finalized called but self._proc is None"
 
@@ -558,18 +556,18 @@ class Monpoly:
             pass
 
         # 2. Drain the output streams
-        event_timeout = self._hard_timeout * Monpoly.LARGE_INPUT_FACTOR
+        event_timeout = Monpoly.MAX_DRAIN_TIMEOUT * Monpoly.LARGE_INPUT_FACTOR
         drain_timeout = self._input_counter * event_timeout - self.duration().total_seconds()
         drain_timeout = max(drain_timeout, Monpoly.MIN_DRAIN_TIMEOUT)
-        drain_timeout = min(drain_timeout, self._hard_timeout)
+        drain_timeout = min(drain_timeout, Monpoly.MAX_DRAIN_TIMEOUT)
         self._drain_output_streams(drain_timeout)
 
         # 3. Try graceful process shutdown. If it times out, terminate by PID
         returncode = None
         try:
-            returncode = func_timeout(term_timeout, self._proc.wait)
+            returncode = func_timeout(termination_timeout, self._proc.wait)
         except FunctionTimedOut:
-            timeout = drain_timeout + term_timeout
+            timeout = drain_timeout + termination_timeout
             self.print(f"Monpoly did not finish within {timeout} seconds after closing STDIN.")
             self.print("Killing process by PID ...")
             try:

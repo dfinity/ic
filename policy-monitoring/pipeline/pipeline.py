@@ -110,7 +110,6 @@ class Pipeline:
             reprodir=str(self.art_manager.artifacts_prefix()),
             local_sig_file="predicates.sig",
             local_formula=str(formula_local_path(formula)),
-            hard_timeout=60.0,
             alert_handler=stdout_handler,
             error_handler=lambda _: None,
             exit_handler=lambda _: None,
@@ -169,7 +168,6 @@ class Pipeline:
                     workdir=self.policies_path,
                     local_sig_file="predicates.sig",
                     local_formula=formula_local_path(formula),
-                    hard_timeout=10.0,
                 )
 
             self.stat[group.name]["monpoly"][formula] = dict()
@@ -273,7 +271,6 @@ class Pipeline:
                 reprodir=str(self.art_manager.artifacts_prefix()),
                 local_sig_file="predicates.sig",
                 local_formula=formula_local_path(formula),
-                hard_timeout=60.0,
                 alert_handler=alert_h,
                 error_handler=error_h,
                 exit_handler=exit_h,

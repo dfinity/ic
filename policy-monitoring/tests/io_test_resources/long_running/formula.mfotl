@@ -1,1 +1,1 @@
-(A(x0,x1) AND B(x1,x2) AND C(x2,x3)) AND D(x3,x4)
+(s <- SUM x ((NOT Q(x)) SINCE[100000,200000] P(x))) AND R(x)
