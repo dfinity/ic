@@ -456,7 +456,7 @@ class UniversalPreProcessor(DeclarativePreProcessor):
     _POLICIES: Dict[str, PolicySpec]
     _POLICIES = {
         "logging_behavior__exe": {
-            "enabled": True,
+            "enabled": False,
             "preamble_dependencies": frozenset(
                 [
                     "originally_in_subnet",
@@ -555,14 +555,11 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             "enabled": True,
             "preamble_dependencies": frozenset(
                 [
-                    # "originally_in_ic" -- TODO
                     "originally_in_subnet",
                 ]
             ),
             "regular_dependencies": frozenset(
                 [
-                    # "registry__node_removed_from_ic", -- TODO
-                    # "registry__node_added_to_ic", -- TODO
                     "ControlPlane__spawn_accept_task__tls_server_handshake_failed",
                     "registry__node_added_to_subnet",
                     "registry__node_removed_from_subnet",

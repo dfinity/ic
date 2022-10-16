@@ -120,7 +120,7 @@ def main():
         "--download_working_dirs",
         "-dwd",
         action="store_true",
-        default=True,
+        default=False,
         help=("Save the the test driver's working_dirs that can be loaded via --system_tests_working_dir"),
     )
     parser.add_argument(

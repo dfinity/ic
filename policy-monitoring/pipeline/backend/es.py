@@ -23,6 +23,10 @@ class EsException(Exception):
     pass
 
 
+def is_replica_log_index(index_name: str) -> bool:
+    return index_name.startswith("journalbeat-guestos-journal")
+
+
 class Es:
 
     JOURNALBEAT_VERSION = "7.14.0"
@@ -78,7 +82,7 @@ class Es:
         """
         result = []
         index: str
-        for index in self.es.indices.get_alias(index="*"):
+        for index in filter(is_replica_log_index, self.es.indices.get_alias(index="*")):
             body = {"query": Es._precise_query(tag)}
             try:
                 response = self.es.count(index=index, body=body)
@@ -102,7 +106,7 @@ class Es:
             if size > 0:
                 eprint(f"Found index {index} with {size} documents tagged {tag}")
                 result.append(index)
-                assert_with_trace(tag not in self.stat["raw_logs"], "duplicate tag")
+                assert_with_trace(tag not in self.stat["raw_logs"], f"duplicate tag {tag}")
                 # Save statistics:
                 # total number of raw log messages sent to Elasticsearch
                 self.stat["raw_logs"][tag] = size

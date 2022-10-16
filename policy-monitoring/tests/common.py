@@ -14,6 +14,8 @@ from monpoly.monpoly import ErrorHandlerParams
 from monpoly.monpoly import ExitHandlerParams
 from monpoly.monpoly import Monpoly
 from monpoly.monpoly import MonpolyException
+from monpoly.monpoly import MonpolyGlobalTimeout
+from monpoly.multi_monitor import MultiMonitor
 from util import docker
 
 EVENT_DELAY = 0.1  # seconds
@@ -118,38 +120,54 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
         print("{{{ Monpoly exited with code %s }}}" % arg.exit_code, flush=True)
         actual_exit_status["code"] = arg.exit_code
 
+    def multi_monitor_exception_handler(e: MonpolyException) -> None:
+        print("{{{ MultiMonitor exception: %s }}}" % e.msg)
+        raise e
+
     if local_sig_file:
         sig_file = join(test, "predicates.sig")
     else:
         sig_file = "predicates.sig"
 
-    with Monpoly(
-        name="test",
-        workdir=str(join(prefix)),
-        local_sig_file=sig_file,
-        local_formula=str(join(test, "formula.mfotl")),
-        alert_handler=alert_handler,
-        error_handler=error_handler,
-        exit_handler=exit_handler,
-        docker=(not docker.is_inside_docker()),
-        hard_timeout=6.0,
-    ) as monpoly:
+    timeout_detected = False
 
+    with MultiMonitor(
+        [
+            Monpoly(
+                name="test",
+                workdir=str(join(prefix)),
+                local_sig_file=sig_file,
+                local_formula=str(join(test, "formula.mfotl")),
+                alert_handler=alert_handler,
+                error_handler=error_handler,
+                exit_handler=exit_handler,
+                docker=(not docker.is_inside_docker()),
+            )
+        ],
+        hard_timeout=6.0,
+        exception_handlers=multi_monitor_exception_handler,
+        event_stream_file=None,
+    ) as mon:
         try:
             for entry in logs:
-                # sleep(EVENT_DELAY)
-                monpoly.submit(entry)
-                # monpoly.submit(Monpoly.SYNC_MARKER)
-        except MonpolyException:
-            print("Interaction stopped due to Monpoly exception", flush=True)
+                mon.submit(entry)
+        except MonpolyGlobalTimeout as e:
+            timeout_detected = True
+            print("{{{ Monpoly %s }}}" % e.msg)
+        except MonpolyException as e:
+            print(f"Interaction stopped due to Monpoly exception: {str(e)}", flush=True)
 
     # Monpoly has closed
 
     assert_match(join(test, instance), "STDOUT", actual=actual_stdout, expected=expected_stdout)
     assert_match(join(test, instance), "STDERR", actual=actual_stderr, expected=expected_stderr)
-    assert (
-        expected_exit_code == actual_exit_status["code"]
-    ), f"actual exit code {actual_exit_status['code']} did not match expected exit code {expected_exit_code}"
+    if expected_exit_code == "None":
+        assert timeout_detected, "expected Monpoly timeout was not observed"
+    else:
+        assert not timeout_detected, "unexpected Monpoly timeout"
+        assert (
+            expected_exit_code == actual_exit_status["code"]
+        ), f"actual exit code {actual_exit_status['code']} did not match expected exit code {expected_exit_code}"
 
     # Obtain the variable sequence,
     #  but only if monpoly is expected to succeed with -check
@@ -159,7 +177,6 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
             local_sig_file=sig_file,
             local_formula=str(join(test, "formula.mfotl")),
             docker=(not docker.is_inside_docker()),
-            hard_timeout=5.0,
         )
         assert var_seq is not None, "could not obtain sequence of variables"
         print(f"obtained sequence of variables: {', '.join(var_seq)}")
