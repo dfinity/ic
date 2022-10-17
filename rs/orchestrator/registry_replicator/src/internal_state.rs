@@ -20,7 +20,7 @@ use ic_registry_keys::{
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, Time};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -49,6 +49,7 @@ pub(crate) struct InternalState {
     registry_client: Arc<dyn RegistryClient>,
     local_store: Arc<dyn LocalStore>,
     latest_version: RegistryVersion,
+    last_certified_time: Time,
     nns_pub_key: Option<ThresholdSigPublicKey>,
     nns_urls: Vec<Url>,
     registry_canister: Option<Arc<RegistryCanister>>,
@@ -63,12 +64,14 @@ impl InternalState {
         local_store: Arc<dyn LocalStore>,
         poll_delay: Duration,
     ) -> Self {
+        let last_certified_time = local_store.read_certified_time();
         Self {
             logger,
             node_id,
             registry_client,
             local_store,
             latest_version: ZERO_REGISTRY_VERSION,
+            last_certified_time,
             nns_pub_key: None,
             nns_urls: vec![],
             registry_canister: None,
@@ -143,6 +146,13 @@ impl InternalState {
                 })
                 .expect("Writing to the FS failed: Stop.");
 
+            if t > self.last_certified_time {
+                self.local_store
+                    .update_certified_time(t.as_nanos_since_unix_epoch())
+                    .expect("Could not store certified time");
+                self.last_certified_time = t;
+            }
+
             if entries > 0 {
                 info!(
                     self.logger,
@@ -150,9 +160,6 @@ impl InternalState {
                     latest_version + RegistryVersion::from(entries as u64)
                 );
             }
-            self.local_store
-                .update_certified_time(t.as_nanos_since_unix_epoch())
-                .expect("Could not store certified time");
         }
 
         Ok(())
