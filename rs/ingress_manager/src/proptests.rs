@@ -44,7 +44,7 @@ const MAX_BLOCK_SIZE: u64 = 4 * 1024 * 1024;
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 512,
+        cases: 64,
         max_shrink_time: 60000,
         ..ProptestConfig::default()
     })]
