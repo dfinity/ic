@@ -14,59 +14,32 @@ import { fromHex } from '@dfinity/agent/lib/cjs/utils/buffer';
 import { Principal } from '@dfinity/principal';
 import { HttpRequest } from '../http-interface/canister_http_interface_types';
 
-const CANISTER_ID = 'rdmx6-jaaaa-aaaaa-aaadq-cai';
+const CANISTER_ID = 'qoctq-giaaa-aaaaa-aaaea-cai';
 const CERT_MAX_TIME_OFFSET = 300_000; // 5 Minutes
 const INVALID_ROOT_KEY =
   '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c050302010361008fcd89d93d038059ceec489f42bbb93fb873a890e9c748dd864741198e822dd24dbb984f7a735bcc75b6abb5d42832ea153c7f7a01e3f9b03b9a67ae4e4dfb00901cb20139ac5f787fae28cc7da755cf2064702220aa7c92282e17b9935169ae';
-const TEST_DATA = {
-  queryData: {
-    root_key:
-      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c05030201036100a6a3c5c70ad96a6c3f987f747312a2232dcec6ced0daf07d6a6b63a70199149f647430534c3b33023cc6d096bef178b3184637ecbe2e6ae148c1797bf19245d634aa4b33264ba66357294b66f49e1f0c6eb9c0ac5147dbddba07068bfaf18fc7',
-    certificate:
-      'certificate=:2dn3omR0cmVlgwGDAkhjYW5pc3RlcoMCSgAAAAAAAAAHAQGDAk5jZXJ0aWZpZWRfZGF0YYIDWCBb1aIcc2xftgJaN6877pAf6qk3k8NHiyRKu4Hn3ft+/4MCRHRpbWWCA0mnm/H8zaOC9RZpc2lnbmF0dXJlWDCSPmVbeBM5Xg6nxdmheXDezSOY111ikBHCMf/OV9aF50EAPZKOSQq9RYRwdoTwfJo=:, tree=:2dn3gwJLaHR0cF9hc3NldHODAkEvggNYIHUJ5b2gx2LSusf5DXWLWyJj+gHMvFQqtePfFjvgjmyp:',
-    body: 'hello world!',
-    certificate_time: 1651142233000,
-  },
-  updateData: {
-    root_key:
-      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c050302010361008096df0d1ffb96ca6fff319d4e1dd4b8339f3019d7e9848a9d315a6468df1e51dc6989efdcdcb90f33bae821281a90781202aa623dd38eb9cfae16424e7c4764e0ad3362b549b7fc4a5d8bf1f326df0171e12c68814743f8371459b9680fde64',
-    certificate:
-      'd9d9f7a2647472656583024e726571756573745f7374617475738302582007bf53acde2967b1ddc8f06814fb8a0d037e5ef19ba597e92b9d1febe726698983018302457265706c79820358354449444c046d7b6c02007101716d016c03a2f5ed880400c6a4a19806029aa1b2f90c7a01030c68656c6c6f20776f726c642100c8008302467374617475738203477265706c696564697369676e61747572655830971e62f35e9c288ea9b4c446b8febfc2bf040172a539753bed5349ed671bda6d80b4c7ae641ce9df0fc779deb61511e6',
-    request_time: 1650551764352,
-  },
-  wrongCanisterId: {
-    root_key:
-      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c0503020103610086d6f09aa8ba5a3fe67dd3fcba6b75266c2f96961fb1d35f7f4f34a6af5e99cc01386e703fa517e16f4006aef5513f460a809cfdadf60a32ac6930550d9473d6e792786253f6fd6b0d08189482ce9a07cc6f68821bc655c59ce24a21174e393f',
-    certificate:
-      'certificate=:2dn3omR0cmVlgwGDAkhjYW5pc3RlcoMCSgAAAAAAMAAZAQGDAk5jZXJ0aWZpZWRfZGF0YYIDWCBb1aIcc2xftgJaN6877pAf6qk3k8NHiyRKu4Hn3ft+/4MCRHRpbWWCA0mnm/H8zaOC9RZpc2lnbmF0dXJlWDCYu3oVZ8ckpUkz715Pcf4TtLwRVF42BBg9BcC2wj2g3BH9cdIk6D6PoUVWiVXkL4I=:, tree=:2dn3gwJLaHR0cF9hc3NldHODAkEvggNYIHUJ5b2gx2LSusf5DXWLWyJj+gHMvFQqtePfFjvgjmyp:',
-    body: 'hello world!',
-    certificate_time: 1651142233000,
-  },
-  invalidWitness: {
-    root_key:
-      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c05030201036100974dbc96e64a3651e2ddd5ee083834777a6cee28854eb125017fc3da329e1b651cad89b01f28ef453f10ada8c8c915d0065daa5330ef09500e0eee24483a6fe4ccbf1fa6e4b2d15f4211304a812811a03289f87eb46c3d9868f37cb36846aed5',
-    certificate:
-      'certificate=:2dn3omR0cmVlgwGDAkhjYW5pc3RlcoMCSgAAAAAAAAAHAQGDAk5jZXJ0aWZpZWRfZGF0YYIDWCD9vaIGJzGndcAVzeIv5atRB2VKT+F1SLMwfmidEXTaP4MCRHRpbWWCA0mnm/H8zaOC9RZpc2lnbmF0dXJlWDCYtUjT5AcZyvqnsqETmCL8X+ndP4h7URgjr6YJshGOraoPOBSiaQqk0TUDxoReBWk=:, tree=:2dn3gwJLaHR0cF9hc3NldHODAkEvggNYIHUJ5b2gx2LSusf5DXWLWyJj+gHMvFQqtePfFjvgjmyp:',
-    body: 'hello world!',
-    certificate_time: 1651142233000,
-  },
-  fallbackToIndexHtml: {
-    root_key:
-      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c0503020103610095864d503c4d238b03fe480ddd2ebde6b29bb911dd2d394329c4bd17f868d7d2e260848b47cd4cd1b5f5d6ea691ed906103e5c3226e7ed3c7de0a0dcf8efa6adab96a5ce07757427e9de7be270177df67a2761f3e0b821adf97ae89747e0f6c2',
-    certificate:
-      'certificate=:2dn3omR0cmVlgwGDAkhjYW5pc3RlcoMCSgAAAAAAAAAHAQGDAk5jZXJ0aWZpZWRfZGF0YYIDWCCTYiq9Z2R97ckZGkWaapIku/HPaP1nllHaYnSbPIr8JoMCRHRpbWWCA0mnm/H8zaOC9RZpc2lnbmF0dXJlWDCFYbCbcUPBbVVASJfnqklL6jR4pdW/hYFVMs5SRG5SqoUr9ZCIyaOfQ8OKIL8r1PQ=:, tree=:2dn3gwJLaHR0cF9hc3NldHODAksvaW5kZXguaHRtbIIDWCB1CeW9oMdi0rrH+Q11i1siY/oBzLxUKrXj3xY74I5sqQ==:',
-    body: 'hello world!',
-    certificate_time: 1651142233000,
-  },
-  queryDataDscvr: {
-    root_key:
-      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c0503020103610092b9abda44e940299a30e0f4ebdcefbbdc7bc618fe7dec5d882e9c77395cf233763fb6ca4eb592fa93e222da1fa44850164f76397a16fc9145b8b7aa6cec7de344497b73ccc7bfacee0e914279322053d81e2787c369260e5f118859025ffc37',
-    certificate:
-      'certificate=:2dn3omR0cmVlgwGDAkhjYW5pc3RlcoMCSgAAAAAAMAAZAQGDAk5jZXJ0aWZpZWRfZGF0YYIDWCCTYiq9Z2R97ckZGkWaapIku/HPaP1nllHaYnSbPIr8JoMCRHRpbWWCA0mnm/H8zaOC9RZpc2lnbmF0dXJlWDC2U1VIQ21bIeuTxfpA1OS7+26db71jE71wsAxRQ9MlO1OgQ/I0Gy5lxcHI2UH3IZo=:, tree=:2dn3gwJLaHR0cF9hc3NldHODAksvaW5kZXguaHRtbIIDWCB1CeW9oMdi0rrH+Q11i1siY/oBzLxUKrXj3xY74I5sqQ==:',
-    body: 'hello world!',
-    certificate_time: 1651142233000,
-  },
-};
+
+interface QueryCallTestFixture {
+  root_key: string;
+  certificate: string;
+  body: string;
+  certificate_time: number;
+}
+interface UpdateCallTestFixture {
+  root_key: string;
+  certificate: string;
+  request_time: number;
+}
+interface AllTestFixtures {
+  query_call: QueryCallTestFixture;
+  query_call_with_index_html_fallback: QueryCallTestFixture;
+  query_call_with_dscvr_canister_id: QueryCallTestFixture;
+  query_call_with_no_witness: QueryCallTestFixture;
+  query_call_with_invalid_witness: QueryCallTestFixture;
+  update_call: UpdateCallTestFixture;
+}
+const TEST_DATA: AllTestFixtures = require('../../test_utils/fixtures.json');
+
 const HeaderFieldType = IDL.Tuple(IDL.Text, IDL.Text);
 const HttpRequestType = IDL.Record({
   url: IDL.Text,
@@ -142,13 +115,15 @@ it.each([
 );
 
 it('should reject invalid certification (body hash mismatch)', async () => {
-  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
   const queryHttpPayload = createHttpQueryResponsePayload(
     'this payload does not match the certificate and must not be accepted',
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
-  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
+    query: queryHttpPayload,
+  });
 
   const response = await handleRequest(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
@@ -164,11 +139,11 @@ it('should reject invalid certification (body hash mismatch)', async () => {
 });
 
 it('should reject invalid certification (invalid root key)', async () => {
-  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
   const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryData.body,
+    TEST_DATA.query_call.body,
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
   mockFetchResponses(INVALID_ROOT_KEY, { query: queryHttpPayload });
 
@@ -186,20 +161,22 @@ it('should reject invalid certification (invalid root key)', async () => {
 });
 
 it('should accept valid certification without callbacks', async () => {
-  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
   const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryData.body,
+    TEST_DATA.query_call.body,
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
-  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
+    query: queryHttpPayload,
+  });
 
   const response = await handleRequest(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
 
   expect(response.status).toEqual(200);
-  expect(await response.text()).toEqual(TEST_DATA.queryData.body);
+  expect(await response.text()).toEqual(TEST_DATA.query_call.body);
   expect(fetch.mock.calls).toHaveLength(2);
   expect(fetch.mock.calls[0][0]).toEqual('https://ic0.app/api/v2/status');
   expect(fetch.mock.calls[1][0]).toEqual(
@@ -216,17 +193,17 @@ it('should accept valid certification without callbacks', async () => {
 });
 
 it('should use hostnameCanisterIdMap to resolve canister id', async () => {
-  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
   const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryData.body,
+    TEST_DATA.query_call.body,
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
-  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
+    query: queryHttpPayload,
+  });
 
-  const response = await handleRequest(
-    new Request(`https://identity.ic0.app/`)
-  );
+  const response = await handleRequest(new Request(`https://nns.ic0.app/`));
 
   expect(response.status).toEqual(200);
   expect(fetch.mock.calls).toHaveLength(2);
@@ -236,13 +213,15 @@ it('should use hostnameCanisterIdMap to resolve canister id', async () => {
 });
 
 it('should send canister calls to https://ic0.app for any mapped domain in hostnameCanisterIdMap', async () => {
-  jest.setSystemTime(TEST_DATA.queryDataDscvr.certificate_time);
-  const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryDataDscvr.body,
-    getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryDataDscvr.certificate
+  jest.setSystemTime(
+    TEST_DATA.query_call_with_dscvr_canister_id.certificate_time
   );
-  mockFetchResponses(TEST_DATA.queryDataDscvr.root_key, {
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.query_call_with_dscvr_canister_id.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.query_call_with_dscvr_canister_id.certificate
+  );
+  mockFetchResponses(TEST_DATA.query_call_with_dscvr_canister_id.root_key, {
     query: queryHttpPayload,
   });
 
@@ -256,20 +235,20 @@ it('should send canister calls to https://ic0.app for any mapped domain in hostn
 });
 
 it('should drop if-none-match request header', async () => {
-  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
   const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryData.body,
+    TEST_DATA.query_call.body,
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
-  mockFetchResponses(TEST_DATA.queryData.root_key, {
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
     query: queryHttpPayload,
     reqValidator: (req: HttpRequest) =>
       headerPresent(req, 'If-None-Match2') &&
       !headerPresent(req, 'If-None-Match'),
   });
 
-  let request = new Request(`https://identity.ic0.app/`);
+  let request = new Request(`https://nns.ic0.app/`);
   request.headers.append('If-None-Match', '"some etag"');
   request.headers.append('If-None-Match2', '"some etag"');
   const response = await handleRequest(request);
@@ -282,13 +261,15 @@ it('should drop if-none-match request header', async () => {
 });
 
 it('should accept valid certification for index.html fallback', async () => {
-  jest.setSystemTime(TEST_DATA.fallbackToIndexHtml.certificate_time);
-  const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.fallbackToIndexHtml.body,
-    getResponseTypes(IDL.Text)[0],
-    TEST_DATA.fallbackToIndexHtml.certificate
+  jest.setSystemTime(
+    TEST_DATA.query_call_with_index_html_fallback.certificate_time
   );
-  mockFetchResponses(TEST_DATA.fallbackToIndexHtml.root_key, {
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.query_call_with_index_html_fallback.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.query_call_with_index_html_fallback.certificate
+  );
+  mockFetchResponses(TEST_DATA.query_call_with_index_html_fallback.root_key, {
     query: queryHttpPayload,
   });
 
@@ -301,14 +282,16 @@ it('should accept valid certification for index.html fallback', async () => {
 
 it('should accept almost (but not yet) expired certificate', async () => {
   jest.setSystemTime(
-    TEST_DATA.queryData.certificate_time + CERT_MAX_TIME_OFFSET
+    TEST_DATA.query_call.certificate_time + CERT_MAX_TIME_OFFSET
   );
   const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryData.body,
+    TEST_DATA.query_call.body,
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
-  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
+    query: queryHttpPayload,
+  });
 
   const response = await handleRequest(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
@@ -319,14 +302,16 @@ it('should accept almost (but not yet) expired certificate', async () => {
 
 it('should reject expired certificate', async () => {
   jest.setSystemTime(
-    TEST_DATA.queryData.certificate_time + CERT_MAX_TIME_OFFSET + 1
+    TEST_DATA.query_call.certificate_time + CERT_MAX_TIME_OFFSET + 1
   );
   const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryData.body,
+    TEST_DATA.query_call.body,
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
-  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
+    query: queryHttpPayload,
+  });
 
   const response = await handleRequest(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
@@ -336,13 +321,15 @@ it('should reject expired certificate', async () => {
 });
 
 it('should reject certificate for other canister', async () => {
-  jest.setSystemTime(TEST_DATA.wrongCanisterId.certificate_time);
-  const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.wrongCanisterId.body,
-    getResponseTypes(IDL.Text)[0],
-    TEST_DATA.wrongCanisterId.certificate
+  jest.setSystemTime(
+    TEST_DATA.query_call_with_dscvr_canister_id.certificate_time
   );
-  mockFetchResponses(TEST_DATA.wrongCanisterId.root_key, {
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.query_call_with_dscvr_canister_id.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.query_call_with_dscvr_canister_id.certificate
+  );
+  mockFetchResponses(TEST_DATA.query_call_with_dscvr_canister_id.root_key, {
     query: queryHttpPayload,
   });
 
@@ -354,13 +341,15 @@ it('should reject certificate for other canister', async () => {
 });
 
 it('should reject certificate with invalid witness', async () => {
-  jest.setSystemTime(TEST_DATA.invalidWitness.certificate_time);
-  const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.invalidWitness.body,
-    getResponseTypes(IDL.Text)[0],
-    TEST_DATA.invalidWitness.certificate
+  jest.setSystemTime(
+    TEST_DATA.query_call_with_invalid_witness.certificate_time
   );
-  mockFetchResponses(TEST_DATA.invalidWitness.root_key, {
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.query_call_with_invalid_witness.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.query_call_with_invalid_witness.certificate
+  );
+  mockFetchResponses(TEST_DATA.query_call_with_invalid_witness.root_key, {
     query: queryHttpPayload,
   });
 
@@ -372,13 +361,13 @@ it('should reject certificate with invalid witness', async () => {
 });
 
 it('should reject certificate for different asset', async () => {
-  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
   const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryData.body,
+    TEST_DATA.query_call.body,
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
-  mockFetchResponses(TEST_DATA.queryData.root_key, {
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
     query: queryHttpPayload,
   });
 
@@ -391,14 +380,16 @@ it('should reject certificate for different asset', async () => {
 
 it('should accept certificate time almost (but not quite) too far in the future', async () => {
   jest.setSystemTime(
-    TEST_DATA.queryData.certificate_time - CERT_MAX_TIME_OFFSET
+    TEST_DATA.query_call.certificate_time - CERT_MAX_TIME_OFFSET
   );
   const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryData.body,
+    TEST_DATA.query_call.body,
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
-  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
+    query: queryHttpPayload,
+  });
 
   const response = await handleRequest(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
@@ -409,14 +400,16 @@ it('should accept certificate time almost (but not quite) too far in the future'
 
 it('should reject certificate with time too far in the future', async () => {
   jest.setSystemTime(
-    TEST_DATA.queryData.certificate_time - CERT_MAX_TIME_OFFSET - 1
+    TEST_DATA.query_call.certificate_time - CERT_MAX_TIME_OFFSET - 1
   );
   const queryHttpPayload = createHttpQueryResponsePayload(
-    TEST_DATA.queryData.body,
+    TEST_DATA.query_call.body,
     getResponseTypes(IDL.Text)[0],
-    TEST_DATA.queryData.certificate
+    TEST_DATA.query_call.certificate
   );
-  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
+    query: queryHttpPayload,
+  });
 
   const response = await handleRequest(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
@@ -426,13 +419,13 @@ it('should reject certificate with time too far in the future', async () => {
 });
 
 it('should accept valid certification using callbacks with primitive tokens', async () => {
-  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
   const tokenType = IDL.Text;
   const [httpResponseType, CallbackResponseType] = getResponseTypes(tokenType);
   const queryHttpPayload = createHttpQueryResponsePayload(
     'hello',
     httpResponseType,
-    TEST_DATA.queryData.certificate,
+    TEST_DATA.query_call.certificate,
     [
       {
         Callback: {
@@ -447,7 +440,7 @@ it('should accept valid certification using callbacks with primitive tokens', as
     CallbackResponseType
   );
   mockFetchResponses(
-    TEST_DATA.queryData.root_key,
+    TEST_DATA.query_call.root_key,
     { query: queryHttpPayload },
     { query: callbackPayload }
   );
@@ -457,7 +450,7 @@ it('should accept valid certification using callbacks with primitive tokens', as
   );
 
   expect(response.status).toEqual(200);
-  expect(await response.text()).toEqual(TEST_DATA.queryData.body);
+  expect(await response.text()).toEqual(TEST_DATA.query_call.body);
   expect(fetch.mock.calls).toHaveLength(3);
   expect(fetch.mock.calls[0][0]).toEqual('https://ic0.app/api/v2/status');
   fetch.mock.calls
@@ -485,7 +478,7 @@ it('should accept valid certification using callbacks with primitive tokens', as
 });
 
 it('should accept valid certification using multiple callbacks with structured tokens', async () => {
-  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
   const [httpResponseType, CallbackResponseType] = getResponseTypes(
     IDL.Record({
       counter: IDL.Nat,
@@ -495,7 +488,7 @@ it('should accept valid certification using multiple callbacks with structured t
   const queryHttpPayload = createHttpQueryResponsePayload(
     'hel',
     httpResponseType,
-    TEST_DATA.queryData.certificate,
+    TEST_DATA.query_call.certificate,
     [
       {
         Callback: {
@@ -520,7 +513,7 @@ it('should accept valid certification using multiple callbacks with structured t
     CallbackResponseType
   );
   mockFetchResponses(
-    TEST_DATA.queryData.root_key,
+    TEST_DATA.query_call.root_key,
     { query: queryHttpPayload },
     { query: callbackPayload1 },
     { query: callbackPayload2 }
@@ -531,7 +524,7 @@ it('should accept valid certification using multiple callbacks with structured t
   );
 
   expect(response.status).toEqual(200);
-  expect(await response.text()).toEqual(TEST_DATA.queryData.body);
+  expect(await response.text()).toEqual(TEST_DATA.query_call.body);
   expect(fetch.mock.calls).toHaveLength(4);
   expect(fetch.mock.calls[0][0]).toEqual('https://ic0.app/api/v2/status');
   fetch.mock.calls
@@ -544,11 +537,11 @@ it('should accept valid certification using multiple callbacks with structured t
 });
 
 it('should do update call on upgrade flag', async () => {
-  jest.setSystemTime(TEST_DATA.updateData.request_time); // required because request id is dependent on time
+  jest.setSystemTime(TEST_DATA.update_call.request_time); // required because request id is dependent on time
   jest.spyOn(global.Math, 'random').mockReturnValue(0.5); // required because request id is dependent on 'random' nonce
-  mockFetchResponses(TEST_DATA.updateData.root_key, {
+  mockFetchResponses(TEST_DATA.update_call.root_key, {
     query: createUpgradeQueryResponse(),
-    update: createHttpUpdateResponsePayload(TEST_DATA.updateData.certificate),
+    update: createHttpUpdateResponsePayload(TEST_DATA.update_call.certificate),
   });
 
   const response = await handleRequest(
@@ -592,9 +585,11 @@ it('should do update call on upgrade flag', async () => {
 });
 
 it('should reject redirects', async () => {
-  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
   const queryHttpPayload = createHttpRedirectResponsePayload();
-  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
+    query: queryHttpPayload,
+  });
 
   const response = await handleRequest(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
