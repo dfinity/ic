@@ -60,6 +60,8 @@ rust_test(
     aliases = ALIASES,
     crate = ":ingress_manager",
     crate_features = ["proptest"],
+    # https://dfinity.atlassian.net/browse/CON-874
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
