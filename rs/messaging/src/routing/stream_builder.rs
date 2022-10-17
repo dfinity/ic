@@ -342,8 +342,7 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
-            // MALICIOUS CODE:
-            let cycles_in_msg = msg.cycles().div(2u64);
+            let cycles_in_msg = msg.cycles();
             match routing_table.route(queue_id.dst_canister.get()) {
                 // Destination subnet found.
                 Some(dst_net_id) => {
@@ -436,10 +435,6 @@ impl StreamBuilderImpl {
                                     stream.set_sum_cycles_out(
                                         stream.sum_cycles_out().add(cycles_in_msg),
                                     );
-                                    // self.metrics
-                                    //     .out_cycles
-                                    //     .with_label_values(&[&dst_net_id.to_string()])
-                                    //     .set(stream.sum_cycles_out().get() as f64);
                                 }
                                 None => {}
                             }
@@ -458,16 +453,6 @@ impl StreamBuilderImpl {
                                     stream.set_sum_cycles_out(
                                         stream.sum_cycles_out().add(cycles_in_msg),
                                     );
-                                    // self.metrics
-                                    //     .out_cycles
-                                    //     .with_label_values(&[&dst_net_id.to_string()])
-                                    //     .set(stream.sum_cycles_out().get() as f64);
-                                    // if cycles_in_msg.get() != 10 {
-                                    //     self.metrics
-                                    //         .msg_cycles_test
-                                    //         .with_label_values(&[&dst_net_id.to_string()])
-                                    //         .inc();
-                                    // }
                                 }
                                 None => {}
                             }
