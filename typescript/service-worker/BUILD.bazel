@@ -45,5 +45,6 @@ jest_test(
         "test-setup.ts",
         "@sw_npm//:node_modules",
         "tsconfig.json",
+        "test_utils/fixtures.json",
     ],
 )
