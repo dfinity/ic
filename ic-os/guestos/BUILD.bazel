@@ -12,6 +12,7 @@ icos_build(name = "prod")
 
 exports_files([
     "rootfs/opt/ic/share/ic.json5.template",
+    "scripts/build-bootstrap-config-image.sh",
 ])
 
 alias(

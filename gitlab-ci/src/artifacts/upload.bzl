@@ -96,6 +96,6 @@ def urls_test(name, inputs, tags = ["system_test"]):
         name = name,
         tags = tags + ["requires-network"],
         srcs = ["//gitlab-ci/src/artifacts:urls_test.sh"],
-        args = ["$(rootpath :{})".format(name + "_wrapped")],
+        args = ["$(rootpaths :{})".format(name + "_wrapped")],
         data = [":" + name + "_wrapped"],
     )
