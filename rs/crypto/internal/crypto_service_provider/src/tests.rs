@@ -2,13 +2,12 @@ mod csp_tests {
     use crate::api::CspSigner;
     use crate::api::CspTlsHandshakeSignerProvider;
     use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
-    use crate::keygen::tls_cert_hash_as_key_id;
-    use crate::public_key_hash_as_key_id;
     use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
     use crate::vault::test_utils::tls::ed25519_csp_pubkey_from_tls_pubkey_cert;
     use crate::CryptoRng;
     use crate::Csp;
     use crate::CspPublicKey;
+    use crate::KeyId;
     use crate::Rng;
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use ic_types::crypto::AlgorithmId;
@@ -19,7 +18,7 @@ mod csp_tests {
     #[test]
     fn should_contain_newly_generated_secret_key_from_store() {
         let (csp, public_key) = csp_with_key_pair();
-        let key_id = public_key_hash_as_key_id(&public_key);
+        let key_id = KeyId::from(&public_key);
 
         let is_contained_in_sks_store = csp
             .sks_contains(&key_id)
@@ -31,7 +30,7 @@ mod csp_tests {
     #[test]
     fn should_sign_and_verify_with_newly_generated_secret_key_from_store() {
         let (csp, public_key) = csp_with_key_pair();
-        let key_id = public_key_hash_as_key_id(&public_key);
+        let key_id = KeyId::from(&public_key);
         let message = "Hello world!".as_bytes();
 
         let signature = csp
@@ -57,7 +56,7 @@ mod csp_tests {
     #[test]
     fn should_sign_and_verify_with_newly_generated_tls_secret_key_from_store() {
         let (csp, cert) = csp_with_tls_key_pair();
-        let key_id = tls_cert_hash_as_key_id(&cert);
+        let key_id = KeyId::from(&cert);
         let message = "Hello world!".as_bytes();
 
         let signature = csp

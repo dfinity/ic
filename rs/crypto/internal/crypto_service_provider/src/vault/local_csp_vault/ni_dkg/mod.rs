@@ -1,8 +1,6 @@
-use crate::keygen::forward_secure_key_id;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
 use crate::threshold::ni_dkg::specialise;
 use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
-use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
@@ -62,7 +60,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         let (public_key, pop, key_set) = result?;
 
         // Update state:
-        let key_id = forward_secure_key_id(&public_key);
+        let key_id = KeyId::from(&public_key);
         let result = self.sks_write_lock().insert(
             key_id,
             CspSecretKey::FsEncryption(key_set),
@@ -239,8 +237,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         let start_time = self.metrics.now();
         let result = match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
-                let threshold_key_id =
-                    key_id_from_csp_pub_coeffs(&CspPublicCoefficients::from(&csp_transcript));
+                let threshold_key_id = KeyId::from(&CspPublicCoefficients::from(&csp_transcript));
 
                 // Convert types
                 let transcript = specialise::groth20::transcript(csp_transcript)

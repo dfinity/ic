@@ -4,6 +4,7 @@ use crate::key_id::KeyId;
 use crate::secret_key_store::{Scope, SecretKeyStore, SecretKeyStoreError};
 use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::CspSecretKey;
+use hex::{FromHex, ToHex};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::convert_keyset_to_keyset_with_pop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
@@ -12,7 +13,6 @@ use parking_lot::RwLock;
 use prost::Message;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -21,56 +21,8 @@ use std::sync::Arc;
 
 const CURRENT_SKS_VERSION: u32 = 2;
 
-// TODO(CRP-523): turn this to FromStr-trait once KeyId is not public.
-const KEY_ID_PREFIX: &str = "KeyId(0x";
-const KEY_ID_SUFFIX: &str = ")";
-fn key_id_from_display_string(s: &str) -> KeyId {
-    if s.starts_with(KEY_ID_PREFIX) && s.ends_with(KEY_ID_SUFFIX) {
-        let key_id_hex = s
-            .get(KEY_ID_PREFIX.len()..s.len() - KEY_ID_SUFFIX.len())
-            .unwrap_or_else(|| panic!("Invalid display string for KeyId: {}", s));
-        key_id_from_hex(key_id_hex)
-    } else {
-        panic!("Invalid display string for KeyId: {}", s)
-    }
-}
-
-#[cfg(test)]
-mod key_id_generation_stability_tests {
-    use crate::key_id::KeyId;
-    use crate::secret_key_store::proto_store::key_id_from_display_string;
-
-    #[test]
-    fn should_key_id_from_display_string_be_stable() {
-        let displayed_key_id =
-            "KeyId(0xd9564f1e7ab210c9f0c95d4627d5266485b4a7724048a36170c8ff5ac2915a48)";
-        let computed_key_id = key_id_from_display_string(displayed_key_id);
-        let expected_key_id = KeyId::from(hex_to_bytes(
-            "d9564f1e7ab210c9f0c95d4627d5266485b4a7724048a36170c8ff5ac2915a48",
-        ));
-
-        assert_eq!(computed_key_id, expected_key_id);
-    }
-
-    fn hex_to_bytes<T: AsRef<[u8]>, const N: usize>(data: T) -> [u8; N] {
-        hex::decode(data)
-            .expect("error decoding hex")
-            .try_into()
-            .expect("wrong size of array")
-    }
-}
-
-fn key_id_to_hex(key_id: &KeyId) -> String {
-    hex::encode(key_id.0)
-}
-
 fn key_id_from_hex(key_id_hex: &str) -> KeyId {
-    let parsed = hex::decode(key_id_hex)
-        .unwrap_or_else(|e| panic!("Error parsing hex KeyId {}: {}", key_id_hex, e));
-    let bytes: [u8; 32] = parsed[..]
-        .try_into()
-        .unwrap_or_else(|_| panic!("KeyId {} should have 32 bytes", key_id_hex));
-    KeyId::from(bytes)
+    KeyId::from_hex(key_id_hex).unwrap_or_else(|_| panic!("Error parsing hex KeyId {}", key_id_hex))
 }
 
 /// The secret key store protobuf definitions
@@ -136,7 +88,9 @@ impl ProtoSecretKeyStore {
             0 => {
                 let mut secret_keys = SecretKeys::new();
                 for (key_id_string, key_bytes) in sks_proto.key_id_to_csp_secret_key.iter() {
-                    let key_id = key_id_from_display_string(key_id_string);
+                    let key_id = KeyId::try_from(key_id_string.as_str()).unwrap_or_else(|err| {
+                        panic!("Failed to create KeyId: {}", err);
+                    });
                     let mut csp_key: CspSecretKey = serde_cbor::from_slice(key_bytes)
                         .unwrap_or_else(|e| {
                             panic!("Error deserializing key with ID {}: {}", key_id, e)
@@ -228,7 +182,7 @@ impl ProtoSecretKeyStore {
             ..Default::default()
         };
         for (key_id, (csp_key, maybe_scope)) in secret_keys {
-            let key_id_hex = key_id_to_hex(key_id);
+            let key_id_hex = key_id.encode_hex();
             let key_as_cbor = serde_cbor::to_vec(&csp_key)
                 .unwrap_or_else(|_| panic!("Error serializing key with ID {}", key_id));
             let sk_pb = match maybe_scope {

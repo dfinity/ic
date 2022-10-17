@@ -10,8 +10,7 @@ mod tests;
 use crate::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
 };
-use crate::keygen::{commitment_key_id, mega_key_id};
-use crate::Csp;
+use crate::{Csp, KeyId};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
     publicly_verify_dealing as tecdsa_verify_dealing_public,
@@ -79,7 +78,7 @@ impl CspIDkgProtocol for Csp {
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private");
 
-        let receiver_key_id = mega_key_id(receiver_public_key);
+        let receiver_key_id = key_id_from_mega_public_key_or_panic(receiver_public_key);
 
         self.csp_vault.idkg_verify_dealing_private(
             algorithm_id,
@@ -166,7 +165,7 @@ impl CspIDkgProtocol for Csp {
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         debug!(self.logger; crypto.method_name => "idkg_load_transcript");
 
-        let key_id = mega_key_id(public_key);
+        let key_id = key_id_from_mega_public_key_or_panic(public_key);
 
         self.csp_vault.idkg_load_transcript(
             dealings,
@@ -188,7 +187,7 @@ impl CspIDkgProtocol for Csp {
     ) -> Result<(), IDkgLoadTranscriptError> {
         debug!(self.logger; crypto.method_name => "idkg_load_transcript_with_openings");
 
-        let key_id = mega_key_id(public_key);
+        let key_id = key_id_from_mega_public_key_or_panic(public_key);
 
         self.csp_vault.idkg_load_transcript_with_openings(
             dealings,
@@ -240,7 +239,8 @@ impl CspIDkgProtocol for Csp {
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
         debug!(self.logger; crypto.method_name => "idkg_open_dealing");
 
-        let opener_key_id = mega_key_id(opener_public_key);
+        let opener_key_id = key_id_from_mega_public_key_or_panic(opener_public_key);
+
         self.csp_vault.idkg_open_dealing(
             dealing,
             dealer_index,
@@ -273,7 +273,7 @@ impl CspIDkgProtocol for Csp {
 
         let active_key_ids = active_keys
             .iter()
-            .map(|active_key| commitment_key_id(active_key.combined_commitment.commitment()))
+            .map(|active_key| KeyId::from(active_key.combined_commitment.commitment()))
             .collect();
 
         self.csp_vault
@@ -432,4 +432,8 @@ impl CspThresholdEcdsaSigVerifier for Csp {
             }
         })
     }
+}
+
+fn key_id_from_mega_public_key_or_panic(public_key: &MEGaPublicKey) -> KeyId {
+    KeyId::try_from(public_key).unwrap_or_else(|err| panic!("{}", err))
 }

@@ -1,9 +1,7 @@
 //! States capturing the stages of the non-interactive DKG protocol.
 
 use crate::key_id::KeyId;
-use crate::keygen::forward_secure_key_id;
 use crate::threshold::ni_dkg::static_api as ni_dkg_static_api;
-use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -90,10 +88,7 @@ impl MockNode {
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
         resharing_public_coefficients: Option<CspPublicCoefficients>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
-        let maybe_reshared_secret_id =
-            resharing_public_coefficients.map(|resharing_public_coefficients| {
-                key_id_from_csp_pub_coeffs(&resharing_public_coefficients)
-            });
+        let maybe_reshared_secret_id = resharing_public_coefficients.as_ref().map(KeyId::from);
         self.csp_vault
             .create_dealing(
                 algorithm_id,
@@ -144,7 +139,7 @@ impl MockNetwork {
                             )
                         }),
                 );
-                node.fs_key_id = forward_secure_key_id(&pubkey);
+                node.fs_key_id = KeyId::from(&pubkey);
                 (id, pubkey)
             })
             .collect();

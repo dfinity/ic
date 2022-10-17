@@ -7,9 +7,7 @@ use crate::sign::{
 };
 use crate::{key_from_registry, CryptoComponentFatClient};
 use ic_crypto_internal_csp::api::CspSecretKeyStoreChecker;
-use ic_crypto_internal_csp::keygen::{
-    forward_secure_key_id, mega_key_id, public_key_hash_as_key_id,
-};
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::CryptoServiceProvider;
@@ -272,7 +270,7 @@ pub(crate) fn ensure_node_signing_key_material_is_set_up_correctly(
         });
     }
     let csp_key = CspPublicKey::try_from(pubkey_proto)?;
-    let key_id = public_key_hash_as_key_id(&csp_key);
+    let key_id = KeyId::from(&csp_key);
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::Ed25519,
@@ -298,7 +296,7 @@ pub(crate) fn ensure_committee_signing_key_material_is_set_up_correctly(
     }
     ensure_committe_signing_key_pop_is_well_formed(&pubkey_proto)?;
     let csp_key = CspPublicKey::try_from(pubkey_proto)?;
-    let key_id = public_key_hash_as_key_id(&csp_key);
+    let key_id = KeyId::from(&csp_key);
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::MultiBls12_381,
@@ -363,7 +361,7 @@ pub(crate) fn ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(
             internal_error: e.internal_error,
         }
     })?;
-    let key_id = forward_secure_key_id(&csp_key);
+    let key_id = KeyId::from(&csp_key);
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::Groth20_Bls12_381,
@@ -398,7 +396,13 @@ pub(crate) fn ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(
             }
         })?;
 
-    let key_id = mega_key_id(&idkg_dealing_encryption_pk);
+    let key_id = KeyId::try_from(&idkg_dealing_encryption_pk).map_err(|error| {
+        CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::MegaSecp256k1,
+            key_bytes: Some(idkg_dealing_encryption_pk.serialize()),
+            internal_error: format!("failed to derive key ID from MEGa public key: {}", error),
+        }
+    })?;
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::MegaSecp256k1,

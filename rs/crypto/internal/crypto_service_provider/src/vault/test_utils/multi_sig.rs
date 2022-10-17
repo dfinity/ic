@@ -1,9 +1,9 @@
 use crate::api::CspSigner;
-use crate::keygen::public_key_hash_as_key_id;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::{CspMultiSignatureError, CspMultiSignatureKeygenError, CspVault};
 use crate::Csp;
+use crate::KeyId;
 use ic_types::crypto::AlgorithmId;
 use rand::{thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -24,7 +24,7 @@ pub fn should_generate_multi_bls12_381_key_pair(csp_vault: Arc<dyn CspVault>) {
         CspPublicKey::MultiBls12_381(_) => {}
         _ => panic!("Wrong CspPublicKey: {:?}", pk),
     }
-    assert_eq!(key_id, public_key_hash_as_key_id(&pk));
+    assert_eq!(key_id, KeyId::from(&pk));
 }
 
 pub fn should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(csp_vault: Arc<dyn CspVault>) {

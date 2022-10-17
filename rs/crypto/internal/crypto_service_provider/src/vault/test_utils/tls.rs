@@ -1,6 +1,5 @@
 use crate::api::CspSigner;
 use crate::key_id::KeyId;
-use crate::keygen::tls_cert_hash_as_key_id;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::CspTlsKeygenError;
@@ -27,7 +26,7 @@ pub fn should_insert_secret_key_into_key_store(csp_vault: Arc<dyn CspVault>) {
     let (key_id, cert) = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
-    assert_eq!(key_id, tls_cert_hash_as_key_id(&cert));
+    assert_eq!(key_id, KeyId::from(&cert));
     assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
 }
 
@@ -184,7 +183,7 @@ pub fn should_sign_verifiably(csp_vault: Arc<dyn CspVault>) {
 }
 
 pub fn should_fail_to_sign_if_secret_key_not_found(csp_vault: Arc<dyn CspVault>) {
-    let non_existent_key_id = KeyId(b"non-existent-key-id-000000000000".to_owned());
+    let non_existent_key_id = KeyId::from(b"non-existent-key-id-000000000000".to_owned());
 
     let result = csp_vault.tls_sign(b"message", &non_existent_key_id);
 

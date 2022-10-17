@@ -1,5 +1,6 @@
 use super::*;
 use ic_crypto_internal_csp::api::{CspSigVerifier, CspSigner};
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::SigConverter;
 
 #[cfg(test)]
@@ -114,7 +115,7 @@ impl BasicSignerInternal {
             key_from_registry(registry, signer, KeyPurpose::NodeSigning, registry_version)?;
         let algorithm_id = AlgorithmId::from(pk_proto.algorithm);
         let csp_pk = CspPublicKey::try_from(pk_proto)?;
-        let key_id = public_key_hash_as_key_id(&csp_pk);
+        let key_id = KeyId::from(&csp_pk);
         let csp_sig = csp_signer.sign(algorithm_id, &message.as_signed_bytes(), key_id)?;
 
         Ok(BasicSigOf::new(BasicSig(csp_sig.as_ref().to_vec())))

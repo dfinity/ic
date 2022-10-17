@@ -28,7 +28,6 @@ use crate::api::{
     CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspTlsHandshakeSignerProvider,
     NiDkgCspClient, NodePublicKeyData, ThresholdSignatureCspClient,
 };
-use crate::keygen::{forward_secure_key_id, public_key_hash_as_key_id};
 use crate::public_key_store::read_node_public_keys;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspPublicKey;
@@ -102,7 +101,7 @@ impl PublicKeyData {
             Some(node_signing_pk) => {
                 let csp_pk = CspPublicKey::try_from(node_signing_pk)
                     .expect("Unsupported public key proto as node signing public key.");
-                Some(public_key_hash_as_key_id(&csp_pk))
+                Some(KeyId::from(&csp_pk))
             }
         };
 
@@ -114,7 +113,7 @@ impl PublicKeyData {
             Some(dkg_dealing_encryption_pk) => {
                 let csp_pk = CspFsEncryptionPublicKey::try_from(dkg_dealing_encryption_pk)
                     .expect("Unsupported public key proto as dkg dealing encryption public key.");
-                Some(forward_secure_key_id(&csp_pk))
+                Some(KeyId::from(&csp_pk))
             }
         };
         let sks_key_ids = SksKeyIds {
