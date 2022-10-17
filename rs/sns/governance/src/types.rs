@@ -2282,6 +2282,7 @@ pub(crate) mod tests {
             stake_e8s: Some(E8S_PER_TOKEN),
             memo: Some(0),
             dissolve_delay_seconds: Some(3 * ONE_MONTH_SECONDS),
+            source_nns_neuron_id: None,
         };
 
         let neuron_minimum_stake_e8s = E8S_PER_TOKEN;
