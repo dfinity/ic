@@ -70,9 +70,9 @@ use crate::{
     artifact_download_list::ArtifactDownloadList,
     download_prioritization::{AdvertTracker, AdvertTrackerFinalAction, DownloadAttemptTracker},
     gossip_protocol::{
-        GossipAdvertAction, GossipAdvertSendRequest, GossipChunk, GossipChunkRequest, GossipImpl,
-        GossipMessage, GossipRetransmissionRequest, Percentage, ReceiveCheckCache,
+        GossipAdvertAction, GossipAdvertSendRequest, GossipImpl, Percentage, ReceiveCheckCache,
     },
+    gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage, GossipRetransmissionRequest},
     peer_context::{
         GossipChunkRequestTracker, GossipChunkRequestTrackerKey, PeerContext, PeerContextMap,
     },

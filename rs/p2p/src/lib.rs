@@ -116,6 +116,7 @@ mod download_management;
 mod download_prioritization;
 mod event_handler;
 mod gossip_protocol;
+mod gossip_types;
 mod malicious_gossip;
 mod metrics;
 mod peer_context;
@@ -128,7 +129,7 @@ pub(crate) type P2PResult<T> = std::result::Result<T, P2PError>;
 pub(crate) mod utils {
     //! The utils module provides a mapping from a gossip message to the
     //! corresponding flow tag.
-    use crate::gossip_protocol::GossipMessage;
+    use crate::gossip_types::GossipMessage;
     use ic_interfaces_transport::TransportChannelId;
 
     /// An ordered collection of transport channels.
