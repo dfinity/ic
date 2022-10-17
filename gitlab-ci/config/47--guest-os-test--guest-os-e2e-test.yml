@@ -273,7 +273,6 @@ test-monpoly-docker:
   extends:
     - .e2e-test-base
   stage: prod-tests
-  allow_failure: true  # TODO: VER-1714
   script:
     - set -euo pipefail
     - *build-and-test-monpoly-docker-e2e
