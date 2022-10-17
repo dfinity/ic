@@ -13,6 +13,7 @@ import {
 } from '../http-interface/canister_http_interface_types';
 import { idlFactory } from '../http-interface/canister_http_interface';
 import { streamContent } from './streaming';
+import { internetIdentityMaintenanceTemplate } from '../pages/internet-identity-maintenance';
 
 const hostnameCanisterIdMap: Record<string, [string, string]> = {
   'identity.ic0.app': ['rdmx6-jaaaa-aaaaa-aaadq-cai', 'ic0.app'],
@@ -452,6 +453,17 @@ export async function handleRequest(request: Request): Promise<Response> {
       }
     } catch (e) {
       console.error('Failed to fetch response:', e);
+
+      if (
+        ['rdmx6-jaaaa-aaaaa-aaadq-cai', 'y2aaj-miaaa-aaaad-aacxq-cai'].includes(
+          maybeCanisterId.toString()
+        )
+      ) {
+        return new Response(internetIdentityMaintenanceTemplate(String(e)), {
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
       return new Response(`Failed to fetch response: ${String(e)}`, {
         status: 500,
       });
