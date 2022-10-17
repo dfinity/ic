@@ -154,7 +154,7 @@ impl BasicSignatureCspVault for RemoteCspVault {
     fn gen_key_pair(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError> {
+    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
         self.tokio_block_on(
             self.tarpc_csp_client
                 .gen_key_pair(context_with_timeout(self.rpc_timeout), algorithm_id),
@@ -190,7 +190,7 @@ impl MultiSignatureCspVault for RemoteCspVault {
     fn gen_key_pair_with_pop(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
         self.tokio_block_on(
             self.tarpc_csp_client
                 .gen_key_pair_with_pop(context_with_timeout(self.rpc_timeout), algorithm_id),
@@ -371,7 +371,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
         &self,
         node: NodeId,
         not_after: &str,
-    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         self.tokio_block_on(self.tarpc_csp_client.gen_tls_key_pair(
             context_with_timeout(self.rpc_timeout),
             node,

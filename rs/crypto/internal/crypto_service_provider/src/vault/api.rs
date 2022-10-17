@@ -193,7 +193,7 @@ pub trait BasicSignatureCspVault {
     fn gen_key_pair(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError>;
+    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
 }
 
 /// Operations of `CspVault` related to multi-signatures
@@ -228,7 +228,7 @@ pub trait MultiSignatureCspVault {
     fn gen_key_pair_with_pop(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
 }
 
 /// Operations of `CspVault` related to threshold signatures
@@ -422,7 +422,7 @@ pub trait TlsHandshakeCspVault: Send + Sync {
         &self,
         node: NodeId,
         not_after: &str,
-    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError>;
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
 
     /// Signs the given message using the specified algorithm and key ID.
     ///

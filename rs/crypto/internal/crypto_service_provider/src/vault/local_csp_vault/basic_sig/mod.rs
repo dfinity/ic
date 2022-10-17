@@ -61,7 +61,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
     fn gen_key_pair(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError> {
+    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
         let start_time = self.metrics.now();
         let (sk, pk) = match algorithm_id {
             AlgorithmId::Ed25519 => {
@@ -82,6 +82,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
             "gen_key_pair",
             start_time,
         );
-        Ok((sk_id, pk))
+        Ok(pk)
     }
 }

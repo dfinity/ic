@@ -25,7 +25,7 @@ impl TlsHandshakeCspVault for CspTlsHandshakeSignerImpl {
         &self,
         _node: NodeId,
         _not_after: &str,
-    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         unimplemented!("CspTlsHandshakeSigner on purpose supports only tls_sign()-operation")
     }
 

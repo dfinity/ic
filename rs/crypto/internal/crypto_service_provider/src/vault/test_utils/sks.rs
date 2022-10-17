@@ -26,9 +26,10 @@ pub fn sks_should_contain_keys_only_after_generation(
     csp_vault1: Arc<dyn CspVault>,
     csp_vault2: Arc<dyn CspVault>,
 ) {
-    let (key_id1, _public_key) = csp_vault1
+    let public_key1 = csp_vault1
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("Test setup failed: Failed to generate keys");
+    let key_id1 = KeyId::from(&public_key1);
     assert!(
         csp_vault1.sks_contains(&key_id1).expect("SKS call failed"),
         "Key should be present after generation."
@@ -38,9 +39,10 @@ pub fn sks_should_contain_keys_only_after_generation(
         "Key should be absent if not generated in the CSP."
     );
 
-    let (key_id2, _public_key) = csp_vault2
+    let public_key2 = csp_vault2
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("Test setup failed: Failed to generate keys");
+    let key_id2 = KeyId::from(&public_key2);
     assert_ne!(
         key_id1, key_id2,
         "Test failure: Key IDs from different CSPs were the same.  Check random number generation."
@@ -63,9 +65,10 @@ pub fn sks_should_contain_tls_keys_only_after_generation(
     csp_vault1: Arc<dyn CspVault>,
     csp_vault2: Arc<dyn CspVault>,
 ) {
-    let (key_id1, _public_key_cert) = csp_vault1
+    let public_key_cert1 = csp_vault1
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("error generating TLS key pair");
+    let key_id1 = KeyId::from(&public_key_cert1);
     assert!(
         csp_vault1.sks_contains(&key_id1).expect("SKS call failed"),
         "TLS key should be present after generation."
@@ -75,9 +78,10 @@ pub fn sks_should_contain_tls_keys_only_after_generation(
         "TLS key should be absent if not generated in the CSP."
     );
 
-    let (key_id2, _public_key_cert) = csp_vault2
+    let public_key_cert2 = csp_vault2
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("error generating TLS key pair");
+    let key_id2 = KeyId::from(&public_key_cert2);
     assert_ne!(
         key_id1, key_id2,
         "Test failure: Key IDs from different CSPs were the same.  Check random number generation."

@@ -17,14 +17,11 @@ fn multi_sig_verifier() -> impl CspSigner {
 }
 
 pub fn should_generate_multi_bls12_381_key_pair(csp_vault: Arc<dyn CspVault>) {
-    let gen_key_result = csp_vault.gen_key_pair_with_pop(AlgorithmId::MultiBls12_381);
-    assert!(gen_key_result.is_ok());
-    let (key_id, pk, _pop) = gen_key_result.expect("Failed to unwrap key_id");
-    match pk {
-        CspPublicKey::MultiBls12_381(_) => {}
-        _ => panic!("Wrong CspPublicKey: {:?}", pk),
-    }
-    assert_eq!(key_id, KeyId::from(&pk));
+    let (pk, _pop) = csp_vault
+        .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+        .expect("Failure generating key pair with pop");
+
+    assert!(matches!(pk, CspPublicKey::MultiBls12_381(_)));
 }
 
 pub fn should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(csp_vault: Arc<dyn CspVault>) {
@@ -41,7 +38,7 @@ pub fn should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(csp_vault: A
 }
 
 pub fn should_generate_verifiable_pop(csp_vault: Arc<dyn CspVault>) {
-    let (_key_id, public_key, pop) = csp_vault
+    let (public_key, pop) = csp_vault
         .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
         .expect("Failed to generate key pair with PoP");
 
@@ -52,9 +49,10 @@ pub fn should_generate_verifiable_pop(csp_vault: Arc<dyn CspVault>) {
 }
 
 pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: Arc<dyn CspVault>) {
-    let (key_id, csp_pub_key, csp_pop) = csp_vault
+    let (csp_pub_key, csp_pop) = csp_vault
         .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
         .expect("failed to generate keys");
+    let key_id = KeyId::from(&csp_pub_key);
 
     let mut rng = thread_rng();
     let msg_len: usize = rng.gen_range(0..1024);
@@ -75,9 +73,10 @@ pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: Arc<dyn CspVau
 }
 
 pub fn should_not_multi_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn CspVault>) {
-    let (key_id, _csp_pub_key, _csp_pop) = csp_vault
+    let (csp_pub_key, _csp_pop) = csp_vault
         .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
         .expect("failed to generate keys");
+    let key_id = KeyId::from(&csp_pub_key);
 
     let msg = [31; 41];
 
@@ -96,12 +95,16 @@ pub fn should_not_multi_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn Cs
 }
 
 pub fn should_not_multi_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Arc<dyn CspVault>) {
-    let (key_id, _wrong_csp_pub_key) = csp_vault
+    let wrong_csp_pub_key = csp_vault
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("failed to generate keys");
 
     let msg = [31; 41];
-    let result = csp_vault.multi_sign(AlgorithmId::MultiBls12_381, &msg, key_id);
+    let result = csp_vault.multi_sign(
+        AlgorithmId::MultiBls12_381,
+        &msg,
+        KeyId::from(&wrong_csp_pub_key),
+    );
 
     assert_eq!(
         result.unwrap_err(),

@@ -60,7 +60,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Mul
     fn gen_key_pair_with_pop(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
         let start_time = self.metrics.now();
         let (sk, pk, pop) = match algorithm_id {
             AlgorithmId::MultiBls12_381 => {
@@ -85,7 +85,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Mul
             "gen_key_pair_with_pop",
             start_time,
         );
-        Ok((sk_id, pk, pop))
+        Ok((pk, pop))
     }
 }
 

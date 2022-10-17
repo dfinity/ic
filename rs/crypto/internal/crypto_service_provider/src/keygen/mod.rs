@@ -17,11 +17,11 @@ impl CspKeyGenerator for Csp {
     fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<CspPublicKey, CryptoError> {
         match alg_id {
             AlgorithmId::MultiBls12_381 => {
-                let (_key_id, csp_pk, _pop) = self.csp_vault.gen_key_pair_with_pop(alg_id)?;
+                let (csp_pk, _pop) = self.csp_vault.gen_key_pair_with_pop(alg_id)?;
                 Ok(csp_pk)
             }
             _ => {
-                let (_key_id, csp_pk) = self.csp_vault.gen_key_pair(alg_id)?;
+                let csp_pk = self.csp_vault.gen_key_pair(alg_id)?;
                 Ok(csp_pk)
             }
         }
@@ -30,7 +30,7 @@ impl CspKeyGenerator for Csp {
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<(CspPublicKey, CspPop), CryptoError> {
-        let (_key_id, csp_pk, pop) = self.csp_vault.gen_key_pair_with_pop(algorithm_id)?;
+        let (csp_pk, pop) = self.csp_vault.gen_key_pair_with_pop(algorithm_id)?;
         Ok((csp_pk, pop))
     }
 
@@ -39,26 +39,26 @@ impl CspKeyGenerator for Csp {
         node: NodeId,
         not_after: &str,
     ) -> Result<TlsPublicKeyCert, CryptoError> {
-        let (_key_id, cert) =
-            self.csp_vault
-                .gen_tls_key_pair(node, not_after)
-                .map_err(|e| match e {
-                    CspTlsKeygenError::InvalidNotAfterDate {
-                        message: msg,
-                        not_after: date,
-                    } => CryptoError::InvalidNotAfterDate {
-                        message: msg,
-                        not_after: date,
-                    },
-                    CspTlsKeygenError::InternalError {
-                        internal_error: msg,
-                    } => CryptoError::InternalError {
-                        internal_error: msg,
-                    },
-                    CspTlsKeygenError::DuplicateKeyId { key_id } => {
-                        panic_due_to_duplicated_key_id(key_id)
-                    }
-                })?;
+        let cert = self
+            .csp_vault
+            .gen_tls_key_pair(node, not_after)
+            .map_err(|e| match e {
+                CspTlsKeygenError::InvalidNotAfterDate {
+                    message: msg,
+                    not_after: date,
+                } => CryptoError::InvalidNotAfterDate {
+                    message: msg,
+                    not_after: date,
+                },
+                CspTlsKeygenError::InternalError {
+                    internal_error: msg,
+                } => CryptoError::InternalError {
+                    internal_error: msg,
+                },
+                CspTlsKeygenError::DuplicateKeyId { key_id } => {
+                    panic_due_to_duplicated_key_id(key_id)
+                }
+            })?;
         Ok(cert)
     }
 }
