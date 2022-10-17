@@ -83,8 +83,6 @@ impl Service<Body> for DashboardService {
                 height: labeled_state.height(),
                 replicated_state: labeled_state.get_ref(),
                 canisters: &canisters,
-                // TODO(EXC-750): Remove this field.
-                cow_memory_manager_enabled: false,
                 replica_version: ReplicaVersion::default(),
             };
 
