@@ -5,7 +5,6 @@
 //! Types for working with the registry.
 
 use crate::RegistryVersion;
-use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
@@ -167,12 +166,4 @@ pub enum RegistryClientError {
 
     #[error("failed to decode registry contents: {error}")]
     DecodeError { error: String },
-}
-
-impl From<ProxyDecodeError> for RegistryClientError {
-    fn from(err: ProxyDecodeError) -> Self {
-        Self::DecodeError {
-            error: err.to_string(),
-        }
-    }
 }
