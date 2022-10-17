@@ -91,8 +91,6 @@ pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
         C::CanisterMethodNotFound => StatusCode::NOT_FOUND,
         C::CanisterAlreadyInstalled => StatusCode::PRECONDITION_FAILED,
         C::CanisterWasmModuleNotFound => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterEmpty => StatusCode::SERVICE_UNAVAILABLE,
-        C::InsufficientTransferFunds => StatusCode::SERVICE_UNAVAILABLE,
         C::InsufficientMemoryAllocation => StatusCode::SERVICE_UNAVAILABLE,
         C::InsufficientCyclesForCreateCanister => StatusCode::SERVICE_UNAVAILABLE,
         C::SubnetNotFound => StatusCode::NOT_FOUND,
