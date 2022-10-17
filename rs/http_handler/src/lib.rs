@@ -73,7 +73,7 @@ use ic_types::{
 use metrics::HttpHandlerMetrics;
 use rand::Rng;
 use std::{
-    convert::TryFrom,
+    convert::{Infallible, TryFrom},
     io::{Error, Write},
     net::SocketAddr,
     path::PathBuf,
@@ -145,14 +145,6 @@ pub(crate) struct HttpError {
     pub status: StatusCode,
     pub message: String,
 }
-
-impl std::fmt::Display for HttpError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl std::error::Error for HttpError {}
 
 pub(crate) type EndpointService = BoxCloneService<Body, Response<Body>, BoxError>;
 
@@ -496,11 +488,11 @@ pub fn start_server(
 fn create_main_service(
     metrics: HttpHandlerMetrics,
     http_handler: HttpHandler,
-) -> BoxCloneService<Request<Body>, Response<Body>, HttpError> {
+) -> BoxCloneService<Request<Body>, Response<Body>, Infallible> {
     let health_status_refresher = http_handler.health_status_refresher.clone();
     let route_service = service_fn(move |req: RequestWithTimer| {
         let http_handler = http_handler.clone();
-        async move { Ok::<_, HttpError>(make_router(http_handler, req).await) }
+        async move { Ok::<_, Infallible>(make_router(http_handler, req).await) }
     });
 
     BoxCloneService::new(
@@ -518,26 +510,21 @@ fn create_main_service(
             })
             .layer(health_status_refresher)
             .service(route_service)
-            .map_result(move |result| match result {
-                Ok((response, request_timer)) => {
-                    let status = response.status();
-                    // This is a workaround for `StatusCode::as_str()` not returning a `&'static
-                    // str`. It ensures `request_timer` is dropped before `status`.
-                    let mut timer = request_timer;
-                    timer.set_label(LABEL_STATUS, status.as_str());
-                    Ok::<_, HttpError>(response)
-                }
-                Err(err) => {
-                    // This should never happen
-                    Err(err)
-                }
+            .map_result(move |result| {
+                let (response, request_timer) = result.expect("Can't panic on infallible");
+                let status = response.status();
+                // This is a workaround for `StatusCode::as_str()` not returning a `&'static
+                // str`. It ensures `request_timer` is dropped before `status`.
+                let mut timer = request_timer;
+                timer.set_label(LABEL_STATUS, status.as_str());
+                Ok::<_, Infallible>(response)
             }),
     )
 }
 
 async fn serve_connection(
     log: ReplicaLogger,
-    service: BoxCloneService<Request<Body>, Response<Body>, HttpError>,
+    service: BoxCloneService<Request<Body>, Response<Body>, Infallible>,
     app_layer: AppLayer,
     http: Http,
     tcp_stream: WrappedTcpStream,
