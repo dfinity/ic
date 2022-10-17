@@ -69,10 +69,8 @@
 //! ```
 use crate::{
     advert_utils::AdvertRequestBuilder,
-    gossip_protocol::{
-        Gossip, GossipAdvertSendRequest, GossipChunk, GossipChunkRequest, GossipMessage,
-        GossipRetransmissionRequest,
-    },
+    gossip_protocol::{Gossip, GossipAdvertSendRequest},
+    gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage, GossipRetransmissionRequest},
     metrics::FlowWorkerMetrics,
 };
 use ic_interfaces_transport::{TransportEvent, TransportMessage};
@@ -552,7 +550,7 @@ pub mod tests {
     use super::*;
     use crate::{
         download_prioritization::test::make_gossip_advert,
-        gossip_protocol::{GossipAdvertSendRequest, GossipRetransmissionRequest},
+        gossip_protocol::GossipAdvertSendRequest, gossip_types::GossipRetransmissionRequest,
     };
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
     use ic_interfaces_transport::TransportPayload;
