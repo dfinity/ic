@@ -74,11 +74,7 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_scalar");
 
     group.bench_function("serialize", |b| {
-        b.iter_batched_ref(
-            || random_scalar(),
-            |pt| pt.serialize(),
-            BatchSize::SmallInput,
-        )
+        b.iter_batched_ref(random_scalar, |pt| pt.serialize(), BatchSize::SmallInput)
     });
 
     group.bench_function("deserialize", |b| {
@@ -126,7 +122,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_g1");
 
     group.bench_function("serialize", |b| {
-        b.iter_batched_ref(|| random_g1(), |pt| pt.serialize(), BatchSize::SmallInput)
+        b.iter_batched_ref(random_g1, |pt| pt.serialize(), BatchSize::SmallInput)
     });
 
     group.bench_function("deserialize", |b| {
@@ -180,11 +176,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     });
 
     group.bench_function("to_affine", |b| {
-        b.iter_batched_ref(
-            || random_g1(),
-            |pt| G1Affine::from(*pt),
-            BatchSize::SmallInput,
-        )
+        b.iter_batched_ref(random_g1, |pt| G1Affine::from(*pt), BatchSize::SmallInput)
     });
 
     group.bench_function("multiexp_naive2", |b| {
@@ -239,7 +231,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_g2");
 
     group.bench_function("serialize", |b| {
-        b.iter_batched_ref(|| random_g2(), |pt| pt.serialize(), BatchSize::SmallInput)
+        b.iter_batched_ref(random_g2, |pt| pt.serialize(), BatchSize::SmallInput)
     });
 
     group.bench_function("deserialize", |b| {
@@ -293,11 +285,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     });
 
     group.bench_function("to_affine", |b| {
-        b.iter_batched_ref(
-            || random_g2(),
-            |pt| G2Affine::from(*pt),
-            BatchSize::SmallInput,
-        )
+        b.iter_batched_ref(random_g2, |pt| G2Affine::from(*pt), BatchSize::SmallInput)
     });
 
     group.bench_function("prepare", |b| {
