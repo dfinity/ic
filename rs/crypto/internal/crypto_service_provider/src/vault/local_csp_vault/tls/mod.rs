@@ -1,6 +1,5 @@
 //! TLS handshake operations provided by the CSP vault
 use crate::key_id::KeyId;
-use crate::keygen::tls_cert_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
@@ -140,7 +139,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         cert: &TlsPublicKeyCert,
         secret_key: TlsEd25519SecretKeyDerBytes,
     ) -> Result<KeyId, CspTlsKeygenError> {
-        let key_id = tls_cert_hash_as_key_id(cert);
+        let key_id = KeyId::from(cert);
         self.store_secret_key(CspSecretKey::TlsEd25519(secret_key), key_id)?;
         Ok(key_id)
     }

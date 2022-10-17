@@ -99,6 +99,6 @@ mod tests {
         hash.update(DomainSeparationContext::new("dkg_id_domain").as_bytes());
         hash.update(&serde_cbor::to_vec(&dkg_id).expect("Could not serialise DkgId"));
         let digest = hash.finish();
-        KeyId(digest)
+        KeyId::from(digest)
     }
 }

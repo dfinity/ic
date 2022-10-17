@@ -1,5 +1,6 @@
 use super::*;
 use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_csp::key_id::KeyId;
 
 #[cfg(test)]
 mod tests;
@@ -218,7 +219,7 @@ impl MultiSignerInternal {
         let algorithm_id = AlgorithmId::from(pk_proto.algorithm);
         let csp_pk = CspPublicKey::try_from(pk_proto)?;
         let message_bytes = message.as_signed_bytes();
-        let key_id = public_key_hash_as_key_id(&csp_pk);
+        let key_id = KeyId::from(&csp_pk);
         let csp_sig = csp_signer.sign(algorithm_id, &message_bytes, key_id)?;
 
         Ok(IndividualMultiSigOf::new(IndividualMultiSig(

@@ -89,7 +89,7 @@ fn threshold_signatures_should_work(
     };
     let public_coefficients = csp_types::CspPublicCoefficients::Bls12_381(public_coefficients);
     let signatories: Vec<(&Csp, KeyId)> = {
-        let key_id = key_id_from_csp_pub_coeffs(&public_coefficients);
+        let key_id = KeyId::from(&public_coefficients);
         config
             .receivers
             .get()

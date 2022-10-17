@@ -1,8 +1,8 @@
-use crate::keygen::commitment_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdEcdsaSignerCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
+use crate::KeyId;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
@@ -74,7 +74,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
             | CombinedCommitment::ByInterpolation(commitment) => commitment,
         };
 
-        let key_id = commitment_key_id(commitment);
+        let key_id = KeyId::from(commitment);
         let opening = self.canister_sks_read_lock().get(&key_id);
         match &opening {
             Some(CspSecretKey::IDkgCommitmentOpening(bytes)) => CommitmentOpening::try_from(bytes)

@@ -30,7 +30,6 @@ use crate::sign::ThresholdSigDataStoreImpl;
 use crate::utils::NodeKeysToGenerate;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
-use ic_crypto_internal_csp::keygen::public_key_hash_as_key_id;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_tls_interfaces::TlsHandshake;

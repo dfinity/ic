@@ -144,6 +144,12 @@ pub enum AlgorithmId {
     MegaSecp256k1 = 16,
 }
 
+impl AlgorithmId {
+    pub fn as_u8(&self) -> u8 {
+        u8::try_from(*self as isize).expect("could not convert AlgorithmId to u8")
+    }
+}
+
 impl From<CspThresholdSigPublicKey> for AlgorithmId {
     fn from(public_key: CspThresholdSigPublicKey) -> Self {
         match public_key {

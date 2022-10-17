@@ -1,6 +1,5 @@
 //! Basic Signature operations provided by the CSP vault.
 use crate::key_id::KeyId;
-use crate::keygen::public_key_hash_as_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use crate::vault::api::{
@@ -75,7 +74,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
                 algorithm: algorithm_id,
             }),
         }?;
-        let sk_id = public_key_hash_as_key_id(&pk);
+        let sk_id = KeyId::from(&pk);
         self.store_secret_key(sk, sk_id)?;
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,

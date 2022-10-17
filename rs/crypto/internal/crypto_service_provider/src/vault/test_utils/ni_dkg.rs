@@ -1,7 +1,6 @@
 pub mod fixtures;
 
 use crate::key_id::KeyId;
-use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
 use crate::vault::test_utils;
@@ -82,7 +81,7 @@ fn threshold_signatures_should_work(
     };
     let public_coefficients = CspPublicCoefficients::Bls12_381(public_coefficients);
     let signatories: Vec<(Arc<dyn CspVault>, KeyId)> = {
-        let key_id = key_id_from_csp_pub_coeffs(&public_coefficients);
+        let key_id = KeyId::from(&public_coefficients);
         config
             .receivers
             .get()
@@ -157,7 +156,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         let node: &mut MockNode = get_one_node(&mut state);
 
         // Verify that the key is there:
-        let key_id = key_id_from_csp_pub_coeffs(&internal_public_coefficients);
+        let key_id = KeyId::from(&internal_public_coefficients);
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
@@ -169,7 +168,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         // Call retain, keeping the threshold key:
         let active_key_ids: BTreeSet<KeyId> = vec![internal_public_coefficients.clone()]
             .iter()
-            .map(key_id_from_csp_pub_coeffs)
+            .map(KeyId::from)
             .collect();
         node.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
@@ -195,7 +194,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         );
         let active_key_ids = vec![different_public_coefficients]
             .iter()
-            .map(key_id_from_csp_pub_coeffs)
+            .map(KeyId::from)
             .collect();
         node.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
@@ -223,7 +222,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         let node = get_one_node(&mut state);
 
         // Verify that the threshold key has been reloaded:
-        let key_id = key_id_from_csp_pub_coeffs(&internal_public_coefficients);
+        let key_id = KeyId::from(&internal_public_coefficients);
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,

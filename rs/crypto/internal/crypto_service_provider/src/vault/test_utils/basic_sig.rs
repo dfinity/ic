@@ -1,6 +1,6 @@
-use crate::keygen::public_key_hash_as_key_id;
 use crate::types::{CspPublicKey, CspSignature};
 use crate::vault::api::{CspBasicSignatureError, CspBasicSignatureKeygenError, CspVault};
+use crate::KeyId;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_types::crypto::AlgorithmId;
 use rand::{thread_rng, Rng};
@@ -15,7 +15,7 @@ pub fn should_generate_ed25519_key_pair(csp_vault: Arc<dyn CspVault>) {
         CspPublicKey::Ed25519(_) => {}
         _ => panic!("Wrong CspPublicKey: {:?}", pk),
     }
-    assert_eq!(key_id, public_key_hash_as_key_id(&pk));
+    assert_eq!(key_id, KeyId::from(&pk));
 }
 
 pub fn should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(csp_vault: Arc<dyn CspVault>) {
@@ -77,7 +77,7 @@ pub fn should_not_basic_sign_with_non_existent_key(csp_vault: Arc<dyn CspVault>)
     let mut rng = thread_rng();
     let (_, pk_bytes) = ed25519::keypair_from_rng(&mut rng);
 
-    let key_id = public_key_hash_as_key_id(&CspPublicKey::Ed25519(pk_bytes));
+    let key_id = KeyId::from(&CspPublicKey::Ed25519(pk_bytes));
     let msg = "some message";
     let sign_result = csp_vault.sign(AlgorithmId::Ed25519, msg.as_ref(), key_id);
     assert!(sign_result.is_err());

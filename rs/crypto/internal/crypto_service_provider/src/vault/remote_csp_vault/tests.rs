@@ -470,7 +470,7 @@ mod tls_sign {
 
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_encoding() {
-        let key_id = KeyId([42; 32]);
+        let key_id = KeyId::from([42; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_encoding(key_id);
         let local_csp_vault = new_local_csp_vault_with_secret_key_store(key_store);
         let tokio_rt = new_tokio_runtime();
@@ -485,7 +485,7 @@ mod tls_sign {
 
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_length() {
-        let key_id = KeyId([43; 32]);
+        let key_id = KeyId::from([43; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_length(key_id);
         let local_csp_vault = new_local_csp_vault_with_secret_key_store(key_store);
         let tokio_rt = new_tokio_runtime();

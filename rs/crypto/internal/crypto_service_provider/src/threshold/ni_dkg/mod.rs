@@ -6,7 +6,6 @@
 
 use crate::api::{NiDkgCspClient, NodePublicKeyData};
 use crate::key_id::KeyId;
-use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -94,7 +93,7 @@ impl NiDkgCspClient for Csp {
         resharing_public_coefficients: CspPublicCoefficients,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
         debug!(self.logger; crypto.method_name => "create_resharing_dealing", crypto.dkg_epoch => epoch.get());
-        let key_id = key_id_from_csp_pub_coeffs(&resharing_public_coefficients);
+        let key_id = KeyId::from(&resharing_public_coefficients);
         self.csp_vault.create_dealing(
             algorithm_id,
             dealer_resharing_index,
@@ -213,8 +212,7 @@ impl NiDkgCspClient for Csp {
         active_keys: BTreeSet<CspPublicCoefficients>,
     ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "retain_threshold_keys_if_present");
-        let active_key_ids: BTreeSet<KeyId> =
-            active_keys.iter().map(key_id_from_csp_pub_coeffs).collect();
+        let active_key_ids: BTreeSet<KeyId> = active_keys.iter().map(KeyId::from).collect();
         self.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
     }

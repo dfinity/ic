@@ -4,8 +4,7 @@ use strum::IntoEnumIterator;
 
 #[test]
 fn should_correctly_convert_i32_to_algorithm_id() {
-    // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
-    assert_eq!(AlgorithmId::iter().count(), 17);
+    ensure_all_algorithm_ids_are_compared(&(0..=16).collect::<Vec<_>>());
 
     assert_eq!(AlgorithmId::from(0), AlgorithmId::Placeholder);
     assert_eq!(AlgorithmId::from(1), AlgorithmId::MultiBls12_381);
@@ -31,8 +30,7 @@ fn should_correctly_convert_i32_to_algorithm_id() {
 
 #[test]
 fn should_correctly_convert_algorithm_id_to_i32() {
-    // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
-    assert_eq!(AlgorithmId::iter().count(), 17);
+    ensure_all_algorithm_ids_are_compared(&(0..=16).collect::<Vec<_>>());
 
     assert_eq!(AlgorithmId::Placeholder as i32, 0);
     assert_eq!(AlgorithmId::MultiBls12_381 as i32, 1);
@@ -51,6 +49,35 @@ fn should_correctly_convert_algorithm_id_to_i32() {
     assert_eq!(AlgorithmId::RsaSha256 as i32, 14);
     assert_eq!(AlgorithmId::ThresholdEcdsaSecp256k1 as i32, 15);
     assert_eq!(AlgorithmId::MegaSecp256k1 as i32, 16)
+}
+
+#[test]
+fn should_correctly_convert_algorithm_id_to_u8() {
+    ensure_all_algorithm_ids_are_compared(&(0..=16).collect::<Vec<_>>());
+
+    let tests: Vec<(AlgorithmId, u8)> = vec![
+        (AlgorithmId::Placeholder, 0),
+        (AlgorithmId::MultiBls12_381, 1),
+        (AlgorithmId::ThresBls12_381, 2),
+        (AlgorithmId::SchnorrSecp256k1, 3),
+        (AlgorithmId::StaticDhSecp256k1, 4),
+        (AlgorithmId::HashSha256, 5),
+        (AlgorithmId::Tls, 6),
+        (AlgorithmId::Ed25519, 7),
+        (AlgorithmId::Secp256k1, 8),
+        (AlgorithmId::Groth20_Bls12_381, 9),
+        (AlgorithmId::NiDkg_Groth20_Bls12_381, 10),
+        (AlgorithmId::EcdsaP256, 11),
+        (AlgorithmId::EcdsaSecp256k1, 12),
+        (AlgorithmId::IcCanisterSignature, 13),
+        (AlgorithmId::RsaSha256, 14),
+        (AlgorithmId::ThresholdEcdsaSecp256k1, 15),
+        (AlgorithmId::MegaSecp256k1, 16),
+    ];
+
+    for (algorithm_id, expected_discriminant) in tests {
+        assert_eq!(algorithm_id.as_u8(), expected_discriminant);
+    }
 }
 
 #[test]
@@ -104,4 +131,9 @@ pub fn set_of(node_ids: &[NodeId]) -> BTreeSet<NodeId> {
         dealers.insert(*node_id);
     });
     dealers
+}
+
+fn ensure_all_algorithm_ids_are_compared(tested_algorithm_ids: &[isize]) {
+    let all_algorithm_ids: Vec<isize> = (0..=16).collect();
+    assert_eq!(tested_algorithm_ids, all_algorithm_ids);
 }

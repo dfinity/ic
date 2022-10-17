@@ -1,7 +1,6 @@
 use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::IDKG_THRESHOLD_KEYS_SCOPE;
 use crate::key_id::KeyId;
-use crate::keygen::{commitment_key_id, mega_key_id};
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
@@ -135,7 +134,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                             }
                         })?;
                     self.canister_sks_write_lock().insert_or_replace(
-                        commitment_key_id(transcript.combined_commitment.commitment()),
+                        KeyId::from(transcript.combined_commitment.commitment()),
                         CspSecretKey::IDkgCommitmentOpening(opening_bytes),
                         Some(IDKG_THRESHOLD_KEYS_SCOPE),
                     );
@@ -213,7 +212,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                             }
                         })?;
                     self.canister_sks_write_lock().insert_or_replace(
-                        commitment_key_id(transcript.combined_commitment.commitment()),
+                        KeyId::from(transcript.combined_commitment.commitment()),
                         CspSecretKey::IDkgCommitmentOpening(opening_bytes),
                         Some(IDKG_THRESHOLD_KEYS_SCOPE),
                     );
@@ -273,7 +272,10 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 public_key: public_key_bytes,
                 private_key: private_key_bytes,
             }),
-            mega_key_id(&public_key),
+            //TODO CRP-1702: should no longer panic with IDKG key rotation
+            KeyId::try_from(&public_key).unwrap_or_else(|err| {
+                panic!("Failed to create MEGa public/private key pair: {}", err)
+            }),
         )?;
 
         self.metrics.observe_duration_seconds(
@@ -380,7 +382,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         &self,
         commitment: &PolynomialCommitment,
     ) -> Result<CommitmentOpeningBytes, IDkgCreateDealingError> {
-        let key_id = commitment_key_id(commitment);
+        let key_id = KeyId::from(commitment);
         let opening = self.canister_sks_read_lock().get(&key_id);
         match &opening {
             Some(CspSecretKey::IDkgCommitmentOpening(bytes)) => Ok(bytes.clone()),
