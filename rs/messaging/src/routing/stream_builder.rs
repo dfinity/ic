@@ -20,7 +20,7 @@ use ic_types::{
 use mockall::automock;
 use prometheus::{GaugeVec, Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::collections::BTreeMap;
-use std::ops::{Add, Div};
+use std::ops::Add;
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
