@@ -247,6 +247,7 @@ type Neuron = record {
   maturity_e8s_equivalent : nat64;
   cached_neuron_stake_e8s : nat64;
   created_timestamp_seconds : nat64;
+  source_nns_neuron_id : opt nat64;
   aging_since_timestamp_seconds : nat64;
   dissolve_state : opt DissolveState;
   voting_power_percentage_multiplier : nat64;
@@ -262,6 +263,7 @@ type NeuronParameters = record {
   controller : opt principal;
   dissolve_delay_seconds : opt nat64;
   memo : opt nat64;
+  source_nns_neuron_id : opt nat64;
   stake_e8s : opt nat64;
   hotkey : opt principal;
 };

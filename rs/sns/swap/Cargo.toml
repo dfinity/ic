@@ -33,8 +33,8 @@ ic-ic00-types = { path = "../../types/ic00_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
-ic-nervous-system-common = {path = "../../nervous_system/common"}
-ic-nervous-system-root = {path = "../../nervous_system/root"}
+ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-governance = { path = "../governance" }
 

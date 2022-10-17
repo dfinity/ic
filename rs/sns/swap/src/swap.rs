@@ -760,20 +760,22 @@ impl Swap {
 
         let nns_governance = self.init().nns_governance();
         for recipe in &sns_neuron_recipes {
-            let (hotkey, controller) = match &recipe.investor.as_ref().unwrap() {
-                Investor::Direct(DirectInvestment { buyer_principal: p }) => {
-                    (None, PrincipalId::from_str(p).unwrap())
-                }
-                Investor::CommunityFund(CfInvestment {
-                    hotkey_principal,
-                    nns_neuron_id: _,
-                }) => (
-                    Some(PrincipalId::from_str(hotkey_principal).unwrap()),
-                    nns_governance.into(),
-                ),
-            };
+            let (hotkey, controller, source_nns_neuron_id) =
+                match &recipe.investor.as_ref().unwrap() {
+                    Investor::Direct(DirectInvestment { buyer_principal: p }) => {
+                        (None, PrincipalId::from_str(p).unwrap(), None)
+                    }
+                    Investor::CommunityFund(CfInvestment {
+                        hotkey_principal,
+                        nns_neuron_id,
+                    }) => (
+                        Some(PrincipalId::from_str(hotkey_principal).unwrap()), // TODO it would be great if this was a principalId instead of string
+                        nns_governance.into(),
+                        Some(*nns_neuron_id),
+                    ),
+                };
 
-            let neuron_attributes = recipe
+            let _neuron_attributes = recipe
                 .neuron_attributes
                 .as_ref()
                 .expect("Expected the neuron_attributes to be present");
@@ -785,8 +787,15 @@ impl Swap {
                     // Since we use a permission-ed API on governance, account for the transfer_fee
                     // that is applied with the sns ledger transfer
                     stake_e8s: Some(recipe.amount_e8s() - transfer_fee.get_e8s()),
-                    memo: Some(neuron_attributes.memo),
-                    dissolve_delay_seconds: Some(neuron_attributes.dissolve_delay_seconds),
+                    memo: Some(recipe.neuron_attributes.as_ref().unwrap().memo),
+                    dissolve_delay_seconds: Some(
+                        recipe
+                            .neuron_attributes
+                            .as_ref()
+                            .unwrap()
+                            .dissolve_delay_seconds,
+                    ),
+                    source_nns_neuron_id,
                 });
         }
 

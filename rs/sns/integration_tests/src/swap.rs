@@ -337,7 +337,19 @@ fn make_account(seed: u64) -> ic_base_types::PrincipalId {
 ///   2. SNS
 ///   3. dapp
 ///
-/// Begins a swap.
+/// Brings the SNS token swap canister to the Open state. That is, this not only
+/// creates the canister, and installs the code, but also does the following:
+///
+///   1. Funds it with SNS tokens.
+///   2. Makes OpenSnsTokenSwap NNS proposal.
+///     a. The proposal includes Community Fund. The return value includes a
+///        list of the NNS CF neurons (i.e. those that will participate in the
+///        Community Fund if/when the proposal passes).
+///   3. Makes all NNS neurons vote in favor of the proposal so that it passes
+///      and executes.
+///
+/// At that point, the test can start sending direct participants (as opposed to
+/// CF participants) to the swap.
 ///
 /// TEST_USER2 has 100 ICP that they can use to buy into the swap, as well as
 /// any accounts listed in `accounts`.
@@ -817,6 +829,48 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
                 "{:#?}",
                 observed_sns_neuron
             );
+        }
+    }
+
+    // Inspect the source_nns_neuron_id field in Community Fund neurons.
+    for community_fund_neuron in &community_fund_neurons {
+        let controller = community_fund_neuron.controller.unwrap();
+
+        let sns_neurons = sns_governance_list_neurons(
+            &mut state_machine,
+            scenario.governance_canister_id,
+            &ListNeurons {
+                limit: 100,
+                start_page_at: None,
+                of_principal: Some(controller),
+            },
+        )
+        .neurons;
+
+        assert!(!sns_neurons.is_empty(), "{}", controller);
+        let expected_source_neuron_id = community_fund_neuron.id.as_ref().map(|id| id.id);
+        for sns_neuron in sns_neurons {
+            assert_eq!(sns_neuron.source_nns_neuron_id, expected_source_neuron_id);
+        }
+    }
+
+    // Analogous to the previous loop, insepct the source_nns_neuron_id field,
+    // but this time, in non-Community Fund neurons.
+    for principal_id in accounts {
+        let sns_neurons = sns_governance_list_neurons(
+            &mut state_machine,
+            scenario.governance_canister_id,
+            &ListNeurons {
+                limit: 100,
+                start_page_at: None,
+                of_principal: Some(principal_id),
+            },
+        )
+        .neurons;
+
+        assert!(!sns_neurons.is_empty(), "{}", principal_id);
+        for sns_neuron in sns_neurons {
+            assert_eq!(sns_neuron.source_nns_neuron_id, None);
         }
     }
 

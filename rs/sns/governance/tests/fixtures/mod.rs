@@ -265,6 +265,7 @@ impl NeuronBuilder {
             dissolve_state: self.dissolve_state,
             followees: self.followees,
             voting_power_percentage_multiplier: self.voting_power_percentage_multiplier,
+            source_nns_neuron_id: None,
         }
     }
 

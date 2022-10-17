@@ -92,6 +92,10 @@ pub struct Neuron {
     /// that is created at SNS initialization.
     #[prost(uint64, tag = "13")]
     pub voting_power_percentage_multiplier: u64,
+    /// The ID of the NNS neuron whose Community Fund participation resulted in the
+    /// creation of this SNS neuron.
+    #[prost(uint64, optional, tag = "14")]
+    pub source_nns_neuron_id: ::core::option::Option<u64>,
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///
@@ -2163,6 +2167,10 @@ pub mod claim_swap_neurons_request {
         /// while direct investors will be automatically set to non-dissolving.
         #[prost(uint64, optional, tag = "5")]
         pub dissolve_delay_seconds: ::core::option::Option<u64>,
+        /// The ID of the NNS neuron whose Community Fund participation resulted in the
+        /// creation of this SNS neuron.
+        #[prost(uint64, optional, tag = "6")]
+        pub source_nns_neuron_id: ::core::option::Option<u64>,
     }
 }
 /// The response for the `claim_swap_neurons` method. The sum of all fields

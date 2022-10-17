@@ -156,6 +156,10 @@ message Neuron {
   // voting_power_percentage_multiplier can only be less than 100 for a developer neuron
   // that is created at SNS initialization.
   uint64 voting_power_percentage_multiplier = 13;
+
+  // The ID of the NNS neuron whose Community Fund participation resulted in the
+  // creation of this SNS neuron.
+  optional uint64 source_nns_neuron_id = 14;
 }
 
 // The types of votes a neuron can issue.
@@ -1560,6 +1564,10 @@ message ClaimSwapNeuronsRequest {
     // that are for Community Fund investors will be automatically set to dissolving,
     // while direct investors will be automatically set to non-dissolving.
     optional uint64 dissolve_delay_seconds = 5;
+
+    // The ID of the NNS neuron whose Community Fund participation resulted in the
+    // creation of this SNS neuron.
+    optional uint64 source_nns_neuron_id = 6;
   }
 
   // The set of parameters that define the neurons created in `claim_swap_neurons`. For

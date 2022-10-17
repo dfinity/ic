@@ -1208,6 +1208,7 @@ impl Governance {
             maturity_e8s_equivalent: 0,
             dissolve_state: parent_neuron.dissolve_state.clone(),
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
+            source_nns_neuron_id: parent_neuron.source_nns_neuron_id,
         };
 
         // Add the child neuron's id to the set of neurons with ongoing operations.
@@ -3011,6 +3012,7 @@ impl Governance {
             // A neuron created through the `claim_or_refresh` ManageNeuron command will
             // have the default voting power multiplier applied.
             voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+            source_nns_neuron_id: None,
         };
 
         // This also verifies that there are not too many neurons already.
@@ -3145,6 +3147,7 @@ impl Governance {
                     neuron_parameter.get_dissolve_delay_seconds(),
                 )),
                 voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+                source_nns_neuron_id: neuron_parameter.source_nns_neuron_id,
             };
 
             // This also verifies that there are not too many neurons already. This is a best effort
