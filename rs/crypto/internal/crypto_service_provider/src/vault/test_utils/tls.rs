@@ -23,10 +23,11 @@ pub const FIXED_SEED: u64 = 42;
 pub const NOT_AFTER: &str = "25670102030405Z";
 
 pub fn should_insert_secret_key_into_key_store(csp_vault: Arc<dyn CspVault>) {
-    let (key_id, cert) = csp_vault
+    let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
-    assert_eq!(key_id, KeyId::from(&cert));
+    let key_id = KeyId::from(&cert);
+
     assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
 }
 
@@ -43,7 +44,7 @@ pub fn should_fail_if_secret_key_insertion_yields_duplicate_error(
 }
 
 pub fn should_return_der_encoded_self_signed_certificate(csp_vault: Arc<dyn CspVault>) {
-    let (_key_id, cert) = csp_vault
+    let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
 
@@ -56,7 +57,7 @@ pub fn should_return_der_encoded_self_signed_certificate(csp_vault: Arc<dyn CspV
 }
 
 pub fn should_set_cert_subject_cn_as_node_id(csp_vault: Arc<dyn CspVault>) {
-    let (_key_id, cert) = csp_vault
+    let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
 
@@ -70,7 +71,7 @@ pub fn should_set_cert_subject_cn_as_node_id(csp_vault: Arc<dyn CspVault>) {
 }
 
 pub fn should_use_stable_node_id_string_representation_as_subject_cn(csp_vault: Arc<dyn CspVault>) {
-    let (_key_id, cert) = csp_vault
+    let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
 
@@ -81,7 +82,7 @@ pub fn should_use_stable_node_id_string_representation_as_subject_cn(csp_vault: 
 }
 
 pub fn should_set_cert_issuer_cn_as_node_id(csp_vault: Arc<dyn CspVault>) {
-    let (_key_id, cert) = csp_vault
+    let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
 
@@ -96,7 +97,7 @@ pub fn should_set_cert_issuer_cn_as_node_id(csp_vault: Arc<dyn CspVault>) {
 }
 
 pub fn should_not_set_cert_subject_alt_name(csp_vault: Arc<dyn CspVault>) {
-    let (_key_id, cert) = csp_vault
+    let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
 
@@ -105,7 +106,7 @@ pub fn should_not_set_cert_subject_alt_name(csp_vault: Arc<dyn CspVault>) {
 }
 
 pub fn should_set_random_cert_serial_number(csp_vault: Arc<dyn CspVault>) {
-    let (_key_id, cert) = csp_vault
+    let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
 
@@ -124,7 +125,7 @@ pub fn should_set_different_serial_numbers_for_multiple_certs(csp_vault: Arc<dyn
     const SAMPLE_SIZE: usize = 20;
     let mut serial_samples = BTreeSet::new();
     for _i in 0..SAMPLE_SIZE {
-        let (_key_id, cert) = csp_vault
+        let cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
         serial_samples.insert(serial_number(&cert));
@@ -133,7 +134,7 @@ pub fn should_set_different_serial_numbers_for_multiple_certs(csp_vault: Arc<dyn
 }
 
 pub fn should_set_cert_not_after_correctly(csp_vault: Arc<dyn CspVault>) {
-    let (_key_id, cert) = csp_vault
+    let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
     assert!(
@@ -158,22 +159,24 @@ fn serial_number(cert: &TlsPublicKeyCert) -> BigNum {
 }
 
 pub fn should_sign_with_valid_key(csp_vault: Arc<dyn CspVault>) {
-    let (key_id, _public_key_cert) = csp_vault
+    let public_key_cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
 
-    assert!(csp_vault.tls_sign(&random_message(), &key_id).is_ok());
+    assert!(csp_vault
+        .tls_sign(&random_message(), &KeyId::from(&public_key_cert))
+        .is_ok());
 }
 
 pub fn should_sign_verifiably(csp_vault: Arc<dyn CspVault>) {
     let verifier = verifier();
-    let (key_id, public_key_cert) = csp_vault
+    let public_key_cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
     let msg = random_message();
 
     let sig = csp_vault
-        .tls_sign(&msg, &key_id)
+        .tls_sign(&msg, &KeyId::from(&public_key_cert))
         .expect("failed to generate signature");
 
     let csp_pub_key = ed25519_csp_pubkey_from_tls_pubkey_cert(&public_key_cert);
@@ -196,12 +199,12 @@ pub fn should_fail_to_sign_if_secret_key_not_found(csp_vault: Arc<dyn CspVault>)
 }
 
 pub fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Arc<dyn CspVault>) {
-    let (key_id, _wrong_csp_pub_key) = csp_vault
+    let wrong_csp_pub_key = csp_vault
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("failed to generate keys");
     let msg = random_message();
 
-    let result = csp_vault.tls_sign(&msg, &key_id);
+    let result = csp_vault.tls_sign(&msg, &KeyId::from(&wrong_csp_pub_key));
 
     assert_eq!(
         result.unwrap_err(),

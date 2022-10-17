@@ -26,7 +26,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
         &self,
         node: NodeId,
         not_after: &str,
-    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         let start_time = self.metrics.now();
         let common_name = &node.get().to_string()[..];
         let not_after_asn1 = Asn1Time::from_str_x509(not_after).map_err(|_| {
@@ -49,14 +49,14 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
 
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");
-        let key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key)?;
+        let _key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key)?;
         self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
             MetricsScope::Local,
             "gen_tls_key_pair",
             start_time,
         );
-        Ok((key_id, x509_pk_cert))
+        Ok(x509_pk_cert)
     }
 
     fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {

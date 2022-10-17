@@ -143,7 +143,7 @@ impl<
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError> {
+    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
         let vault = self.local_csp_vault;
         let job = move || vault.gen_key_pair(algorithm_id);
         execute_on_thread_pool(self.thread_pool_handle, job).await
@@ -166,7 +166,7 @@ impl<
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
         let vault = self.local_csp_vault;
         let job = move || vault.gen_key_pair_with_pop(algorithm_id);
         execute_on_thread_pool(self.thread_pool_handle, job).await
@@ -296,7 +296,7 @@ impl<
         _: context::Context,
         node: NodeId,
         not_after: String,
-    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         let vault = self.local_csp_vault;
         let job = move || vault.gen_tls_key_pair(node, &not_after);
         execute_on_thread_pool(self.thread_pool_handle, job).await

@@ -8,14 +8,11 @@ use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 pub fn should_generate_ed25519_key_pair(csp_vault: Arc<dyn CspVault>) {
-    let gen_key_result = csp_vault.gen_key_pair(AlgorithmId::Ed25519);
-    assert!(gen_key_result.is_ok());
-    let (key_id, pk) = gen_key_result.expect("Failed to unwrap key_id");
-    match pk {
-        CspPublicKey::Ed25519(_) => {}
-        _ => panic!("Wrong CspPublicKey: {:?}", pk),
-    }
-    assert_eq!(key_id, KeyId::from(&pk));
+    let gen_key_result = csp_vault
+        .gen_key_pair(AlgorithmId::Ed25519)
+        .expect("failed creating key pair");
+
+    assert!(matches!(gen_key_result, CspPublicKey::Ed25519(_)));
 }
 
 pub fn should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(csp_vault: Arc<dyn CspVault>) {
@@ -32,7 +29,7 @@ pub fn should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(csp_vault: A
 }
 
 pub fn should_sign_and_verify_with_generated_ed25519_key_pair(csp_vault: Arc<dyn CspVault>) {
-    let (key_id, csp_pk) = csp_vault
+    let csp_pk = csp_vault
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("failed to generate keys");
     let pk_bytes = match csp_pk {
@@ -44,7 +41,7 @@ pub fn should_sign_and_verify_with_generated_ed25519_key_pair(csp_vault: Arc<dyn
     let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
 
-    let sign_result = csp_vault.sign(AlgorithmId::Ed25519, &msg, key_id);
+    let sign_result = csp_vault.sign(AlgorithmId::Ed25519, &msg, KeyId::from(&csp_pk));
     assert!(sign_result.is_ok());
     let signature = sign_result.expect("Failed to extract the signature");
     let signature_bytes = match signature {
@@ -55,14 +52,18 @@ pub fn should_sign_and_verify_with_generated_ed25519_key_pair(csp_vault: Arc<dyn
 }
 
 pub fn should_not_basic_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn CspVault>) {
-    let (key_id, _) = csp_vault
+    let public_key = csp_vault
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("failed to generate keys");
 
     let msg = "sample message";
     for algorithm_id in AlgorithmId::iter() {
         if algorithm_id != AlgorithmId::Ed25519 {
-            let sign_result = csp_vault.sign(AlgorithmId::EcdsaP256, msg.as_ref(), key_id);
+            let sign_result = csp_vault.sign(
+                AlgorithmId::EcdsaP256,
+                msg.as_ref(),
+                KeyId::from(&public_key),
+            );
             assert!(sign_result.is_err());
             let err = sign_result.err().expect("Expected an error.");
             match err {

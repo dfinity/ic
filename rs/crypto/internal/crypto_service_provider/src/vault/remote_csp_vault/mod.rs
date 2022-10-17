@@ -61,7 +61,7 @@ pub trait TarpcCspVault {
     // Corresponds to `BasicSignatureCspVault.gen_key_pair()`.
     async fn gen_key_pair(
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError>;
+    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
 
     // Corresponds to `MultiSignatureCspVault.multi_sign()`.
     async fn multi_sign(
@@ -73,7 +73,7 @@ pub trait TarpcCspVault {
     // Corresponds to `MultiSignatureCspVault.gen_key_pair_with_pop()`.
     async fn gen_key_pair_with_pop(
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
 
     // Corresponds to `ThresholdSignatureCspVault.threshold_sign()`.
     async fn threshold_sign(
@@ -134,7 +134,7 @@ pub trait TarpcCspVault {
     async fn gen_tls_key_pair(
         node: NodeId,
         not_after: String,
-    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError>;
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
 
     // Corresponds to `TlsHandshakeCspVault.tls_sign()`.
     async fn tls_sign(message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError>;
