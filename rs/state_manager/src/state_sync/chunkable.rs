@@ -2,7 +2,7 @@ use crate::{
     manifest::{filter_out_zero_chunks, DiffScript},
     CheckpointRef, StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
-    LABEL_PREALLOCATE,
+    LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
 };
 use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -69,6 +69,7 @@ pub struct IncompleteState {
     manifest_with_checkpoint_ref: Option<(Manifest, CheckpointRef)>,
     metrics: StateManagerMetrics,
     started_at: Instant,
+    fetch_started_at: Option<Instant>,
     own_subnet_type: SubnetType,
     thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     state_sync_refs: StateSyncRefs,
@@ -169,6 +170,7 @@ impl IncompleteState {
             manifest_with_checkpoint_ref,
             metrics,
             started_at: Instant::now(),
+            fetch_started_at: None,
             own_subnet_type,
             thread_pool,
             state_sync_refs,
@@ -731,6 +733,17 @@ impl IncompleteState {
         state_layout: &StateLayout,
         own_subnet_type: SubnetType,
     ) {
+        let _timer = metrics
+            .state_sync_metrics
+            .step_duration
+            .with_label_values(&[LABEL_STATE_SYNC_MAKE_CHECKPOINT])
+            .start_timer();
+
+        info!(
+            log,
+            "state sync: start to make a checkpoint from the scratchpad"
+        );
+
         let ro_layout = CheckpointLayout::<ReadOnly>::new(root.to_path_buf(), height)
             .expect("failed to create checkpoint layout");
 
@@ -759,9 +772,9 @@ impl IncompleteState {
         let scratchpad_layout = CheckpointLayout::<RwPolicy>::new(root.to_path_buf(), height)
             .expect("failed to create checkpoint layout");
 
-        let elapsed = started_at.elapsed();
         match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height) {
             Ok(_) => {
+                let elapsed = started_at.elapsed();
                 metrics
                     .state_sync_metrics
                     .duration
@@ -774,6 +787,7 @@ impl IncompleteState {
                 );
             }
             Err(LayoutError::AlreadyExists(_)) => {
+                let elapsed = started_at.elapsed();
                 metrics
                     .state_sync_metrics
                     .duration
@@ -792,6 +806,7 @@ impl IncompleteState {
                 message,
                 io_err,
             }) => {
+                let elapsed = started_at.elapsed();
                 metrics
                     .state_sync_metrics
                     .duration
@@ -1153,10 +1168,17 @@ impl Chunkable for IncompleteState {
                             .register_successful_sync(self.height);
                         Ok(artifact)
                     } else {
+                        let num_fetch_chunks = fetch_chunks.len();
                         self.state = DownloadState::Loading {
                             manifest,
                             fetch_chunks,
                         };
+                        self.fetch_started_at = Some(Instant::now());
+                        info!(
+                            self.log,
+                            "state sync enters the loading phase with {} chunks to fetch",
+                            num_fetch_chunks,
+                        );
                         Err(ChunksMoreNeeded)
                     }
                 } else {
@@ -1222,6 +1244,20 @@ impl Chunkable for IncompleteState {
                         manifest.chunk_table.len(),
                         self.height
                     );
+
+                    if let Some(fetch_start_at) = self.fetch_started_at {
+                        let elapsed = fetch_start_at.elapsed();
+                        self.metrics
+                            .state_sync_metrics
+                            .step_duration
+                            .with_label_values(&[LABEL_FETCH])
+                            .observe(elapsed.as_secs_f64());
+                    } else {
+                        warn!(
+                            self.log,
+                            "The starting time of the loading phase was not properly set."
+                        )
+                    }
 
                     Self::make_checkpoint(
                         &self.log,
