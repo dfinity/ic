@@ -24,7 +24,7 @@ const MAX_PAGES_TO_COPY: usize = 64;
 // The new signal handler requires `AccessKind` which currently available only
 // on Linux without WSL.
 fn new_signal_handler_available() -> bool {
-    cfg!(target_os = "linux") && !*ic_sys::IS_WSL
+    cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") && !*ic_sys::IS_WSL
 }
 
 // Represents a memory area: address + size. Address must be page-aligned and
