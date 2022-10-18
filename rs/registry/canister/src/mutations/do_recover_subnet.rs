@@ -55,13 +55,15 @@ impl Registry {
         } else {
             cup_contents.registry_store_uri = None;
 
-            let subnet_record = self.get_subnet_or_panic(subnet_id);
+            let mut subnet_record = self.get_subnet_or_panic(subnet_id);
 
             let dkg_nodes = if let Some(replacement_nodes) = payload.replacement_nodes.clone() {
-                let replace_nodes_mutations = self
-                    .make_replace_subnet_membership_mutation(subnet_id, replacement_nodes.clone());
+                self.replace_subnet_record_membership(
+                    subnet_id,
+                    &mut subnet_record,
+                    replacement_nodes.clone(),
+                );
 
-                mutations.push(replace_nodes_mutations);
                 replacement_nodes
             } else {
                 subnet_record
@@ -105,13 +107,13 @@ impl Registry {
                     &self.get_keys_that_will_be_removed_from_subnet(subnet_id, new_key_list),
                 ));
                 // Update ECDSA configuration on subnet record to reflect new holdings
-                let mut subnet_record = self.get_subnet_or_panic(subnet_id);
                 subnet_record.ecdsa_config = Some(new_ecdsa_config.clone().into());
-                mutations.push(upsert(
-                    &make_subnet_record_key(subnet_id),
-                    encode_or_panic(&subnet_record),
-                ));
             }
+            // Push all of our subnet_record mutations
+            mutations.push(upsert(
+                &make_subnet_record_key(subnet_id),
+                encode_or_panic(&subnet_record),
+            ));
 
             let post_call_registry_version = self.latest_version();
 
