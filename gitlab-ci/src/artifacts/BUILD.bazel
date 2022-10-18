@@ -1,3 +1,5 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files(
@@ -15,4 +17,9 @@ sh_binary(
 py_binary(
     name = "rclone_upload",
     srcs = ["rclone_upload.py"],
+)
+
+string_flag(
+    name = "s3_endpoint",
+    build_setting_default = "",
 )

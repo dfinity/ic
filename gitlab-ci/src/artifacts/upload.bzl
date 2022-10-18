@@ -15,12 +15,17 @@ def _upload_artifact_impl(ctx):
 
     uploader = ctx.actions.declare_file(ctx.label.name + "_uploader")
 
+    rclone_config = ctx.file.rclone_config
+    rclone_endpoint = ctx.attr._s3_endpoint[BuildSettingInfo].value
+    if rclone_endpoint != "":
+        rclone_config = ctx.file.rclone_anon_config
+
     ctx.actions.expand_template(
         template = ctx.file._artifacts_uploader_template,
         output = uploader,
         substitutions = {
             "@@RCLONE@@": ctx.file._rclone.path,
-            "@@RCLONE_CONFIG@@": ctx.file.rclone_config.path,
+            "@@RCLONE_CONFIG@@": rclone_config.path,
             "@@REMOTE_SUBDIR@@": ctx.attr.remote_subdir,
             "@@VERSION_FILE@@": ctx.version_file.path,
         },
@@ -34,9 +39,10 @@ def _upload_artifact_impl(ctx):
             executable = uploader,
             arguments = [f.path, url.path],
             env = {
+                "RCLONE_S3_ENDPOINT": rclone_endpoint,
                 "VERSION": ctx.attr._ic_version[BuildSettingInfo].value,
             },
-            inputs = [f, ctx.version_file, ctx.file.rclone_config],
+            inputs = [f, ctx.version_file, rclone_config],
             outputs = [url],
             tools = [ctx.file._rclone],
         )
@@ -62,9 +68,11 @@ _upload_artifacts = rule(
         "inputs": attr.label_list(allow_files = True),
         "remote_subdir": attr.string(mandatory = True),
         "rclone_config": attr.label(allow_single_file = True, default = "//:.rclone.conf"),
+        "rclone_anon_config": attr.label(allow_single_file = True, default = "//:.rclone-anon.conf"),
         "_rclone": attr.label(allow_single_file = True, default = "@rclone//:rclone"),
         "_artifacts_uploader_template": attr.label(allow_single_file = True, default = ":upload.bash.template"),
         "_ic_version": attr.label(default = "//bazel:ic_version"),
+        "_s3_endpoint": attr.label(default = ":s3_endpoint"),
     },
 )
 
