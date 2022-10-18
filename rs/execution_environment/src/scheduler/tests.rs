@@ -2713,8 +2713,9 @@ fn dts_long_execution_completes() {
 
     let canister = test.create_canister();
     let message_id = test.send_ingress(canister, ingress(1000));
-    for _ in 0..10 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    for _ in 1..10 {
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
     assert_eq!(
@@ -2747,8 +2748,9 @@ fn dts_long_execution_runs_out_of_instructions() {
 
     let canister = test.create_canister();
     let message_id = test.send_ingress(canister, ingress(1001));
-    for _ in 0..10 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    for _ in 1..10 {
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
     assert_eq!(
@@ -4032,7 +4034,7 @@ fn dts_resume_long_execution_after_abort() {
     assert!(test.canister_state(canister).has_aborted_execution());
 
     for _ in 0..10 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
     assert_eq!(

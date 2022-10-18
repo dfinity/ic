@@ -4,7 +4,7 @@
 use crate::canister_manager::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
-use crate::execution::common::update_round_limits;
+use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
     canister_layout, finish_err, InstallCodeHelper, OriginalContext, PausedInstallCodeHelper,
     StableMemoryHandling,
@@ -154,6 +154,8 @@ pub(crate) fn execute_install(
                     slice.executed_instructions,
                 );
                 update_round_limits(round_limits, &slice);
+                let ingress_status =
+                    ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
                     paused_helper: helper.pause(),
@@ -164,6 +166,7 @@ pub(crate) fn execute_install(
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
                     paused_execution,
+                    ingress_status,
                 }
             }
         }
@@ -259,6 +262,8 @@ fn install_stage_2b_continue_install_after_start(
                 clean_canister.canister_id(),
                 slice.executed_instructions,
             );
+            let ingress_status =
+                ingress_status_with_processing_state(&original.message, original.time);
             let paused_execution = Box::new(PausedInitExecution {
                 paused_helper: helper.pause(),
                 paused_wasm_execution,
@@ -267,6 +272,7 @@ fn install_stage_2b_continue_install_after_start(
             DtsInstallCodeResult::Paused {
                 canister: clean_canister,
                 paused_execution,
+                ingress_status,
             }
         }
     }
@@ -369,6 +375,9 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
                     paused_execution,
+                    // Pausing a resumed execution doesn't change the ingress
+                    // status.
+                    ingress_status: None,
                 }
             }
         }
@@ -462,6 +471,9 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
                     paused_execution,
+                    // Pausing a resumed execution doesn't change the ingress
+                    // status.
+                    ingress_status: None,
                 }
             }
         }

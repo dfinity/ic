@@ -29,7 +29,7 @@ use ic_replicated_state::{
     SystemState,
 };
 use ic_system_api::ExecutionParameters;
-use ic_types::messages::SignedIngressContent;
+use ic_types::messages::{MessageId, SignedIngressContent};
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::NumInstructions;
 use ic_types::{
@@ -71,6 +71,7 @@ pub(crate) enum DtsInstallCodeResult {
     Paused {
         canister: CanisterState,
         paused_execution: Box<dyn PausedInstallCodeExecution>,
+        ingress_status: Option<(MessageId, IngressStatus)>,
     },
 }
 
@@ -643,9 +644,10 @@ impl CanisterManager {
             DtsInstallCodeResult::Paused {
                 canister: _,
                 paused_execution,
+                ingress_status: _,
             } => {
                 unreachable!(
-                    "Unexpected paused execution: {:?}. DTS is not enabled yet",
+                    "Unexpected paused execution in canister manager tests: {:?}",
                     paused_execution
                 );
             }

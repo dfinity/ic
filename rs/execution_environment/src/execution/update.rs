@@ -2,8 +2,8 @@
 // See https://smartcontracts.org/docs/interface-spec/index.html#rule-message-execution
 
 use crate::execution::common::{
-    action_to_response, apply_canister_state_changes, finish_call_with_error, update_round_limits,
-    validate_message,
+    action_to_response, apply_canister_state_changes, finish_call_with_error,
+    ingress_status_with_processing_state, update_round_limits, validate_message,
 };
 use crate::execution_environment::{
     ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
@@ -40,33 +40,34 @@ pub fn execute_update(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
 ) -> ExecuteMessageResult {
-    let (clean_canister, prepaid_execution_cycles) = match prepaid_execution_cycles {
-        Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles),
-        None => {
-            let mut canister = clean_canister;
-            let memory_usage = canister.memory_usage(execution_parameters.subnet_type);
-            let prepaid_execution_cycles =
-                match round.cycles_account_manager.prepay_execution_cycles(
-                    &mut canister.system_state,
-                    memory_usage,
-                    execution_parameters.compute_allocation,
-                    execution_parameters.instruction_limits.message(),
-                    subnet_size,
-                ) {
-                    Ok(cycles) => cycles,
-                    Err(err) => {
-                        return finish_call_with_error(
-                            UserError::new(ErrorCode::CanisterOutOfCycles, err),
-                            canister,
-                            message,
-                            NumInstructions::from(0),
-                            round.time,
-                        );
-                    }
-                };
-            (canister, prepaid_execution_cycles)
-        }
-    };
+    let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
+        match prepaid_execution_cycles {
+            Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles, true),
+            None => {
+                let mut canister = clean_canister;
+                let memory_usage = canister.memory_usage(execution_parameters.subnet_type);
+                let prepaid_execution_cycles =
+                    match round.cycles_account_manager.prepay_execution_cycles(
+                        &mut canister.system_state,
+                        memory_usage,
+                        execution_parameters.compute_allocation,
+                        execution_parameters.instruction_limits.message(),
+                        subnet_size,
+                    ) {
+                        Ok(cycles) => cycles,
+                        Err(err) => {
+                            return finish_call_with_error(
+                                UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                                canister,
+                                message,
+                                NumInstructions::from(0),
+                                round.time,
+                            );
+                        }
+                    };
+                (canister, prepaid_execution_cycles, false)
+            }
+        };
 
     let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
         clean_canister.system_state.freeze_threshold,
@@ -132,6 +133,13 @@ pub fn execute_update(
                 slice.executed_instructions,
             );
             update_round_limits(round_limits, &slice);
+            let ingress_status = if resuming_aborted {
+                // Resuming an aborted execution doesn't change the ingress
+                // status.
+                None
+            } else {
+                ingress_status_with_processing_state(&original.message, original.time)
+            };
             let paused_execution = Box::new(PausedCallExecution {
                 paused_wasm_execution,
                 paused_helper: helper.pause(),
@@ -140,6 +148,7 @@ pub fn execute_update(
             ExecuteMessageResult::Paused {
                 canister: clean_canister,
                 paused_execution,
+                ingress_status,
             }
         }
         WasmExecutionResult::Finished(slice, output, state_changes) => {
@@ -454,6 +463,9 @@ impl PausedExecution for PausedCallExecution {
                 ExecuteMessageResult::Paused {
                     canister: clean_canister,
                     paused_execution,
+                    // Pausing a resumed execution doesn't change the ingress
+                    // status.
+                    ingress_status: None,
                 }
             }
             WasmExecutionResult::Finished(slice, output, state_changes) => {

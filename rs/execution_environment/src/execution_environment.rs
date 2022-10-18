@@ -126,6 +126,10 @@ pub enum ExecuteMessageResult {
 
         /// The paused execution that the caller can either resume or abort.
         paused_execution: Box<dyn PausedExecution>,
+
+        /// If the original message was an ingress message, then this field
+        /// contains an ingress status with the state `Processing`.
+        ingress_status: Option<(MessageId, IngressStatus)>,
     },
 }
 
@@ -301,6 +305,13 @@ impl CanisterHeartbeatError {
     }
 }
 
+/// This is a helper enum that indicates whether the current DTS execution of
+/// install_code is the first execution or not.
+pub enum DtsInstallCodeStatus {
+    StartingFirstExecution,
+    ResumingPausedOrAbortedExecution,
+}
+
 impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -428,6 +439,7 @@ impl ExecutionEnvironment {
                 return self.execute_install_code(
                     msg,
                     None,
+                    DtsInstallCodeStatus::StartingFirstExecution,
                     state,
                     instruction_limits,
                     round_limits,
@@ -1766,6 +1778,7 @@ impl ExecutionEnvironment {
         &self,
         mut msg: RequestOrIngress,
         prepaid_execution_cycles: Option<Cycles>,
+        dts_status: DtsInstallCodeStatus,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
@@ -1844,7 +1857,7 @@ impl ExecutionEnvironment {
             compilation_cost_handling,
             subnet_size,
         );
-        self.process_install_code_result(state, dts_result, timer)
+        self.process_install_code_result(state, dts_result, dts_status, timer)
     }
 
     /// Processes the result of install code message that was executed using
@@ -1858,6 +1871,7 @@ impl ExecutionEnvironment {
         &self,
         mut state: ReplicatedState,
         dts_result: DtsInstallCodeResult,
+        dts_status: DtsInstallCodeStatus,
         timer: Timer,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let execution_duration = timer.elapsed();
@@ -1907,12 +1921,28 @@ impl ExecutionEnvironment {
             DtsInstallCodeResult::Paused {
                 mut canister,
                 paused_execution,
+                ingress_status,
             } => {
                 let id = self.register_paused_install_code(paused_execution);
                 canister
                     .system_state
                     .task_queue
                     .push_front(ExecutionTask::PausedInstallCode(id));
+
+                match (dts_status, ingress_status) {
+                    (DtsInstallCodeStatus::StartingFirstExecution, Some((message_id, status))) => {
+                        self.ingress_history_writer
+                            .set_status(&mut state, message_id, status);
+                    }
+                    (DtsInstallCodeStatus::StartingFirstExecution, None) => {
+                        // The original message is not an ingress message.
+                    }
+                    (DtsInstallCodeStatus::ResumingPausedOrAbortedExecution, _) => {
+                        // Resuming a previously aborted execution does not
+                        // update the ingress status.
+                    }
+                };
+
                 state.put_canister_state(canister);
                 (state, None)
             }
@@ -1964,7 +1994,8 @@ impl ExecutionEnvironment {
                     time: state.metadata.time(),
                 };
                 let dts_result = paused.resume(canister, round, round_limits);
-                self.process_install_code_result(state, dts_result, timer)
+                let dts_status = DtsInstallCodeStatus::ResumingPausedOrAbortedExecution;
+                self.process_install_code_result(state, dts_result, dts_status, timer)
             }
             ExecutionTask::AbortedInstallCode {
                 message,
@@ -1972,6 +2003,7 @@ impl ExecutionEnvironment {
             } => self.execute_install_code(
                 message,
                 Some(prepaid_execution_cycles),
+                DtsInstallCodeStatus::ResumingPausedOrAbortedExecution,
                 state,
                 instruction_limits,
                 round_limits,
@@ -2099,13 +2131,14 @@ impl ExecutionEnvironment {
             ExecuteMessageResult::Paused {
                 mut canister,
                 paused_execution,
+                ingress_status,
             } => {
                 let id = self.register_paused_execution(paused_execution);
                 canister
                     .system_state
                     .task_queue
                     .push_front(ExecutionTask::PausedExecution(id));
-                (canister, None, NumBytes::from(0), None)
+                (canister, None, NumBytes::from(0), ingress_status)
             }
         }
     }
