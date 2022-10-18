@@ -1,15 +1,12 @@
-use ic_config::subnet_config::SchedulerConfig;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
 };
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     NumInstructions, NumMessages, NumSlices, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
 use prometheus::Histogram;
 use std::{cell::RefCell, rc::Rc, time::Instant};
-use strum::IntoEnumIterator;
 
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
@@ -236,41 +233,24 @@ pub fn duration_histogram<S: Into<String>>(
 
 /// Returns buckets appropriate for instructions.
 fn instructions_buckets() -> Vec<f64> {
-    fn add_limits(buckets: &mut Vec<NumInstructions>, config: SchedulerConfig) {
-        buckets.push(config.max_instructions_per_message);
-        buckets.push(config.max_instructions_per_round);
-        buckets.push(config.max_instructions_per_install_code);
-    }
-    let mut buckets: Vec<NumInstructions> = decimal_buckets_with_zero(4, 10)
+    let mut buckets: Vec<NumInstructions> = decimal_buckets_with_zero(4, 11)
         .into_iter()
         .map(|x| NumInstructions::from(x as u64))
         .collect();
+
     // Add buckets for counting no-op and small messages.
     buckets.push(NumInstructions::from(10));
     buckets.push(NumInstructions::from(1000));
-    // Add buckets for all known instruction limits.
-    for t in SubnetType::iter() {
-        let config = match t {
-            SubnetType::Application => SchedulerConfig::application_subnet(),
-            SubnetType::System => SchedulerConfig::system_subnet(),
-            SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
-        };
-        add_limits(&mut buckets, config);
-    }
-
-    // Add buckets with higher resolution between [round_limit,
-    // round_limit+message_limit] for app subnets.
-    let app_subnet_config = SchedulerConfig::application_subnet();
-    let round_limit = app_subnet_config.max_instructions_per_round.get();
-    let message_limit = app_subnet_config.max_instructions_per_message.get();
-    for value in (round_limit..(round_limit + message_limit)).step_by(1_000_000_000) {
+    for value in (1_000_000_000..10_000_000_000).step_by(1_000_000_000) {
         buckets.push(NumInstructions::from(value));
     }
+
+    buckets.push(NumInstructions::from(1_000_000_000_000));
 
     // Ensure that all buckets are unique.
     buckets.sort_unstable();
     buckets.dedup();
-    // Buckets are [0, 10, 1K, 10K, 20K, ...,  10B, 20B, 50B] + [subnet limits]
+    // Buckets are [0, 10, 1K, 10K, 20K, ..., 100B, 200B, 500B, 1T] + [1B, 2B, 3B, ..., 9B]
     buckets.into_iter().map(|x| x.get() as f64).collect()
 }
 
@@ -638,24 +618,7 @@ mod tests {
             .map(|x| x as u64)
             .collect();
         assert!(!buckets.is_empty());
-        // Collect all Instructions limits
-        let limits: Vec<_> = SubnetType::iter()
-            .flat_map(|t| {
-                let config = match t {
-                    SubnetType::Application => SchedulerConfig::application_subnet(),
-                    SubnetType::System => SchedulerConfig::system_subnet(),
-                    SubnetType::VerifiedApplication => {
-                        SchedulerConfig::verified_application_subnet()
-                    }
-                };
-                [
-                    config.max_instructions_per_message.get(),
-                    config.max_instructions_per_round.get(),
-                    config.max_instructions_per_install_code.get(),
-                ]
-            })
-            .collect();
-        assert!(!limits.is_empty());
+        let limits = [10, 1_000, 1_000_000_000, 200_000_000_000, 500_000_000_000];
         for l in limits {
             assert!(buckets.contains(&l));
         }

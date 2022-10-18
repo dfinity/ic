@@ -981,6 +981,7 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         instruction_limits: InstructionLimits,
+        max_instructions_per_message_without_dts: NumInstructions,
         msg: CanisterInputMessage,
         prepaid_execution_cycles: Option<Cycles>,
         time: Time,
@@ -1026,11 +1027,10 @@ impl ExecutionEnvironment {
 
         if canister.exports_query_method(req.method_name().to_string()) {
             // A query call is expected to finish quickly, so DTS is not supported for it.
-            let slice_instruction_limit = instruction_limits.slice();
             let instruction_limits = InstructionLimits::new(
                 FlagStatus::Disabled,
-                slice_instruction_limit,
-                slice_instruction_limit,
+                max_instructions_per_message_without_dts,
+                max_instructions_per_message_without_dts,
             );
             let execution_parameters =
                 self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
@@ -1074,12 +1074,6 @@ impl ExecutionEnvironment {
         NumInstructions,
         Result<NumBytes, CanisterHeartbeatError>,
     ) {
-        // A heartbeat is expected to finish quickly, so DTS is not supported for it.
-        let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
-            instruction_limits.slice(),
-            instruction_limits.slice(),
-        );
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
         let (canister, instructions_used, result) = execute_heartbeat(
@@ -1424,7 +1418,7 @@ impl ExecutionEnvironment {
         &self,
         anonymous_query: AnonymousQuery,
         state: Arc<ReplicatedState>,
-        max_instructions_per_message: NumInstructions,
+        max_instructions_per_query: NumInstructions,
     ) -> Result<WasmResult, UserError> {
         let canister_id = anonymous_query.receiver;
         let canister = state.get_active_canister(&canister_id)?;
@@ -1432,14 +1426,14 @@ impl ExecutionEnvironment {
         // supported for it.
         let instruction_limits = InstructionLimits::new(
             FlagStatus::Disabled,
-            max_instructions_per_message,
-            max_instructions_per_message,
+            max_instructions_per_query,
+            max_instructions_per_query,
         );
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limits, ExecutionMode::NonReplicated);
         let subnet_available_memory = subnet_memory_capacity(&self.config);
         let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(max_instructions_per_message),
+            instructions: as_round_instructions(max_instructions_per_query),
             subnet_available_memory,
             // Ignore compute allocation
             compute_allocation_used: 0,
@@ -2213,6 +2207,7 @@ fn execute_message(
     exec_env: &ExecutionEnvironment,
     canister: CanisterState,
     instruction_limits: InstructionLimits,
+    max_instructions_per_message_without_dts: NumInstructions,
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
@@ -2222,6 +2217,7 @@ fn execute_message(
     let result = exec_env.execute_canister_message(
         canister,
         instruction_limits,
+        max_instructions_per_message_without_dts,
         message,
         prepaid_execution_cycles,
         time,
@@ -2245,6 +2241,7 @@ pub fn execute_canister(
     exec_env: &ExecutionEnvironment,
     mut canister: CanisterState,
     instruction_limits: InstructionLimits,
+    max_instructions_per_message_without_dts: NumInstructions,
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
@@ -2266,6 +2263,12 @@ pub fn execute_canister(
     match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
             ExecutionTask::Heartbeat => {
+                // A heartbeat is expected to finish quickly, so DTS is not supported for it.
+                let instruction_limits = InstructionLimits::new(
+                    FlagStatus::Disabled,
+                    max_instructions_per_message_without_dts,
+                    max_instructions_per_message_without_dts,
+                );
                 let (canister, instructions_used, result) = exec_env.execute_canister_heartbeat(
                     canister,
                     instruction_limits,
@@ -2313,6 +2316,7 @@ pub fn execute_canister(
                 exec_env,
                 canister,
                 instruction_limits,
+                max_instructions_per_message_without_dts,
                 network_topology,
                 time,
                 round_limits,
@@ -2330,6 +2334,7 @@ pub fn execute_canister(
                 exec_env,
                 canister,
                 instruction_limits,
+                max_instructions_per_message_without_dts,
                 network_topology,
                 time,
                 round_limits,

@@ -138,7 +138,7 @@ impl ExecutionServices {
             own_subnet_type,
             config.clone(),
             metrics_registry,
-            scheduler_config.max_instructions_per_message,
+            scheduler_config.max_instructions_per_message_without_dts,
             Arc::clone(&cycles_account_manager),
         ));
         let threadpool = threadpool::Builder::new()
@@ -171,7 +171,7 @@ impl ExecutionServices {
             threadpool,
             Arc::clone(&state_reader),
             Arc::clone(&exec_env),
-            scheduler_config.max_instructions_per_message,
+            scheduler_config.max_instructions_per_message_without_dts,
         );
 
         let bitcoin_canister = Arc::new(BitcoinCanister::new(metrics_registry, logger.clone()));

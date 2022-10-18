@@ -151,10 +151,13 @@ pub fn execute_heartbeat(
             );
         }
     }
+    // Heartbeat runs without DTS.
+    let instruction_limits = &execution_parameters.instruction_limits;
+    assert_eq!(instruction_limits.message(), instruction_limits.slice());
     let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
     let memory_usage = canister.memory_usage(own_subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
-    let message_instruction_limit = execution_parameters.instruction_limits.message();
+    let message_instruction_limit = instruction_limits.message();
 
     // Validate and extract execution state.
     let (execution_state, mut system_state, scheduler_state) =

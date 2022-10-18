@@ -22,7 +22,7 @@ pub(crate) struct AnonymousQueryHandler {
     exec_env: Arc<ExecutionEnvironment>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     threadpool: Arc<Mutex<threadpool::ThreadPool>>,
-    max_instructions_per_message: NumInstructions,
+    max_instructions_per_query: NumInstructions,
 }
 
 impl AnonymousQueryHandler {
@@ -31,13 +31,13 @@ impl AnonymousQueryHandler {
         threadpool: Arc<Mutex<threadpool::ThreadPool>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironment>,
-        max_instructions_per_message: NumInstructions,
+        max_instructions_per_query: NumInstructions,
     ) -> AnonymousQueryService {
         let base_service = BoxCloneService::new(Self {
             exec_env,
             state_reader,
             threadpool,
-            max_instructions_per_message,
+            max_instructions_per_query,
         });
         ServiceBuilder::new()
             .layer(concurrency_buffer)
@@ -56,7 +56,7 @@ impl Service<AnonymousQuery> for AnonymousQueryHandler {
     }
 
     fn call(&mut self, anonymous_query: AnonymousQuery) -> Self::Future {
-        let instructions_limit = self.max_instructions_per_message;
+        let instructions_limit = self.max_instructions_per_query;
         let exec_env = Arc::clone(&self.exec_env);
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();

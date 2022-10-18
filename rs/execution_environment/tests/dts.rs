@@ -94,6 +94,7 @@ fn dts_env(
                 max_instructions_per_install_code_slice: slice_instruction_limit,
                 max_instructions_per_round: slice_instruction_limit + slice_instruction_limit,
                 max_instructions_per_message: message_instruction_limit,
+                max_instructions_per_message_without_dts: slice_instruction_limit,
                 max_instructions_per_slice: slice_instruction_limit,
                 instruction_overhead_per_message: NumInstructions::from(0),
                 ..subnet_config.scheduler_config
@@ -119,6 +120,7 @@ fn dts_install_code_env(
                 max_instructions_per_install_code_slice: slice_instruction_limit,
                 max_instructions_per_round: message_instruction_limit + message_instruction_limit,
                 max_instructions_per_message: message_instruction_limit,
+                max_instructions_per_message_without_dts: slice_instruction_limit,
                 max_instructions_per_slice: message_instruction_limit,
                 instruction_overhead_per_message: NumInstructions::from(0),
                 ..subnet_config.scheduler_config

@@ -93,7 +93,7 @@ pub struct InternalHttpQueryHandler {
     query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
     config: Config,
     metrics: QueryHandlerMetrics,
-    max_instructions_per_message: NumInstructions,
+    max_instructions_per_query: NumInstructions,
     cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
@@ -112,7 +112,7 @@ impl InternalHttpQueryHandler {
         own_subnet_type: SubnetType,
         config: Config,
         metrics_registry: &MetricsRegistry,
-        max_instructions_per_message: NumInstructions,
+        max_instructions_per_query: NumInstructions,
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
         Self {
@@ -122,7 +122,7 @@ impl InternalHttpQueryHandler {
             query_allocations_used: Arc::new(RwLock::new(QueryAllocationsUsed::new())),
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
-            max_instructions_per_message,
+            max_instructions_per_query,
             cycles_account_manager,
         }
     }
@@ -162,7 +162,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.query_allocations_used.clone(),
             subnet_available_memory,
             max_canister_memory_size,
-            self.max_instructions_per_message,
+            self.max_instructions_per_query,
         );
         context.run(
             query,

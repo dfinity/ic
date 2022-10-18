@@ -118,7 +118,7 @@ pub(super) struct QueryContext<'a> {
     outstanding_response: Option<Response>,
     query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
     max_canister_memory_size: NumBytes,
-    max_instructions_per_message: NumInstructions,
+    max_instructions_per_query: NumInstructions,
     round_limits: RoundLimits,
 }
 
@@ -133,11 +133,11 @@ impl<'a> QueryContext<'a> {
         query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
         subnet_available_memory: SubnetAvailableMemory,
         max_canister_memory_size: NumBytes,
-        max_instructions_per_message: NumInstructions,
+        max_instructions_per_query: NumInstructions,
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let round_limits = RoundLimits {
-            instructions: as_round_instructions(max_instructions_per_message),
+            instructions: as_round_instructions(max_instructions_per_query),
             subnet_available_memory,
             // Ignore compute allocation
             compute_allocation_used: 0,
@@ -154,7 +154,7 @@ impl<'a> QueryContext<'a> {
             query_allocations_used,
             network_topology,
             max_canister_memory_size,
-            max_instructions_per_message,
+            max_instructions_per_query,
             round_limits,
         }
     }
@@ -411,7 +411,7 @@ impl<'a> QueryContext<'a> {
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
-        let instruction_limit = self.max_instructions_per_message.min(
+        let instruction_limit = self.max_instructions_per_query.min(
             self.query_allocations_used
                 .write()
                 .unwrap()
@@ -502,7 +502,7 @@ impl<'a> QueryContext<'a> {
         // No cycles are refunded in a response to a query call.
         let incoming_cycles = Cycles::zero();
 
-        let instruction_limit = self.max_instructions_per_message.min(
+        let instruction_limit = self.max_instructions_per_query.min(
             self.query_allocations_used
                 .write()
                 .unwrap()
