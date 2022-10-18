@@ -34,6 +34,9 @@
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
       changes:
         - 'rs/**/*.rs'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
     - if: '$SCHEDULE_NAME == "run-all-master"'
 
 .cargo-rules-autorun-on-trigger:
