@@ -3,6 +3,8 @@ load("@io_bazel_rules_docker//container:container.bzl", "container_image", "cont
 load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file")
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_pkg//pkg:tar.bzl", tar = "pkg_tar")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -66,7 +68,7 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
-ROSETTA_VERSION = "1.7.1"
+ROSETTA_VERSION = "1.7.2"
 
 rust_library(
     name = "rosetta-api",
@@ -126,9 +128,15 @@ write_file(
 )
 
 ## Create a layer with a rosetta user
+passwd_entry(
+    name = "root_user",
+    uid = 0,
+    username = "root",
+)
 
 passwd_entry(
-    name = "rosetta",
+    name = "rosetta_user",
+    home = "/home/rosetta",
     info = "rosetta node user",
     uid = 1002,
     username = "rosetta",
@@ -136,7 +144,10 @@ passwd_entry(
 
 passwd_file(
     name = "passwd",
-    entries = [":rosetta"],
+    entries = [
+        ":rosetta_user",
+        ":root_user",
+    ],
 )
 
 pkg_tar(
@@ -146,11 +157,45 @@ pkg_tar(
     package_dir = "etc",
 )
 
+pkg_mkdirs(
+    name = "data_dir",
+    # Unfortunately, rules_docker does not preserve the file ownership:
+    # https://github.com/bazelbuild/rules_docker/issues/1928
+    #
+    # We make the /data directory rwx for everyone so that "rosetta"
+    # user could write to that directory.
+    attributes = pkg_attributes(
+        mode = "0777",
+        user = "rosetta",
+    ),
+    dirs = [
+        "/data",
+        "/home/rosetta/log",
+    ],
+)
+
+tar(
+    name = "data_tar",
+    srcs = [":data_dir"],
+)
+
+## An intermediate image with the passwd file and empty directories.
+
+container_image(
+    name = "rosetta_image_base",
+    base = "@rust_base//image",
+    tags = ["manual"],
+    tars = [
+        ":passwd_tar",
+        ":data_tar",
+    ],
+)
+
 ## The final image we can publish.
 
 container_image(
     name = "rosetta_image",
-    base = "@rust_base//image",
+    base = ":rosetta_image_base",
     directory = "/home/rosetta",
     entrypoint = [
         "/home/rosetta/ic-rosetta-api",
@@ -162,7 +207,6 @@ container_image(
         ":log_config.yml",
     ],
     tags = ["manual"],
-    tars = [":passwd_tar"],
     user = "rosetta",
     workdir = "/home/rosetta",
 )

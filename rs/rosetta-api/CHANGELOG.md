@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.7.2] - 2022-10-18
+### Fixed
+- Invalid Docker image configuration
+
 ## [1.7.1] - 2022-10-12
 ### Fixed
 - A bug in absence proof check, see
