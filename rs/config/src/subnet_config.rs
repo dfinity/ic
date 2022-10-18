@@ -16,6 +16,12 @@ const M: u64 = 1_000_000;
 // Going above the limit results in an `InstructionLimitExceeded` error.
 pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(5 * B);
 
+// The limit on the number of instructions a message is allowed to execute
+// without deterministic time slicing.
+// Going above the limit results in an `InstructionLimitExceeded` error.
+pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS: NumInstructions =
+    NumInstructions::new(5 * B);
+
 // The limit on the number of instructions a slice is allowed to executed.
 // If deterministic time slicing is enabled, then going above this limit
 // causes the Wasm execution to pause until the next slice.
@@ -146,6 +152,10 @@ pub struct SchedulerConfig {
     /// Maximum amount of instructions a single message execution can consume.
     pub max_instructions_per_message: NumInstructions,
 
+    /// Maximum amount of instructions a single message execution can consume
+    /// without deterministic time slicing.
+    pub max_instructions_per_message_without_dts: NumInstructions,
+
     /// Maximum amount of instructions a single slice of execution can consume.
     /// This should not exceed `max_instructions_per_round`.
     pub max_instructions_per_slice: NumInstructions,
@@ -213,6 +223,7 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
+            max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
             max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             instruction_overhead_per_canister_for_finalization:
@@ -229,16 +240,19 @@ impl SchedulerConfig {
     }
 
     pub fn system_subnet() -> Self {
-        let max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR;
+        let max_instructions_per_message_without_dts =
+            MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS * SYSTEM_SUBNET_FACTOR;
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
-            max_instructions_per_message,
             // Effectively disable DTS on system subnets.
-            max_instructions_per_slice: max_instructions_per_message,
+            max_instructions_per_message: max_instructions_per_message_without_dts,
+            max_instructions_per_message_without_dts,
+            // Effectively disable DTS on system subnets.
+            max_instructions_per_slice: max_instructions_per_message_without_dts,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
@@ -265,6 +279,7 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
+            max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
             max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             instruction_overhead_per_canister_for_finalization:

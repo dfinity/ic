@@ -385,7 +385,8 @@ pub fn bench_execute_update(c: &mut Criterion) {
             let instructions_before = round_limits.instructions;
             let res = exec_env.execute_canister_message(
                 canister_state,
-                execution_parameters.instruction_limits,
+                execution_parameters.instruction_limits.clone(),
+                execution_parameters.instruction_limits.message(),
                 ingress,
                 None,
                 time,

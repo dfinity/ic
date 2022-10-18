@@ -113,6 +113,7 @@ pub struct ExecutionTest {
     // Read-only fields.
     instruction_limits: InstructionLimits,
     install_code_instruction_limits: InstructionLimits,
+    instruction_limit_without_dts: NumInstructions,
     initial_canister_cycles: Cycles,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
@@ -739,9 +740,14 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
+        let instruction_limits = InstructionLimits::new(
+            FlagStatus::Disabled,
+            self.instruction_limit_without_dts,
+            self.instruction_limit_without_dts,
+        );
         let (canister, instructions_used, result) = self.exec_env.execute_canister_heartbeat(
             canister,
-            self.instruction_limits.clone(),
+            instruction_limits,
             network_topology,
             self.time,
             &mut round_limits,
@@ -780,7 +786,7 @@ impl ExecutionTest {
         let result = self.exec_env.execute_anonymous_query(
             query,
             state.clone(),
-            self.instruction_limits.message(),
+            self.instruction_limit_without_dts,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -961,6 +967,7 @@ impl ExecutionTest {
                     &self.exec_env,
                     canister,
                     self.instruction_limits.clone(),
+                    self.instruction_limit_without_dts,
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
@@ -1047,6 +1054,7 @@ impl ExecutionTest {
                     &self.exec_env,
                     canister,
                     self.instruction_limits.clone(),
+                    self.instruction_limit_without_dts,
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
@@ -1242,6 +1250,7 @@ pub struct ExecutionTestBuilder {
     slice_instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
     install_code_slice_instruction_limit: NumInstructions,
+    instruction_limit_without_dts: NumInstructions,
     initial_canister_cycles: Cycles,
     subnet_total_memory: i64,
     subnet_message_memory: i64,
@@ -1282,6 +1291,8 @@ impl Default for ExecutionTestBuilder {
             install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
             install_code_slice_instruction_limit: scheduler_config
                 .max_instructions_per_install_code_slice,
+            instruction_limit_without_dts: scheduler_config
+                .max_instructions_per_message_without_dts,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
             subnet_total_memory,
             subnet_message_memory,
@@ -1364,6 +1375,13 @@ impl ExecutionTestBuilder {
     pub fn with_slice_instruction_limit(self, limit: u64) -> Self {
         Self {
             slice_instruction_limit: NumInstructions::from(limit),
+            ..self
+        }
+    }
+
+    pub fn with_instruction_limit_without_dts(self, limit: u64) -> Self {
+        Self {
+            instruction_limit_without_dts: NumInstructions::from(limit),
             ..self
         }
     }
@@ -1617,7 +1635,7 @@ impl ExecutionTestBuilder {
             self.subnet_type,
             Config::default(),
             &metrics_registry,
-            self.instruction_limit,
+            self.instruction_limit_without_dts,
             Arc::clone(&cycles_account_manager),
         );
         ExecutionTest {
@@ -1642,6 +1660,7 @@ impl ExecutionTestBuilder {
                 self.install_code_instruction_limit,
                 self.install_code_slice_instruction_limit,
             ),
+            instruction_limit_without_dts: self.instruction_limit_without_dts,
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),

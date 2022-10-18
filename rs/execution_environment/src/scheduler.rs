@@ -1229,9 +1229,9 @@ impl Scheduler for SchedulerImpl {
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
                 let instruction_limits = InstructionLimits::new(
-                    self.deterministic_time_slicing,
-                    self.config.max_instructions_per_message,
-                    self.config.max_instructions_per_slice,
+                    FlagStatus::Disabled,
+                    self.config.max_instructions_per_message_without_dts,
+                    self.config.max_instructions_per_message_without_dts,
                 );
                 let instructions_before = round_limits.instructions;
                 let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
@@ -1291,15 +1291,19 @@ impl Scheduler for SchedulerImpl {
         // The round will stop as soon as the counter reaches zero.
         // We can compute the initial value `X` of the counter based on:
         // - `R = max_instructions_per_round`,
-        // - `S = max_instructions_per_slice`.
+        // - `S = max(max_instructions_per_slice, max_instructions_per_message_without_dts)`.
         // In the worst case, we start a new Wasm execution when then counter
         // reaches 1 and the execution uses the maximum `S` instructions. After
         // the execution the counter will be set to `1 - S`.
         //
         // We want the total number executed instructions to not exceed `R`,
         // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
+        let max_instructions_per_slice = std::cmp::max(
+            self.config.max_instructions_per_slice,
+            self.config.max_instructions_per_message_without_dts,
+        );
         round_limits.instructions = as_round_instructions(self.config.max_instructions_per_round)
-            - as_round_instructions(self.config.max_instructions_per_slice)
+            - as_round_instructions(max_instructions_per_slice)
             + RoundInstructions::from(1);
 
         let round_schedule;
@@ -1595,6 +1599,7 @@ fn execute_canisters_on_thread(
                 exec_env,
                 canister,
                 instruction_limits.clone(),
+                config.max_instructions_per_message_without_dts,
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
@@ -1870,9 +1875,9 @@ fn get_instructions_limits_for_subnet_message(
     msg: &CanisterInputMessage,
 ) -> InstructionLimits {
     let default_limits = InstructionLimits::new(
-        dts,
-        config.max_instructions_per_message,
-        config.max_instructions_per_slice,
+        FlagStatus::Disabled,
+        config.max_instructions_per_message_without_dts,
+        config.max_instructions_per_message_without_dts,
     );
     let method_name = match &msg {
         CanisterInputMessage::Response(_) => {

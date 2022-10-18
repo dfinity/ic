@@ -1,7 +1,7 @@
 use crate::{
     embedders::{self, QUERY_EXECUTION_THREADS},
     flag_status::FlagStatus,
-    subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
+    subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
 };
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_types::{
@@ -128,7 +128,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             create_funds_whitelist: String::default(),
-            max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE,
+            max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
             subnet_message_memory_capacity: SUBNET_MESSAGE_MEMORY_CAPACITY,
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,

@@ -28,7 +28,10 @@ pub fn execute_replicated_query(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
 ) -> ExecuteMessageResult {
-    let instruction_limit = execution_parameters.instruction_limits.message();
+    // A replicated query runs without DTS.
+    let instruction_limits = &execution_parameters.instruction_limits;
+    assert_eq!(instruction_limits.message(), instruction_limits.slice());
+    let instruction_limit = instruction_limits.message();
     // Withdraw execution cycles.
     let subnet_type = round.hypervisor.subnet_type();
     let memory_usage = canister.memory_usage(subnet_type);
