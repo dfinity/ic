@@ -25,4 +25,4 @@ linux-tools-common
 linux-tools-generic
 # If it becomes to tedious to maintain the kernel version here,
 # put logic in Dockerfile.base to download the one for the corresponding kernel.
-linux-tools-5.15.0-46-generic
+linux-tools-5.15.0-48-generic
