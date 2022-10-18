@@ -1,5 +1,5 @@
 {
-  "checksum": "fff92b2bbdd5ea6939e15bb2103fbad0e70b4fb46625b0b17be2bfde9517db33",
+  "checksum": "21a39e4054927616312332058b385065d7afb4eff0ab763097ce0afe7c98f360",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -965,7 +965,7 @@
               "target": "actix_router"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -1944,7 +1944,7 @@
               "target": "askama_shared"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -2064,7 +2064,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -2312,7 +2312,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -2468,7 +2468,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -2534,7 +2534,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -3555,7 +3555,7 @@
               "target": "peeking_take_while"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -3686,7 +3686,7 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -4916,7 +4916,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -5397,13 +5397,13 @@
       },
       "license": "Apache-2.0"
     },
-    "candid 0.8.2": {
+    "candid 0.8.3": {
       "name": "candid",
-      "version": "0.8.2",
+      "version": "0.8.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/candid/0.8.2/download",
-          "sha256": "00748d2466ccd456787852ce1c3bd8d47f946639b46fd0fd2e728c3bb23d307f"
+          "url": "https://crates.io/api/v1/crates/candid/0.8.3/download",
+          "sha256": "0571f3777880555f86d8aaa63080162560a8bf183d7853e0cc561d9a75458bbd"
         }
       },
       "targets": [
@@ -5452,7 +5452,7 @@
               "target": "byteorder"
             },
             {
-              "id": "candid 0.8.2",
+              "id": "candid 0.8.3",
               "target": "build_script_build"
             },
             {
@@ -5532,7 +5532,7 @@
           ],
           "selects": {}
         },
-        "version": "0.8.2"
+        "version": "0.8.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -5585,7 +5585,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -5639,7 +5639,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -6857,7 +6857,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -7203,7 +7203,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -7257,7 +7257,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -9991,7 +9991,7 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -10566,7 +10566,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -10648,7 +10648,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -10740,7 +10740,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -11158,7 +11158,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.8.2",
+              "id": "candid 0.8.3",
               "target": "candid"
             },
             {
@@ -11378,7 +11378,7 @@
               "target": "iai"
             },
             {
-              "id": "ic-agent 0.21.0",
+              "id": "ic-agent 0.22.0",
               "target": "ic_agent"
             },
             {
@@ -11390,7 +11390,7 @@
               "target": "ic_certified_map"
             },
             {
-              "id": "ic-identity-hsm 0.21.0",
+              "id": "ic-identity-hsm 0.22.0",
               "target": "ic_identity_hsm"
             },
             {
@@ -11402,7 +11402,7 @@
               "target": "ic_stable_structures"
             },
             {
-              "id": "ic-utils 0.21.0",
+              "id": "ic-utils 0.22.0",
               "target": "ic_utils"
             },
             {
@@ -11640,7 +11640,7 @@
               "target": "pretty_assertions"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -12380,7 +12380,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -12707,7 +12707,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -13145,7 +13145,7 @@
               "target": "num_traits"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -14111,7 +14111,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -15068,7 +15068,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -15745,7 +15745,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -15795,7 +15795,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -15845,7 +15845,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -17660,13 +17660,13 @@
       },
       "license": "Apache-2.0/MIT"
     },
-    "ic-agent 0.21.0": {
+    "ic-agent 0.22.0": {
       "name": "ic-agent",
-      "version": "0.21.0",
+      "version": "0.22.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-agent/0.21.0/download",
-          "sha256": "699755970b44fbc3fd97ed75c584bd764fc42a37db8bacf9fed909857750d770"
+          "url": "https://crates.io/api/v1/crates/ic-agent/0.22.0/download",
+          "sha256": "261a977b6cc35db6ee84195148f5e8307ffc1bbcb1895a221fe16d0fb097a427"
         }
       },
       "targets": [
@@ -17709,7 +17709,7 @@
               "target": "byteorder"
             },
             {
-              "id": "candid 0.8.2",
+              "id": "candid 0.8.3",
               "target": "candid"
             },
             {
@@ -17825,7 +17825,7 @@
           ],
           "selects": {}
         },
-        "version": "0.21.0"
+        "version": "0.22.0"
       },
       "license": "Apache-2.0"
     },
@@ -17910,7 +17910,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.8.2",
+              "id": "candid 0.8.3",
               "target": "candid"
             },
             {
@@ -17960,7 +17960,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.8.2",
+              "id": "candid 0.8.3",
               "target": "candid"
             },
             {
@@ -17968,7 +17968,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -18048,13 +18048,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-identity-hsm 0.21.0": {
+    "ic-identity-hsm 0.22.0": {
       "name": "ic-identity-hsm",
-      "version": "0.21.0",
+      "version": "0.22.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-identity-hsm/0.21.0/download",
-          "sha256": "ed32fe4c1338979f4add6257d6dd20875ef7adefb3435d7415a2a3f5806e5f21"
+          "url": "https://crates.io/api/v1/crates/ic-identity-hsm/0.22.0/download",
+          "sha256": "0ec2335ec6c8bf1fdeb8b034c2a81c87a5b8373b6d919b8fee0c67ca2f14aa93"
         }
       },
       "targets": [
@@ -18083,7 +18083,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-agent 0.21.0",
+              "id": "ic-agent 0.22.0",
               "target": "ic_agent"
             },
             {
@@ -18110,7 +18110,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.21.0"
+        "version": "0.22.0"
       },
       "license": "Apache-2.0"
     },
@@ -18355,13 +18355,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-utils 0.21.0": {
+    "ic-utils 0.22.0": {
       "name": "ic-utils",
-      "version": "0.21.0",
+      "version": "0.22.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-utils/0.21.0/download",
-          "sha256": "09fdc0776e3a3e5984b1cf712f34048914fbd4e1793b6aefea81e68e33779613"
+          "url": "https://crates.io/api/v1/crates/ic-utils/0.22.0/download",
+          "sha256": "d4fe431f4ee1f86da88d5cac3979476888dbcd9d44481409f103da5b2b44a440"
         }
       },
       "targets": [
@@ -18389,7 +18389,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.8.2",
+              "id": "candid 0.8.3",
               "target": "candid"
             },
             {
@@ -18397,7 +18397,7 @@
               "target": "garcon"
             },
             {
-              "id": "ic-agent 0.21.0",
+              "id": "ic-agent 0.22.0",
               "target": "ic_agent"
             },
             {
@@ -18453,7 +18453,7 @@
           ],
           "selects": {}
         },
-        "version": "0.21.0"
+        "version": "0.22.0"
       },
       "license": "Apache-2.0"
     },
@@ -19001,13 +19001,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "inferno 0.11.10": {
+    "inferno 0.11.11": {
       "name": "inferno",
-      "version": "0.11.10",
+      "version": "0.11.11",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/inferno/0.11.10/download",
-          "sha256": "65678bf692af3f4654f7baa7aab103fda889e37a84816cf3bd0aaa795277f6a3"
+          "url": "https://crates.io/api/v1/crates/inferno/0.11.11/download",
+          "sha256": "5f3b820618e1737bba20ec69b6fcd6efb25cfed922669353817e2f24c86bdc10"
         }
       },
       "targets": [
@@ -19175,7 +19175,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.10"
+        "version": "0.11.11"
       },
       "license": "CDDL-1.0"
     },
@@ -20675,7 +20675,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -22813,7 +22813,7 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -24199,7 +24199,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -24253,7 +24253,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -24307,7 +24307,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -24583,7 +24583,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -26327,7 +26327,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -26872,7 +26872,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -28463,7 +28463,7 @@
               "target": "pest_meta"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -28809,7 +28809,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -29398,7 +29398,7 @@
               "target": "findshlibs"
             },
             {
-              "id": "inferno 0.11.10",
+              "id": "inferno 0.11.11",
               "target": "inferno"
             },
             {
@@ -30062,13 +30062,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "prettyplease 0.1.20": {
+    "prettyplease 0.1.21": {
       "name": "prettyplease",
-      "version": "0.1.20",
+      "version": "0.1.21",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/prettyplease/0.1.20/download",
-          "sha256": "83fead41e178796ef8274dc612a7d8ce4c7e10ca35cd2c5b5ad24cac63aeb6c0"
+          "url": "https://crates.io/api/v1/crates/prettyplease/0.1.21/download",
+          "sha256": "c142c0e46b57171fe0c528bee8c5b7569e80f0c17e377cd0e30ea57dbc11bb51"
         }
       },
       "targets": [
@@ -30105,11 +30105,11 @@
         "deps": {
           "common": [
             {
-              "id": "prettyplease 0.1.20",
+              "id": "prettyplease 0.1.21",
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -30120,7 +30120,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.20"
+        "version": "0.1.21"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -30232,7 +30232,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -30321,7 +30321,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -30476,13 +30476,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "proc-macro2 1.0.46": {
+    "proc-macro2 1.0.47": {
       "name": "proc-macro2",
-      "version": "1.0.46",
+      "version": "1.0.47",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.46/download",
-          "sha256": "94e2ef8dbfc347b10c094890f778ee2e36ca9bb4262e86dc99cd217e35f3470b"
+          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.47/download",
+          "sha256": "5ea3d908b0e36316caf9e9e2c4625cdde190a7e6f440d794667ed17a1855e725"
         }
       },
       "targets": [
@@ -30523,7 +30523,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "build_script_build"
             },
             {
@@ -30534,7 +30534,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.46"
+        "version": "1.0.47"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -31142,7 +31142,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -31625,7 +31625,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -33074,7 +33074,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -36143,7 +36143,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -36321,7 +36321,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -36485,7 +36485,7 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -36661,7 +36661,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -38222,7 +38222,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -38897,7 +38897,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -38956,7 +38956,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -39095,7 +39095,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -39158,7 +39158,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -39649,7 +39649,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -39787,7 +39787,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -40115,7 +40115,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -40518,7 +40518,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -40765,7 +40765,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -41616,7 +41616,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -42552,11 +42552,11 @@
         "deps": {
           "common": [
             {
-              "id": "prettyplease 0.1.20",
+              "id": "prettyplease 0.1.21",
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -43064,7 +43064,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -44985,7 +44985,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -45426,7 +45426,7 @@
               "target": "once_cell"
             },
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -45589,7 +45589,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -48142,7 +48142,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.46",
+              "id": "proc-macro2 1.0.47",
               "target": "proc_macro2"
             },
             {
@@ -48379,7 +48379,7 @@
     "difference 2.0.0",
     "escargot 0.5.7",
     "ic-wasm 0.1.5",
-    "inferno 0.11.10",
+    "inferno 0.11.11",
     "lalrpop 0.19.8",
     "leb128 0.2.5",
     "multipart 0.18.0",

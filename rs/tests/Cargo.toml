@@ -129,8 +129,8 @@ utils = { path = "../utils", package ="ic-utils" }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
-ic-agent = "=0.21.0"
-ic-utils = "=0.21.0"
+ic-agent = "=0.22.0"
+ic-utils = "=0.22.0"
 
 [[bin]]
 name = "system-tests"

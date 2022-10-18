@@ -544,7 +544,7 @@ pub fn check_update_balance(env: TestEnv) {
         // should be 50 * 101 = 5050 bitcoin or 505000000000 satoshis.
         let expected_balance_in_satoshis = 5050_0000_0000_u64;
         // Call endpoint.
-        let canister = UniversalCanister::new(&agent, sys_node.effective_canister_id()).await;
+        let canister = UniversalCanister::new(&agent, node.effective_canister_id()).await;
         let mut res_mint = 0;
         // Let's wait until the balance has been updated on the bitcoin replica
         let start = Instant::now();
