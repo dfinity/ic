@@ -274,17 +274,21 @@ impl SnsCanisterIds {
 }
 
 impl FromStr for SnsCanisterType {
-    type Err = ();
+    type Err = String;
 
     fn from_str(input: &str) -> Result<SnsCanisterType, Self::Err> {
-        match input {
-            "Unspecified" => Ok(SnsCanisterType::Unspecified),
-            "Root" => Ok(SnsCanisterType::Root),
-            "Governance" => Ok(SnsCanisterType::Governance),
-            "Ledger" => Ok(SnsCanisterType::Ledger),
-            "Swap" => Ok(SnsCanisterType::Swap),
-            "Archive" => Ok(SnsCanisterType::Archive),
-            _ => Err(()),
+        match input.to_lowercase().as_str() {
+            "unspecified" => Ok(SnsCanisterType::Unspecified),
+            "root" => Ok(SnsCanisterType::Root),
+            "governance" => Ok(SnsCanisterType::Governance),
+            "ledger" => Ok(SnsCanisterType::Ledger),
+            "swap" => Ok(SnsCanisterType::Swap),
+            "archive" => Ok(SnsCanisterType::Archive),
+            "index" => Ok(SnsCanisterType::Index),
+            _ => Err(format!(
+                "from_str is not yet implemented or that is not a valid type: {}",
+                input
+            )),
         }
     }
 }

@@ -1972,7 +1972,7 @@ struct ProposeToAddWasmToSnsWasmCmd {
     wasm_module_sha256: String,
 
     #[clap(long, required = true)]
-    /// The Canister type, one of: Root, Governance, Ledger, Swap, Archive
+    /// The Canister type, one of: Root, Governance, Ledger, Swap, Archive, Index
     canister_type: String,
 }
 
@@ -1995,7 +1995,7 @@ impl ProposalTitleAndPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
 
         let canister_type = SnsCanisterType::from_str(&*self.canister_type).expect(
             "Invalid canister_type, expected one of: \
-                        Root, Governance, Ledger, Swap, Archive",
+                        Root, Governance, Ledger, Swap, Archive, Index",
         ) as i32;
 
         let sns_wasm = SnsWasm {
