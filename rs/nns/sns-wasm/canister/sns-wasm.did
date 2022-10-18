@@ -7,7 +7,13 @@ type DeployNewSnsResponse = record {
   error : opt SnsWasmError;
   canisters : opt SnsCanisterIds;
 };
-type DeployedSns = record { root_canister_id : opt principal };
+type DeployedSns = record {
+  root_canister_id : opt principal;
+  governance_canister_id : opt principal;
+  index_canister_id : opt principal;
+  swap_canister_id : opt principal;
+  ledger_canister_id : opt principal;
+};
 type DeveloperDistribution = record {
   developer_neurons : vec NeuronDistribution;
 };

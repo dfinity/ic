@@ -20,6 +20,7 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
+use maplit::hashmap;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
@@ -27,6 +28,18 @@ use std::iter::zip;
 use std::thread::LocalKey;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
+
+impl From<SnsCanisterIds> for DeployedSns {
+    fn from(src: SnsCanisterIds) -> Self {
+        Self {
+            root_canister_id: src.root,
+            governance_canister_id: src.governance,
+            ledger_canister_id: src.ledger,
+            swap_canister_id: src.swap,
+            index_canister_id: src.index,
+        }
+    }
+}
 
 /// The struct that implements the public API of the canister
 #[derive(Clone, Default)]
@@ -75,13 +88,13 @@ fn validation_deploy_error(message: String) -> DeployError {
 /// Helper function to create a DeployError::Reversible(ReversibleDeployError {})
 /// Returns a function that takes an error message and returns the DeployError
 fn reversible_deploy_error(
-    canisters_to_delete: &SnsCanisterIds,
+    canisters_to_delete: SnsCanisterIds,
     subnet: SubnetId,
-) -> impl Fn(String) -> DeployError + '_ {
+) -> impl Fn(String) -> DeployError {
     move |message| {
         DeployError::Reversible(RerversibleDeployError {
             message,
-            canisters_to_delete: Some(canisters_to_delete.clone()),
+            canisters_to_delete: Some(canisters_to_delete),
             subnet: Some(subnet),
         })
     }
@@ -90,13 +103,13 @@ fn reversible_deploy_error(
 /// Helper function to create a DeployError::Irreversible(IrreversibleDeployError {})
 /// Returns a function that takes the error message and returns the DeployError
 fn irreversible_depoy_error(
-    canisters_created: &SnsCanisterIds,
+    canisters_created: SnsCanisterIds,
     subnet: SubnetId,
-) -> impl Fn(String) -> DeployError + '_ {
+) -> impl Fn(String) -> DeployError {
     move |message| {
         DeployError::Irreversible(IrreversibleDeployError {
             message,
-            canisters_created: canisters_created.clone(),
+            canisters_created,
             subnet,
         })
     }
@@ -368,7 +381,7 @@ where
                 .await?;
         // This step should never fail unless the step before it fails which would return
         // an error.
-        let sns_init_canister_ids = canisters.clone().try_into().expect(
+        let sns_init_canister_ids = canisters.try_into().expect(
             "This should never happen. Failed to convert SnsCanisterIds into correct type.",
         );
 
@@ -390,7 +403,7 @@ where
             // NOTE: This error path is not under test, because validate(), called above, should
             // ensure this can never be triggered where validate() would succeed.
             .map_err(|e| {
-                reversible_deploy_error(&canisters, subnet_id)(format!(
+                reversible_deploy_error(canisters, subnet_id)(format!(
                     "build_canister_payloads failed: {}",
                     e
                 ))
@@ -399,13 +412,13 @@ where
         // Install the wasms for the canisters.
         Self::install_wasms(canister_api, &canisters, latest_wasms, initial_payloads)
             .await
-            .map_err(reversible_deploy_error(&canisters, subnet_id))?;
+            .map_err(reversible_deploy_error(canisters, subnet_id))?;
 
         // At this point, we cannot delete all the canisters necessarily, so we will have to fail
         // and allow some other mechanism to retry setting the correct ownership.
         Self::add_controllers(canister_api, &canisters)
             .await
-            .map_err(reversible_deploy_error(&canisters, subnet_id))?;
+            .map_err(reversible_deploy_error(canisters, subnet_id))?;
 
         // We record here because the remaining failures cannot be reversed, so it will be a deployed
         // SNS, but that needs cleanup or extra cycles
@@ -413,9 +426,7 @@ where
             sns_canister
                 .borrow_mut()
                 .deployed_sns_list
-                .push(DeployedSns {
-                    root_canister_id: canisters.root,
-                })
+                .push(DeployedSns::from(canisters))
         });
 
         // We combine the errors of the last two steps because at this point they should both be done
@@ -426,7 +437,7 @@ where
             // Remove self as the controller
             Self::remove_self_as_controller(canister_api, &canisters).await,
         ])
-        .map_err(irreversible_depoy_error(&canisters, subnet_id))?;
+        .map_err(irreversible_depoy_error(canisters, subnet_id))?;
 
         Ok((subnet_id, canisters))
     }
@@ -441,16 +452,15 @@ where
         let remaining_unaccepted_cycles = canister_api.accept_message_cycles(None).unwrap();
         let cycles_per_canister = remaining_unaccepted_cycles / 5;
 
-        let results =
-            futures::future::join_all(canisters.clone().into_named_tuples().into_iter().map(
-                |(label, canister_id)| async move {
-                    canister_api
-                        .send_cycles_to_canister(canister_id, cycles_per_canister)
-                        .await
-                        .map_err(|e| format!("Could not fund {} canister: {}", label, e))
-                },
-            ))
-            .await;
+        let results = futures::future::join_all(canisters.into_named_tuples().into_iter().map(
+            |(label, canister_id)| async move {
+                canister_api
+                    .send_cycles_to_canister(canister_id, cycles_per_canister)
+                    .await
+                    .map_err(|e| format!("Could not fund {} canister: {}", label, e))
+            },
+        ))
+        .await;
 
         join_errors_or_ok(results)
     }
@@ -720,7 +730,7 @@ where
                 message: deploy_error.message.clone(),
             }),
         };
-        let named_canister_tuples = match deploy_error.canisters_to_delete.clone() {
+        let named_canister_tuples = match deploy_error.canisters_to_delete {
             None => return success_response,
             Some(canisters) => canisters.into_named_tuples(),
         };
@@ -1011,6 +1021,39 @@ impl UpgradePath {
     }
 }
 
+pub fn assert_unique_canister_ids(sns_1: &SnsCanisterIds, sns_2: &SnsCanisterIds) {
+    let mut canister_id_to_name = hashmap! {};
+    for (name, canister_id) in [
+        ("root 1", sns_1.root.unwrap()),
+        ("ledger 1", sns_1.ledger.unwrap()),
+        ("governance 1", sns_1.governance.unwrap()),
+        ("swap 1", sns_1.swap.unwrap()),
+        ("index 1", sns_1.index.unwrap()),
+        ("root 2", sns_2.root.unwrap()),
+        ("ledger 2", sns_2.ledger.unwrap()),
+        ("governance 2", sns_2.governance.unwrap()),
+        ("swap 2", sns_2.swap.unwrap()),
+        ("index 2", sns_2.index.unwrap()),
+    ] {
+        use std::collections::hash_map::Entry;
+        match canister_id_to_name.entry(canister_id) {
+            Entry::Vacant(entry) => {
+                // Looking good so far (no panic).
+                entry.insert(name);
+                continue;
+            }
+            Entry::Occupied(entry) => {
+                panic!(
+                    "Canister ID {} not unique: {} vs. {}",
+                    canister_id,
+                    name,
+                    entry.get()
+                );
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1024,7 +1067,7 @@ mod test {
     use ic_sns_init::pb::v1::SnsInitPayload;
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
     use maplit::hashset;
-    use pretty_assertions::{assert_eq, assert_ne};
+    use pretty_assertions::assert_eq;
     use std::sync::{Arc, Mutex};
     use std::vec;
 
@@ -2285,7 +2328,7 @@ mod test {
             add_mock_wasms(&mut c.borrow_mut());
         });
 
-        let root_canister_1 = SnsWasmCanister::deploy_new_sns(
+        let sns_1 = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
             &canister_api,
             DeployNewSnsRequest {
@@ -2295,8 +2338,6 @@ mod test {
         )
         .await
         .canisters
-        .unwrap()
-        .root
         .unwrap();
 
         // Add more cycles so our second call works
@@ -2311,9 +2352,9 @@ mod test {
         )
         .await;
 
-        let root_canister_2 = response.canisters.unwrap().root.unwrap();
+        let sns_2 = response.canisters.unwrap();
 
-        assert_ne!(root_canister_1, root_canister_2);
+        assert_unique_canister_ids(&sns_1, &sns_2);
 
         let known_deployments_response = CANISTER_WRAPPER.with(|canister| {
             canister
@@ -2324,14 +2365,7 @@ mod test {
         assert_eq!(
             known_deployments_response,
             ListDeployedSnsesResponse {
-                instances: vec![
-                    DeployedSns {
-                        root_canister_id: Some(root_canister_1),
-                    },
-                    DeployedSns {
-                        root_canister_id: Some(root_canister_2),
-                    },
-                ],
+                instances: vec![DeployedSns::from(sns_1), DeployedSns::from(sns_2),],
             },
         )
     }

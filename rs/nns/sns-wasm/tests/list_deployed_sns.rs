@@ -1,13 +1,17 @@
 use canister_test::Project;
+use common::set_up_state_machine_with_nns;
 use ic_base_types::CanisterId;
+use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::sns_wasm;
 use ic_nns_test_utils::state_test_helpers::set_up_universal_canister;
 use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesResponse};
+use ic_sns_wasm::{
+    pb::v1::{DeployedSns, ListDeployedSnsesResponse},
+    sns_wasm::assert_unique_canister_ids,
+};
 use ic_types::Cycles;
+
 pub mod common;
-use common::set_up_state_machine_with_nns;
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
 
 #[test]
 fn list_deployed_snses_lists_created_sns_instances() {
@@ -24,7 +28,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
 
     sns_wasm::add_dummy_wasms_to_sns_wasms(&machine);
 
-    let root_1 = sns_wasm::deploy_new_sns(
+    let sns_1 = sns_wasm::deploy_new_sns(
         &machine,
         wallet_canister,
         SNS_WASM_CANISTER_ID,
@@ -32,10 +36,9 @@ fn list_deployed_snses_lists_created_sns_instances() {
         50_000_000_000_000,
     )
     .canisters
-    .unwrap()
-    .root;
+    .unwrap();
 
-    let root_2 = sns_wasm::deploy_new_sns(
+    let sns_2 = sns_wasm::deploy_new_sns(
         &machine,
         wallet_canister,
         SNS_WASM_CANISTER_ID,
@@ -43,10 +46,10 @@ fn list_deployed_snses_lists_created_sns_instances() {
         50_000_000_000_000,
     )
     .canisters
-    .unwrap()
-    .root;
+    .unwrap();
 
-    assert_ne!(root_1, root_2);
+    // Assert that canister IDs are unique.
+    assert_unique_canister_ids(&sns_1, &sns_2);
 
     // Also check that deployed SNSes are persisted across upgrades
     machine
@@ -58,14 +61,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
     assert_eq!(
         response,
         ListDeployedSnsesResponse {
-            instances: vec![
-                DeployedSns {
-                    root_canister_id: root_1,
-                },
-                DeployedSns {
-                    root_canister_id: root_2,
-                },
-            ]
+            instances: vec![DeployedSns::from(sns_1), DeployedSns::from(sns_2),]
         }
     );
 }

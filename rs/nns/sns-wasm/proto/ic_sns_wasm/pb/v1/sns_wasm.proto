@@ -133,10 +133,14 @@ message ListDeployedSnsesResponse {
   repeated DeployedSns instances = 1;
 }
 
-// A deployed SNS root_canister_id.
+// An SNS deployed by this canister (i.e. the sns-wasm canister).
 message DeployedSns {
-  // PrincipalId of the root canister of the sns.
+  // ID of the various canisters that were originally created in an SNS.
   ic_base_types.pb.v1.PrincipalId root_canister_id = 1;
+  ic_base_types.pb.v1.PrincipalId governance_canister_id = 2;
+  ic_base_types.pb.v1.PrincipalId ledger_canister_id = 3;
+  ic_base_types.pb.v1.PrincipalId swap_canister_id = 4;
+  ic_base_types.pb.v1.PrincipalId index_canister_id = 5;
 }
 
 // Specifies the version of an SNS.

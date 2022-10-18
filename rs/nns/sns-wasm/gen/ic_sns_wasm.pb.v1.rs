@@ -145,7 +145,13 @@ pub struct DeployNewSnsResponse {
 }
 /// The CanisterIds of the SNS canisters that are created.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Copy,
+    Clone,
+    PartialEq,
+    ::prost::Message,
 )]
 pub struct SnsCanisterIds {
     /// PrincipalId of the root canister.
@@ -178,14 +184,22 @@ pub struct ListDeployedSnsesResponse {
     #[prost(message, repeated, tag = "1")]
     pub instances: ::prost::alloc::vec::Vec<DeployedSns>,
 }
-/// A deployed SNS root_canister_id.
+/// An SNS deployed by this canister (i.e. the sns-wasm canister).
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
 )]
 pub struct DeployedSns {
-    /// PrincipalId of the root canister of the sns.
+    /// ID of the various canisters that were originally created in an SNS.
     #[prost(message, optional, tag = "1")]
     pub root_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "2")]
+    pub governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "3")]
+    pub ledger_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "4")]
+    pub swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "5")]
+    pub index_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 /// Specifies the version of an SNS.
 #[derive(
