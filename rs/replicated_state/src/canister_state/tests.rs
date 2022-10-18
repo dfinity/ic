@@ -8,6 +8,7 @@ use ic_test_utilities::types::{
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
+use ic_types::messages::CallContextId;
 use ic_types::{
     messages::CallbackId,
     methods::{Callback, WasmClosure},
@@ -76,6 +77,8 @@ fn canister_state_push_input_response_no_reservation() {
                 Some(CANISTER_ID),
                 Some(OTHER_CANISTER_ID),
                 Cycles::zero(),
+                Some(Cycles::new(42)),
+                Some(Cycles::new(84)),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
@@ -135,6 +138,8 @@ fn canister_state_push_input_response_success() {
                 Some(CANISTER_ID),
                 Some(OTHER_CANISTER_ID),
                 Cycles::zero(),
+                Some(Cycles::new(42)),
+                Some(Cycles::new(84)),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
@@ -463,6 +468,8 @@ fn canister_state_push_input_response_memory_limit_test_impl(
                 Some(CANISTER_ID),
                 Some(OTHER_CANISTER_ID),
                 Cycles::zero(),
+                Some(Cycles::new(42)),
+                Some(Cycles::new(84)),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
@@ -565,4 +572,27 @@ fn canister_state_cycles_debit() {
             system_state.debited_balance()
         );
     })
+}
+
+#[test]
+fn canister_state_callback_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    let callback = Callback::new(
+        CallContextId::new(1),
+        Some(CANISTER_ID),
+        Some(OTHER_CANISTER_ID),
+        Cycles::zero(),
+        Some(Cycles::new(42)),
+        Some(Cycles::new(84)),
+        WasmClosure::new(0, 2),
+        WasmClosure::new(0, 2),
+        None,
+    );
+
+    let pb_callback = pb::Callback::from(&callback);
+
+    let round_trip = Callback::try_from(pb_callback).unwrap();
+
+    assert_eq!(callback, round_trip);
 }

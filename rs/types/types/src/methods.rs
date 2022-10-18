@@ -214,6 +214,12 @@ pub struct Callback {
     pub respondent: Option<CanisterId>,
     /// The number of cycles that were sent in the original request.
     pub cycles_sent: Cycles,
+    /// Cycles prepaid by the caller for response execution.
+    /// The field is optional for backwards compatibility.
+    pub prepayment_for_response_execution: Option<Cycles>,
+    /// Cycles prepaid by the caller for response transimission.
+    /// The field is optional for backwards compatibility.
+    pub prepayment_for_response_transmission: Option<Cycles>,
     /// A closure to be executed if the call succeeded.
     pub on_reply: WasmClosure,
     /// A closure to be executed if the call was rejected.
@@ -229,6 +235,8 @@ impl Callback {
         originator: Option<CanisterId>,
         respondent: Option<CanisterId>,
         cycles_sent: Cycles,
+        prepayment_for_response_execution: Option<Cycles>,
+        prepayment_for_response_transmission: Option<Cycles>,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         on_cleanup: Option<WasmClosure>,
@@ -238,6 +246,8 @@ impl Callback {
             originator,
             respondent,
             cycles_sent,
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission,
             on_reply,
             on_reject,
             on_cleanup,
@@ -258,6 +268,12 @@ impl From<&Callback> for pb::Callback {
                 .as_ref()
                 .map(|respondent| pb_types::CanisterId::from(*respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
+            prepayment_for_response_execution: item
+                .prepayment_for_response_execution
+                .map(|cycles| cycles.into()),
+            prepayment_for_response_transmission: item
+                .prepayment_for_response_transmission
+                .map(|cycles| cycles.into()),
             on_reply: Some(pb::WasmClosure {
                 func_idx: item.on_reply.func_idx,
                 env: item.on_reply.env,
@@ -285,11 +301,23 @@ impl TryFrom<pb::Callback> for Callback {
         let cycles_sent: PbCycles =
             try_from_option_field(value.cycles_sent, "Callback::cycles_sent")?;
 
+        let prepayment_for_response_execution = value
+            .prepayment_for_response_execution
+            .map(|c| c.try_into())
+            .transpose()?;
+
+        let prepayment_for_response_transmission = value
+            .prepayment_for_response_transmission
+            .map(|c| c.try_into())
+            .transpose()?;
+
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
             originator: try_from_option_field(value.originator, "Callback::originator").ok(),
             respondent: try_from_option_field(value.respondent, "Callback::respondent").ok(),
             cycles_sent: Cycles::from(cycles_sent),
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission,
             on_reply: WasmClosure {
                 func_idx: on_reply.func_idx,
                 env: on_reply.env,

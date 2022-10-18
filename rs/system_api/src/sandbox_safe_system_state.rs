@@ -494,6 +494,16 @@ impl SandboxSafeSystemState {
         amount_to_accept
     }
 
+    pub fn prepayment_for_response_execution(&self) -> Cycles {
+        self.cycles_account_manager
+            .prepayment_for_response_execution(self.subnet_size)
+    }
+
+    pub fn prepayment_for_response_transmission(&self) -> Cycles {
+        self.cycles_account_manager
+            .prepayment_for_response_transmission(self.subnet_size)
+    }
+
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
         canister_current_memory_usage: NumBytes,
@@ -523,6 +533,8 @@ impl SandboxSafeSystemState {
         canister_current_memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         msg: Request,
+        prepayment_for_response_execution: Cycles,
+        prepayment_for_response_transmission: Cycles,
     ) -> Result<(), Request> {
         let mut new_balance = self.cycles_balance();
         if self
@@ -535,6 +547,8 @@ impl SandboxSafeSystemState {
                 canister_current_memory_usage,
                 compute_allocation,
                 &msg,
+                prepayment_for_response_execution,
+                prepayment_for_response_transmission,
                 self.subnet_size,
             )
             .is_err()

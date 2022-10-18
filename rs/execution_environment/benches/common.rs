@@ -114,6 +114,8 @@ where
         Some(canister_test_id(LOCAL_CANISTER_ID)),
         Some(canister_test_id(REMOTE_CANISTER_ID)),
         Cycles::new(0),
+        None,
+        None,
         WasmClosure::new(0, 1),
         WasmClosure::new(0, 1),
         None,

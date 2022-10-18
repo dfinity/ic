@@ -694,6 +694,8 @@ pub fn register_callback(
         Some(originator),
         Some(respondent),
         Cycles::zero(),
+        Some(Cycles::new(42)),
+        Some(Cycles::new(84)),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,

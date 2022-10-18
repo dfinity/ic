@@ -1108,7 +1108,12 @@ impl SystemApiImpl {
     ///
     /// Note that this function is made public only for the tests
     #[doc(hidden)]
-    pub fn push_output_request(&mut self, req: Request) -> HypervisorResult<i32> {
+    pub fn push_output_request(
+        &mut self,
+        req: Request,
+        prepayment_for_response_execution: Cycles,
+        prepayment_for_response_transmission: Cycles,
+    ) -> HypervisorResult<i32> {
         let abort = |request: Request, sandbox_safe_system_state: &mut SandboxSafeSystemState| {
             sandbox_safe_system_state.refund_cycles(request.payment);
             sandbox_safe_system_state.unregister_callback(request.sender_reply_callback);
@@ -1133,6 +1138,8 @@ impl SystemApiImpl {
             self.memory_usage.current_usage,
             self.execution_parameters.compute_allocation,
             req,
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission,
         ) {
             Ok(()) => Ok(0),
             Err(request) => {
@@ -1755,6 +1762,14 @@ impl SystemApi for SystemApiImpl {
 
                 let on_reply = WasmClosure::new(reply_fun, reply_env);
                 let on_reject = WasmClosure::new(reject_fun, reject_env);
+
+                let prepayment_for_response_execution = self
+                    .sandbox_safe_system_state
+                    .prepayment_for_response_execution();
+                let prepayment_for_response_transmission = self
+                    .sandbox_safe_system_state
+                    .prepayment_for_response_transmission();
+
                 let callback_id =
                     self.sandbox_safe_system_state
                         .register_callback(Callback::new(
@@ -1762,6 +1777,8 @@ impl SystemApi for SystemApiImpl {
                             Some(self.sandbox_safe_system_state.canister_id),
                             Some(callee),
                             Cycles::zero(),
+                            Some(prepayment_for_response_execution),
+                            Some(prepayment_for_response_transmission),
                             on_reply,
                             on_reject,
                             None,
@@ -1775,7 +1792,11 @@ impl SystemApi for SystemApiImpl {
                     sender_reply_callback: callback_id,
                     payment: Cycles::zero(),
                 };
-                self.push_output_request(msg)
+                self.push_output_request(
+                    msg,
+                    prepayment_for_response_execution,
+                    prepayment_for_response_transmission,
+                )
             }
         };
         trace_syscall!(
@@ -2040,7 +2061,11 @@ impl SystemApi for SystemApiImpl {
                     &self.log,
                 )?;
 
-                self.push_output_request(req)
+                self.push_output_request(
+                    req.request,
+                    req.prepayment_for_response_execution,
+                    req.prepayment_for_response_transmission,
+                )
             }
         };
         trace_syscall!(self, ic0_call_perform, result);
