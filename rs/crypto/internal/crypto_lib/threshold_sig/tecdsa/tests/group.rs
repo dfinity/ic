@@ -250,7 +250,71 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
             assert_eq!(should_be_zero, id);
         }
     }
+    Ok(())
+}
 
+#[test]
+fn test_mul_2_is_correct() -> ThresholdEcdsaResult<()> {
+    let mut rng = reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let g = EccPoint::generator_g(curve_type)?;
+
+        for _iteration in 0..100 {
+            let p_0 = g.scalar_mul(&EccScalar::random(curve_type, &mut rng))?;
+            let p_1 = g.scalar_mul(&EccScalar::random(curve_type, &mut rng))?;
+
+            let s_0 = EccScalar::random(curve_type, &mut rng);
+            let s_1 = EccScalar::random(curve_type, &mut rng);
+
+            let computed_result = EccPoint::mul_2_points(&p_0, &s_0, &p_1, &s_1)?;
+            let expected_result = p_0.scalar_mul(&s_0)?.add_points(&p_1.scalar_mul(&s_1)?)?;
+            assert_eq!(computed_result, expected_result);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_mul_n_ct_pippenger_is_correct() -> ThresholdEcdsaResult<()> {
+    let mut rng = reproducible_rng();
+    let mut random_point_and_scalar = |curve_type| -> ThresholdEcdsaResult<(EccPoint, EccScalar)> {
+        let p = EccPoint::mul_by_g(&EccScalar::random(curve_type, &mut rng))?;
+        Ok((p, EccScalar::random(curve_type, &mut rng)))
+    };
+
+    for curve_type in EccCurveType::all() {
+        for num_terms in 2..20 {
+            // generate point-scalar pairs
+            let pairs: Vec<_> = (0..num_terms)
+                .map(|_| (random_point_and_scalar(curve_type)))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            // create "deep" refs of pairs
+            let refs_of_pairs: Vec<(&EccPoint, &EccScalar)> =
+                pairs.iter().map(|pair| (&pair.0, &pair.1)).collect();
+
+            // compute the result using an optimized algorithm, which is to be tested
+            let computed_result = EccPoint::mul_n_points_pippenger(&refs_of_pairs)?;
+
+            let mul_and_aggregate =
+                |acc: &EccPoint, p: EccPoint, s: EccScalar| -> ThresholdEcdsaResult<EccPoint> {
+                    let mul = p.scalar_mul(&s)?;
+                    acc.add_points(&mul)
+                };
+            // compute the result using a non-optimized algorithm, which is assumed to always be correct
+            let expected_result =
+                pairs
+                    .into_iter()
+                    .try_fold(EccPoint::identity(curve_type), |acc, pair| {
+                        let (p, s) = pair;
+                        // acc += p * s
+                        mul_and_aggregate(&acc, p, s)
+                    })?;
+            assert_eq!(computed_result, expected_result);
+        }
+    }
     Ok(())
 }
 

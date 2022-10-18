@@ -27,9 +27,9 @@ fn mul_n_naive(terms: &[(EccPoint, EccScalar)]) -> EccPoint {
     accum
 }
 
-fn multiexp_total(c: &mut Criterion) {
+fn point_multiexp_vartime_total(c: &mut Criterion) {
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!("crypto_multiexp_total_{}", curve_type));
+        let mut group = c.benchmark_group(format!("crypto_point_multiexp_total_{}", curve_type));
 
         {
             // fixed 2 arguments for special-purpose functions with a fixed number of arguments
@@ -98,9 +98,9 @@ fn multiexp_total(c: &mut Criterion) {
     }
 }
 
-fn multiexp_online(c: &mut Criterion) {
+fn point_multiexp_vartime_online(c: &mut Criterion) {
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!("crypto_multiexp_online_{}", curve_type));
+        let mut group = c.benchmark_group(format!("crypto_point_multiexp_online_{}", curve_type));
 
         {
             // fixed 2 arguments for special-purpose functions with a fixed number of arguments
@@ -171,9 +171,76 @@ fn multiexp_online(c: &mut Criterion) {
     }
 }
 
-fn double_vs_addition(c: &mut Criterion) {
+fn point_multiexp_constant_time(c: &mut Criterion) {
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!("crypto_double_vs_addition_{}", curve_type));
+        let mut group = c.benchmark_group(format!(
+            "crypto_point_multiexp_constant_time_{}",
+            curve_type
+        ));
+
+        {
+            // fixed 2 arguments for special-purpose functions with a fixed number of arguments
+            let num_args = 2;
+            group.bench_with_input(
+                BenchmarkId::new("consttime_lincomb", num_args),
+                &num_args,
+                |b, size| {
+                    b.iter_batched_ref(
+                        || gen_mul_n_instance(*size, curve_type),
+                        |terms| {
+                            EccPoint::mul_2_points(
+                                &terms[0].0,
+                                &terms[0].1,
+                                &terms[1].0,
+                                &terms[1].1,
+                            )
+                        },
+                        BatchSize::SmallInput,
+                    )
+                },
+            );
+        }
+
+        // range of arguments for generic functions
+        for num_args in [2, 4, 8, 16, 32, 64, 128].iter() {
+            group.bench_with_input(
+                BenchmarkId::new("consttime_naive", num_args),
+                &num_args,
+                |b, &size| {
+                    b.iter_batched_ref(
+                        || gen_mul_n_instance(*size, curve_type),
+                        |terms| mul_n_naive(&terms[..]),
+                        BatchSize::SmallInput,
+                    )
+                },
+            );
+
+            group.bench_with_input(
+                BenchmarkId::new("constant_time_pippenger", num_args),
+                &num_args,
+                |b, &size| {
+                    b.iter_batched_ref(
+                        || gen_mul_n_instance(*size, curve_type),
+                        |terms| {
+                            // create refs of pairs
+                            let refs_of_pairs: Vec<_> = terms.iter().map(|(p, s)| (p, s)).collect();
+                            EccPoint::mul_n_points_pippenger(&refs_of_pairs)
+                        },
+                        BatchSize::SmallInput,
+                    )
+                },
+            );
+        }
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        group.plot_config(plot_config);
+        group.finish();
+    }
+}
+
+fn point_double_vs_addition(c: &mut Criterion) {
+    for curve_type in EccCurveType::all() {
+        let mut group =
+            c.benchmark_group(format!("crypto_point_double_vs_addition_{}", curve_type));
 
         group.bench_function(BenchmarkId::new("double", 0), move |b| {
             b.iter_with_setup(|| random_point(curve_type), |p| p.double())
@@ -193,6 +260,6 @@ fn double_vs_addition(c: &mut Criterion) {
 criterion_group! {
 name = group_ops;
 config = Criterion::default().measurement_time(Duration::from_secs(30));
-targets = multiexp_total, multiexp_online, double_vs_addition
+targets = point_multiexp_constant_time, point_multiexp_vartime_total, point_multiexp_vartime_online, point_double_vs_addition
 }
 criterion_main!(group_ops);

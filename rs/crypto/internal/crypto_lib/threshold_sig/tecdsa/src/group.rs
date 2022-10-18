@@ -6,6 +6,7 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
+use subtle::{Choice, ConditionallySelectable};
 use zeroize::Zeroize;
 
 mod secp256k1;
@@ -706,6 +707,54 @@ impl EccPoint {
         }
     }
 
+    /// Constant time point selection
+    ///
+    /// Equivalent to `points[index]` except avoids leaking the index
+    /// through side channels.
+    ///
+    ///
+    /// # Errors
+    /// * [`ThresholdEcdsaResult::CurveMismatch`] in case of inconsistent points.
+    /// * [`ThresholdEcdsaResult::InvalidArguments`] If `points.is_empty()`.
+    pub(crate) fn ct_select_from_slice(
+        points: &[Self],
+        index: usize,
+    ) -> ThresholdEcdsaResult<Self> {
+        use subtle::ConstantTimeEq;
+        if points.is_empty() {
+            return Err(ThresholdEcdsaError::InvalidArguments(String::from(
+                "The input to constant-time select from slice must contain at least one elememt",
+            )));
+        }
+        let mut result = Self::identity(points[0].curve_type());
+
+        for (i, point) in points.iter().enumerate() {
+            result.conditional_assign(point, usize::ct_eq(&i, &index))?;
+        }
+        Ok(result)
+    }
+
+    /// Constant time point selection
+    ///
+    /// Equivalent to `points[index]` except avoids leaking the index
+    /// through side channels.
+    ///
+    /// If the index is out of range, no assignment will happen, which will not be detectable using side channels.
+    ///
+    /// # Errors
+    /// * [`ThresholdEcdsaResult::CurveMismatch`] in case of inconsistent points.
+    pub(crate) fn ct_assign_in_slice(
+        points: &mut [Self],
+        input: &Self,
+        index: usize,
+    ) -> ThresholdEcdsaResult<()> {
+        use subtle::ConstantTimeEq;
+        for (i, point) in points.iter_mut().enumerate() {
+            point.conditional_assign(input, usize::ct_eq(&i, &index))?;
+        }
+        Ok(())
+    }
+
     /// Multiplies and adds together `point_scalar_pairs` as
     /// `ps[0].0 * ps[0].1 + ... + ps[ps.len() - 1].0 * ps[ps.len() - 1].1`,
     /// where `ps` is `point_scalar_pairs`.
@@ -757,6 +806,82 @@ impl EccPoint {
         for (i, (p, _s)) in point_scalar_pairs.iter().enumerate() {
             p.scalar_mul_step_vartime(&mut mul_states[i], &mut accum)?;
         }
+        Ok(accum)
+    }
+
+    /// Constant-time multiscalar multiplication using Pippenger's algorithm
+    ///
+    /// Return point_scalar_pairs[1].0 * point_scalar_pairs[1].1 + ...
+    /// + point_scalar_pairs[n].0 * point_scalar_pairs[n].1
+    /// where .0 is a point and .1 is a scalar
+    ///
+    /// # Errors
+    /// * CurveMismatch in case of inconsistent points.
+    /// * `ThresholdEcdsaError::InvalidArguments` if `point_scalar_pairs`
+    /// is empty because we cannot infer a curve type from the input arguments.
+    pub fn mul_n_points_pippenger(
+        point_scalar_pairs: &[(&EccPoint, &EccScalar)],
+    ) -> ThresholdEcdsaResult<Self> {
+        if point_scalar_pairs.is_empty() {
+            return Err(ThresholdEcdsaError::InvalidArguments(
+                "Trying to invoke batch-multiplication with an empty argument vector".to_string(),
+            ));
+        }
+
+        // deduce the curve type from the 0th point
+        let curve_type = point_scalar_pairs[0].0.curve_type();
+
+        // Configurable window size: can be 1, 2, 4, or 8
+        //
+        // TODO: the current window size is taken from the variable time implementation of the Pippenger's algorithm,
+        // this may not be optimal for the constant-time algorithm => re-evaluate on production hardware when
+        // this function is used somewhere.
+        type Window = WindowInfo<4>;
+        let num_windows = Window::number_of_windows(curve_type);
+
+        let mut windows = Vec::with_capacity(point_scalar_pairs.len());
+        for (p, s) in point_scalar_pairs {
+            if p.curve_type() != s.curve_type() {
+                return Err(ThresholdEcdsaError::CurveMismatch);
+            }
+            let sb = (*s).serialize();
+
+            let mut window = vec![0u8; num_windows];
+            for (i, w) in window.iter_mut().enumerate() {
+                *w = Window::extract(&sb, i);
+            }
+            windows.push(window);
+        }
+        let id = Self::identity(curve_type);
+        let mut accum = id.clone();
+
+        let mut buckets: Vec<EccPoint> = (0..Window::MAX).map(|_| id.clone()).collect();
+
+        for i in 0..num_windows {
+            for j in 0..point_scalar_pairs.len() {
+                let bucket_index = windows[j][i] as usize;
+                // constant-time conditional read
+                let mut selected = EccPoint::ct_select_from_slice(&buckets, bucket_index)?;
+                // add points
+                selected = selected.add_points(point_scalar_pairs[j].0)?;
+                // constant-time conditional write
+                EccPoint::ct_assign_in_slice(&mut buckets, &selected, bucket_index)?;
+            }
+
+            if i > 0 {
+                for _ in 0..Window::SIZE {
+                    accum = accum.double();
+                }
+            }
+            let mut t = id.clone();
+
+            for bucket in buckets[1..].iter_mut().rev() {
+                t = t.add_points(bucket)?;
+                accum = accum.add_points(&t)?;
+                *bucket = id.clone();
+            }
+        }
+
         Ok(accum)
     }
 
@@ -897,6 +1022,27 @@ impl EccPoint {
             }
         }
     }
+
+    /// # Errors
+    /// * CurveMismatch in case of inconsistent points.
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> ThresholdEcdsaResult<Self> {
+        match (&a.point, &b.point) {
+            (EccPointInternal::K256(pt_a), EccPointInternal::K256(pt_b)) => {
+                Ok(secp256k1::Point::conditional_select(pt_a, pt_b, choice).into())
+            }
+            (EccPointInternal::P256(pt_a), EccPointInternal::P256(pt_b)) => {
+                Ok(secp256r1::Point::conditional_select(pt_a, pt_b, choice).into())
+            }
+            _ => Err(ThresholdEcdsaError::CurveMismatch),
+        }
+    }
+
+    /// # Errors
+    /// * CurveMismatch in case of inconsistent points.
+    fn conditional_assign(&mut self, other: &Self, choice: Choice) -> ThresholdEcdsaResult<()> {
+        *self = Self::conditional_select(self, other, choice)?;
+        Ok(())
+    }
 }
 
 /// Converts `secp256r1` point to `EccPoint`
@@ -934,6 +1080,43 @@ impl<'de> Deserialize<'de> for EccPoint {
         let helper: EccPointSerializationHelper = Deserialize::deserialize(deserializer)?;
         EccPoint::deserialize_tagged(&helper.0)
             .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
+    }
+}
+
+struct WindowInfo<const WINDOW_SIZE: usize> {}
+
+impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
+    const SIZE: usize = WINDOW_SIZE;
+
+    const MASK: u8 = 0xFFu8 >> (8 - WINDOW_SIZE);
+    const MAX: usize = 1 << WINDOW_SIZE;
+    const WINDOWS_IN_BYTE: usize = 8 / WINDOW_SIZE;
+
+    /// Returns the bit offset for window `w`.
+    #[inline(always)]
+    fn window_bit_offset(w: usize) -> usize {
+        8 - Self::SIZE - Self::SIZE * (w % Self::WINDOWS_IN_BYTE)
+    }
+
+    #[inline(always)]
+    /// Extracts a window from a serialized scalar value.
+    ///
+    /// Treats the scalar as if it was a sequence of windows, each of `WINDOW_SIZE` bits,
+    /// and return the `w`th one of them. For 8 bit windows, this is simply the byte
+    /// value. For smaller windows this is some subset of a single byte.
+    ///
+    /// Only window sizes which are a power of 2 are supported which simplifies the
+    /// implementation to not require creating windows that cross byte boundaries.
+    fn extract(scalar: &[u8], w: usize) -> u8 {
+        assert!(WINDOW_SIZE == 1 || WINDOW_SIZE == 2 || WINDOW_SIZE == 4 || WINDOW_SIZE == 8);
+        let window_byte = scalar[w / Self::WINDOWS_IN_BYTE];
+        (window_byte >> Self::window_bit_offset(w)) & Self::MASK
+    }
+
+    /// Returns the number of windows in `curve_type`.
+    #[inline(always)]
+    fn number_of_windows(curve_type: EccCurveType) -> usize {
+        curve_type.scalar_bits() / WINDOW_SIZE
     }
 }
 

@@ -5,6 +5,7 @@ use p256::elliptic_curve::{
     Field, Group, IsHigh,
 };
 use std::ops::Neg;
+use subtle::{Choice, ConditionallySelectable};
 use zeroize::Zeroize;
 
 #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
@@ -235,5 +236,13 @@ impl Point {
     /// Check if the point is the point at infinity
     pub fn is_infinity(&self) -> bool {
         bool::from(self.p.is_identity())
+    }
+}
+
+impl ConditionallySelectable for Point {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        Self {
+            p: p256::ProjectivePoint::conditional_select(&a.p, &b.p, choice),
+        }
     }
 }
