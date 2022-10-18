@@ -5,7 +5,7 @@
 use crate::canister_manager::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
-use crate::execution::common::update_round_limits;
+use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
     canister_layout, finish_err, InstallCodeHelper, OriginalContext, PausedInstallCodeHelper,
     StableMemoryHandling,
@@ -163,6 +163,8 @@ pub(crate) fn execute_upgrade(
                     slice.executed_instructions,
                 );
                 update_round_limits(round_limits, &slice);
+                let ingress_status =
+                    ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedPreUpgradeExecution {
                     paused_wasm_execution,
                     paused_helper: helper.pause(),
@@ -172,6 +174,7 @@ pub(crate) fn execute_upgrade(
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
                     paused_execution,
+                    ingress_status,
                 }
             }
         }
@@ -298,6 +301,8 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     slice.executed_instructions,
                 );
                 update_round_limits(round_limits, &slice);
+                let ingress_status =
+                    ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedStartExecutionDuringUpgrade {
                     paused_wasm_execution,
                     paused_helper: helper.pause(),
@@ -308,6 +313,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
                     paused_execution,
+                    ingress_status,
                 }
             }
         }
@@ -406,6 +412,8 @@ fn upgrade_stage_4a_call_post_upgrade(
                 slice.executed_instructions,
             );
             update_round_limits(round_limits, &slice);
+            let ingress_status =
+                ingress_status_with_processing_state(&original.message, original.time);
             let paused_execution = Box::new(PausedPostUpgradeExecution {
                 paused_wasm_execution,
                 paused_helper: helper.pause(),
@@ -414,6 +422,7 @@ fn upgrade_stage_4a_call_post_upgrade(
             DtsInstallCodeResult::Paused {
                 canister: clean_canister,
                 paused_execution,
+                ingress_status,
             }
         }
     }
@@ -518,6 +527,9 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
                     paused_execution,
+                    // Pausing a resumed execution doesn't change the ingress
+                    // status.
+                    ingress_status: None,
                 }
             }
         }
@@ -613,6 +625,9 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
                     paused_execution,
+                    // Pausing a resumed execution doesn't change the ingress
+                    // status.
+                    ingress_status: None,
                 }
             }
         }
@@ -704,6 +719,9 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
                     paused_execution,
+                    // Pausing a resumed execution doesn't change the ingress
+                    // status.
+                    ingress_status: None,
                 }
             }
         }

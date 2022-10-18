@@ -260,6 +260,13 @@ impl SchedulerTest {
         }
     }
 
+    pub fn ingress_state(&self, message_id: &MessageId) -> IngressState {
+        match self.ingress_status(message_id) {
+            IngressStatus::Known { state, .. } => state,
+            IngressStatus::Unknown => unreachable!("Expected a known ingress status."),
+        }
+    }
+
     /// Injects a call to the management canister.
     /// Note that this function doesn't support `InstallCode`
     /// messages, because for such messages we additionally need to know

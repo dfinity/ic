@@ -191,6 +191,27 @@ pub(crate) fn action_to_ingress_response(
     }
 }
 
+/// Returns an ingress status with the `Processing` ingress state if the
+/// original message was an ingress message.
+/// Otherwise, returns `None`.
+pub(crate) fn ingress_status_with_processing_state(
+    message: &RequestOrIngress,
+    time: Time,
+) -> Option<(MessageId, IngressStatus)> {
+    match message {
+        RequestOrIngress::Ingress(ingress) => Some((
+            ingress.message_id.clone(),
+            IngressStatus::Known {
+                receiver: ingress.receiver.get(),
+                user_id: ingress.source,
+                time,
+                state: IngressState::Processing,
+            },
+        )),
+        RequestOrIngress::Request(_) => None,
+    }
+}
+
 pub(crate) fn wasm_result_to_query_response(
     result: Result<Option<WasmResult>, UserError>,
     canister: &CanisterState,

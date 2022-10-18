@@ -335,6 +335,13 @@ impl ExecutionTest {
         self.state().get_ingress_status(message_id)
     }
 
+    pub fn ingress_state(&self, message_id: &MessageId) -> IngressState {
+        match self.ingress_status(message_id) {
+            IngressStatus::Known { state, .. } => state,
+            IngressStatus::Unknown => unreachable!("Expected a known ingress status."),
+        }
+    }
+
     pub fn get_call_context(
         &self,
         canister_id: CanisterId,

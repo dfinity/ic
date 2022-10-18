@@ -1,3 +1,5 @@
+use std::time::{Duration, SystemTime};
+
 use candid::Encode;
 use ic_config::{
     execution_environment::Config as HypervisorConfig,
@@ -21,19 +23,27 @@ const DTS_WAT: &str = r#"
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32))
             )
-
-            (func (export "canister_post_upgrade")
+            (func $work
                 (memory.fill (i32.const 0) (i32.const 12) (i32.const 10000))
                 (memory.fill (i32.const 0) (i32.const 23) (i32.const 10000))
                 (memory.fill (i32.const 0) (i32.const 34) (i32.const 10000))
                 (memory.fill (i32.const 0) (i32.const 45) (i32.const 10000))
-            )
-
-            (func (export "canister_init")
                 (memory.fill (i32.const 0) (i32.const 56) (i32.const 10000))
                 (memory.fill (i32.const 0) (i32.const 67) (i32.const 10000))
                 (memory.fill (i32.const 0) (i32.const 78) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 89) (i32.const 10000))
+            )
+            (start $work)
+
+            (func (export "canister_pre_upgrade")
+                (call $work)
+            )
+
+            (func (export "canister_post_upgrade")
+                (call $work)
+            )
+
+            (func (export "canister_init")
+                (call $work)
             )
 
             (func (export "canister_query read")
@@ -43,10 +53,7 @@ const DTS_WAT: &str = r#"
                 (call $msg_reply))
 
             (func (export "canister_update update")
-                (memory.fill (i32.const 0) (i32.const 90) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 01) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 12) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 23) (i32.const 10000))
+                (call $work)
                 (call $msg_reply_data_append (i32.const 0) (i32.const 0))
                 (call $msg_reply)
             )
@@ -136,6 +143,18 @@ fn dts_install_code_env(
 fn ingress_state(ingress_status: IngressStatus) -> Option<IngressState> {
     match ingress_status {
         IngressStatus::Known { state, .. } => Some(state),
+        IngressStatus::Unknown => None,
+    }
+}
+
+/// Extracts the ingress time from the ingress status.
+fn ingress_time(ingress_status: IngressStatus) -> Option<SystemTime> {
+    match ingress_status {
+        IngressStatus::Known { time, .. } => {
+            let time =
+                SystemTime::UNIX_EPOCH + Duration::from_nanos(time.as_nanos_since_unix_epoch());
+            Some(time)
+        }
         IngressStatus::Unknown => None,
     }
 }
@@ -440,17 +459,17 @@ fn dts_pending_upgrade_with_heartbeat() {
 
     assert_eq!(
         ingress_state(env.ingress_status(&upgrade)),
-        Some(IngressState::Received)
+        Some(IngressState::Processing)
     );
 
     env.set_checkpoints_enabled(false);
 
-    env.await_ingress(upgrade, 20).unwrap();
+    env.await_ingress(upgrade, 30).unwrap();
 
     let read = env.send_ingress(user_id, canister, "read", vec![]);
     let result = env.await_ingress(read, 10).unwrap();
     let mut expected = vec![12; 10];
-    expected.extend([45; 10].iter());
+    expected.extend([78; 10].iter());
     assert_eq!(result, WasmResult::Reply(expected));
 }
 
@@ -592,7 +611,7 @@ fn dts_scheduling_of_install_code() {
 
     // Now install code messages start making progress.
     for k in 0..n {
-        env.await_ingress(ingress[k].clone(), 10).unwrap();
+        env.await_ingress(ingress[k].clone(), 30).unwrap();
         // All subsequent install code messages are still blocked.
         for i in ingress.iter().skip(k + 1) {
             assert_eq!(
@@ -738,7 +757,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
 
     // Now install code messages start making progress.
     for k in 0..n / 2 {
-        env.await_ingress(install[k].clone(), 10).unwrap();
+        env.await_ingress(install[k].clone(), 30).unwrap();
         // All subsequent install code messages are still blocked.
         for i in install.iter().skip(k + 1) {
             assert_eq!(
@@ -819,7 +838,7 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
 
     assert_eq!(
         ingress_state(env.ingress_status(&update)),
-        Some(IngressState::Received)
+        Some(IngressState::Processing)
     );
 
     assert_eq!(
@@ -834,11 +853,11 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
 
     env.set_checkpoints_enabled(false);
 
-    env.await_ingress(update, 10).unwrap();
+    env.await_ingress(update, 30).unwrap();
 
-    env.await_ingress(status, 10).unwrap();
+    env.await_ingress(status, 30).unwrap();
 
-    env.await_ingress(upgrade, 10).unwrap();
+    env.await_ingress(upgrade, 30).unwrap();
 }
 
 /// This test starts execution of a long-running install code message
@@ -897,7 +916,7 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
 
     assert_eq!(
         ingress_state(env.ingress_status(&install)),
-        Some(IngressState::Received)
+        Some(IngressState::Processing)
     );
 
     assert_eq!(
@@ -907,8 +926,8 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
 
     env.set_checkpoints_enabled(false);
 
-    env.await_ingress(install, 10).unwrap();
-    env.await_ingress(update, 10).unwrap();
+    env.await_ingress(install, 30).unwrap();
+    env.await_ingress(update, 30).unwrap();
 }
 
 /// This test runs multiple long-running update and install code messages.
@@ -1205,14 +1224,345 @@ fn dts_unrelated_subnet_messages_make_progress() {
         env.send_ingress(user_id, IC_00, Method::CanisterStatus, arg)
     };
 
-    env.await_ingress(status, 10).unwrap();
+    env.await_ingress(status, 30).unwrap();
 
     assert_eq!(
         ingress_state(env.ingress_status(&upgrade)),
-        Some(IngressState::Received)
+        Some(IngressState::Processing)
     );
 
     env.set_checkpoints_enabled(false);
 
-    env.await_ingress(upgrade, 10).unwrap();
+    env.await_ingress(upgrade, 30).unwrap();
+}
+
+#[test]
+fn dts_ingress_status_of_update_is_correct() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(10_000),
+    );
+
+    let binary = wat2wasm(DTS_WAT);
+
+    let user_id = PrincipalId::new_anonymous();
+
+    let canister = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let original_time = env.time();
+    let update = env.send_ingress(user_id, canister, "update", vec![]);
+
+    env.tick();
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&update)),
+        Some(IngressState::Processing)
+    );
+
+    assert_eq!(
+        ingress_time(env.ingress_status(&update)),
+        Some(original_time)
+    );
+
+    env.advance_time(Duration::from_secs(60));
+
+    env.tick();
+
+    env.advance_time(Duration::from_secs(60));
+
+    // Enable the checkpoints to abort the update message execution.
+    env.set_checkpoints_enabled(true);
+
+    env.tick();
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&update)),
+        Some(IngressState::Processing)
+    );
+
+    assert_eq!(
+        ingress_time(env.ingress_status(&update)),
+        Some(original_time)
+    );
+
+    env.set_checkpoints_enabled(false);
+
+    // The ingress time must not change during DTS execution.
+    while ingress_state(env.ingress_status(&update)) == Some(IngressState::Processing) {
+        assert_eq!(
+            ingress_time(env.ingress_status(&update)),
+            Some(original_time)
+        );
+        env.tick();
+    }
+
+    env.await_ingress(update, 30).unwrap();
+}
+
+#[test]
+fn dts_ingress_status_of_install_is_correct() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(10_000),
+    );
+
+    let binary = wat2wasm(DTS_WAT);
+
+    let user_id = PrincipalId::new_anonymous();
+
+    let canister = env
+        .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let original_time = env.time();
+
+    let install = {
+        let args = InstallCodeArgs::new(
+            CanisterInstallMode::Reinstall,
+            canister,
+            binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
+    };
+
+    env.tick();
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&install)),
+        Some(IngressState::Processing)
+    );
+
+    assert_eq!(
+        ingress_time(env.ingress_status(&install)),
+        Some(original_time)
+    );
+
+    env.advance_time(Duration::from_secs(60));
+
+    env.tick();
+
+    env.advance_time(Duration::from_secs(60));
+
+    // Enable the checkpoints to abort the update message execution.
+    env.set_checkpoints_enabled(true);
+
+    env.tick();
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&install)),
+        Some(IngressState::Processing)
+    );
+
+    assert_eq!(
+        ingress_time(env.ingress_status(&install)),
+        Some(original_time)
+    );
+
+    env.set_checkpoints_enabled(false);
+
+    // The ingress time must not change during DTS execution.
+    while ingress_state(env.ingress_status(&install)) == Some(IngressState::Processing) {
+        assert_eq!(
+            ingress_time(env.ingress_status(&install)),
+            Some(original_time)
+        );
+        env.tick();
+    }
+
+    env.await_ingress(install, 30).unwrap();
+}
+
+#[test]
+fn dts_ingress_status_of_upgrade_is_correct() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(10_000),
+    );
+
+    let binary = wat2wasm(DTS_WAT);
+
+    let user_id = PrincipalId::new_anonymous();
+
+    let canister = env
+        .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let original_time = env.time();
+
+    let install = {
+        let args = InstallCodeArgs::new(
+            CanisterInstallMode::Upgrade,
+            canister,
+            binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
+    };
+
+    env.tick();
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&install)),
+        Some(IngressState::Processing)
+    );
+
+    assert_eq!(
+        ingress_time(env.ingress_status(&install)),
+        Some(original_time)
+    );
+
+    env.advance_time(Duration::from_secs(60));
+
+    env.tick();
+
+    env.advance_time(Duration::from_secs(60));
+
+    // Enable the checkpoints to abort the update message execution.
+    env.set_checkpoints_enabled(true);
+
+    env.tick();
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&install)),
+        Some(IngressState::Processing)
+    );
+
+    assert_eq!(
+        ingress_time(env.ingress_status(&install)),
+        Some(original_time)
+    );
+
+    env.set_checkpoints_enabled(false);
+
+    // The ingress time must not change during DTS execution.
+    while ingress_state(env.ingress_status(&install)) == Some(IngressState::Processing) {
+        assert_eq!(
+            ingress_time(env.ingress_status(&install)),
+            Some(original_time)
+        );
+        env.tick();
+    }
+
+    env.await_ingress(install, 30).unwrap();
+}
+
+#[test]
+fn dts_ingress_status_of_update_with_call_is_correct() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(10_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let user_id = PrincipalId::new_anonymous();
+
+    let a_id = env
+        .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let b_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let b = wasm()
+        .stable64_grow(1)
+        .stable64_write(0, 0, 10_000)
+        .stable64_write(0, 0, 10_000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .stable64_grow(1)
+        .stable64_write(0, 0, 10_000)
+        .stable64_write(0, 0, 10_000)
+        .call_simple(b_id, "update", call_args().other_side(b))
+        .build();
+
+    let original_time = env.time();
+    let update = env.send_ingress(user_id, a_id, "update", a);
+
+    env.tick();
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&update)),
+        Some(IngressState::Processing)
+    );
+
+    assert_eq!(
+        ingress_time(env.ingress_status(&update)),
+        Some(original_time)
+    );
+
+    env.advance_time(Duration::from_secs(60));
+
+    env.tick();
+
+    env.advance_time(Duration::from_secs(60));
+
+    // Enable the checkpoints to abort the update message execution.
+    env.set_checkpoints_enabled(true);
+
+    env.tick();
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&update)),
+        Some(IngressState::Processing)
+    );
+
+    assert_eq!(
+        ingress_time(env.ingress_status(&update)),
+        Some(original_time)
+    );
+
+    env.set_checkpoints_enabled(false);
+
+    let mut call_time = None;
+
+    // The ingress time must not change during DTS execution.
+    while ingress_state(env.ingress_status(&update)) == Some(IngressState::Processing) {
+        if ingress_time(env.ingress_status(&update)) != Some(original_time) {
+            // The ingress time in the `Processing` state may change only once
+            // when the call is made.
+            if let Some(call_time) = call_time {
+                assert_eq!(ingress_time(env.ingress_status(&update)), Some(call_time));
+            }
+            call_time = ingress_time(env.ingress_status(&update));
+        }
+        env.tick();
+    }
+
+    call_time.unwrap();
+
+    env.await_ingress(update, 100).unwrap();
 }

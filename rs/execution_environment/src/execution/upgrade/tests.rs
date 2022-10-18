@@ -5,7 +5,7 @@ use ic_error_types::ErrorCode;
 use ic_ic00_types::{EmptyBlob, Payload};
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_replicated_state::CanisterState;
-use ic_state_machine_tests::{IngressStatus, WasmResult};
+use ic_state_machine_tests::{IngressState, WasmResult};
 use ic_test_utilities::types::ids::user_test_id;
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::Cycles;
@@ -277,7 +277,7 @@ fn upgrade_ok_with_long_pre_upgrade() {
     let message_id = test.dts_upgrade_canister(canister_id, new_empty_binary());
     // Execute more rounds
     for _round in 1..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -313,7 +313,7 @@ fn upgrade_fails_on_long_pre_upgrade_trap() {
     let message_id = test.dts_upgrade_canister(canister_id, new_empty_binary());
     // Execute more rounds
     for _round in 1..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -333,7 +333,7 @@ fn upgrade_fails_on_long_pre_upgrade_hits_instructions_limit() {
     let message_id = test.dts_upgrade_canister(canister_id, new_empty_binary());
     // Execute more rounds
     for _round in 1..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -398,7 +398,7 @@ fn upgrade_ok_with_long_start() {
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
     // Execute more rounds
     for _round in 1..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -434,7 +434,7 @@ fn upgrade_fails_on_long_start_trap() {
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
     // Execute more rounds
     for _round in 1..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -454,7 +454,7 @@ fn upgrade_fails_on_long_start_hits_instructions_limit() {
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
     // Execute more rounds
     for _round in 1..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -508,7 +508,7 @@ fn upgrade_ok_with_long_post_upgrade() {
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
     // Execute more rounds
     for _round in 1..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -544,7 +544,7 @@ fn upgrade_fails_on_long_post_upgrade_trap() {
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
     // Execute more rounds
     for _round in 1..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -564,7 +564,7 @@ fn upgrade_fails_on_long_post_upgrade_hits_instructions_limit() {
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
     // Execute more rounds
     for _round in 1..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -600,7 +600,7 @@ fn upgrade_fails_on_pre_upgrade_resume_error() {
     let canister = test.canister_state_mut(canister_id);
     canister.system_state.controllers = btreeset! {user_test_id(999).get()};
     // Execute one more round
-    assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
     test.execute_slice(canister_id);
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
@@ -622,7 +622,7 @@ fn upgrade_ok_with_paused_pre_upgrade_resume_paused() {
     let message_id = test.dts_upgrade_canister(canister_id, new_empty_binary());
     // Execute more rounds
     for _round in 1..3 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -648,7 +648,7 @@ fn upgrade_ok_on_pre_upgrade_abort() {
     );
     // Execute more rounds
     for _round in 0..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -681,7 +681,7 @@ fn upgrade_fails_on_start_resume_error() {
     let canister = test.canister_state_mut(canister_id);
     canister.system_state.controllers = btreeset! {user_test_id(999).get()};
     // Execute one more round
-    assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
     test.execute_slice(canister_id);
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
@@ -703,7 +703,7 @@ fn upgrade_ok_with_paused_start_resume_paused() {
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
     // Execute more rounds
     for _round in 1..3 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -729,7 +729,7 @@ fn upgrade_ok_on_start_abort() {
     );
     // Execute more rounds
     for _round in 0..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -762,7 +762,7 @@ fn upgrade_fails_on_post_upgrade_resume_error() {
     let canister = test.canister_state_mut(canister_id);
     canister.system_state.controllers = btreeset! {user_test_id(999).get()};
     // Execute one more round
-    assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
     test.execute_slice(canister_id);
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
@@ -784,7 +784,7 @@ fn upgrade_ok_with_paused_post_upgrade_resume_paused() {
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
     // Execute more rounds
     for _round in 1..3 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -806,7 +806,7 @@ fn upgrade_ok_on_post_upgrade_abort() {
     test.abort_all_paused_executions();
     // Execute more rounds
     for _round in 0..2 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));
@@ -837,7 +837,7 @@ fn upgrade_ok_with_long_pre_upgrade_long_start_long_post_upgrade() {
     // reset the slice limit. So the total number of rounds to finish 3
     // 2-round executions is 4.
     for _round in 1..4 {
-        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_slice(canister_id);
     }
     let result = check_ingress_status(test.ingress_status(&message_id));

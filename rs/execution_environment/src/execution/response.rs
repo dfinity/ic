@@ -889,6 +889,9 @@ fn process_response_result(
             ExecuteMessageResult::Paused {
                 canister: clean_canister,
                 paused_execution,
+                // Pausing a resumed execution doesn't change the ingress
+                // status.
+                ingress_status: None,
             }
         }
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
@@ -976,6 +979,9 @@ fn process_cleanup_result(
             ExecuteMessageResult::Paused {
                 canister: clean_canister,
                 paused_execution,
+                // Pausing a resumed execution doesn't change the ingress
+                // status.
+                ingress_status: None,
             }
         }
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
