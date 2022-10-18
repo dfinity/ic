@@ -26,6 +26,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
     // Add additional customizations
     ic_sns_type_attr(&mut config, "SnsVersion", "#[derive(Eq, Hash)]");
+    ic_sns_type_attr(&mut config, "SnsCanisterIds", "#[derive(Copy)]");
 
     config
         .compile_protos(

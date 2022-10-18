@@ -198,6 +198,10 @@ mod test {
         let sns_subnet_ids = vec![PrincipalId::new_subnet_test_id(34)];
         let deployed_sns_list = vec![DeployedSns {
             root_canister_id: Some(PrincipalId::new_subnet_test_id(560)),
+            governance_canister_id: Some(PrincipalId::new_subnet_test_id(561)),
+            ledger_canister_id: Some(PrincipalId::new_subnet_test_id(562)),
+            swap_canister_id: Some(PrincipalId::new_subnet_test_id(563)),
+            index_canister_id: Some(PrincipalId::new_subnet_test_id(564)),
         }];
 
         let sns_version1 = SnsVersion {
