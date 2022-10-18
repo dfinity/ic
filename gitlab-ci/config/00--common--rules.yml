@@ -318,8 +318,8 @@
   rules:
     - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
       changes:
-        - '/ic-os/**/*'
-        - '/toolchains/sysimage/**/*'
+        - 'ic-os/**/*'
+        - 'toolchains/sysimage/**/*'
     - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
       allow_failure: true
