@@ -261,7 +261,7 @@ class BaseExperiment:
         for m in self.metrics:
             m.end_benchmark(self)
         print(
-            f"Experiment finished. Generating report like: python3 common/generate_report.py --base_dir='results/' --git_revision='{self.git_hash}' --timestamp='{self.out_dir_timestamp}'"
+            f"Experiment finished. Generating report like: pipenv run common/generate_report.py --base_dir='results/' --git_revision='{self.git_hash}' --timestamp='{self.out_dir_timestamp}'"
         )
 
     def _get_ic_admin_path(self):
