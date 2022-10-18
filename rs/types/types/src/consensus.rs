@@ -312,7 +312,7 @@ impl From<&BlockProposal> for pb::BlockProposal {
 impl TryFrom<pb::BlockProposal> for BlockProposal {
     type Error = String;
     fn try_from(block_proposal: pb::BlockProposal) -> Result<Self, Self::Error> {
-        Ok(Signed {
+        let ret = Signed {
             content: Hashed {
                 value: Block::try_from(
                     block_proposal
@@ -328,7 +328,12 @@ impl TryFrom<pb::BlockProposal> for BlockProposal {
                         .expect("Couldn't parse principal id."),
                 ),
             },
-        })
+        };
+        if ret.check_integrity() {
+            Ok(ret)
+        } else {
+            Err("Block proposal validity check failed".to_string())
+        }
     }
 }
 
