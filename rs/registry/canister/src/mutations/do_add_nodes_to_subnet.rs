@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
 
 use std::convert::TryFrom;
 
@@ -8,6 +8,8 @@ use dfn_core::println;
 use serde::Serialize;
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_registry_keys::make_subnet_record_key;
+use ic_registry_transport::upsert;
 
 impl Registry {
     /// Adds the nodes to an existing subnet record in the registry.
@@ -21,7 +23,8 @@ impl Registry {
         );
 
         let mut nodes_to_add = payload.node_ids.clone();
-        let subnet_record = self.get_subnet_or_panic(SubnetId::from(payload.subnet_id));
+        let subnet_id = SubnetId::from(payload.subnet_id);
+        let mut subnet_record = self.get_subnet_or_panic(subnet_id);
 
         let mut existing_nodes: Vec<NodeId> = subnet_record
             .membership
@@ -31,9 +34,10 @@ impl Registry {
 
         nodes_to_add.append(&mut existing_nodes);
 
-        let mutations = vec![self.make_replace_subnet_membership_mutation(
-            SubnetId::from(payload.subnet_id),
-            nodes_to_add,
+        self.replace_subnet_record_membership(subnet_id, &mut subnet_record, nodes_to_add);
+        let mutations = vec![upsert(
+            &make_subnet_record_key(subnet_id),
+            encode_or_panic(&subnet_record),
         )];
 
         // Check invariants before applying mutations

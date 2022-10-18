@@ -21,7 +21,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_ecdsa_signing_subnet_list_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
 use ic_registry_transport::upsert;
 use on_wire::bytes;
 use std::collections::HashMap;
@@ -68,26 +68,15 @@ impl Registry {
         }
     }
 
-    /// Return the mutation that can be used to replace the given subnet's
-    /// membership with `new_membership`.
-    pub fn make_replace_subnet_membership_mutation(
+    /// Replace the given subnet record's membership with `new_membership`.
+    /// Panic if any node in `new_membership` is already part of a subnet other than `subnet_id`.
+    pub fn replace_subnet_record_membership(
         &self,
         subnet_id: SubnetId,
+        subnet_record: &mut SubnetRecord,
         mut new_membership: Vec<NodeId>,
-    ) -> RegistryMutation {
+    ) {
         new_membership.dedup();
-        let mut subnet_record = self.get_subnet_or_panic(subnet_id);
-
-        subnet_record.membership = new_membership
-            .iter()
-            .map(|id| id.get().into_vec())
-            .collect();
-
-        let update_subnet_record = RegistryMutation {
-            mutation_type: registry_mutation::Type::Update as i32,
-            key: make_subnet_record_key(subnet_id).into_bytes(),
-            value: encode_or_panic(&subnet_record),
-        };
 
         let subnet_list_record = self.get_subnet_list_record();
 
@@ -120,7 +109,10 @@ impl Registry {
             }
         }
 
-        update_subnet_record
+        subnet_record.membership = new_membership
+            .iter()
+            .map(|id| id.get().into_vec())
+            .collect();
     }
 
     /// Retrieve the CUP for a given subnet at a registry version (or latest if not specified).
