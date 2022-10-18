@@ -989,7 +989,7 @@ dependencies = [
  "humantime 2.1.0",
  "hyper",
  "ic-agent",
- "ic-utils 0.21.0",
+ "ic-utils 0.22.0",
  "indoc",
  "mockall 0.11.2",
  "opentelemetry 0.17.0",
@@ -3305,7 +3305,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-init",
  "ic-types",
- "ic-utils 0.21.0",
+ "ic-utils 0.22.0",
  "on_wire",
  "tokio",
  "url",
@@ -3817,9 +3817,9 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "699755970b44fbc3fd97ed75c584bd764fc42a37db8bacf9fed909857750d770"
+checksum = "261a977b6cc35db6ee84195148f5e8307ffc1bbcb1895a221fe16d0fb097a427"
 dependencies = [
  "async-trait",
  "base32",
@@ -5885,9 +5885,9 @@ dependencies = [
 
 [[package]]
 name = "ic-identity-hsm"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed32fe4c1338979f4add6257d6dd20875ef7adefb3435d7415a2a3f5806e5f21"
+checksum = "0ec2335ec6c8bf1fdeb8b034c2a81c87a5b8373b6d919b8fee0c67ca2f14aa93"
 dependencies = [
  "hex",
  "ic-agent",
@@ -8517,9 +8517,9 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09fdc0776e3a3e5984b1cf712f34048914fbd4e1793b6aefea81e68e33779613"
+checksum = "d4fe431f4ee1f86da88d5cac3979476888dbcd9d44481409f103da5b2b44a440"
 dependencies = [
  "async-trait",
  "candid",
@@ -8757,7 +8757,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "ic-agent",
- "ic-utils 0.21.0",
+ "ic-utils 0.22.0",
  "itertools 0.10.3",
  "lazy-regex",
  "opentelemetry 0.17.0",
@@ -13419,7 +13419,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "ic-universal-canister",
- "ic-utils 0.21.0",
+ "ic-utils 0.22.0",
  "ic-utils 0.8.0",
  "itertools 0.10.3",
  "json5",

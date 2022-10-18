@@ -135,7 +135,7 @@ fn validate_body(
     let tree: HashTree =
         serde_cbor::from_slice(certificates.tree).map_err(AgentError::InvalidCborData)?;
 
-    if let Err(e) = agent.verify(&cert, *canister_id, false) {
+    if let Err(e) = agent.verify(&cert, *canister_id) {
         trace!(">> certificate failed verification: {}", e);
         return Ok(false);
     }

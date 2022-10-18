@@ -350,7 +350,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.1",
             ),
             "ic-agent": crate.spec(
-                version = "^0.21.0",
+                version = "^0.22.0",
                 features = [
                     "hyper",
                 ],
@@ -367,7 +367,7 @@ def external_crates_repository(name, annotations):
                 rev = "2112e912e156b271389a51777680de542bb43980",
             ),
             "ic-identity-hsm": crate.spec(
-                version = "=0.21.0",
+                version = "=0.22.0",
             ),
             "ic-ledger-types": crate.spec(
                 version = "^0.1.1",
@@ -376,7 +376,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.1.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.21.0",
+                version = "^0.22.0",
                 features = [
                     "raw",
                 ],
