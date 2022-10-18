@@ -24,9 +24,9 @@ rosetta-release:
       # - Build an publish the image
       ROSETTA_API_DATE=$(date +"%Y%m%d")
 
-      bazel run --stamp --embed_label="$VERSION_TAG" //rs/rosetta-api:push_rosetta_image
-      bazel run --stamp --embed_label="$CI_COMMIT_SHA" //rs/rosetta-api:push_rosetta_image
-      bazel run --stamp --embed_label="$ROSETTA_API_DATE" //rs/rosetta-api:push_rosetta_image
+      for tag in "$VERSION_TAG" "$CI_COMMIT_SHA" "$ROSETTA_API_DATE" latest; do
+          bazel run --stamp --embed_label="$tag" //rs/rosetta-api:push_rosetta_image
+      done
 
       # - Tag the commit
       git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
