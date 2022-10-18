@@ -112,9 +112,6 @@ pub struct Config {
     /// Indicates whether deterministic time slicing is enabled or not.
     pub deterministic_time_slicing: FlagStatus,
 
-    /// Sharing of serialized modules between canisters.
-    pub module_sharing: FlagStatus,
-
     /// Compiling a single WASM instruction should cost as much as executing
     /// this many instructions.
     pub cost_to_compile_wasm_instruction: NumInstructions,
@@ -149,7 +146,6 @@ impl Default for Config {
             // best-effort canisters have sufficient compute to make progress.
             allocatable_compute_capacity_in_percent: 50,
             deterministic_time_slicing: FlagStatus::Enabled,
-            module_sharing: FlagStatus::Enabled,
             cost_to_compile_wasm_instruction: embedders::DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             bitcoin_canisters: Vec::default(),
         }

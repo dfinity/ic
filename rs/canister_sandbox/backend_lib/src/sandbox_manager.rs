@@ -26,7 +26,6 @@ use ic_canister_sandbox_common::protocol::structs::{
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_utils::compile;
 use ic_embedders::wasm_utils::instrumentation::Segments;
 use ic_embedders::SerializedModule;
@@ -470,24 +469,13 @@ impl SandboxManager {
         canister_id: CanisterId,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
         // Validate, instrument, and compile the binary.
-        let (embedder_cache, compilation_result, mut serialized_module) =
+        let (embedder_cache, compilation_result, serialized_module) =
             self.open_wasm(wasm_id, wasm_source)?;
 
-        let segments;
-        let segments = match self.embedder.config().feature_flags.module_sharing {
-            FlagStatus::Disabled => {
-                // With sharing disabled we can clear the data segments
-                // from the `SerializedModule` so that we don't waste
-                // time passing them back to the main replica process.
-                segments = serialized_module.take_data_segments();
-                &segments
-            }
-            FlagStatus::Enabled => &serialized_module.data_segments,
-        };
         let (wasm_memory_modifications, exported_globals) = self
             .create_initial_memory_and_globals(
                 &embedder_cache,
-                segments,
+                &serialized_module.data_segments,
                 wasm_page_map,
                 next_wasm_memory_id,
                 canister_id,

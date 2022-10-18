@@ -1438,7 +1438,7 @@ mod tests {
     use std::fs::{self, File};
 
     use super::*;
-    use ic_config::{flag_status::FlagStatus, logger::Config as LoggerConfig};
+    use ic_config::logger::Config as LoggerConfig;
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
     use ic_test_utilities::types::ids::canister_test_id;
     use libc::kill;
@@ -1497,7 +1497,7 @@ mod tests {
                 canister_module,
                 PathBuf::new(),
                 canister_id,
-                Arc::new(CompilationCache::new(FlagStatus::Disabled)),
+                Arc::new(CompilationCache::default()),
             )
             .unwrap();
         let sandbox_pid = match controller

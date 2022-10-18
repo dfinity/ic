@@ -2,7 +2,6 @@ mod execution_tests {
     use std::path::PathBuf;
 
     use crate::execution::test_utilities::{wat_compilation_cost, ExecutionTestBuilder};
-    use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
         canister_state::execution_state::{WasmBinary, WasmMetadata},
@@ -126,10 +125,7 @@ mod execution_tests {
             "hypervisor_wasm_compile_time_seconds",
         )
         .unwrap();
-        match EmbeddersConfig::default().feature_flags.module_sharing {
-            FlagStatus::Enabled => assert_eq!(compilation_time_metric.count, 2),
-            FlagStatus::Disabled => assert_eq!(compilation_time_metric.count, 3),
-        }
+        assert_eq!(compilation_time_metric.count, 2);
     }
 
     #[test]
@@ -166,10 +162,7 @@ mod execution_tests {
             "hypervisor_wasm_compile_time_seconds",
         )
         .unwrap();
-        match EmbeddersConfig::default().feature_flags.module_sharing {
-            FlagStatus::Enabled => assert_eq!(compilation_time_metric.count, 2),
-            FlagStatus::Disabled => assert_eq!(compilation_time_metric.count, 4),
-        }
+        assert_eq!(compilation_time_metric.count, 2);
     }
 
     #[test]
@@ -186,10 +179,7 @@ mod execution_tests {
             "hypervisor_wasm_compile_time_seconds",
         )
         .unwrap();
-        match EmbeddersConfig::default().feature_flags.module_sharing {
-            FlagStatus::Enabled => assert_eq!(compilation_time_metric.count, 1),
-            FlagStatus::Disabled => assert_eq!(compilation_time_metric.count, 2),
-        }
+        assert_eq!(compilation_time_metric.count, 1);
     }
 
     #[test]
@@ -217,10 +207,7 @@ mod execution_tests {
             "hypervisor_wasm_compile_time_seconds",
         )
         .unwrap();
-        match EmbeddersConfig::default().feature_flags.module_sharing {
-            FlagStatus::Enabled => assert_eq!(compilation_time_metric.count, 2),
-            FlagStatus::Disabled => assert_eq!(compilation_time_metric.count, 3),
-        }
+        assert_eq!(compilation_time_metric.count, 2);
     }
 
     /// When installing the same wat twice, we should ignore the compilation cost on
@@ -515,7 +502,6 @@ mod state_machine_tests {
 
     use crate::execution::test_utilities::wat_compilation_cost;
     use crate::CompilationCostHandling;
-    use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_state_machine_tests::StateMachine;
 
     /// A canister with an update and a query method.
@@ -547,21 +533,12 @@ mod state_machine_tests {
 
         // Installing another canister with the same WASM doesn't take instructions.
         let _canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-        let compilation_cost_handling =
-            match EmbeddersConfig::default().feature_flags.module_sharing {
-                FlagStatus::Enabled => CompilationCostHandling::CountReducedAmount,
-                FlagStatus::Disabled => CompilationCostHandling::CountFullAmount,
-            };
         assert_eq!(
             env.subnet_message_instructions(),
-            match EmbeddersConfig::default().feature_flags.module_sharing {
-                FlagStatus::Enabled =>
-                    expected_compilation_instructions.get() as f64
-                        + compilation_cost_handling
-                            .adjusted_compilation_cost(expected_compilation_instructions)
-                            .get() as f64,
-                FlagStatus::Disabled => 2.0 * (expected_compilation_instructions.get() as f64),
-            }
+            expected_compilation_instructions.get() as f64
+                + CompilationCostHandling::CountReducedAmount
+                    .adjusted_compilation_cost(expected_compilation_instructions)
+                    .get() as f64
         );
     }
 

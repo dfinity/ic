@@ -1,6 +1,5 @@
 use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
 
-use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 use ic_types::{methods::WasmMethod, NumInstructions};
@@ -75,16 +74,11 @@ pub struct SerializedModule {
 
 impl SerializedModule {
     pub(crate) fn new(
-        module_sharing: FlagStatus,
         module: &Module,
         instrumentation_output: InstrumentationOutput,
         validation_details: WasmValidationDetails,
     ) -> HypervisorResult<Self> {
-        let bytes = if module_sharing == FlagStatus::Enabled {
-            SerializedModuleBytes::try_from(module)?
-        } else {
-            SerializedModuleBytes::empty()
-        };
+        let bytes = SerializedModuleBytes::try_from(module)?;
         Ok(Self {
             bytes: Arc::new(bytes),
             exported_functions: instrumentation_output.exported_functions,

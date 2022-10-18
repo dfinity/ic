@@ -40,14 +40,12 @@ const STABLE_MEMORY_DIRTY_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
     pub rate_limiting_of_debug_prints: FlagStatus,
-    pub module_sharing: FlagStatus,
 }
 
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            module_sharing: FlagStatus::Enabled,
         }
     }
 }
