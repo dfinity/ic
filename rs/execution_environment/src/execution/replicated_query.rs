@@ -62,6 +62,7 @@ pub fn execute_replicated_query(
             instruction_limit,
             prepaid_execution_cycles,
             subnet_size,
+            round.log,
         );
         return finish_call_with_error(user_error, canister, req, NumInstructions::from(0), time);
     }
@@ -102,6 +103,7 @@ pub fn execute_replicated_query(
         instruction_limit,
         prepaid_execution_cycles,
         subnet_size,
+        round.log,
     );
 
     let instructions_used = NumInstructions::from(

@@ -450,6 +450,7 @@ impl ResponseHelper {
             original.message_instruction_limit,
             prepaid_execution_cycles,
             original.subnet_size,
+            round.log,
         );
         let instructions_used = NumInstructions::from(
             original

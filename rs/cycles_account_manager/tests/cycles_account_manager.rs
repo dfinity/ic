@@ -4,6 +4,7 @@ use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
+use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SystemState;
 use ic_test_utilities::{
@@ -264,6 +265,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         NumInstructions::from(1_000_000),
         cycles,
         subnet_size,
+        &no_op_logger(),
     );
     assert_eq!(system_state.balance(), INITIAL_CYCLES);
 }
@@ -294,6 +296,7 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
         initial_instructions_charged_for,
         cycles,
         subnet_size,
+        &no_op_logger(),
     );
     assert!(system_state.balance() <= INITIAL_CYCLES);
 }

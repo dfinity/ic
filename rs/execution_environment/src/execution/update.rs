@@ -179,6 +179,7 @@ fn finish_err(
         instruction_limit,
         original.prepaid_execution_cycles,
         original.subnet_size,
+        round.log,
     );
     let instructions_used = instruction_limit - instructions_left;
     finish_call_with_error(
@@ -360,6 +361,7 @@ impl UpdateHelper {
             original.execution_parameters.instruction_limits.message(),
             original.prepaid_execution_cycles,
             original.subnet_size,
+            round.log,
         );
         let instructions_used = NumInstructions::from(
             original

@@ -746,6 +746,7 @@ impl ExecutionTest {
             self.time,
             &mut round_limits,
             self.subnet_size(),
+            &self.log,
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         state.put_canister_state(canister);
