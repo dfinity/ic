@@ -141,6 +141,12 @@ impl RequestInPrep {
     }
 }
 
+pub(crate) struct RequestWithPrepayment {
+    pub request: Request,
+    pub prepayment_for_response_execution: Cycles,
+    pub prepayment_for_response_transmission: Cycles,
+}
+
 /// Turns a `RequestInPrep` into a `Request`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn into_request(
@@ -159,7 +165,7 @@ pub(crate) fn into_request(
     call_context_id: CallContextId,
     sandbox_safe_system_state: &mut SandboxSafeSystemState,
     _logger: &ReplicaLogger,
-) -> HypervisorResult<Request> {
+) -> HypervisorResult<RequestWithPrepayment> {
     let destination_canister =
         CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?;
 
@@ -174,11 +180,18 @@ pub(crate) fn into_request(
         }
     }
 
+    let prepayment_for_response_execution =
+        sandbox_safe_system_state.prepayment_for_response_execution();
+    let prepayment_for_response_transmission =
+        sandbox_safe_system_state.prepayment_for_response_transmission();
+
     let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
         call_context_id,
         Some(sender),
         Some(destination_canister),
         cycles,
+        Some(prepayment_for_response_execution),
+        Some(prepayment_for_response_transmission),
         on_reply,
         on_reject,
         on_cleanup,
@@ -200,7 +213,11 @@ pub(crate) fn into_request(
         "Inconsistent request payload size calculation"
     );
 
-    Ok(req)
+    Ok(RequestWithPrepayment {
+        request: req,
+        prepayment_for_response_execution,
+        prepayment_for_response_transmission,
+    })
 }
 
 #[cfg(test)]

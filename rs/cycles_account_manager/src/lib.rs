@@ -602,6 +602,8 @@ impl CyclesAccountManager {
         canister_current_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         request: &Request,
+        prepayment_for_response_execution: Cycles,
+        prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
         // The total amount charged is the fee to do the xnet call (request +
@@ -610,11 +612,10 @@ impl CyclesAccountManager {
         // response when it eventually arrives.
         let fee = self.scale_cost(
             self.config.xnet_call_fee
-                + self.config.xnet_byte_transmission_fee * request.payload_size_bytes().get()
-                + self.config.xnet_byte_transmission_fee
-                    * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get(),
+                + self.config.xnet_byte_transmission_fee * request.payload_size_bytes().get(),
             subnet_size,
-        ) + self.execution_cost(self.max_num_instructions, subnet_size);
+        ) + prepayment_for_response_transmission
+            + prepayment_for_response_execution;
         self.withdraw_with_threshold(
             canister_id,
             cycles_balance,
@@ -629,6 +630,21 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Returns the amount of cycles required for executing the longest-running
+    /// response callback.
+    pub fn prepayment_for_response_execution(&self, subnet_size: usize) -> Cycles {
+        self.execution_cost(self.max_num_instructions, subnet_size)
+    }
+
+    /// Returns the amount of cycles required for transmitting the largest
+    /// response message.
+    pub fn prepayment_for_response_transmission(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(
+            self.config.xnet_byte_transmission_fee * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get(),
+            subnet_size,
+        )
+    }
+
     /// Returns the refund cycles for the response transmission bytes reserved at
     /// the initial call time.
     pub fn refund_for_response_transmission(
@@ -636,31 +652,27 @@ impl CyclesAccountManager {
         log: &ReplicaLogger,
         error_counter: &IntCounter,
         response: &Response,
+        prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
     ) -> Cycles {
-        // We originally charged for the maximum number of bytes possible so
-        // figure out how many extra bytes we charged for.
-        let response_payload_size_bytes = response.payload_size_bytes().get();
-        let max_payload_size_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
-        let some_extra_bytes = max_payload_size_bytes.checked_sub(response_payload_size_bytes);
-
-        match some_extra_bytes {
-            None => {
-                error_counter.inc();
-                error!(
-                    log,
-                    "{}: Unexpected response payload size of {} bytes (max expected {})",
-                    CRITICAL_ERROR_RESPONSE_CYCLES_REFUND,
-                    response_payload_size_bytes,
-                    max_payload_size_bytes
-                );
-                Cycles::zero()
-            }
-            Some(extra_bytes) => self.scale_cost(
-                self.config.xnet_byte_transmission_fee * extra_bytes,
-                subnet_size,
-            ),
+        let max_expected_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
+        let transmitted_bytes = response.payload_size_bytes().get();
+        if max_expected_bytes < transmitted_bytes {
+            error_counter.inc();
+            error!(
+                log,
+                "{}: Unexpected response payload size of {} bytes (max expected {})",
+                CRITICAL_ERROR_RESPONSE_CYCLES_REFUND,
+                transmitted_bytes,
+                max_expected_bytes,
+            );
         }
+        let transmission_cost = self.scale_cost(
+            self.config.xnet_byte_transmission_fee * transmitted_bytes,
+            subnet_size,
+        );
+        prepayment_for_response_transmission
+            - transmission_cost.min(prepayment_for_response_transmission)
     }
 
     ////////////////////////////////////////////////////////////////////////////

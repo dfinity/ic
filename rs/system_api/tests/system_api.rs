@@ -1610,6 +1610,8 @@ fn take_execution_result_properly_frees_memory() {
             Some(own_canister_id),
             Some(canister_test_id(0)),
             Cycles::zero(),
+            Some(Cycles::zero()),
+            Some(Cycles::zero()),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1633,7 +1635,11 @@ fn take_execution_result_properly_frees_memory() {
         .sender_reply_callback(callback_id)
         .build();
 
-    assert_eq!(0, api.push_output_request(req).unwrap());
+    assert_eq!(
+        0,
+        api.push_output_request(req, Cycles::zero(), Cycles::zero())
+            .unwrap()
+    );
 
     assert!(api.get_allocated_bytes().get() > 0);
     assert!(api.get_allocated_message_bytes().get() > 0);
@@ -1668,6 +1674,8 @@ fn push_output_request_respects_memory_limits() {
                 Some(own_canister_id),
                 Some(canister_test_id(0)),
                 Cycles::zero(),
+                Some(Cycles::zero()),
+                Some(Cycles::zero()),
                 WasmClosure::new(0, 0),
                 WasmClosure::new(0, 0),
                 None,
@@ -1691,7 +1699,11 @@ fn push_output_request_respects_memory_limits() {
 
         // First push succeeds with or without message memory usage accounting, as the
         // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
-        assert_eq!(0, api.push_output_request(req.clone()).unwrap());
+        assert_eq!(
+            0,
+            api.push_output_request(req.clone(), Cycles::zero(), Cycles::zero())
+                .unwrap()
+        );
 
         // `MAX_RESPONSE_COUNT_BYTES` are consumed.
         assert_eq!(
@@ -1710,7 +1722,8 @@ fn push_output_request_respects_memory_limits() {
         // And the second push fails.
         assert_eq!(
             RejectCode::SysTransient as i32,
-            api.push_output_request(req).unwrap()
+            api.push_output_request(req, Cycles::zero(), Cycles::zero())
+                .unwrap()
         );
         // Without altering memory usage.
         assert_eq!(
@@ -1764,6 +1777,8 @@ fn push_output_request_oversized_request_memory_limits() {
             Some(own_canister_id),
             Some(canister_test_id(0)),
             Cycles::zero(),
+            Some(Cycles::zero()),
+            Some(Cycles::zero()),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1790,7 +1805,8 @@ fn push_output_request_oversized_request_memory_limits() {
     // Not enough memory to push the request.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(req).unwrap()
+        api.push_output_request(req, Cycles::zero(), Cycles::zero())
+            .unwrap()
     );
 
     // Memory usage unchanged.
@@ -1806,7 +1822,11 @@ fn push_output_request_oversized_request_memory_limits() {
     assert!(req_size_bytes > MAX_RESPONSE_COUNT_BYTES);
 
     // Pushing succeeds.
-    assert_eq!(0, api.push_output_request(req).unwrap());
+    assert_eq!(
+        0,
+        api.push_output_request(req, Cycles::zero(), Cycles::zero())
+            .unwrap()
+    );
 
     // `req_size_bytes` are consumed.
     assert_eq!(req_size_bytes as u64, api.get_allocated_bytes().get());

@@ -675,7 +675,10 @@ impl SchedulerTestBuilder {
             deterministic_time_slicing,
             ..ic_config::execution_environment::Config::default()
         };
-        let wasm_executor = Arc::new(TestWasmExecutor::new());
+        let wasm_executor = Arc::new(TestWasmExecutor::new(
+            Arc::clone(&cycles_account_manager),
+            self.registry_settings.subnet_size,
+        ));
         let hypervisor = Hypervisor::new_for_testing(
             &metrics_registry,
             self.own_subnet_id,
@@ -709,7 +712,7 @@ impl SchedulerTestBuilder {
             self.own_subnet_id,
             ingress_history_writer,
             Arc::new(exec_env),
-            cycles_account_manager,
+            Arc::clone(&cycles_account_manager),
             bitcoin_canister,
             &metrics_registry,
             self.log,
@@ -856,9 +859,12 @@ struct TestWasmExecutor {
 }
 
 impl TestWasmExecutor {
-    fn new() -> Self {
+    fn new(cycles_account_manager: Arc<CyclesAccountManager>, subnet_size: usize) -> Self {
         Self {
-            core: Mutex::new(TestWasmExecutorCore::new()),
+            core: Mutex::new(TestWasmExecutorCore::new(
+                cycles_account_manager,
+                subnet_size,
+            )),
         }
     }
 }
@@ -918,16 +924,20 @@ struct TestWasmExecutorCore {
     schedule: Vec<(ExecutionRound, CanisterId, NumInstructions)>,
     next_message_id: u32,
     round: ExecutionRound,
+    subnet_size: usize,
+    cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
 impl TestWasmExecutorCore {
-    fn new() -> Self {
+    fn new(cycles_account_manager: Arc<CyclesAccountManager>, subnet_size: usize) -> Self {
         Self {
             messages: HashMap::new(),
             heartbeat: HashMap::new(),
             schedule: vec![],
             next_message_id: 0,
             round: ExecutionRound::new(0),
+            cycles_account_manager,
+            subnet_size,
         }
     }
 
@@ -1086,12 +1096,20 @@ impl TestWasmExecutorCore {
             func_idx: 0,
             env: response_message_id,
         };
+        let prepayment_for_response_execution = self
+            .cycles_account_manager
+            .prepayment_for_response_execution(self.subnet_size);
+        let prepayment_for_response_transmission = self
+            .cycles_account_manager
+            .prepayment_for_response_transmission(self.subnet_size);
         let callback = system_state
             .register_callback(Callback {
                 call_context_id,
                 originator: Some(sender),
                 respondent: Some(receiver),
                 cycles_sent: Cycles::zero(),
+                prepayment_for_response_execution: Some(prepayment_for_response_execution),
+                prepayment_for_response_transmission: Some(prepayment_for_response_transmission),
                 on_reply: closure.clone(),
                 on_reject: closure,
                 on_cleanup: None,
@@ -1106,7 +1124,13 @@ impl TestWasmExecutorCore {
             method_payload: encode_message_id_as_payload(call_message_id),
         };
         system_state
-            .push_output_request(canister_current_memory_usage, compute_allocation, request)
+            .push_output_request(
+                canister_current_memory_usage,
+                compute_allocation,
+                request,
+                prepayment_for_response_execution,
+                prepayment_for_response_transmission,
+            )
             .map_err(|req| format!("Failed pushing request {:?} to output queue.", req))?;
         self.messages.insert(call_message_id, call.other_side);
         self.messages.insert(response_message_id, call.on_response);

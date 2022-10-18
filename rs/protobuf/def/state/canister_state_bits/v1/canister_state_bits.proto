@@ -49,6 +49,8 @@ message Callback {
   state.queues.v1.Cycles cycles_sent = 5;
   types.v1.CanisterId originator = 6;
   types.v1.CanisterId respondent = 7;
+  state.queues.v1.Cycles prepayment_for_response_execution = 8;
+  state.queues.v1.Cycles prepayment_for_response_transmission = 9;
 }
 
 message CallbackEntry {

@@ -62,6 +62,8 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             request.clone(),
+            Cycles::zero(),
+            Cycles::zero(),
         ),
         Err(request)
     );
@@ -80,14 +82,14 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
     let request_payload_cost = cycles_account_manager
         .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
-    let response_reservation = cycles_account_manager.xnet_call_bytes_transmitted_fee(
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-        SMALL_APP_SUBNET_MAX_SIZE,
-    );
+    let prepayment_for_response_execution =
+        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_transmission =
+        cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
     let total_cost = xnet_cost
         + request_payload_cost
-        + response_reservation
-        + cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS, SMALL_APP_SUBNET_MAX_SIZE);
+        + prepayment_for_response_execution
+        + prepayment_for_response_transmission;
 
     // Set cycles balance to a number that is enough to cover for the request
     // transfer but not to cover the cost of processing the expected response.
@@ -110,6 +112,8 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             request.clone(),
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission
         ),
         Err(request)
     );
@@ -135,6 +139,11 @@ fn push_output_request_succeeds_with_enough_cycles() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
     );
 
+    let prepayment_for_response_execution =
+        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_transmission =
+        cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
+
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
             NumBytes::from(0),
@@ -142,6 +151,8 @@ fn push_output_request_succeeds_with_enough_cycles() {
             RequestBuilder::default()
                 .sender(canister_test_id(0))
                 .build(),
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission,
         ),
         Ok(())
     );
@@ -178,19 +189,24 @@ fn correct_charging_source_canister_for_a_request() {
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
     let request_payload_cost = cycles_account_manager
         .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
-    // Which should result in refunding everything except the response payload cost
-    let response_reservation = cycles_account_manager.xnet_call_bytes_transmitted_fee(
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-        SMALL_APP_SUBNET_MAX_SIZE,
-    );
+    let prepayment_for_response_execution =
+        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_transmission =
+        cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
     let total_cost = xnet_cost
         + request_payload_cost
-        + response_reservation
-        + cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS, SMALL_APP_SUBNET_MAX_SIZE);
+        + prepayment_for_response_execution
+        + prepayment_for_response_transmission;
 
     // Enqueue the Request.
     sandbox_safe_system_state
-        .push_output_request(NumBytes::from(0), ComputeAllocation::default(), request)
+        .push_output_request(
+            NumBytes::from(0),
+            ComputeAllocation::default(),
+            request,
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission,
+        )
         .unwrap();
 
     // Assume the destination canister got the message and prepared a response
@@ -218,6 +234,7 @@ fn correct_charging_source_canister_for_a_request() {
         &no_op_logger(),
         &no_op_counter,
         &response,
+        prepayment_for_response_transmission,
         SMALL_APP_SUBNET_MAX_SIZE,
     );
 

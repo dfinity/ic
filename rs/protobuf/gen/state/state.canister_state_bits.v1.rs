@@ -73,6 +73,11 @@ pub struct Callback {
     pub originator: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag = "7")]
     pub respondent: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(message, optional, tag = "8")]
+    pub prepayment_for_response_execution: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "9")]
+    pub prepayment_for_response_transmission:
+        ::core::option::Option<super::super::queues::v1::Cycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackEntry {
