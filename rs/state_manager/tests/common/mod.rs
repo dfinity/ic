@@ -375,13 +375,7 @@ pub fn pipe_manifest(src: &StateSyncMessage, dst: &mut dyn Chunkable) -> Option<
         .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
     match dst.add_chunk(chunk) {
-        Ok(Artifact::StateSync(msg)) => {
-            assert!(
-                dst.is_complete(),
-                "add_chunk returned OK but the artifact is not complete"
-            );
-            Some(msg)
-        }
+        Ok(Artifact::StateSync(msg)) => Some(msg),
         Ok(artifact) => {
             panic!("Unexpected artifact type: {:?}", artifact);
         }
@@ -396,13 +390,13 @@ pub fn pipe_partial_state_sync(
     dst: &mut dyn Chunkable,
     omit: &HashSet<ChunkId>,
 ) -> Option<StateSyncMessage> {
-    while !dst.is_complete() {
+    loop {
         let ids: Vec<_> = dst.chunks_to_download().collect();
 
-        assert!(
-            !ids.is_empty(),
-            "Can't have incomplete artifact that needs no chunks"
-        );
+        if ids.is_empty() {
+            break;
+        }
+
         let mut omitted_chunks = false;
         for id in ids {
             if omit.contains(&id) {
@@ -415,10 +409,6 @@ pub fn pipe_partial_state_sync(
 
             match dst.add_chunk(chunk) {
                 Ok(Artifact::StateSync(msg)) => {
-                    assert!(
-                        dst.is_complete(),
-                        "add_chunk returned OK but the artifact is not complete"
-                    );
                     return Some(msg);
                 }
                 Ok(artifact) => {

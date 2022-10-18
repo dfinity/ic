@@ -181,27 +181,15 @@ impl ChunkableArtifact for StateSyncMessage {
 
 /// Basic chunking interface for [`SingleChunked`] artifact tracker.
 pub trait Chunkable {
-    fn get_artifact_hash(&self) -> CryptoHash;
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-    fn get_artifact_identifier(&self) -> CryptoHash;
     fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode>;
-    fn is_complete(&self) -> bool;
-    fn get_chunk_size(&self, chunk_id: ChunkId) -> usize;
 }
 
 // Basic chunking impl for [`SingleChunked`] object tracking
 impl Chunkable for SingleChunked {
-    fn get_artifact_hash(&self) -> CryptoHash {
-        unimplemented!("")
-    }
-
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         let v: Vec<ChunkId> = vec![ChunkId::from(CHUNKID_UNIT_CHUNK)];
         Box::new(v.into_iter())
-    }
-
-    fn get_artifact_identifier(&self) -> CryptoHash {
-        unimplemented!("")
     }
 
     fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
@@ -209,14 +197,6 @@ impl Chunkable for SingleChunked {
             ArtifactChunkData::UnitChunkData(artifact) => Ok(artifact),
             _ => Err(ArtifactErrorCode::ChunkVerificationFailed),
         }
-    }
-
-    fn is_complete(&self) -> bool {
-        unimplemented!("")
-    }
-
-    fn get_chunk_size(&self, _chunk_id: ChunkId) -> usize {
-        unimplemented!("")
     }
 }
 
