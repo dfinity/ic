@@ -5,6 +5,7 @@ use crate::{CanisterHeartbeatError, Hypervisor};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
+use ic_logger::ReplicaLogger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::{
@@ -137,6 +138,7 @@ pub fn execute_heartbeat(
     cycles_account_manager: &CyclesAccountManager,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    log: &ReplicaLogger,
 ) -> HeartbeatResult {
     match canister.next_execution() {
         NextExecution::None | NextExecution::StartNew => {}
@@ -226,6 +228,7 @@ pub fn execute_heartbeat(
         message_instruction_limit,
         prepaid_execution_cycles,
         subnet_size,
+        log,
     );
 
     let instructions_used = NumInstructions::from(

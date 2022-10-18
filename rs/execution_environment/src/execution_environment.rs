@@ -1049,6 +1049,7 @@ impl ExecutionEnvironment {
         time: Time,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        log: &ReplicaLogger,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -1072,6 +1073,7 @@ impl ExecutionEnvironment {
             &self.cycles_account_manager,
             round_limits,
             subnet_size,
+            log,
         )
         .into_parts();
         if let Err(err) = &result {
@@ -2255,6 +2257,7 @@ pub fn execute_canister(
                     time,
                     round_limits,
                     subnet_size,
+                    &exec_env.log,
                 );
                 let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
                 ExecuteCanisterResult {

@@ -34,6 +34,9 @@ use std::{str::FromStr, time::Duration};
 pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
     "cycles_account_manager_response_cycles_refund_error";
 
+pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
+    "cycles_account_manager_execution_cycles_refund_error";
+
 /// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
 const USE_COST_SCALING_FLAG: bool = false;
 
@@ -397,8 +400,17 @@ impl CyclesAccountManager {
         num_instructions_initially_charged: NumInstructions,
         prepaid_execution_cycles: Cycles,
         subnet_size: usize,
+        log: &ReplicaLogger,
     ) {
-        // TODO(EXC-1055): Log an error if `num_instructions` is larger.
+        if num_instructions > num_instructions_initially_charged {
+            error!(
+                log,
+                "{}: Unexpected amount of executed instructions: {} (max expected {})",
+                CRITICAL_ERROR_EXECUTION_CYCLES_REFUND,
+                num_instructions,
+                num_instructions_initially_charged
+            );
+        }
         let num_instructions_to_refund =
             std::cmp::min(num_instructions, num_instructions_initially_charged);
         let cycles_to_refund = self

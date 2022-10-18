@@ -242,6 +242,7 @@ impl InstallCodeHelper {
             message_instruction_limit,
             original.prepaid_execution_cycles,
             original.subnet_size,
+            round.log,
         );
 
         if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
@@ -673,6 +674,7 @@ pub(crate) fn finish_err(
         message_instruction_limit,
         original.prepaid_execution_cycles,
         original.subnet_size,
+        round.log,
     );
 
     let instructions_used = NumInstructions::from(
