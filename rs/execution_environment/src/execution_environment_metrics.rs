@@ -1,10 +1,15 @@
 use ic_cycles_account_manager::CRITICAL_ERROR_RESPONSE_CYCLES_REFUND;
-use ic_error_types::UserError;
+use ic_error_types::ErrorCode;
 use ic_ic00_types as ic00;
 use ic_metrics::buckets::decimal_buckets;
-use ic_metrics::{MetricsRegistry, Timer};
+use ic_metrics::MetricsRegistry;
 use prometheus::{HistogramVec, IntCounter};
 use std::str::FromStr;
+
+pub const FINISHED_OUTCOME_LABEL: &str = "finished";
+pub const SUBMITTED_OUTCOME_LABEL: &str = "finished";
+pub const ERROR_OUTCOME_LABEL: &str = "error";
+pub const SUCCESS_STATUS_LABEL: &str = "success";
 
 /// Metrics used to monitor the performance of the execution environment.
 pub(crate) struct ExecutionEnvironmentMetrics {
@@ -69,8 +74,24 @@ impl ExecutionEnvironmentMetrics {
     pub fn observe_subnet_message<T>(
         &self,
         method_name: &str,
-        timer: &Timer,
-        res: &Result<T, UserError>,
+        duration: f64,
+        res: &Result<T, ErrorCode>,
+    ) {
+        let (outcome_label, status_label) = match res {
+            Ok(_) => (FINISHED_OUTCOME_LABEL.into(), SUCCESS_STATUS_LABEL.into()),
+            Err(err_code) => (ERROR_OUTCOME_LABEL.into(), format!("{:?}", err_code)),
+        };
+
+        self.observe_message_with_label(method_name, duration, outcome_label, status_label)
+    }
+
+    /// Helper function to observe the duration and count of subnet messages.
+    pub(crate) fn observe_message_with_label(
+        &self,
+        method_name: &str,
+        duration: f64,
+        outcome_label: String,
+        status_label: String,
     ) {
         let method_name_label = if let Ok(method_name) = ic00::Method::from_str(method_name) {
             format!("ic00_{}", method_name)
@@ -78,14 +99,9 @@ impl ExecutionEnvironmentMetrics {
             String::from("unknown_method")
         };
 
-        let (outcome_label, status_label) = match res {
-            Ok(_) => (String::from("success"), String::from("success")),
-            Err(err) => (String::from("error"), format!("{:?}", err.code())),
-        };
-
         self.subnet_messages
             .with_label_values(&[&method_name_label, &outcome_label, &status_label])
-            .observe(timer.elapsed());
+            .observe(duration);
     }
 
     pub fn response_cycles_refund_error_counter(&self) -> &IntCounter {

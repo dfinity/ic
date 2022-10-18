@@ -10,7 +10,9 @@ use crate::{
         replicated_query::execute_replicated_query, response::execute_response,
         update::execute_update,
     },
-    execution_environment_metrics::ExecutionEnvironmentMetrics,
+    execution_environment_metrics::{
+        ExecutionEnvironmentMetrics, SUBMITTED_OUTCOME_LABEL, SUCCESS_STATUS_LABEL,
+    },
     hypervisor::Hypervisor,
     util::candid_error_to_user_error,
     NonReplicatedQueryKind,
@@ -378,13 +380,25 @@ impl ExecutionEnvironment {
 
         let mut msg = match msg {
             CanisterInputMessage::Response(response) => {
-                let request = state
+                let context = state
                     .metadata
                     .subnet_call_context_manager
-                    .retrieve_request(response.originator_reply_callback, &self.log);
-                return match request {
+                    .retrieve_context(response.originator_reply_callback, &self.log);
+                return match context {
                     None => (state, Some(NumInstructions::from(0))),
-                    Some(request) => {
+                    Some(context) => {
+                        let time_elapsed = state.time() - context.get_time();
+                        let request = context.get_request();
+
+                        self.metrics.observe_subnet_message(
+                            &request.method_name,
+                            time_elapsed.as_secs_f64(),
+                            &match &response.response_payload {
+                                Payload::Data(_) => Ok(()),
+                                Payload::Reject(_) => Err(ErrorCode::CanisterRejectedMessage),
+                            },
+                        );
+
                         state.push_subnet_output_response(
                             Response {
                                 originator: request.sender,
@@ -395,6 +409,7 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
+
                         (state, Some(NumInstructions::from(0)))
                     }
                 };
@@ -713,10 +728,11 @@ impl ExecutionEnvironment {
                                             .metadata
                                             .subnet_call_context_manager
                                             .push_http_request(canister_http_request_context);
-                                        self.metrics.observe_subnet_message(
+                                        self.metrics.observe_message_with_label(
                                             &request.method_name,
-                                            &timer,
-                                            &Ok(()),
+                                            timer.elapsed(),
+                                            SUBMITTED_OUTCOME_LABEL.into(),
+                                            SUCCESS_STATUS_LABEL.into(),
                                         );
                                         None
                                     }
@@ -951,8 +967,11 @@ impl ExecutionEnvironment {
     ) -> ReplicatedState {
         // Request has been executed. Observe metrics and respond.
         let method_name = String::from(message.method_name());
-        self.metrics
-            .observe_subnet_message(method_name.as_str(), &timer, &response);
+        self.metrics.observe_subnet_message(
+            method_name.as_str(),
+            timer.elapsed(),
+            &response.as_ref().map_err(|err| err.code()),
+        );
         self.output_subnet_response(message, state, response, refund)
     }
 
