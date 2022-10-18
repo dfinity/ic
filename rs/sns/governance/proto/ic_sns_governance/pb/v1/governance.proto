@@ -604,7 +604,7 @@ message ProposalData {
   // This is set if the proposal is considered valid at time of submission.
   optional string payload_text_rendering = 15;
 
-  // True if NervousSystemParameters.voting_reward_parameters was set when the
+  // True if NervousSystemParameters.voting_rewards_parameters was set when the
   // proposal was made.
   bool is_eligible_for_rewards = 16;
 
@@ -784,13 +784,13 @@ message VotingRewardsParameters {
   // levels out at the end of the growth rate transition period.
   optional uint64 reward_rate_transition_duration_seconds = 3;
 
-  // The amount of rewards is propotional to token_supply * current_rate. In
-  // turn, current_rate is somewhere between these two values. In the first
-  // reward period, it is the initial growth rate, and after the growth rate
-  // transition period has elapsed, the growth rate becomes the final growth
-  // rate, and remains at that value for the rest of time. The transition
-  // between the initial and final growth rates is quadratic, and levels out at
-  // the end of the growth rate transition period.
+  // The amount of rewards is proportional to token_supply * current_rate. In
+  // turn, current_rate is somewhere between `initial_reward_rate_basis_points` 
+  // and `final_reward_rate_basis_points`. In the first reward period, it is the 
+  // initial growth rate, and after the growth rate transition period has elapsed, 
+  // the growth rate becomes the final growth rate, and remains at that value for 
+  // the rest of time. The transition between the initial and final growth rates is 
+  // quadratic, and levels out at the end of the growth rate transition period.
   //
   // (A basis point is one in ten thousand.)
   optional uint64 initial_reward_rate_basis_points = 4;

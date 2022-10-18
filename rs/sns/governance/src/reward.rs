@@ -121,6 +121,11 @@ impl LinearMap {
 }
 
 impl VotingRewardsParameters {
+    /// This is an upper bound for `initial_reward_rate_basis_points_ceiling`. High values
+    /// may improve the incentives when voting, but too-high values may also lead
+    /// to an over-concentration of voting power and high inflation.
+    pub const INITIAL_REWARD_RATE_BASIS_POINTS_CEILING: u64 = 10_000;
+
     /// Returns Ok if self is usable.
     ///
     /// If Err is returned, it contains a description (for human consumption) of
@@ -275,7 +280,7 @@ impl VotingRewardsParameters {
         require_field_set_and_in_range(
             "initial_reward_rate_basis_points",
             &self.initial_reward_rate_basis_points,
-            ..10_000, // Not more than 100%.
+            ..Self::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING,
         )
     }
 

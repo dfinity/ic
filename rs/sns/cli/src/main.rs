@@ -2,6 +2,7 @@
 
 mod deploy;
 mod init_config_file;
+mod unit_helpers;
 
 use crate::deploy::{DirectSnsDeployerForTests, SnsWasmSnsDeployer};
 use crate::init_config_file::{InitConfigFileArgs, SnsCliInitConfig};

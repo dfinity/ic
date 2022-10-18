@@ -1,3 +1,4 @@
+use crate::unit_helpers;
 use anyhow::anyhow;
 use clap::Parser;
 use ic_sns_governance::pb::v1::{governance::SnsMetadata, NervousSystemParameters};
@@ -43,7 +44,7 @@ enum SubCommand {
 /// the SnsInitPayload, users of the SNS Cli would need to do the encoding by hand and paste
 /// it into the init config file. With SnsCliInitConfig, this struct allows for a PathBuf to be specified
 /// and will handle converting to the correct type within the Cli tool.
-#[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
 pub struct SnsCliInitConfig {
     /// Fee of a transaction.
     pub transaction_fee_e8s: Option<u64>,
@@ -75,6 +76,18 @@ pub struct SnsCliInitConfig {
     /// A description of the SNS project.
     pub description: Option<String>,
 
+    /// The amount of rewards is proportional to token_supply * current_rate. In
+    /// turn, current_rate is somewhere between `initial_reward_rate_percentage`
+    /// and `final_reward_rate_percentage`. In the first reward period, it is the
+    /// initial growth rate, and after the growth rate transition period has elapsed,
+    /// the growth rate becomes the final growth rate, and remains at that value for
+    /// the rest of time. The transition between the initial and final growth rates is
+    /// quadratic, and levels out at the end of the growth rate transition period.
+    ///
+    /// (A basis point is one in ten thousand.)
+    pub initial_reward_rate_percentage: Option<f64>,
+    pub final_reward_rate_percentage: Option<f64>,
+
     /// If the swap fails, control of the dapp canister(s) will be set to these
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s).
@@ -89,6 +102,10 @@ pub struct SnsCliInitConfig {
 impl Default for SnsCliInitConfig {
     fn default() -> Self {
         let nervous_system_parameters_default = NervousSystemParameters::with_default_values();
+        let voting_rewards_parameters = nervous_system_parameters_default
+            .voting_rewards_parameters
+            .as_ref()
+            .unwrap();
 
         SnsCliInitConfig {
             transaction_fee_e8s: nervous_system_parameters_default.transaction_fee_e8s,
@@ -104,13 +121,19 @@ impl Default for SnsCliInitConfig {
             name: None,
             description: None,
             initial_token_distribution: None,
+            initial_reward_rate_percentage: voting_rewards_parameters
+                .initial_reward_rate_basis_points
+                .map(unit_helpers::basis_points_to_percentage),
+            final_reward_rate_percentage: voting_rewards_parameters
+                .final_reward_rate_basis_points
+                .map(unit_helpers::basis_points_to_percentage),
         }
     }
 }
 
 impl SnsCliInitConfig {
     /// A SnsCliInitConfig is valid if it can convert to an SnsInitPayload and have the generated
-    /// struct pass it's validation.
+    /// struct pass its validation.
     fn validate(&self) -> anyhow::Result<()> {
         let sns_init_payload = SnsInitPayload::try_from(self.clone())?;
         sns_init_payload.validate()?;
@@ -211,6 +234,12 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             name: sns_cli_init_config.name,
             description: sns_cli_init_config.description,
             initial_token_distribution: sns_cli_init_config.initial_token_distribution,
+            initial_reward_rate_basis_points: sns_cli_init_config
+                .initial_reward_rate_percentage
+                .map(unit_helpers::percentage_to_basis_points),
+            final_reward_rate_basis_points: sns_cli_init_config
+                .final_reward_rate_percentage
+                .map(unit_helpers::percentage_to_basis_points),
         })
     }
 }
@@ -235,7 +264,7 @@ fn new(init_config_file_path: PathBuf) {
 }
 
 pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
-    let nervous_system_parameters_default = NervousSystemParameters::with_default_values();
+    let default_config = SnsCliInitConfig::default();
     let yaml_payload = serde_yaml::to_string(&sns_cli_init_config)
         .expect("Error when converting sns_cli_init_config to yaml");
 
@@ -251,9 +280,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # Fee of a ledger transaction.
 # Default value = {}
 #"##,
-                nervous_system_parameters_default
-                    .transaction_fee_e8s
-                    .unwrap()
+                default_config.transaction_fee_e8s.unwrap()
             ),
         ),
         (
@@ -266,7 +293,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # The cost of making a proposal that is not adopted in e8s.
 # Default value = {}
 #"##,
-                nervous_system_parameters_default.reject_cost_e8s.unwrap()
+                default_config.proposal_reject_cost_e8s.unwrap()
             ),
         ),
         (
@@ -378,9 +405,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # The minimum amount of SNS Token e8s an SNS Ledger account must have to stake a neuron.
 # Default value = {}
 #"##,
-                nervous_system_parameters_default
-                    .neuron_minimum_stake_e8s
-                    .unwrap(),
+                default_config.neuron_minimum_stake_e8s.unwrap(),
             ),
         ),
         (
@@ -390,7 +415,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
 # Default value = {}
 #"##,
-                nervous_system_parameters_default
+                default_config
                     .neuron_minimum_dissolve_delay_to_vote_seconds
                     .unwrap(),
             ),
@@ -443,6 +468,32 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # Must be a string of max length = {}.
 #"##,
                 SnsMetadata::MAX_DESCRIPTION_LENGTH
+            ),
+        ),
+        (
+            Regex::new(r"initial_reward_rate_percentage[^A-Za-z]*").unwrap(),
+            format!(
+                r##"#
+# The voting reward rate controls how quickly the supply of the SNS token 
+# increases. For example, a reward rate of 2% will cause the supply to increase 
+# by at most 2% each year. A higher voting reward rate incentivizes people to 
+# participate in governance, but also results in higher inflation. 
+#
+# An initial and a final reward rate can be set, to have a higher reward rate at
+# the launch of the SNS, and a lower rate farther into the SNS’s lifetime. The 
+# reward rate falls quadratically from the initial rate to the final rate over 
+# the course of `reward_rate_transition_duration_seconds`.
+#
+# Setting both `initial_reward_rate_percentage` and `final_reward_rate_percentage`
+# to 0 will result in the system not distributing voting rewards at all. 
+#
+# The default value for initial_reward_rate_percentage is {}. The value used 
+# by the NNS is 10%.
+# The default value for final_reward_rate_percentage is {}. The value used by 
+# the NNS is 5%.
+#"##,
+                default_config.initial_reward_rate_percentage.unwrap(),
+                default_config.final_reward_rate_percentage.unwrap(),
             ),
         ),
     ];
@@ -520,6 +571,8 @@ mod test {
                 initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
                     ..Default::default()
                 })),
+                initial_reward_rate_percentage: Some(31.0),
+                final_reward_rate_percentage: Some(27.0),
             }
         }
     }
@@ -572,6 +625,8 @@ logo: {}
 description: Launching an SNS
 name: ServiceNervousSystemTest
 url: https://internetcomputer.org/
+initial_reward_rate_percentage: 100
+final_reward_rate_percentage: 100
         "#,
             logo_path.clone().into_os_string().into_string().unwrap()
         );
@@ -644,6 +699,18 @@ url: https://internetcomputer.org/
         assert_eq!(
             sns_cli_init_config.initial_token_distribution,
             sns_init_payload.initial_token_distribution
+        );
+        assert_eq!(
+            sns_cli_init_config
+                .initial_reward_rate_percentage
+                .map(|v| (v * 100.0) as u64),
+            sns_init_payload.initial_reward_rate_basis_points
+        );
+        assert_eq!(
+            sns_cli_init_config
+                .final_reward_rate_percentage
+                .map(|v| (v * 100.0) as u64),
+            sns_init_payload.final_reward_rate_basis_points
         );
 
         // Read the test.png file into memory
