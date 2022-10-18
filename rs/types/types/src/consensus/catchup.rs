@@ -2,8 +2,8 @@
 
 use crate::{
     consensus::{
-        Block, Committee, HasCommittee, HasHeight, HasVersion, HashedBlock, HashedRandomBeacon,
-        RandomBeacon, ThresholdSignature, ThresholdSignatureShare,
+        Block, Committee, ConsensusMessageHashable, HasCommittee, HasHeight, HasVersion,
+        HashedBlock, HashedRandomBeacon, RandomBeacon, ThresholdSignature, ThresholdSignatureShare,
     },
     crypto::threshold_sig::ni_dkg::NiDkgId,
     crypto::*,
@@ -158,7 +158,7 @@ impl From<&CatchUpPackage> for pb::CatchUpPackage {
 impl TryFrom<&pb::CatchUpPackage> for CatchUpPackage {
     type Error = String;
     fn try_from(cup: &pb::CatchUpPackage) -> Result<CatchUpPackage, String> {
-        Ok(CatchUpPackage {
+        let ret = CatchUpPackage {
             content: CatchUpContent::try_from(
                 pb::CatchUpContent::decode(&cup.content[..])
                     .map_err(|e| format!("CatchUpContent failed to decode {:?}", e))?,
@@ -173,7 +173,12 @@ impl TryFrom<&pb::CatchUpPackage> for CatchUpPackage {
                 )
                 .map_err(|e| format!("Unable to decode CUP signer {:?}", e))?,
             },
-        })
+        };
+        if ret.check_integrity() {
+            Ok(ret)
+        } else {
+            Err("CatchUpPackage validity check failed".to_string())
+        }
     }
 }
 
