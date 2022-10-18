@@ -1297,12 +1297,6 @@ pub mod tests {
 
     /// `TestArtifact` implements the `Chunkable` trait.
     impl Chunkable for TestArtifact {
-        /// This method to return the artifact hash is not implemented as it is
-        /// not used.
-        fn get_artifact_hash(&self) -> CryptoHash {
-            unimplemented!()
-        }
-
         /// The method returns an Iterator over the chunks to download.
         fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
             Box::new(
@@ -1311,12 +1305,6 @@ pub mod tests {
                     .collect::<Vec<_>>()
                     .into_iter(),
             )
-        }
-
-        /// The method to return the artifact ID is not implemented as it is not
-        /// used.
-        fn get_artifact_identifier(&self) -> CryptoHash {
-            unimplemented!()
         }
 
         /// The method adds the given chunk.
@@ -1333,16 +1321,6 @@ pub mod tests {
             } else {
                 Err(ArtifactErrorCode::ChunksMoreNeeded)
             }
-        }
-
-        /// The method always simply returns "false".
-        fn is_complete(&self) -> bool {
-            false
-        }
-
-        /// The returned chunk size is always zero.
-        fn get_chunk_size(&self, _chunk_id: ChunkId) -> usize {
-            0
         }
     }
 

@@ -16,7 +16,6 @@ use ic_types::{
         ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
         ChunkId, Chunkable,
     },
-    crypto::CryptoHash,
     state_sync::{decode_manifest, Manifest, MANIFEST_CHUNK},
     CryptoHashOfState, Height,
 };
@@ -1057,10 +1056,6 @@ impl IncompleteState {
 }
 
 impl Chunkable for IncompleteState {
-    fn get_artifact_hash(&self) -> CryptoHash {
-        self.root_hash.get_ref().clone()
-    }
-
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         match self.state {
             DownloadState::Blank => Box::new(std::iter::once(MANIFEST_CHUNK)),
@@ -1077,10 +1072,6 @@ impl Chunkable for IncompleteState {
                 Box::new(ids.into_iter())
             }
         }
-    }
-
-    fn get_artifact_identifier(&self) -> CryptoHash {
-        self.get_artifact_hash()
     }
 
     fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
@@ -1258,30 +1249,6 @@ impl Chunkable for IncompleteState {
                 }
 
                 Err(ChunksMoreNeeded)
-            }
-        }
-    }
-
-    fn is_complete(&self) -> bool {
-        matches!(self.state, DownloadState::Complete(_))
-    }
-
-    fn get_chunk_size(&self, chunk_id: ChunkId) -> usize {
-        let ix = chunk_id.get() as usize;
-
-        if ix == 0 {
-            // Guestimate of manifest size
-            return crate::manifest::DEFAULT_CHUNK_SIZE as usize;
-        }
-        match &self.state {
-            DownloadState::Blank | DownloadState::Complete(_) => {
-                crate::manifest::DEFAULT_CHUNK_SIZE as usize
-            }
-            DownloadState::Loading { manifest, .. } => {
-                if ix > manifest.chunk_table.len() {
-                    return 0;
-                }
-                manifest.chunk_table[ix - 1].size_bytes as usize
             }
         }
     }

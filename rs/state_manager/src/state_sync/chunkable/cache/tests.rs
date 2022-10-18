@@ -1,6 +1,7 @@
 use super::*;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_types::crypto::CryptoHash;
 use tempfile::TempDir;
 
 const NUM_THREADS: u32 = 3;
