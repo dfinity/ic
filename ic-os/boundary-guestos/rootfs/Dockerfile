@@ -3,7 +3,7 @@
 # Build step for exmaple:
 # - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev --build-arg SW=true \ `
 #   `--build-arg BASE_IMAGE=dfinity/boundaryos-base@sha256:1be252d3ecbb29c1ec3c4fdc90b7b726f856cd5beb502aa70480975a8aa4b5ed -f Dockerfile .`
-# 
+#
 #
 # The base images are defined in docker-base.prod and docker-base.dev. Update
 # the references there when a new base image has been built. Note that this
@@ -14,7 +14,7 @@ ARG BASE_IMAGE=
 ARG BUILD_TYPE=
 
 # Service worker version and sha256; only if SW is `true` the service worker from npm is used
-ARG SW= 
+ARG SW=
 ARG sw_version=1.2.13
 ARG sw_sha256=eb06cb3c7fba541b61161ce17989813ce86266b788c84bd6a27f664f9f5df21b
 
@@ -28,7 +28,7 @@ USER root:root
 
 WORKDIR /tmp
 
-# Download and check service worker production version 
+# Download and check service worker production version
 # from: https://registry.npmjs.org/@dfinity/service-worker/-/
 ARG sw_version
 ARG sw_sha256
@@ -55,7 +55,7 @@ FROM $BASE_IMAGE
 
 USER root:root
 
-# Fetch and install npm ic service worker for production 
+# Fetch and install npm ic service worker for production
 COPY --from=download /tmp/service-worker.tgz /tmp/service-worker.tgz
 
 ARG SW=
@@ -213,13 +213,13 @@ COPY opt /opt
 RUN rm -rf /etc/nginx/sites-enabled/nginx.conf
 
 # Install ic service worker production version from: https://registry.npmjs.org/@dfinity/service-worker/-/
-RUN mkdir -p /var/www/html && chown www-data:www-data /var/www/html 
+RUN mkdir -p /var/www/html && chown www-data:www-data /var/www/html
 
 # Install other files (e.g. the uninstall-script)
 COPY var/www/html /var/www/html
 
 RUN chmod 0644 /var/www/html/*
- 
+
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
     rm -rf \
@@ -237,11 +237,7 @@ RUN apt-get clean && \
 # Update POSIX permissions in /opt
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
-    chmod 0755 /opt/ic/bin/* 
-
-COPY boot /boot
-# Update POSIX permissions in /boot/
-RUN chmod 0644 /boot/extra_boot_args
+    chmod 0755 /opt/ic/bin/*
 
 # Take care of nginx files
 RUN chmod 0755 /etc/nginx/* && \
