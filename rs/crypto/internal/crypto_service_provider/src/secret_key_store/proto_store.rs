@@ -20,6 +20,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 const CURRENT_SKS_VERSION: u32 = 2;
+const VAULT_FOLDER: &str = "vault"; // sub-folder relative to `crypto_root`, holding secret keys
 
 fn key_id_from_hex(key_id_hex: &str) -> KeyId {
     KeyId::from_hex(key_id_hex).unwrap_or_else(|_| panic!("Error parsing hex KeyId {}", key_id_hex))
@@ -43,18 +44,35 @@ pub struct ProtoSecretKeyStore {
 
 impl ProtoSecretKeyStore {
     /// Creates a database instance.
-    pub fn open(dir: &Path, file_name: &str, logger: Option<ReplicaLogger>) -> Self {
-        CryptoConfig::check_dir_has_required_permissions(dir)
-            .expect("wrong crypto root permissions");
-        let proto_file = dir.join(file_name);
-        let secret_keys = match Self::read_sks_data_from_disk(&proto_file) {
-            Some(sks_proto) => sks_proto,
-            None => SecretKeys::new(),
-        };
-        ProtoSecretKeyStore {
-            proto_file,
-            keys: Arc::new(RwLock::new(secret_keys)),
-            logger: logger.unwrap_or_else(no_op_logger),
+    pub fn open(crypto_root: &Path, file_name: &str, logger: Option<ReplicaLogger>) -> Self {
+        let legacy_proto_file = crypto_root.join(file_name);
+        let vault_folder = crypto_root.join(VAULT_FOLDER);
+        let proto_file = vault_folder.join(file_name);
+        if proto_file.exists() {
+            CryptoConfig::check_dir_has_required_permissions(vault_folder.as_path())
+                .expect("wrong vault folder permissions");
+            let secret_keys = match Self::read_sks_data_from_disk(&proto_file) {
+                Some(sks_proto) => sks_proto,
+                None => SecretKeys::new(),
+            };
+            ProtoSecretKeyStore {
+                proto_file,
+                keys: Arc::new(RwLock::new(secret_keys)),
+                logger: logger.unwrap_or_else(no_op_logger),
+            }
+        } else {
+            // proceed with legacy proto file
+            CryptoConfig::check_dir_has_required_permissions(crypto_root)
+                .expect("wrong crypto_root permissions");
+            let secret_keys = match Self::read_sks_data_from_disk(&legacy_proto_file) {
+                Some(sks_proto) => sks_proto,
+                None => SecretKeys::new(),
+            };
+            ProtoSecretKeyStore {
+                proto_file: legacy_proto_file,
+                keys: Arc::new(RwLock::new(secret_keys)),
+                logger: logger.unwrap_or_else(no_op_logger),
+            }
         }
     }
 
