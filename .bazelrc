@@ -46,6 +46,7 @@ build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 build --@rules_rust//:source_path_prefix=""
 
 build --flag_alias=ic_version=//bazel:ic_version
+build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
 
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439

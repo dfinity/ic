@@ -36,13 +36,14 @@ if [ -L "$f" ];then
     f=$(readlink "$f")
 fi
 
-# TODO: copy to blessed/ic when run in protected mode.
+# Multipart upload does not work trough the proxy for some reasons. Just disabling it for now.
 "@@RCLONE@@" \
     --config="@@RCLONE_CONFIG@@" \
     --progress \
     --stats-one-line \
     --checksum \
     --immutable \
+    --s3-upload-cutoff=5G \
     copy \
     "$f" \
     "public-s3:dfinity-download-public/ic/${VERSION}/@@REMOTE_SUBDIR@@/"
