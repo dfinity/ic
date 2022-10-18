@@ -1817,11 +1817,10 @@ impl ExecutionEnvironment {
 
         let canister_id = old_canister.canister_id();
         let new_wasm_hash = WasmHash::from(&install_context.wasm_module);
-        let compilation_cost_handling = if self.config.module_sharing == FlagStatus::Enabled
-            && state
-                .metadata
-                .expected_compiled_wasms
-                .contains(&new_wasm_hash)
+        let compilation_cost_handling = if state
+            .metadata
+            .expected_compiled_wasms
+            .contains(&new_wasm_hash)
         {
             CompilationCostHandling::CountReducedAmount
         } else {
@@ -1879,13 +1878,11 @@ impl ExecutionEnvironment {
                 let result = match result {
                     Ok(result) => {
                         state.metadata.heap_delta_estimate += result.heap_delta;
-                        if self.config.module_sharing == FlagStatus::Enabled {
-                            if let Some(new_wasm_hash) = result.new_wasm_hash {
-                                state
-                                    .metadata
-                                    .expected_compiled_wasms
-                                    .insert(WasmHash::from(new_wasm_hash));
-                            }
+                        if let Some(new_wasm_hash) = result.new_wasm_hash {
+                            state
+                                .metadata
+                                .expected_compiled_wasms
+                                .insert(WasmHash::from(new_wasm_hash));
                         }
                         info!(
                             self.log,

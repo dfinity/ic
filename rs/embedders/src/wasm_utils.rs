@@ -48,12 +48,8 @@ fn compile_inner(
     let module = embedder.compile(&instrumentation_output.binary)?;
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
-    let serialized_module = SerializedModule::new(
-        embedder.config().feature_flags.module_sharing,
-        &module,
-        instrumentation_output,
-        wasm_validation_details,
-    )?;
+    let serialized_module =
+        SerializedModule::new(&module, instrumentation_output, wasm_validation_details)?;
     Ok((
         module,
         CompilationResult {

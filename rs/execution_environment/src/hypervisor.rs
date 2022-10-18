@@ -1,5 +1,4 @@
 use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
-use ic_config::embedders::FeatureFlags;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -230,7 +229,6 @@ impl Hypervisor {
         embedder_config.query_execution_threads = config.query_execution_threads;
         embedder_config.feature_flags.rate_limiting_of_debug_prints =
             config.rate_limiting_of_debug_prints;
-        embedder_config.feature_flags.module_sharing = config.module_sharing;
         embedder_config.cost_to_compile_wasm_instruction = config.cost_to_compile_wasm_instruction;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
@@ -260,7 +258,7 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(config.module_sharing)),
+            compilation_cache: Arc::new(CompilationCache::new()),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config.cost_to_compile_wasm_instruction,
             dirty_page_overhead,
@@ -286,9 +284,7 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(
-                FeatureFlags::default().module_sharing,
-            )),
+            compilation_cache: Arc::new(CompilationCache::default()),
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,

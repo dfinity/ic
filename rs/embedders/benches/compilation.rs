@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{compile, validate_and_instrument_for_testing},
     WasmtimeEmbedder,
@@ -118,8 +118,7 @@ fn wasm_deserialization(c: &mut Criterion) {
     let binaries = generate_binaries();
     let mut group = c.benchmark_group("deserialization");
     for (name, comp_cost, wasm) in binaries {
-        let mut config = EmbeddersConfig::default();
-        config.feature_flags.module_sharing = FlagStatus::Enabled;
+        let config = EmbeddersConfig::default();
         let embedder = WasmtimeEmbedder::new(config, no_op_logger());
         let (_, serialized_module) = compile(&embedder, &wasm)
             .1
