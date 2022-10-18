@@ -54,6 +54,8 @@ bazel-cache-perf-test-linux:
     - .bazel-rules-post-master
   needs:
     - bazel-test-all
+  variables:
+    BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output"
   
 bazel-test-all-rebuild:
   extends:
