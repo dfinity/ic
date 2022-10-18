@@ -31,13 +31,15 @@ fn get_test_sns_cli_init_config() -> SnsCliInitConfig {
         description: Some("A project that decentralizes a dapp".to_string()),
         url: Some("https://internetcomputer.org/".to_string()),
         neuron_minimum_dissolve_delay_to_vote_seconds: Some(0),
+        initial_reward_rate_percentage: Some(31.0),
+        final_reward_rate_percentage: Some(21.0),
     }
 }
 #[test]
 fn test_get_init_config_file() {
     local_test_on_sns_subnet(|runtime| async move {
         let sns_init_payload = SnsInitPayload::try_from(get_test_sns_cli_init_config())
-            .expect("Error: couldnt convert SnsCliInitConfig into SnsInitPayload");
+            .expect("Error: couldn't convert SnsCliInitConfig into SnsInitPayload");
 
         let sns_canisters_init_payload = sns_init_payload
             .build_canister_payloads(

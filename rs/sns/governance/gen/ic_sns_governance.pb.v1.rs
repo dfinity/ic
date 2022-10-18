@@ -665,7 +665,7 @@ pub struct ProposalData {
     /// This is set if the proposal is considered valid at time of submission.
     #[prost(string, optional, tag = "15")]
     pub payload_text_rendering: ::core::option::Option<::prost::alloc::string::String>,
-    /// True if NervousSystemParameters.voting_reward_parameters was set when the
+    /// True if NervousSystemParameters.voting_rewards_parameters was set when the
     /// proposal was made.
     #[prost(bool, tag = "16")]
     pub is_eligible_for_rewards: bool,
@@ -853,13 +853,13 @@ pub struct VotingRewardsParameters {
     /// levels out at the end of the growth rate transition period.
     #[prost(uint64, optional, tag = "3")]
     pub reward_rate_transition_duration_seconds: ::core::option::Option<u64>,
-    /// The amount of rewards is propotional to token_supply * current_rate. In
-    /// turn, current_rate is somewhere between these two values. In the first
-    /// reward period, it is the initial growth rate, and after the growth rate
-    /// transition period has elapsed, the growth rate becomes the final growth
-    /// rate, and remains at that value for the rest of time. The transition
-    /// between the initial and final growth rates is quadratic, and levels out at
-    /// the end of the growth rate transition period.
+    /// The amount of rewards is proportional to token_supply * current_rate. In
+    /// turn, current_rate is somewhere between `initial_reward_rate_basis_points`
+    /// and `final_reward_rate_basis_points`. In the first reward period, it is the
+    /// initial growth rate, and after the growth rate transition period has elapsed,
+    /// the growth rate becomes the final growth rate, and remains at that value for
+    /// the rest of time. The transition between the initial and final growth rates is
+    /// quadratic, and levels out at the end of the growth rate transition period.
     ///
     /// (A basis point is one in ten thousand.)
     #[prost(uint64, optional, tag = "4")]

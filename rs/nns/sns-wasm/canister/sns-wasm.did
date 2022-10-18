@@ -53,11 +53,13 @@ type SnsInitPayload = record {
   url : opt text;
   fallback_controller_principal_ids : vec text;
   token_symbol : opt text;
+  final_reward_rate_basis_points : opt nat64;
   neuron_minimum_stake_e8s : opt nat64;
   logo : opt text;
   name : opt text;
   neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
   description : opt text;
+  initial_reward_rate_basis_points : opt nat64;
   transaction_fee_e8s : opt nat64;
   sns_initialization_parameters : opt text;
   initial_token_distribution : opt InitialTokenDistribution;

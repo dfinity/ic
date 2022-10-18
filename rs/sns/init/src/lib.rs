@@ -20,6 +20,7 @@ use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::governance::{SnsMetadata, Version};
 use ic_sns_governance::pb::v1::{
     Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
+    VotingRewardsParameters,
 };
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
@@ -83,8 +84,16 @@ impl SnsInitPayload {
     /// for default-able parameters.
     pub fn with_default_values() -> Self {
         let nervous_system_parameters_default = NervousSystemParameters::with_default_values();
+        let voting_rewards_parameters = nervous_system_parameters_default
+            .voting_rewards_parameters
+            .as_ref()
+            .unwrap();
         Self {
             transaction_fee_e8s: nervous_system_parameters_default.transaction_fee_e8s,
+            initial_reward_rate_basis_points: voting_rewards_parameters
+                .initial_reward_rate_basis_points,
+            final_reward_rate_basis_points: voting_rewards_parameters
+                .final_reward_rate_basis_points,
             token_name: None,
             token_symbol: None,
             proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
@@ -308,20 +317,45 @@ impl SnsInitPayload {
     /// Returns a complete NervousSystemParameter struct with its corresponding SnsInitPayload
     /// fields filled out.
     fn get_nervous_system_parameters(&self) -> NervousSystemParameters {
-        let mut nervous_system_parameters = NervousSystemParameters::with_default_values();
+        let nervous_system_parameters = NervousSystemParameters::with_default_values();
         let all_permissions = NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
         };
-        nervous_system_parameters.neuron_claimer_permissions = Some(all_permissions.clone());
-        nervous_system_parameters.neuron_grantable_permissions = Some(all_permissions);
-        nervous_system_parameters.neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s;
-        nervous_system_parameters.reject_cost_e8s = self.proposal_reject_cost_e8s;
-        nervous_system_parameters.neuron_minimum_dissolve_delay_to_vote_seconds =
-            self.neuron_minimum_dissolve_delay_to_vote_seconds;
-        nervous_system_parameters.transaction_fee_e8s = self.transaction_fee_e8s;
-        nervous_system_parameters.reject_cost_e8s = self.proposal_reject_cost_e8s;
 
-        nervous_system_parameters
+        let SnsInitPayload {
+            transaction_fee_e8s,
+            token_name: _,
+            token_symbol: _,
+            proposal_reject_cost_e8s: reject_cost_e8s,
+            neuron_minimum_stake_e8s,
+            fallback_controller_principal_ids: _,
+            logo: _,
+            url: _,
+            name: _,
+            description: _,
+            neuron_minimum_dissolve_delay_to_vote_seconds,
+            sns_initialization_parameters: _,
+            initial_reward_rate_basis_points,
+            final_reward_rate_basis_points,
+            initial_token_distribution: _,
+        } = self.clone();
+
+        let voting_rewards_parameters = Some(VotingRewardsParameters {
+            initial_reward_rate_basis_points,
+            final_reward_rate_basis_points,
+            ..nervous_system_parameters.voting_rewards_parameters.unwrap()
+        });
+
+        NervousSystemParameters {
+            neuron_claimer_permissions: Some(all_permissions.clone()),
+            neuron_grantable_permissions: Some(all_permissions),
+            transaction_fee_e8s,
+            reject_cost_e8s,
+            neuron_minimum_stake_e8s,
+            neuron_minimum_dissolve_delay_to_vote_seconds,
+            voting_rewards_parameters,
+            ..nervous_system_parameters
+        }
     }
 
     /// Returns an SnsMetadata struct based on configuration of the `SnsInitPayload`.
@@ -350,6 +384,8 @@ impl SnsInitPayload {
             self.validate_logo(),
             self.validate_description(),
             self.validate_name(),
+            self.validate_initial_reward_rate_basis_points(),
+            self.validate_final_reward_rate_basis_points(),
         ];
 
         let defect_msg = validation_fns
@@ -611,6 +647,41 @@ impl SnsInitPayload {
             .ok_or("Error: description must be specified")?;
         SnsMetadata::validate_description(description)?;
         Ok(())
+    }
+
+    fn validate_initial_reward_rate_basis_points(&self) -> Result<(), String> {
+        let initial_reward_rate_basis_points = self
+            .initial_reward_rate_basis_points
+            .ok_or("Error: initial_reward_rate_basis_points must be specified")?;
+        if initial_reward_rate_basis_points
+            > VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING
+        {
+            Err(format!(
+                "Error: initial_reward_rate_basis_points must be less than or equal to {}",
+                VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_final_reward_rate_basis_points(&self) -> Result<(), String> {
+        let initial_reward_rate_basis_points = self
+            .initial_reward_rate_basis_points
+            .ok_or("Error: initial_reward_rate_basis_points must be specified")?;
+        let final_reward_rate_basis_points = self
+            .final_reward_rate_basis_points
+            .ok_or("Error: final_reward_rate_basis_points must be specified")?;
+        if final_reward_rate_basis_points > initial_reward_rate_basis_points {
+            Err(
+                format!(
+                    "Error: final_reward_rate_basis_points ({}) must be less than or equal to initial_reward_rate_basis_points ({})", final_reward_rate_basis_points, 
+                    initial_reward_rate_basis_points
+                )
+            )
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -910,6 +981,28 @@ mod test {
                 .final_reward_rate_basis_points
                 .unwrap(),
             0
+        );
+    }
+
+    #[test]
+    fn voting_rewards_propagate_to_parameters() {
+        let test_payload = SnsInitPayload {
+            initial_reward_rate_basis_points: Some(100),
+            final_reward_rate_basis_points: Some(200),
+            ..SnsInitPayload::with_default_values()
+        };
+        let voting_rewards_parameters = test_payload
+            .get_nervous_system_parameters()
+            .voting_rewards_parameters
+            .unwrap();
+
+        assert_eq!(
+            voting_rewards_parameters.initial_reward_rate_basis_points,
+            test_payload.initial_reward_rate_basis_points
+        );
+        assert_eq!(
+            voting_rewards_parameters.final_reward_rate_basis_points,
+            test_payload.final_reward_rate_basis_points
         );
     }
 }
