@@ -74,6 +74,28 @@ pub struct SnsInitPayload {
     /// levels out at the end of the growth rate transition period.
     #[prost(uint64, optional, tag = "16")]
     pub reward_rate_transition_duration_seconds: ::core::option::Option<u64>,
+    /// The maximum dissolve delay that a neuron can have. That is, the maximum
+    /// that a neuron's dissolve delay can be increased to. The maximum is also enforced
+    /// when saturating the dissolve delay bonus in the voting power computation.
+    #[prost(uint64, optional, tag = "17")]
+    pub max_dissolve_delay_seconds: ::core::option::Option<u64>,
+    /// The age of a neuron that saturates the age bonus for the voting power computation.
+    #[prost(uint64, optional, tag = "18")]
+    pub max_neuron_age_seconds_for_age_bonus: ::core::option::Option<u64>,
+    /// E.g. if a large dissolve delay can double the voting power of a neuron,
+    /// then this field would have a value of 2.0.
+    ///
+    /// For no bonus, this should be set to 1.
+    ///
+    /// To achieve functionality equivalent to NNS, this should be set to 2.
+    #[prost(uint64, optional, tag = "19")]
+    pub max_dissolve_delay_bonus_percentage: ::core::option::Option<u64>,
+    /// Analogous to the previous field (see the previous comment),
+    /// but this one relates to neuron age instead of dissolve delay.
+    ///
+    /// To achieve functionality equivalent to NNS, this should be set to 1.25.
+    #[prost(uint64, optional, tag = "20")]
+    pub max_age_bonus_percentage: ::core::option::Option<u64>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.

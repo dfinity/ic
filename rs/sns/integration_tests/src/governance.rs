@@ -4,6 +4,7 @@ use ic_sns_cli::init_config_file::SnsCliInitConfig;
 use ic_sns_governance::pb::v1::{
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
 };
+use ic_sns_governance::types::ONE_MONTH_SECONDS;
 use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower;
 use ic_sns_init::pb::v1::{FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload};
 use ic_sns_init::SnsCanisterIds;
@@ -34,6 +35,10 @@ fn get_test_sns_cli_init_config() -> SnsCliInitConfig {
         initial_reward_rate_percentage: Some(31.0),
         final_reward_rate_percentage: Some(21.0),
         reward_rate_transition_duration_seconds: Some(100_000),
+        max_dissolve_delay_seconds: Some(8 * ONE_MONTH_SECONDS),
+        max_neuron_age_seconds_for_age_bonus: Some(11 * ONE_MONTH_SECONDS),
+        max_dissolve_delay_bonus_multiplier: Some(1.3),
+        max_age_bonus_multiplier: Some(1.8),
     }
 }
 #[test]

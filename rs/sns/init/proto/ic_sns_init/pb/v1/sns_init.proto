@@ -77,6 +77,28 @@ message SnsInitPayload {
   // *_reward_rate_basis_points fields bellow.) The transition is quadratic, and
   // levels out at the end of the growth rate transition period.
   optional uint64 reward_rate_transition_duration_seconds = 16;
+
+  // The maximum dissolve delay that a neuron can have. That is, the maximum
+  // that a neuron's dissolve delay can be increased to. The maximum is also enforced
+  // when saturating the dissolve delay bonus in the voting power computation.
+  optional uint64 max_dissolve_delay_seconds = 17;
+
+  // The age of a neuron that saturates the age bonus for the voting power computation.
+  optional uint64 max_neuron_age_seconds_for_age_bonus = 18;
+
+  // E.g. if a large dissolve delay can double the voting power of a neuron,
+  // then this field would have a value of 2.0.
+  //
+  // For no bonus, this should be set to 1.
+  //
+  // To achieve functionality equivalent to NNS, this should be set to 2.
+  optional uint64 max_dissolve_delay_bonus_percentage = 19;
+
+  // Analogous to the previous field (see the previous comment),
+  // but this one relates to neuron age instead of dissolve delay.
+  //
+  // To achieve functionality equivalent to NNS, this should be set to 1.25.
+  optional uint64 max_age_bonus_percentage = 20;
 }
 
 // The FractionalDeveloperVotingPower token distribution strategy configures
