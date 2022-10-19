@@ -580,3 +580,65 @@ fn dts_abort_of_call_works() {
         Cycles::new(initial_cycles) + transferred_cycles - test.canister_execution_cost(b_id)
     );
 }
+
+#[test]
+fn dts_cycles_debit_is_applied_on_aborts() {
+    // Test steps:
+    // 1. Canister A starts running the update method.
+    // 2. While canister A is paused, we emulate a postponed charge
+    //    of 1000 cycles (i.e. add 1000 to `cycles_debit`).
+    // 3. The update method is aborted and we expected the cycles debit to be
+    //    applied.
+    let instruction_limit = 1_000_000;
+    let initial_canister_cycles = 1_000_000_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(10_000)
+        .with_deterministic_time_slicing()
+        .with_initial_canister_cycles(initial_canister_cycles)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .stable64_grow(1)
+        .stable64_write(0, 0, 10_000)
+        .stable64_write(0, 0, 10_000)
+        .push_bytes(&[42])
+        .append_and_reply()
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    test.execute_slice(a_id);
+
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    let cycles_debit = Cycles::new(1000);
+    test.canister_state_mut(a_id)
+        .system_state
+        .add_postponed_charge_to_cycles_debit(cycles_debit);
+
+    assert!(test.canister_state(a_id).system_state.cycles_debit() > Cycles::zero());
+
+    test.abort_all_paused_executions();
+
+    assert_eq!(
+        test.canister_state(a_id).system_state.cycles_debit(),
+        Cycles::zero()
+    );
+
+    test.execute_message(a_id);
+
+    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+
+    assert_eq!(result, WasmResult::Reply(vec![42]));
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        Cycles::new(initial_canister_cycles) - test.canister_execution_cost(a_id) - cycles_debit
+    );
+}

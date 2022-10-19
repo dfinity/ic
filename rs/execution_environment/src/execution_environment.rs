@@ -2051,7 +2051,6 @@ impl ExecutionEnvironment {
     /// Aborts paused execution in the given state.
     pub fn abort_canister(&self, canister: &mut CanisterState, log: &ReplicaLogger) {
         if !canister.system_state.task_queue.is_empty() {
-            canister.apply_priority_credit();
             let task_queue = std::mem::take(&mut canister.system_state.task_queue);
             canister.system_state.task_queue = task_queue
                 .into_iter()
@@ -2079,6 +2078,9 @@ impl ExecutionEnvironment {
                     }
                 })
                 .collect();
+            canister.apply_priority_credit();
+            let canister_id = canister.canister_id();
+            canister.system_state.apply_cycles_debit(canister_id, log);
         };
     }
 
