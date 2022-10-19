@@ -159,6 +159,7 @@ pub fn create_networking_stack(
             tls_handshake,
             rt_handle.clone(),
             log.clone(),
+            false,
         )
     });
 

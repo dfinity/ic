@@ -30,6 +30,7 @@ fn setup_test_peer<F>(
     registry_version: RegistryVersion,
     registry_and_data: &mut RegistryAndDataProvider,
     mut crypto_factory: F,
+    use_h2: bool,
 ) -> (Arc<dyn Transport>, Handle<TransportEvent, ()>, SocketAddr)
 where
     F: FnMut(&mut RegistryAndDataProvider, NodeId) -> Arc<dyn TlsHandshake + Send + Sync>,
@@ -49,6 +50,7 @@ where
         crypto,
         rt_handle,
         log,
+        use_h2,
     );
     let addr = SocketAddr::from_str(&format!("127.0.0.1:{}", port)).unwrap();
     let (event_handler, mock_handle) = create_mock_event_handler();
@@ -58,6 +60,11 @@ where
 
 #[test]
 fn test_single_transient_failure_of_tls_client_handshake() {
+    test_single_transient_failure_of_tls_client_handshake_impl(false);
+    test_single_transient_failure_of_tls_client_handshake_impl(true);
+}
+
+fn test_single_transient_failure_of_tls_client_handshake_impl(use_h2: bool) {
     with_test_replica_logger(|log| {
         let mut registry_and_data = RegistryAndDataProvider::new();
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -131,6 +138,7 @@ fn test_single_transient_failure_of_tls_client_handshake() {
             REG_V1,
             &mut registry_and_data,
             crypto_factory_with_single_tls_handshake_client_failures,
+            use_h2,
         );
         let peer2_port = get_free_localhost_port().expect("Failed to get free localhost port");
         let (peer_2, mut mock_handle_peer_2, peer_2_addr) = setup_test_peer(
@@ -141,6 +149,7 @@ fn test_single_transient_failure_of_tls_client_handshake() {
             REG_V1,
             &mut registry_and_data,
             crypto_factory,
+            use_h2,
         );
         registry_and_data.registry.update_to_latest_version();
 
@@ -174,6 +183,11 @@ fn test_single_transient_failure_of_tls_client_handshake() {
 
 #[test]
 fn test_single_transient_failure_of_tls_server_handshake() {
+    test_single_transient_failure_of_tls_server_handshake_impl(false);
+    test_single_transient_failure_of_tls_server_handshake_impl(true);
+}
+
+fn test_single_transient_failure_of_tls_server_handshake_impl(use_h2: bool) {
     with_test_replica_logger(|log| {
         let mut registry_and_data = RegistryAndDataProvider::new();
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -247,6 +261,7 @@ fn test_single_transient_failure_of_tls_server_handshake() {
             REG_V1,
             &mut registry_and_data,
             crypto_factory,
+            use_h2,
         );
         let peer2_port = get_free_localhost_port().expect("Failed to get free localhost port");
         let (peer_2, mut mock_handle_peer_2, peer_2_addr) = setup_test_peer(
@@ -257,6 +272,7 @@ fn test_single_transient_failure_of_tls_server_handshake() {
             REG_V1,
             &mut registry_and_data,
             crypto_factory_with_single_tls_handshake_server_failures,
+            use_h2,
         );
         registry_and_data.registry.update_to_latest_version();
 
