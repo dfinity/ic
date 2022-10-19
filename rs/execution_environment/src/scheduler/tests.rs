@@ -3715,6 +3715,7 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores,
+            max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message_without_dts: max_instructions_per_slice.into(),
             max_paused_executions: num_canisters,
@@ -3781,6 +3782,7 @@ fn filter_after_long_executions() {
 
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
+            max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message_without_dts: max_instructions_per_slice.into(),
             ..SchedulerConfig::application_subnet()
