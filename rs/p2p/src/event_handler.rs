@@ -513,7 +513,7 @@ impl AdvertBroadcaster {
         self.gossip.write().replace(gossip_arc);
         let (lock, cvar) = &*self.started;
         *lock.lock().unwrap() = true;
-        cvar.notify_one();
+        cvar.notify_all();
     }
 
     /// The method broadcasts the given advert.
