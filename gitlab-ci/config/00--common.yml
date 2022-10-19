@@ -196,14 +196,6 @@ after_script:
     - .cargo-rules
     - .build-env-base
   variables:
-    # Disable cargo incremental - it's incompatible with sccache.
-    CARGO_INCREMENTAL: "0"
-    CARGO_BUILD_INCREMENTAL: "false"
-    SCCACHE_CACHE_SIZE: "500G"
-    # The default sccache idle timeout is 600, which is too short and leads to intermittent build errors.
-    # https://github.com/mozilla/sccache/issues/256
-    SCCACHE_IDLE_TIMEOUT: "7200"
-    SCCACHE_STARTUP_TIMEOUT_MS: "30000"
     BUILD_COMMAND_PRE: ""
     BUILD_COMMAND: "echo Replace this with a build command"
     BUILD_COMMAND_POST: ""
@@ -227,11 +219,6 @@ after_script:
         bash -c \"$BUILD_COMMAND_POST\"
         set +x
       "
-
-      set +x
-      echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
-      "$RUSTC_WRAPPER" --show-stats || true
-      echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
 
 .ubuntu-docker:
   extends: 
@@ -278,8 +265,6 @@ after_script:
   # - Build results are stored in non-persisted /cargo_target
   # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
   variables:
-    SCCACHE_DIR: /cache/sccache
-    RUSTC_WRAPPER: "/usr/bin/sccache-run"
     # This MUST match the directory used in our `docker-build-ic` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 
@@ -315,5 +300,3 @@ after_script:
   tags:
     - dfinity
     - macos
-  variables:
-    RUSTC_WRAPPER: "/usr/local/bin/sccache"

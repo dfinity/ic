@@ -11,7 +11,6 @@ from ci import ENV
 from ci import flatten
 from ci import mkdir_p
 from ci import sh
-from ci import show_sccache_stats
 
 BIN_CANISTERS = [
     "candid-test-canister",
@@ -231,5 +230,3 @@ def run(artifacts_dir=default_artifacts_dir):
 
     if ENV.is_gitlab:
         sh("gitlab-ci/src/artifacts/openssl-sign.sh", f"{ENV.top}/artifacts/canisters{artifact_ext}")
-
-    show_sccache_stats()

@@ -6,13 +6,11 @@ from artifacts.collector import Collector
 from ci import buildevent
 from ci import ENV
 from ci import sh
-from ci import show_sccache_stats
 
 
 def run(
     target: str = "//:binaries",
     artifact_ext: str = "",
-    sccache_stats=False,
     after_script: Optional[Callable[[], None]] = None,
 ):
     # TODO: get rid of this usage of git revision
@@ -46,6 +44,3 @@ def run(
 
     with buildevent("collect-artifacts"):
         Collector.collect(artifacts_dir=f"artifacts/release{artifact_ext}")
-
-    if sccache_stats:
-        show_sccache_stats()

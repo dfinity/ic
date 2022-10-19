@@ -121,11 +121,6 @@ include:
         "
       fi
 
-      set +x
-      echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
-      "$RUSTC_WRAPPER" --show-stats
-      echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
-
 .cargo-crate-tests-process-per-test:
   # Run each test in the crate in a separate processes, increasing parallelism and reducing contention
   extends: .cargo-crate-test
@@ -177,8 +172,3 @@ include:
         cargo test -p \"${TARGET_CRATE}\" --release -- --list | grep ': test' | sed 's/: test$//' > /tmp/test-list.txt
         parallel -a /tmp/test-list.txt --halt now,fail=1 --eta --results ../logs/ci_output -t --joblog ../logs/ci_joblog buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" '{}' -- cargo test -p \"${TARGET_CRATE}\" --release '{}' -- $TARGS --report-time -Z unstable-options --format=json | tee ../logs/job.log
       "
-
-      set +x
-      echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
-      "$RUSTC_WRAPPER" --show-stats
-      echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
