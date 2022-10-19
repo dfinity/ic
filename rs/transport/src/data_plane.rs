@@ -20,12 +20,13 @@
 use crate::{
     metrics::{DataPlaneMetrics, IntGaugeResource},
     types::{
-        Connected, ConnectionRole, SendQueueReader, TransportHeader, TransportImpl,
-        TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
+        ChannelReader, ChannelWriter, Connected, ConnectionRole, SendQueueReader, TransportHeader,
+        TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
     },
 };
+use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{TlsStream, TlsStreamWriteHalf};
+use ic_crypto_tls_interfaces::TlsStream;
 use ic_interfaces_transport::{
     TransportChannelId, TransportEvent, TransportEventHandler, TransportMessage, TransportPayload,
 };
@@ -34,7 +35,7 @@ use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::Weak;
 use strum::IntoStaticStr;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
 use tower::Service;
@@ -122,7 +123,7 @@ fn spawn_write_task(
     peer_id: NodeId,
     channel_id: TransportChannelId,
     mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
-    mut writer: Box<dyn TlsStreamWriteHalf>,
+    mut writer: ChannelWriter,
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
@@ -172,22 +173,14 @@ fn spawn_write_task(
 
             // Send the payload
             let start_time = Instant::now();
-            if let Err(e) = writer.write_all(&bytes_to_send).await {
+
+            if let Err(err) = write_one_message(&mut writer, &bytes_to_send).await {
                 warn!(
                     arc_self.log,
-                    "DataPlane::spawn_write_task(): failed to write payload: peer_id = {:?}, channel_id = {:?}, {:?}",
+                    "DataPlane::spawn_write_task(): failed to write payload: peer_id = {:?}, channel_id = {:?}, error ={:?}",
                     peer_id,
                     channel_id,
-                    e,
-                );
-                arc_self.on_disconnect(peer_id, channel_id).await;
-                return;
-            }
-            // Flush the write
-            if let Err(e) = writer.flush().await {
-                warn!(
-                    arc_self.log,
-                    "DataPlane::spawn_write_task(): failed to flush: peer_id = {:?}, channel_id = {:?}, {:?}", peer_id, channel_id, e,
+                    err,
                 );
                 arc_self.on_disconnect(peer_id, channel_id).await;
                 return;
@@ -207,13 +200,32 @@ fn spawn_write_task(
     })
 }
 
+async fn write_one_message(
+    writer: &mut ChannelWriter,
+    bytes_to_send: &[u8],
+) -> Result<(), std::io::Error> {
+    match writer {
+        ChannelWriter::Legacy(writer) => {
+            writer.write_all(bytes_to_send).await?;
+            writer.flush().await
+        }
+        ChannelWriter::H2SendStream(send_stream) => {
+            // TODO: flush the stream and handle the error.
+            // TODO: do not use Bytes::copy_from_slice since it will do a copy
+            send_stream
+                .send_data(Bytes::copy_from_slice(bytes_to_send), false)
+                .map_err(|err| err.into_io().unwrap())
+        }
+    }
+}
+
 /// Per-flow receive task. Reads the messages from the socket and passes to
 /// the client.
-fn spawn_read_task<T: AsyncRead + Unpin + Send + 'static>(
+fn spawn_read_task(
     peer_id: NodeId,
     channel_id: TransportChannelId,
     mut event_handler: TransportEventHandler,
-    mut reader: T,
+    mut reader: ChannelReader,
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
@@ -284,8 +296,8 @@ fn spawn_read_task<T: AsyncRead + Unpin + Send + 'static>(
 /// Reads and returns the next <message hdr, message payload> from the
 /// socket. The timeout is for each socket read (header, payload chunks)
 /// and not the full message.
-async fn read_one_message<T: AsyncRead + Unpin>(
-    reader: &mut T,
+async fn read_one_message(
+    reader: &mut ChannelReader,
     timeout: Duration,
 ) -> Result<(TransportHeader, TransportPayload), StreamReadError> {
     // Read the hdr
@@ -320,21 +332,35 @@ async fn read_one_message<T: AsyncRead + Unpin>(
 }
 
 /// Reads the requested bytes from the socket with a timeout
-async fn read_into_buffer<T: AsyncRead + Unpin>(
-    reader: &mut T,
+async fn read_into_buffer(
+    reader: &mut ChannelReader,
     buf: &mut [u8],
     timeout: Duration,
 ) -> Result<(), StreamReadError> {
-    let read_future = reader.read_exact(buf);
-    match tokio::time::timeout(timeout, read_future).await {
-        Err(_) => Err(StreamReadError::TimeOut),
-        Ok(Ok(_)) => Ok(()),
-        Ok(Err(e)) => Err(StreamReadError::Failed(e)),
+    match reader {
+        ChannelReader::Legacy(reader) => {
+            let read_future = reader.read_exact(buf);
+            match tokio::time::timeout(timeout, read_future).await {
+                Err(_) => Err(StreamReadError::TimeOut),
+                Ok(Ok(_)) => Ok(()),
+                Ok(Err(e)) => Err(StreamReadError::Failed(e)),
+            }
+        }
+        ChannelReader::H2RecvStream(receive_stream) => {
+            if let Some(data) = receive_stream.data().await {
+                match data {
+                    Ok(_) => Ok(()), // TODO implement
+                    Err(e) => Err(StreamReadError::Failed(e.into_io().unwrap())),
+                }
+            } else {
+                Err(StreamReadError::TimeOut)
+            }
+        }
     }
 }
 
 /// Handle connection setup. Starts flow read and write tasks.
-pub(crate) fn create_connected_state(
+pub(crate) async fn create_connected_state(
     peer_id: NodeId,
     channel_id: TransportChannelId,
     send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
@@ -345,34 +371,243 @@ pub(crate) fn create_connected_state(
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
-    _use_h2: bool,
-) -> Connected {
-    let (tls_reader, tls_writer) = Box::new(tls_stream).split();
-    // Spawn write task
-    let write_task = spawn_write_task(
-        peer_id,
-        channel_id,
-        send_queue_reader,
-        tls_writer,
-        data_plane_metrics.clone(),
-        weak_self.clone(),
-        rt_handle.clone(),
-    );
+    use_h2: bool,
+) -> Result<Connected, Box<dyn std::error::Error + Send + Sync>> {
+    if !use_h2 {
+        let (tls_reader, tls_writer) = Box::new(tls_stream).split();
+        let channel_reader = ChannelReader::new_with_legacy(tls_reader);
+        let channel_writer = ChannelWriter::new_with_legacy(tls_writer);
+        // Spawn write task
+        let write_task = spawn_write_task(
+            peer_id,
+            channel_id,
+            send_queue_reader,
+            channel_writer,
+            data_plane_metrics.clone(),
+            weak_self.clone(),
+            rt_handle.clone(),
+        );
+        //
+        let read_task = spawn_read_task(
+            peer_id,
+            channel_id,
+            event_handler,
+            channel_reader,
+            data_plane_metrics,
+            weak_self,
+            rt_handle,
+        );
 
-    let read_task = spawn_read_task(
-        peer_id,
-        channel_id,
-        event_handler,
-        tls_reader,
-        data_plane_metrics,
-        weak_self,
-        rt_handle,
-    );
+        Ok(Connected {
+            peer_addr,
+            read_task,
+            write_task,
+            role,
+        })
+    } else {
+        match role {
+            ConnectionRole::Client => {
+                create_connected_state_for_h2_client(
+                    peer_id,
+                    channel_id,
+                    send_queue_reader,
+                    peer_addr,
+                    tls_stream,
+                    event_handler,
+                    data_plane_metrics,
+                    weak_self,
+                    rt_handle,
+                )
+                .await
+            }
+            ConnectionRole::Server => {
+                create_connected_state_for_h2_server(
+                    peer_id,
+                    channel_id,
+                    send_queue_reader,
+                    peer_addr,
+                    tls_stream,
+                    event_handler,
+                    data_plane_metrics,
+                    weak_self,
+                    rt_handle,
+                )
+                .await
+            }
+        }
+    }
+}
 
-    Connected {
-        peer_addr,
-        read_task,
-        write_task,
-        role,
+pub(crate) async fn create_connected_state_for_h2_client(
+    peer_id: NodeId,
+    channel_id: TransportChannelId,
+    send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
+    peer_addr: SocketAddr,
+    tls_stream: Box<dyn TlsStream>,
+    event_handler: TransportEventHandler,
+    data_plane_metrics: DataPlaneMetrics,
+    weak_self: Weak<TransportImpl>,
+    rt_handle: tokio::runtime::Handle,
+) -> Result<Connected, Box<dyn std::error::Error + Send + Sync>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let rt_handle_clone = rt_handle.clone();
+    let rt_handle_clone2 = rt_handle.clone();
+
+    rt_handle.clone().spawn(async move {
+        // TODO: We need to handle the error.
+        match h2::client::handshake(tls_stream).await {
+            Ok((mut client, connection)) => {
+                // This needs to be running before we send a request for server to accept the request
+                rt_handle.clone().spawn(async move {
+                    if (connection.await).is_err() {
+                        // TODO handle error
+                    }
+                });
+                let request = http::Request::new(());
+
+                // accept the first request
+                match client.send_request(request, false) {
+                    Ok((response, send_stream)) => {
+                        match response.await {
+                            Ok(response) => {
+                                let recv_stream = response.into_body();
+
+                                if tx.send((send_stream, recv_stream)).is_err() {
+                                    // TODO: We need to handle the error.
+                                }
+                            }
+                            Err(_) => {
+                                drop(tx);
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // TODO metrics
+                        drop(tx);
+                    }
+                }
+            }
+            Err(_) => {
+                // TODO metrics
+                drop(tx);
+            }
+        }
+    });
+
+    match rx.await {
+        Ok((send_stream, recv_stream)) => {
+            let write_task = spawn_write_task(
+                peer_id,
+                channel_id,
+                send_queue_reader,
+                ChannelWriter::new_with_h2_send_stream(send_stream),
+                data_plane_metrics.clone(),
+                weak_self.clone(),
+                rt_handle_clone,
+            );
+
+            let read_task = spawn_read_task(
+                peer_id,
+                channel_id,
+                event_handler,
+                ChannelReader::new_with_h2_recv_stream(recv_stream),
+                data_plane_metrics,
+                weak_self,
+                rt_handle_clone2,
+            );
+
+            Ok(Connected {
+                peer_addr,
+                read_task,
+                write_task,
+                role: ConnectionRole::Client,
+            })
+        }
+        Err(_) => Err("Client handshake failed".into()),
+    }
+}
+
+pub(crate) async fn create_connected_state_for_h2_server(
+    peer_id: NodeId,
+    channel_id: TransportChannelId,
+    send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
+    peer_addr: SocketAddr,
+    tls_stream: Box<dyn TlsStream>,
+    event_handler: TransportEventHandler,
+    data_plane_metrics: DataPlaneMetrics,
+    weak_self: Weak<TransportImpl>,
+    rt_handle: tokio::runtime::Handle,
+) -> Result<Connected, Box<dyn std::error::Error + Send + Sync>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    rt_handle.clone().spawn(async move {
+        match h2::server::handshake(tls_stream).await {
+            Ok(mut connection) => {
+                // accept the first request
+                if let Some(res) = connection.accept().await {
+                    match res {
+                        Ok((request, mut respond)) => {
+                            let response = http::Response::new(());
+                            // TODO: We need to handle the error.
+                            match respond.send_response(response, false) {
+                                Ok(send_stream) => {
+                                    let recv_stream = request.into_body();
+
+                                    if tx.send((send_stream, recv_stream)).is_err() {
+                                        // TODO: We need to handle the error.
+                                    }
+                                    // do nothing with other requests for now
+                                    while connection.accept().await.is_some() {}
+                                }
+                                Err(_) => {
+                                    // TODO metrics
+                                    drop(tx);
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // TODO metrics
+                            drop(tx);
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                // TODO metrics
+                drop(tx);
+            }
+        }
+    });
+
+    match rx.await {
+        Ok(res) => {
+            let (send_stream, recv_stream) = res;
+            let write_task = spawn_write_task(
+                peer_id,
+                channel_id,
+                send_queue_reader,
+                ChannelWriter::new_with_h2_send_stream(send_stream),
+                data_plane_metrics.clone(),
+                weak_self.clone(),
+                rt_handle.clone(),
+            );
+
+            let read_task = spawn_read_task(
+                peer_id,
+                channel_id,
+                event_handler,
+                ChannelReader::new_with_h2_recv_stream(recv_stream),
+                data_plane_metrics,
+                weak_self,
+                rt_handle,
+            );
+
+            Ok(Connected {
+                peer_addr,
+                read_task,
+                write_task,
+                role: ConnectionRole::Server,
+            })
+        }
+        Err(_) => Err("Server handshake failed".into()),
     }
 }

@@ -546,6 +546,7 @@ fn task_main(
         crypto,
         rt.handle().clone(),
         log.clone(),
+        false,
     );
 
     println!("starting test client... [Node: {}]", node_id_val);

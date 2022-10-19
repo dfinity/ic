@@ -132,6 +132,7 @@ pub fn create_transport(
     crypto: Arc<dyn TlsHandshake + Send + Sync>,
     rt_handle: Handle,
     log: ReplicaLogger,
+    use_h2: bool,
 ) -> Arc<dyn Transport> {
     TransportImpl::new(
         node_id,
@@ -141,7 +142,7 @@ pub fn create_transport(
         crypto,
         rt_handle,
         log,
-        false,
+        use_h2,
     )
 }
 

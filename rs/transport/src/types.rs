@@ -3,9 +3,12 @@
 use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
 use crate::utils::SendQueueImpl;
 use async_trait::async_trait;
+use bytes::Bytes;
+use h2::{RecvStream, SendStream};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_tls_interfaces::{TlsStreamReadHalf, TlsStreamWriteHalf};
 use ic_interfaces_transport::{TransportChannelId, TransportEventHandler, TransportPayload};
 use ic_logger::{warn, ReplicaLogger};
 use phantom_newtype::AmountOf;
@@ -65,6 +68,36 @@ pub(crate) struct TransportHeader {
     pub(crate) reserved: u16, // Currently 0, serialized little endian.
     /// The length of the byte payload that follows next
     pub(crate) payload_length: u32, // Serialized little endian.
+}
+
+pub(crate) enum ChannelReader {
+    Legacy(Box<dyn TlsStreamReadHalf>),
+    H2RecvStream(RecvStream),
+}
+
+impl ChannelReader {
+    pub fn new_with_legacy(tls_reader: Box<dyn TlsStreamReadHalf>) -> Self {
+        ChannelReader::Legacy(tls_reader)
+    }
+
+    pub fn new_with_h2_recv_stream(recv_stream: RecvStream) -> Self {
+        ChannelReader::H2RecvStream(recv_stream)
+    }
+}
+
+pub(crate) enum ChannelWriter {
+    Legacy(Box<dyn TlsStreamWriteHalf>),
+    H2SendStream(SendStream<Bytes>),
+}
+
+impl ChannelWriter {
+    pub fn new_with_legacy(tls_writer: Box<dyn TlsStreamWriteHalf>) -> Self {
+        ChannelWriter::Legacy(tls_writer)
+    }
+
+    pub fn new_with_h2_send_stream(send_stream: SendStream<Bytes>) -> Self {
+        ChannelWriter::H2SendStream(send_stream)
+    }
 }
 
 /// Transport implementation state struct. The control and data planes provide

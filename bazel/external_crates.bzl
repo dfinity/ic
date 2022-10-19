@@ -296,6 +296,9 @@ def external_crates_repository(name, annotations):
             "glob": crate.spec(
                 version = "^0.3.0",
             ),
+            "h2": crate.spec(
+                version = "^0.3.14",
+            ),
             "hashlink": crate.spec(
                 version = "^0.8.0",
             ),

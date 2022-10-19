@@ -6,7 +6,6 @@ use common::{
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
     TransportPayload,
@@ -14,7 +13,7 @@ use ic_interfaces_transport::{
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_transport::{transport::create_transport, transport_h2::create_transport_h2};
+use ic_transport::transport::create_transport;
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -32,7 +31,7 @@ const TRANSPORT_CHANNEL_ID: u32 = 1234;
 #[test]
 fn test_start_connection_between_two_peers() {
     test_start_connection_between_two_peers_impl(false);
-    //test_start_connection_between_two_peers_impl(true);
+    test_start_connection_between_two_peers_impl(true);
 }
 
 fn test_start_connection_between_two_peers_impl(use_h2: bool) {
@@ -392,10 +391,11 @@ fn start_connection_between_two_peers(
         send_queue_size,
     };
 
-    let peer_a = create_transport_obj(
+    let peer_a = create_transport(
         NODE_ID_1,
         peer_a_config,
         registry_version,
+        MetricsRegistry::new(),
         Arc::new(crypto_1),
         rt_handle.clone(),
         logger.clone(),
@@ -412,10 +412,11 @@ fn start_connection_between_two_peers(
         send_queue_size,
     };
 
-    let peer_b = create_transport_obj(
+    let peer_b = create_transport(
         NODE_ID_2,
         peer_b_config,
         registry_version,
+        MetricsRegistry::new(),
         Arc::new(crypto_2),
         rt_handle,
         logger,
@@ -481,36 +482,4 @@ fn trigger_and_test_send_queue_full(
     assert_eq!(res2, Err(TransportError::SendQueueFull(normal_msg)));
 
     (peer_a, _peer_b, messages_sent)
-}
-
-fn create_transport_obj(
-    node_id: NodeId,
-    transport_config: TransportConfig,
-    registry_version: RegistryVersion,
-    crypto: Arc<dyn TlsHandshake + Send + Sync>,
-    rt_handle: tokio::runtime::Handle,
-    logger: ReplicaLogger,
-    use_h2: bool,
-) -> Arc<dyn Transport> {
-    if use_h2 {
-        create_transport_h2(
-            node_id,
-            transport_config,
-            registry_version,
-            MetricsRegistry::new(),
-            crypto,
-            rt_handle,
-            logger,
-        )
-    } else {
-        create_transport(
-            node_id,
-            transport_config,
-            registry_version,
-            MetricsRegistry::new(),
-            crypto,
-            rt_handle,
-            logger,
-        )
-    }
 }
