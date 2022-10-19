@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use clap::Parser;
 use ic_sns_governance::{
     pb::v1::{governance::SnsMetadata, NervousSystemParameters},
-    types::ONE_YEAR_SECONDS,
+    types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
 };
 use ic_sns_init::{
     pb::v1::{sns_init_payload::InitialTokenDistribution, SnsInitPayload},
@@ -97,6 +97,36 @@ pub struct SnsCliInitConfig {
     pub initial_reward_rate_percentage: Option<f64>,
     pub final_reward_rate_percentage: Option<f64>,
 
+    // The maximum dissolve delay that a neuron can have. That is, the maximum
+    // that a neuron's dissolve delay can be increased to. The maximum is also enforced
+    // when saturating the dissolve delay bonus in the voting power computation.
+    pub max_dissolve_delay_seconds: Option<u64>,
+
+    // The age of a neuron that saturates the age bonus for the voting power computation.
+    pub max_neuron_age_seconds_for_age_bonus: Option<u64>,
+
+    // The voting power multiplier of a neuron with a dissolve delay of
+    // `max_dissolve_delay_seconds`.
+    // For example, a value of 2.0 means a neuron with the max dissolve delay
+    // has 100% more voting power than an otherwise-equivalent neuron with the
+    // minimum dissolve delay.
+    //
+    // For no bonus, this should be set to 1.
+    //
+    // To achieve functionality equivalent to NNS, this should be set to 2.0.
+    pub max_dissolve_delay_bonus_multiplier: Option<f64>,
+
+    // The voting power multiplier of a neuron whose age is
+    // `max_neuron_age_seconds_for_age_bonus` or older.
+    // For example, a value of 1.25 means a neuron with max age has 25% more
+    // voting power than an otherwise-equivalent neuron with age 0.
+    //
+    // Analogous to `max_dissolve_delay_bonus_multiplier`.
+    // but this one relates to neuron age instead of dissolve delay.
+    //
+    // To achieve functionality equivalent to NNS, this should be set to 1.25.
+    pub max_age_bonus_multiplier: Option<f64>,
+
     /// If the swap fails, control of the dapp canister(s) will be set to these
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s).
@@ -138,6 +168,16 @@ impl Default for SnsCliInitConfig {
             final_reward_rate_percentage: voting_rewards_parameters
                 .final_reward_rate_basis_points
                 .map(unit_helpers::basis_points_to_percentage),
+            max_dissolve_delay_seconds: nervous_system_parameters_default
+                .max_dissolve_delay_seconds,
+            max_neuron_age_seconds_for_age_bonus: nervous_system_parameters_default
+                .max_neuron_age_for_age_bonus,
+            max_dissolve_delay_bonus_multiplier: nervous_system_parameters_default
+                .max_dissolve_delay_bonus_percentage
+                .map(unit_helpers::percentage_increase_to_multiplier),
+            max_age_bonus_multiplier: nervous_system_parameters_default
+                .max_age_bonus_percentage
+                .map(unit_helpers::percentage_increase_to_multiplier),
         }
     }
 }
@@ -227,6 +267,36 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             Some(ref logo_path) => Some(load_logo(logo_path)?),
         };
 
+        let max_dissolve_delay_bonus_percentage = if let Some(max_dissolve_delay_bonus_multiplier) =
+            sns_cli_init_config.max_dissolve_delay_bonus_multiplier
+        {
+            Some(unit_helpers::multiplier_to_percentage_increase(
+                max_dissolve_delay_bonus_multiplier,
+            ).ok_or_else(|| {
+                anyhow!(
+                    "max_dissolve_delay_bonus_multiplier must be greater than or equal to 1.0, but it is {}",
+                    max_dissolve_delay_bonus_multiplier
+                )
+            })?)
+        } else {
+            None
+        };
+
+        let max_age_bonus_percentage =
+            if let Some(max_age_bonus_multiplier) = sns_cli_init_config.max_age_bonus_multiplier {
+                Some(
+                    unit_helpers::multiplier_to_percentage_increase(max_age_bonus_multiplier)
+                        .ok_or_else(|| {
+                            anyhow!(
+                    "max_age_bonus_multiplier must be greater than or equal to 1.0, but it is {}",
+                    max_age_bonus_multiplier
+                )
+                        })?,
+                )
+            } else {
+                None
+            };
+
         Ok(SnsInitPayload {
             sns_initialization_parameters: Some(get_config_file_contents(
                 sns_cli_init_config.clone(),
@@ -253,6 +323,11 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
                 .map(unit_helpers::percentage_to_basis_points),
             reward_rate_transition_duration_seconds: sns_cli_init_config
                 .reward_rate_transition_duration_seconds,
+            max_dissolve_delay_seconds: sns_cli_init_config.max_dissolve_delay_seconds,
+            max_neuron_age_seconds_for_age_bonus: sns_cli_init_config
+                .max_neuron_age_seconds_for_age_bonus,
+            max_dissolve_delay_bonus_percentage,
+            max_age_bonus_percentage,
         })
     }
 }
@@ -518,14 +593,79 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # the time period defined by `reward_rate_transition_duration_seconds`. 
 #
 # The default value is {}. Values of 0 result in the reward rate always being
-# `final_reward_rate_basis_points`. The value used by the NNS is 10 years, or 
+# `final_reward_rate_basis_points`. The value used by the NNS is 8 years, or 
 # {} seconds. (The value cannot be set to 0.)
 #
 #"##,
                 default_config
                     .reward_rate_transition_duration_seconds
                     .unwrap(),
-                10 * ONE_YEAR_SECONDS
+                8 * ONE_YEAR_SECONDS
+            ),
+        ),
+        (
+            Regex::new(r"max_dissolve_delay_seconds[^A-Za-z]*").unwrap(),
+            format!(
+                r##"#
+# The maximum dissolve delay that a neuron can have. 
+#
+# The default value is {} seconds ({} months). 
+#"##,
+                default_config.max_dissolve_delay_seconds.unwrap(),
+                default_config.max_dissolve_delay_seconds.unwrap() / ONE_MONTH_SECONDS
+            ),
+        ),
+        (
+            Regex::new(r"max_neuron_age_seconds_for_age_bonus[^A-Za-z]*").unwrap(),
+            format!(
+                r##"#
+# It is possible to give a higher voting weight to older neurons by setting 
+# `max_age_bonus_percentage` to a value other than zero. This parameter, 
+# `max_neuron_age_for_age_bonus`, sets the age at which the maximum bonus will 
+# be given. All older neurons will be treated as if they are this age. The unit 
+# is seconds. 
+#
+# The default value is {} seconds ({} months).
+#"##,
+                default_config.max_neuron_age_seconds_for_age_bonus.unwrap(),
+                default_config.max_neuron_age_seconds_for_age_bonus.unwrap() / ONE_MONTH_SECONDS
+            ),
+        ),
+        (
+            Regex::new(r"max_dissolve_delay_bonus_multiplier[^A-Za-z]*").unwrap(),
+            format!(
+                r##"#
+# Users with a higher dissolve delay are incentivized to take the long-term 
+# interests of the SNS into consideration when voting. To reward this long time 
+# commitment, this parameter can be set to a value larger than zero, which will 
+# result in neurons having their voting weight increased in proportion to their 
+# dissolve delay. 
+#
+# If neurons’ dissolve delay is set to `max_dissolve_delay_seconds`, their 
+# voting weight will be multiplied by `max_dissolve_delay_bonus_multiplier`. 
+#
+# The default value is {}. The value the NNS uses is 2. A value of 1 results in
+# no change in voting weight for neurons with higher dissolve delays. 
+# Values below 1 are prohibited.
+#"##,
+                default_config.max_dissolve_delay_bonus_multiplier.unwrap(),
+            ),
+        ),
+        (
+            Regex::new(r"max_age_bonus_multiplier[^A-Za-z]*").unwrap(),
+            format!(
+                r##"#
+# This is analogous to `max_dissolve_delay_bonus_multiplier`, but controls the 
+# additional voting weight given to neurons with more age.
+#
+# If neurons' age is `max_neuron_age_seconds_for_age_bonus` or older, their 
+# voting weight will be multiplied by `max_age_bonus_multiplier`. 
+#
+# The default value is {}. The value the NNS uses is 1.25. A value of 1 results 
+# in no change in voting weight for neurons with higher age. 
+# Values below 1 are prohibited.
+#"##,
+                default_config.max_dissolve_delay_bonus_multiplier.unwrap(),
             ),
         ),
     ];
@@ -606,6 +746,10 @@ mod test {
                 initial_reward_rate_percentage: Some(31.0),
                 final_reward_rate_percentage: Some(27.0),
                 reward_rate_transition_duration_seconds: Some(100_000),
+                max_dissolve_delay_seconds: Some(8 * ONE_MONTH_SECONDS),
+                max_neuron_age_seconds_for_age_bonus: Some(11 * ONE_MONTH_SECONDS),
+                max_dissolve_delay_bonus_multiplier: Some(8.0),
+                max_age_bonus_multiplier: Some(25.0),
             }
         }
     }
@@ -661,6 +805,10 @@ url: https://internetcomputer.org/
 initial_reward_rate_percentage: 100
 final_reward_rate_percentage: 100
 reward_rate_transition_duration_seconds: 100
+max_dissolve_delay_seconds: 100000000
+max_neuron_age_seconds_for_age_bonus: 18
+max_dissolve_delay_bonus_multiplier: 1.9
+max_age_bonus_multiplier: 1.3
         "#,
             logo_path.clone().into_os_string().into_string().unwrap()
         );

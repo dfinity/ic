@@ -109,6 +109,13 @@ impl SnsInitPayload {
             name: None,
             description: None,
             sns_initialization_parameters: Some("".to_string()),
+            max_dissolve_delay_seconds: nervous_system_parameters_default
+                .max_dissolve_delay_seconds,
+            max_neuron_age_seconds_for_age_bonus: nervous_system_parameters_default
+                .max_neuron_age_for_age_bonus,
+            max_dissolve_delay_bonus_percentage: nervous_system_parameters_default
+                .max_dissolve_delay_bonus_percentage,
+            max_age_bonus_percentage: nervous_system_parameters_default.max_age_bonus_percentage,
         }
     }
 
@@ -341,6 +348,10 @@ impl SnsInitPayload {
             initial_reward_rate_basis_points,
             final_reward_rate_basis_points,
             initial_token_distribution: _,
+            max_dissolve_delay_seconds,
+            max_neuron_age_seconds_for_age_bonus: max_neuron_age_for_age_bonus,
+            max_dissolve_delay_bonus_percentage,
+            max_age_bonus_percentage,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
@@ -358,6 +369,10 @@ impl SnsInitPayload {
             neuron_minimum_stake_e8s,
             neuron_minimum_dissolve_delay_to_vote_seconds,
             voting_rewards_parameters,
+            max_dissolve_delay_seconds,
+            max_neuron_age_for_age_bonus,
+            max_dissolve_delay_bonus_percentage,
+            max_age_bonus_percentage,
             ..nervous_system_parameters
         }
     }
@@ -391,6 +406,10 @@ impl SnsInitPayload {
             self.validate_initial_reward_rate_basis_points(),
             self.validate_final_reward_rate_basis_points(),
             self.validate_reward_rate_transition_duration_seconds(),
+            self.validate_max_dissolve_delay_seconds(),
+            self.validate_max_neuron_age_seconds_for_age_bonus(),
+            self.validate_max_dissolve_delay_bonus_percentage(),
+            self.validate_max_age_bonus_percentage(),
         ];
 
         let defect_msg = validation_fns
@@ -694,6 +713,51 @@ impl SnsInitPayload {
             .reward_rate_transition_duration_seconds
             .ok_or("Error: reward_rate_transition_duration_seconds must be specified")?;
         Ok(())
+    }
+
+    fn validate_max_dissolve_delay_seconds(&self) -> Result<(), String> {
+        let _max_dissolve_delay_seconds = self
+            .max_dissolve_delay_seconds
+            .ok_or("Error: max_dissolve_delay_seconds must be specified")?;
+        Ok(())
+    }
+
+    fn validate_max_neuron_age_seconds_for_age_bonus(&self) -> Result<(), String> {
+        let _max_neuron_age_seconds_for_age_bonus = self
+            .max_neuron_age_seconds_for_age_bonus
+            .ok_or("Error: max_neuron_age_seconds_for_age_bonus must be specified")?;
+        Ok(())
+    }
+
+    fn validate_max_dissolve_delay_bonus_percentage(&self) -> Result<(), String> {
+        let max_dissolve_delay_bonus_percentage = self
+            .max_dissolve_delay_bonus_percentage
+            .ok_or("Error: max_dissolve_delay_bonus_percentage must be specified")?;
+
+        if max_dissolve_delay_bonus_percentage
+            > NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING
+        {
+            Err(format!(
+                "max_dissolve_delay_bonus_percentage must be less than {}",
+                NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_max_age_bonus_percentage(&self) -> Result<(), String> {
+        let max_age_bonus_percentage = self
+            .max_age_bonus_percentage
+            .ok_or("Error: max_age_bonus_percentage must be specified")?;
+        if max_age_bonus_percentage > NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING {
+            Err(format!(
+                "max_age_bonus_percentage must be less than {}",
+                NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING
+            ))
+        } else {
+            Ok(())
+        }
     }
 }
 
