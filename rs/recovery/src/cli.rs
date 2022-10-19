@@ -90,26 +90,10 @@ pub fn app_subnet_recovery(
                     );
                 }
                 if subnet_recovery.params.ecdsa_subnet_id.is_none() {
-                    let is_ecdsa_subnet = match subnet_recovery
-                        .get_recovery_api()
-                        .get_ecdsa_config(subnet_recovery.params.subnet_id)
-                    {
-                        Ok(Some(_)) => true,
-                        Ok(None) => false,
-                        Err(err) => {
-                            warn!(
-                                logger,
-                                "Failed to determine if broken subnet has ECDSA key: {:?}", err
-                            );
-                            false
-                        }
-                    };
-                    if is_ecdsa_subnet {
-                        subnet_recovery.params.ecdsa_subnet_id = read_optional_subnet_id(
-                            &logger,
-                            "Enter ID of subnet to reshare ECDSA key from: ",
-                        );
-                    }
+                    subnet_recovery.params.ecdsa_subnet_id = read_optional_subnet_id(
+                        &logger,
+                        "Enter ID of subnet to reshare ECDSA key from: ",
+                    );
                 }
             }
 

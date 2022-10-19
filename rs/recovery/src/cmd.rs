@@ -38,7 +38,7 @@ pub struct RecoveryToolArgs {
     pub replica_version: Option<ReplicaVersion>,
 
     /// The directory to perform recovery in
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, parse(from_os_str), default_value = "/var/lib/ic/data")]
     pub dir: PathBuf,
 
     /// The path to a private key to be considered for SSH connections
