@@ -49,7 +49,7 @@ pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
 pub const IC_STATE_DIR: &str = "data/ic_state";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
-pub const IC_STATE_EXCLUDES: &[&str] = &["images", "tip", "backups", "fs_tmp", "cups"];
+pub const IC_STATE_EXCLUDES: &[&str] = &["images", "tip", "backups", "fs_tmp", "cups", "recovery"];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
@@ -496,18 +496,20 @@ impl Recovery {
         registry_params: Option<RegistryParams>,
         ecdsa_subnet_id: Option<SubnetId>,
     ) -> RecoveryResult<impl Step> {
-        let key_ids = match self.get_ecdsa_config(subnet_id) {
-            Ok(Some(config)) => config.key_ids,
-            Ok(None) => vec![],
-            Err(err) => {
-                warn!(
-                    self.logger,
-                    "{}",
-                    format!("Failed to get ECDSA config: {:?}", err)
-                );
-                vec![]
-            }
-        };
+        let key_ids = ecdsa_subnet_id
+            .map(|id| match self.get_ecdsa_config(id) {
+                Ok(Some(config)) => config.key_ids,
+                Ok(None) => vec![],
+                Err(err) => {
+                    warn!(
+                        self.logger,
+                        "{}",
+                        format!("Failed to get ECDSA config: {:?}", err)
+                    );
+                    vec![]
+                }
+            })
+            .unwrap_or_default();
         Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
