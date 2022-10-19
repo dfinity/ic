@@ -1,7 +1,5 @@
 # syntax=docker/dockerfile
 # This Dockerfile builds the image used by the outsource machinery.
-# It is a fairly barebone Ubuntu image with a few tools like Nix and sccache
-# used when remote-building.
 #
 # NOTE: We pass the UID and the primary group ID of the logged user to make
 # sure that permissions within the container (i.e. the 'ubuntu' user) matches
@@ -17,9 +15,6 @@ ARG GID
 # The nix version
 ARG NIX_VERSION=2.3.10
 
-# The nix version
-ARG SCCACHE_VERSION=v0.2.15
-
 RUN apt --yes --quiet update && \
     apt --yes --quiet --quiet install \
 # used by Nix
@@ -34,16 +29,6 @@ python3 python3-pip \
 jq dosfstools mtools rclone \
 # linked to at runtime
 liblmdb-dev
-
-# Install sccache in /usr/bin/sccache
-RUN cd /usr/bin; \
-    curl --fail -L \
-    https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz \
-    | tar xvz --strip-components=1 "sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache" \
-    && chmod 0755 /usr/bin/sccache
-
-# Make sure sccache is working
-RUN sccache --help
 
 # Add the ubuntu used with the user's UID and primary GID on the host
 RUN groupadd --gid ${GID} ubuntu

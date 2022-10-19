@@ -4,7 +4,7 @@ FROM ${SRC_IMG_PATH} as src_img
 FROM ubuntu@sha256:9d42d0e3e57bc067d10a75ee33bdd1a5298e95e5fc3c5d1fce98b455cb879249
 
 # The image expects the following volumes mounted from the host:
-# /cache - holding the sccache artifacts
+# /cache - holding the cache artifacts
 # /cargo - is the CARGO_HOME, holding cargo binaries and cloned repos
 # /builds/git - a read only volume with the git repository which should be built
 

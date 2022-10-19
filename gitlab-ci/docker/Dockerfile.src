@@ -15,12 +15,6 @@ RUN mkdir -p /opt/bin
 ARG protoc_version=3.18.1
 RUN cd $(mktemp -d) && curl -fLO https://github.com/protocolbuffers/protobuf/releases/download/v${protoc_version}/protoc-${protoc_version}-linux-x86_64.zip && unzip * -d /opt/protoc && chmod -R 755 /opt/protoc/bin && chmod -R u+rwX,go+rX,go-w /opt/protoc/include
 
-ARG sccache_version=0.2.19-alpha+dfinity
-RUN curl -fsSL https://gitlab.com/api/v4/projects/30166821/packages/generic/sccache/v${sccache_version}/sccache -o /opt/bin/sccache && \
-    chmod +x /opt/bin/sccache && \
-    # has to match the path in the new dockerfile, not this one
-    ln -s /usr/bin/sccache /opt/bin/sccache-run
-
 ARG buildevents_version=0.6.0
 RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /opt/bin/buildevents && \
     chmod +x /opt/bin/buildevents

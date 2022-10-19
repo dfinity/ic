@@ -566,10 +566,7 @@ def run_container(image_full, cmd: shell_safe.Command, relative_path):
         "export IN_NIX_SHELL=impure",  # XXX: this is needed by some tools to function properly.
         "export CARGO_HOME=/persisted/cargo-home",
         "export CARGO_TARGET_DIR=/persisted/cargo-target",
-        "export RUSTC_WRAPPER=sccache",
-        "export SCCACHE_DIR=/persisted/sccache",
         "export XDG_CACHE_HOME=/persisted/.cache",  # make sure the nix "cache" (not the binary cache, the other one) is saved for faster eval. Right now the shell invocation goes from 20s down to 7s.
-        "export SCCACHE_CACHE_SIZE=100G",
         "export NIX_STATE_DIR=/tmp",
         "export NIX_LOG_DIR=/tmp",
         "export NIX_REMOTE=daemon",

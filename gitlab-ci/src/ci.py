@@ -108,13 +108,6 @@ def log_section(header: str, name: Optional[str] = None, collapsed: bool = True)
         print(f"\x1b[0Ksection_end:{ts}:{name}\r\x1b[0K", flush=True)
 
 
-def show_sccache_stats():
-    wrapper = getenv("RUSTC_WRAPPER")
-    if wrapper is not None:
-        with log_section("Click here to see the sccache stats"):
-            sh(wrapper, "--show-stats")
-
-
 @contextmanager
 def cwd(dir: str):
     """
