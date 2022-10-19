@@ -1,7 +1,10 @@
 use crate::unit_helpers;
 use anyhow::anyhow;
 use clap::Parser;
-use ic_sns_governance::pb::v1::{governance::SnsMetadata, NervousSystemParameters};
+use ic_sns_governance::{
+    pb::v1::{governance::SnsMetadata, NervousSystemParameters},
+    types::ONE_YEAR_SECONDS,
+};
 use ic_sns_init::{
     pb::v1::{sns_init_payload::InitialTokenDistribution, SnsInitPayload},
     MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH, MIN_TOKEN_NAME_LENGTH, MIN_TOKEN_SYMBOL_LENGTH,
@@ -76,6 +79,12 @@ pub struct SnsCliInitConfig {
     /// A description of the SNS project.
     pub description: Option<String>,
 
+    /// The amount of time that the growth rate changes (presumably, decreases)
+    /// from the initial growth rate to the final growth rate. (See the two
+    /// *_reward_rate_basis_points fields bellow.) The transition is quadratic, and
+    /// levels out at the end of the growth rate transition period.
+    pub reward_rate_transition_duration_seconds: Option<u64>,
+
     /// The amount of rewards is proportional to token_supply * current_rate. In
     /// turn, current_rate is somewhere between `initial_reward_rate_percentage`
     /// and `final_reward_rate_percentage`. In the first reward period, it is the
@@ -121,6 +130,8 @@ impl Default for SnsCliInitConfig {
             name: None,
             description: None,
             initial_token_distribution: None,
+            reward_rate_transition_duration_seconds: voting_rewards_parameters
+                .reward_rate_transition_duration_seconds,
             initial_reward_rate_percentage: voting_rewards_parameters
                 .initial_reward_rate_basis_points
                 .map(unit_helpers::basis_points_to_percentage),
@@ -240,6 +251,8 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             final_reward_rate_basis_points: sns_cli_init_config
                 .final_reward_rate_percentage
                 .map(unit_helpers::percentage_to_basis_points),
+            reward_rate_transition_duration_seconds: sns_cli_init_config
+                .reward_rate_transition_duration_seconds,
         })
     }
 }
@@ -496,6 +509,25 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
                 default_config.final_reward_rate_percentage.unwrap(),
             ),
         ),
+        (
+            Regex::new(r"reward_rate_transition_duration_seconds[^A-Za-z]*").unwrap(),
+            format!(
+                r##"#
+# The voting reward rate falls quadratically from 
+# `initial_reward_rate_basis_points` to `final_reward_rate_basis_points` over 
+# the time period defined by `reward_rate_transition_duration_seconds`. 
+#
+# The default value is {}. Values of 0 result in the reward rate always being
+# `final_reward_rate_basis_points`. The value used by the NNS is 10 years, or 
+# {} seconds. (The value cannot be set to 0.)
+#
+#"##,
+                default_config
+                    .reward_rate_transition_duration_seconds
+                    .unwrap(),
+                10 * ONE_YEAR_SECONDS
+            ),
+        ),
     ];
 
     for (i, line) in yaml_payload.lines().enumerate() {
@@ -573,6 +605,7 @@ mod test {
                 })),
                 initial_reward_rate_percentage: Some(31.0),
                 final_reward_rate_percentage: Some(27.0),
+                reward_rate_transition_duration_seconds: Some(100_000),
             }
         }
     }
@@ -627,11 +660,12 @@ name: ServiceNervousSystemTest
 url: https://internetcomputer.org/
 initial_reward_rate_percentage: 100
 final_reward_rate_percentage: 100
+reward_rate_transition_duration_seconds: 100
         "#,
             logo_path.clone().into_os_string().into_string().unwrap()
         );
         let resulting_payload: SnsCliInitConfig = serde_yaml::from_str(&file_contents).unwrap();
-        assert!(resulting_payload.validate().is_ok());
+        resulting_payload.validate().unwrap();
 
         let sns_init_payload = SnsInitPayload::try_from(resulting_payload.clone())
             .expect("Expected to be able to convert");
@@ -711,6 +745,10 @@ final_reward_rate_percentage: 100
                 .final_reward_rate_percentage
                 .map(|v| (v * 100.0) as u64),
             sns_init_payload.final_reward_rate_basis_points
+        );
+        assert_eq!(
+            sns_cli_init_config.reward_rate_transition_duration_seconds,
+            sns_init_payload.reward_rate_transition_duration_seconds
         );
 
         // Read the test.png file into memory

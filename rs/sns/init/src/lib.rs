@@ -90,6 +90,8 @@ impl SnsInitPayload {
             .unwrap();
         Self {
             transaction_fee_e8s: nervous_system_parameters_default.transaction_fee_e8s,
+            reward_rate_transition_duration_seconds: voting_rewards_parameters
+                .reward_rate_transition_duration_seconds,
             initial_reward_rate_basis_points: voting_rewards_parameters
                 .initial_reward_rate_basis_points,
             final_reward_rate_basis_points: voting_rewards_parameters
@@ -335,12 +337,14 @@ impl SnsInitPayload {
             description: _,
             neuron_minimum_dissolve_delay_to_vote_seconds,
             sns_initialization_parameters: _,
+            reward_rate_transition_duration_seconds,
             initial_reward_rate_basis_points,
             final_reward_rate_basis_points,
             initial_token_distribution: _,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
+            reward_rate_transition_duration_seconds,
             initial_reward_rate_basis_points,
             final_reward_rate_basis_points,
             ..nervous_system_parameters.voting_rewards_parameters.unwrap()
@@ -386,6 +390,7 @@ impl SnsInitPayload {
             self.validate_name(),
             self.validate_initial_reward_rate_basis_points(),
             self.validate_final_reward_rate_basis_points(),
+            self.validate_reward_rate_transition_duration_seconds(),
         ];
 
         let defect_msg = validation_fns
@@ -682,6 +687,13 @@ impl SnsInitPayload {
         } else {
             Ok(())
         }
+    }
+
+    fn validate_reward_rate_transition_duration_seconds(&self) -> Result<(), String> {
+        let _reward_rate_transition_duration_seconds = self
+            .reward_rate_transition_duration_seconds
+            .ok_or("Error: reward_rate_transition_duration_seconds must be specified")?;
+        Ok(())
     }
 }
 
@@ -989,6 +1001,7 @@ mod test {
         let test_payload = SnsInitPayload {
             initial_reward_rate_basis_points: Some(100),
             final_reward_rate_basis_points: Some(200),
+            reward_rate_transition_duration_seconds: Some(300),
             ..SnsInitPayload::with_default_values()
         };
         let voting_rewards_parameters = test_payload
@@ -1003,6 +1016,10 @@ mod test {
         assert_eq!(
             voting_rewards_parameters.final_reward_rate_basis_points,
             test_payload.final_reward_rate_basis_points
+        );
+        assert_eq!(
+            voting_rewards_parameters.reward_rate_transition_duration_seconds,
+            test_payload.reward_rate_transition_duration_seconds
         );
     }
 }

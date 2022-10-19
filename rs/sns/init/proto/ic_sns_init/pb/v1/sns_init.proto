@@ -71,6 +71,12 @@ message SnsInitPayload {
   // (A basis point is one in ten thousand.)
   optional uint64 initial_reward_rate_basis_points = 14;
   optional uint64 final_reward_rate_basis_points = 15;
+
+  // The amount of time that the growth rate changes (presumably, decreases)
+  // from the initial growth rate to the final growth rate. (See the two
+  // *_reward_rate_basis_points fields bellow.) The transition is quadratic, and
+  // levels out at the end of the growth rate transition period.
+  optional uint64 reward_rate_transition_duration_seconds = 16;
 }
 
 // The FractionalDeveloperVotingPower token distribution strategy configures

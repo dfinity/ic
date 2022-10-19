@@ -68,6 +68,12 @@ pub struct SnsInitPayload {
     pub initial_reward_rate_basis_points: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "15")]
     pub final_reward_rate_basis_points: ::core::option::Option<u64>,
+    /// The amount of time that the growth rate changes (presumably, decreases)
+    /// from the initial growth rate to the final growth rate. (See the two
+    /// *_reward_rate_basis_points fields bellow.) The transition is quadratic, and
+    /// levels out at the end of the growth rate transition period.
+    #[prost(uint64, optional, tag = "16")]
+    pub reward_rate_transition_duration_seconds: ::core::option::Option<u64>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.

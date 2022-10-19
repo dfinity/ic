@@ -110,13 +110,19 @@ impl LinearMap {
         let Self { from, to } = &self;
 
         // t varies from 0 to 1 as x varies from from.start to from.end...
-        let t = (x - from.start) / (from.end - from.start);
+        // But if from.end == from.start, we set t to 1 to avoid division by
+        // zero.
+        let t = if from.end == from.start {
+            i2d(1)
+        } else {
+            (x - from.start) / (from.end - from.start)
+        };
 
         // Thus, the result varies from
         //   to.start * 1 + to.end * 0 = to.start
         // to
         //   to.start * (1 - 1) + to.end * 1 = to.end
-        to.start * (dec!(1) - t) + to.end * t
+        to.start * (i2d(1) - t) + to.end * t
     }
 }
 
@@ -269,10 +275,7 @@ impl VotingRewardsParameters {
         require_field_set_and_in_range(
             "reward_rate_transition_duration_seconds",
             &self.reward_rate_transition_duration_seconds,
-            // Conceptually, allowing 0 make sense, but for convenience of
-            // implementation, we disallow 0 to avoid division by zero (in
-            // LinearMap).
-            1..,
+            0..,
         )
     }
 
@@ -490,6 +493,32 @@ mod test {
     }
 
     #[test]
+    fn reward_rate_zero() {
+        let expected = RewardRate::from_basis_points(100);
+        let parameters_with_zero_transition_duration_seconds = VotingRewardsParameters {
+            reward_rate_transition_duration_seconds: Some(0),
+            ..VOTING_REWARDS_PARAMETERS
+        };
+        for i in 0..100 {
+            assert_eq!(
+                parameters_with_zero_transition_duration_seconds.reward_rate(i),
+                expected,
+            );
+        }
+    }
+
+    #[test]
+    fn round_duration_is_transition_duration() {
+        let parameters = VotingRewardsParameters {
+            round_duration_seconds: Some(100),
+            reward_rate_transition_duration_seconds: Some(100),
+            ..VOTING_REWARDS_PARAMETERS
+        };
+        let expected = RewardRate::from_basis_points(100);
+        assert_eq!(parameters.reward_rate(100), expected,);
+    }
+
+    #[test]
     fn reward_rate_flattens_out() {
         let expected = RewardRate::from_basis_points(100);
         assert_eq!(VOTING_REWARDS_PARAMETERS.reward_rate(42), expected,);
@@ -568,13 +597,6 @@ mod test {
         assert_is_err(
             VotingRewardsParameters {
                 reward_rate_transition_duration_seconds: None,
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .validate(),
-        );
-        assert_is_err(
-            VotingRewardsParameters {
-                reward_rate_transition_duration_seconds: Some(0),
                 ..VOTING_REWARDS_PARAMETERS
             }
             .validate(),
