@@ -28,12 +28,15 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict
 from typing import List
 from typing import Tuple
 
 import requests
+import requests.packages.urllib3.util.connection as urllib3_cn
+
 
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s:%(message)s")
 
@@ -225,15 +228,37 @@ def send_all_slack_alerts(slack_alerts_file_path: str, ci_project_dir: str) -> N
             )
 
 
+def allowed_gai_family():
+    if not urllib3_cn.HAS_IPV6:
+        raise Exception("IPv6 is required but not supported")
+    return socket.AF_INET6
+
+
+@contextmanager
+def use_ipv6_in_requests():
+    orig_allowed_gai_family = urllib3_cn.allowed_gai_family
+    try:
+        urllib3_cn.allowed_gai_family = allowed_gai_family
+        yield
+    finally:
+        urllib3_cn.allowed_gai_family = orig_allowed_gai_family
+
+
 def get_external_ipv6_address():
-    url = "http://v6.ident.me"
-    get_ipv6_resp = requests.get(url, timeout=GET_EXTERNAL_IPV6_TIMEOUT)
-    status_code = get_ipv6_resp.status_code
-    if status_code != 200:
-        raise GetExternalIPv6Exception(
-            f"Failed to get external IPv6 address by requesting {url} because status code = {str(status_code)}!"
-        )
-    return get_ipv6_resp.text
+    url = "http://ifconfig.co"
+    try:
+        with use_ipv6_in_requests():
+            get_ipv6_resp = requests.get(url, timeout=GET_EXTERNAL_IPV6_TIMEOUT, headers={"accept": "text/plain"})
+        status_code = get_ipv6_resp.status_code
+        if status_code != 200:
+            logging.warning(
+                f"Failed to get external IPv6 address by requesting {url} because status code = {str(status_code)}!"
+            )
+            return None
+        return get_ipv6_resp.text.strip()
+    except BaseException as err:
+        logging.warning(f"Failed to get external IPv6 address by requesting {url} because: {err}")
+        return None
 
 
 def main(
@@ -428,6 +453,9 @@ def main(
 
     external_ipv6_address = get_external_ipv6_address()
 
+    def optional(condition, item):
+        return [item] if condition else []
+
     run_test_driver_cmd = (
         [SHELL_WRAPPER]
         + RUN_CMD
@@ -448,8 +476,8 @@ def main(
             f"--artifacts-path={ARTIFACT_DIR}",
             f"--authorized-ssh-accounts={SSH_KEY_DIR}",
             f"--journalbeat-hosts={TEST_ES_HOSTNAMES}",
-            f"--preferred-network={external_ipv6_address}",
         ]
+        + optional(external_ipv6_address is not None, f"--preferred-network={external_ipv6_address}")
     )
     logging.debug(f"run_test_driver_cmd: {run_test_driver_cmd}")
     # We launch prod-test-driver with a timeout. This enables us to send slack notification before the global CI timeout kills the whole job.
