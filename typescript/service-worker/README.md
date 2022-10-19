@@ -22,31 +22,6 @@ always fetch the root key of the network before doing the validation.
 **THIS SHOULD ONLY BE USED ON A TEST OR LOCAL NETWORK.** The IC mainnet public key is hard coded in
 the agent and, for security reasons, should not be fetched by the agent.
 
-## Develop
-
-To start the local development instance:
-
-1. Run `npm install`
-2. Run `npm start`
-
-This will start serving the files built using `npm run build-dev` on http://localhost:8080. Any path that don't match a file instead will be sent to https://ic0.app.
-Note that for the service worker to correctly relay the canister call to a canister there must be a query parameter `canisterId=<canisterId>`.
-The service worker can be tested against any mainnet canister.
-
-For example:
-
-- Internet Identity: http://localhost:8080/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai
-- DSCVR: http://localhost:8080/?canisterId=h5aet-waaaa-aaaab-qaamq-cai
-
-### Developing locally on Safari
-
-Safari does not allow service workers to be served on non-secure connections, even on localhost. So to test the service worker locally first follow the setup instructions on [web.dev](https://web.dev/how-to-use-local-https/) (except for the final step to generate SSL certs), then generate SSL certificates by running `npm run create-ssl-certs`. This will create self-signed certificates that will be stored in a temporary folder called `certs`. Now you can run `npm run start-ssl`. Now you can test using HTTPS.
-
-For example:
-
-- Internet Identity: https://localhost:8080/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai
-- DSCVR: https://localhost:8080/?canisterId=h5aet-waaaa-aaaab-qaamq-cai
-
 ## Generating HTTP Gateway bindings
 
 ### JavaScript binding
@@ -138,6 +113,10 @@ export type Token = { type: <T>() => IDL.Type<T> };
       # Nuance
       127.0.0.1 exwqn-uaaaa-aaaaf-qaeaa-cai.ic0.local
       127.0.0.1 nuance.ic0.local
+
+      # Open Chat
+      127.0.0.1 6hsbt-vqaaa-aaaaf-aaafq-cai.ic0.local
+      127.0.0.1 oc.ic0.local
       ```
 1. Set the `hostnameCanisterIdMap` value in the `http_request.ts` file (make sure to revert this before commiting):
       ```shell
@@ -148,6 +127,7 @@ export type Token = { type: <T>() => IDL.Type<T> };
             'distrikt.ic0.local': ['az5sd-cqaaa-aaaae-aaarq-cai', 'ic0.app'],
             'distrikt-staging.ic0.local': ['am2do-dyaaa-aaaae-aaasa-cai', 'ic0.app'],
             'nuance.ic0.local': ['exwqn-uaaaa-aaaaf-qaeaa-cai', 'ic0.app'],
+            'oc.ic0.local': ['6hsbt-vqaaa-aaaaf-aaafq-cai', 'ic0.app'],
       };
       ```
 1. Build and watch the service worker:

@@ -33,7 +33,7 @@ export async function validateBody(
   agent: HttpAgent,
   shouldFetchRootKey = false
 ): Promise<boolean> {
-  // If we're running locally, update the key manually.
+  // If we're running locally or on a testnet, update the key manually.
   if (shouldFetchRootKey) {
     await agent.fetchRootKey();
   }

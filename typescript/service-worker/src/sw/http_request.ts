@@ -82,18 +82,11 @@ function maybeResolveCanisterIdFromHostName(
 /**
  * Try to resolve the Canister ID to contact in the search params.
  * @param searchParams The URL Search params.
- * @param isLocal Whether to resolve headers as if we were running locally.
  * @returns A Canister ID or null if none were found.
  */
 function maybeResolveCanisterIdFromSearchParam(
-  searchParams: URLSearchParams,
-  isLocal: boolean
+  searchParams: URLSearchParams
 ): Principal | null {
-  // Skip this if we're not on localhost.
-  if (!isLocal) {
-    return null;
-  }
-
   const maybeCanisterId = searchParams.get('canisterId');
   if (maybeCanisterId) {
     try {
@@ -109,18 +102,14 @@ function maybeResolveCanisterIdFromSearchParam(
 /**
  * Try to resolve the Canister ID to contact from a URL string.
  * @param urlString The URL in string format (normally from the request).
- * @param isLocal Whether to resolve headers as if we were running locally.
  * @returns A Canister ID or null if none were found.
  */
-function resolveCanisterIdFromUrl(
-  urlString: string,
-  isLocal: boolean
-): Principal | null {
+function resolveCanisterIdFromUrl(urlString: string): Principal | null {
   try {
     const url = new URL(urlString);
     return (
       maybeResolveCanisterIdFromHostName(url.hostname) ||
-      maybeResolveCanisterIdFromSearchParam(url.searchParams, isLocal)
+      maybeResolveCanisterIdFromSearchParam(url.searchParams)
     );
   } catch (_) {
     return null;
@@ -130,13 +119,9 @@ function resolveCanisterIdFromUrl(
 /**
  * Try to resolve the Canister ID to contact from headers.
  * @param headers Headers from the HttpRequest.
- * @param isLocal Whether to resolve headers as if we were running locally.
  * @returns A Canister ID or null if none were found.
  */
-function maybeResolveCanisterIdFromHeaders(
-  headers: Headers,
-  isLocal: boolean
-): Principal | null {
+function maybeResolveCanisterIdFromHeaders(headers: Headers): Principal | null {
   const maybeHostHeader = headers.get('host');
   if (maybeHostHeader) {
     // Remove the port.
@@ -148,30 +133,13 @@ function maybeResolveCanisterIdFromHeaders(
     }
   }
 
-  if (isLocal) {
-    const maybeRefererHeader = headers.get('referer');
-    if (maybeRefererHeader) {
-      const maybeCanisterId = resolveCanisterIdFromUrl(
-        maybeRefererHeader,
-        isLocal
-      );
-      if (maybeCanisterId) {
-        return maybeCanisterId;
-      }
-    }
-  }
-
   return null;
 }
 
-function maybeResolveCanisterIdFromHttpRequest(
-  request: Request,
-  isLocal: boolean
-) {
+function maybeResolveCanisterIdFromHttpRequest(request: Request) {
   return (
-    (isLocal && resolveCanisterIdFromUrl(request.referrer, isLocal)) ||
-    maybeResolveCanisterIdFromHeaders(request.headers, isLocal) ||
-    resolveCanisterIdFromUrl(request.url, isLocal)
+    maybeResolveCanisterIdFromHeaders(request.headers) ||
+    resolveCanisterIdFromUrl(request.url)
   );
 }
 
@@ -288,11 +256,7 @@ export async function handleRequest(request: Request): Promise<Response> {
   /**
    * We try to do an HTTP Request query.
    */
-  const isLocal = swDomains === 'localhost';
-  const maybeCanisterId = maybeResolveCanisterIdFromHttpRequest(
-    request,
-    isLocal
-  );
+  const maybeCanisterId = maybeResolveCanisterIdFromHttpRequest(request);
 
   /**
    * We forward all requests to /api/ to the replica, as is.
