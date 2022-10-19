@@ -33,6 +33,7 @@ fn get_test_sns_cli_init_config() -> SnsCliInitConfig {
         neuron_minimum_dissolve_delay_to_vote_seconds: Some(0),
         initial_reward_rate_percentage: Some(31.0),
         final_reward_rate_percentage: Some(21.0),
+        reward_rate_transition_duration_seconds: Some(100_000),
     }
 }
 #[test]
