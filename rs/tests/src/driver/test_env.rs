@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use utils::fs::{sync_path, write_atomically};
 
+use super::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use super::pot_dsl::TestPath;
 
 const ASYNC_CHAN_SIZE: usize = 8192;
@@ -233,4 +234,45 @@ fn append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<File> {
     let fd = f.as_raw_fd();
     nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusiveNonblock)?;
     Ok(f)
+}
+
+pub trait SshKeyGen {
+    /// Generates an SSH key-pair for the given user and stores it in self.
+    fn ssh_keygen(&self, username: &str) -> Result<()>;
+}
+
+impl SshKeyGen for TestEnv {
+    /// Generates an SSH key-pair for the given user and stores it in the TestEnv.
+    fn ssh_keygen(&self, username: &str) -> Result<()> {
+        let ssh_authorized_pub_keys_dir = self.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+        let ssh_authorized_priv_key_dir = self.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
+
+        let priv_key = ssh_authorized_priv_key_dir.join(username);
+
+        if !priv_key.exists() {
+            fs::create_dir_all(ssh_authorized_pub_keys_dir.clone())?;
+            fs::create_dir_all(ssh_authorized_priv_key_dir)?;
+
+            let mut cmd = std::process::Command::new("ssh-keygen");
+            let mut ssh_keygen_child = cmd
+                .arg("-t")
+                .arg("ed25519")
+                .arg("-N")
+                .arg("")
+                .arg("-C")
+                .arg(username)
+                .arg("-f")
+                .arg(priv_key.clone())
+                .spawn()?;
+            ssh_keygen_child
+                .wait()
+                .expect("Expected ssh-keygen to finish successfully");
+
+            let orig_pub_key = priv_key.with_extension("pub");
+            let final_pub_key = ssh_authorized_pub_keys_dir.join(username);
+            fs::rename(orig_pub_key, final_pub_key)?;
+        }
+
+        Ok(())
+    }
 }

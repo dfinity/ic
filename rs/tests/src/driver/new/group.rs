@@ -6,8 +6,6 @@ use std::{
     path::PathBuf,
 };
 
-use std::fs;
-
 use crate::driver::{
     driver_setup::IcSetup,
     new::{
@@ -187,8 +185,6 @@ impl SystemTestGroup {
                         println!("Child: running setup");
                         // Step 1: create an independent driver context for this process
                         let env = process_ctx.group_context.create_setup_env()?;
-
-                        fs::create_dir_all(&env.get_path("ssh/authorized_pub_keys"))?;
 
                         // Step 2: invoke InternetComputer interfaces
                         let ic_setup = IcSetup::from_bazel_env();

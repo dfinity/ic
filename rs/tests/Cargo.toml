@@ -147,3 +147,7 @@ path = "bin/prod_test_driver.rs"
 [[bin]]
 name = "ic-systest-basic-health"
 path = "bin/basic_health_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-add-nodes"
+path = "bin/tecdsa_add_nodes_test.rs"
