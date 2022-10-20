@@ -6,8 +6,8 @@ load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_im
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts", "urls_test")
 
 img_bases = {
-    "dev": "dfinity/guestos-base-dev@sha256:cc19a9356b4b62a9133d93f3477293dd54996e2e7a449b9947027cbb8da200c8",
-    "prod": "dfinity/guestos-base@sha256:2393f708544922105927ccae5c315bc7fd1265c0590fd2b362362ee414948312",
+    "dev": "dfinity/guestos-base-dev@sha256:c54c12d710d748d776e88bedf8e9c4eb3c391cfcdbd81df3c1ed40b86358314d",
+    "prod": "dfinity/guestos-base@sha256:65b977ea21e1aedf1af1153610457a192e5edfc2768e6ea5926818246e894ccf",
 }
 
 # Declare the dependencies that we will have for the built filesystem images.
