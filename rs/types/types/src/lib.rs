@@ -429,6 +429,34 @@ fn display_canister_id() {
     );
 }
 
+/// Represents Canister timer.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
+pub enum CanisterTimer {
+    /// The canister timer is not set.
+    Inactive,
+    /// The canister timer is set at the specific time.
+    Active(Time),
+}
+
+impl CanisterTimer {
+    /// Convert this canister timer to time.
+    pub fn to_time(&self) -> Time {
+        match self {
+            CanisterTimer::Inactive => time::UNIX_EPOCH,
+            CanisterTimer::Active(time) => *time,
+        }
+    }
+
+    /// Create a canister timer from time.
+    pub fn from_time(time: Time) -> Self {
+        if time == time::UNIX_EPOCH {
+            CanisterTimer::Inactive
+        } else {
+            CanisterTimer::Active(time)
+        }
+    }
+}
+
 /// Represents scheduling strategy for Canisters with long execution in progress.
 /// All long execution start in the Opportunistic mode, and then the scheduler
 /// prioritizes top `long_execution_cores` some of them. This is to enforce FIFO

@@ -205,6 +205,9 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_time(&self) -> HypervisorResult<Time> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_global_timer_set(&mut self, _time: Time) -> HypervisorResult<Time> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_performance_counter(
         &self,
         _performance_counter_type: PerformanceCounterType,

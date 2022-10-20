@@ -22,8 +22,8 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{Callback, WasmClosure},
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, NumPages, PrincipalId,
-    SubnetId, Time,
+    CanisterId, CanisterTimer, ComputeAllocation, Cycles, NumBytes, NumInstructions, NumPages,
+    PrincipalId, SubnetId, Time,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
@@ -2335,6 +2335,29 @@ impl SystemApi for SystemApiImpl {
             | ApiType::InspectMessage { time, .. } => Ok(*time),
         };
         trace_syscall!(self, ic0_time, result);
+        result
+    }
+
+    fn ic0_global_timer_set(&mut self, time: Time) -> HypervisorResult<Time> {
+        let result = match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_global_timer_set")),
+            ApiType::Init { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
+                let prev_time = self.sandbox_safe_system_state.global_timer().to_time();
+                self.sandbox_safe_system_state
+                    .set_global_timer(CanisterTimer::from_time(time));
+                Ok(prev_time)
+            }
+        };
+        trace_syscall!(self, ic0_global_timer_set, result);
         result
     }
 

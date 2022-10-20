@@ -293,6 +293,11 @@ lazy_static! {
             11_000_004,
         ),
         common::Benchmark(
+            "ic0_global_timer_set()",
+            Module::Test.from_ic0("global_timer_set", Param1(0_i64), Result::I64),
+            12_000_004,
+        ),
+        common::Benchmark(
             "ic0_performance_counter()",
             Module::Test.from_ic0("performance_counter", Param1(0), Result::I64),
             212_000_004,
