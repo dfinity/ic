@@ -422,7 +422,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.4.1",
             ),
             "k256": crate.spec(
-                version = "^0.11.2",
+                version = "^0.11.6",
                 features = [
                     "arithmetic",
                     "ecdsa",

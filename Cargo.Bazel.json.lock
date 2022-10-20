@@ -1,5 +1,5 @@
 {
-  "checksum": "dee8faf901baf23f60bfcf1e27a1c37905ed75375c4338b23e2f59e40649be46",
+  "checksum": "52e28dcfe36fcb3634596efc95a2f1feb0698ed3013ce60b001dd7a90ae7a5d9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -23659,7 +23659,7 @@
               "target": "log"
             },
             {
-              "id": "net2 0.2.37",
+              "id": "net2 0.2.38",
               "target": "net2"
             },
             {
@@ -23937,7 +23937,7 @@
               "target": "kernel32"
             },
             {
-              "id": "net2 0.2.37",
+              "id": "net2 0.2.38",
               "target": "net2"
             },
             {
@@ -24758,13 +24758,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "net2 0.2.37": {
+    "net2 0.2.38": {
       "name": "net2",
-      "version": "0.2.37",
+      "version": "0.2.38",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/net2/0.2.37/download",
-          "sha256": "391630d12b68002ae1e25e8f974306474966550ad82dac6886fb8910c19568ae"
+          "url": "https://crates.io/api/v1/crates/net2/0.2.38/download",
+          "sha256": "74d0df99cfcd2530b2e694f6e17e7f37b8e26bb23983ac530c0c97408837c631"
         }
       },
       "targets": [
@@ -24798,7 +24798,7 @@
             }
           ],
           "selects": {
-            "cfg(any(target_os = \"redox\", unix, target_os = \"wasi\"))": [
+            "cfg(any(unix, target_os = \"wasi\"))": [
               {
                 "id": "libc 0.2.135",
                 "target": "libc"
@@ -24813,7 +24813,7 @@
           }
         },
         "edition": "2015",
-        "version": "0.2.37"
+        "version": "0.2.38"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -44821,8 +44821,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -44833,8 +44833,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -49191,28 +49191,6 @@
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
       "x86_64-unknown-freebsd"
-    ],
-    "cfg(any(target_os = \"redox\", unix, target_os = \"wasi\"))": [
-      "aarch64-apple-darwin",
-      "aarch64-apple-ios",
-      "aarch64-apple-ios-sim",
-      "aarch64-linux-android",
-      "aarch64-unknown-linux-gnu",
-      "arm-unknown-linux-gnueabi",
-      "armv7-linux-androideabi",
-      "armv7-unknown-linux-gnueabi",
-      "i686-apple-darwin",
-      "i686-linux-android",
-      "i686-unknown-freebsd",
-      "i686-unknown-linux-gnu",
-      "powerpc-unknown-linux-gnu",
-      "s390x-unknown-linux-gnu",
-      "wasm32-wasi",
-      "x86_64-apple-darwin",
-      "x86_64-apple-ios",
-      "x86_64-linux-android",
-      "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu"
     ],
     "cfg(any(unix, target_os = \"wasi\"))": [
       "aarch64-apple-darwin",
