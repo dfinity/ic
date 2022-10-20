@@ -89,7 +89,10 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
-use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
+use ic_sns_wasm::pb::v1::{
+    AddWasmRequest, SnsCanisterType, SnsWasm, UpdateAllowedPrincipalsRequest,
+    UpdateSnsSubnetListRequest,
+};
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
     CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
@@ -368,6 +371,10 @@ enum SubCommand {
     ProposeToAddWasmToSnsWasm(ProposeToAddWasmToSnsWasmCmd),
     /// Get the ECDSA key ids and their signing subnets
     GetEcdsaSigningSubnets,
+    /// Propose to update the list of SNS Subnet IDs that SNS-WASM deploys SNS instances to
+    ProposeToUpdateSnsSubnetIdsInSnsWasm(ProposeToUpdateSnsSubnetIdsInSnsWasmCmd),
+    /// Propose to update the list of Principals that are allowed to deploy SNS instances
+    ProposeToUpdateSnsDeployWhitelist(ProposeToUpdateSnsDeployWhitelistCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -2010,6 +2017,68 @@ impl ProposalTitleAndPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
     }
 }
 
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
+    #[clap(long)]
+    /// Add SNS Subnet IDs to the list of subnets that SNS-WASM will deploy SNS instances to
+    pub sns_subnet_ids_to_add: Vec<PrincipalId>,
+
+    #[clap(long)]
+    /// Remove SNS Subnet IDs from the list of subnets that SNS-WASM will deploy SNS instances to
+    pub sns_subnet_ids_to_remove: Vec<PrincipalId>,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<UpdateSnsSubnetListRequest>
+    for ProposeToUpdateSnsSubnetIdsInSnsWasmCmd
+{
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => "Add SNS Subnet IDs to SNS-WASM".to_string(),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> UpdateSnsSubnetListRequest {
+        UpdateSnsSubnetListRequest {
+            sns_subnet_ids_to_add: self.sns_subnet_ids_to_add.clone(),
+            sns_subnet_ids_to_remove: self.sns_subnet_ids_to_remove.clone(),
+        }
+    }
+}
+
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateSnsDeployWhitelistCmd {
+    #[clap(long)]
+    /// Principals to add to the SNS deploy whitelist
+    pub added_principals: Vec<PrincipalId>,
+
+    #[clap(long)]
+    /// Principals to remove from the SNS deploy whitelist
+    pub removed_principals: Vec<PrincipalId>,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<UpdateAllowedPrincipalsRequest>
+    for ProposeToUpdateSnsDeployWhitelistCmd
+{
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => "Update the list of Principals allowed to deploy an SNS".to_string(),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> UpdateAllowedPrincipalsRequest {
+        UpdateAllowedPrincipalsRequest {
+            added_principals: self.added_principals.clone(),
+            removed_principals: self.removed_principals.clone(),
+        }
+    }
+}
+
 /// Sub-command to submit a proposal to clear the provisional whitelist.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -3066,6 +3135,8 @@ async fn main() {
             SubCommand::ProposeToStartCanister(_) => (),
             SubCommand::ProposeToRerouteCanisterRanges(_) => (),
             SubCommand::ProposeXdrIcpConversionRate(_) => (),
+            SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(_) => (),
+            SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -3758,6 +3829,24 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::AddSnsWasm,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateSnsWasmSnsSubnetIds,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUpdateSnsDeployWhitelist(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateAllowedPrincipals,
                 opts.nns_url,
                 sender,
             )
