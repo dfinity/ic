@@ -1,5 +1,5 @@
 {
-  "checksum": "52e28dcfe36fcb3634596efc95a2f1feb0698ed3013ce60b001dd7a90ae7a5d9",
+  "checksum": "2af25b9681872274e3a328148d2eecc7cfc1c630ae4eba657336adcb8ed1cbf4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -182,11 +182,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.24",
+              "id": "futures-sink 0.3.25",
               "target": "futures_sink"
             },
             {
@@ -313,7 +313,7 @@
               "target": "flate2"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
@@ -537,7 +537,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
@@ -607,11 +607,11 @@
               "target": "actix_utils"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -673,7 +673,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
@@ -838,11 +838,11 @@
               "target": "encoding_rs"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -882,7 +882,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -2076,7 +2076,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -2130,7 +2130,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
@@ -2417,7 +2417,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             }
           ],
@@ -2744,7 +2744,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -2788,7 +2788,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -2871,7 +2871,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -4032,7 +4032,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
@@ -4082,7 +4082,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
@@ -4764,7 +4764,7 @@
               "target": "rustc_version"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -4924,7 +4924,7 @@
               "target": "quote"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -5750,7 +5750,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
@@ -5983,7 +5983,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -8692,7 +8692,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -11298,15 +11298,15 @@
               "target": "fs_extra"
             },
             {
-              "id": "futures 0.3.24",
+              "id": "futures 0.3.25",
               "target": "futures"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -11792,7 +11792,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -13502,7 +13502,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
@@ -14782,13 +14782,13 @@
       },
       "license": "BSD-3-Clause"
     },
-    "futures 0.3.24": {
+    "futures 0.3.25": {
       "name": "futures",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures/0.3.24/download",
-          "sha256": "7f21eda599937fba36daeb58a22e8f5cee2d14c4a17b5b7739c7c8e5e3b8230c"
+          "url": "https://crates.io/api/v1/crates/futures/0.3.25/download",
+          "sha256": "38390104763dc37a5145a53c29c63c1290b5d316d6086ec32c293f6736051bb0"
         }
       },
       "targets": [
@@ -14821,48 +14821,48 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.24",
+              "id": "futures-channel 0.3.25",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-executor 0.3.24",
+              "id": "futures-executor 0.3.25",
               "target": "futures_executor"
             },
             {
-              "id": "futures-io 0.3.24",
+              "id": "futures-io 0.3.25",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.24",
+              "id": "futures-sink 0.3.25",
               "target": "futures_sink"
             },
             {
-              "id": "futures-task 0.3.24",
+              "id": "futures-task 0.3.25",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.24"
+        "version": "0.3.25"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-channel 0.3.24": {
+    "futures-channel 0.3.25": {
       "name": "futures-channel",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-channel/0.3.24/download",
-          "sha256": "30bdd20c28fadd505d0fd6712cdfcb0d4b5648baf45faef7f852afb2399bb050"
+          "url": "https://crates.io/api/v1/crates/futures-channel/0.3.25/download",
+          "sha256": "52ba265a92256105f45b719605a571ffe2d1f0fea3807304b522c1d778f79eed"
         }
       },
       "targets": [
@@ -14906,22 +14906,22 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.24",
+              "id": "futures-channel 0.3.25",
               "target": "build_script_build"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.24",
+              "id": "futures-sink 0.3.25",
               "target": "futures_sink"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.24"
+        "version": "0.3.25"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -14930,13 +14930,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-core 0.3.24": {
+    "futures-core 0.3.25": {
       "name": "futures-core",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-core/0.3.24/download",
-          "sha256": "4e5aa3de05362c3fb88de6531e6296e85cde7739cccad4b9dfeeb7f6ebce56bf"
+          "url": "https://crates.io/api/v1/crates/futures-core/0.3.25/download",
+          "sha256": "04909a7a7e4633ae6c4a9ab280aeb86da1236243a77b694a49eacd659a4bd3ac"
         }
       },
       "targets": [
@@ -14978,14 +14978,14 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.24"
+        "version": "0.3.25"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -14994,13 +14994,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-executor 0.3.24": {
+    "futures-executor 0.3.25": {
       "name": "futures-executor",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-executor/0.3.24/download",
-          "sha256": "9ff63c23854bee61b6e9cd331d523909f238fc7636290b96826e9cfa5faa00ab"
+          "url": "https://crates.io/api/v1/crates/futures-executor/0.3.25/download",
+          "sha256": "7acc85df6714c176ab5edf386123fafe217be88c0840ec11f199441134a074e2"
         }
       },
       "targets": [
@@ -15029,32 +15029,32 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-task 0.3.24",
+              "id": "futures-task 0.3.25",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.24"
+        "version": "0.3.25"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-io 0.3.24": {
+    "futures-io 0.3.25": {
       "name": "futures-io",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-io/0.3.24/download",
-          "sha256": "bbf4d2a7a308fd4578637c0b17c7e1c7ba127b8f6ba00b29f717e9655d85eb68"
+          "url": "https://crates.io/api/v1/crates/futures-io/0.3.25/download",
+          "sha256": "00f5fb52a06bdcadeb54e8d3671f8888a39697dcb0b81b23b55174030427f4eb"
         }
       },
       "targets": [
@@ -15080,17 +15080,17 @@
           "std"
         ],
         "edition": "2018",
-        "version": "0.3.24"
+        "version": "0.3.25"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-macro 0.3.24": {
+    "futures-macro 0.3.25": {
       "name": "futures-macro",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-macro/0.3.24/download",
-          "sha256": "42cd15d1c7456c04dbdf7e88bcd69760d74f3a798d6444e16974b505b0e62f17"
+          "url": "https://crates.io/api/v1/crates/futures-macro/0.3.25/download",
+          "sha256": "bdfb8ce053d86b91919aad980c220b1fb8401a9394410e1c289ed7e66b61835d"
         }
       },
       "targets": [
@@ -15130,17 +15130,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.24"
+        "version": "0.3.25"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-sink 0.3.24": {
+    "futures-sink 0.3.25": {
       "name": "futures-sink",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-sink/0.3.24/download",
-          "sha256": "21b20ba5a92e727ba30e72834706623d94ac93a725410b6a6b6fbc1b07f7ba56"
+          "url": "https://crates.io/api/v1/crates/futures-sink/0.3.25/download",
+          "sha256": "39c15cf1a4aa79df40f1bb462fb39676d0ad9e366c2a33b590d7c66f4f81fcf9"
         }
       },
       "targets": [
@@ -15168,17 +15168,17 @@
           "std"
         ],
         "edition": "2018",
-        "version": "0.3.24"
+        "version": "0.3.25"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-task 0.3.24": {
+    "futures-task 0.3.25": {
       "name": "futures-task",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-task/0.3.24/download",
-          "sha256": "a6508c467c73851293f390476d4491cf4d227dbabcd4170f3bb6044959b294f1"
+          "url": "https://crates.io/api/v1/crates/futures-task/0.3.25/download",
+          "sha256": "2ffb393ac5d9a6eaa9d3fdf37ae2776656b706e200c8e16b1bdb227f5198e6ea"
         }
       },
       "targets": [
@@ -15219,14 +15219,14 @@
         "deps": {
           "common": [
             {
-              "id": "futures-task 0.3.24",
+              "id": "futures-task 0.3.25",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.24"
+        "version": "0.3.25"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -15235,13 +15235,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-util 0.3.24": {
+    "futures-util 0.3.25": {
       "name": "futures-util",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-util/0.3.24/download",
-          "sha256": "44fb6cb1be61cc1d2e43b262516aafcf63b241cffdb1d3fa115f91d9c7b09c90"
+          "url": "https://crates.io/api/v1/crates/futures-util/0.3.25/download",
+          "sha256": "197676987abd2f9cadff84926f410af1c183608d36641465df73ae8211dc65d6"
         }
       },
       "targets": [
@@ -15294,27 +15294,27 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.24",
+              "id": "futures-channel 0.3.25",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-io 0.3.24",
+              "id": "futures-io 0.3.25",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.24",
+              "id": "futures-sink 0.3.25",
               "target": "futures_sink"
             },
             {
-              "id": "futures-task 0.3.24",
+              "id": "futures-task 0.3.25",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "build_script_build"
             },
             {
@@ -15340,13 +15340,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "futures-macro 0.3.24",
+              "id": "futures-macro 0.3.25",
               "target": "futures_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.3.24"
+        "version": "0.3.25"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -15432,7 +15432,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             }
           ],
@@ -16145,15 +16145,15 @@
               "target": "fnv"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.24",
+              "id": "futures-sink 0.3.25",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -17132,7 +17132,7 @@
               "target": "form_urlencoded"
             },
             {
-              "id": "futures 0.3.24",
+              "id": "futures 0.3.25",
               "target": "futures"
             },
             {
@@ -17160,7 +17160,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -17339,15 +17339,15 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.24",
+              "id": "futures-channel 0.3.25",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -17528,7 +17528,7 @@
               "target": "async_socks5"
             },
             {
-              "id": "futures 0.3.24",
+              "id": "futures 0.3.25",
               "target": "futures"
             },
             {
@@ -17760,7 +17760,7 @@
               "target": "candid"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -19408,7 +19408,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -20130,7 +20130,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -20247,7 +20247,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
@@ -22390,15 +22390,15 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.24",
+              "id": "futures-sink 0.3.25",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -22724,7 +22724,7 @@
               "target": "serde_value"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -27102,7 +27102,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "futures 0.3.24",
+              "id": "futures 0.3.25",
               "target": "futures"
             },
             {
@@ -27204,15 +27204,15 @@
               "target": "fnv"
             },
             {
-              "id": "futures-channel 0.3.24",
+              "id": "futures-channel 0.3.25",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.24",
+              "id": "futures-executor 0.3.25",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -33463,7 +33463,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -33486,11 +33486,11 @@
                 "target": "encoding_rs"
               },
               {
-                "id": "futures-core 0.3.24",
+                "id": "futures-core 0.3.25",
                 "target": "futures_core"
               },
               {
-                "id": "futures-util 0.3.24",
+                "id": "futures-util 0.3.25",
                 "target": "futures_util"
               },
               {
@@ -33577,7 +33577,7 @@
                 "target": "js_sys"
               },
               {
-                "id": "serde_json 1.0.86",
+                "id": "serde_json 1.0.87",
                 "target": "serde_json"
               },
               {
@@ -36218,13 +36218,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "serde_json 1.0.86": {
+    "serde_json 1.0.87": {
       "name": "serde_json",
-      "version": "1.0.86",
+      "version": "1.0.87",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_json/1.0.86/download",
-          "sha256": "41feea4228a6f1cd09ec7a3593a682276702cd67b5273544757dae23c096f074"
+          "url": "https://crates.io/api/v1/crates/serde_json/1.0.87/download",
+          "sha256": "6ce777b7b150d76b9cf60d28b55f5847135a003f7d7350c6be7a773508ce7d45"
         }
       },
       "targets": [
@@ -36279,14 +36279,14 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.86"
+        "version": "1.0.87"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -36641,7 +36641,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.24",
+              "id": "futures 0.3.25",
               "target": "futures"
             },
             {
@@ -38058,7 +38058,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -40060,7 +40060,7 @@
               "target": "fnv"
             },
             {
-              "id": "futures 0.3.24",
+              "id": "futures 0.3.25",
               "target": "futures"
             },
             {
@@ -40964,7 +40964,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -41345,7 +41345,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
@@ -41771,7 +41771,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -41959,11 +41959,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.24",
+              "id": "futures-sink 0.3.25",
               "target": "futures_sink"
             },
             {
@@ -41975,7 +41975,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
@@ -42030,7 +42030,7 @@
               "target": "either"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -42084,7 +42084,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
@@ -42142,7 +42142,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
@@ -42197,7 +42197,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -42261,11 +42261,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.24",
+              "id": "futures-sink 0.3.25",
               "target": "futures_sink"
             },
             {
@@ -42333,11 +42333,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.24",
+              "id": "futures-sink 0.3.25",
               "target": "futures_sink"
             },
             {
@@ -42469,11 +42469,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -42683,11 +42683,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -42785,11 +42785,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.24",
+              "id": "futures-core 0.3.25",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -42929,7 +42929,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -43502,7 +43502,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -43572,7 +43572,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
@@ -44821,6 +44821,18 @@
         },
         {
           "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -44835,18 +44847,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -45140,11 +45140,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.24",
+              "id": "futures-channel 0.3.25",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.24",
+              "id": "futures-util 0.3.25",
               "target": "futures_util"
             },
             {
@@ -45196,7 +45196,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             },
             {
@@ -48390,7 +48390,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.86",
+              "id": "serde_json 1.0.87",
               "target": "serde_json"
             }
           ],
