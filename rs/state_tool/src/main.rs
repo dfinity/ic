@@ -120,6 +120,28 @@ enum Opt {
         #[clap(long = "file")]
         file: PathBuf,
     },
+
+    /// Converts textual principal representation to hex.
+    #[clap(name = "canister_id_to_hex")]
+    CanisterIdToHex {
+        #[clap(long = "canister_id")]
+        canister_id: String,
+    },
+
+    /// Converts hex principal representation to textual representation.
+    #[clap(name = "canister_id_from_hex")]
+    CanisterIdFromHex {
+        #[clap(long = "canister_id")]
+        canister_id: String,
+    },
+
+    /// Encodes an array of comma-separated bytes (e.g., [0, 1, 20, ... , 142]) as
+    /// a principal.
+    #[clap(name = "principal_from_bytes")]
+    PrincipalFromBytes {
+        #[clap(long = "bytes")]
+        bytes: String,
+    },
 }
 
 fn main() {
@@ -141,6 +163,15 @@ fn main() {
         }
         Opt::ListStates { config } => commands::list::do_list(config),
         Opt::Decode { file } => commands::decode::do_decode(file),
+        Opt::CanisterIdToHex { canister_id } => {
+            commands::convert_ids::do_canister_id_to_hex(canister_id)
+        }
+        Opt::CanisterIdFromHex { canister_id } => {
+            commands::convert_ids::do_canister_id_from_hex(canister_id)
+        }
+        Opt::PrincipalFromBytes { bytes } => {
+            commands::convert_ids::do_principal_from_byte_string(bytes)
+        }
     };
 
     if let Err(e) = result {
