@@ -16,7 +16,7 @@ use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request},
     methods::Callback,
     nominal_cycles::NominalCycles,
-    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, NumPages, Time,
+    CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, NumPages, Time,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -57,6 +57,7 @@ pub struct SystemStateChanges {
     call_context_balance_taken: BTreeMap<CallContextId, Cycles>,
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
+    pub(super) new_global_timer: Option<CanisterTimer>,
 }
 
 impl Default for SystemStateChanges {
@@ -69,6 +70,7 @@ impl Default for SystemStateChanges {
             call_context_balance_taken: BTreeMap::new(),
             request_slots_used: BTreeMap::new(),
             requests: vec![],
+            new_global_timer: None,
         }
     }
 }
@@ -231,6 +233,12 @@ impl SystemStateChanges {
             }
             system_state.certified_data = certified_data.clone();
         }
+
+        // Update canister global timer
+        if let Some(new_global_timer) = self.new_global_timer {
+            system_state.global_timer = new_global_timer;
+        }
+
         Ok(())
     }
 }
@@ -261,6 +269,7 @@ pub struct SandboxSafeSystemState {
     available_request_slots: BTreeMap<CanisterId, usize>,
     ic00_available_request_slots: usize,
     ic00_aliases: BTreeSet<CanisterId>,
+    global_timer: CanisterTimer,
 }
 
 impl SandboxSafeSystemState {
@@ -282,6 +291,7 @@ impl SandboxSafeSystemState {
         ic00_aliases: BTreeSet<CanisterId>,
         subnet_size: usize,
         dirty_page_overhead: NumInstructions,
+        global_timer: CanisterTimer,
     ) -> Self {
         Self {
             canister_id,
@@ -300,6 +310,7 @@ impl SandboxSafeSystemState {
             available_request_slots,
             ic00_available_request_slots,
             ic00_aliases,
+            global_timer,
         }
     }
 
@@ -358,11 +369,22 @@ impl SandboxSafeSystemState {
             ic00_aliases,
             subnet_size,
             dirty_page_overhead,
+            system_state.global_timer,
         )
     }
 
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
+    }
+
+    pub fn global_timer(&self) -> CanisterTimer {
+        self.global_timer
+    }
+
+    pub fn set_global_timer(&mut self, timer: CanisterTimer) {
+        // Update both sandbox global timer and the changes.
+        self.system_state_changes.new_global_timer = Some(timer);
+        self.global_timer = timer;
     }
 
     pub fn changes(self) -> SystemStateChanges {

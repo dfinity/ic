@@ -7,7 +7,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, NumPages};
+use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, NumPages, Time};
 
 use wasmtime::{AsContextMut, Caller, Global, Linker, Store, Trap, Val};
 
@@ -1119,6 +1119,18 @@ pub(crate) fn syscalls<S: SystemApi>(
                 with_system_api(&mut caller, |s| s.ic0_time())
                     .map_err(|e| process_err(&mut caller, e))
                     .map(|s| s.as_nanos_since_unix_epoch())
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "global_timer_set", {
+            move |mut caller: Caller<'_, StoreData<S>>, time: i64| {
+                with_system_api(&mut caller, |s| {
+                    s.ic0_global_timer_set(Time::from_nanos_since_unix_epoch(time as u64))
+                })
+                .map_err(|e| process_err(&mut caller, e))
+                .map(|s| s.as_nanos_since_unix_epoch())
             }
         })
         .unwrap();

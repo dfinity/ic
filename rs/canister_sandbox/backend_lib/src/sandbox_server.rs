@@ -162,7 +162,7 @@ mod tests {
         messages::CallContextId,
         methods::{FuncRef, WasmMethod},
         time::Time,
-        ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     };
     use mockall::*;
     use std::collections::{BTreeMap, BTreeSet};
@@ -209,6 +209,7 @@ mod tests {
             ic00_aliases,
             SMALL_APP_SUBNET_MAX_SIZE,
             SchedulerConfig::application_subnet().dirty_page_overhead,
+            CanisterTimer::Inactive,
         )
     }
 

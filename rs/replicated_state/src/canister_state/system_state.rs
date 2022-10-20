@@ -16,7 +16,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{Ingress, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext},
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
+    CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreeset;
@@ -106,6 +106,9 @@ pub struct SystemState {
     /// Tasks to execute before processing input messages.
     /// Currently the task queue is empty outside of execution rounds.
     pub task_queue: VecDeque<ExecutionTask>,
+
+    /// Canister global timer.
+    pub global_timer: CanisterTimer,
 }
 
 /// A wrapper around the different canister statuses.
@@ -403,6 +406,7 @@ impl SystemState {
             certified_data: Default::default(),
             canister_metrics: CanisterMetrics::default(),
             task_queue: Default::default(),
+            global_timer: CanisterTimer::Inactive,
         }
     }
 
@@ -448,6 +452,8 @@ impl SystemState {
             cycles_balance,
             cycles_debit,
             task_queue,
+            // TODO: RUN-405: Serialize/deserialize canister global timer state
+            global_timer: CanisterTimer::Inactive,
         }
     }
 

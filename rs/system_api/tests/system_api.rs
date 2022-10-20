@@ -28,7 +28,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     methods::{Callback, WasmClosure},
-    CountBytes, Cycles, NumBytes, NumInstructions, Time,
+    time, CanisterTimer, CountBytes, Cycles, NumBytes, NumInstructions, Time,
 };
 use std::{
     convert::{From, TryInto},
@@ -108,6 +108,7 @@ fn test_canister_init_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -171,6 +172,7 @@ fn test_canister_update_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -234,6 +236,7 @@ fn test_canister_replicated_query_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_not_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -297,6 +300,7 @@ fn test_canister_pure_query_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_not_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -370,6 +374,7 @@ fn test_canister_stateful_query_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_not_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -433,6 +438,7 @@ fn test_reply_api_support_on_nns() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -496,6 +502,7 @@ fn test_reply_api_support_non_nns() {
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -562,6 +569,7 @@ fn test_reject_api_support_on_nns() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -628,6 +636,7 @@ fn test_reject_api_support_non_nns() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -691,6 +700,7 @@ fn test_pre_upgrade_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_not_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -754,6 +764,7 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_not_supported(api.ic0_time());
+    assert_api_not_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -817,6 +828,7 @@ fn test_cleanup_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -885,6 +897,7 @@ fn test_inspect_message_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_not_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -949,6 +962,7 @@ fn test_canister_heartbeat_support() {
     assert_api_supported(api.ic0_stable64_grow(1));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -1012,6 +1026,7 @@ fn test_canister_heartbeat_support_nns() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );
@@ -1851,4 +1866,43 @@ fn push_output_request_oversized_request_memory_limits() {
         )
         .unwrap();
     assert_eq!(1, system_state.queues().output_queues_len());
+}
+
+#[test]
+fn ic0_global_timer_set_is_propagated_from_sandbox() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let mut system_state = SystemStateBuilder::default().build();
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &system_state,
+        cycles_account_manager,
+    );
+
+    assert_eq!(
+        api.ic0_global_timer_set(Time::from_nanos_since_unix_epoch(1))
+            .unwrap(),
+        time::UNIX_EPOCH
+    );
+    assert_eq!(
+        api.ic0_global_timer_set(Time::from_nanos_since_unix_epoch(2))
+            .unwrap(),
+        Time::from_nanos_since_unix_epoch(1)
+    );
+
+    // Propagate system state changes
+    assert_eq!(system_state.global_timer, CanisterTimer::Inactive);
+    let system_state_changes = api.into_system_state_changes();
+    system_state_changes
+        .apply_changes(
+            mock_time(),
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            &no_op_logger(),
+        )
+        .unwrap();
+    assert_eq!(
+        system_state.global_timer,
+        CanisterTimer::Active(Time::from_nanos_since_unix_epoch(2))
+    );
 }

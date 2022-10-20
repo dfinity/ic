@@ -788,6 +788,39 @@ fn ic0_time_with_5_seconds() {
 }
 
 #[test]
+fn ic0_global_timer_set_returns_previous_value() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "global_timer_set"
+                (func $global_timer_set (param i64) (result i64))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                ;; Initially the timer should not be set, i.e. be zero
+                (if (i64.ne
+                        (call $global_timer_set (i64.const 1))
+                        (i64.const 0)
+                    )
+                    (then (unreachable))
+                )
+                ;; Expect the timer is set to 1 now
+                (if (i64.ne
+                        (call $global_timer_set (i64.const 0))
+                        (i64.const 1)
+                    )
+                    (then (unreachable))
+                )
+                (call $msg_reply)
+            )
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    test.advance_time(Duration::new(5, 0));
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
 fn ic0_msg_arg_data_size_is_not_available_in_reject_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
