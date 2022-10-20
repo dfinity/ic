@@ -40,6 +40,8 @@ fn get_test_sns_cli_init_config() -> SnsCliInitConfig {
             max_neuron_age_seconds_for_age_bonus: Some(11 * ONE_MONTH_SECONDS),
             max_dissolve_delay_bonus_multiplier: Some(1.3),
             max_age_bonus_multiplier: Some(1.8),
+            initial_voting_period_seconds: Some(1006700),
+            wait_for_quiet_deadline_increase_seconds: Some(86700),
         },
         initial_token_distribution: SnsInitialTokenDistributionConfig {
             initial_token_distribution: Some(FractionalDeveloperVotingPower(

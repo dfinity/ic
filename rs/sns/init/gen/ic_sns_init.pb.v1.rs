@@ -96,6 +96,27 @@ pub struct SnsInitPayload {
     /// To achieve functionality equivalent to NNS, this should be set to 1.25.
     #[prost(uint64, optional, tag = "20")]
     pub max_age_bonus_percentage: ::core::option::Option<u64>,
+    /// The initial voting period of a newly created proposal.
+    /// A proposal's voting period may then be further increased during
+    /// a proposal's lifecycle due to the wait-for-quiet algorithm.
+    ///
+    /// The voting period must be between (inclusive) the defined floor
+    /// INITIAL_VOTING_PERIOD_SECONDS_FLOOR and ceiling
+    /// INITIAL_VOTING_PERIOD_SECONDS_CEILING.
+    #[prost(uint64, optional, tag = "21")]
+    pub initial_voting_period_seconds: ::core::option::Option<u64>,
+    /// The wait for quiet algorithm extends the voting period of a proposal when
+    /// there is a flip in the majority vote during the proposal's voting period.
+    /// This parameter determines the maximum time period that the voting period
+    /// may be extended after a flip. If there is a flip at the very end of the
+    /// original proposal deadline, the remaining time will be set to this parameter.
+    /// If there is a flip before or after the original deadline, the deadline will
+    /// extended by somewhat less than this parameter.
+    /// The maximum total voting period extension is 2 * wait_for_quiet_deadline_increase_seconds.
+    /// For more information, see the wiki page on the wait-for-quiet algorithm:
+    /// <https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet>
+    #[prost(uint64, optional, tag = "22")]
+    pub wait_for_quiet_deadline_increase_seconds: ::core::option::Option<u64>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
