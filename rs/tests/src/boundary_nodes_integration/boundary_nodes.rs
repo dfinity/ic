@@ -45,7 +45,7 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 use serde::Deserialize;
-use slog::{error, info};
+use slog::{error, info, Logger};
 use tokio::runtime::Runtime;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
@@ -230,6 +230,39 @@ pub fn config(env: TestEnv) {
     boundary_node_vm
         .await_status_is_healthy()
         .expect("Boundary node did not come up healthy.");
+}
+
+async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Principal, Error> {
+    let install_node = env
+        .topology_snapshot()
+        .subnets()
+        .next()
+        .unwrap()
+        .nodes()
+        .next()
+        .map(|node| (node.get_public_url(), node.effective_canister_id()))
+        .unwrap();
+
+    info!(
+        &logger,
+        "creating replica agent {}",
+        install_node.0.as_str()
+    );
+    let agent = assert_create_agent(install_node.0.as_str()).await;
+
+    let canister = env.load_wasm(path);
+
+    info!(&logger, "installing canister from path {}", path);
+    let canister_id = create_canister(&agent, install_node.1, &canister, None)
+        .await
+        .expect("Could not create http_counter canister");
+
+    // wait for canister to finish installing
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    info!(&logger, "created canister {canister_id}");
+
+    Ok::<_, Error>(canister_id)
 }
 
 /* tag::catalog[]
@@ -1071,14 +1104,22 @@ pub fn sw_test(env: TestEnv) {
 
     let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let canister_id = rt
+        .block_on(install_canister(
+            env.clone(),
+            logger.clone(),
+            "http_counter.wasm",
+        ))
+        .unwrap();
+
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("cid.ic0.app", vm_addr.into())
+        .resolve(&format!("{canister_id}.ic0.app"), vm_addr.into())
         .build()
         .unwrap();
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     let futs = FuturesUnordered::new();
 
@@ -1088,7 +1129,10 @@ pub fn sw_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://cid.ic0.app/").send().await?;
+            let res = client
+                .get(format!("https://{canister_id}.ic0.app/"))
+                .send()
+                .await?;
 
             if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
@@ -1114,7 +1158,10 @@ pub fn sw_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://cid.ic0.app/a/b/c").send().await?;
+            let res = client
+                .get(format!("https://{canister_id}.ic0.app/a/b/c"))
+                .send()
+                .await?;
 
             if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
@@ -1140,7 +1187,10 @@ pub fn sw_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://cid.ic0.app/sw.js").send().await?;
+            let res = client
+                .get(format!("https://{canister_id}.ic0.app/sw.js"))
+                .send()
+                .await?;
 
             if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
@@ -1174,7 +1224,7 @@ pub fn sw_test(env: TestEnv) {
 
         async move {
             let res = client
-                .get("https://cid.ic0.app/anything.js")
+                .get(format!("https://{canister_id}.ic0.app/anything.js"))
                 .header("Service-Worker", "script")
                 .send()
                 .await?;
@@ -1245,15 +1295,23 @@ pub fn icx_proxy_test(env: TestEnv) {
 
     let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let canister_id = rt
+        .block_on(install_canister(
+            env.clone(),
+            logger.clone(),
+            "http_counter.wasm",
+        ))
+        .unwrap();
+
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("cid.ic0.app", vm_addr.into())
-        .resolve("cid.raw.ic0.app", vm_addr.into())
+        .resolve(&format!("{canister_id}.ic0.app"), vm_addr.into())
+        .resolve(&format!("{canister_id}.raw.ic0.app"), vm_addr.into())
         .build()
         .unwrap();
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     let futs = FuturesUnordered::new();
 
@@ -1263,16 +1321,19 @@ pub fn icx_proxy_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://cid.ic0.app/_/raw/").send().await?;
+            let res = client
+                .get(format!("https://{canister_id}.ic0.app/_/raw/"))
+                .send()
+                .await?;
 
-            if res.status() != reqwest::StatusCode::BAD_REQUEST {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
             }
 
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
-            if !body.contains("Could not find a canister id to forward to") {
+            if !body.contains("Counter is 0") {
                 bail!("{name} failed: expected icx-response but got {body}")
             }
 
@@ -1286,16 +1347,19 @@ pub fn icx_proxy_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://cid.raw.ic0.app/").send().await?;
+            let res = client
+                .get(format!("https://{canister_id}.raw.ic0.app/"))
+                .send()
+                .await?;
 
-            if res.status() != reqwest::StatusCode::BAD_REQUEST {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
             }
 
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
-            if !body.contains("Could not find a canister id to forward to") {
+            if !body.contains("Counter is 0") {
                 bail!("{name} failed: expected icx-response but got {body}")
             }
 
@@ -1861,14 +1925,22 @@ pub fn seo_test(env: TestEnv) {
 
     let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let canister_id = rt
+        .block_on(install_canister(
+            env.clone(),
+            logger.clone(),
+            "http_counter.wasm",
+        ))
+        .unwrap();
+
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("cid.ic0.app", vm_addr.into())
+        .resolve(&format!("{canister_id}.ic0.app"), vm_addr.into())
         .build()
         .unwrap();
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     let futs = FuturesUnordered::new();
 
@@ -1878,7 +1950,7 @@ pub fn seo_test(env: TestEnv) {
 
         async move {
             let res = client
-                .get("https://cid.ic0.app/")
+                .get(format!("https://{canister_id}.ic0.app/"))
                 .header(
                     "User-Agent",
                     "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
@@ -1886,14 +1958,14 @@ pub fn seo_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != reqwest::StatusCode::BAD_REQUEST {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
             }
 
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
-            if !body.contains("Could not find a canister id to forward to") {
+            if !body.contains("Counter is 0") {
                 bail!("{name} failed: expected icx-response but got {body}")
             }
 

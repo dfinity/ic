@@ -11,8 +11,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::Context;
-use clap::Args;
+use anyhow::{Context, Error};
 use hyper::{
     self,
     body::Bytes,
@@ -26,49 +25,24 @@ use hyper::{
 use hyper_rustls::HttpsConnectorBuilder;
 use ic_agent::agent::http_transport;
 use itertools::Either;
-use tracing::error;
 
-/// DNS resolve overrides
-/// `ic0.app=[::1]:9090`
-
-#[derive(Clone)]
-struct OptResolve {
-    domain: String,
-    addr: SocketAddr,
-}
-
-impl FromStr for OptResolve {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self, anyhow::Error> {
-        let (domain, addr) = s
-            .split_once('=')
-            .ok_or_else(|| anyhow::Error::msg("missing '='"))?;
-        Ok(OptResolve {
-            domain: domain.into(),
-            addr: addr.parse()?,
-        })
-    }
-}
+use crate::domain_addr::DomainAddr;
 
 /// The options for the HTTP client
-#[derive(Args)]
-pub struct Opts {
+pub struct HttpClientOpts {
     /// The list of custom root HTTPS certificates to use to talk to the replica. This can be used
     /// to connect to an IC that has a self-signed certificate, for example. Do not use this when
     /// talking to the Internet Computer blockchain mainnet as it is unsecure.
-    #[clap(long)]
-    ssl_root_certificate: Vec<PathBuf>,
+    pub ssl_root_certificates: Vec<PathBuf>,
 
     /// Allows HTTPS connection to replicas with invalid HTTPS certificates. This can be used to
     /// connect to an IC that has a self-signed certificate, for example. Do not use this when
     /// talking to the Internet Computer blockchain mainnet as it is *VERY* unsecure.
-    #[clap(long)]
-    danger_accept_invalid_ssl: bool,
+    pub danger_accept_invalid_ssl: bool,
 
     /// Override DNS resolution for specific replica domains to particular IP addresses.
     /// Examples: ic0.app=[::1]:9090
-    #[clap(long, value_name("DOMAIN=IP_PORT"))]
-    replica_resolve: Vec<OptResolve>,
+    pub domain_addrs: Vec<DomainAddr>,
 }
 
 pub type Body = hyper::Body;
@@ -116,23 +90,26 @@ where
     type ResponseBody2 = B2;
 }
 
-pub fn setup(opts: Opts) -> Result<impl HyperService<Body>, anyhow::Error> {
-    let Opts {
+pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
+    let HttpClientOpts {
         danger_accept_invalid_ssl,
-        ssl_root_certificate,
-        replica_resolve,
+        ssl_root_certificates,
+        domain_addrs,
     } = opts;
+
     let builder = rustls::ClientConfig::builder().with_safe_defaults();
     let tls_config = if !danger_accept_invalid_ssl {
         use rustls::{Certificate, RootCertStore};
 
         let mut root_cert_store = RootCertStore::empty();
-        for cert_path in ssl_root_certificate {
+        for cert_path in ssl_root_certificates {
             let mut buf = Vec::new();
+
             if let Err(e) = File::open(&cert_path).and_then(|mut v| v.read_to_end(&mut buf)) {
                 tracing::warn!("Could not load cert `{}`: {}", cert_path.display(), e);
                 continue;
             }
+
             match cert_path.extension() {
                 Some(v) if v == "pem" => {
                     tracing::info!(
@@ -238,49 +215,52 @@ pub fn setup(opts: Opts) -> Result<impl HyperService<Body>, anyhow::Error> {
     // Advertise support for HTTP/2
     //tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
-    #[derive(Debug, Eq)]
-    struct Uncased(Name);
-    impl PartialEq<Uncased> for Uncased {
-        fn eq(&self, v: &Uncased) -> bool {
-            self.0.as_str().eq_ignore_ascii_case(v.0.as_str())
-        }
-    }
-    impl Hash for Uncased {
-        fn hash<H: Hasher>(&self, state: &mut H) {
-            self.0.as_str().len().hash(state);
-            for b in self.0.as_str().as_bytes() {
-                state.write_u8(b.to_ascii_lowercase());
-            }
-        }
-    }
-
-    let mapped = replica_resolve
+    let domain_addrs: HashMap<Uncased, SocketAddr> = domain_addrs
         .into_iter()
         .map(|v| Ok((Uncased(Name::from_str(&v.domain)?), v.addr)))
-        .collect::<Result<HashMap<_, _>, anyhow::Error>>()
-        .context("Invalid domain in `replica-resolve` flag");
-    // TODO: inspect_err
-    let _ = mapped.as_ref().map_err(|e| error!("{}", e));
-    let mapped = Arc::new(mapped?);
+        .collect::<Result<_, Error>>()
+        .context("Invalid domain in `replica-resolve` flag")?;
+
     let resolver = tower::service_fn(move |name: Name| {
-        let mapped = mapped.clone();
+        let domain_addrs = domain_addrs.clone();
+
         async move {
             let name = Uncased(name);
-            if let Some(v) = mapped.get(&name) {
-                Ok(Either::Left(iter::once(*v)))
-            } else {
-                GaiResolver::new().call(name.0).await.map(Either::Right)
+            match domain_addrs.get(&name) {
+                Some(&v) => Ok(Either::Left(iter::once(v))),
+                None => GaiResolver::new().call(name.0).await.map(Either::Right),
             }
         }
     });
+
     let mut connector = HttpConnector::new_with_resolver(resolver);
     connector.enforce_http(false);
+
     let connector = HttpsConnectorBuilder::new()
         .with_tls_config(tls_config)
         .https_or_http()
         .enable_http1()
         .enable_http2()
         .wrap_connector(connector);
+
     let client: Client<_, Body> = Client::builder().build(connector);
     Ok(client)
+}
+
+#[derive(Clone, Debug, Eq)]
+struct Uncased(Name);
+
+impl PartialEq<Uncased> for Uncased {
+    fn eq(&self, v: &Uncased) -> bool {
+        self.0.as_str().eq_ignore_ascii_case(v.0.as_str())
+    }
+}
+
+impl Hash for Uncased {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.as_str().len().hash(state);
+        for b in self.0.as_str().as_bytes() {
+            state.write_u8(b.to_ascii_lowercase());
+        }
+    }
 }

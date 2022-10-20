@@ -26,17 +26,17 @@ pub(crate) enum OptFormat {
 
 /// The options for logging
 #[derive(Args)]
-pub struct Opts {
+pub struct LoggingOpts {
     /// Verbose level. By default, INFO will be used. Add a single `-v` to upgrade to
     /// DEBUG, and another `-v` to upgrade to TRACE.
     #[clap(long, short('v'), action = Count)]
-    verbose: u64,
+    verbose: u8,
 
     /// Quiet level. The opposite of verbose. A single `-q` will drop the logging to
     /// WARN only, then another one to ERR, and finally another one for FATAL. Another
     /// `-q` will silence ALL logs.
     #[clap(long, short('q'), action = Count)]
-    quiet: u64,
+    quiet: u8,
 
     /// Mode to use the logging. "stderr" will output logs in STDERR, "file" will output
     /// logs in a file, and "tee" will do both.
@@ -58,7 +58,7 @@ pub fn add_trace_layer(r: Router) -> Router {
     r.layer(TraceLayer::new_for_http().make_span_with(Span::current()))
 }
 
-pub fn setup(opts: Opts) -> EnteredSpan {
+pub fn setup(opts: LoggingOpts) -> EnteredSpan {
     let filter = match opts.verbose as i64 - opts.quiet as i64 {
         -2 => LevelFilter::ERROR,
         -1 => LevelFilter::WARN,

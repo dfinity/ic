@@ -1,6 +1,9 @@
 import qs from "querystring";
 
 import subnet_table from "/var/opt/nginx/ic/ic_router_table.js";
+import CANISTER_ID_ALIASES from "/var/opt/nginx/canister_aliases/canister_id_aliases.js";
+
+const CANISTER_ID_LENGTH = 27;
 
 function leftpad(s, len, pad) {
   return (
@@ -51,25 +54,31 @@ function resolve_canister_id_from_uri(uri) {
     return "";
   }
   var canister_id = m[1];
-  if (canister_id.length < 27) {
+  if (canister_id.length != CANISTER_ID_LENGTH) {
     // not a canister id
     return "";
   }
   return canister_id;
 }
 
-function resolve_canister_id_from_host(host) {
-  var re = /^([0-9a-zA-Z\-]+)\./;
-  var m = re.exec(host);
+function extractCanisterIdFromHost(host) {
+  let re = /^([0-9a-zA-Z\-]+)\./;
+  let m = re.exec(host);
   if (!m) {
     return "";
   }
-  var canister_id = m[1];
-  if (canister_id.length < 27) {
-    // not a canister id
+  let canisterId = m[1];
+
+  // Check if ID is an alias
+  if (!!CANISTER_ID_ALIASES[canisterId]) {
+    canisterId = CANISTER_ID_ALIASES[canisterId];
+  }
+
+  if (canisterId.length != CANISTER_ID_LENGTH) {
     return "";
   }
-  return canister_id;
+
+  return canisterId;
 }
 
 function resolve_ci_from_host(host) {
@@ -105,7 +114,7 @@ function extractCanisterIdFromReferer(r) {
     return "";
   }
 
-  canisterId = resolve_canister_id_from_host(refererHost);
+  canisterId = extractCanisterIdFromHost(refererHost);
   if (!!canisterId) {
     return canisterId;
   }
@@ -120,7 +129,7 @@ function extractCanisterIdFromReferer(r) {
 }
 
 function hostCanisterId(r) {
-  return resolve_canister_id_from_host(r.headersIn.host);
+  return extractCanisterIdFromHost(r.headersIn.host);
 }
 
 function inferCanisterId(r) {
@@ -131,7 +140,7 @@ function inferCanisterId(r) {
   }
 
   // Host
-  var canisterId = resolve_canister_id_from_host(r.headersIn.host);
+  var canisterId = extractCanisterIdFromHost(r.headersIn.host);
   if (!!canisterId) {
     return canisterId;
   }
@@ -148,6 +157,15 @@ function inferCanisterId(r) {
 
 function isTableEmpty(r) {
   return !subnet_table["canister_subnets"] ? "1" : "";
+}
+
+function normalizeSubnetType(typ) {
+  return (
+    {
+      application: "application",
+      system: "system",
+    }[typ] || ""
+  );
 }
 
 function route(r) {
@@ -178,6 +196,10 @@ function route(r) {
   }
 
   var subnet_id = subnet_table.canister_subnets[subnet_index];
+
+  var subnet_types = subnet_table["subnet_types"] || {};
+  var subnet_type = normalizeSubnetType(subnet_types[subnet_id]);
+
   var nodes = subnet_table.subnet_nodes[subnet_id];
   if (nodes.length < 1) {
     return "";
@@ -192,7 +214,7 @@ function route(r) {
     r.headersOut["x-ic-canister-id"] = canister_id;
   }
 
-  return `${node_id},${subnet_id}`;
+  return `${node_id},${subnet_id},${subnet_type}`;
 }
 
 function randomRoute() {
@@ -212,11 +234,14 @@ function randomRoute() {
     return "";
   }
 
+  var subnetTypes = subnet_table["subnet_types"] || {};
+  var subnetType = normalizeSubnetType(subnetTypes[subnetId]);
+
   // Choose random node
   var nodeIdx = Math.floor(Math.random() * nodeCount);
   var nodeId = subnetNodeIds[nodeIdx];
 
-  return `${subnetId},${nodeId}`;
+  return `${subnetId},${subnetType},${nodeId}`;
 }
 
 export default {

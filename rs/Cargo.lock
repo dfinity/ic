@@ -955,6 +955,7 @@ dependencies = [
  "dashmap 5.3.4",
  "futures",
  "ic-crypto-utils-basic-sig",
+ "ic-protobuf",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-local-store",

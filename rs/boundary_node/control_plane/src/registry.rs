@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use ic_crypto_utils_basic_sig::conversions::pem::der_to_pem;
+use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl, RegistryDataProvider};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
@@ -56,6 +57,7 @@ pub struct Node {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Subnet {
     pub subnet_id: String,
+    pub subnet_type: String,
     pub nodes: Vec<Node>,
 }
 
@@ -109,6 +111,19 @@ impl<T: RegistryClient> Snapshot for Snapshotter<T> {
         let subnets = subnet_ids
             .into_iter()
             .map(|subnet_id| {
+                let subnet = self
+                    .registry_client
+                    .get_subnet_record(subnet_id, version)
+                    .context("failed to get subnet")?
+                    .context("subnet not available")?;
+
+                let subnet_type = match subnet.subnet_type() {
+                    SubnetType::Unspecified => "unspecified",
+                    SubnetType::Application => "application",
+                    SubnetType::System => "system",
+                    SubnetType::VerifiedApplication => "application",
+                };
+
                 let node_ids = self
                     .registry_client
                     .get_node_ids_on_subnet(subnet_id, version)
@@ -156,6 +171,7 @@ impl<T: RegistryClient> Snapshot for Snapshotter<T> {
 
                 let subnet_route = Subnet {
                     subnet_id: subnet_id.to_string(),
+                    subnet_type: subnet_type.to_string(),
                     nodes,
                 };
 

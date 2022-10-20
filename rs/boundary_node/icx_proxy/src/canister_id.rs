@@ -1,5 +1,4 @@
 use anyhow::Context;
-use clap::Args;
 use hyper::{header::HOST, http::request::Parts, Uri};
 use ic_agent::export::Principal;
 use tracing::error;
@@ -7,21 +6,17 @@ use tracing::error;
 use crate::config::dns_canister_config::DnsCanisterConfig;
 
 /// The options for the canister resolver
-#[derive(Args)]
-pub struct Opts {
+pub struct CanisterIdOpts {
     /// A map of domain names to canister IDs.
     /// Format: domain.name:canister-id
-    #[clap(long)]
-    dns_alias: Vec<String>,
+    pub dns_alias: Vec<String>,
 
     /// A list of domain name suffixes.  If found, the next (to the left) subdomain
     /// is used as the Principal, if it parses as a Principal.
-    #[clap(long, default_value = "localhost")]
-    dns_suffix: Vec<String>,
+    pub dns_suffix: Vec<String>,
 
     /// Whether or not to ignore `canisterId=` when locating the canister.
-    #[clap(long)]
-    ignore_url_canister_param: bool,
+    pub ignore_url_canister_param: bool,
 }
 
 /// A resolver for `Principal`s from a `Uri`.
@@ -105,7 +100,7 @@ impl Resolver for DefaultResolver {
     }
 }
 
-pub fn setup(opts: Opts) -> Result<DefaultResolver, anyhow::Error> {
+pub fn setup(opts: CanisterIdOpts) -> Result<DefaultResolver, anyhow::Error> {
     let dns = DnsCanisterConfig::new(&opts.dns_alias, &opts.dns_suffix)
         .context("Failed to configure canister resolver DNS");
     let dns = match dns {

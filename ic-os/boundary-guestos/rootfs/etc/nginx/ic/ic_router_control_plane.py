@@ -259,9 +259,11 @@ ic_router_section.append("],\n")
 nns_subnet_index = canister_subnet_ids.index(data.nns_subnet_id)
 ic_router_section.append("nns_subnet_index: %s,\n" % nns_subnet_index)
 
+subnet_types = []
 subnet_node_ids = []
 subnet_nodes = []
 for subnet in sorted(data.subnets, key=lambda s: canister_subnet_ids.index(s.subnet_id)):
+    subnet_types.append(' "%s":"%s",\n' % (subnet.subnet_id, subnet.subnet_type))
     subnet_node_ids.append(' "%s":[\n' % subnet.subnet_id)
     subnet_nodes.append('  "%s":[\n' % subnet.subnet_id)
     for node in subnet.nodes:
@@ -271,6 +273,9 @@ for subnet in sorted(data.subnets, key=lambda s: canister_subnet_ids.index(s.sub
         subnet_nodes.append("    '%s',\n" % node.socket_addr)
     subnet_node_ids.append("  ],\n")
     subnet_nodes.append("  ],\n")
+ic_router_section.append("subnet_types: {\n")
+ic_router_section.extend(subnet_types)
+ic_router_section.append("},\n")
 ic_router_section.append("subnet_node_ids: {\n")
 ic_router_section.extend(subnet_node_ids)
 ic_router_section.append("},\n")
