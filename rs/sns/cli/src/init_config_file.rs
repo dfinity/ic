@@ -6,7 +6,7 @@ use ic_sns_governance::{
     types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
 };
 use ic_sns_init::{
-    pb::v1::{sns_init_payload::InitialTokenDistribution, SnsInitPayload},
+    pb::v1::{sns_init_payload, SnsInitPayload},
     MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH, MIN_TOKEN_NAME_LENGTH, MIN_TOKEN_SYMBOL_LENGTH,
 };
 use regex::Regex;
@@ -39,16 +39,8 @@ enum SubCommand {
     Validate,
 }
 
-/// The SnsCliInitConfig allows for a more "human-friendly" way of specifying parameters for
-/// the SnsInitPayload that make sense for a CLI tool.
-///
-/// For instance, the SnsInitPayload requires the logo to be a base64
-/// encoded String representation of a image file. If directly mapping the config file to
-/// the SnsInitPayload, users of the SNS Cli would need to do the encoding by hand and paste
-/// it into the init config file. With SnsCliInitConfig, this struct allows for a PathBuf to be specified
-/// and will handle converting to the correct type within the Cli tool.
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
-pub struct SnsCliInitConfig {
+#[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
+pub struct SnsLedgerConfig {
     /// Fee of a transaction.
     pub transaction_fee_e8s: Option<u64>,
 
@@ -57,7 +49,9 @@ pub struct SnsCliInitConfig {
 
     /// The symbol of the token issued by an SNS Ledger.
     pub token_symbol: Option<String>,
-
+}
+#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct SnsGovernanceConfig {
     /// Cost of making a proposal that is rejected.
     pub proposal_reject_cost_e8s: Option<u64>,
 
@@ -131,11 +125,32 @@ pub struct SnsCliInitConfig {
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s).
     pub fallback_controller_principal_ids: Vec<String>,
+}
 
+#[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
+pub struct SnsInitialTokenDistributionConfig {
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
-    pub initial_token_distribution: Option<InitialTokenDistribution>,
+    pub initial_token_distribution: Option<sns_init_payload::InitialTokenDistribution>,
+}
+
+/// The SnsCliInitConfig allows for a more "human-friendly" way of specifying parameters for
+/// the SnsInitPayload that make sense for a CLI tool.
+///
+/// For instance, the SnsInitPayload requires the logo to be a base64
+/// encoded String representation of a image file. If directly mapping the config file to
+/// the SnsInitPayload, users of the SNS Cli would need to do the encoding by hand and paste
+/// it into the init config file. With SnsCliInitConfig, this struct allows for a PathBuf to be specified
+/// and will handle converting to the correct type within the Cli tool.
+#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct SnsCliInitConfig {
+    #[serde(flatten)]
+    pub sns_ledger: SnsLedgerConfig,
+    #[serde(flatten)]
+    pub sns_governance: SnsGovernanceConfig,
+    #[serde(flatten)]
+    pub initial_token_distribution: SnsInitialTokenDistributionConfig,
 }
 
 impl Default for SnsCliInitConfig {
@@ -147,37 +162,45 @@ impl Default for SnsCliInitConfig {
             .unwrap();
 
         SnsCliInitConfig {
-            transaction_fee_e8s: nervous_system_parameters_default.transaction_fee_e8s,
-            token_name: None,
-            token_symbol: None,
-            proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
-            neuron_minimum_stake_e8s: nervous_system_parameters_default.neuron_minimum_stake_e8s,
-            neuron_minimum_dissolve_delay_to_vote_seconds: nervous_system_parameters_default
-                .neuron_minimum_dissolve_delay_to_vote_seconds,
-            fallback_controller_principal_ids: vec![],
-            logo: None,
-            url: None,
-            name: None,
-            description: None,
-            initial_token_distribution: None,
-            reward_rate_transition_duration_seconds: voting_rewards_parameters
-                .reward_rate_transition_duration_seconds,
-            initial_reward_rate_percentage: voting_rewards_parameters
-                .initial_reward_rate_basis_points
-                .map(unit_helpers::basis_points_to_percentage),
-            final_reward_rate_percentage: voting_rewards_parameters
-                .final_reward_rate_basis_points
-                .map(unit_helpers::basis_points_to_percentage),
-            max_dissolve_delay_seconds: nervous_system_parameters_default
-                .max_dissolve_delay_seconds,
-            max_neuron_age_seconds_for_age_bonus: nervous_system_parameters_default
-                .max_neuron_age_for_age_bonus,
-            max_dissolve_delay_bonus_multiplier: nervous_system_parameters_default
-                .max_dissolve_delay_bonus_percentage
-                .map(unit_helpers::percentage_increase_to_multiplier),
-            max_age_bonus_multiplier: nervous_system_parameters_default
-                .max_age_bonus_percentage
-                .map(unit_helpers::percentage_increase_to_multiplier),
+            sns_ledger: SnsLedgerConfig {
+                transaction_fee_e8s: nervous_system_parameters_default.transaction_fee_e8s,
+                token_name: None,
+                token_symbol: None,
+            },
+            sns_governance: SnsGovernanceConfig {
+                proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
+                neuron_minimum_stake_e8s: nervous_system_parameters_default
+                    .neuron_minimum_stake_e8s,
+                neuron_minimum_dissolve_delay_to_vote_seconds: nervous_system_parameters_default
+                    .neuron_minimum_dissolve_delay_to_vote_seconds,
+                fallback_controller_principal_ids: vec![],
+                logo: None,
+                url: None,
+                name: None,
+                description: None,
+
+                reward_rate_transition_duration_seconds: voting_rewards_parameters
+                    .reward_rate_transition_duration_seconds,
+                initial_reward_rate_percentage: voting_rewards_parameters
+                    .initial_reward_rate_basis_points
+                    .map(unit_helpers::basis_points_to_percentage),
+                final_reward_rate_percentage: voting_rewards_parameters
+                    .final_reward_rate_basis_points
+                    .map(unit_helpers::basis_points_to_percentage),
+                max_dissolve_delay_seconds: nervous_system_parameters_default
+                    .max_dissolve_delay_seconds,
+                max_neuron_age_seconds_for_age_bonus: nervous_system_parameters_default
+                    .max_neuron_age_for_age_bonus,
+                max_dissolve_delay_bonus_multiplier: nervous_system_parameters_default
+                    .max_dissolve_delay_bonus_percentage
+                    .map(unit_helpers::percentage_increase_to_multiplier),
+                max_age_bonus_multiplier: nervous_system_parameters_default
+                    .max_age_bonus_percentage
+                    .map(unit_helpers::percentage_increase_to_multiplier),
+            },
+            initial_token_distribution: SnsInitialTokenDistributionConfig {
+                initial_token_distribution: None,
+            },
         }
     }
 }
@@ -262,13 +285,15 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
     type Error = anyhow::Error;
 
     fn try_from(sns_cli_init_config: SnsCliInitConfig) -> Result<Self, Self::Error> {
-        let optional_logo = match sns_cli_init_config.logo {
+        let optional_logo = match sns_cli_init_config.sns_governance.logo {
             None => None,
             Some(ref logo_path) => Some(load_logo(logo_path)?),
         };
 
         let max_dissolve_delay_bonus_percentage = if let Some(max_dissolve_delay_bonus_multiplier) =
-            sns_cli_init_config.max_dissolve_delay_bonus_multiplier
+            sns_cli_init_config
+                .sns_governance
+                .max_dissolve_delay_bonus_multiplier
         {
             Some(unit_helpers::multiplier_to_percentage_increase(
                 max_dissolve_delay_bonus_multiplier,
@@ -282,49 +307,60 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             None
         };
 
-        let max_age_bonus_percentage =
-            if let Some(max_age_bonus_multiplier) = sns_cli_init_config.max_age_bonus_multiplier {
-                Some(
-                    unit_helpers::multiplier_to_percentage_increase(max_age_bonus_multiplier)
-                        .ok_or_else(|| {
-                            anyhow!(
+        let max_age_bonus_percentage = if let Some(max_age_bonus_multiplier) =
+            sns_cli_init_config.sns_governance.max_age_bonus_multiplier
+        {
+            Some(
+                unit_helpers::multiplier_to_percentage_increase(max_age_bonus_multiplier)
+                    .ok_or_else(|| {
+                        anyhow!(
                     "max_age_bonus_multiplier must be greater than or equal to 1.0, but it is {}",
                     max_age_bonus_multiplier
                 )
-                        })?,
-                )
-            } else {
-                None
-            };
+                    })?,
+            )
+        } else {
+            None
+        };
 
         Ok(SnsInitPayload {
             sns_initialization_parameters: Some(get_config_file_contents(
                 sns_cli_init_config.clone(),
             )),
-            transaction_fee_e8s: sns_cli_init_config.transaction_fee_e8s,
-            token_name: sns_cli_init_config.token_name,
-            token_symbol: sns_cli_init_config.token_symbol,
-            proposal_reject_cost_e8s: sns_cli_init_config.proposal_reject_cost_e8s,
-            neuron_minimum_stake_e8s: sns_cli_init_config.neuron_minimum_stake_e8s,
+            transaction_fee_e8s: sns_cli_init_config.sns_ledger.transaction_fee_e8s,
+            token_name: sns_cli_init_config.sns_ledger.token_name,
+            token_symbol: sns_cli_init_config.sns_ledger.token_symbol,
+            proposal_reject_cost_e8s: sns_cli_init_config.sns_governance.proposal_reject_cost_e8s,
+            neuron_minimum_stake_e8s: sns_cli_init_config.sns_governance.neuron_minimum_stake_e8s,
             neuron_minimum_dissolve_delay_to_vote_seconds: sns_cli_init_config
+                .sns_governance
                 .neuron_minimum_dissolve_delay_to_vote_seconds,
             fallback_controller_principal_ids: sns_cli_init_config
+                .sns_governance
                 .fallback_controller_principal_ids,
             logo: optional_logo,
-            url: sns_cli_init_config.url,
-            name: sns_cli_init_config.name,
-            description: sns_cli_init_config.description,
-            initial_token_distribution: sns_cli_init_config.initial_token_distribution,
+            url: sns_cli_init_config.sns_governance.url,
+            name: sns_cli_init_config.sns_governance.name,
+            description: sns_cli_init_config.sns_governance.description,
+            initial_token_distribution: sns_cli_init_config
+                .initial_token_distribution
+                .initial_token_distribution,
             initial_reward_rate_basis_points: sns_cli_init_config
+                .sns_governance
                 .initial_reward_rate_percentage
                 .map(unit_helpers::percentage_to_basis_points),
             final_reward_rate_basis_points: sns_cli_init_config
+                .sns_governance
                 .final_reward_rate_percentage
                 .map(unit_helpers::percentage_to_basis_points),
             reward_rate_transition_duration_seconds: sns_cli_init_config
+                .sns_governance
                 .reward_rate_transition_duration_seconds,
-            max_dissolve_delay_seconds: sns_cli_init_config.max_dissolve_delay_seconds,
+            max_dissolve_delay_seconds: sns_cli_init_config
+                .sns_governance
+                .max_dissolve_delay_seconds,
             max_neuron_age_seconds_for_age_bonus: sns_cli_init_config
+                .sns_governance
                 .max_neuron_age_seconds_for_age_bonus,
             max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage,
@@ -368,7 +404,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # Fee of a ledger transaction.
 # Default value = {}
 #"##,
-                default_config.transaction_fee_e8s.unwrap()
+                default_config.sns_ledger.transaction_fee_e8s.unwrap()
             ),
         ),
         (
@@ -381,7 +417,10 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # The cost of making a proposal that is not adopted in e8s.
 # Default value = {}
 #"##,
-                default_config.proposal_reject_cost_e8s.unwrap()
+                default_config
+                    .sns_governance
+                    .proposal_reject_cost_e8s
+                    .unwrap()
             ),
         ),
         (
@@ -493,7 +532,10 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # The minimum amount of SNS Token e8s an SNS Ledger account must have to stake a neuron.
 # Default value = {}
 #"##,
-                default_config.neuron_minimum_stake_e8s.unwrap(),
+                default_config
+                    .sns_governance
+                    .neuron_minimum_stake_e8s
+                    .unwrap(),
             ),
         ),
         (
@@ -504,6 +546,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # Default value = {}
 #"##,
                 default_config
+                    .sns_governance
                     .neuron_minimum_dissolve_delay_to_vote_seconds
                     .unwrap(),
             ),
@@ -580,8 +623,14 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # The default value for final_reward_rate_percentage is {}. The value used by 
 # the NNS is 5%.
 #"##,
-                default_config.initial_reward_rate_percentage.unwrap(),
-                default_config.final_reward_rate_percentage.unwrap(),
+                default_config
+                    .sns_governance
+                    .initial_reward_rate_percentage
+                    .unwrap(),
+                default_config
+                    .sns_governance
+                    .final_reward_rate_percentage
+                    .unwrap(),
             ),
         ),
         (
@@ -598,6 +647,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #
 #"##,
                 default_config
+                    .sns_governance
                     .reward_rate_transition_duration_seconds
                     .unwrap(),
                 8 * ONE_YEAR_SECONDS
@@ -611,8 +661,15 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #
 # The default value is {} seconds ({} months). 
 #"##,
-                default_config.max_dissolve_delay_seconds.unwrap(),
-                default_config.max_dissolve_delay_seconds.unwrap() / ONE_MONTH_SECONDS
+                default_config
+                    .sns_governance
+                    .max_dissolve_delay_seconds
+                    .unwrap(),
+                default_config
+                    .sns_governance
+                    .max_dissolve_delay_seconds
+                    .unwrap()
+                    / ONE_MONTH_SECONDS
             ),
         ),
         (
@@ -627,8 +684,15 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #
 # The default value is {} seconds ({} months).
 #"##,
-                default_config.max_neuron_age_seconds_for_age_bonus.unwrap(),
-                default_config.max_neuron_age_seconds_for_age_bonus.unwrap() / ONE_MONTH_SECONDS
+                default_config
+                    .sns_governance
+                    .max_neuron_age_seconds_for_age_bonus
+                    .unwrap(),
+                default_config
+                    .sns_governance
+                    .max_neuron_age_seconds_for_age_bonus
+                    .unwrap()
+                    / ONE_MONTH_SECONDS
             ),
         ),
         (
@@ -648,7 +712,10 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # no change in voting weight for neurons with higher dissolve delays. 
 # Values below 1 are prohibited.
 #"##,
-                default_config.max_dissolve_delay_bonus_multiplier.unwrap(),
+                default_config
+                    .sns_governance
+                    .max_dissolve_delay_bonus_multiplier
+                    .unwrap(),
             ),
         ),
         (
@@ -665,7 +732,10 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # in no change in voting weight for neurons with higher age. 
 # Values below 1 are prohibited.
 #"##,
-                default_config.max_dissolve_delay_bonus_multiplier.unwrap(),
+                default_config
+                    .sns_governance
+                    .max_dissolve_delay_bonus_multiplier
+                    .unwrap(),
             ),
         ),
     ];
@@ -712,7 +782,7 @@ fn validate(init_config_file: PathBuf) {
 
 #[cfg(test)]
 mod test {
-    use crate::init_config_file::{get_config_file_contents, SnsCliInitConfig};
+    use super::*;
     use ic_sns_governance::types::ONE_MONTH_SECONDS;
     use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower as FDVP;
     use ic_sns_init::pb::v1::{FractionalDeveloperVotingPower, SnsInitPayload};
@@ -727,29 +797,36 @@ mod test {
             logo_path.push("test.png");
 
             Self {
-                transaction_fee_e8s: Some(1),
-                token_name: Some("ServiceNervousSystem".to_string()),
-                token_symbol: Some("SNS".to_string()),
-                proposal_reject_cost_e8s: Some(2),
-                neuron_minimum_stake_e8s: Some(3),
-                neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
-                fallback_controller_principal_ids: vec![
-                    "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe".to_string(),
-                ],
-                logo: Some(logo_path.clone()),
-                url: Some("https://internetcomputer.org".to_string()),
-                name: Some("Name".to_string()),
-                description: Some("Description".to_string()),
-                initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
-                    ..Default::default()
-                })),
-                initial_reward_rate_percentage: Some(31.0),
-                final_reward_rate_percentage: Some(27.0),
-                reward_rate_transition_duration_seconds: Some(100_000),
-                max_dissolve_delay_seconds: Some(8 * ONE_MONTH_SECONDS),
-                max_neuron_age_seconds_for_age_bonus: Some(11 * ONE_MONTH_SECONDS),
-                max_dissolve_delay_bonus_multiplier: Some(8.0),
-                max_age_bonus_multiplier: Some(25.0),
+                sns_ledger: SnsLedgerConfig {
+                    transaction_fee_e8s: Some(1),
+                    token_name: Some("ServiceNervousSystem".to_string()),
+                    token_symbol: Some("SNS".to_string()),
+                },
+                sns_governance: SnsGovernanceConfig {
+                    proposal_reject_cost_e8s: Some(2),
+                    neuron_minimum_stake_e8s: Some(3),
+                    neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
+                    fallback_controller_principal_ids: vec![
+                        "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe"
+                            .to_string(),
+                    ],
+                    logo: Some(logo_path.clone()),
+                    url: Some("https://internetcomputer.org".to_string()),
+                    name: Some("Name".to_string()),
+                    description: Some("Description".to_string()),
+                    initial_reward_rate_percentage: Some(31.0),
+                    final_reward_rate_percentage: Some(27.0),
+                    reward_rate_transition_duration_seconds: Some(100_000),
+                    max_dissolve_delay_seconds: Some(8 * ONE_MONTH_SECONDS),
+                    max_neuron_age_seconds_for_age_bonus: Some(11 * ONE_MONTH_SECONDS),
+                    max_dissolve_delay_bonus_multiplier: Some(8.0),
+                    max_age_bonus_multiplier: Some(25.0),
+                },
+                initial_token_distribution: SnsInitialTokenDistributionConfig {
+                    initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
+                        ..Default::default()
+                    })),
+                },
             }
         }
     }
@@ -849,58 +926,71 @@ max_age_bonus_multiplier: 1.3
             sns_init_payload.sns_initialization_parameters.unwrap()
         );
         assert_eq!(
-            sns_cli_init_config.transaction_fee_e8s,
+            sns_cli_init_config.sns_ledger.transaction_fee_e8s,
             sns_init_payload.transaction_fee_e8s
         );
-        assert_eq!(sns_cli_init_config.token_name, sns_init_payload.token_name);
         assert_eq!(
-            sns_cli_init_config.token_symbol,
+            sns_cli_init_config.sns_ledger.token_name,
+            sns_init_payload.token_name
+        );
+        assert_eq!(
+            sns_cli_init_config.sns_ledger.token_symbol,
             sns_init_payload.token_symbol
         );
         assert_eq!(
-            sns_cli_init_config.proposal_reject_cost_e8s,
+            sns_cli_init_config.sns_governance.proposal_reject_cost_e8s,
             sns_init_payload.proposal_reject_cost_e8s
         );
         assert_eq!(
-            sns_cli_init_config.neuron_minimum_stake_e8s,
+            sns_cli_init_config.sns_governance.neuron_minimum_stake_e8s,
             sns_init_payload.neuron_minimum_stake_e8s
         );
         assert_eq!(
-            sns_cli_init_config.neuron_minimum_dissolve_delay_to_vote_seconds,
+            sns_cli_init_config
+                .sns_governance
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
             sns_init_payload.neuron_minimum_dissolve_delay_to_vote_seconds
         );
         assert_eq!(
-            sns_cli_init_config.fallback_controller_principal_ids,
+            sns_cli_init_config
+                .sns_governance
+                .fallback_controller_principal_ids,
             sns_init_payload.fallback_controller_principal_ids
         );
-        assert_eq!(sns_cli_init_config.url, sns_init_payload.url);
+        assert_eq!(sns_cli_init_config.sns_governance.url, sns_init_payload.url);
         assert_eq!(
-            sns_cli_init_config.description,
+            sns_cli_init_config.sns_governance.description,
             sns_init_payload.description
         );
         assert_eq!(
-            sns_cli_init_config.initial_token_distribution,
+            sns_cli_init_config
+                .initial_token_distribution
+                .initial_token_distribution,
             sns_init_payload.initial_token_distribution
         );
         assert_eq!(
             sns_cli_init_config
+                .sns_governance
                 .initial_reward_rate_percentage
                 .map(|v| (v * 100.0) as u64),
             sns_init_payload.initial_reward_rate_basis_points
         );
         assert_eq!(
             sns_cli_init_config
+                .sns_governance
                 .final_reward_rate_percentage
                 .map(|v| (v * 100.0) as u64),
             sns_init_payload.final_reward_rate_basis_points
         );
         assert_eq!(
-            sns_cli_init_config.reward_rate_transition_duration_seconds,
+            sns_cli_init_config
+                .sns_governance
+                .reward_rate_transition_duration_seconds,
             sns_init_payload.reward_rate_transition_duration_seconds
         );
 
         // Read the test.png file into memory
-        let logo_path = sns_cli_init_config.logo.unwrap();
+        let logo_path = sns_cli_init_config.sns_governance.logo.unwrap();
 
         let file = File::open(&logo_path).unwrap();
         let mut reader = BufReader::new(file);
@@ -916,7 +1006,7 @@ max_age_bonus_multiplier: 1.3
         let mut sns_cli_init_config = SnsCliInitConfig::with_test_values();
 
         // Set the logo to None to indicate the developer hasn't provided it
-        sns_cli_init_config.logo = None;
+        sns_cli_init_config.sns_governance.logo = None;
 
         let try_from_result = SnsInitPayload::try_from(sns_cli_init_config);
 
