@@ -1,0 +1,11 @@
+load("//ic-os:defs.bzl", "icos_build")
+
+# The macro contains several targets.
+# Check
+#       //ic-os/guestos/BUILD.bazel for examples
+#    or //ic-os/defs.bzl for the full list of targets.
+icos_build(
+    name = "dev-malicious",
+    malicious = True,
+    mode = "dev",
+)

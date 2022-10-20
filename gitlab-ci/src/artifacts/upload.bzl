@@ -93,12 +93,12 @@ def upload_artifacts(**kwargs):
     kwargs["tags"] = tags
     _upload_artifacts(**kwargs)
 
-def urls_test(name, inputs, tags = ["system_test"]):
+def urls_test(name, inputs, tags = ["manual"]):
     # https://github.com/bazelbuild/bazel/issues/6783S
     native.sh_library(
         name = name + "_wrapped",
         data = inputs,
-        tags = tags + ["manual"],
+        tags = tags,
     )
     native.sh_test(
         name = name,

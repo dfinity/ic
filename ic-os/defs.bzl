@@ -4,6 +4,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "summary_sha256sum", "tar_extract", "upgrade_image")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts", "urls_test")
+load("//bazel:output_files.bzl", "output_files")
 
 img_bases = {
     "dev": "dfinity/guestos-base-dev@sha256:cc19a9356b4b62a9133d93f3477293dd54996e2e7a449b9947027cbb8da200c8",
@@ -14,15 +15,15 @@ img_bases = {
 # This needs to be done separately from the build rules because we want to
 # compute the hash over all inputs going into the image and derive the
 # "version.txt" file from it.
-def _image_deps(mode, name, malicious = False):
+def _image_deps(mode, malicious = False):
     extra_rootfs_deps = {
-        "dev": {":rootfs/allow_console_root": "/etc/allow_console_root:0644"},
+        "dev": {"//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644"},
         "prod": {},
     }
     deps = {
         "bootfs": {
             # base layer
-            ":{}_rootfs-tree.tar".format(name): "/",
+            ":rootfs-tree.tar": "/",
 
             # We will install extra_boot_args onto the system, after substuting
             # the hash of the root filesystem into it. Add the template (before
@@ -30,11 +31,11 @@ def _image_deps(mode, name, malicious = False):
             # to the template file are reflected in the overall version hash
             # (the root_hash must include the version hash, it cannot be the
             # other way around).
-            ":bootloader/extra_boot_args.template": "/boot/extra_boot_args.template:0644",
+            "//ic-os/guestos:bootloader/extra_boot_args.template": "/boot/extra_boot_args.template:0644",
         },
         "rootfs": {
             # base layer
-            ":{}_rootfs-tree.tar".format(name): "/",
+            ":rootfs-tree.tar": "/",
 
             # additional files to install
             "//:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
@@ -61,8 +62,7 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     An ICOS build parameterized by mode.
 
     Args:
-      name: Name for the generated filegroup. You can access individual artifacts via
-        //ic-os/guestos:{name}_{artifact}, i.e. //ic-os/guestos:dev_disk-img.tar.gz
+      name: Name for the generated filegroup.
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
       visibility: See Bazel documentation
@@ -70,11 +70,7 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     if mode == None:
         mode = name
 
-    nm = lambda s: "{}_{}".format(name, s)
-
-    lbl = lambda s: ":" + nm(s)
-
-    image_deps = _image_deps(mode, name, malicious)
+    image_deps = _image_deps(mode, malicious)
 
     dev_rootfs_args = []
 
@@ -83,8 +79,8 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
 
     docker_tar(
         visibility = visibility,
-        name = nm("rootfs-tree.tar"),
-        src = ":rootfs",
+        name = "rootfs-tree.tar",
+        src = "//ic-os/guestos:rootfs",
         dep = native.glob(["rootfs/**"] + ["dev-root-ca.crt"] if mode == "dev" else []),
         extra_args_before = dev_rootfs_args,
         extra_args_after = [
@@ -102,7 +98,7 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     )
 
     ext4_image(
-        name = nm("partition-config.tar"),
+        name = "partition-config.tar",
         partition_size = "100M",
         target_compatible_with = [
             "@platforms//os:linux",
@@ -111,8 +107,8 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
 
     tar_extract(
         visibility = visibility,
-        name = nm("file_contexts"),
-        src = lbl("rootfs-tree.tar"),
+        name = "file_contexts",
+        src = "rootfs-tree.tar",
         path = "etc/selinux/default/contexts/files/file_contexts",
         target_compatible_with = [
             "@platforms//os:linux",
@@ -120,29 +116,29 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     )
 
     summary_sha256sum(
-        name = nm("version.txt"),
+        name = "version.txt",
         inputs = image_deps,
         suffix = "-dev" if mode == "dev" else "",
     )
 
     ext4_image(
-        name = nm("partition-boot.tar"),
-        src = lbl("rootfs-tree.tar"),
+        name = "partition-boot.tar",
+        src = "rootfs-tree.tar",
         # Take the dependency list declared above, and add in the "version.txt"
         # as well as the generated extra_boot_args file in the correct place.
         extra_files = {
             k: v
             for k, v in (
                 image_deps["bootfs"].items() + [
-                    (lbl("version.txt"), "/boot/version.txt:0644"),
-                    (lbl("extra_boot_args"), "/boot/extra_boot_args:0644"),
+                    ("version.txt", "/boot/version.txt:0644"),
+                    ("extra_boot_args", "/boot/extra_boot_args:0644"),
                 ]
             )
-            if k != ":bootloader/extra_boot_args.template"
+            if ":bootloader/extra_boot_args.template" not in k
             # additional files to install
             if v != "/"
         },
-        file_contexts = lbl("file_contexts"),
+        file_contexts = ":file_contexts",
         partition_size = "1G",
         subdir = "boot/",
         target_compatible_with = [
@@ -151,16 +147,16 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     )
 
     ext4_image(
-        name = nm("partition-root-unsigned.tar"),
-        src = lbl("rootfs-tree.tar"),
+        name = "partition-root-unsigned.tar",
+        src = "rootfs-tree.tar",
         # Take the dependency list declared above, and add in the "version.txt"
         # at the correct place.
         extra_files = {
             k: v
-            for k, v in (image_deps["rootfs"].items() + [(lbl("version.txt"), "/opt/ic/share/version.txt:0644")])
+            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
             if v != "/"
         },
-        file_contexts = lbl("file_contexts"),
+        file_contexts = ":file_contexts",
         partition_size = "3G",
         strip_paths = [
             "/run",
@@ -175,33 +171,33 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     )
 
     native.genrule(
-        name = nm("partition-root-sign"),
-        srcs = [lbl("partition-root-unsigned.tar")],
-        outs = [nm("partition-root.tar"), nm("partition-root-hash")],
-        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location {}) -r $(location {})".format(nm("partition-root.tar"), nm("partition-root-hash")),
+        name = "partition-root-sign",
+        srcs = ["partition-root-unsigned.tar"],
+        outs = ["partition-root.tar", "partition-root-hash"],
+        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tar) -r $(location partition-root-hash)",
         executable = False,
         tools = ["//toolchains/sysimage:verity_sign.py"],
     )
 
     native.genrule(
-        name = nm("extra_boot_args_root_hash"),
+        name = "extra_boot_args_root_hash",
         srcs = [
-            ":bootloader/extra_boot_args.template",
-            lbl("partition-root-hash"),
+            "//ic-os/guestos:bootloader/extra_boot_args.template",
+            ":partition-root-hash",
         ],
-        outs = [lbl("extra_boot_args")],
-        cmd = "sed -e s/ROOT_HASH/$$(cat $(location {}))/ < $(location :bootloader/extra_boot_args.template) > $@".format(lbl("partition-root-hash")),
+        outs = ["extra_boot_args"],
+        cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location //ic-os/guestos:bootloader/extra_boot_args.template) > $@",
     )
 
     disk_image(
-        name = nm("disk-img.tar"),
-        layout = ":partitions.csv",
+        name = "disk-img.tar",
+        layout = "//ic-os/guestos:partitions.csv",
         partitions = [
             "//ic-os/bootloader:partition-esp.tar",
             "//ic-os/bootloader:partition-grub.tar",
-            lbl("partition-config.tar"),
-            lbl("partition-boot.tar"),
-            lbl("partition-root.tar"),
+            ":partition-config.tar",
+            ":partition-boot.tar",
+            "partition-root.tar",
         ],
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
@@ -212,22 +208,22 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     )
 
     upgrade_image(
-        name = nm("upgrade.tar"),
-        boot_partition = lbl("partition-boot.tar"),
-        root_partition = lbl("partition-root.tar"),
+        name = "upgrade.tar",
+        boot_partition = ":partition-boot.tar",
+        root_partition = ":partition-root.tar",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        version_file = lbl("version.txt"),
+        version_file = ":version.txt",
     )
 
     native.genrule(
-        name = nm("disk-img.tar_zst"),
-        srcs = [lbl("disk-img.tar")],
-        outs = [lbl("disk-img.tar.zst")],
+        name = "disk-img.tar_zst",
+        srcs = ["disk-img.tar"],
+        outs = ["disk-img.tar.zst"],
         cmd = "zstd --threads=0 -10 -f -z $< -o $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
@@ -235,14 +231,14 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     )
 
     sha256sum(
-        name = nm("disk-img.tar.zst.sha256"),
-        srcs = [lbl("disk-img.tar.zst")],
+        name = "disk-img.tar.zst.sha256",
+        srcs = [":disk-img.tar.zst"],
     )
 
     native.genrule(
-        name = nm("disk-img.tar_gz"),
-        srcs = [lbl("disk-img.tar")],
-        outs = [lbl("disk-img.tar.gz")],
+        name = "disk-img.tar_gz",
+        srcs = ["disk-img.tar"],
+        outs = ["disk-img.tar.gz"],
         cmd = "gzip -9 < $< > $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
@@ -250,50 +246,73 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     )
 
     native.genrule(
-        name = nm("upgrade.tar_zst"),
-        srcs = [lbl("upgrade.tar")],
-        outs = [lbl("upgrade.tar.zst")],
+        name = "upgrade.tar_zst",
+        srcs = ["upgrade.tar"],
+        outs = ["upgrade.tar.zst"],
         cmd = "zstd --threads=0 -10 -f -z $< -o $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
     )
 
+    upload_suffix = ""
+    if mode == "dev":
+        upload_suffix = "-dev"
+    if malicious:
+        upload_suffix += "-malicious"
+
     upload_artifacts(
-        name = nm("upload_guestos"),
+        name = "upload_disk-img",
         inputs = [
-            lbl("disk-img.tar.zst"),
-            lbl("upgrade.tar.zst"),
+            ":disk-img.tar_zst",
+            ":disk-img.tar_gz",
         ],
-        remote_subdir = "ic-os/guestos",
+        remote_subdir = "guest-os/disk-img" + upload_suffix,
+    )
+
+    upload_artifacts(
+        name = "upload_update-img",
+        inputs = [
+            ":upgrade.tar_zst",
+        ],
+        remote_subdir = "guest-os/update-img" + upload_suffix,
     )
 
     urls_test(
-        name = nm("upload_guestos_test"),
-        inputs = [lbl("upload_guestos")],
+        name = "upload_disk-img_test",
+        inputs = [":upload_disk-img"],
+    )
+
+    output_files(
+        name = "disk-img-url",
+        target = ":upload_disk-img",
+        basenames = ["upload_disk-img_disk-img.tar.zst.url"],
+        tags = ["manual"],
     )
 
     native.py_binary(
-        name = nm("launch_single_vm"),
+        name = "launch_single_vm",
         main = "launch_single_vm.py",
         srcs = [
-            ":launch_single_vm.py",
+            "//ic-os/guestos:launch_single_vm.py",
             "//ic-os/guestos/tests:ictools.py",
         ],
-        env = {
-            "DATA_PREFIX": nm(""),
-        },
         data = [
-            lbl("disk-img.tar.zst.sha256"),
-            lbl("upload_guestos"),
-            lbl("version.txt"),
+            ":disk-img.tar.zst.sha256",
+            ":disk-img-url",
+            ":version.txt",
             "//rs/prep:ic-prep",
         ],
+        env = {
+            "VERSION_FILE": "$(location :version.txt)",
+            "IMG_HASH_FILE": "$(location :disk-img.tar.zst.sha256)",
+            "DISK_IMG_URL_FILE": "$(location :disk-img-url)",
+        },
         tags = ["manual"],
     )
 
     native.filegroup(
         name = name,
-        srcs = [nm("disk-img.tar.zst"), nm("disk-img.tar.gz"), nm("upgrade.tar.zst")],
+        srcs = [":disk-img.tar.zst", ":disk-img.tar.gz", ":upgrade.tar.zst"],
         visibility = visibility,
     )
