@@ -25,7 +25,6 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tracing",
-    "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
     "@wabt_rs//:wabt",
 ]
