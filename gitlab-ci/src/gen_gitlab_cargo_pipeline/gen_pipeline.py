@@ -461,7 +461,15 @@ def _generate_tests_may_raise_exception(
             git_root, [guestos_workspace], ignored_files=["BUILD.bazel"]
         ) or git_changes.get_changed_files(
             git_root,
-            ["testnet", "ic-os", "scalability", "policy-monitoring", "rs/workload_generator", "rs/registry/client"],
+            [
+                "testnet",
+                "ic-os",
+                "scalability",
+                "policy-monitoring",
+                "rs/workload_generator",
+                "rs/registry/client",
+                "Cargo.Bazel.toml.lock",
+            ],
             ignored_files=["BUILD.bazel"],
         )
 
