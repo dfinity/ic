@@ -296,11 +296,6 @@ export async function handleRequest(request: Request): Promise<Response> {
         requestHeaders.push([key, value]);
       });
 
-      // If the accept encoding isn't given, add it because we want to save bandwidth.
-      if (!request.headers.has('Accept-Encoding')) {
-        requestHeaders.push(['Accept-Encoding', 'gzip, deflate, identity']);
-      }
-
       const httpRequest: HttpRequest = {
         method: request.method,
         url: url.pathname + url.search,
