@@ -93,6 +93,7 @@ fn genesis(merkle_root: TxMerkleNode) -> BlockHeader {
 pub struct TransactionBuilder {
     previous_output: Vec<OutPoint>,
     output: Vec<TxOut>,
+    lock_time: u32,
 }
 
 impl TransactionBuilder {
@@ -100,6 +101,7 @@ impl TransactionBuilder {
         Self {
             previous_output: vec![],
             output: vec![],
+            lock_time: 0,
         }
     }
 
@@ -107,6 +109,7 @@ impl TransactionBuilder {
         Self {
             previous_output: vec![OutPoint::null()],
             output: vec![],
+            lock_time: 0,
         }
     }
 
@@ -123,6 +126,11 @@ impl TransactionBuilder {
             value,
             script_pubkey: address.script_pubkey(),
         });
+        self
+    }
+
+    pub fn with_lock_time(mut self, time: u32) -> Self {
+        self.lock_time = time;
         self
     }
 
@@ -154,7 +162,7 @@ impl TransactionBuilder {
 
         Transaction {
             version: 1,
-            lock_time: 0,
+            lock_time: self.lock_time,
             input,
             output,
         }
