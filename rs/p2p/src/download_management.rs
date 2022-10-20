@@ -72,7 +72,7 @@ use crate::{
     gossip_protocol::{
         GossipAdvertAction, GossipAdvertSendRequest, GossipImpl, Percentage, ReceiveCheckCache,
     },
-    gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage, GossipRetransmissionRequest},
+    gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     peer_context::{
         GossipChunkRequestTracker, GossipChunkRequestTrackerKey, PeerContext, PeerContextMap,
     },
@@ -87,7 +87,7 @@ use ic_logger::{error, info, trace, warn};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::node::v1::NodeRecord};
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
 use ic_types::{
-    artifact::{Artifact, ArtifactId, ArtifactTag},
+    artifact::{Artifact, ArtifactFilter, ArtifactId, ArtifactTag},
     chunkable::{ArtifactErrorCode, ChunkId},
     crypto::CryptoHash,
     p2p::GossipAdvert,
@@ -516,7 +516,7 @@ impl GossipImpl {
     /// The method reacts to a retransmission request.
     pub fn on_retransmission_request(
         &self,
-        gossip_re_request: &GossipRetransmissionRequest,
+        gossip_re_request: &ArtifactFilter,
         peer_id: NodeId,
     ) -> P2PResult<()> {
         const BUSY_ERR: P2PResult<()> = Err(P2PError {
@@ -552,7 +552,7 @@ impl GossipImpl {
 
         let adverts = self
             .artifact_manager
-            .get_all_validated_by_filter(&gossip_re_request.filter)
+            .get_all_validated_by_filter(gossip_re_request)
             .into_iter();
 
         adverts.for_each(|advert| self.send_advert_to_peer_list(advert, vec![peer_id]));
@@ -563,7 +563,7 @@ impl GossipImpl {
     /// node ID.
     pub fn send_retransmission_request(&self, peer_id: NodeId) {
         let filter = self.artifact_manager.get_filter();
-        let message = GossipMessage::RetransmissionRequest(GossipRetransmissionRequest { filter });
+        let message = GossipMessage::RetransmissionRequest(filter);
         let transport_channel = self.transport_channel_mapper.map(&message);
         let start_time = Instant::now();
         self.transport_send(message, peer_id, transport_channel)

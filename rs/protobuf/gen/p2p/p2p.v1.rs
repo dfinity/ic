@@ -1,6 +1,6 @@
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct GossipMessage {
-    #[prost(oneof = "gossip_message::Body", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "gossip_message::Body", tags = "1, 2, 3, 5")]
     pub body: ::core::option::Option<gossip_message::Body>,
 }
 /// Nested message and enum types in `GossipMessage`.
@@ -13,8 +13,8 @@ pub mod gossip_message {
         ChunkRequest(super::GossipChunkRequest),
         #[prost(message, tag = "3")]
         Chunk(super::GossipChunk),
-        #[prost(message, tag = "4")]
-        RetransmissionRequest(super::GossipRetransmissionRequest),
+        #[prost(message, tag = "5")]
+        RetransmissionRequest(super::ArtifactFilter),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
@@ -67,11 +67,6 @@ pub struct CertificationMessageFilter {
 pub struct StateSyncFilter {
     #[prost(uint64, tag = "1")]
     pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct GossipRetransmissionRequest {
-    #[prost(message, optional, tag = "1")]
-    pub filter: ::core::option::Option<ArtifactFilter>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct GossipChunk {

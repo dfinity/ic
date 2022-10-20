@@ -7,8 +7,9 @@ message GossipMessage {
     GossipAdvert advert = 1;
     GossipChunkRequest chunk_request = 2;
     GossipChunk chunk = 3;
-    GossipRetransmissionRequest retransmission_request = 4;
+    ArtifactFilter retransmission_request = 5;
   }
+  reserved 4;
 }
 
 message GossipAdvert {
@@ -45,10 +46,6 @@ message CertificationMessageFilter {
 
 message StateSyncFilter {
   uint64 height = 1;
-}
-
-message GossipRetransmissionRequest {
-  ArtifactFilter filter = 1;
 }
 
 message GossipChunk {
