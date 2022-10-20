@@ -7244,7 +7244,14 @@ fn draw_funds_from_the_community_fund(
     mut withdrawal_amount_e8s: u64,
     limits: &sns_swap_pb::Params,
 ) -> Vec<sns_swap_pb::CfParticipant> {
+    if withdrawal_amount_e8s == 0 {
+        return vec![];
+    }
+
     let total_cf_maturity_e8s = total_community_fund_maturity_e8s_equivalent(id_to_neuron);
+    if total_cf_maturity_e8s == 0 {
+        return vec![];
+    }
     if total_cf_maturity_e8s < original_total_community_fund_maturity_e8s_equivalent {
         // Scale down withdrawal amount, so that we do not use more maturity
         // than how it appeared when the proposal was first made.
@@ -7288,8 +7295,8 @@ fn draw_funds_from_the_community_fund(
 
         // Make the current neuron's contribution proportional to its maturity.
         let neuron_contribution_e8s = (withdrawal_amount_e8s as u128)
-            * (neuron.maturity_e8s_equivalent as u128)
-            / (total_cf_maturity_e8s as u128);
+            .saturating_mul(neuron.maturity_e8s_equivalent as u128)
+            .saturating_div(total_cf_maturity_e8s as u128);
         assert!(
             neuron_contribution_e8s < (u64::MAX as u128),
             "{}",
@@ -7941,6 +7948,70 @@ mod tests {
             expected_failed_refunds,
         );
         assert_eq!(original_id_to_neuron, *expected_id_to_neuron);
+    }
+
+    #[test]
+    fn draw_funds_from_the_community_fund_all_cf_neurons_have_zero_maturity() {
+        let mut id_to_neuron = craft_id_to_neuron(&[
+            // (maturity, controller, joined cf at)
+
+            // CF neurons.
+            (0, *PRINCIPAL_ID_1, Some(1)),
+            (0, *PRINCIPAL_ID_2, Some(1)),
+            (0, *PRINCIPAL_ID_1, Some(1)),
+            // non-CF neurons.
+            (400, *PRINCIPAL_ID_1, None),
+            (500, *PRINCIPAL_ID_2, None),
+        ]);
+        let original_id_to_neuron = id_to_neuron.clone();
+
+        let observed_cf_neurons = draw_funds_from_the_community_fund(
+            &mut id_to_neuron,
+            *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
+            /* withdrawal_amount_e8s = */ 60,
+            &PARAMS,
+        );
+
+        // Inspect results.
+        assert_eq!(observed_cf_neurons, vec![]);
+        assert_eq!(id_to_neuron, original_id_to_neuron);
+        assert_clean_refund(
+            &mut id_to_neuron,
+            &observed_cf_neurons,
+            &original_id_to_neuron,
+        );
+    }
+
+    #[test]
+    fn draw_funds_from_the_community_fund_zero_withdrawal_amount() {
+        let mut id_to_neuron = craft_id_to_neuron(&[
+            // (maturity, controller, joined cf at)
+
+            // CF neurons.
+            (0, *PRINCIPAL_ID_1, Some(1)),
+            (10, *PRINCIPAL_ID_2, Some(1)),
+            (50, *PRINCIPAL_ID_1, Some(1)),
+            // non-CF neurons.
+            (400, *PRINCIPAL_ID_1, None),
+            (500, *PRINCIPAL_ID_2, None),
+        ]);
+        let original_id_to_neuron = id_to_neuron.clone();
+
+        let observed_cf_neurons = draw_funds_from_the_community_fund(
+            &mut id_to_neuron,
+            *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
+            /* withdrawal_amount_e8s = */ 0,
+            &PARAMS,
+        );
+
+        // Inspect results.
+        assert_eq!(observed_cf_neurons, vec![]);
+        assert_eq!(id_to_neuron, original_id_to_neuron);
+        assert_clean_refund(
+            &mut id_to_neuron,
+            &observed_cf_neurons,
+            &original_id_to_neuron,
+        );
     }
 
     #[test]
