@@ -244,7 +244,6 @@ pub fn create_config_disk_image(
     println!("ls -alh {:?}: {:?}", script_path, tmp_out);
     let mut cmd =
         Command::new(ci_project_dir.join("ic-os/guestos/scripts/build-bootstrap-config-image.sh"));
-    let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     let ic_setup = IcSetup::read_attribute(test_env);
     let journalbeat_hosts: Vec<String> = ic_setup.journalbeat_hosts;
 
@@ -260,10 +259,14 @@ pub fn create_config_disk_image(
         .arg(local_store_path)
         .arg("--ic_crypto")
         .arg(node.crypto_path())
-        .arg("--accounts_ssh_authorized_keys")
-        .arg(ssh_authorized_pub_keys_dir)
         .arg("--journalbeat_tags")
         .arg(format!("system_test {}", group_name));
+
+    let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+    if ssh_authorized_pub_keys_dir.exists() {
+        cmd.arg("--accounts_ssh_authorized_keys")
+            .arg(ssh_authorized_pub_keys_dir);
+    }
 
     if !journalbeat_hosts.is_empty() {
         cmd.arg("--journalbeat_hosts")

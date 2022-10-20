@@ -2,6 +2,7 @@
 Rules for system-tests.
 """
 
+load("@bazel_skylib//lib:dicts.bzl", "dicts")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 def _run_system_test(ctx):
@@ -21,6 +22,15 @@ def _run_system_test(ctx):
         ),
     )
 
+    runtime_deps = []
+    runtime_env = {}
+    has_single_file = lambda t: DefaultInfo in t and len(t[DefaultInfo].files.to_list()) == 1
+    for target, env_var in ctx.attr.runtime_deps.items():
+        runtime_deps.append(target.files)
+        if env_var != "" and has_single_file(target):
+            file = target[DefaultInfo].files.to_list()[0]
+            runtime_env[env_var] = "dependencies/" + file.short_path
+
     return [
         DefaultInfo(
             executable = run_test_script_file,
@@ -31,12 +41,12 @@ def _run_system_test(ctx):
                 ],
                 transitive_files = depset(
                     direct = [],
-                    transitive = [target.files for target in ctx.attr.runtime_deps],
+                    transitive = runtime_deps,
                 ),
             ),
         ),
         RunEnvironmentInfo(
-            environment = ctx.attr.env,
+            environment = dicts.add(runtime_env, ctx.attr.env),
         ),
     ]
 
@@ -46,11 +56,11 @@ run_system_test = rule(
     attrs = {
         "src": attr.label(executable = True, cfg = "exec"),
         "env": attr.string_dict(allow_empty = True),
-        "runtime_deps": attr.label_list(allow_files = True),
+        "runtime_deps": attr.label_keyed_string_dict(allow_files = True),
     },
 )
 
-def system_test(name, runtime_deps = [], test_timeout = "long", **kwargs):
+def system_test(name, runtime_deps = {}, test_timeout = "long", **kwargs):
     """Declares a system-test.
 
     Args:

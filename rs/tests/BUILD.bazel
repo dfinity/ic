@@ -1,3 +1,4 @@
+load("@bazel_skylib//lib:dicts.bzl", "dicts")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load(":system_tests.bzl", "system_test")
 
@@ -181,12 +182,35 @@ rust_test(
     deps = DEPENDENCIES,
 )
 
+GUESTOS_RUNTIME_DEPS = {
+    "//ic-os/guestos:scripts/build-bootstrap-config-image.sh": "",
+}
+
+NNS_CANISTER_RUNTIME_DEPS = {
+    "//rs/registry/canister:registry-canister": "REGISTRY_CANISTER_WASM_PATH",
+    "//rs/nns/governance:governance-canister-test": "GOVERNANCE_CANISTER_TEST_WASM_PATH",
+    "//rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method": "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH",
+    "//rs/nns/handlers/root:root-canister": "ROOT_CANISTER_WASM_PATH",
+    "//rs/nns/cmc:cycles-minting-canister": "CYCLES_MINTING_CANISTER_WASM_PATH",
+    "//rs/nns/handlers/lifeline:lifeline_actor": "LIFELINE_WASM_PATH",
+    "//rs/nns/gtc:genesis-token-canister": "GENESIS_TOKEN_CANISTER_WASM_PATH",
+    "//rs/nns/sns-wasm:sns-wasm-canister": "SNS_WASM_CANISTER_WASM_PATH",
+}
+
 system_test(
     name = "basic_health_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = [
-        "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
-    ],
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "tecdsa_add_nodes_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    # TODO: replace the following with: GUESTOS_RUNTIME_DEPS | NNS_CANISTER_RUNTIME_DEPS
+    # once we have Bazel >= 6.0
+    runtime_deps = dicts.add(GUESTOS_RUNTIME_DEPS, NNS_CANISTER_RUNTIME_DEPS),
     deps = DEPENDENCIES + [":tests"],
 )

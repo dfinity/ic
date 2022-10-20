@@ -21,9 +21,9 @@ end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
-use crate::driver::test_env::TestEnv;
+use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
 };
 use crate::tecdsa::tecdsa_signature_test::{enable_ecdsa_signing, make_key};
 use crate::{
@@ -45,6 +45,8 @@ const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: i32 = 3;
 
 pub fn config(env: TestEnv) {
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
+
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
