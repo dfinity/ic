@@ -54,7 +54,7 @@
 use crate::{
     artifact_download_list::ArtifactDownloadListImpl,
     download_prioritization::{DownloadPrioritizer, DownloadPrioritizerImpl},
-    gossip_types::{GossipChunk, GossipChunkRequest, GossipRetransmissionRequest},
+    gossip_types::{GossipChunk, GossipChunkRequest},
     metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics, GossipMetrics},
     peer_context::PeerContextMap,
     use_gossip_malicious_behavior_on_chunk_request,
@@ -69,6 +69,7 @@ use ic_logger::{info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_types::{
+    artifact::ArtifactFilter,
     chunkable::{ArtifactChunk, ArtifactChunkData},
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
@@ -334,7 +335,7 @@ impl Gossip for GossipImpl {
     type GossipAdvert = GossipAdvert;
     type GossipChunkRequest = GossipChunkRequest;
     type GossipChunk = GossipChunk;
-    type GossipRetransmissionRequest = GossipRetransmissionRequest;
+    type GossipRetransmissionRequest = ArtifactFilter;
     type GossipAdvertSendRequest = GossipAdvertSendRequest;
     type NodeId = NodeId;
 
@@ -401,7 +402,7 @@ impl Gossip for GossipImpl {
     /// collected and sent to the peer.
     fn on_gossip_retransmission_request(
         &self,
-        gossip_retransmission_request: GossipRetransmissionRequest,
+        gossip_retransmission_request: Self::GossipRetransmissionRequest,
         peer_id: NodeId,
     ) {
         let _ = self.on_retransmission_request(&gossip_retransmission_request, peer_id);

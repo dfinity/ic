@@ -59,7 +59,7 @@ pub(crate) enum GossipMessage {
     /// The chunk variant.
     Chunk(GossipChunk),
     /// The retransmission request variant.
-    RetransmissionRequest(GossipRetransmissionRequest),
+    RetransmissionRequest(ArtifactFilter),
 }
 
 /// A *Gossip* message can be converted into a
@@ -186,36 +186,6 @@ impl TryFrom<pb::GossipChunk> for GossipChunk {
                 }),
             },
             integrity_hash: deserialize(&gossip_chunk.integrity_hash)?,
-        })
-    }
-}
-
-/// An re-transmission request can be converted into a
-/// `pb::GossipRetransmissionRequest`.
-impl From<GossipRetransmissionRequest> for pb::GossipRetransmissionRequest {
-    /// The function converts a retransmission request into the Protobuf
-    /// equivalent.
-    fn from(gossip_request: GossipRetransmissionRequest) -> Self {
-        Self {
-            filter: Some(gossip_request.filter.into()),
-        }
-    }
-}
-
-/// A `pb::GossipRetransmissionRequest` can be converted into a
-/// retransmission request.
-impl TryFrom<pb::GossipRetransmissionRequest> for GossipRetransmissionRequest {
-    type Error = ProxyDecodeError;
-    /// The function attempts to convert a Protobuf retransmission request into
-    /// a GossipRetransmissionRequest.
-    fn try_from(
-        gossip_retransmission_request: pb::GossipRetransmissionRequest,
-    ) -> Result<Self, Self::Error> {
-        Ok(Self {
-            filter: try_from_option_field(
-                gossip_retransmission_request.filter,
-                "GossipRetransmissionRequest.filter",
-            )?,
         })
     }
 }

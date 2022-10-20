@@ -70,14 +70,14 @@
 use crate::{
     advert_utils::AdvertRequestBuilder,
     gossip_protocol::{Gossip, GossipAdvertSendRequest},
-    gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage, GossipRetransmissionRequest},
+    gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     metrics::FlowWorkerMetrics,
 };
 use ic_interfaces_transport::{TransportEvent, TransportMessage};
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
-use ic_types::{artifact::AdvertClass, p2p::GossipAdvert, NodeId};
+use ic_types::{artifact::AdvertClass, artifact::ArtifactFilter, p2p::GossipAdvert, NodeId};
 use parking_lot::RwLock;
 use std::{
     cmp::max,
@@ -111,7 +111,7 @@ type GossipArc = Arc<
             GossipAdvert = GossipAdvert,
             GossipChunkRequest = GossipChunkRequest,
             GossipChunk = GossipChunk,
-            GossipRetransmissionRequest = GossipRetransmissionRequest,
+            GossipRetransmissionRequest = ArtifactFilter,
             GossipAdvertSendRequest = GossipAdvertSendRequest,
             NodeId = NodeId,
         > + Send
@@ -549,8 +549,7 @@ impl AdvertBroadcaster {
 pub mod tests {
     use super::*;
     use crate::{
-        download_prioritization::test::make_gossip_advert,
-        gossip_protocol::GossipAdvertSendRequest, gossip_types::GossipRetransmissionRequest,
+        download_prioritization::test::make_gossip_advert, gossip_protocol::GossipAdvertSendRequest,
     };
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
     use ic_interfaces_transport::TransportPayload;
@@ -620,7 +619,7 @@ pub mod tests {
         type GossipAdvert = GossipAdvert;
         type GossipChunkRequest = GossipChunkRequest;
         type GossipChunk = GossipChunk;
-        type GossipRetransmissionRequest = GossipRetransmissionRequest;
+        type GossipRetransmissionRequest = ArtifactFilter;
         type GossipAdvertSendRequest = GossipAdvertSendRequest;
         type NodeId = NodeId;
 
@@ -648,7 +647,7 @@ pub mod tests {
         /// The method is called when a re-transmission request is received.
         fn on_gossip_retransmission_request(
             &self,
-            _gossip_request: GossipRetransmissionRequest,
+            _gossip_request: Self::GossipRetransmissionRequest,
             _node_id: NodeId,
         ) {
             unimplemented!()
