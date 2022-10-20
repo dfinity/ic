@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use clap::Parser;
 use ic_sns_governance::{
     pb::v1::{governance::SnsMetadata, NervousSystemParameters},
-    types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
+    types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
 };
 use ic_sns_init::{
     pb::v1::{sns_init_payload, SnsInitPayload},
@@ -125,6 +125,27 @@ pub struct SnsGovernanceConfig {
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s).
     pub fallback_controller_principal_ids: Vec<String>,
+
+    // The initial voting period of a newly created proposal.
+    // A proposal's voting period may then be further increased during
+    // a proposal's lifecycle due to the wait-for-quiet algorithm.
+    //
+    // The voting period must be between (inclusive) the defined floor
+    // INITIAL_VOTING_PERIOD_SECONDS_FLOOR and ceiling
+    // INITIAL_VOTING_PERIOD_SECONDS_CEILING.
+    pub initial_voting_period_seconds: Option<u64>,
+
+    // The wait for quiet algorithm extends the voting period of a proposal when
+    // there is a flip in the majority vote during the proposal's voting period.
+    // This parameter determines the maximum time period that the voting period
+    // may be extended after a flip. If there is a flip at the very end of the
+    // original proposal deadline, the remaining time will be set to this parameter.
+    // If there is a flip before or after the original deadline, the deadline will
+    // extended by somewhat less than this parameter.
+    // The maximum total voting period extension is 2 * wait_for_quiet_deadline_increase_seconds.
+    // For more information, see the wiki page on the wait-for-quiet algorithm:
+    // https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet
+    pub wait_for_quiet_deadline_increase_seconds: Option<u64>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
@@ -197,6 +218,10 @@ impl Default for SnsCliInitConfig {
                 max_age_bonus_multiplier: nervous_system_parameters_default
                     .max_age_bonus_percentage
                     .map(unit_helpers::percentage_increase_to_multiplier),
+                initial_voting_period_seconds: nervous_system_parameters_default
+                    .initial_voting_period_seconds,
+                wait_for_quiet_deadline_increase_seconds: nervous_system_parameters_default
+                    .wait_for_quiet_deadline_increase_seconds,
             },
             initial_token_distribution: SnsInitialTokenDistributionConfig {
                 initial_token_distribution: None,
@@ -364,6 +389,12 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
                 .max_neuron_age_seconds_for_age_bonus,
             max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage,
+            initial_voting_period_seconds: sns_cli_init_config
+                .sns_governance
+                .initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds: sns_cli_init_config
+                .sns_governance
+                .wait_for_quiet_deadline_increase_seconds,
         })
     }
 }
@@ -738,6 +769,66 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
                     .unwrap(),
             ),
         ),
+        (
+            Regex::new(r"initial_voting_period_seconds[^A-Za-z]*").unwrap(),
+            format!(
+                r##"#
+# The initial voting period in seconds of a newly created proposal.
+# (A proposal's voting period may be increased during a proposal's lifecycle due
+# to the wait-for-quiet algorithm.)
+# 
+# The default value is {} seconds ({} days).
+#"##,
+                default_config
+                    .sns_governance
+                    .initial_voting_period_seconds
+                    .unwrap(),
+                default_config
+                    .sns_governance
+                    .initial_voting_period_seconds
+                    .unwrap()
+                    / ONE_DAY_SECONDS,
+            ),
+        ),
+        (
+            Regex::new(r"wait_for_quiet_deadline_increase_seconds[^A-Za-z]*").unwrap(),
+            {
+                let wait_for_quiet_deadline_increase_seconds = default_config
+                    .sns_governance
+                    .wait_for_quiet_deadline_increase_seconds
+                    .unwrap();
+                format!(
+                    r##"#
+# The wait for quiet algorithm extends the voting period of a proposal when
+# there is a flip in the majority vote during the proposal's voting period.
+#
+# Without this, there could be an incentive to vote right at the end of a 
+# proposal's voting period, in order to reduce the chance that people will see 
+# the result and vote against. 
+# 
+# If this value is set to 86400 seconds (1 day), a change in the majority vote 
+# during at the end of a proposal's original voting period the voting period 
+# being extended by an additional day. Another change at the end of the extended
+# period will cause the voting period to be extended by half a day, and so on.
+#
+# The total extension to the voting period will never be more than twice this 
+# value.
+#
+# For more information, see the wiki page on the wait-for-quiet algorithm: 
+# https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet
+#
+# The default value is {} seconds ({} day{}).
+#"##,
+                    wait_for_quiet_deadline_increase_seconds,
+                    wait_for_quiet_deadline_increase_seconds / ONE_DAY_SECONDS,
+                    if wait_for_quiet_deadline_increase_seconds / ONE_DAY_SECONDS == 1 {
+                        ""
+                    } else {
+                        "s"
+                    }
+                )
+            },
+        ),
     ];
 
     for (i, line) in yaml_payload.lines().enumerate() {
@@ -783,7 +874,7 @@ fn validate(init_config_file: PathBuf) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_sns_governance::types::ONE_MONTH_SECONDS;
+    use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
     use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower as FDVP;
     use ic_sns_init::pb::v1::{FractionalDeveloperVotingPower, SnsInitPayload};
     use std::convert::TryFrom;
@@ -821,6 +912,8 @@ mod test {
                     max_neuron_age_seconds_for_age_bonus: Some(11 * ONE_MONTH_SECONDS),
                     max_dissolve_delay_bonus_multiplier: Some(8.0),
                     max_age_bonus_multiplier: Some(25.0),
+                    initial_voting_period_seconds: Some(ONE_MONTH_SECONDS),
+                    wait_for_quiet_deadline_increase_seconds: Some(ONE_DAY_SECONDS),
                 },
                 initial_token_distribution: SnsInitialTokenDistributionConfig {
                     initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
@@ -886,6 +979,8 @@ max_dissolve_delay_seconds: 100000000
 max_neuron_age_seconds_for_age_bonus: 18
 max_dissolve_delay_bonus_multiplier: 1.9
 max_age_bonus_multiplier: 1.3
+initial_voting_period_seconds: 86400
+wait_for_quiet_deadline_increase_seconds: 1000
         "#,
             logo_path.clone().into_os_string().into_string().unwrap()
         );

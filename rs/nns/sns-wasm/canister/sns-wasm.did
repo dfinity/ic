@@ -59,10 +59,12 @@ type SnsInitPayload = record {
   neuron_minimum_stake_e8s : opt nat64;
   logo : opt text;
   name : opt text;
+  initial_voting_period_seconds : opt nat64;
   neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
   description : opt text;
   max_neuron_age_seconds_for_age_bonus : opt nat64;
   initial_reward_rate_basis_points : opt nat64;
+  wait_for_quiet_deadline_increase_seconds : opt nat64;
   transaction_fee_e8s : opt nat64;
   sns_initialization_parameters : opt text;
   max_age_bonus_percentage : opt nat64;

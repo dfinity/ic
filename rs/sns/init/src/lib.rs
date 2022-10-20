@@ -116,6 +116,10 @@ impl SnsInitPayload {
             max_dissolve_delay_bonus_percentage: nervous_system_parameters_default
                 .max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: nervous_system_parameters_default.max_age_bonus_percentage,
+            initial_voting_period_seconds: nervous_system_parameters_default
+                .initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds: nervous_system_parameters_default
+                .wait_for_quiet_deadline_increase_seconds,
         }
     }
 
@@ -352,6 +356,8 @@ impl SnsInitPayload {
             max_neuron_age_seconds_for_age_bonus: max_neuron_age_for_age_bonus,
             max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage,
+            initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
@@ -373,6 +379,8 @@ impl SnsInitPayload {
             max_neuron_age_for_age_bonus,
             max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage,
+            initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds,
             ..nervous_system_parameters
         }
     }
@@ -410,6 +418,8 @@ impl SnsInitPayload {
             self.validate_max_neuron_age_seconds_for_age_bonus(),
             self.validate_max_dissolve_delay_bonus_percentage(),
             self.validate_max_age_bonus_percentage(),
+            self.validate_initial_voting_period_seconds(),
+            self.validate_wait_for_quiet_deadline_increase_seconds(),
         ];
 
         let defect_msg = validation_fns
@@ -754,6 +764,65 @@ impl SnsInitPayload {
             Err(format!(
                 "max_age_bonus_percentage must be less than {}",
                 NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_initial_voting_period_seconds(&self) -> Result<(), String> {
+        let initial_voting_period_seconds = self
+            .initial_voting_period_seconds
+            .ok_or("Error: initial_voting_period_seconds must be specified")?;
+
+        if initial_voting_period_seconds
+            < NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_FLOOR
+        {
+            Err(format!(
+                "NervousSystemParameters.initial_voting_period_seconds must be greater than {}",
+                NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_FLOOR
+            ))
+        } else if initial_voting_period_seconds
+            > NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_CEILING
+        {
+            Err(format!(
+                "NervousSystemParameters.initial_voting_period_seconds must be less than {}",
+                NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_CEILING
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_wait_for_quiet_deadline_increase_seconds(&self) -> Result<(), String> {
+        let wait_for_quiet_deadline_increase_seconds = self
+            .wait_for_quiet_deadline_increase_seconds
+            .ok_or("Error: wait_for_quiet_deadline_increase_seconds must be specified")?;
+        let initial_voting_period_seconds = self
+            .initial_voting_period_seconds
+            .ok_or("Error: initial_voting_period_seconds must be specified")?;
+
+        if wait_for_quiet_deadline_increase_seconds
+            < NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_FLOOR
+        {
+            Err(format!(
+                "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds must be greater than or equal to {}",
+                NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_FLOOR
+            ))
+        } else if wait_for_quiet_deadline_increase_seconds
+            > NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_CEILING
+        {
+            Err(format!(
+                "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds must be less than or equal to {}",
+                NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_CEILING
+            ))
+        // If `wait_for_quiet_deadline_increase_seconds > initial_voting_period_seconds / 2`, any flip (including an initial `yes` vote)
+        // will always cause the deadline to be increased. That seems like unreasonable behavior, so we prevent that from being
+        // the case.
+        } else if wait_for_quiet_deadline_increase_seconds > initial_voting_period_seconds / 2 {
+            Err(format!(
+                "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds is {}, but must be less than or equal to half the initial voting period, {}",
+                initial_voting_period_seconds, initial_voting_period_seconds / 2
             ))
         } else {
             Ok(())
