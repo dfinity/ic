@@ -24,13 +24,13 @@ fi
 BUILD_MODE="${BUILD_MODE}${MALICIOUS_MODE}"
 
 # shellcheck disable=SC2086
-bazel ${BAZEL_STARTUP_ARGS:-} build ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_gz //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_zst
+bazel ${BAZEL_STARTUP_ARGS:-} build ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} "//ic-os/guestos/${BUILD_MODE}:disk-img.tar_gz" "//ic-os/guestos/${BUILD_MODE}:disk-img.tar_zst"
 
-cp -fv "$ROOT_DIR"/"$(bazel ${BAZEL_STARTUP_ARGS:-} cquery ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} --output=files //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_gz)" "$BUILD_OUT"/disk-img.tar.gz
-cp -fv "$ROOT_DIR"/"$(bazel ${BAZEL_STARTUP_ARGS:-} cquery ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} --output=files //ic-os/guestos:"$BUILD_MODE"_disk-img.tar_zst)" "$BUILD_OUT"/disk-img.tar.zst
+cp -fv "$ROOT_DIR"/"$(bazel ${BAZEL_STARTUP_ARGS:-} cquery ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} --output=files "//ic-os/guestos/${BUILD_MODE}:disk-img.tar_gz")" "$BUILD_OUT"/disk-img.tar.gz
+cp -fv "$ROOT_DIR"/"$(bazel ${BAZEL_STARTUP_ARGS:-} cquery ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} --output=files "//ic-os/guestos/${BUILD_MODE}:disk-img.tar_zst")" "$BUILD_OUT"/disk-img.tar.zst
 
 if [ -n "${CI_JOB_ID:-}" ]; then
     "$ROOT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "$BUILD_OUT"
 fi
 
-cat "$ROOT_DIR"/"$(bazel ${BAZEL_STARTUP_ARGS:-} cquery ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} --output=files //ic-os/guestos:"$BUILD_MODE"_version.txt)" >"$ROOT_DIR"/version.txt
+cat "$ROOT_DIR"/"$(bazel ${BAZEL_STARTUP_ARGS:-} cquery ${BAZEL_CI_CONFIG:-} ${BAZEL_EXTRA_ARGS:-} --output=files "//ic-os/guestos/${BUILD_MODE}:version.txt")" >"$ROOT_DIR"/version.txt

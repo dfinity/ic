@@ -1,79 +1,20 @@
-load("//ic-os:defs.bzl", "icos_build")
-
-icos_build(name = "dev")
-
-icos_build(
-    name = "dev-malicious",
-    malicious = True,
-    mode = "dev",
-)
-
-icos_build(name = "prod")
+package(default_visibility = ["__subpackages__"])
 
 exports_files([
+    "bootloader/extra_boot_args.template",
+    "launch_single_vm.py",
+    "partitions.csv",
+    "rootfs",
+    "rootfs/allow_console_root",
     "rootfs/opt/ic/share/ic.json5.template",
     "scripts/build-bootstrap-config-image.sh",
 ])
 
-alias(
-    name = "disk_image_dev",
-    actual = "dev_disk-img.tar.zst",
-)
-
-alias(
-    name = "upgrade_image_dev",
-    actual = "dev_upgrade.tar.zst",
-)
-
-# alias(
-#     name = "urls_test_dev",
-#     actual = "dev_upload_guestos_test",
-# )
-
-alias(
-    name = "launch_single_vm_dev",
-    actual = "dev_launch_single_vm",
-    tags = ["manual"],
-)
-
-alias(
-    name = "disk_image_dev-malicious",
-    actual = "dev-malicious_disk-img.tar.zst",
-)
-
-alias(
-    name = "upgrade_image_dev-malicious",
-    actual = "dev-malicious_upgrade.tar.zst",
-)
-
-# alias(
-#     name = "urls_test_dev-malicious",
-#     actual = "dev-malicious_upload_guestos_test",
-# )
-
-alias(
-    name = "launch_single_vm_dev-malicious",
-    actual = "dev-malicious_launch_single_vm",
-    tags = ["manual"],
-)
-
-alias(
-    name = "disk_image_prod",
-    actual = "prod_disk-img.tar.zst",
-)
-
-alias(
-    name = "upgrade_image_prod",
-    actual = "prod_upgrade.tar.zst",
-)
-
-# alias(
-#     name = "urls_test_prod",
-#     actual = "prod_upload_guestos_test",
-# )
-
-alias(
-    name = "launch_single_vm_prod",
-    actual = "prod_launch_single_vm",
-    tags = ["manual"],
-)
+# All guest-os targets are named the same, just stay in different submodules.
+# To build or run specific target:
+#
+# bazel run   //ic-os/guestos/dev-malicious:launch_single_vm [--s3_endpoint=<internal endpoint address>]
+# bazel run   //ic-os/guestos/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
+# bazel build //ic-os/guestos/dev/...
+#
+# check //ic-os/defs.bzl for the full list of targets.
