@@ -12,25 +12,18 @@ LimitNOFILE=524288
 WorkingDirectory=/etc/nginx/ic
 Environment="RUST_BACKTRACE=1"
 EnvironmentFile=/run/ic-node/etc/default/icx-proxy
-ExecStart=/opt/ic/bin/icx-proxy                                        \
-    --address 127.0.0.1:9500                                           \
-    --replica "https://${DOMAIN}/"                                     \
-    --replica-resolve "${DOMAIN}=127.0.0.1:443"                        \
-    --ignore-url-canister-param                                        \
-    --dns-alias "personhood.${DOMAIN}:g3wsl-eqaaa-aaaan-aaaaa-cai"     \
-    --dns-alias "personhood.raw.${DOMAIN}:g3wsl-eqaaa-aaaan-aaaaa-cai" \
-    --dns-alias "identity.${DOMAIN}:rdmx6-jaaaa-aaaaa-aaadq-cai"       \
-    --dns-alias "identity.raw.${DOMAIN}:rdmx6-jaaaa-aaaaa-aaadq-cai"   \
-    --dns-alias "nns.${DOMAIN}:qoctq-giaaa-aaaaa-aaaea-cai"            \
-    --dns-alias "nns.raw.${DOMAIN}:qoctq-giaaa-aaaaa-aaaea-cai"        \
-    --dns-alias "dscvr.${DOMAIN}:h5aet-waaaa-aaaab-qaamq-cai"          \
-    --dns-alias "dscvr.raw.${DOMAIN}:h5aet-waaaa-aaaab-qaamq-cai"      \
-    --dns-suffix "${DOMAIN}"                                           \
-    --dns-suffix "raw.${DOMAIN}"                                       \
-    --metrics-addr "[::]:9314"                                         \
-    # DO NOT ADD CURLY BRACES (they prevent n-arg expansion)
+ExecStart=/opt/ic/bin/icx-proxy                               \
+    --address 127.0.0.1:9500                                  \
+    --canister-alias "personhood:g3wsl-eqaaa-aaaan-aaaaa-cai" \
+    --canister-alias "identity:rdmx6-jaaaa-aaaaa-aaadq-cai"   \
+    --canister-alias "nns:qoctq-giaaa-aaaaa-aaaea-cai"        \
+    --canister-alias "dscvr:h5aet-waaaa-aaaab-qaamq-cai"      \
+    --ignore-url-canister-param                               \
+    --metrics-addr "[::]:9314"                                \
+    # DO NOT ADD CURLY BRACES (they prevent n-arg expansion)  \
+    $REPLICA_DOMAIN_ADDRS                                     \
+    $DOMAINS                                                  \
     $SSL_OPTIONS
-
 
 Restart=always
 RestartSec=10

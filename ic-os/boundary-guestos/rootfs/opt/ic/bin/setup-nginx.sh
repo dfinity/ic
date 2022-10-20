@@ -4,8 +4,10 @@ set -euox pipefail
 source '/opt/ic/bin/helpers.shlib'
 
 readonly BOOT_DIR='/boot/config'
-
 readonly RUN_DIR='/run/ic-node/etc/nginx'
+
+declare -a SYSTEM_DOMAINS
+declare -a APPLICATION_DOMAINS
 
 function read_variables() {
     local -r BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
@@ -24,12 +26,18 @@ function read_variables() {
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "${key}" in
-            "domain") DOMAIN="${value}" ;;
+            "system_domains") SYSTEM_DOMAINS+=("${value}") ;;
+            "application_domains") APPLICATION_DOMAINS+=("${value}") ;;
         esac
     done <"${BN_CONFIG}"
 
-    if [[ -z "${DOMAIN:-}" ]]; then
-        err '${DOMAIN} variable not set. nginx will not be configured.'
+    if [[ "${#SYSTEM_DOMAINS[@]}" -eq 0 ]]; then
+        err "SYSTEM_DOMAINS variable not set. Nginx won't be configured."
+        exit 1
+    fi
+
+    if [[ "${#APPLICATION_DOMAINS[@]}" -eq 0 ]]; then
+        err "APPLICATION_DOMAINS variables not set. Nginx won't be configured."
         exit 1
     fi
 }
@@ -82,17 +90,47 @@ function copy_deny_list() {
     fi
 }
 
-function setup_domain_name() {
-    local -r DOMAIN_DIR="${RUN_DIR}/conf.d"
-    local -r DOMAIN_ESCAPED=${DOMAIN//\./\\.}
+function setup_domains() {
+    local -r SYSTEM_DOMAINS_PATH="${RUN_DIR}/conf.d/system_domains.conf"
+    for DOMAIN in "${SYSTEM_DOMAINS[@]}"; do
+        local DOMAIN_ESCAPED=${DOMAIN//\./\\.}
+        echo "~^([^.]+\.)?(raw\.)?${DOMAIN_ESCAPED}$ 1;" >>"${SYSTEM_DOMAINS_PATH}"
+    done
 
+    local -r APPLICATION_DOMAINS_PATH="${RUN_DIR}/conf.d/application_domains.conf"
+    for DOMAIN in "${APPLICATION_DOMAINS[@]}"; do
+        local DOMAIN_ESCAPED=${DOMAIN//\./\\.}
+        echo "~^([^.]+\.)?(raw\.)?${DOMAIN_ESCAPED}$ 1;" >>"${APPLICATION_DOMAINS_PATH}"
+    done
+
+    local -r DOMAIN_DIR="${RUN_DIR}/conf.d"
     mkdir -p "${DOMAIN_DIR}"
-    echo "map nop \$domain { default ${DOMAIN}; }" >"${DOMAIN_DIR}/domain_set.conf"
-    echo "server_name ~^([^.]+\.${DOMAIN_ESCAPED})$;" >"${DOMAIN_DIR}/server_domain_escaped.conf"
-    echo "server_name ${DOMAIN};" >"${DOMAIN_DIR}/server_domain.conf"
-    echo "server_name ~^([^.]+\.raw\.${DOMAIN_ESCAPED})$;" >"${DOMAIN_DIR}/server_raw_domain_escaped.conf"
-    echo "server_name raw.${DOMAIN};" >"${DOMAIN_DIR}/server_raw_domain.conf"
-    echo "server_name .rosetta-exchanges.${DOMAIN};" >"${DOMAIN_DIR}/server_rosetta_domain.conf"
+
+    # primary domains
+    echo "map nop \$primary_system_domain { default ${SYSTEM_DOMAINS[0]}; }" >"${DOMAIN_DIR}/set_primary_system_domain.conf"
+    echo "map nop \$primary_application_domain { default ${APPLICATION_DOMAINS[0]}; }" >"${DOMAIN_DIR}/set_primary_application_domain.conf"
+
+    local -r DOMAINS=(
+        "${SYSTEM_DOMAINS[@]}"
+        "${APPLICATION_DOMAINS[@]}"
+    )
+
+    local -A UNIQUE_DOMAINS
+
+    for DOMAIN in "${DOMAINS[@]}"; do
+        UNIQUE_DOMAINS[$DOMAIN]=0
+    done
+
+    # server names
+    for DOMAIN in "${!UNIQUE_DOMAINS[@]}"; do
+        local DOMAIN_ESCAPED=${DOMAIN//\./\\.}
+
+        echo "server_name .rosetta-exchanges.${DOMAIN};" >>"${DOMAIN_DIR}/server_rosetta_domain.conf"
+        echo "server_name ~^([^.]+\.${DOMAIN_ESCAPED})$;" >>"${DOMAIN_DIR}/server_domain_escaped.conf"
+        echo "server_name ~^([^.]+\.raw\.${DOMAIN_ESCAPED})$;" >>"${DOMAIN_DIR}/server_raw_domain_escaped.conf"
+        echo "server_name ${DOMAIN};" >>"${DOMAIN_DIR}/server_domain.conf"
+        echo "server_name raw.${DOMAIN};" >>"${DOMAIN_DIR}/server_raw_domain.conf"
+    done
 }
 
 function setup_geolite2_dbs() {
@@ -163,13 +201,31 @@ EOF
     fi
 }
 
+function setup_canister_id_alises() {
+    local -r CANISTER_ID_ALIASES_DIR="/var/opt/nginx/canister_aliases"
+    local -r CANISTER_ID_ALIASES_PATH="${CANISTER_ID_ALIASES_DIR}/canister_id_aliases.js"
+
+    mkdir -p "${CANISTER_ID_ALIASES_DIR}"
+    cat >"${CANISTER_ID_ALIASES_PATH}" <<EOF
+let CANISTER_ID_ALIASES = {
+  dscvr: "h5aet-waaaa-aaaab-qaamq-cai",
+  identity: "rdmx6-jaaaa-aaaaa-aaadq-cai",
+  nns: "qoctq-giaaa-aaaaa-aaaea-cai",
+  personhood: "g3wsl-eqaaa-aaaan-aaaaa-cai",
+};
+
+export default CANISTER_ID_ALIASES;
+EOF
+}
+
 function main() {
     read_variables
     copy_certs
     copy_deny_list
-    setup_domain_name
+    setup_domains
     setup_geolite2_dbs
     setup_ic_router
+    setup_canister_id_alises
 }
 
 main "$@"

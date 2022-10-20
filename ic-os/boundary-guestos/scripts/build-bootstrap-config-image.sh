@@ -75,8 +75,11 @@ options may be specified:
   --prober-identity path
     specify an identity file for the prober
 
-  --domain
-    domain hosted by nginx (e.g. ic0.dev or ic0.app)
+  --system-domains
+    comma-delimited list of domains serving system canisters (e.g. ic0.dev or ic0.app)
+
+  --application-domains
+    comma-delimited list of domains serving application canisters (e.g. ic0.dev or ic0.app)
 
   --ipv4_http_ips
     the ipv4 blocks (e.g. "1.2.3.4/5") to be whitelisted for inbound http(s)
@@ -193,8 +196,11 @@ function build_ic_bootstrap_tar() {
             --prober-identity)
                 local PROBER_IDENTITY="$2"
                 ;;
-            --domain)
-                local DOMAIN="$2"
+            --system-domains)
+                local SYSTEM_DOMAINS="$2"
+                ;;
+            --application-domains)
+                local APPLICATION_DOMAINS="$2"
                 ;;
             --ipv6_replica_ips)
                 local IPV6_REPLICA_IPS="$2"
@@ -235,10 +241,31 @@ function build_ic_bootstrap_tar() {
         fail=1
     fi
 
-    if [[ ! "${DOMAIN:="ic0.app"}" =~ ^.*\..*$ ]]; then
-        err "malformed domain name: '${DOMAIN}'"
-        fail=1
+    if [[ -z "${SYSTEM_DOMAINS:-}" ]]; then
+        SYSTEM_DOMAINS=ic0.app
     fi
+
+    IFS="," read -a SYSTEM_DOMAINS <<<$SYSTEM_DOMAINS
+
+    for DOMAIN in "${SYSTEM_DOMAINS[@]}"; do
+        if [[ ! "${DOMAIN}" =~ ^.*\..*$ ]]; then
+            err "malformed domain name: '${DOMAIN}'"
+            fail=1
+        fi
+    done
+
+    if [[ -z "${APPLICATION_DOMAINS:-}" ]]; then
+        APPLICATION_DOMAINS=ic0.app
+    fi
+
+    IFS="," read -a APPLICATION_DOMAINS <<<$APPLICATION_DOMAINS
+
+    for DOMAIN in "${APPLICATION_DOMAINS[@]}"; do
+        if [[ ! "${DOMAIN}" =~ ^.*\..*$ ]]; then
+            err "malformed domain name: '${DOMAIN}'"
+            fail=1
+        fi
+    done
 
     if [[ -z "${ELASTICSEARCH_URL:-}" ]]; then
         err "missing elasticsearch_url"
@@ -292,8 +319,11 @@ EOF
     fi
 
     # setup the bn_vars
-    cat >"${BOOTSTRAP_TMPDIR}/bn_vars.conf" <<EOF
-domain=${DOMAIN}
+    BN_VARS_PATH="${BOOTSTRAP_TMPDIR}/bn_vars.conf"
+
+    cat >"${BN_VARS_PATH}" <<EOF
+$(printf "system_domains=%s\n" "${SYSTEM_DOMAINS[@]}")
+$(printf "application_domains=%s\n" "${APPLICATION_DOMAINS[@]}")
 denylist_url=${DENYLIST_URL:-}
 elasticsearch_url=${ELASTICSEARCH_URL}
 elasticsearch_tags=${ELASTICSEARCH_TAGS:-}

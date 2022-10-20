@@ -12,6 +12,7 @@ clap = { version = "3.2.6", features = ["derive"] }
 dashmap = "5.3.4"
 futures = "0.3.21"
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
+ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../../registry/client" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-local-store = { path = "../../registry/local_store" }

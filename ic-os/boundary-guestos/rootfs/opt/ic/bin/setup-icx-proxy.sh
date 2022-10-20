@@ -15,7 +15,6 @@ readonly ENV_FILE="${RUN_DIR}/icx-proxy"
 # "key=value" for each line with a specific set of keys permissible (see
 # code below).
 function read_variables() {
-
     if [[ ! -d "${BOOT_DIR}" ]]; then
         err "missing node configuration directory: ${BOOT_DIR}"
         exit 1
@@ -37,20 +36,46 @@ function read_variables() {
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "${key}" in
-            "domain") DOMAIN="${value}" ;;
+            "system_domains") SYSTEM_DOMAINS+=("${value}") ;;
+            "application_domains") APPLICATION_DOMAINS+=("${value}") ;;
         esac
     done <"${BN_CONFIG}"
 
-    if [[ -z "${DOMAIN:-}" ]]; then
-        err "missing domain configuration value(s): $(cat "${BN_CONFIG}")"
+    if [[ "${#SYSTEM_DOMAINS[@]}" -eq 0 ]]; then
+        err "SYSTEM_DOMAINS variable not set. icx-proxy won't be configured."
+        exit 1
+    fi
+
+    if [[ "${#APPLICATION_DOMAINS[@]}" -eq 0 ]]; then
+        err "APPLICATION_DOMAINS variable not set. icx-proxy won't be configured."
         exit 1
     fi
 }
 
 function generate_icx_proxy_config() {
+    local -r DOMAINS=(
+        "${SYSTEM_DOMAINS[@]}"
+        "${APPLICATION_DOMAINS[@]}"
+    )
+
+    local -A UNIQUE_DOMAINS
+
+    for DOMAIN in "${DOMAINS[@]}"; do
+        UNIQUE_DOMAINS[$DOMAIN]=0
+    done
+
+    for DOMAIN in "${SYSTEM_DOMAINS[@]}"; do
+        ARG_REPLICA_DOMAIN_ADDRS+=("--replica-domain-addr ${DOMAIN}=127.0.0.1:443")
+    done
+
+    for DOMAIN in "${!UNIQUE_DOMAINS[@]}"; do
+        ARG_DOMAINS+=("--domain ${DOMAIN}")
+    done
+
     mkdir -p "${RUN_DIR}"
     cat >"${ENV_FILE}" <<EOF
-DOMAIN=${DOMAIN}
+REPLICA_DOMAIN_ADDRS=${ARG_REPLICA_DOMAIN_ADDRS[@]}
+DOMAINS=${ARG_DOMAINS[@]}
 SSL_OPTIONS=${SSL_OPTIONS:-}
 EOF
 }

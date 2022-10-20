@@ -1,9 +1,9 @@
-use std::{future::Future, net::SocketAddr};
+use std::net::SocketAddr;
 
+use anyhow::{Context, Error};
 use axum::{handler::Handler, routing::get, Extension, Router};
 use candid::Principal;
 use clap::Args;
-use futures::{future::OptionFuture, FutureExt};
 use hyper::{self, Body, Request, Response, StatusCode, Uri};
 use ic_agent::Agent;
 use opentelemetry::{
@@ -19,7 +19,7 @@ use crate::{headers::HeadersData, logging::add_trace_layer, validate::Validate};
 
 /// The options for metrics
 #[derive(Args)]
-pub struct Opts {
+pub struct MetricsOpts {
     /// Address to expose Prometheus metrics on
     /// Examples: 127.0.0.1:9090, [::1]:9090
     #[clap(long)]
@@ -96,7 +96,7 @@ async fn metrics_handler(
         .body(metrics_text.into())
         .unwrap()
 }
-pub fn setup(opts: Opts) -> (Meter, Runner) {
+pub fn setup(opts: MetricsOpts) -> (Meter, Runner) {
     let exporter = opentelemetry_prometheus::exporter()
         .with_resource(Resource::new(vec![KeyValue::new("service", "prober")]))
         .init();
@@ -115,15 +115,23 @@ pub struct Runner {
 }
 
 impl Runner {
-    pub fn run(self) -> impl Future<Output = Result<Option<()>, hyper::Error>> {
-        let exporter = self.exporter;
-        OptionFuture::from(self.metrics_addr.map(|metrics_addr| {
-            let metrics_handler = metrics_handler.layer(Extension(HandlerArgs { exporter }));
-            let metrics_router = Router::new().route("/metrics", get(metrics_handler));
+    pub async fn run(self) -> Result<(), Error> {
+        if self.metrics_addr.is_none() {
+            return Ok(());
+        }
 
-            axum::Server::bind(&metrics_addr)
-                .serve(add_trace_layer(metrics_router).into_make_service())
-        }))
-        .map(|v| v.transpose())
+        let metrics_router = Router::new().route(
+            "/metrics",
+            get(metrics_handler.layer(Extension(HandlerArgs {
+                exporter: self.exporter,
+            }))),
+        );
+
+        axum::Server::bind(&self.metrics_addr.unwrap())
+            .serve(add_trace_layer(metrics_router).into_make_service())
+            .await
+            .context("failed to start metrics server")?;
+
+        Ok(())
     }
 }
