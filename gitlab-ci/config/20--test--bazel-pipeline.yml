@@ -47,6 +47,8 @@
 bazel-test-all:
   extends:
     - .bazel-test-all
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going"
 
 bazel-cache-perf-test-linux:
   extends:
