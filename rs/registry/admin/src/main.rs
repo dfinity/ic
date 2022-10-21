@@ -85,7 +85,10 @@ use ic_registry_local_store::{
 };
 use ic_registry_nns_data_provider::data_provider::NnsDataProvider;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_routing_table::{
+    CanisterIdRange, CanisterMigrations as OtherCanisterMigrations,
+    RoutingTable as OtherRoutingTable,
+};
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
@@ -3915,6 +3918,55 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                 registry.records.push(record);
 
                 println!("{}", serde_json::to_string_pretty(&registry).unwrap());
+            } else if key == b"routing_table" {
+                let value = OtherRoutingTable::try_from(
+                    RoutingTable::decode(&bytes[..]).expect("Error decoding value from registry."),
+                )
+                .unwrap();
+                println!("Routing table. Most recent version is {:?}.\n", version);
+                for (range, subnet) in value.into_iter() {
+                    println!("Subnet: {}", subnet);
+                    println!(
+                        "    Range start: {} (0x{})",
+                        range.start,
+                        hex::encode(range.start.get_ref().as_slice())
+                    );
+                    println!(
+                        "    Range end:   {} (0x{})",
+                        range.end,
+                        hex::encode(range.end.get_ref().as_slice())
+                    );
+                }
+            } else if key == b"canister_migrations" {
+                let value = OtherCanisterMigrations::try_from(
+                    CanisterMigrations::decode(&bytes[..])
+                        .expect("Error decoding value from registry."),
+                )
+                .unwrap();
+                println!(
+                    "Canister migrations. Most recent version is {:?}.\n",
+                    version
+                );
+                for (range, trace) in value.iter() {
+                    println!(
+                        "Trace: {}",
+                        trace
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(" -> ")
+                    );
+                    println!(
+                        "    Range start: {} (0x{})",
+                        range.start,
+                        hex::encode(range.start.get_ref().as_slice())
+                    );
+                    println!(
+                        "    Range end:   {} (0x{})",
+                        range.end,
+                        hex::encode(range.end.get_ref().as_slice())
+                    );
+                }
             } else {
                 // Everything is dumped as debug representation
                 println!(
