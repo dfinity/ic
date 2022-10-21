@@ -669,7 +669,6 @@ mod tests {
     use crate::{BitcoinPageMap, NUMBER_OF_CHECKPOINT_THREADS};
     use ic_base_types::NumSeconds;
     use ic_ic00_types::CanisterStatusType;
-    use ic_logger::info;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::execution_state::WasmBinary, canister_state::execution_state::WasmMetadata,
@@ -688,7 +687,6 @@ mod tests {
     use ic_test_utilities_tmpdir::tmpdir;
     use ic_types::messages::StopCanisterContext;
     use ic_types::{CanisterId, Cycles, ExecutionRound, Height};
-    use ic_utils::fs::sync_path;
     use ic_wasm_types::CanisterModule;
     use std::collections::BTreeSet;
 
@@ -718,21 +716,10 @@ mod tests {
         Memory::new(page_map, NumWasmPages::from(1))
     }
 
-    fn log_path_and_metadata(log: &ReplicaLogger, path: &std::path::Path) -> std::io::Result<()> {
-        info!(
-            log,
-            "Path: {} Metadata: {:?}",
-            path.display(),
-            path.metadata()?
-        );
-        Ok(())
-    }
-
     fn mark_readonly(path: &std::path::Path) -> std::io::Result<()> {
         let mut permissions = path.metadata()?.permissions();
         permissions.set_readonly(true);
-        std::fs::set_permissions(path, permissions)?;
-        sync_path(path)
+        std::fs::set_permissions(path, permissions)
     }
 
     fn make_checkpoint_and_get_state(
@@ -824,9 +811,7 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
-            log_path_and_metadata(&log, &checkpoints_dir).unwrap();
             mark_readonly(&checkpoints_dir).unwrap();
-            log_path_and_metadata(&log, &checkpoints_dir).unwrap();
 
             // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
             let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
@@ -839,7 +824,6 @@ mod tests {
                 &checkpoint_metrics(),
                 &mut thread_pool(),
             );
-            log_path_and_metadata(&log, &checkpoints_dir).unwrap();
 
             match replicated_state {
                 Err(_) => assert!(
@@ -1001,37 +985,10 @@ mod tests {
             let tmp = tmpdir("checkpoint_reports_an_error_on_misconfiguration");
             let root = tmp.path().to_path_buf();
 
-            log_path_and_metadata(&log, &root).unwrap();
             mark_readonly(&root).unwrap();
-            log_path_and_metadata(&log, &root).unwrap();
-            info!(
-                &log,
-                "ls before StateLayout::try_new: {}",
-                String::from_utf8(
-                    std::process::Command::new("ls")
-                        .args(["-l", "-a", root.to_str().unwrap()])
-                        .output()
-                        .unwrap()
-                        .stdout
-                )
-                .unwrap()
-            );
 
-            let layout = StateLayout::try_new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log, root);
 
-            log_path_and_metadata(&log, &root).unwrap();
-            info!(
-                &log,
-                "ls after StateLayout::try_new: {}",
-                String::from_utf8(
-                    std::process::Command::new("ls")
-                        .args(["-l", "-a", root.to_str().unwrap()])
-                        .output()
-                        .unwrap()
-                        .stdout
-                )
-                .unwrap()
-            );
             assert!(layout.is_err());
             let err_msg = layout.err().unwrap().to_string();
             assert!(
