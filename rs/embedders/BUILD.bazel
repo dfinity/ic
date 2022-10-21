@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -113,5 +113,12 @@ rust_test_suite_with_extra_srcs(
         "tests/instrumentation.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "embedders_bench",
+    srcs = ["benches/compilation.rs"],
+    compile_data = glob(["benches/test-data/*"]),
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
