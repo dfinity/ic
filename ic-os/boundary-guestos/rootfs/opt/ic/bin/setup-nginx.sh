@@ -6,8 +6,8 @@ source '/opt/ic/bin/helpers.shlib'
 readonly BOOT_DIR='/boot/config'
 readonly RUN_DIR='/run/ic-node/etc/nginx'
 
-declare -a SYSTEM_DOMAINS
-declare -a APPLICATION_DOMAINS
+SYSTEM_DOMAINS=()
+APPLICATION_DOMAINS=()
 
 function read_variables() {
     local -r BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
