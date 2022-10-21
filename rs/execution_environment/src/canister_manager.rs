@@ -41,6 +41,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use num_traits::cast::ToPrimitive;
+use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
@@ -597,6 +598,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
+        execution_refund_error_counter: &IntCounter,
         subnet_size: usize,
     ) -> (
         Result<InstallCodeResult, CanisterManagerError>,
@@ -632,6 +634,7 @@ impl CanisterManager {
             execution_parameters,
             round_limits,
             CompilationCostHandling::CountFullAmount,
+            execution_refund_error_counter,
             subnet_size,
         );
         match dts_result {
@@ -687,6 +690,7 @@ impl CanisterManager {
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
+        execution_refund_error_counter: &IntCounter,
         subnet_size: usize,
     ) -> DtsInstallCodeResult {
         if let Err(err) = validate_controller(&canister, &context.sender) {
@@ -742,6 +746,7 @@ impl CanisterManager {
             network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
+            execution_refund_error_counter,
             log: &self.log,
             time,
         };

@@ -68,6 +68,7 @@ use maplit::{btreemap, btreeset};
 use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
 
 use super::InstallCodeResult;
+use prometheus::IntCounter;
 
 const CANISTER_CREATION_FEE: Cycles = Cycles::new(100_000_000_000);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
@@ -298,12 +299,14 @@ fn install_code(
         .method_name(Method::InstallCode)
         .method_payload(args.encode())
         .build();
+    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     let (result, instructions_used, canister) = canister_manager.install_code(
         context,
         RequestOrIngress::Ingress(Arc::new(ingress)),
         state,
         execution_parameters,
         round_limits,
+        &no_op_counter,
         SMALL_APP_SUBNET_MAX_SIZE,
     );
     let instructions_left = instruction_limit - instructions_used.min(instruction_limit);

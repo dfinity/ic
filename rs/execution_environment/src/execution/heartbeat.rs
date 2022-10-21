@@ -14,6 +14,7 @@ use ic_replicated_state::{
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use prometheus::IntCounter;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -137,6 +138,7 @@ pub fn execute_heartbeat(
     hypervisor: &Hypervisor,
     cycles_account_manager: &CyclesAccountManager,
     round_limits: &mut RoundLimits,
+    error_counter: &IntCounter,
     subnet_size: usize,
     log: &ReplicaLogger,
 ) -> HeartbeatResult {
@@ -230,6 +232,7 @@ pub fn execute_heartbeat(
         num_instructions_left,
         message_instruction_limit,
         prepaid_execution_cycles,
+        error_counter,
         subnet_size,
         log,
     );

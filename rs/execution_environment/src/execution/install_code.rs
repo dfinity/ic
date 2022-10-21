@@ -241,6 +241,7 @@ impl InstallCodeHelper {
             instructions_left,
             message_instruction_limit,
             original.prepaid_execution_cycles,
+            round.execution_refund_error_counter,
             original.subnet_size,
             round.log,
         );
@@ -673,6 +674,7 @@ pub(crate) fn finish_err(
         instructions_left,
         message_instruction_limit,
         original.prepaid_execution_cycles,
+        round.execution_refund_error_counter,
         original.subnet_size,
         round.log,
     );
