@@ -27,13 +27,13 @@ url = "2.1.1"
 
 [dev-dependencies]
 bytes = "1.0.1"
+ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
-ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 maplit = "1.0.2"
 prost = "0.10.4"
 reqwest = "0.11.1"

@@ -1,5 +1,6 @@
 use super::*;
 use bytes::Bytes;
+use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
@@ -15,7 +16,6 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
 };
-use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{messages::CallbackId, xnet::StreamIndexedQueue, Height, SubnetId};
 use maplit::btreemap;
 use std::sync::Barrier;

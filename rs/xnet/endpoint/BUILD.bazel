@@ -28,13 +28,13 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/registry/mocks",
     "//rs/interfaces/state_manager",
     "//rs/registry/keys",
     "//rs/replicated_state",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",
-    "//rs/test_utilities/registry",
     "@crate_index//:bytes",
     "@crate_index//:maplit",
     "@crate_index//:prost",

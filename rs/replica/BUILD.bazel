@@ -69,9 +69,9 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/interfaces/registry/mocks",
     "//rs/rust_canisters/canister_test",
     "//rs/test_utilities",
-    "//rs/test_utilities/registry",
     "//rs/types/ic00_types",
     "@crate_index//:assert_cmd",
     "@crate_index//:criterion",

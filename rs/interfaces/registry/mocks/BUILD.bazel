@@ -1,0 +1,17 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "mocks",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    crate_name = "ic_interfaces_registry_mocks",
+    version = "0.8.0",
+    deps = [
+        "//rs/interfaces/registry",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:mockall",
+    ],
+)
