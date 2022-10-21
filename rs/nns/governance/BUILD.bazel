@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
+    "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/ledger_canister",

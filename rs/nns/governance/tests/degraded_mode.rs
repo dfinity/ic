@@ -146,8 +146,8 @@ fn test_heap_soft_limit_is_3_and_half_gigibyte() {
     )
 }
 
-#[test]
-fn test_cannot_submit_motion_in_degraded_mode() {
+#[tokio::test]
+async fn test_cannot_submit_motion_in_degraded_mode() {
     let mut gov = degraded_governance();
 
     // Now let's send a proposal
@@ -163,13 +163,13 @@ fn test_cannot_submit_motion_in_degraded_mode() {
             })),
             ..Default::default()
         },
-    ),
+    ).await,
     Err(e) if e.error_type == ErrorType::ResourceExhausted as i32
     );
 }
 
-#[test]
-fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
+#[tokio::test]
+async fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
     let mut gov = degraded_governance();
 
     // Now let's send a proposal
@@ -187,7 +187,8 @@ fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
                 })),
                 ..Default::default()
             },
-        ),
+        )
+        .await,
         Ok(_)
     );
 }

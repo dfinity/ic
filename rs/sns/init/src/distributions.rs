@@ -527,6 +527,16 @@ impl NeuronDistribution {
             dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
         }
     }
+
+    pub fn id(&self) -> NeuronId {
+        let subaccount = compute_neuron_staking_subaccount(
+            self.controller.expect("field `controller` not set"),
+            self.memo,
+        );
+        NeuronId {
+            id: subaccount.into(),
+        }
+    }
 }
 
 #[cfg(test)]

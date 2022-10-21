@@ -19,7 +19,7 @@ use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
 };
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 #[cfg(feature = "test")]
 use ic_nns_governance::{
     governance::governance_minting_account,
@@ -75,6 +75,7 @@ use ic_nns_governance::{
 use ic_sns_swap::pb::v1::{
     self as sns_swap_pb, params::NeuronBasketConstructionParameters, Params,
 };
+use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use ledger_canister::{AccountIdentifier, Memo, Subaccount, Tokens};
 use maplit::hashmap;
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
@@ -714,8 +715,8 @@ fn fixture_for_following_new() -> NNS {
 /// - As neuron 2 follows neurons 1 and 3 on the NetworkEconomics topic, 2 should vote
 ///   yes as 1 votes implicitly by proposing and 3 votes by following 5 and 6.
 #[cfg(feature = "test")]
-#[test]
-fn test_cascade_following_new() {
+#[tokio::test]
+async fn test_cascade_following_new() {
     let mut nns = fixture_for_following_new();
     let id = NeuronId { id: 1 };
 
@@ -733,6 +734,7 @@ fn test_cascade_following_new() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // The fee should now be 1 ICP since the fees are charged upfront.
@@ -1173,8 +1175,8 @@ fn fixture_for_following() -> GovernanceProto {
 /// - As neuron 2 follows neurons 1 and 3 on the NetworkEconomics topic, 2
 ///   should vote yes as 1 votes implicitly by proposing and 3 votes by
 ///   following 5 and 6.
-#[test]
-fn test_cascade_following() {
+#[tokio::test]
+async fn test_cascade_following() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         fixture_for_following(),
@@ -1195,6 +1197,7 @@ fn test_cascade_following() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     // The fee should now be 1 ICP since the fees are charged upfront.
@@ -1282,8 +1285,8 @@ fn test_cascade_following() {
 
 /// In this scenario, we simply test that you cannot make a proposal
 /// to set the conversion rate below the minimum allowable rate.
-#[test]
-fn test_minimum_icp_xdr_conversion_rate() {
+#[tokio::test]
+async fn test_minimum_icp_xdr_conversion_rate() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         fixture_for_following(),
@@ -1314,6 +1317,7 @@ fn test_minimum_icp_xdr_conversion_rate() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -1337,11 +1341,12 @@ fn test_minimum_icp_xdr_conversion_rate() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
-#[test]
-fn test_node_provider_must_be_registered() {
+#[tokio::test]
+async fn test_node_provider_must_be_registered() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         fixture_for_following(),
@@ -1375,6 +1380,7 @@ fn test_node_provider_must_be_registered() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -1397,13 +1403,14 @@ fn test_node_provider_must_be_registered() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
 /// In this scenario, we simply test that you cannot make a proposal
 /// if you have insufficient stake (less than the reject fee).
-#[test]
-fn test_sufficient_stake() {
+#[tokio::test]
+async fn test_sufficient_stake() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         fixture_for_following(),
@@ -1433,6 +1440,7 @@ fn test_sufficient_stake() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -1456,14 +1464,15 @@ fn test_sufficient_stake() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
 /// In this scenario, we configure neurons 5 and 6 to follow neuron 1.
 /// When neuron 1 now votes, this should result in the propsal being
 /// immediately acceptable.
-#[test]
-fn test_all_follow_proposer() {
+#[tokio::test]
+async fn test_all_follow_proposer() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         fixture_for_following(),
@@ -1517,6 +1526,7 @@ fn test_all_follow_proposer() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // The proposal should now be accepted and executed.
     assert_eq!(
@@ -1537,8 +1547,8 @@ fn test_all_follow_proposer() {
 /// We make neurons 4, 5, and 6 vote 'no'. Neuron 3 follows {5, 6} and
 /// neuron 2 follows {3, 4} and we now have a quorum for 'no', viz., 2
 /// to 6.
-#[test]
-fn test_follow_negative() {
+#[tokio::test]
+async fn test_follow_negative() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         fixture_for_following(),
@@ -1559,6 +1569,7 @@ fn test_follow_negative() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // No controller for 4 yet.
     let result = fake::register_vote(
@@ -1622,8 +1633,8 @@ fn test_follow_negative() {
 /// As no following applies, the proposal should not be adopted until
 /// neuron 8 votes yes as default following is disabled for governance
 /// proposals.
-#[test]
-fn test_no_default_follow_for_governance() {
+#[tokio::test]
+async fn test_no_default_follow_for_governance() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         fixture_for_following(),
@@ -1644,6 +1655,7 @@ fn test_no_default_follow_for_governance() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // Now vote yes for neurons 5-7.
     for i in 5..=7 {
@@ -1899,8 +1911,8 @@ fn test_query_for_manage_neuron() {
 ///
 /// As a next step, neuron 2 submits a proposal and this ought to be
 /// executed immediately as 2 is now the sole manager of canister 1.
-#[test]
-fn test_manage_neuron() {
+#[tokio::test]
+async fn test_manage_neuron() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         fixture_for_manage_neuron(),
@@ -1926,6 +1938,7 @@ fn test_manage_neuron() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         ProposalStatus::Open,
@@ -2018,6 +2031,7 @@ fn test_manage_neuron() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // Now proccess the proposals: proposal should be executed as
     // neuron 2 is the sole followee of neuron 1 on the manage neuron
@@ -2057,8 +2071,8 @@ fn test_manage_neuron() {
 
 /// In this scenario, we test that you cannot make a manage neuron
 /// proposal if you have insufficient stake (less than the manage neuron fee).
-#[test]
-fn test_sufficient_stake_for_manage_neuron() {
+#[tokio::test]
+async fn test_sufficient_stake_for_manage_neuron() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         fixture_for_manage_neuron(),
@@ -2096,6 +2110,7 @@ fn test_sufficient_stake_for_manage_neuron() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -2123,6 +2138,7 @@ fn test_sufficient_stake_for_manage_neuron() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -2158,9 +2174,9 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
     }
 }
 
-#[test]
+#[tokio::test]
 #[should_panic]
-fn test_invalid_proposals_fail() {
+async fn test_invalid_proposals_fail() {
     let fake_driver = fake::FakeDriver::default();
     let fixture = fixture_two_neurons_second_is_bigger();
     let mut gov = Governance::new(
@@ -2187,6 +2203,7 @@ fn test_invalid_proposals_fail() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -2194,8 +2211,8 @@ fn test_invalid_proposals_fail() {
 /// several reward periods.
 ///
 /// We check that the reward event for a proposal happens at the expected time.
-#[test]
-fn test_reward_event_proposals_last_longer_than_reward_period() {
+#[tokio::test]
+async fn test_reward_event_proposals_last_longer_than_reward_period() {
     let mut fake_driver = fake::FakeDriver::default()
         .at(56)
         // To make assertion easy to sanity-check, the total supply of ICPs is chosen
@@ -2252,6 +2269,7 @@ fn test_reward_event_proposals_last_longer_than_reward_period() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     let pid = ProposalId { id: 1 };
     // Let's advance time by several reward periods, but less than the
@@ -2326,8 +2344,8 @@ fn test_reward_event_proposals_last_longer_than_reward_period() {
 
 /// Restricted proposals, those where the eligible voters depend on the
 /// proposal's content, should never be taken into account for voting rewards.
-#[test]
-fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
+#[tokio::test]
+async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     let mut fake_driver = fake::FakeDriver::default()
         .at(3)
         // We need a positive supply to ensure that there can be voting rewards
@@ -2374,6 +2392,7 @@ fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     {
@@ -2515,8 +2534,8 @@ fn test_reward_distribution_skips_deleted_neurons() {
 /// period), and long proposals are set to last 2 reward periods -- so that a
 /// long proposal created before genesis should only be considered in the second
 /// reward event after genesis, not the first.
-#[test]
-fn test_genesis_in_the_future_in_supported() {
+#[tokio::test]
+async fn test_genesis_in_the_future_in_supported() {
     let mut fake_driver = fake::FakeDriver::default()
         .at(78)
         // To make assertion easy to sanity-check, the total supply of ICPs is chosen
@@ -2561,6 +2580,7 @@ fn test_genesis_in_the_future_in_supported() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
     let short_proposal_pid = gov
         .make_proposal(
@@ -2582,6 +2602,7 @@ fn test_genesis_in_the_future_in_supported() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -2644,6 +2665,7 @@ fn test_genesis_in_the_future_in_supported() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -5840,8 +5862,8 @@ fn governance_with_neurons(neurons: &[Neuron]) -> (fake::FakeDriver, Governance)
     (driver, gov)
 }
 
-#[test]
-fn test_not_for_profit_neurons() {
+#[tokio::test]
+async fn test_not_for_profit_neurons() {
     let p = match std::env::var("NEURON_CSV_PATH") {
         Ok(v) => PathBuf::from(v),
         Err(_) => PathBuf::from("tests/neurons.csv"),
@@ -5867,49 +5889,53 @@ fn test_not_for_profit_neurons() {
 
     // A normal neuron can't issue a manage neuron proposal to disburse,
     // split or disburse-to-neuron.
-    let result = gov.make_proposal(
-        normal_neuron.id.as_ref().unwrap(),
-        normal_neuron.controller.as_ref().unwrap(),
-        &Proposal {
-            title: Some("A Reasonable Title".to_string()),
-            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    normal_neuron.id.as_ref().unwrap().clone(),
-                )),
-                id: None,
-                command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
-                    amount: None,
-                    to_account: None,
-                })),
-            }))),
-            summary: "".to_string(),
-            url: "".to_string(),
-        },
-    );
+    let result = gov
+        .make_proposal(
+            normal_neuron.id.as_ref().unwrap(),
+            normal_neuron.controller.as_ref().unwrap(),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                        normal_neuron.id.as_ref().unwrap().clone(),
+                    )),
+                    id: None,
+                    command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
+                        amount: None,
+                        to_account: None,
+                    })),
+                }))),
+                summary: "".to_string(),
+                url: "".to_string(),
+            },
+        )
+        .await;
     assert!(result.is_err());
     assert_eq!(result.err().unwrap().error_type(), ErrorType::NotAuthorized);
 
     // A not for profit neuron, on the other hand, can.
     // The followee of the managed neuron must make the proposal, in this case.
-    let result = gov.make_proposal(
-        normal_neuron.id.as_ref().unwrap(),
-        normal_neuron.controller.as_ref().unwrap(),
-        &Proposal {
-            title: Some("A Reasonable Title".to_string()),
-            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    not_for_profit_neuron.id.as_ref().unwrap().clone(),
-                )),
-                id: None,
-                command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
-                    amount: None,
-                    to_account: None,
-                })),
-            }))),
-            summary: "".to_string(),
-            url: "".to_string(),
-        },
-    );
+    let result = gov
+        .make_proposal(
+            normal_neuron.id.as_ref().unwrap(),
+            normal_neuron.controller.as_ref().unwrap(),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                        not_for_profit_neuron.id.as_ref().unwrap().clone(),
+                    )),
+                    id: None,
+                    command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
+                        amount: None,
+                        to_account: None,
+                    })),
+                }))),
+                summary: "".to_string(),
+                url: "".to_string(),
+            },
+        )
+        .await;
 
     result.expect("Failed.");
 }
@@ -7019,7 +7045,7 @@ fn test_default_followees() {
         &voter_pid,
         &voter_neuron,
         proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
-            target_swap_canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
+            target_swap_canister_id: Some((*fake::SWAP_CANISTER_ID).into()),
             params: Some(Params {
                 min_participants: 100,
                 min_icp_e8s: 1,
@@ -8026,8 +8052,8 @@ fn test_list_neurons() {
     );
 }
 
-#[test]
-fn test_max_number_of_proposals_with_ballots() {
+#[tokio::test]
+async fn test_max_number_of_proposals_with_ballots() {
     let mut fake_driver = fake::FakeDriver::default();
     let proto = GovernanceProto {
         wait_for_quiet_threshold_seconds: 5,
@@ -8054,6 +8080,7 @@ fn test_max_number_of_proposals_with_ballots() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
     }
     assert_eq!(
@@ -8073,7 +8100,8 @@ fn test_max_number_of_proposals_with_ballots() {
             })),
             ..Default::default()
         },
-    ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
+    )
+    .await, Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
     // Let's try a NnsCanisterUpgrade. This proposal type is whitelisted, so it can
     // be submitted even though the max is reached.
     assert_matches!(
@@ -8090,7 +8118,8 @@ fn test_max_number_of_proposals_with_ballots() {
                 })),
                 ..Default::default()
             },
-        ),
+        )
+        .await,
         Ok(_)
     );
 
@@ -8121,7 +8150,8 @@ fn test_max_number_of_proposals_with_ballots() {
             })),
             ..Default::default()
         },
-    ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
+    )
+    .await, Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
 
     // Let's make a reward event happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -8141,6 +8171,7 @@ fn test_max_number_of_proposals_with_ballots() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -8226,8 +8257,8 @@ fn test_proposal_gc() {
     assert!(!gov.maybe_gc());
 }
 
-#[test]
-fn test_id_v1_works() {
+#[tokio::test]
+async fn test_id_v1_works() {
     let driver = fake::FakeDriver::default();
 
     let mut gov = Governance::new(
@@ -8254,6 +8285,7 @@ fn test_id_v1_works() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         ProposalStatus::Open,
@@ -9638,21 +9670,20 @@ fn wait_for_quiet_test_helper(
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
     );
-    let pid = gov
-        .make_proposal(
-            &NeuronId { id: 0 },
-            // Must match neuron 1's serialized_id.
-            &principal(0),
-            &Proposal {
-                title: Some("A Reasonable Title".to_string()),
-                summary: "Summary".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "Some proposal".to_string(),
-                })),
-                ..Default::default()
-            },
-        )
-        .unwrap();
+    let pid = tokio_test::block_on(gov.make_proposal(
+        &NeuronId { id: 0 },
+        // Must match neuron 1's serialized_id.
+        &principal(0),
+        &Proposal {
+            title: Some("A Reasonable Title".to_string()),
+            summary: "Summary".to_string(),
+            action: Some(proposal::Action::Motion(Motion {
+                motion_text: "Some proposal".to_string(),
+            })),
+            ..Default::default()
+        },
+    ))
+    .unwrap();
     let expected_initial_deadline_seconds =
         DEFAULT_TEST_START_TIMESTAMP_SECONDS + initial_expiration_seconds;
     let initial_deadline_seconds = gov
@@ -10472,8 +10503,8 @@ fn test_wfq_constant_flipping() {
 /// - Verify that nothing is changed, the previous proposal did not succeed.
 /// - Update the name of one of the neurons, with a new name.
 /// - Assert than when querying the neuron the updated name is correct.
-#[test]
-fn test_known_neurons() {
+#[tokio::test]
+async fn test_known_neurons() {
     let driver = fake::FakeDriver::default();
     let neurons = [
         (
@@ -10544,6 +10575,7 @@ fn test_known_neurons() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     gov.make_proposal(
@@ -10562,6 +10594,7 @@ fn test_known_neurons() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         gov.get_neuron_info(&NeuronId { id: 1 })
@@ -10610,6 +10643,7 @@ fn test_known_neurons() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     assert_eq!(
@@ -10642,6 +10676,7 @@ fn test_known_neurons() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         gov.get_neuron_info(&NeuronId { id: 2 })
@@ -10659,8 +10694,8 @@ fn test_known_neurons() {
     assert_eq!(expected_known_neuron_name_set, gov.known_neuron_name_set);
 }
 
-#[test]
-fn test_open_sns_token_swap_proposal() {
+#[tokio::test]
+async fn test_open_sns_token_swap_proposal() {
     // Step 0: Define helper(s)
 
     #[derive(Debug, PartialEq, Eq, Clone)]
@@ -10831,19 +10866,35 @@ fn test_open_sns_token_swap_proposal() {
     ];
     cf_participants.sort_by(|p1, p2| p1.hotkey_principal.cmp(&p2.hotkey_principal));
     let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
-        [(
-            ExpectedCallCanisterMethodCallArguments {
-                target: CanisterId::try_from(target_swap_canister_id).unwrap(),
-                method_name: "open",
-                request: Encode!(&sns_swap_pb::OpenRequest {
-                    params: Some(params.clone()),
-                    cf_participants: cf_participants.clone(),
-                    open_sns_token_swap_proposal_id: Some(1),
+        [
+            (
+                ExpectedCallCanisterMethodCallArguments {
+                    target: SNS_WASM_CANISTER_ID,
+                    method_name: "list_deployed_snses",
+                    request: Encode!(&ListDeployedSnsesRequest {}).unwrap(),
+                },
+                Ok(Encode!(&ListDeployedSnsesResponse {
+                    instances: vec![DeployedSns {
+                        swap_canister_id: Some(target_swap_canister_id),
+                        ..Default::default() // Not realistic, but other fields are not actually used.
+                    },],
                 })
-                .unwrap(),
-            },
-            Ok(Encode!(&sns_swap_pb::SetOpenTimeWindowResponse {}).unwrap()),
-        )]
+                .unwrap()),
+            ),
+            (
+                ExpectedCallCanisterMethodCallArguments {
+                    target: CanisterId::try_from(target_swap_canister_id).unwrap(),
+                    method_name: "open",
+                    request: Encode!(&sns_swap_pb::OpenRequest {
+                        params: Some(params.clone()),
+                        cf_participants: cf_participants.clone(),
+                        open_sns_token_swap_proposal_id: Some(1),
+                    })
+                    .unwrap(),
+                },
+                Ok(Encode!(&sns_swap_pb::SetOpenTimeWindowResponse {}).unwrap()),
+            ),
+        ]
         .into(),
     ));
 
@@ -10875,6 +10926,7 @@ fn test_open_sns_token_swap_proposal() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     // Step 3: Inspect results.

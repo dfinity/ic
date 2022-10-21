@@ -61,6 +61,7 @@ ic-sns-governance = { path = "../governance", features = ["test"] }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
 ic-sns-test-utils = { path = "../test_utils" }
+ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
 itertools = "0.10.3"
