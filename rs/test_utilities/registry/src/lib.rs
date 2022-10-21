@@ -1,9 +1,6 @@
 use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
 use ic_interfaces::time_source::TimeSource;
-use ic_interfaces_registry::{
-    LocalStoreCertifiedTimeReader, RegistryClient, RegistryClientResult,
-    RegistryClientVersionedResult,
-};
+use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_protobuf::registry::subnet::v1::{
     CatchUpPackageContents, SubnetFeatures, SubnetListRecord, SubnetRecord,
 };
@@ -13,34 +10,11 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
-use ic_types::{registry::RegistryClientError, PrincipalId, Time};
-use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use mockall::predicate::*;
-use mockall::*;
+use ic_types::{
+    crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
+    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, Time,
+};
 use std::sync::Arc;
-
-mock! {
-    pub RegistryClient {}
-
-    pub trait RegistryClient: Send + Sync {
-        fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>>;
-        fn get_versioned_value(
-            &self,
-            key: &str,
-            version: RegistryVersion,
-        ) -> RegistryClientVersionedResult<Vec<u8>>;
-
-        fn get_key_family(&self,
-            key_prefix: &str,
-            version: RegistryVersion
-        ) -> Result<Vec<String>, RegistryClientError>;
-
-        fn get_latest_version(&self) -> RegistryVersion;
-
-        fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time>;
-    }
-}
 
 fn empty_ni_dkg_transcripts_with_committee(
     committee: Vec<NodeId>,

@@ -8,6 +8,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
 use ic_ic00_types::{self as ic00, CanisterInstallMode, Payload};
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
+use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
@@ -16,7 +17,6 @@ use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier, mock_time, types::messages::SignedIngressBuilder,
 };
-use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
     ingress::{IngressState, IngressStatus, WasmResult},

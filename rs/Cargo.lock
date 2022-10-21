@@ -4090,6 +4090,7 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",
  "ic-interfaces-registry",
+ "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
@@ -4099,7 +4100,6 @@ dependencies = [
  "ic-replicated-state",
  "ic-test-utilities",
  "ic-test-utilities-logger",
- "ic-test-utilities-registry",
  "ic-types",
  "prometheus 0.12.0",
  "slog",
@@ -4644,6 +4644,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-interfaces",
  "ic-interfaces-registry",
+ "ic-interfaces-registry-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -6005,6 +6006,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-interfaces-registry-mocks"
+version = "0.8.0"
+dependencies = [
+ "ic-base-types",
+ "ic-interfaces-registry",
+ "ic-types",
+ "mockall 0.11.2",
+]
+
+[[package]]
 name = "ic-interfaces-state-manager"
 version = "0.8.0"
 dependencies = [
@@ -7262,6 +7273,7 @@ dependencies = [
  "ic-interfaces-bitcoin-adapter-client",
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
+ "ic-interfaces-registry-mocks",
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
@@ -7278,7 +7290,6 @@ dependencies = [
  "ic-state-manager",
  "ic-sys",
  "ic-test-utilities",
- "ic-test-utilities-registry",
  "ic-types",
  "ic-utils 0.8.0",
  "ic-xnet-endpoint",
@@ -8362,7 +8373,6 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-registry-subnet-type",
  "ic-types",
- "mockall 0.7.2",
  "serde_cbor",
 ]
 
@@ -8634,6 +8644,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
  "ic-interfaces-registry",
+ "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
@@ -8644,7 +8655,6 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
- "ic-test-utilities-registry",
  "ic-types",
  "ic-xnet-hyper",
  "ic-xnet-uri",

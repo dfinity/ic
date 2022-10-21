@@ -6,6 +6,7 @@ use ic_btc_types_internal::{
 use ic_interfaces::self_validating_payload::SelfValidatingPayloadBuilder;
 use ic_interfaces_bitcoin_adapter_client::BitcoinAdapterClientError;
 use ic_interfaces_registry::RegistryValue;
+use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{bitcoin::v1 as pb_bitcoin, registry::subnet::v1::SubnetRecord};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -15,7 +16,6 @@ use ic_test_utilities::{
     state::ReplicatedStateBuilder, state_manager::MockStateManager, types::ids::subnet_test_id,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{batch::ValidationContext, Height, NumBytes, RegistryVersion, SubnetId};
 use std::{str::FromStr, sync::Arc};
 

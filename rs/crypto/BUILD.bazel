@@ -75,6 +75,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/keygen",
     "//rs/crypto/test_utils/multi_sigs",
     "//rs/crypto/test_utils/threshold_sigs",
+    "//rs/interfaces/registry/mocks",
     "//rs/registry/client",
     "//rs/test_utilities/registry",
     "//rs/types/types_test_utils",
