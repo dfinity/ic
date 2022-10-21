@@ -1,20 +1,22 @@
 use async_trait::async_trait;
-use candid::Encode;
+use candid::{Decode, Encode};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::{
-    governance::{Environment, Governance},
+    governance::{Environment, Governance, HeapGrowthPotential, CMC},
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
-        ExecuteNnsFunction, GovernanceError, ManageNeuron, Motion, NetworkEconomics, Neuron,
-        NnsFunction, Proposal, Vote,
+        ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,
+        NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
     },
 };
-use ledger_canister::{AccountIdentifier, Tokens};
+use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
+use lazy_static::lazy_static;
+use ledger_canister::{AccountIdentifier, Subaccount, Tokens};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::hash_map::Entry;
@@ -25,11 +27,11 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use ic_nns_governance::governance::{HeapGrowthPotential, CMC};
-use ic_nns_governance::pb::v1::ManageNeuronResponse;
-use ledger_canister::Subaccount;
-
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+
+lazy_static! {
+    pub static ref SWAP_CANISTER_ID: CanisterId = CanisterId::from(978554);
+}
 
 #[derive(Clone, Debug)]
 pub struct FakeAccount {
@@ -315,10 +317,26 @@ impl Environment for FakeDriver {
 
     async fn call_canister_method(
         &mut self,
-        _target: CanisterId,
-        _method_name: &str,
-        _request: Vec<u8>,
+        target: CanisterId,
+        method_name: &str,
+        request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        if method_name == "list_deployed_snses" {
+            assert_eq!(target, SNS_WASM_CANISTER_ID);
+
+            let request = Decode!(&request, ListDeployedSnsesRequest).unwrap();
+            assert_eq!(request, ListDeployedSnsesRequest {});
+
+            return Ok(Encode!(&ListDeployedSnsesResponse {
+                instances: vec![DeployedSns {
+                    swap_canister_id: Some((*SWAP_CANISTER_ID).into()),
+                    // Not realistic, but sufficient for test(s) that use this.
+                    ..Default::default()
+                }],
+            })
+            .unwrap());
+        }
+
         Ok(vec![])
     }
 }
@@ -421,18 +439,17 @@ impl ProposalNeuronBehavior {
                 })
             }
         };
-        let pid = gov
-            .make_proposal(
-                &NeuronId { id: self.proposer },
-                &principal(self.proposer),
-                &Proposal {
-                    title: Some("A Reasonable Title".to_string()),
-                    summary,
-                    action: Some(action),
-                    ..Default::default()
-                },
-            )
-            .unwrap();
+        let pid = tokio_test::block_on(gov.make_proposal(
+            &NeuronId { id: self.proposer },
+            &principal(self.proposer),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                summary,
+                action: Some(action),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
         // Vote
         for (voter, vote) in &self.votes {
             register_vote_assert_success(

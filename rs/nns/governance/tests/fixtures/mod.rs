@@ -563,19 +563,17 @@ impl ProposalNeuronBehavior {
                 })
             }
         };
-        let pid = nns
-            .governance
-            .make_proposal(
-                &NeuronId { id: self.proposer },
-                &principal(self.proposer),
-                &Proposal {
-                    title: Some("A Reasonable Title".to_string()),
-                    summary,
-                    action: Some(action),
-                    ..Default::default()
-                },
-            )
-            .unwrap();
+        let pid = tokio_test::block_on(nns.governance.make_proposal(
+            &NeuronId { id: self.proposer },
+            &principal(self.proposer),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                summary,
+                action: Some(action),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
         // Vote
         for (voter, vote) in &self.votes {
             nns.register_vote_assert_success(
@@ -739,18 +737,17 @@ impl NNS {
         action: proposal::Action,
     ) -> ProposalId {
         // Submit proposal
-        self.governance
-            .make_proposal(
-                &NeuronId { id: prop.proposer },
-                &principal(prop.proposer),
-                &Proposal {
-                    title: Some("A Reasonable Title".to_string()),
-                    summary,
-                    action: Some(action),
-                    ..Default::default()
-                },
-            )
-            .unwrap()
+        tokio_test::block_on(self.governance.make_proposal(
+            &NeuronId { id: prop.proposer },
+            &principal(prop.proposer),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                summary,
+                action: Some(action),
+                ..Default::default()
+            },
+        ))
+        .unwrap()
     }
 
     pub fn propose_and_vote(

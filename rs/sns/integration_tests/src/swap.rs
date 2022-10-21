@@ -1,7 +1,6 @@
-use candid::{types::number::Nat, CandidType, Decode, Encode};
-use canister_test::Project;
+use candid::{types::number::Nat, Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs, UpdateSettingsArgs};
+use ic_ic00_types::{CanisterSettingsArgs, UpdateSettingsArgs};
 use ic_icrc1::Account;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
@@ -11,7 +10,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1 as nns_common_pb;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
+    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::pb::v1::{
     self as nns_governance_pb,
@@ -19,11 +18,17 @@ use ic_nns_governance::pb::v1::{
     manage_neuron_response, proposal, ManageNeuron, OpenSnsTokenSwap, Proposal, Vote,
 };
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder, ids::TEST_NEURON_1_ID, state_test_helpers,
-    state_test_helpers::setup_nns_canisters,
+    common::NnsInitPayloadsBuilder,
+    ids::TEST_NEURON_1_ID,
+    sns_wasm::{add_real_wasms_to_sns_wasms, deploy_new_sns},
+    state_test_helpers::{self, set_up_universal_canister, setup_nns_canisters},
 };
 use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse};
-use ic_sns_init::SnsCanisterInitPayloads;
+use ic_sns_init::pb::v1::{
+    sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
+    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
+    TreasuryDistribution,
+};
 use ic_sns_root::{
     pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse},
     CanisterIdRecord, CanisterStatusResultV2,
@@ -32,11 +37,12 @@ use ic_sns_swap::pb::v1::{
     self as swap_pb, params::NeuronBasketConstructionParameters, set_dapp_controllers_call_result,
     SetDappControllersCallResult, SetDappControllersResponse,
 };
-use ic_sns_test_utils::itest_helpers::{populate_canister_ids, SnsTestsInitPayloadBuilder};
+use ic_sns_wasm::pb::v1::SnsCanisterIds;
 use ic_state_machine_tests::StateMachine;
 use ic_types::{
     crypto::{AlgorithmId, UserPublicKey},
     ingress::WasmResult,
+    Cycles,
 };
 use lazy_static::lazy_static;
 use ledger_canister::{
@@ -46,6 +52,7 @@ use ledger_canister::{
 use num_traits::ToPrimitive;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
+use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
 
 const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
@@ -68,49 +75,6 @@ struct SwapPerformanceResults {
     instructions_consumed_swapping: f64,
     instructions_consumed_finalization: f64,
     time_to_finalize_swap: Duration,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum SnsCanisterType {
-    Ledger,
-    Root,
-    Governance,
-    Swap,
-}
-
-impl SnsCanisterType {
-    fn get_wasm(self) -> Vec<u8> {
-        let features = [];
-        Project::cargo_bin_maybe_from_env(self.bin_name(), &features).bytes()
-    }
-
-    fn bin_name(self) -> &'static str {
-        use SnsCanisterType::*;
-        match self {
-            Ledger => "ic-icrc1-ledger",
-
-            Root => "sns-root-canister",
-            Governance => "sns-governance-canister",
-            Swap => "sns-swap-canister",
-        }
-    }
-}
-
-fn init_canister(
-    state_machine: &mut StateMachine,
-    canister_id: CanisterId,
-    sns_canister_type: SnsCanisterType,
-    init_argument: &impl CandidType,
-) {
-    let init_argument = Encode!(init_argument).unwrap();
-    state_machine
-        .install_wasm_in_mode(
-            canister_id,
-            CanisterInstallMode::Install,
-            sns_canister_type.get_wasm(),
-            init_argument,
-        )
-        .unwrap();
 }
 
 fn set_controllers(
@@ -146,163 +110,6 @@ fn canister_status(
         }
     };
     Decode!(&result, CanisterStatusResultV2).unwrap()
-}
-
-struct Scenario {
-    configuration: SnsCanisterInitPayloads,
-
-    root_canister_id: CanisterId,
-    governance_canister_id: CanisterId,
-    ledger_canister_id: CanisterId,
-    swap_canister_id: CanisterId,
-    dapp_canister_id: CanisterId,
-}
-
-impl Scenario {
-    /// Step 1: Creates canisters, but does not install code into them.
-    ///
-    /// Installation is performed separately using the init_all_canisters method.
-    ///
-    /// These two operations are performed separately in order to allow the user
-    /// to customize the canisters. This can be done by modifying
-    /// self.configuration before calling init_all_canisters.
-    ///
-    /// self.configuration is initialized with "bare-bones" values. More
-    /// precisely, it builds upon SnsTestsInitPayloadBuilder::new().build(), but
-    /// this makes two enhancements:
-    ///
-    ///   1. The swap canister is funded (with the provided number of SNS tokens).
-    ///   2. The canister_id fields are populated.
-    ///   3. TEST_USER1 is the original owner of the dapp canister.
-    ///
-    /// The dapp canister is owned by TEST_USER1.
-    pub fn new(state_machine: &mut StateMachine, sns_tokens: Tokens) -> Self {
-        let create_canister = || state_machine.create_canister(/* settings= */ None);
-
-        let root_canister_id = create_canister();
-        let governance_canister_id = create_canister();
-        let ledger_canister_id = create_canister();
-        let swap_canister_id = create_canister();
-        let dapp_canister_id = create_canister();
-        let index_canister_id = create_canister();
-
-        set_controllers(
-            state_machine,
-            PrincipalId::new_anonymous(),
-            root_canister_id,
-            vec![governance_canister_id.into()],
-        );
-        set_controllers(
-            state_machine,
-            PrincipalId::new_anonymous(),
-            governance_canister_id,
-            vec![root_canister_id.into()],
-        );
-        set_controllers(
-            state_machine,
-            PrincipalId::new_anonymous(),
-            ledger_canister_id,
-            vec![root_canister_id.into()],
-        );
-        set_controllers(
-            state_machine,
-            PrincipalId::new_anonymous(),
-            swap_canister_id,
-            vec![NNS_ROOT_CANISTER_ID.into(), swap_canister_id.into()],
-        );
-        set_controllers(
-            state_machine,
-            PrincipalId::new_anonymous(),
-            dapp_canister_id,
-            vec![*TEST_USER1_PRINCIPAL],
-        );
-        set_controllers(
-            state_machine,
-            PrincipalId::new_anonymous(),
-            index_canister_id,
-            vec![root_canister_id.into()],
-        );
-
-        // Construct base configuration.
-        let swap_canister_account_identifier = Account {
-            owner: swap_canister_id.into(),
-            subaccount: None,
-        };
-        let mut configuration = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(swap_canister_account_identifier, sns_tokens)
-            .build();
-        configuration.swap.fallback_controller_principal_ids =
-            vec![TEST_USER1_PRINCIPAL.to_string()];
-        populate_canister_ids(
-            root_canister_id,
-            governance_canister_id,
-            ledger_canister_id,
-            swap_canister_id,
-            index_canister_id,
-            &mut configuration,
-        );
-
-        Self {
-            root_canister_id,
-            governance_canister_id,
-            ledger_canister_id,
-            swap_canister_id,
-            dapp_canister_id,
-            configuration,
-        }
-    }
-
-    /// Installs respective wasms into respective canisters, using the
-    /// corresponding init payload, of course.
-    ///
-    /// (The dapp canister is not touched).
-    pub fn init_all_canisters(&self, state_machine: &mut StateMachine) {
-        println!(
-            "Initializing SNS canisters as follows:\n{:#?}",
-            self.configuration,
-        );
-
-        init_canister(
-            state_machine,
-            self.root_canister_id,
-            SnsCanisterType::Root,
-            &self.configuration.root,
-        );
-        init_canister(
-            state_machine,
-            self.governance_canister_id,
-            SnsCanisterType::Governance,
-            &self.configuration.governance,
-        );
-        init_canister(
-            state_machine,
-            self.ledger_canister_id,
-            SnsCanisterType::Ledger,
-            &self.configuration.ledger,
-        );
-        init_canister(
-            state_machine,
-            self.swap_canister_id,
-            SnsCanisterType::Swap,
-            &self.configuration.swap,
-        );
-
-        // TEST_USER1 relinquishes control of the dapp to SNS root (and tells
-        // SNS root about it).
-        set_controllers(
-            state_machine,
-            *TEST_USER1_PRINCIPAL,
-            self.dapp_canister_id,
-            vec![self.root_canister_id.into()],
-        );
-        sns_root_register_dapp_canister(
-            state_machine,
-            self.root_canister_id,
-            &RegisterDappCanisterRequest {
-                canister_id: Some(self.dapp_canister_id.into()),
-            },
-        );
-    }
 }
 
 fn make_account(seed: u64) -> ic_base_types::PrincipalId {
@@ -360,13 +167,21 @@ fn begin_swap(
     planned_cf_contribution: u64,
     neuron_basket_count: u64,
 ) -> (
-    Scenario,
+    SnsCanisterIds,
     /* community_fund_nns_neurons */ Vec<nns_governance_pb::Neuron>,
+    FractionalDeveloperVotingPower,
+    /* dapp_canister_id */ CanisterId,
 ) {
     let num_accounts = accounts.len().max(1) as u64;
     // Give TEST_USER2 and everyone in `accounts` some ICP so that they can buy into the swap.
     let test_user2_principal_id: PrincipalId = *TEST_USER2_PRINCIPAL;
+    // The canister id the wallet canister will have.
+    let wallet_canister_id = CanisterId::from_u64(11);
     let mut nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_initial_invariant_compliant_mutations()
+        .with_sns_dedicated_subnets(state_machine.get_subnet_ids())
+        .with_sns_wasm_access_controls(true)
+        .with_sns_wasm_allowed_principals(vec![wallet_canister_id.into()])
         .with_ledger_account(
             test_user2_principal_id.into(),
             *TEST_USER2_ORIGINAL_BALANCE_ICP,
@@ -410,13 +225,56 @@ fn begin_swap(
         neuron_id_to_principal_id
     );
     setup_nns_canisters(state_machine, nns_init_payloads);
+    add_real_wasms_to_sns_wasms(state_machine);
 
     // Create, configure, and init SNS canisters.
-    let scenario = Scenario::new(
+    let mut sns_init_payload: SnsInitPayload = SnsInitPayload::with_valid_values_for_testing();
+    sns_init_payload.fallback_controller_principal_ids = vec![TEST_USER1_PRINCIPAL.to_string()];
+    let fractional_developer_voting_power = FractionalDeveloperVotingPower {
+        swap_distribution: Some(SwapDistribution {
+            total_e8s: 100 * num_accounts * neuron_basket_count * E8,
+            initial_swap_amount_e8s: 100 * num_accounts * neuron_basket_count * E8,
+        }),
+        airdrop_distribution: Some(AirdropDistribution {
+            airdrop_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
+        }),
+        developer_distribution: Some(DeveloperDistribution {
+            developer_neurons: vec![],
+        }),
+        treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
+    };
+    sns_init_payload.initial_token_distribution =
+        Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
+            fractional_developer_voting_power.clone(),
+        ));
+    let cycle_count = 50_000_000_000_000;
+    let wallet_canister = set_up_universal_canister(state_machine, Some(Cycles::new(cycle_count)));
+    let deploy_new_sns_response = deploy_new_sns(
         state_machine,
-        Tokens::from_tokens(100 * num_accounts * neuron_basket_count).unwrap(),
+        wallet_canister,
+        SNS_WASM_CANISTER_ID,
+        sns_init_payload,
+        cycle_count,
     );
-    scenario.init_all_canisters(state_machine);
+    let canister_ids = deploy_new_sns_response
+        .canisters
+        .unwrap_or_else(|| panic!("SNS deployment failed: {:#?}", deploy_new_sns_response));
+
+    // Create dapp canister, and make it controlled by the SNS that was just created.
+    let dapp_canister_id = state_machine.create_canister(/* settings = */ None);
+    set_controllers(
+        state_machine,
+        PrincipalId::new_anonymous(),
+        dapp_canister_id,
+        vec![canister_ids.root.unwrap()],
+    );
+    sns_root_register_dapp_canister(
+        state_machine,
+        canister_ids.root.unwrap().try_into().unwrap(),
+        &RegisterDappCanisterRequest {
+            canister_id: Some(dapp_canister_id.into()),
+        },
+    );
 
     // Propose that a swap be scheduled to start 3 days from now, and last for
     // 10 days.
@@ -437,7 +295,7 @@ fn begin_swap(
             summary: "".to_string(),
             url: "".to_string(),
             action: Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
-                target_swap_canister_id: Some(scenario.swap_canister_id.into()),
+                target_swap_canister_id: Some(canister_ids.swap.unwrap()),
                 params: Some(swap_pb::Params {
                     // Succeed as soon as we raise `goal_tokens_raised`. In this case,
                     // SNS tokens and ICP trade at a ratio of `neuron_basket` so each
@@ -504,7 +362,7 @@ fn begin_swap(
     {
         let result = swap_get_state(
             state_machine,
-            scenario.swap_canister_id,
+            canister_ids.swap.unwrap().try_into().unwrap(),
             &swap_pb::GetStateRequest {},
         )
         .swap
@@ -518,7 +376,12 @@ fn begin_swap(
         );
     }
 
-    (scenario, community_fund_neurons)
+    (
+        canister_ids,
+        community_fund_neurons,
+        fractional_developer_voting_power,
+        dapp_canister_id,
+    )
 }
 
 #[test]
@@ -549,7 +412,12 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachine::new();
     let accounts = (0..num_accounts).map(make_account).collect::<Vec<_>>();
-    let (scenario, community_fund_neurons) = begin_swap(
+    let (
+        sns_canister_ids,
+        community_fund_neurons,
+        _fractional_developer_voting_power,
+        _dapp_canister_id,
+    ) = begin_swap(
         &mut state_machine,
         &accounts,
         planned_contribution_per_account,
@@ -598,7 +466,7 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
         }
         participate_in_swap(
             &mut state_machine,
-            scenario.swap_canister_id,
+            sns_canister_ids.swap.unwrap().try_into().unwrap(),
             *principal_id,
             Tokens::from_tokens(planned_contribution_per_account).unwrap(),
         );
@@ -608,7 +476,7 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
     {
         let result = swap_get_state(
             &mut state_machine,
-            scenario.swap_canister_id,
+            sns_canister_ids.swap.unwrap().try_into().unwrap(),
             &swap_pb::GetStateRequest {},
         )
         .swap
@@ -626,7 +494,7 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
     let finalize_swap_response = {
         let result = state_machine
             .execute_ingress(
-                scenario.swap_canister_id,
+                sns_canister_ids.swap.unwrap().try_into().unwrap(),
                 "finalize_swap",
                 Encode!(&swap_pb::FinalizeSwapRequest {}).unwrap(),
             )
@@ -691,7 +559,7 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
             &mut state_machine,
             ICP_LEDGER_CANISTER_ID,
             &AccountBalanceArgs {
-                account: AccountIdentifier::new(scenario.governance_canister_id.into(), None)
+                account: AccountIdentifier::new(sns_canister_ids.governance.unwrap(), None)
                     .to_address(),
             },
         );
@@ -727,7 +595,7 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
     let sns_tokens_per_icp_e8s = {
         let swap_state = swap_get_state(
             &mut state_machine,
-            scenario.swap_canister_id,
+            sns_canister_ids.swap.unwrap().try_into().unwrap(),
             &swap_pb::GetStateRequest {},
         );
         swap_state.derived.unwrap().sns_tokens_per_icp as f64
@@ -761,7 +629,7 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
     {
         let distributed_neurons = sns_governance_list_neurons(
             &mut state_machine,
-            scenario.governance_canister_id,
+            sns_canister_ids.governance.unwrap().try_into().unwrap(),
             &ListNeurons {
                 limit: 100,
                 start_page_at: None,
@@ -777,9 +645,9 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
 
             let observed_balance = icrc1_balance_of(
                 &mut state_machine,
-                scenario.ledger_canister_id,
+                sns_canister_ids.ledger.unwrap().try_into().unwrap(),
                 &Account {
-                    owner: scenario.governance_canister_id.into(),
+                    owner: sns_canister_ids.governance.unwrap(),
                     subaccount: Some(subaccount),
                 },
             )
@@ -802,7 +670,7 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
         // List all neurons that have the principal_id with some permission in it
         let observed_sns_neurons = sns_governance_list_neurons(
             &mut state_machine,
-            scenario.governance_canister_id,
+            sns_canister_ids.governance.unwrap().try_into().unwrap(),
             &ListNeurons {
                 limit: 100,
                 start_page_at: None,
@@ -838,7 +706,7 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
 
         let sns_neurons = sns_governance_list_neurons(
             &mut state_machine,
-            scenario.governance_canister_id,
+            sns_canister_ids.governance.unwrap().try_into().unwrap(),
             &ListNeurons {
                 limit: 100,
                 start_page_at: None,
@@ -859,7 +727,7 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
     for principal_id in accounts {
         let sns_neurons = sns_governance_list_neurons(
             &mut state_machine,
-            scenario.governance_canister_id,
+            sns_canister_ids.governance.unwrap().try_into().unwrap(),
             &ListNeurons {
                 limit: 100,
                 start_page_at: None,
@@ -903,7 +771,12 @@ fn swap_lifecycle_sad() {
 
     // Step 1: Prepare the world.
     let mut state_machine = StateMachine::new();
-    let (scenario, community_fund_neurons) = begin_swap(
+    let (
+        sns_canister_ids,
+        community_fund_neurons,
+        fractional_developer_voting_power,
+        dapp_canister_id,
+    ) = begin_swap(
         &mut state_machine,
         &[],
         planned_contribution_per_account,
@@ -931,7 +804,7 @@ fn swap_lifecycle_sad() {
                 let extra =
                     (new_neuron.maturity_e8s_equivalent as f64) / (expected_e8s as f64) - 1.0;
                 assert!(
-                    extra < 0.015,
+                    (0.0..0.03).contains(&extra),
                     "observed = {} expected = {} extra = {}",
                     new_neuron.maturity_e8s_equivalent,
                     expected_e8s,
@@ -951,7 +824,7 @@ fn swap_lifecycle_sad() {
     // after the open time window has passed.
     participate_in_swap(
         &mut state_machine,
-        scenario.swap_canister_id,
+        sns_canister_ids.swap.unwrap().try_into().unwrap(),
         *TEST_USER2_PRINCIPAL,
         Tokens::from_e8s(E8 - 1),
     );
@@ -960,7 +833,7 @@ fn swap_lifecycle_sad() {
     {
         let result = swap_get_state(
             &mut state_machine,
-            scenario.swap_canister_id,
+            sns_canister_ids.swap.unwrap().try_into().unwrap(),
             &swap_pb::GetStateRequest {},
         )
         .swap
@@ -983,7 +856,7 @@ fn swap_lifecycle_sad() {
     {
         let result = swap_get_state(
             &mut state_machine,
-            scenario.swap_canister_id,
+            sns_canister_ids.swap.unwrap().try_into().unwrap(),
             &swap_pb::GetStateRequest {},
         )
         .swap
@@ -1001,7 +874,7 @@ fn swap_lifecycle_sad() {
     let finalize_swap_response = {
         let result = state_machine
             .execute_ingress(
-                scenario.swap_canister_id,
+                sns_canister_ids.swap.unwrap().try_into().unwrap(),
                 "finalize_swap",
                 Encode!(&swap_pb::FinalizeSwapRequest {}).unwrap(),
             )
@@ -1073,9 +946,9 @@ fn swap_lifecycle_sad() {
         // any SNS tokens.
         let observed_balance = icrc1_balance_of(
             &mut state_machine,
-            scenario.ledger_canister_id,
+            sns_canister_ids.ledger.unwrap().try_into().unwrap(),
             &ic_icrc1::Account {
-                owner: scenario.swap_canister_id.into(),
+                owner: sns_canister_ids.swap.unwrap(),
                 subaccount: None,
             },
         )
@@ -1085,23 +958,43 @@ fn swap_lifecycle_sad() {
         assert_eq!(observed_balance, 100 * neuron_basket_count * E8);
     }
 
-    // Step 3.3: There should be no SNS neurons.
+    // Step 3.3: No additional SNS neurons are created.
     {
         let observed_neurons = sns_governance_list_neurons(
             &mut state_machine,
-            scenario.governance_canister_id,
+            sns_canister_ids.governance.unwrap().try_into().unwrap(),
             &ListNeurons::default(),
         )
         .neurons;
-        assert_eq!(observed_neurons, vec![]);
+        let expected_neurons = fractional_developer_voting_power
+            .airdrop_distribution
+            .unwrap()
+            .airdrop_neurons
+            .iter()
+            .chain(
+                fractional_developer_voting_power
+                    .developer_distribution
+                    .unwrap()
+                    .developer_neurons
+                    .iter(),
+            )
+            .map(|neuron_distribution| neuron_distribution.id())
+            .collect::<HashSet<_>>();
+        assert_eq!(
+            observed_neurons
+                .iter()
+                .map(|neuron| neuron.id.as_ref().unwrap().clone())
+                .collect::<HashSet<_>>(),
+            expected_neurons,
+        );
     }
 
-    // Dapp should once again return to the (exclusive) control of TEST_USER1.
+    // Step 3.4: Dapp should once again return to the (exclusive) control of TEST_USER1.
     {
         let dapp_canister_status = canister_status(
             &mut state_machine,
             *TEST_USER1_PRINCIPAL,
-            &scenario.dapp_canister_id.into(),
+            &dapp_canister_id.into(),
         );
         assert_eq!(
             dapp_canister_status.controllers(),
@@ -1109,7 +1002,7 @@ fn swap_lifecycle_sad() {
         );
     }
 
-    // Maturity of CF neurons should be restored.
+    // Step 3.5: Maturity of CF neurons should be restored.
     assert_cf_neuron_maturities(&mut state_machine, &[0, 0]);
 }
 
