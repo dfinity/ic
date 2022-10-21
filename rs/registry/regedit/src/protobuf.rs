@@ -10,19 +10,19 @@ use ic_protobuf::{
         node_operator::v1::NodeOperatorRecord,
         provisional_whitelist::v1::ProvisionalWhitelist,
         replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-        routing_table::v1::RoutingTable,
+        routing_table::v1::{CanisterMigrations, RoutingTable},
         subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
     },
     types::v1::SubnetId as SubnetIdProto,
 };
 use ic_registry_client_helpers::node::NodeRecord;
 use ic_registry_keys::{
-    make_blessed_replica_version_key, make_firewall_config_record_key,
-    make_nns_canister_records_key, make_provisional_whitelist_record_key,
-    make_routing_table_record_key, make_subnet_list_record_key, CRYPTO_RECORD_KEY_PREFIX,
-    CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX,
-    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, REPLICA_VERSION_KEY_PREFIX,
-    ROOT_SUBNET_ID_KEY, SUBNET_RECORD_KEY_PREFIX,
+    make_blessed_replica_version_key, make_canister_migrations_record_key,
+    make_firewall_config_record_key, make_nns_canister_records_key,
+    make_provisional_whitelist_record_key, make_routing_table_record_key,
+    make_subnet_list_record_key, CRYPTO_RECORD_KEY_PREFIX, CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX,
+    CRYPTO_TLS_CERT_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    REPLICA_VERSION_KEY_PREFIX, ROOT_SUBNET_ID_KEY, SUBNET_RECORD_KEY_PREFIX,
 };
 pub(crate) trait Transformable {
     fn pb_to_value(data: &[u8]) -> Value;
@@ -92,6 +92,8 @@ fn get_transformer(key: &str) -> Transformers {
         BlessedReplicaVersions::transformers()
     } else if key.starts_with(&make_routing_table_record_key()) {
         RoutingTable::transformers()
+    } else if key.starts_with(&make_canister_migrations_record_key()) {
+        CanisterMigrations::transformers()
     } else if key.starts_with(&make_provisional_whitelist_record_key()) {
         ProvisionalWhitelist::transformers()
     } else if key.starts_with("catch_up_package_contents_") {
