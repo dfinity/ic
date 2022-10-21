@@ -11,6 +11,9 @@ readonly CERTS=("fullchain.pem" "privkey.pem" "chain.pem")
 readonly RUN_DIR='/run/ic-node/etc/default'
 readonly ENV_FILE="${RUN_DIR}/icx-proxy"
 
+SYSTEM_DOMAINS=()
+APPLICATION_DOMAINS=()
+
 # Read the config variables. The files must be of the form
 # "key=value" for each line with a specific set of keys permissible (see
 # code below).
