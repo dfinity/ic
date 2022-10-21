@@ -53,6 +53,7 @@ build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
 build --build_tag_filters="-system_test"
 test --test_tag_filters="-system_test,-post_master"
 test:alltests --test_tag_filters=""
+test:paritytests --test_tag_filters="-system_test"
 test:ci --test_tag_filters="-post_master"
 
 test --test_output=errors
