@@ -12,9 +12,7 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types as ecdsa_secp256r1_types
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
-use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::{
-    EphemeralKeySetBytes, EphemeralPopBytes,
-};
+use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::EphemeralPopBytes;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 #[cfg(test)]
@@ -30,6 +28,7 @@ mod external_conversion_utilities;
 
 #[cfg(test)]
 use proptest_derive::Arbitrary;
+
 mod test_utils;
 #[cfg(test)]
 mod tests;
@@ -40,11 +39,10 @@ use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 use test_utils::{
     arbitrary_ecdsa_secp256k1_public_key, arbitrary_ecdsa_secp256r1_public_key,
     arbitrary_ecdsa_secp256r1_signature, arbitrary_ed25519_public_key,
-    arbitrary_ed25519_secret_key, arbitrary_ed25519_signature, arbitrary_ephemeral_key_set,
-    arbitrary_fs_encryption_key_set, arbitrary_mega_k256_encryption_key_set,
-    arbitrary_multi_bls12381_combined_signature, arbitrary_multi_bls12381_individual_signature,
-    arbitrary_multi_bls12381_public_key, arbitrary_multi_bls12381_secret_key,
-    arbitrary_rsa_public_key, arbitrary_secp256k1_signature,
+    arbitrary_ed25519_secret_key, arbitrary_ed25519_signature, arbitrary_fs_encryption_key_set,
+    arbitrary_mega_k256_encryption_key_set, arbitrary_multi_bls12381_combined_signature,
+    arbitrary_multi_bls12381_individual_signature, arbitrary_multi_bls12381_public_key,
+    arbitrary_multi_bls12381_secret_key, arbitrary_rsa_public_key, arbitrary_secp256k1_signature,
     arbitrary_threshold_bls12381_combined_signature,
     arbitrary_threshold_bls12381_individual_signature, arbitrary_threshold_bls12381_secret_key,
     arbitrary_threshold_ecdsa_opening, arbitrary_tls_ed25519_secret_key,
@@ -65,8 +63,6 @@ pub enum CspSecretKey {
     MultiBls12_381(multi_types::SecretKeyBytes),
     #[cfg_attr(test, proptest(value(arbitrary_threshold_bls12381_secret_key)))]
     ThresBls12_381(threshold_types::SecretKeyBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_ephemeral_key_set)))]
-    Secp256k1WithPublicKey(EphemeralKeySetBytes),
     #[cfg_attr(test, proptest(value(arbitrary_tls_ed25519_secret_key)))]
     TlsEd25519(TlsEd25519SecretKeyDerBytes),
     #[cfg_attr(test, proptest(value(arbitrary_fs_encryption_key_set)))]
@@ -92,12 +88,6 @@ impl std::fmt::Debug for CspSecretKey {
             CspSecretKey::Ed25519(_) => write!(f, "CspSecretKey::Ed25519 - REDACTED"),
             CspSecretKey::MultiBls12_381(_) => write!(f, "CspSecretKey::MultiBls12_381 - REDACTED"),
             CspSecretKey::ThresBls12_381(_) => write!(f, "CspSecretKey::ThresBls12_381 - REDACTED"),
-            CspSecretKey::Secp256k1WithPublicKey(sk) => write!(
-                f,
-                "CspSecretKey::Secp256k1WithPublicKey secret_key: REDACTED public_key: {} pop: {}",
-                hex::encode(&sk.public_key_bytes.0[..]),
-                hex::encode(&sk.pop_bytes.0[..])
-            ),
             CspSecretKey::TlsEd25519(_) => write!(f, "CspSecretKey::TlsEd25519 - REDACTED"),
             CspSecretKey::FsEncryption(_) => write!(f, "CspSecretKey::FsEncryption - REDACTED"),
             CspSecretKey::MEGaEncryptionK256(_) => {
@@ -209,6 +199,7 @@ pub enum CspSignature {
     ThresBls12_381(ThresBls12_381_Signature),
     RsaSha256(Vec<u8>),
 }
+
 impl std::fmt::Debug for CspSignature {
     /// Prints in a developer-friendly format.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -8,9 +8,6 @@ use ic_crypto_internal_test_vectors::ed25519::{
 };
 use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_1_PK;
 use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
-use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::{
-    EphemeralKeySetBytes, EphemeralPopBytes, EphemeralPublicKeyBytes, EphemeralSecretKeyBytes,
-};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::{
     BTENode, FsEncryptionKeySet, FsEncryptionSecretKey,
 };
@@ -88,16 +85,6 @@ fn should_redact_csp_secret_key_thres_debug() {
 }
 
 #[test]
-fn should_redact_csp_secret_key_secp_debug() {
-    let cspsk_secp = CspSecretKey::Secp256k1WithPublicKey(EphemeralKeySetBytes {
-        secret_key_bytes: EphemeralSecretKeyBytes([1u8; EphemeralSecretKeyBytes::SIZE]),
-        public_key_bytes: EphemeralPublicKeyBytes([1u8; EphemeralPublicKeyBytes::SIZE]),
-        pop_bytes: EphemeralPopBytes([1u8; EphemeralPopBytes::SIZE]),
-    });
-    assert!(format!("{:?}", cspsk_secp).contains("secret_key: REDACTED"));
-}
-
-#[test]
 fn should_redact_csp_secret_key_tls_ed25519_debug() {
     let cspsk_tls = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
         bytes: vec![1u8; 3],
@@ -158,14 +145,6 @@ fn should_return_correct_enum_variant() {
     ));
     assert_eq!(key.enum_variant(), "ThresBls12_381");
 
-    // Secp256k1WithPublicKey
-    let key = CspSecretKey::Secp256k1WithPublicKey(EphemeralKeySetBytes {
-        secret_key_bytes: EphemeralSecretKeyBytes([0; EphemeralSecretKeyBytes::SIZE]),
-        public_key_bytes: EphemeralPublicKeyBytes([0; EphemeralPublicKeyBytes::SIZE]),
-        pop_bytes: EphemeralPopBytes([0; EphemeralPopBytes::SIZE]),
-    });
-    assert_eq!(key.enum_variant(), "Secp256k1WithPublicKey");
-
     // TlsEd25519
     let key = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes { bytes: vec![] });
     assert_eq!(key.enum_variant(), "TlsEd25519");
@@ -200,7 +179,7 @@ fn should_return_correct_enum_variant() {
     assert_eq!(key.enum_variant(), "IDkgCommitmentOpening");
 
     // plase add here tests for newly added ’CspSecretKey’ enums and increment the counter to match their count
-    assert_eq!(CspSecretKey::COUNT, 8);
+    assert_eq!(CspSecretKey::COUNT, 7);
 }
 
 #[test]
