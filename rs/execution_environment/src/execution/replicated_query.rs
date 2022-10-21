@@ -64,6 +64,7 @@ pub fn execute_replicated_query(
             instruction_limit,
             instruction_limit,
             prepaid_execution_cycles,
+            round.execution_refund_error_counter,
             subnet_size,
             round.log,
         );
@@ -105,6 +106,7 @@ pub fn execute_replicated_query(
         output.num_instructions_left,
         instruction_limit,
         prepaid_execution_cycles,
+        round.execution_refund_error_counter,
         subnet_size,
         round.log,
     );

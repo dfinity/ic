@@ -21,6 +21,7 @@ use ic_types::{
     nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
+use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
 
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
@@ -259,11 +260,13 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         .unwrap();
     assert_eq!(system_state.balance(), INITIAL_CYCLES);
 
+    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     cycles_account_manager.refund_unused_execution_cycles(
         &mut system_state,
         NumInstructions::from(5_000_000),
         NumInstructions::from(1_000_000),
         cycles,
+        &no_op_counter,
         subnet_size,
         &no_op_logger(),
     );
@@ -290,11 +293,13 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
         )
         .unwrap();
 
+    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     cycles_account_manager.refund_unused_execution_cycles(
         &mut system_state,
         initial_instructions_charged_for * 2,
         initial_instructions_charged_for,
         cycles,
+        &no_op_counter,
         subnet_size,
         &no_op_logger(),
     );

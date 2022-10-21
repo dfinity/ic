@@ -68,6 +68,7 @@ use ic_types::{
 use ic_wasm_types::WasmHash;
 use lazy_static::lazy_static;
 use phantom_newtype::AmountOf;
+use prometheus::IntCounter;
 use rand::RngCore;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
@@ -139,6 +140,7 @@ pub struct RoundContext<'a> {
     pub network_topology: &'a NetworkTopology,
     pub hypervisor: &'a Hypervisor,
     pub cycles_account_manager: &'a CyclesAccountManager,
+    pub execution_refund_error_counter: &'a IntCounter,
     pub log: &'a ReplicaLogger,
     pub time: Time,
 }
@@ -1033,6 +1035,7 @@ impl ExecutionEnvironment {
             network_topology: &*network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
+            execution_refund_error_counter: self.metrics.execution_cycles_refund_error_counter(),
             log: &self.log,
             time,
         };
@@ -1097,6 +1100,7 @@ impl ExecutionEnvironment {
             &self.hypervisor,
             &self.cycles_account_manager,
             round_limits,
+            self.metrics.execution_cycles_refund_error_counter(),
             subnet_size,
             log,
         )
@@ -1315,6 +1319,7 @@ impl ExecutionEnvironment {
             network_topology: &*network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
+            execution_refund_error_counter: self.metrics.execution_cycles_refund_error_counter(),
             log: &self.log,
             time,
         };
@@ -1855,6 +1860,7 @@ impl ExecutionEnvironment {
             execution_parameters,
             round_limits,
             compilation_cost_handling,
+            self.metrics.execution_cycles_refund_error_counter(),
             subnet_size,
         );
         self.process_install_code_result(state, dts_result, dts_status, timer)
@@ -1990,6 +1996,9 @@ impl ExecutionEnvironment {
                     network_topology: &state.metadata.network_topology,
                     hypervisor: &self.hypervisor,
                     cycles_account_manager: &self.cycles_account_manager,
+                    execution_refund_error_counter: self
+                        .metrics
+                        .execution_cycles_refund_error_counter(),
                     log: &self.log,
                     time: state.metadata.time(),
                 };
@@ -2326,6 +2335,9 @@ pub fn execute_canister(
                     network_topology: &network_topology,
                     hypervisor: &exec_env.hypervisor,
                     cycles_account_manager: &exec_env.cycles_account_manager,
+                    execution_refund_error_counter: exec_env
+                        .metrics
+                        .execution_cycles_refund_error_counter(),
                     log: &exec_env.log,
                     time,
                 };

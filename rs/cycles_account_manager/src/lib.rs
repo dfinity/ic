@@ -399,10 +399,12 @@ impl CyclesAccountManager {
         num_instructions: NumInstructions,
         num_instructions_initially_charged: NumInstructions,
         prepaid_execution_cycles: Cycles,
+        error_counter: &IntCounter,
         subnet_size: usize,
         log: &ReplicaLogger,
     ) {
         if num_instructions > num_instructions_initially_charged {
+            error_counter.inc();
             error!(
                 log,
                 "{}: Unexpected amount of executed instructions: {} (max expected {})",

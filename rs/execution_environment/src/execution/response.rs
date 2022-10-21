@@ -460,6 +460,7 @@ impl ResponseHelper {
             instructions_left,
             original.message_instruction_limit,
             prepayment_for_response_execution,
+            round.execution_refund_error_counter,
             original.subnet_size,
             round.log,
         );

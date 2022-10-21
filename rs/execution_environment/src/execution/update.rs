@@ -187,6 +187,7 @@ fn finish_err(
         instructions_left,
         instruction_limit,
         original.prepaid_execution_cycles,
+        round.execution_refund_error_counter,
         original.subnet_size,
         round.log,
     );
@@ -369,6 +370,7 @@ impl UpdateHelper {
             output.num_instructions_left,
             original.execution_parameters.instruction_limits.message(),
             original.prepaid_execution_cycles,
+            round.execution_refund_error_counter,
             original.subnet_size,
             round.log,
         );

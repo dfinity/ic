@@ -1,4 +1,6 @@
-use ic_cycles_account_manager::CRITICAL_ERROR_RESPONSE_CYCLES_REFUND;
+use ic_cycles_account_manager::{
+    CRITICAL_ERROR_EXECUTION_CYCLES_REFUND, CRITICAL_ERROR_RESPONSE_CYCLES_REFUND,
+};
 use ic_error_types::ErrorCode;
 use ic_ic00_types as ic00;
 use ic_metrics::buckets::decimal_buckets;
@@ -17,6 +19,8 @@ pub(crate) struct ExecutionEnvironmentMetrics {
 
     /// Critical error for responses above the maximum allowed size.
     response_cycles_refund_error: IntCounter,
+    /// Critical error for executions above the maximum allowed size.
+    execution_cycles_refund_error: IntCounter,
 
     pub execution_round_failed_heartbeat_executions: IntCounter,
     pub executions_aborted: IntCounter,
@@ -37,6 +41,8 @@ impl ExecutionEnvironmentMetrics {
             ),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),
+            execution_cycles_refund_error: metrics_registry
+                .error_counter(CRITICAL_ERROR_EXECUTION_CYCLES_REFUND),
             execution_round_failed_heartbeat_executions: metrics_registry.int_counter(
                 "execution_round_failed_heartbeat_executions",
                 "Total number of heartbeat executions that resulted in an error",
@@ -106,5 +112,9 @@ impl ExecutionEnvironmentMetrics {
 
     pub fn response_cycles_refund_error_counter(&self) -> &IntCounter {
         &self.response_cycles_refund_error
+    }
+
+    pub fn execution_cycles_refund_error_counter(&self) -> &IntCounter {
+        &self.execution_cycles_refund_error
     }
 }
