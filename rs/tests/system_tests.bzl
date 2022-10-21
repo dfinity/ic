@@ -77,22 +77,10 @@ def system_test(name, runtime_deps = {}, test_timeout = "long", **kwargs):
         **kwargs
     )
 
-    IC_VERSION_ID = "c51e7175ad2d7c7c5327f832a5d9e1bd7f6889c5"
-
-    test_env = {
-        "FARM_BASE_URL": "https://farm.dfinity.systems",
-        "IC_OS_IMG_URL": "https://download.dfinity.systems/ic/{}/guest-os/disk-img-dev/disk-img.tar.zst".format(IC_VERSION_ID),
-        "IC_OS_IMG_SHA256": "2cb880cc6fbb11b3ec29aa7b65d3643c1cbe74f73c2d0cd5dcae4cc7a8a7a243",
-        "IC_OS_UPD_DEV_IMG_URL": "https://download.dfinity.systems/ic/{}/guest-os/update-img-dev/update-img.tar.zst".format(IC_VERSION_ID),
-        "IC_OS_UPD_DEV_IMG_SHA256": "e67df14785c367c350fcbb5aa10ffd3773443e477be61d898e2dbd4b555ce700",
-        "IC_VERSION_ID": IC_VERSION_ID,
-    }
-
     run_system_test(
         name = name,
         src = bin_name,
         runtime_deps = runtime_deps,
         tags = ["requires-network", "system_test"],
         timeout = test_timeout,
-        env = test_env,
     )

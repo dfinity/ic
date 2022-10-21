@@ -255,6 +255,11 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         tags = ["no-remote-cache"],
     )
 
+    sha256sum(
+        name = "upgrade.tar.zst.sha256",
+        srcs = [":upgrade.tar.zst"],
+    )
+
     upload_suffix = ""
     if mode == "dev":
         upload_suffix = "-dev"
@@ -276,6 +281,26 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
             ":upgrade.tar_zst",
         ],
         remote_subdir = "guest-os/update-img" + upload_suffix,
+    )
+
+    native.filegroup(
+        name = "hash_and_upload_disk-img",
+        srcs = [
+            ":upload_disk-img",
+            ":disk-img.tar.zst.sha256",
+        ],
+        visibility = ["//visibility:public"],
+        tags = ["manual"],
+    )
+
+    native.filegroup(
+        name = "hash_and_upload_upgrade-img",
+        srcs = [
+            ":upload_update-img",
+            ":upgrade.tar.zst.sha256",
+        ],
+        visibility = ["//visibility:public"],
+        tags = ["manual"],
     )
 
     urls_test(

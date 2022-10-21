@@ -41,7 +41,7 @@ pub struct IcSetup {
 impl Default for IcSetup {
     fn default() -> IcSetup {
         Self {
-            farm_base_url: Url::parse("http://example.com").expect(""),
+            farm_base_url: Url::parse(DEFAULT_FARM_BASE_URL).expect(""),
             ic_os_img_url: Url::parse("http://example.com").expect(""),
             ic_os_img_sha256: String::default(),
             ic_os_update_img_url: Url::parse("http://example.com").expect(""),
@@ -66,31 +66,26 @@ impl TestEnvAttribute for IcSetup {
 
 impl IcSetup {
     pub fn from_bazel_env() -> Self {
+        fn dependency(path: &str) -> String {
+            let dep_path = format!("dependencies/{}", path);
+            fs::read_to_string(dep_path.clone())
+                .unwrap_or_else(|_| panic!("cannot read {}", dep_path))
+                .as_str()
+                .trim_end()
+                .to_string()
+        }
         Self {
-            farm_base_url: Url::parse(
-                std::env::var("FARM_BASE_URL")
-                    .expect("cannot read FARM_BASE_URL")
-                    .as_str(),
-            )
-            .expect("Could not parse URL in env-var FARM_BASE_URL"),
-            ic_os_img_url: Url::parse(
-                std::env::var("IC_OS_IMG_URL")
-                    .expect("cannot read IC_OS_IMG_URL")
-                    .as_str(),
-            )
-            .expect("Could not parse URL in env-var IC_OS_IMG_URL"),
-            ic_os_img_sha256: std::env::var("IC_OS_IMG_SHA256")
-                .expect("cannot read IC_OS_IMG_SHA256"),
-            ic_os_update_img_url: Url::parse(
-                std::env::var("IC_OS_UPD_DEV_IMG_URL")
-                    .expect("cannot read IC_OS_UPD_DEV_IMG_URL")
-                    .as_str(),
-            )
-            .expect("IC_OS_UPD_DEV_IMG_URL is broken"),
-            ic_os_update_img_sha256: std::env::var("IC_OS_UPD_DEV_IMG_SHA256")
-                .expect("cannot read IC_OS_UPD_DEV_IMG_SHA256"),
-            initial_replica_version: std::env::var("IC_VERSION_ID")
-                .expect("cannot read IC_VERSION_ID")
+            ic_os_img_url: Url::parse(&dependency(
+                "ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.url",
+            ))
+            .expect("Could not parse ic_os_img_url"),
+            ic_os_img_sha256: dependency("ic-os/guestos/dev/disk-img.tar.zst.sha256"),
+            ic_os_update_img_url: Url::parse(&dependency(
+                "ic-os/guestos/dev/upload_update-img_upgrade.tar.zst.url",
+            ))
+            .expect("Could not parse ic_os_update_img_url"),
+            ic_os_update_img_sha256: dependency("ic-os/guestos/dev/upgrade.tar.zst.sha256"),
+            initial_replica_version: dependency("rs/tests/ic_version_id")
                 .try_into()
                 .expect("cannot get ReplicaVersion"),
             ..Default::default()
@@ -100,8 +95,8 @@ impl IcSetup {
 
 pub fn initialize_env(env: &TestEnv, cli_args: ValidatedCliRunTestsArgs) -> Result<()> {
     let farm_base_url = cli_args
-        .farm_base_url
-        .clone()
+        .farm_base_url // We should allow this url to be overridden via a FARM_BASE_URL environment variable,
+        .clone() //       and fall back to using DEFAULT_FARM_BASE_URL when FARM_BASE_URL is not set.
         .unwrap_or_else(|| Url::parse(DEFAULT_FARM_BASE_URL).expect("should not fail!"));
     if let Some(authorized_ssh_accounts) = cli_args.authorized_ssh_accounts.clone() {
         copy_ssh_keys(env, authorized_ssh_accounts)?;
