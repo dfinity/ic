@@ -172,6 +172,12 @@ pub struct NetworkTopology {
     /// Mapping from ECDSA key_id to a list of subnets which can sign with the
     /// given key. Keys without any signing subnets are not included in the map.
     pub ecdsa_signing_subnets: BTreeMap<EcdsaKeyId, Vec<SubnetId>>,
+
+    /// The ID of the canister to forward bitcoin testnet requests to.
+    pub bitcoin_testnet_canister_id: Option<CanisterId>,
+
+    /// The ID of the canister to forward bitcoin mainnet requests to.
+    pub bitcoin_mainnet_canister_id: Option<CanisterId>,
 }
 
 impl Default for NetworkTopology {
@@ -182,6 +188,8 @@ impl Default for NetworkTopology {
             canister_migrations: Default::default(),
             nns_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
             ecdsa_signing_subnets: Default::default(),
+            bitcoin_testnet_canister_id: None,
+            bitcoin_mainnet_canister_id: None,
         }
     }
 }
@@ -246,6 +254,14 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
+            bitcoin_testnet_canister_ids: match item.bitcoin_testnet_canister_id {
+                Some(c) => vec![pb_types::CanisterId::from(c)],
+                None => vec![],
+            },
+            bitcoin_mainnet_canister_ids: match item.bitcoin_mainnet_canister_id {
+                Some(c) => vec![pb_types::CanisterId::from(c)],
+                None => vec![],
+            },
         }
     }
 }
@@ -282,6 +298,16 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             );
         }
 
+        let bitcoin_testnet_canister_id = match item.bitcoin_testnet_canister_ids.first() {
+            Some(canister) => Some(CanisterId::try_from(canister.clone())?),
+            None => None,
+        };
+
+        let bitcoin_mainnet_canister_id = match item.bitcoin_mainnet_canister_ids.first() {
+            Some(canister) => Some(CanisterId::try_from(canister.clone())?),
+            None => None,
+        };
+
         Ok(Self {
             subnets,
             routing_table: try_from_option_field(
@@ -298,6 +324,8 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 .into(),
             nns_subnet_id,
             ecdsa_signing_subnets,
+            bitcoin_testnet_canister_id,
+            bitcoin_mainnet_canister_id,
         })
     }
 }

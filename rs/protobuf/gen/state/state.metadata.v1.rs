@@ -66,6 +66,12 @@ pub struct NetworkTopology {
     >,
     #[prost(message, repeated, tag = "5")]
     pub ecdsa_signing_subnets: ::prost::alloc::vec::Vec<EcdsaKeyEntry>,
+    #[prost(message, repeated, tag = "6")]
+    pub bitcoin_testnet_canister_ids:
+        ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
+    #[prost(message, repeated, tag = "7")]
+    pub bitcoin_mainnet_canister_ids:
+        ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {

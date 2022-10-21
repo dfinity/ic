@@ -8194,6 +8194,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "ic-base-types",
+ "ic-btc-types",
  "ic-config",
  "ic-constants",
  "ic-cycles-account-manager",

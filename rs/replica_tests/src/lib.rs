@@ -26,6 +26,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replica::setup::setup_crypto_provider;
 use ic_replicated_state::{CanisterState, ReplicatedState};
+use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::{
     types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
     universal_canister::UNIVERSAL_CANISTER_WASM,
@@ -821,6 +822,36 @@ impl<'a> UniversalCanister {
         self.runtime
             .ingress(self.canister_id(), "update", payload.into())
     }
+}
+
+pub struct UniversalCanisterWithStateMachine<'a> {
+    env: &'a StateMachine,
+    canister_id: CanisterId,
+}
+
+impl<'a> UniversalCanisterWithStateMachine<'a> {
+    pub fn canister_id(&self) -> CanisterId {
+        self.canister_id
+    }
+
+    pub fn query<P: Into<Vec<u8>>>(&self, payload: P) -> Result<WasmResult, UserError> {
+        self.env.query(self.canister_id(), "query", payload.into())
+    }
+
+    pub fn update<P: Into<Vec<u8>>>(&self, payload: P) -> Result<WasmResult, UserError> {
+        self.env
+            .execute_ingress(self.canister_id(), "update", payload.into())
+    }
+}
+
+pub fn install_universal_canister<P: Into<Vec<u8>>>(
+    env: &StateMachine,
+    args: P,
+) -> UniversalCanisterWithStateMachine<'_> {
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), args.into(), None)
+        .expect("failed to install universal canister");
+    UniversalCanisterWithStateMachine { env, canister_id }
 }
 
 pub fn assert_reject(res: Result<WasmResult, UserError>, reject_code: RejectCode) {

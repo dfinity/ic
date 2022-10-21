@@ -30,6 +30,7 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-replicated-state = { path = "../replicated_state" }
+ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
@@ -54,7 +55,6 @@ candid = "0.8.1"
 canister-test = { path = "../rust_canisters/canister_test" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
-ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-sys = { path = "../sys" }
 ic-test-utilities = { path = "../test_utilities" }
 maplit = "1.0.2"
