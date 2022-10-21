@@ -1,50 +1,20 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::ErrorCode;
 use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_replica_tests as utils;
-use ic_replica_tests::assert_reply;
+use ic_replica_tests::{assert_reply, install_universal_canister};
 use ic_replicated_state::{PageIndex, PageMap};
 use ic_state_machine_tests::StateMachine;
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::types::ids::canister_test_id;
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     time::current_time_and_expiry_time, CanisterId, NumBytes, RegistryVersion,
 };
 
 const WASM_PAGE_SIZE: usize = 65536;
-
-pub struct UniversalCanister<'a> {
-    env: &'a StateMachine,
-    canister_id: CanisterId,
-}
-
-impl<'a> UniversalCanister<'a> {
-    pub fn canister_id(&self) -> CanisterId {
-        self.canister_id
-    }
-
-    pub fn query<P: Into<Vec<u8>>>(&self, payload: P) -> Result<WasmResult, UserError> {
-        self.env.query(self.canister_id(), "query", payload.into())
-    }
-
-    pub fn update<P: Into<Vec<u8>>>(&self, payload: P) -> Result<WasmResult, UserError> {
-        self.env
-            .execute_ingress(self.canister_id(), "update", payload.into())
-    }
-}
-
-fn install_universal_canister<P: Into<Vec<u8>>>(
-    env: &StateMachine,
-    args: P,
-) -> UniversalCanister<'_> {
-    let canister_id = env
-        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), args.into(), None)
-        .expect("failed to install universal canister");
-    UniversalCanister { env, canister_id }
-}
 
 #[test]
 /// Tests a message can roundtrip through all layers

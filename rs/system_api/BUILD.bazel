@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_system_api",
     version = "0.8.0",
     deps = [
+        "//rs/bitcoin/types/public",
         "//rs/config",
         "//rs/constants",
         "//rs/cycles_account_manager",

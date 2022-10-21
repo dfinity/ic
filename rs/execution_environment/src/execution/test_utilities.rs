@@ -6,7 +6,9 @@ use std::sync::Arc;
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_config::{
-    embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
+    embedders::Config as EmbeddersConfig,
+    execution_environment::{BitcoinConfig, Config},
+    flag_status::FlagStatus,
     subnet_config::SubnetConfigs,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -1267,7 +1269,7 @@ pub struct ExecutionTestBuilder {
     deterministic_time_slicing: bool,
     allocatable_compute_capacity_in_percent: usize,
     subnet_features: String,
-    bitcoin_canisters: Vec<PrincipalId>,
+    bitcoin_privileged_access: Vec<CanisterId>,
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     cost_to_compile_wasm_instruction: u64,
 }
@@ -1309,7 +1311,7 @@ impl Default for ExecutionTestBuilder {
             deterministic_time_slicing: false,
             allocatable_compute_capacity_in_percent: 100,
             subnet_features: String::default(),
-            bitcoin_canisters: Vec::default(),
+            bitcoin_privileged_access: Vec::default(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             cost_to_compile_wasm_instruction: ic_config::execution_environment::Config::default()
                 .cost_to_compile_wasm_instruction
@@ -1481,8 +1483,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_bitcoin_canister(mut self, bitcoin_canister: PrincipalId) -> Self {
-        self.bitcoin_canisters.push(bitcoin_canister);
+    pub fn with_bitcoin_privileged_access(mut self, canister: CanisterId) -> Self {
+        self.bitcoin_privileged_access.push(canister);
         self
     }
 
@@ -1597,7 +1599,10 @@ impl ExecutionTestBuilder {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
-            bitcoin_canisters: self.bitcoin_canisters,
+            bitcoin: BitcoinConfig {
+                privileged_access: self.bitcoin_privileged_access,
+                ..Default::default()
+            },
             cost_to_compile_wasm_instruction: self.cost_to_compile_wasm_instruction.into(),
             ..Config::default()
         };

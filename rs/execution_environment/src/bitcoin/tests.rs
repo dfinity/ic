@@ -883,7 +883,7 @@ fn clears_state_of_former_bitcoin_canisters() {
 
     let mut test = ExecutionTestBuilder::new()
         // Set the bitcoin canister to be the ID of the canister about to be created.
-        .with_bitcoin_canister(bitcoin_canister_id.get())
+        .with_bitcoin_privileged_access(bitcoin_canister_id)
         .with_bitcoin_follow_up_responses(bitcoin_canister_id, vec![vec![1], vec![2]])
         .with_bitcoin_follow_up_responses(canister_test_id(123), vec![vec![1], vec![2], vec![3]])
         .with_provisional_whitelist_all()

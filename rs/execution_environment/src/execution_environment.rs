@@ -920,7 +920,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::BitcoinGetSuccessors) => match &msg {
                 RequestOrIngress::Request(request) => {
                     match crate::bitcoin::get_successors(
-                        &self.config.bitcoin_canisters,
+                        &self.config.bitcoin.privileged_access,
                         request,
                         &mut state,
                     ) {

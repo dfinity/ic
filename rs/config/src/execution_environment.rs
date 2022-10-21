@@ -3,7 +3,7 @@ use crate::{
     flag_status::FlagStatus,
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
 };
-use ic_base_types::{NumSeconds, PrincipalId};
+use ic_base_types::{CanisterId, NumSeconds};
 use ic_types::{
     Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
@@ -120,12 +120,15 @@ pub struct Config {
     /// this many instructions.
     pub cost_to_compile_wasm_instruction: NumInstructions,
 
-    /// Principals of Bitcoin canisters, which can access privileged APIs.
-    pub bitcoin_canisters: Vec<PrincipalId>,
+    /// Bitcoin configuration.
+    pub bitcoin: BitcoinConfig,
 }
 
 impl Default for Config {
     fn default() -> Self {
+        let bitcoin_testnet_canister_id = CanisterId::from_str(BITCOIN_TESTNET_CANISTER_ID)
+            .expect("bitcoin testnet canister id must be a valid principal");
+
         Self {
             create_funds_whitelist: String::default(),
             max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
@@ -151,8 +154,25 @@ impl Default for Config {
             allocatable_compute_capacity_in_percent: 50,
             deterministic_time_slicing: FlagStatus::Enabled,
             cost_to_compile_wasm_instruction: embedders::DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
-            bitcoin_canisters: vec![PrincipalId::from_str(BITCOIN_TESTNET_CANISTER_ID)
-                .expect("bitcoin testnet canister id must be a valid principal")],
+            bitcoin: BitcoinConfig {
+                privileged_access: vec![bitcoin_testnet_canister_id],
+                testnet_canister_id: Some(bitcoin_testnet_canister_id),
+                mainnet_canister_id: None,
+            },
         }
     }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, Default)]
+pub struct BitcoinConfig {
+    /// Canisters that have access to privileged bitcoin API (e.g. `bitcoin_get_successors`)
+    /// This list is intentionally separate from the bitcoin canister IDs below because it
+    /// allows us to spin up new bitcoin canisters without necessarily routing requests to them.
+    pub privileged_access: Vec<CanisterId>,
+
+    /// The bitcoin testnet canister to forward requests to.
+    pub testnet_canister_id: Option<CanisterId>,
+
+    /// The bitcoin mainnet canister to forward requests to.
+    pub mainnet_canister_id: Option<CanisterId>,
 }
