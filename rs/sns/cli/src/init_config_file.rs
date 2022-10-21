@@ -1016,72 +1016,127 @@ wait_for_quiet_deadline_increase_seconds: 1000
             ),
         };
 
+        let SnsInitPayload {
+            transaction_fee_e8s,
+            token_name,
+            token_symbol,
+            proposal_reject_cost_e8s,
+            neuron_minimum_stake_e8s,
+            fallback_controller_principal_ids,
+            logo,
+            url,
+            name,
+            description,
+            neuron_minimum_dissolve_delay_to_vote_seconds,
+            sns_initialization_parameters,
+            initial_reward_rate_basis_points,
+            final_reward_rate_basis_points,
+            reward_rate_transition_duration_seconds,
+            max_dissolve_delay_seconds,
+            max_neuron_age_seconds_for_age_bonus,
+            max_dissolve_delay_bonus_percentage,
+            max_age_bonus_percentage,
+            initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds,
+            initial_token_distribution,
+        } = sns_init_payload;
+
         assert_eq!(
             get_config_file_contents(sns_cli_init_config.clone()),
-            sns_init_payload.sns_initialization_parameters.unwrap()
+            sns_initialization_parameters.unwrap()
         );
         assert_eq!(
             sns_cli_init_config.sns_ledger.transaction_fee_e8s,
-            sns_init_payload.transaction_fee_e8s
+            transaction_fee_e8s
         );
-        assert_eq!(
-            sns_cli_init_config.sns_ledger.token_name,
-            sns_init_payload.token_name
-        );
-        assert_eq!(
-            sns_cli_init_config.sns_ledger.token_symbol,
-            sns_init_payload.token_symbol
-        );
+        assert_eq!(sns_cli_init_config.sns_ledger.token_name, token_name);
+        assert_eq!(sns_cli_init_config.sns_ledger.token_symbol, token_symbol);
         assert_eq!(
             sns_cli_init_config.sns_governance.proposal_reject_cost_e8s,
-            sns_init_payload.proposal_reject_cost_e8s
+            proposal_reject_cost_e8s
         );
         assert_eq!(
             sns_cli_init_config.sns_governance.neuron_minimum_stake_e8s,
-            sns_init_payload.neuron_minimum_stake_e8s
+            neuron_minimum_stake_e8s
         );
         assert_eq!(
             sns_cli_init_config
                 .sns_governance
                 .neuron_minimum_dissolve_delay_to_vote_seconds,
-            sns_init_payload.neuron_minimum_dissolve_delay_to_vote_seconds
+            neuron_minimum_dissolve_delay_to_vote_seconds
         );
         assert_eq!(
             sns_cli_init_config
                 .sns_governance
                 .fallback_controller_principal_ids,
-            sns_init_payload.fallback_controller_principal_ids
+            fallback_controller_principal_ids
         );
-        assert_eq!(sns_cli_init_config.sns_governance.url, sns_init_payload.url);
-        assert_eq!(
-            sns_cli_init_config.sns_governance.description,
-            sns_init_payload.description
-        );
+        assert_eq!(sns_cli_init_config.sns_governance.url, url);
+        assert_eq!(sns_cli_init_config.sns_governance.description, description);
         assert_eq!(
             sns_cli_init_config
                 .initial_token_distribution
                 .initial_token_distribution,
-            sns_init_payload.initial_token_distribution
+            initial_token_distribution
         );
         assert_eq!(
             sns_cli_init_config
                 .sns_governance
                 .initial_reward_rate_percentage
                 .map(|v| (v * 100.0) as u64),
-            sns_init_payload.initial_reward_rate_basis_points
+            initial_reward_rate_basis_points
         );
         assert_eq!(
             sns_cli_init_config
                 .sns_governance
                 .final_reward_rate_percentage
                 .map(|v| (v * 100.0) as u64),
-            sns_init_payload.final_reward_rate_basis_points
+            final_reward_rate_basis_points
         );
         assert_eq!(
             sns_cli_init_config
                 .sns_governance
                 .reward_rate_transition_duration_seconds,
-            sns_init_payload.reward_rate_transition_duration_seconds
+            reward_rate_transition_duration_seconds
+        );
+        assert_eq!(sns_cli_init_config.sns_governance.name, name);
+        assert_eq!(
+            sns_cli_init_config
+                .sns_governance
+                .max_dissolve_delay_seconds,
+            max_dissolve_delay_seconds
+        );
+        assert_eq!(
+            sns_cli_init_config
+                .sns_governance
+                .max_neuron_age_seconds_for_age_bonus,
+            max_neuron_age_seconds_for_age_bonus
+        );
+        assert_eq!(
+            sns_cli_init_config
+                .sns_governance
+                .max_dissolve_delay_bonus_multiplier
+                .map(|v| ((v - 1.0) * 100.0) as u64),
+            max_dissolve_delay_bonus_percentage
+        );
+        assert_eq!(
+            sns_cli_init_config
+                .sns_governance
+                .max_age_bonus_multiplier
+                .map(|v| ((v - 1.0) * 100.0) as u64),
+            max_age_bonus_percentage
+        );
+        assert_eq!(
+            sns_cli_init_config
+                .sns_governance
+                .initial_voting_period_seconds,
+            initial_voting_period_seconds
+        );
+        assert_eq!(
+            sns_cli_init_config
+                .sns_governance
+                .wait_for_quiet_deadline_increase_seconds,
+            wait_for_quiet_deadline_increase_seconds
         );
 
         // Read the test.png file into memory
@@ -1093,7 +1148,7 @@ wait_for_quiet_deadline_increase_seconds: 1000
         reader.read_to_end(&mut buffer).unwrap();
         let encoded_logo = "data:image/png;base64,".to_owned() + &base64::encode(&buffer);
 
-        assert_eq!(Some(encoded_logo), sns_init_payload.logo);
+        assert_eq!(Some(encoded_logo), logo);
     }
 
     #[test]
