@@ -21,8 +21,8 @@ use ic_recovery::steps::Step;
 use ic_recovery::{get_node_metrics, NodeMetrics, Recovery};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
+use k256::ecdsa::VerifyingKey;
 use registry_canister::mutations::do_create_subnet::EcdsaKeyRequest;
-use secp256k1::PublicKey;
 use slog::{info, Logger};
 use url::Url;
 
@@ -253,7 +253,7 @@ pub(crate) fn get_canister_and_ecdsa_pub_key(
     node: &IcNodeSnapshot,
     existing_can_id: Option<Principal>,
     logger: &Logger,
-) -> (Principal, PublicKey) {
+) -> (Principal, VerifyingKey) {
     info!(logger, "Initial run to get app ecdsa public key.");
     let agent = node.with_default_agent(|agent| async move { agent });
     let (canister_id, public_key) = block_on(async {
@@ -269,7 +269,7 @@ pub(crate) fn get_canister_and_ecdsa_pub_key(
     });
     info!(
         logger,
-        "Got public key of canister {}: {}", canister_id, public_key
+        "Got public key of canister {}: {:?}", canister_id, public_key
     );
     (canister_id, public_key)
 }
@@ -277,7 +277,7 @@ pub(crate) fn get_canister_and_ecdsa_pub_key(
 pub(crate) fn run_ecdsa_signature_test(
     node: &IcNodeSnapshot,
     logger: &Logger,
-    ecdsa_canister_and_key: (Principal, PublicKey),
+    ecdsa_canister_and_key: (Principal, VerifyingKey),
 ) {
     let (canister_id, public_key) = ecdsa_canister_and_key;
     info!(logger, "Run through ecdsa signature test.");

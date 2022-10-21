@@ -48,11 +48,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::p2p::{self};
 use ic_types::{Height, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
+use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::do_create_subnet::{
     CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest,
 };
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
 use slog::{debug, info, Logger};
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
@@ -239,7 +239,7 @@ pub(crate) async fn get_public_key(
     key_id: EcdsaKeyId,
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
-) -> Result<PublicKey, AgentError> {
+) -> Result<VerifyingKey, AgentError> {
     get_public_key_with_logger(key_id, uni_can, &ctx.logger).await
 }
 
@@ -247,7 +247,7 @@ pub(crate) async fn get_public_key_with_logger(
     key_id: EcdsaKeyId,
     uni_can: &UniversalCanister<'_>,
     logger: &Logger,
-) -> Result<PublicKey, AgentError> {
+) -> Result<VerifyingKey, AgentError> {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
         derivation_path: vec![],
@@ -281,7 +281,7 @@ pub(crate) async fn get_public_key_with_logger(
         }
     };
     info!(logger, "ecdsa_public_key returns {:?}", public_key);
-    Ok(PublicKey::from_slice(&public_key).expect("Response is not a valid public key"))
+    Ok(VerifyingKey::from_sec1_bytes(&public_key).expect("Response is not a valid public key"))
 }
 
 async fn execute_update_subnet_proposal(
@@ -377,14 +377,17 @@ pub(crate) async fn get_signature_with_logger(
     };
     info!(logger, "sign_with_ecdsa returns {:?}", signature);
 
-    Ok(Signature::from_compact(&signature).expect("Response is not a valid signature"))
+    use k256::ecdsa::signature::Signature;
+    Ok(Signature::from_bytes(&signature).expect("Response is not a valid signature"))
 }
 
-pub(crate) fn verify_signature(message_hash: &[u8], public_key: &PublicKey, signature: &Signature) {
+pub(crate) fn verify_signature(
+    message_hash: &[u8],
+    public_key: &VerifyingKey,
+    signature: &Signature,
+) {
     // Verify the signature:
-    let secp = Secp256k1::new();
-    let message = Message::from_slice(message_hash).expect("32 bytes");
-    assert!(secp.verify_ecdsa(&message, signature, public_key).is_ok());
+    assert!(public_key.verify_prehash(message_hash, signature).is_ok());
 }
 
 pub(crate) async fn enable_ecdsa_signing(
