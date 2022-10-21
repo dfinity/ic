@@ -128,7 +128,7 @@
 /rs/monitoring/adapter_metrics_service/  @dfinity-lab/teams/networking-team
 /rs/monitoring/metrics_exporter/        @dfinity-lab/teams/networking-team
 /rs/nervous_system/                     @dfinity-lab/teams/nns-team
-/rs/nns/                                @dfinity-lab/teams/nns-team @granstrom1
+/rs/nns/                                @dfinity-lab/teams/nns-team
 /rs/orchestrator/                       @dfinity-lab/teams/orchestrator-owners
 /rs/p2p/                                @dfinity-lab/teams/networking-team
 /rs/prep/                               @dfinity-lab/teams/ic-testing-verification
