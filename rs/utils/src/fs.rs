@@ -570,7 +570,6 @@ pub fn defrag_file_partially(path: &Path, offset: u64, size: usize) -> std::io::
         .open(path)?;
     f.read_exact_at(&mut content[..], offset)?;
     f.write_all_at(&content, offset)?;
-    sync_path(path)?;
     Ok(())
 }
 

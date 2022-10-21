@@ -170,11 +170,11 @@ fn serialize_canister_to_tip(
             execution_state
                 .wasm_memory
                 .page_map
-                .persist_and_sync_delta(&canister_layout.vmemory_0())?;
+                .persist_delta(&canister_layout.vmemory_0())?;
             execution_state
                 .stable_memory
                 .page_map
-                .persist_and_sync_delta(&canister_layout.stable_memory_blob())?;
+                .persist_delta(&canister_layout.stable_memory_blob())?;
 
             Some(ExecutionStateBits {
                 exported_globals: execution_state.exported_globals.clone(),
@@ -258,17 +258,17 @@ fn serialize_bitcoin_state_to_tip(
     state
         .utxo_set
         .utxos_small
-        .persist_and_sync_delta(&layout.utxos_small())?;
+        .persist_delta(&layout.utxos_small())?;
 
     state
         .utxo_set
         .utxos_medium
-        .persist_and_sync_delta(&layout.utxos_medium())?;
+        .persist_delta(&layout.utxos_medium())?;
 
     state
         .utxo_set
         .address_outpoints
-        .persist_and_sync_delta(&layout.address_outpoints())?;
+        .persist_delta(&layout.address_outpoints())?;
 
     layout
         .bitcoin_state()
