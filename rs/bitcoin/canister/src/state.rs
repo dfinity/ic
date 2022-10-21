@@ -61,19 +61,19 @@ impl State {
         self.utxos
             .address_to_outpoints
             .get_memory()
-            .persist_and_sync_delta(&root.join("address_outpoints.bin"))?;
+            .persist_delta(&root.join("address_outpoints.bin"))?;
 
         self.utxos
             .utxos
             .small_utxos
             .get_memory()
-            .persist_and_sync_delta(&root.join("small_utxos.bin"))?;
+            .persist_delta(&root.join("small_utxos.bin"))?;
 
         self.utxos
             .utxos
             .medium_utxos
             .get_memory()
-            .persist_and_sync_delta(&root.join("medium_utxos.bin"))
+            .persist_delta(&root.join("medium_utxos.bin"))
     }
 
     // TODO(EXC-1093): Guard this function with a rust feature. It's only needed in local scripts.

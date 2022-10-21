@@ -404,12 +404,6 @@ impl PageMap {
         self.persist_to_file(&self.page_delta, dst)
     }
 
-    /// Persists the heap delta contained in this page map to the specified
-    /// destination and fsync the file to disk.
-    pub fn persist_and_sync_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.persist_to_file_and_sync(&self.page_delta, dst)
-    }
-
     /// Persists the round delta contained in this page map to the specified
     /// destination.
     pub fn persist_round_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
@@ -562,31 +556,6 @@ impl PageMap {
                 internal_error: err.to_string(),
             })?;
         self.apply_delta_to_file(&mut file, page_delta, dst)?;
-        Ok(())
-    }
-
-    /// Persists the given delta to the specified destination and flushes it.
-    fn persist_to_file_and_sync(
-        &self,
-        page_delta: &PageDelta,
-        dst: &Path,
-    ) -> Result<(), PersistenceError> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(dst)
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: dst.display().to_string(),
-                context: "Failed to open file".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        self.apply_delta_to_file(&mut file, page_delta, dst)?;
-        file.sync_all()
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: dst.display().to_string(),
-                context: "Failed to sync file".to_string(),
-                internal_error: err.to_string(),
-            })?;
         Ok(())
     }
 

@@ -1944,13 +1944,6 @@ impl StateManagerImpl {
         }
     }
 
-    fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
-        let target_layout = self.state_layout.checkpoint_to_scratchpad(from)?;
-        self.state_layout
-            .scratchpad_to_checkpoint(target_layout, to)?;
-        Ok(())
-    }
-
     fn find_checkpoint_by_root_hash(
         &self,
         root_hash: &CryptoHashOfState,
@@ -2472,7 +2465,7 @@ impl StateManager for StateManagerImpl {
                           "Copying checkpoint {} with root hash {:?} under new height {}",
                           checkpoint_height, root_hash, height);
 
-                    match self.clone_checkpoint(checkpoint_height, height) {
+                    match self.state_layout.clone_checkpoint(checkpoint_height, height) {
                         Ok(_) => {
                             let state = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type)
                                 .expect("failed to load checkpoint");

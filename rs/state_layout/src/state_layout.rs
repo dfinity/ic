@@ -364,7 +364,7 @@ impl StateLayout {
         if new_cp.exists() {
             return Err(LayoutError::AlreadyExists(height));
         }
-        self.copy_checkpoint(&cp_name, tip.raw_path(), new_cp.as_path(), thread_pool)
+        self.copy_and_sync_checkpoint(&cp_name, tip.raw_path(), new_cp.as_path(), thread_pool)
             .map_err(|err| LayoutError::IoError {
                 path: tip.raw_path().to_path_buf(),
                 message: format!(
@@ -410,35 +410,16 @@ impl StateLayout {
         CheckpointLayout::new(cp_path, height)
     }
 
-    pub fn checkpoint_to_scratchpad(
-        &self,
-        height: Height,
-    ) -> Result<CheckpointLayout<RwPolicy>, LayoutError> {
-        let tmp_path = self.tmp();
-        let scratchpad_dir = tempfile::Builder::new()
-            .prefix(&tmp_path)
-            .tempdir()
+    pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
+        let src = self.checkpoints().join(self.checkpoint_name(from));
+        let dst = self.checkpoints().join(self.checkpoint_name(to));
+        self.copy_and_sync_checkpoint(&self.checkpoint_name(to), &src, &dst, None)
             .map_err(|io_err| LayoutError::IoError {
-                path: tmp_path,
-                message: "Failed to create a temporary directory".to_string(),
+                path: dst,
+                message: format!("Failed to clone checkpoint {} to {}", from, to),
                 io_err,
             })?;
-
-        let cp_name = self.checkpoint_name(height);
-        let cp_path = self.checkpoints().join(cp_name);
-        copy_recursively(
-            &self.log,
-            &cp_path,
-            scratchpad_dir.path(),
-            FilePermissions::ReadWrite,
-            None,
-        )
-        .map_err(|err| LayoutError::IoError {
-            path: scratchpad_dir.path().to_path_buf(),
-            message: format!("Failed to create a copy of checkpoint {}", height),
-            io_err: err,
-        })?;
-        CheckpointLayout::<RwPolicy>::new(scratchpad_dir.into_path(), height)
+        Ok(())
     }
 
     /// Resets "tip" to a checkpoint identified by height.
@@ -467,6 +448,7 @@ impl StateLayout {
             cp_path.as_path(),
             &tip,
             FilePermissions::ReadWrite,
+            FSync::No,
             thread_pool,
         ) {
             Ok(()) => Ok(()),
@@ -642,7 +624,7 @@ impl StateLayout {
 
         let backups_dir = self.backups();
         let dst = backups_dir.join(&cp_name);
-        self.copy_checkpoint(&cp_name, cp_path.as_path(), dst.as_path(), None)
+        self.copy_and_sync_checkpoint(&cp_name, cp_path.as_path(), dst.as_path(), None)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path,
                 message: format!("Failed to backup checkpoint {}", height),
@@ -739,7 +721,7 @@ impl StateLayout {
     /// path into the specified dst path.
     ///
     /// If a thread-pool is provided then files are copied in parallel.
-    fn copy_checkpoint(
+    fn copy_and_sync_checkpoint(
         &self,
         name: &str,
         src: &Path,
@@ -760,10 +742,14 @@ impl StateLayout {
                 src,
                 scratchpad.as_path(),
                 FilePermissions::ReadOnly,
+                FSync::Yes,
                 thread_pool,
             )?;
             std::fs::rename(&scratchpad, &dst)?;
-            sync_path(&dst)
+            match dst.parent() {
+                Some(parent) => sync_path(parent),
+                None => Ok(()),
+            }
         };
 
         match copy_atomically() {
@@ -786,13 +772,11 @@ impl StateLayout {
         for id in canisters_on_disk {
             if !ids.contains(&id) {
                 let canister_path = tip.canister(&id)?.raw_path();
-                let tmp_path = self.fs_tmp().join(format!("canister_{}", &id));
-                self.atomically_remove_via_path(&canister_path, &tmp_path)
-                    .map_err(|err| LayoutError::IoError {
-                        path: canister_path,
-                        message: "Cannot atomically remove canister.".to_string(),
-                        io_err: err,
-                    })?;
+                std::fs::remove_dir_all(&canister_path).map_err(|err| LayoutError::IoError {
+                    path: canister_path,
+                    message: "Cannot remove canister.".to_string(),
+                    io_err: err,
+                })?;
             }
         }
         Ok(())
@@ -1085,17 +1069,13 @@ where
                 io_err,
             })?;
 
-        let file = writer.into_inner().map_err(|err| LayoutError::IoError {
+        writer.into_inner().map_err(|err| LayoutError::IoError {
             path: self.path.clone(),
             message: "failed to flush buffers to file".to_string(),
             io_err: std::io::Error::new(err.error().kind(), err.to_string()),
         })?;
 
-        file.sync_all().map_err(|err| LayoutError::IoError {
-            path: self.path.clone(),
-            message: "failed to sync data to disk".to_string(),
-            io_err: err,
-        })
+        Ok(())
     }
 }
 
@@ -1515,8 +1495,15 @@ enum FilePermissions {
     ReadWrite,
 }
 
+#[derive(Clone, Copy)]
+enum FSync {
+    Yes,
+    No,
+}
+
 /// Recursively copies `src` to `dst` using the given permission policy for
 /// files. If a thread-pool is provided then files are copied in parallel.
+/// Syncs the target files if `fsync` is set to true.
 ///
 /// NOTE: If the function returns an error, the changes to the file
 /// system applied by this function are not undone.
@@ -1525,6 +1512,7 @@ fn copy_recursively(
     root_src: &Path,
     root_dst: &Path,
     dst_permissions: FilePermissions,
+    fsync: FSync,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> std::io::Result<()> {
     let mut copy_plan = CopyPlan {
@@ -1554,23 +1542,28 @@ fn copy_recursively(
             });
             results.into_iter().try_for_each(identity)?;
             let results = parallel_map(thread_pool, copy_plan.copy_and_sync_file.iter(), |op| {
-                copy_and_sync_file(log, &op.src, &op.dst, dst_permissions)
+                copy_file_and_set_permissions(log, &op.src, &op.dst, dst_permissions, fsync)
             });
             results.into_iter().try_for_each(identity)?;
-            let results = parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
-                sync_path(&op.dst)
-            });
-            results.into_iter().try_for_each(identity)?;
+            if let FSync::Yes = fsync {
+                let results =
+                    parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
+                        sync_path(&op.dst)
+                    });
+                results.into_iter().try_for_each(identity)?;
+            }
         }
         None => {
             for op in copy_plan.create_and_sync_dir.iter() {
                 std::fs::create_dir_all(&op.dst)?;
             }
             for op in copy_plan.copy_and_sync_file.into_iter() {
-                copy_and_sync_file(log, &op.src, &op.dst, dst_permissions)?;
+                copy_file_and_set_permissions(log, &op.src, &op.dst, dst_permissions, fsync)?;
             }
-            for op in copy_plan.create_and_sync_dir.iter() {
-                sync_path(&op.dst)?;
+            if let FSync::Yes = fsync {
+                for op in copy_plan.create_and_sync_dir.iter() {
+                    sync_path(&op.dst)?;
+                }
             }
         }
     }
@@ -1579,11 +1572,13 @@ fn copy_recursively(
 
 /// Copies the given file and ensures that the `read/write` permission of the
 /// target file match the given permission.
-fn copy_and_sync_file(
+/// Syncs the target file if `fsync` is true.
+fn copy_file_and_set_permissions(
     log: &ReplicaLogger,
     src: &Path,
     dst: &Path,
     dst_permissions: FilePermissions,
+    fsync: FSync,
 ) -> std::io::Result<()> {
     do_copy(log, src, dst)?;
 
@@ -1596,7 +1591,10 @@ fn copy_and_sync_file(
         FilePermissions::ReadWrite => permissions.set_readonly(false),
     }
     std::fs::set_permissions(&dst, permissions)?;
-    sync_path(&dst)
+    match fsync {
+        FSync::Yes => sync_path(&dst),
+        FSync::No => Ok(()),
+    }
 }
 
 // Describes how to copy one directory to another.

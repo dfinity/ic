@@ -36,9 +36,9 @@ impl PageMapMemory {
     }
 
     /// Persists the memory to disk at the given path.
-    pub fn persist_and_sync_delta(&self, path: &std::path::Path) -> Result<(), PersistenceError> {
+    pub fn persist_delta(&self, path: &std::path::Path) -> Result<(), PersistenceError> {
         let page_delta: PageMap = self.buffer.lock().unwrap().into_page_map();
-        page_delta.persist_and_sync_delta(path)?;
+        page_delta.persist_delta(path)?;
         let new_page_map = PageMap::open(path, Height::new(0))?;
         *self.buffer.lock().unwrap() = Buffer::new(new_page_map);
         Ok(())
