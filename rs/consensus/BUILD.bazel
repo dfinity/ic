@@ -64,7 +64,7 @@ DEV_DEPENDENCIES = [
 
 rust_library(
     name = "consensus",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_features = select({
         "//bazel:malicious_code_enabled": ["malicious_code"],
         "//conditions:default": [],
