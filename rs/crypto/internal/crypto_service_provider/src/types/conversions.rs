@@ -9,8 +9,6 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types as ecdsa_secp256r1_types
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
-use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors;
-use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::EphemeralKeySetBytes;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::dkg::EncryptionPublicKeyPop;
@@ -291,20 +289,6 @@ impl TryFrom<CspSignature> for threshold_types::CombinedSignatureBytes {
                 algorithm: AlgorithmId::ThresBls12_381,
                 sig_bytes: value.as_ref().to_owned(),
                 internal_error: "Not a combined threshold signature".to_string(),
-            })
-        }
-    }
-}
-
-impl TryFrom<CspSecretKey> for EphemeralKeySetBytes {
-    type Error = dkg_errors::MalformedSecretKeyError;
-    fn try_from(value: CspSecretKey) -> Result<Self, Self::Error> {
-        if let CspSecretKey::Secp256k1WithPublicKey(key_set) = value {
-            Ok(key_set)
-        } else {
-            Err(dkg_errors::MalformedSecretKeyError {
-                algorithm: AlgorithmId::Secp256k1,
-                internal_error: "Could not parse ephemeral key set".to_string(),
             })
         }
     }

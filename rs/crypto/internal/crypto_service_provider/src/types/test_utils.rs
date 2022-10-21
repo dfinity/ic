@@ -8,9 +8,6 @@ use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_test_vectors::unhex::{
     hex_to_32_bytes, hex_to_48_bytes, hex_to_64_bytes, hex_to_96_bytes,
 };
-use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::{
-    EphemeralPublicKeyBytes, EphemeralSecretKeyBytes,
-};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types as ni_dkg_types;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionSecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_sig_types;
@@ -233,29 +230,6 @@ pub fn arbitrary_threshold_bls12381_secret_key() -> CspSecretKey {
         *b = rand::random();
     }
     CspSecretKey::ThresBls12_381(threshold_sig_types::SecretKeyBytes(random_bytes))
-}
-
-/// This function is only used for tests
-#[allow(unused)]
-pub fn arbitrary_ephemeral_key_set() -> CspSecretKey {
-    let mut random_sk_bytes = [0; EphemeralSecretKeyBytes::SIZE];
-    for b in random_sk_bytes.iter_mut() {
-        *b = rand::random();
-    }
-    let mut random_pk_bytes = [0; EphemeralPublicKeyBytes::SIZE];
-    for b in random_pk_bytes.iter_mut() {
-        *b = rand::random();
-    }
-    let mut random_pop_bytes = [0; EphemeralPopBytes::SIZE];
-    for b in random_pop_bytes.iter_mut() {
-        *b = rand::random();
-    }
-    let eph_key_set = EphemeralKeySetBytes {
-        secret_key_bytes: EphemeralSecretKeyBytes(random_sk_bytes),
-        public_key_bytes: EphemeralPublicKeyBytes(random_pk_bytes),
-        pop_bytes: EphemeralPopBytes(random_pop_bytes),
-    };
-    CspSecretKey::Secp256k1WithPublicKey(eph_key_set)
 }
 
 /// This function is only used for tests
