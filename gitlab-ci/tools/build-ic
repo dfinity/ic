@@ -17,6 +17,8 @@ export ROOT_PIPELINE_ID=${ROOT_PIPELINE_ID:-""}
 export CI_PROJECT_DIR=${CI_PROJECT_DIR:-$ROOT_DIR}
 export BUILD_EXTRA_SUFFIX=${BUILD_EXTRA_SUFFIX:-""}
 export BUILD_EXTRA_ARGS=${BUILD_EXTRA_ARGS:-""}
+# Do not use remote cache, upload stats to buildfarm etc.
+export BAZEL_CI_CONFIG="--config=local"
 
 cd $ROOT_DIR
 
