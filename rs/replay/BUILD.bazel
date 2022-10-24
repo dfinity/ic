@@ -17,7 +17,6 @@ DEPENDENCIES = [
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
-    "//rs/http_handler",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",

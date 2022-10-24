@@ -7317,7 +7317,6 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
  "ic-execution-environment",
- "ic-http-handler",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",

@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs/replica:__subpackages__"])
 
 DEPENDENCIES = [
     "//rs/async_utils",
