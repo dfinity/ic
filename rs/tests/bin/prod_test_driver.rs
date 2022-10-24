@@ -357,21 +357,24 @@ fn get_test_suites() -> HashMap<String, Suite> {
         "ckbtc_pre_master",
         vec![pot_with_setup(
             "minter_pot",
-            ckbtc::minter::config,
-            par(vec![
-                sys_t(
-                    "minter_get_btc_address_test",
-                    ckbtc::minter::get_btc_address_test,
-                ),
-                sys_t(
-                    "minter_get_withdrawal_account_test",
-                    ckbtc::minter::get_withdrawal_account_test,
-                ),
-                sys_t(
-                    "minter_check_update_balance",
-                    ckbtc::minter::check_update_balance,
-                ),
-            ]),
+            ckbtc::lib::config,
+            seq!(
+                par(vec![
+                    sys_t(
+                        "minter_get_btc_address_test",
+                        ckbtc::minter::get_btc_address_test,
+                    ),
+                    sys_t(
+                        "minter_get_withdrawal_account_test",
+                        ckbtc::minter::get_withdrawal_account_test,
+                    ),
+                    sys_t("minter_update_balance", ckbtc::minter::update_balance,),
+                ]),
+                par(vec![sys_t(
+                    "ckbtc_minter_agent_test",
+                    ckbtc::agent::ckbtc_minter_agent_test,
+                ),]),
+            ),
         )],
     ));
 

@@ -35,6 +35,7 @@ ic-btc-types = { path = "../bitcoin/types/public" }
 ic-canister-client = { path = "../canister_client" }
 ic-cdk = "0.6.0"
 ic-certification = { path = "../certification" }
+ic-ckbtc-agent = { path = "../bitcoin/ckbtc/agent" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }

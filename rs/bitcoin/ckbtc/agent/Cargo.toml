@@ -1,0 +1,14 @@
+[package]
+name = "ic-ckbtc-agent"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Agent for the ckBTC minter."
+edition = "2021"
+
+[dependencies]
+candid = "0.8.1"
+garcon = { version = "0.2", features = ["async"] }
+ic-agent = "=0.22.0"
+ic-ckbtc-minter = { path = "../minter" }
+ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
+num-traits = "0.2.15"
