@@ -94,7 +94,7 @@ pub fn do_import(state_path: PathBuf, config_path: PathBuf, height: u64) -> Resu
         .map_err(|e| format!("Failed to create scratchpad checkpoint layout: {}", e))?;
 
     state_layout
-        .scratchpad_to_checkpoint(cp_layout, height)
+        .scratchpad_to_checkpoint(cp_layout, height, None)
         .map_err(|e| e.to_string())?;
 
     println!(

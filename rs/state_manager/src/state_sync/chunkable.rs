@@ -732,6 +732,7 @@ impl IncompleteState {
         height: Height,
         state_layout: &StateLayout,
         own_subnet_type: SubnetType,
+        thread_pool: &mut scoped_threadpool::Pool,
     ) {
         let _timer = metrics
             .state_sync_metrics
@@ -748,10 +749,11 @@ impl IncompleteState {
             .expect("failed to create checkpoint layout");
 
         // Recover the state to make sure it's usable
-        if let Err(err) = crate::checkpoint::load_checkpoint_parallel(
+        if let Err(err) = crate::checkpoint::load_checkpoint(
             &ro_layout,
             own_subnet_type,
             &metrics.checkpoint_metrics,
+            Some(thread_pool),
         ) {
             let elapsed = started_at.elapsed();
             metrics
@@ -772,7 +774,7 @@ impl IncompleteState {
         let scratchpad_layout = CheckpointLayout::<RwPolicy>::new(root.to_path_buf(), height)
             .expect("failed to create checkpoint layout");
 
-        match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height) {
+        match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height, Some(thread_pool)) {
             Ok(_) => {
                 let elapsed = started_at.elapsed();
                 metrics
@@ -1152,6 +1154,7 @@ impl Chunkable for IncompleteState {
                             self.height,
                             &self.state_layout,
                             self.own_subnet_type,
+                            &mut self.thread_pool.lock().unwrap(),
                         );
 
                         let artifact = Self::build_artifact(
@@ -1267,6 +1270,7 @@ impl Chunkable for IncompleteState {
                         self.height,
                         &self.state_layout,
                         self.own_subnet_type,
+                        &mut self.thread_pool.lock().unwrap(),
                     );
 
                     let artifact = Self::build_artifact(
