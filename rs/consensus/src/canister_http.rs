@@ -359,6 +359,12 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             Ok(true) => (),
         }
 
+        // Payload size should not be bigger than MAX_CANISTER_HTTP_PAYLOAD_SIZE
+        let max_payload_size = std::cmp::min(
+            byte_limit,
+            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+        );
+
         // Get a set of the messages of the already delivered responses
         let delivered_ids = Self::get_past_payload_ids(past_payloads);
         // Get the threshold value that is needed for consensus
@@ -510,7 +516,7 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                     unique_includable_responses += 1;
                     let candidate_size = callback_id.count_bytes();
                     let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                    if size >= byte_limit {
+                    if size >= max_payload_size {
                         // All timeouts have the same size, so we can stop iterating.
                         break;
                     } else if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL
@@ -531,7 +537,7 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 // should be explicit in the code
                 let candidate_size = size_of::<CanisterHttpResponseProof>() + content.count_bytes();
                 let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                if size < byte_limit {
+                if size < max_payload_size {
                     if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
                         break;
                     }
