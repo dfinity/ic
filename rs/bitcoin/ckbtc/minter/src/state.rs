@@ -65,6 +65,9 @@ pub struct CkBtcMinterState {
 
     /// The map of known addresses to their utxos.
     pub utxos_state_addresses: BTreeMap<Address, BTreeSet<Utxo>>,
+
+    /// Process one heartbeat at a time
+    pub is_heartbeat_running: bool,
 }
 
 /// Take the current state.

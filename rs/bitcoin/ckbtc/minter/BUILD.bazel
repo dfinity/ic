@@ -73,6 +73,9 @@ optimized_canister(
 rust_test(
     name = "ckbtc_minter_lib_unit_tests",
     crate = ":ckbtc_minter_lib",
+    deps = [
+        "@crate_index//:proptest",
+    ],
 )
 
 rust_test(
