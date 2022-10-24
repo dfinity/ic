@@ -1,6 +1,6 @@
 //! Helper functionality for the tests
 
-use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_tls_cert_key;

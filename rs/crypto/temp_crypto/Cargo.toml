@@ -1,0 +1,28 @@
+[package]
+name = "ic-crypto-temp-crypto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1.41"
+ic-base-types = { path = "../../types/base_types" }
+ic-config = { path = "../../config" }
+ic-crypto = { path = ".." }
+ic-crypto-internal-csp = { path = "../internal/crypto_service_provider" }
+ic-crypto-internal-logmon = { path = "../internal/logmon" }
+ic-crypto-node-key-generation = { path = "../node_key_generation" }
+ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-types = { path = "../../types/types" }
+tempfile = "3.1.0"
+tokio = { version = "1.15.0", features = ["full"] }
+
+[dev-dependencies]
+ic-crypto-test-utils = { path = "../test_utils" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }

@@ -1,11 +1,9 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG).
-use crate::common::utils::temp_crypto::TempCryptoComponentGeneric;
-use crate::common::utils::TempCryptoComponent;
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_types::NodeIndex;
+use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::NiDkgAlgorithm;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -109,37 +107,14 @@ pub fn initial_dkg_transcript(
     let dkg_config = initial_dkg_config.get();
     ensure_matching_node_ids(dkg_config.receivers(), receiver_keys);
 
-    let dealer = first_dealer(dkg_config);
+    let dealer_id = first_dealer(dkg_config);
     let registry = fake_registry_with_encryption_keys(receiver_keys, dkg_config.registry_version());
     let dealer_crypto = TempCryptoComponent::builder()
         .with_registry(Arc::new(registry))
-        .with_node_id(dealer)
+        .with_node_id(dealer_id)
         .build();
 
-    transcript_with_single_dealing(dkg_config, dealer_crypto)
-}
-
-/// Converts an NI-DKG transcript into the corresponding protobuf
-/// representation.
-pub fn initial_ni_dkg_transcript_record_from_transcript(
-    transcript: NiDkgTranscript,
-) -> InitialNiDkgTranscriptRecord {
-    use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
-
-    let dkg_id = NiDkgIdProto::from(transcript.dkg_id);
-    InitialNiDkgTranscriptRecord {
-        id: Some(dkg_id),
-        threshold: transcript.threshold.get().get(),
-        committee: transcript
-            .committee
-            .get()
-            .iter()
-            .map(|node| node.get().into_vec())
-            .collect(),
-        registry_version: transcript.registry_version.get(),
-        internal_csp_transcript: serde_cbor::to_vec(&transcript.internal_csp_transcript)
-            .expect("failed to serialize CSP NI-DKG transript to CBOR"),
-    }
+    transcript_with_single_dealing(dkg_config, dealer_crypto, dealer_id)
 }
 
 fn number_of_nodes_from_usize(count: usize) -> NumberOfNodes {
@@ -196,11 +171,12 @@ fn map_with(dealer: NodeId, dealing: NiDkgDealing) -> BTreeMap<NodeId, NiDkgDeal
 fn transcript_with_single_dealing<C: CryptoServiceProvider>(
     dkg_config: &NiDkgConfig,
     dealer_crypto: TempCryptoComponentGeneric<C>,
+    dealer_id: NodeId,
 ) -> NiDkgTranscript {
     let dealing = dealer_crypto
         .create_dealing(dkg_config)
         .expect("internal error: failed to create dealing");
     dealer_crypto
-        .create_transcript(dkg_config, &map_with(dealer_crypto.node_id, dealing))
+        .create_transcript(dkg_config, &map_with(dealer_id, dealing))
         .expect("internal error: failed to create transcript")
 }

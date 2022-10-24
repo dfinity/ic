@@ -1,4 +1,4 @@
-use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces_registry::RegistryDataProvider;

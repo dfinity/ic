@@ -55,7 +55,7 @@ DEV_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
     "//rs/canister_client/sender",
     "//rs/config",
-    "//rs/crypto",
+    "//rs/crypto/node_key_generation",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry",
     "//rs/nervous_system/common/test_keys",

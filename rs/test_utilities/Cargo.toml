@@ -14,9 +14,9 @@ ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-constants = { path = "../constants" }
-ic-crypto = { path = "../crypto" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-sha = { path = "../crypto/sha" }
+ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils = { path = "../crypto/test_utils" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }

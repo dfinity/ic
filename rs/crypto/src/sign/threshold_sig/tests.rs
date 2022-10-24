@@ -13,6 +13,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts;
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
@@ -1199,7 +1200,6 @@ mod verify_threshold_sig_combined {
 
 mod verify_combined_threshold_sig_by_public_key {
     use super::*;
-    use crate::common::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
     use crate::sign::tests::{registry_returning_none, REG_V1, SUBNET_ID};
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
         ni_dkg_groth20_bls12_381, CspNiDkgTranscript,
@@ -1447,16 +1447,14 @@ mod verify_combined_threshold_sig_by_public_key {
     ) -> Arc<dyn RegistryClient> {
         let cup_contents = CatchUpPackageContents {
             // We store both transcripts as in production scenario.
-            initial_ni_dkg_transcript_low_threshold: Some(
-                initial_ni_dkg_transcript_record_from_transcript(
-                    empty_ni_dkg_transcripts()
-                        .remove(&NiDkgTag::LowThreshold)
-                        .unwrap(),
-                ),
-            ),
-            initial_ni_dkg_transcript_high_threshold: Some(
-                initial_ni_dkg_transcript_record_from_transcript(transcript),
-            ),
+            initial_ni_dkg_transcript_low_threshold: Some(InitialNiDkgTranscriptRecord::from(
+                empty_ni_dkg_transcripts()
+                    .remove(&NiDkgTag::LowThreshold)
+                    .unwrap(),
+            )),
+            initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+                transcript,
+            )),
             ..Default::default()
         };
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());

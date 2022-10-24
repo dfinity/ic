@@ -5,7 +5,7 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
-    "//rs/crypto",
+    "//rs/crypto/temp_crypto",
     "//rs/interfaces",
     "//rs/registry/fake",
     "//rs/registry/keys",

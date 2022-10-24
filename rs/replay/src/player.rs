@@ -17,7 +17,6 @@ use ic_consensus::{
         batch_delivery::deliver_batches, pool_reader::PoolReader, utils::crypto_hashable_to_seed,
     },
 };
-use ic_crypto::CryptoComponentFatClient;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
@@ -281,7 +280,7 @@ impl Player {
             subnet_id,
             subnet_config.cycles_account_manager_config,
         ));
-        let crypto = CryptoComponentFatClient::new_for_verification_only(registry.clone());
+        let crypto = ic_crypto_for_verification_only::new(registry.clone());
         let crypto = Arc::new(crypto);
 
         let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
@@ -945,8 +944,7 @@ impl Player {
 
         // Verify the CUP signature.
         let protobuf = last_cup_with_proto.protobuf;
-        let crypto =
-            ic_crypto::CryptoComponentFatClient::new_for_verification_only(self.registry.clone());
+        let crypto = ic_crypto_for_verification_only::new(self.registry.clone());
         crypto
             .verify_combined_threshold_sig_by_public_key(
                 &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),

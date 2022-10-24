@@ -304,7 +304,7 @@ fn check_no_orphaned_node_crypto_records(
 mod tests {
     use super::*;
     use ic_config::crypto::CryptoConfig;
-    use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+    use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
     use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
     use ic_protobuf::registry::node::v1::NodeRecord;

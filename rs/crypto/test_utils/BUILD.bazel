@@ -26,6 +26,7 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/types/types",
         "//rs/types/types_test_utils",
+        "@crate_index//:ed25519-consensus",
         "@crate_index//:openssl",
         "@crate_index//:rand_0_8_4",
         "@crate_index//:serde",

@@ -3,6 +3,7 @@
 use super::*;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::empty_fake_registry;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces_registry::RegistryClient;
@@ -36,54 +37,16 @@ fn should_generate_all_keys_for_a_node_without_public_keys() {
     })
 }
 
-#[test]
-fn should_correctly_generate_node_signing_key() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let nspk = node_pks.node_signing_pk.expect("missing key");
-        assert_eq!(nspk.version, 0);
-        assert_eq!(nspk.algorithm, AlgorithmIdProto::Ed25519 as i32);
-        assert!(!nspk.key_value.is_empty());
-        assert!(nspk.proof_data.is_none());
-    })
-}
+fn ensure_node_keys_are_generated_correctly(node_pks: &NodePublicKeys, node_id: &NodeId) {
+    assert!(all_node_keys_are_present(node_pks));
+    assert_eq!(node_pks.version, 1);
 
-#[test]
-fn should_correctly_generate_committee_signing_key() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let cspk = node_pks.committee_signing_pk.expect("missing key");
-        assert_eq!(cspk.version, 0);
-        assert_eq!(cspk.algorithm, AlgorithmIdProto::MultiBls12381 as i32);
-        assert!(!cspk.key_value.is_empty());
-        assert!(cspk.proof_data.is_some());
-        assert!(!cspk.proof_data.unwrap().is_empty());
-    })
-}
-
-#[test]
-fn should_correctly_generate_dkg_dealing_encryption_key() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let ni_dkg_de_pk = node_pks.dkg_dealing_encryption_pk.expect("missing key");
-        assert_eq!(ni_dkg_de_pk.version, 0);
-        assert_eq!(
-            ni_dkg_de_pk.algorithm,
-            AlgorithmIdProto::Groth20Bls12381 as i32
-        );
-        assert!(!ni_dkg_de_pk.key_value.is_empty());
-        assert!(ni_dkg_de_pk.proof_data.is_some());
-        assert!(!ni_dkg_de_pk.proof_data.unwrap().is_empty());
-    })
-}
-
-#[test]
-fn should_correctly_generate_tls_certificate() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        assert!(node_pks.tls_certificate.is_some());
-        assert!(!node_pks.tls_certificate.unwrap().certificate_der.is_empty());
-    })
+    let node_signing_pk = node_pks
+        .node_signing_pk
+        .as_ref()
+        .expect("Missing node signing public key");
+    let derived_node_id = derive_node_id(node_signing_pk);
+    assert_eq!(*node_id, derived_node_id);
 }
 
 #[test]
@@ -464,9 +427,35 @@ fn should_succeed_check_keys_locally_if_all_keys_except_idkg_dealing_enc_key_are
     assert!(matches!(result, Ok(Some(_))));
 }
 
+fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
+    node_pks.node_signing_pk.is_some()
+        && node_pks.committee_signing_pk.is_some()
+        && node_pks.tls_certificate.is_some()
+        && node_pks.dkg_dealing_encryption_pk.is_some()
+        && node_pks.idkg_dealing_encryption_pk.is_some()
+}
+
+fn store_public_keys(crypto_root: &Path, node_pks: &NodePublicKeys) {
+    public_key_store::store_node_public_keys(crypto_root, node_pks).unwrap();
+}
+
+fn crypto_with_node_keys_generation(
+    registry_client: Arc<dyn RegistryClient>,
+    node_id: NodeId,
+    selector: NodeKeysToGenerate,
+) -> (TempCryptoComponent, NodePublicKeys) {
+    let temp_crypto = TempCryptoComponent::builder()
+        .with_registry(registry_client)
+        .with_node_id(node_id)
+        .with_keys(selector)
+        .build();
+    let node_public_keys = temp_crypto.node_public_keys();
+    (temp_crypto, node_public_keys)
+}
+
 mod tls {
-    use super::super::generate_tls_keys;
-    use crate::utils::local_csp_in_temp_dir;
+    use super::generate_tls_keys;
+    use super::local_csp_in_temp_dir;
     use ic_types_test_utils::ids::node_test_id;
     use openssl::x509::X509VerifyResult;
     use openssl::{asn1::Asn1Time, nid::Nid, x509::X509NameEntryRef, x509::X509};
@@ -535,42 +524,4 @@ mod tls {
             .next()
             .unwrap()
     }
-}
-
-fn ensure_node_keys_are_generated_correctly(node_pks: &NodePublicKeys, node_id: &NodeId) {
-    assert!(all_node_keys_are_present(node_pks));
-    assert_eq!(node_pks.version, 1);
-
-    let node_signing_pk = node_pks
-        .node_signing_pk
-        .as_ref()
-        .expect("Missing node signing public key");
-    let derived_node_id = derive_node_id(node_signing_pk);
-    assert_eq!(*node_id, derived_node_id);
-}
-
-fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
-    node_pks.node_signing_pk.is_some()
-        && node_pks.committee_signing_pk.is_some()
-        && node_pks.tls_certificate.is_some()
-        && node_pks.dkg_dealing_encryption_pk.is_some()
-        && node_pks.idkg_dealing_encryption_pk.is_some()
-}
-
-fn store_public_keys(crypto_root: &Path, node_pks: &NodePublicKeys) {
-    public_key_store::store_node_public_keys(crypto_root, node_pks).unwrap();
-}
-
-fn crypto_with_node_keys_generation(
-    registry_client: Arc<dyn RegistryClient>,
-    node_id: NodeId,
-    selector: NodeKeysToGenerate,
-) -> (TempCryptoComponent, NodePublicKeys) {
-    let temp_crypto = TempCryptoComponent::builder()
-        .with_registry(registry_client)
-        .with_node_id(node_id)
-        .with_keys(selector)
-        .build();
-    let node_public_keys = temp_crypto.node_public_keys();
-    (temp_crypto, node_public_keys)
 }

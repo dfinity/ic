@@ -9,7 +9,7 @@ use prost::Message;
 use canister_test::Canister;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,

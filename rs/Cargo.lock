@@ -4616,6 +4616,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-config",
+ "ic-crypto-for-verification-only",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
@@ -4632,8 +4633,10 @@ dependencies = [
  "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-internal-tls",
  "ic-crypto-internal-types",
+ "ic-crypto-node-key-generation",
  "ic-crypto-sha",
  "ic-crypto-tecdsa",
+ "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keygen",
@@ -4691,6 +4694,20 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-threshold-sig-ecdsa",
+]
+
+[[package]]
+name = "ic-crypto-for-verification-only"
+version = "0.1.0"
+dependencies = [
+ "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils",
+ "ic-crypto-tls-interfaces",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-registry-client-fake",
+ "ic-registry-proto-data-provider",
+ "ic-types",
 ]
 
 [[package]]
@@ -5122,6 +5139,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-node-key-generation"
+version = "0.1.0"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "ic-crypto",
+ "ic-crypto-internal-csp",
+ "ic-crypto-internal-csp-test-utils",
+ "ic-crypto-internal-logmon",
+ "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-types",
+ "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils",
+ "ic-crypto-tls-interfaces",
+ "ic-crypto-utils-basic-sig",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-proto-data-provider",
+ "ic-types",
+ "ic-types-test-utils",
+ "openssl",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-crypto-node-key-validation"
 version = "0.8.0"
 dependencies = [
@@ -5129,12 +5176,12 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-config",
- "ic-crypto",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-internal-types",
+ "ic-crypto-node-key-generation",
  "ic-crypto-tls-cert-validation",
  "ic-protobuf",
  "ic-test-utilities",
@@ -5182,9 +5229,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-temp-crypto"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ic-base-types",
+ "ic-config",
+ "ic-crypto",
+ "ic-crypto-internal-csp",
+ "ic-crypto-internal-logmon",
+ "ic-crypto-node-key-generation",
+ "ic-crypto-test-utils",
+ "ic-crypto-tls-interfaces",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-logger",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-types",
+ "ic-types-test-utils",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-crypto-test-utils"
 version = "0.8.0"
 dependencies = [
+ "ed25519-consensus",
  "ic-crypto-internal-csp-test-utils",
  "ic-crypto-internal-types",
  "ic-crypto-tls-interfaces",
@@ -5209,8 +5283,8 @@ dependencies = [
 name = "ic-crypto-test-utils-canister-threshold-sigs"
 version = "0.8.0"
 dependencies = [
- "ic-crypto",
  "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-temp-crypto",
  "ic-interfaces",
  "ic-registry-client-fake",
  "ic-registry-keys",
@@ -5233,13 +5307,34 @@ dependencies = [
 name = "ic-crypto-test-utils-multi-sigs"
 version = "0.8.0"
 dependencies = [
- "ic-crypto",
+ "ic-crypto-temp-crypto",
  "ic-interfaces",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-types",
  "rand 0.8.5",
+]
+
+[[package]]
+name = "ic-crypto-test-utils-ni-dkg"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "ic-crypto-internal-csp",
+ "ic-crypto-internal-types",
+ "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-types",
+ "ic-types-test-utils",
+ "serde",
 ]
 
 [[package]]
@@ -5255,8 +5350,8 @@ name = "ic-crypto-test-utils-threshold-sigs"
 version = "0.8.0"
 dependencies = [
  "ic-config",
- "ic-crypto",
  "ic-crypto-internal-types",
+ "ic-crypto-temp-crypto",
  "ic-interfaces",
  "ic-registry-client-fake",
  "ic-registry-keys",
@@ -5275,9 +5370,9 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-config",
- "ic-crypto",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-types",
+ "ic-crypto-node-key-generation",
  "ic-crypto-test-utils",
  "ic-protobuf",
  "ic-test-utilities",
@@ -6598,7 +6693,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-config",
- "ic-crypto",
+ "ic-crypto-node-key-generation",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-nervous-system-common-test-keys",
@@ -6778,6 +6873,8 @@ dependencies = [
  "ic-config",
  "ic-constants",
  "ic-crypto",
+ "ic-crypto-node-key-generation",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-http-utils",
  "ic-ic00-types",
  "ic-interfaces-registry",
@@ -7098,7 +7195,7 @@ version = "0.1.0"
 dependencies = [
  "clap 3.2.14",
  "ic-config",
- "ic-crypto",
+ "ic-crypto-for-verification-only",
  "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces-registry",
  "ic-logger",
@@ -7188,7 +7285,7 @@ dependencies = [
  "ic-canister-sandbox-launcher",
  "ic-config",
  "ic-consensus",
- "ic-crypto",
+ "ic-crypto-for-verification-only",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-utils-threshold-sig",
@@ -8254,9 +8351,9 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-constants",
- "ic-crypto",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
+ "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-tls-interfaces",
@@ -8352,6 +8449,7 @@ name = "ic-test-utilities-registry"
 version = "0.8.0"
 dependencies = [
  "ic-crypto",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-protobuf",
@@ -8378,7 +8476,7 @@ dependencies = [
  "async-trait",
  "ic-base-types",
  "ic-config",
- "ic-crypto",
+ "ic-crypto-temp-crypto",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-transport",
@@ -8409,7 +8507,7 @@ dependencies = [
  "crossbeam-channel 0.5.6",
  "futures",
  "ic-config",
- "ic-crypto",
+ "ic-crypto-temp-crypto",
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
  "ic-interfaces-transport",
@@ -10504,6 +10602,7 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-crypto",
+ "ic-crypto-node-key-generation",
  "ic-crypto-sha",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-threshold-sig",
@@ -11759,7 +11858,7 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-certified-map",
  "ic-config",
- "ic-crypto",
+ "ic-crypto-node-key-generation",
  "ic-crypto-node-key-validation",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",

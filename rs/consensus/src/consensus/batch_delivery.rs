@@ -11,13 +11,13 @@ use crate::consensus::{
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_crypto::get_tecdsa_master_public_key;
-use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
 use ic_ic00_types::SetupInitialDKGResponse;
 use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_protobuf::log::consensus_log_entry::v1::ConsensusLogEntry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_types::{
     canister_http::*,
     consensus::ecdsa::{CompletedSignature, EcdsaBlockReader},
@@ -375,9 +375,9 @@ fn generate_dkg_response_payload(
                 high_threshold_transcript.dkg_id
             );
             let low_threshold_transcript_record =
-                initial_ni_dkg_transcript_record_from_transcript(low_threshold_transcript.clone());
+                InitialNiDkgTranscriptRecord::from(low_threshold_transcript.clone());
             let high_threshold_transcript_record =
-                initial_ni_dkg_transcript_record_from_transcript(high_threshold_transcript.clone());
+                InitialNiDkgTranscriptRecord::from(high_threshold_transcript.clone());
 
             // This is what we expect consensus to reply with.
             let threshold_sig_pk = high_threshold_transcript.public_key();

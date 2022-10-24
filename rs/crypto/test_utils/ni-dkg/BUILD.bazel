@@ -1,0 +1,49 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/internal/crypto_service_provider",
+    "//rs/crypto/temp_crypto",
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/protobuf",
+    "//rs/registry/fake",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/types/types",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/test_utils",
+    "//rs/types/types_test_utils",
+    "@crate_index//:hex",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "ni-dkg",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_test_utils_ni_dkg",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "ni-dkg_test",
+    aliases = ALIASES,
+    crate = ":ni-dkg",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

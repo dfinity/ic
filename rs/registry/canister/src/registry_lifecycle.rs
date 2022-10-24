@@ -137,7 +137,7 @@ mod test {
     use crate::registry_lifecycle::Registry;
     use ic_base_types::NodeId;
     use ic_config::crypto::CryptoConfig;
-    use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+    use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
     use ic_protobuf::registry::node::v1::NodeRecord;

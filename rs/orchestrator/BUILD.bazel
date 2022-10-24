@@ -19,6 +19,7 @@ rust_library(
         "//rs/config",
         "//rs/consensus",
         "//rs/crypto",
+        "//rs/crypto/node_key_generation",
         "//rs/crypto/sha",
         "//rs/crypto/tls_interfaces",
         "//rs/http_utils",

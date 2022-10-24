@@ -1,14 +1,11 @@
 //! Utilities useful for implementations of IDkgProtocol
-#[cfg(test)]
-mod tests;
 
 mod errors;
 pub use errors::*;
 
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, MEGaPublicKey};
+use ic_crypto_node_key_generation::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
 use ic_interfaces_registry::RegistryClient;
-use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyOpeningError,
@@ -62,33 +59,6 @@ pub fn get_mega_pubkey(
         }
     })?;
     Ok(mega_pubkey)
-}
-
-pub enum MEGaPublicKeyFromProtoError {
-    UnsupportedAlgorithm {
-        algorithm_id: Option<AlgorithmIdProto>,
-    },
-    MalformedPublicKey {
-        key_bytes: Vec<u8>,
-    },
-}
-
-/// Deserialize a Protobuf public key to a MEGaPublicKey.
-pub fn mega_public_key_from_proto(
-    proto: &PublicKeyProto,
-) -> Result<MEGaPublicKey, MEGaPublicKeyFromProtoError> {
-    let curve_type = match AlgorithmIdProto::from_i32(proto.algorithm) {
-        Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
-        alg_id => Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm {
-            algorithm_id: alg_id,
-        }),
-    }?;
-
-    MEGaPublicKey::deserialize(curve_type, &proto.key_value).map_err(|_| {
-        MEGaPublicKeyFromProtoError::MalformedPublicKey {
-            key_bytes: proto.key_value.clone(),
-        }
-    })
 }
 
 pub enum IDkgDealingExtractionError {

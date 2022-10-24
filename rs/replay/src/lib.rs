@@ -22,6 +22,7 @@ use ic_canister_client::{Agent, Sender};
 use ic_config::registry_client::DataProviderConfig;
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_types::ReplicaVersion;
 use prost::Message;
 use std::cell::RefCell;
@@ -243,7 +244,6 @@ fn cmd_get_recovery_cup(
     player: &crate::player::Player,
     cmd: &crate::cmd::GetRecoveryCupCmd,
 ) -> Result<(), String> {
-    use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
     use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, RegistryStoreUri};
     use ic_types::consensus::{catchup::CUPWithOriginalProtobuf, HasHeight};
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
@@ -262,12 +262,11 @@ fn cmd_get_recovery_cup(
         .dkg
         .current_transcript(&NiDkgTag::HighThreshold)
         .clone();
-    let initial_ni_dkg_transcript_low_threshold = Some(
-        initial_ni_dkg_transcript_record_from_transcript(low_threshold_transcript),
-    );
-    let initial_ni_dkg_transcript_high_threshold = Some(
-        initial_ni_dkg_transcript_record_from_transcript(high_threshold_transcript),
-    );
+    let initial_ni_dkg_transcript_low_threshold =
+        Some(InitialNiDkgTranscriptRecord::from(low_threshold_transcript));
+    let initial_ni_dkg_transcript_high_threshold = Some(InitialNiDkgTranscriptRecord::from(
+        high_threshold_transcript,
+    ));
     let registry_version = player.get_latest_registry_version(context_time)?;
     let cup_contents = CatchUpPackageContents {
         initial_ni_dkg_transcript_low_threshold,

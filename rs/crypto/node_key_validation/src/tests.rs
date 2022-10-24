@@ -2,7 +2,7 @@
 use super::*;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 
 #[test]
 fn should_succeed_on_valid_keys() {

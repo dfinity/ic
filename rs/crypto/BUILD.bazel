@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/internal/logmon",
     "//rs/crypto/internal/test_vectors",
+    "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation/tls_cert_validation",
     "//rs/crypto/tecdsa",
     "//rs/crypto/tls_interfaces",
@@ -63,6 +64,7 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/crypto/for_verification_only",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
@@ -70,6 +72,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/tls",
     "//rs/crypto/internal/csp_test_utils",
     "//rs/crypto/sha",
+    "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/keygen",
