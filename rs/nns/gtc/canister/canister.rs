@@ -209,16 +209,17 @@ fn check_gtc_candid_file() {
         std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
     )
     .join("canister/gtc.did");
-    let gtc_did = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
+    let did_contents = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
 
     // See comments in main above
     candid::export_service!();
     let expected = __export_service();
 
-    if gtc_did != expected {
+    if did_contents != expected {
         panic!(
             "Generated candid definition does not match canister/gtc.did. \
-            Run `cargo run --bin genesis-token-canister > canister/gtc.did` in \
+            Run `bazel run :generate_did > canister/gtc.did` (no nix and/or direnv) or \
+            `cargo run --bin genesis-token-canister > canister/gtc.did` in \
             rs/nns/gtc to update canister/gtc.did."
         )
     }

@@ -1022,16 +1022,17 @@ fn check_governance_candid_file() {
         std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
     )
     .join("canister/governance.did");
-    let governance_did = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
+    let did_contents = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
 
     // See comments in main above
     candid::export_service!();
     let expected = __export_service();
 
-    if governance_did != expected {
+    if did_contents != expected {
         panic!(
             "Generated candid definition does not match canister/governance.did. \
-            Run `cargo run --bin governance-canister > canister/governance.did` in \
+            Run `bazel run :generate_did > canister/governance.did` (no nix and/or direnv) or \
+            `cargo run --bin governance-canister > canister/governance.did` in \
             rs/nns/governance to update canister/governance.did."
         )
     }

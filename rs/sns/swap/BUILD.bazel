@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -109,12 +109,25 @@ rust_library(
     ],
 )
 
+rust_binary(
+    name = "generate_did",
+    srcs = ["canister/canister.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":swap",
+    ],
+)
+
 rust_canister(
     name = "sns-swap-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":swap"] + [":build_script"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":swap",
+    ],
 )
 
 optimized_canister(
@@ -133,7 +146,7 @@ rust_test(
 rust_test(
     name = "canister_unit_test",
     crate = ":_wasm_sns-swap-canister-raw",
-    data = [":canister/swap.did"],
+    data = ["canister/swap.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/swap",
     },
