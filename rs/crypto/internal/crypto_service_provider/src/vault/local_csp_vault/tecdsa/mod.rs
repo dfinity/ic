@@ -3,7 +3,7 @@ use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdEcdsaSignerCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::KeyId;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
     ThresholdEcdsaSigShareInternal,
@@ -31,31 +31,22 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
         let start_time = self.metrics.now();
-        let lambda_share =
-            self.combined_commitment_opening_from_sks(&lambda_masked.combined_commitment)?;
-        let kappa_times_lambda_share =
-            self.combined_commitment_opening_from_sks(&kappa_times_lambda.combined_commitment)?;
-        let key_times_lambda_share =
-            self.combined_commitment_opening_from_sks(&key_times_lambda.combined_commitment)?;
-
-        let result = tecdsa_sign_share(
-            &derivation_path.into(),
+        let result = self.ecdsa_sign_share_internal(
+            derivation_path,
             hashed_message,
-            *nonce,
+            nonce,
             key,
             kappa_unmasked,
-            &lambda_share,
-            &kappa_times_lambda_share,
-            &key_times_lambda_share,
+            lambda_masked,
+            kappa_times_lambda,
+            key_times_lambda,
             algorithm_id,
-        )
-        .map_err(|e| ThresholdEcdsaSignShareError::InternalError {
-            internal_error: format!("{:?}", e),
-        });
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Local,
             "ecdsa_sign_share",
+            MetricsResult::from(&result),
             start_time,
         );
         result
@@ -85,5 +76,40 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
                 commitment_string: format!("{:?}", commitment),
             }),
         }
+    }
+
+    fn ecdsa_sign_share_internal(
+        &self,
+        derivation_path: &ExtendedDerivationPath,
+        hashed_message: &[u8],
+        nonce: &Randomness,
+        key: &IDkgTranscriptInternal,
+        kappa_unmasked: &IDkgTranscriptInternal,
+        lambda_masked: &IDkgTranscriptInternal,
+        kappa_times_lambda: &IDkgTranscriptInternal,
+        key_times_lambda: &IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
+        let lambda_share =
+            self.combined_commitment_opening_from_sks(&lambda_masked.combined_commitment)?;
+        let kappa_times_lambda_share =
+            self.combined_commitment_opening_from_sks(&kappa_times_lambda.combined_commitment)?;
+        let key_times_lambda_share =
+            self.combined_commitment_opening_from_sks(&key_times_lambda.combined_commitment)?;
+
+        tecdsa_sign_share(
+            &derivation_path.into(),
+            hashed_message,
+            *nonce,
+            key,
+            kappa_unmasked,
+            &lambda_share,
+            &kappa_times_lambda_share,
+            &key_times_lambda_share,
+            algorithm_id,
+        )
+        .map_err(|e| ThresholdEcdsaSignShareError::InternalError {
+            internal_error: format!("{:?}", e),
+        })
     }
 }

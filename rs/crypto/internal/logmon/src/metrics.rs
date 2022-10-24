@@ -70,12 +70,18 @@ impl CryptoMetrics {
         domain: MetricsDomain,
         scope: MetricsScope,
         method_name: &str,
+        result: MetricsResult,
         start_time: Option<Instant>,
     ) {
         if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
             metrics
                 .crypto_duration_seconds
-                .with_label_values(&[method_name, &format!("{}", scope), &format!("{}", domain)])
+                .with_label_values(&[
+                    method_name,
+                    &format!("{}", scope),
+                    &format!("{}", domain),
+                    &format!("{}", result),
+                ])
                 .observe(start_time.elapsed().as_secs_f64());
         }
     }
@@ -115,6 +121,21 @@ pub enum MetricsDomain {
 pub enum MetricsScope {
     Full,
     Local,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+pub enum MetricsResult {
+    Ok,
+    Err,
+}
+
+impl<T, E> From<&Result<T, E>> for MetricsResult {
+    fn from(original: &Result<T, E>) -> Self {
+        match original {
+            Ok(_) => MetricsResult::Ok,
+            Err(_) => MetricsResult::Err,
+        }
+    }
 }
 
 /// Keeps track of the number of node keys. This information is collected and provided to the
@@ -216,6 +237,21 @@ impl MetricsScope {
     }
 }
 
+impl Display for MetricsResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str_snake_case())
+    }
+}
+
+impl MetricsResult {
+    fn as_str_snake_case(&self) -> &str {
+        match self {
+            MetricsResult::Ok => "ok",
+            MetricsResult::Err => "err",
+        }
+    }
+}
+
 impl Display for KeyType {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str_snake_case())
@@ -246,7 +282,7 @@ impl Metrics {
             "crypto_duration_seconds",
             "Histogram of method call durations in seconds",
             ic_metrics::buckets::decimal_buckets(-4, 1),
-            &["method_name", "scope", "domain"],
+            &["method_name", "scope", "domain", "result"],
         );
         let mut key_counts = BTreeMap::new();
         for key_type in KeyType::iter() {

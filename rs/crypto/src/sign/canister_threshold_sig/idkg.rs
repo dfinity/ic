@@ -25,7 +25,7 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 pub use utils::{get_mega_pubkey, MegaKeyFromRegistryError};
 
 /// Currently, these are implemented with noop stubs,
@@ -52,6 +52,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "create_dealing",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -90,6 +91,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "verify_dealing_public",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -128,6 +130,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "verify_dealing_private",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -165,6 +168,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "verify_initial_dealings",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -198,6 +202,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "create_transcript",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -232,6 +237,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "verify_transcript",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -267,6 +273,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "load_transcript",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -312,6 +319,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "verify_complaint",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -353,6 +361,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "open_transcript",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -390,6 +399,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "verify_opening",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -428,6 +438,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "load_transcript_with_openings",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -463,6 +474,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,
             "retain_active_transcripts",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
