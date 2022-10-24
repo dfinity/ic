@@ -38,5 +38,6 @@ pub fn init(args: InitArgs) {
         pending_retrieve_btc_requests: Default::default(),
         ledger_id: args.ledger_id,
         utxos_state_addresses: Default::default(),
+        is_heartbeat_running: false,
     });
 }

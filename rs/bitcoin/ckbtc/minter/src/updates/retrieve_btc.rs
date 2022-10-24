@@ -165,6 +165,7 @@ mod tests {
             pending_retrieve_btc_requests: Default::default(),
             ledger_id: ic_base_types::CanisterId::from_u64(42),
             utxos_state_addresses: Default::default(),
+            is_heartbeat_running: false,
         });
         assert_eq!(
             Ok(()),

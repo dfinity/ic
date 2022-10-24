@@ -4508,6 +4508,7 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "lazy_static",
  "ledger-canister",
+ "proptest",
  "ripemd",
  "serde",
  "serde_bytes",

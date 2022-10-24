@@ -104,6 +104,7 @@ mod tests {
             update_balance_principals: Default::default(),
             ledger_id: CanisterId::from_u64(42),
             utxos_state_addresses: Default::default(),
+            is_heartbeat_running: false,
         }
     }
 

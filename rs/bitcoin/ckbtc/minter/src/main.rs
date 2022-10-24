@@ -1,5 +1,5 @@
 use candid::candid_method;
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, update};
+use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, update};
 use ic_ckbtc_minter::lifecycle::{self, init::InitArgs};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcErr, RetrieveBtcOk};
@@ -13,6 +13,11 @@ use ic_ckbtc_minter::updates::{
 #[init]
 fn init(args: InitArgs) {
     lifecycle::init::init(args)
+}
+
+#[heartbeat]
+async fn heartbeat() {
+    ic_ckbtc_minter::heartbeat().await;
 }
 
 #[pre_upgrade]
