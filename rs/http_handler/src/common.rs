@@ -110,7 +110,7 @@ pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
         C::CanisterNonEmpty => StatusCode::PRECONDITION_FAILED,
         C::CertifiedStateUnavailable => StatusCode::SERVICE_UNAVAILABLE,
         C::CanisterRejectedMessage => StatusCode::FORBIDDEN,
-        C::InterCanisterQueryLoopDetected => StatusCode::INTERNAL_SERVER_ERROR,
+        C::QueryCallGraphLoopDetected => StatusCode::INTERNAL_SERVER_ERROR,
         C::UnknownManagementMessage => StatusCode::BAD_REQUEST,
         C::InvalidManagementPayload => StatusCode::BAD_REQUEST,
         C::InsufficientCyclesInCall => StatusCode::SERVICE_UNAVAILABLE,
@@ -118,6 +118,7 @@ pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
         C::CanisterInstructionLimitExceeded => StatusCode::INTERNAL_SERVER_ERROR,
         C::CanisterInstallCodeRateLimited => StatusCode::TOO_MANY_REQUESTS,
         C::CanisterMemoryAccessLimitExceeded => StatusCode::INTERNAL_SERVER_ERROR,
+        C::QueryCallGraphTooDeep => StatusCode::INTERNAL_SERVER_ERROR,
     };
     make_plaintext_response(status, user_error.description().to_string())
 }

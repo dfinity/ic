@@ -52,6 +52,9 @@ const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
 /// memory can succeed.
 pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GB);
 
+/// The maximum depth of call graphs allowed for ICQC
+pub(crate) const MAX_QUERY_CALL_DEPTH: usize = 6;
+
 // The ID of the Bitcoin testnet canister in production.
 const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
@@ -96,6 +99,9 @@ pub struct Config {
 
     /// The number of threads to use for query execution.
     pub query_execution_threads: usize,
+
+    /// The maximum depth of the query call tree.
+    pub max_query_call_depth: usize,
 
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
@@ -146,6 +152,7 @@ impl Default for Config {
             max_controllers: 10,
             canister_sandboxing_flag: FlagStatus::Enabled,
             query_execution_threads: QUERY_EXECUTION_THREADS,
+            max_query_call_depth: MAX_QUERY_CALL_DEPTH,
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             rate_limiting_of_heap_delta: FlagStatus::Enabled,
             rate_limiting_of_instructions: FlagStatus::Enabled,

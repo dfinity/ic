@@ -275,7 +275,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         InsufficientMemoryAllocation => "Insufficient memory allocation given to canister",
         SubnetNotFound => "Subnet not found",
         CanisterRejectedMessage => "Canister rejected the message",
-        InterCanisterQueryLoopDetected => "Loop in inter-canister query call graph",
+        QueryCallGraphLoopDetected => "Loop in inter-canister query call graph",
         UnknownManagementMessage => "Unknown management method",
         InvalidManagementPayload => "Invalid management message payload",
         InsufficientCyclesInCall => "Canister tried to keep more cycles than available in the call",
@@ -289,5 +289,6 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterMemoryAccessLimitExceeded => {
             "Canister exceeded the limit for the number of modified stable memory pages for a single message execution"
         }
+        QueryCallGraphTooDeep => "Query call graph contains too many nested calls"
     }
 }

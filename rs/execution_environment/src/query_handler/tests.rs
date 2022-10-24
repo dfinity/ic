@@ -1,4 +1,4 @@
-use crate::execution::test_utilities::ExecutionTestBuilder;
+use crate::execution::test_utilities::{ExecutionTest, ExecutionTestBuilder};
 use crate::InternalHttpQueryHandler;
 use ic_base_types::NumSeconds;
 use ic_error_types::{ErrorCode, UserError};
@@ -258,6 +258,88 @@ fn query_calls_disabled_for_application_subnet() {
     match output {
         Ok(_) => unreachable!("The query was expected to fail, but it succeeded."),
         Err(err) => assert_eq!(err.code(), ErrorCode::CanisterContractViolation),
+    }
+}
+
+#[test]
+fn query_callgraph_depth_is_enforced() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System) // For now, query calls are only allowed in system subnets
+        .build();
+
+    const CANISTERS_MAX: usize = 20;
+
+    let mut canisters = vec![];
+    for _ in 0..CANISTERS_MAX {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    fn generate_call_to(
+        canisters: &[ic_types::CanisterId],
+        canister_idx: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        assert!(canister_idx != 0 && canister_idx < canisters.len());
+        wasm().stable_grow(10).inter_query(
+            canisters[canister_idx],
+            call_args()
+                .other_side(generate_return(canisters, canister_idx - 1))
+                .on_reply(wasm().stable_size().reply_int()),
+        )
+    }
+
+    // Each canister should either just return or trigger another ICQC
+    fn generate_return(
+        canisters: &[ic_types::CanisterId],
+        canister_idx: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        if canister_idx == 0 {
+            wasm().reply_data(b"ignore".as_ref())
+        } else {
+            generate_call_to(canisters, canister_idx)
+        }
+    }
+
+    fn test_query(
+        test: &ExecutionTest,
+        canisters: &[ic_types::CanisterId],
+        num_calls: usize,
+    ) -> Result<WasmResult, UserError> {
+        test.query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canisters[0],
+                method_name: "query".to_string(),
+                method_payload: generate_call_to(canisters, num_calls).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+    }
+
+    // Those should succeed
+    for num_calls in 1..7 {
+        match &test_query(&test, &canisters, num_calls) {
+            Ok(_) => {}
+            Err(err) => panic!(
+                "Query with depth {} failed, when it should have succeeded: {:?}",
+                num_calls, err
+            ),
+        }
+    }
+
+    // Those should fail
+    for num_calls in 7..19 {
+        match test_query(&test, &canisters, num_calls) {
+            Ok(_) => panic!(
+                "Call with depth {} should have failed with call graph being too large",
+                num_calls
+            ),
+            Err(err) => {
+                assert_eq!(err.code(), ErrorCode::QueryCallGraphTooDeep)
+            }
+        }
     }
 }
 

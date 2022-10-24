@@ -88,7 +88,7 @@ impl From<ErrorCode> for RejectCode {
             InsufficientMemoryAllocation => CanisterReject,
             SubnetNotFound => CanisterReject,
             CanisterRejectedMessage => CanisterReject,
-            InterCanisterQueryLoopDetected => CanisterError,
+            QueryCallGraphLoopDetected => CanisterError,
             UnknownManagementMessage => CanisterReject,
             InvalidManagementPayload => CanisterReject,
             InsufficientCyclesInCall => CanisterError,
@@ -96,6 +96,7 @@ impl From<ErrorCode> for RejectCode {
             CanisterInstructionLimitExceeded => CanisterError,
             CanisterInstallCodeRateLimited => SysTransient,
             CanisterMemoryAccessLimitExceeded => CanisterError,
+            QueryCallGraphTooDeep => CanisterError,
         }
     }
 }
@@ -135,7 +136,7 @@ pub enum ErrorCode {
     CanisterNonEmpty = 514,
     CertifiedStateUnavailable = 515,
     CanisterRejectedMessage = 516,
-    InterCanisterQueryLoopDetected = 517,
+    QueryCallGraphLoopDetected = 517,
     UnknownManagementMessage = 518,
     InvalidManagementPayload = 519,
     InsufficientCyclesInCall = 520,
@@ -143,6 +144,7 @@ pub enum ErrorCode {
     CanisterInstructionLimitExceeded = 522,
     CanisterInstallCodeRateLimited = 523,
     CanisterMemoryAccessLimitExceeded = 524,
+    QueryCallGraphTooDeep = 525,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -176,7 +178,7 @@ impl TryFrom<u64> for ErrorCode {
             514 => Ok(ErrorCode::CanisterNonEmpty),
             515 => Ok(ErrorCode::CertifiedStateUnavailable),
             516 => Ok(ErrorCode::CanisterRejectedMessage),
-            517 => Ok(ErrorCode::InterCanisterQueryLoopDetected),
+            517 => Ok(ErrorCode::QueryCallGraphLoopDetected),
             518 => Ok(ErrorCode::UnknownManagementMessage),
             519 => Ok(ErrorCode::InvalidManagementPayload),
             520 => Ok(ErrorCode::InsufficientCyclesInCall),
@@ -184,6 +186,7 @@ impl TryFrom<u64> for ErrorCode {
             522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
             523 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
+            525 => Ok(ErrorCode::QueryCallGraphTooDeep),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
