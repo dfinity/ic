@@ -11,6 +11,8 @@ use ic_types::crypto::{AlgorithmId, CryptoError};
 use ic_types::NodeId;
 
 #[cfg(test)]
+mod fixtures;
+#[cfg(test)]
 mod tests;
 
 impl CspKeyGenerator for Csp {
