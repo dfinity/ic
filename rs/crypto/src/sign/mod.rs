@@ -47,7 +47,7 @@ pub use canister_threshold_sig::{get_mega_pubkey, MegaKeyFromRegistryError};
 mod tests;
 // TODO: Remove this indirection:
 pub(crate) use ic_crypto_internal_csp::imported_utilities::sign_utils as utils;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_types::signature::BasicSignatureBatch;
 
 impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFatClient<C> {
@@ -81,6 +81,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFa
             MetricsDomain::BasicSignature,
             MetricsScope::Full,
             "sign_basic",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -127,6 +128,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             MetricsDomain::BasicSignature,
             MetricsScope::Full,
             "verify_basic_sig",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -159,6 +161,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             MetricsDomain::BasicSignature,
             MetricsScope::Full,
             "combine_basic_sig",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -198,6 +201,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             MetricsDomain::BasicSignature,
             MetricsScope::Full,
             "verify_basic_sig_batch",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -242,6 +246,7 @@ impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
             MetricsDomain::BasicSignature,
             MetricsScope::Full,
             &metrics_label,
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -284,6 +289,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentFa
             MetricsDomain::MultiSignature,
             MetricsScope::Full,
             "sign_multi",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -330,6 +336,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             MetricsDomain::MultiSignature,
             MetricsScope::Full,
             "verify_multi_sig_individual",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -369,6 +376,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             MetricsDomain::MultiSignature,
             MetricsScope::Full,
             "combine_multi_sig_individuals",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -415,6 +423,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             MetricsDomain::MultiSignature,
             MetricsScope::Full,
             "verify_multi_sig_combined",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -452,6 +461,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoCompone
             MetricsDomain::ThresholdSignature,
             MetricsScope::Full,
             "sign_threshold",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -500,6 +510,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
             MetricsDomain::ThresholdSignature,
             MetricsScope::Full,
             "verify_threshold_sig_share",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -537,6 +548,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
             MetricsDomain::ThresholdSignature,
             MetricsScope::Full,
             "combine_threshold_sig_shares",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -578,6 +590,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
             MetricsDomain::ThresholdSignature,
             MetricsScope::Full,
             "verify_threshold_sig_combined",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -625,6 +638,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
             MetricsDomain::ThresholdSignature,
             MetricsScope::Full,
             "verify_combined_threshold_sig_by_public_key",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -669,6 +683,7 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
             MetricsDomain::IcCanisterSignature,
             MetricsScope::Full,
             "verify_canister_sig",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -701,6 +716,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentFatClient
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,
             "sign_share",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -739,6 +755,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,
             "verify_sig_share",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -771,6 +788,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,
             "combine_sig_shares",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -805,6 +823,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,
             "verify_combined_sig",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;

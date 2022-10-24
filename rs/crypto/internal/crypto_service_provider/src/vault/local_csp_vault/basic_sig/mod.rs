@@ -7,7 +7,7 @@ use crate::vault::api::{
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_types::crypto::AlgorithmId;
 use rand::{CryptoRng, Rng};
 
@@ -24,6 +24,43 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let start_time = self.metrics.now();
+        let result = self.sign_internal(algorithm_id, message, key_id);
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::BasicSignature,
+            MetricsScope::Local,
+            "sign",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
+    }
+
+    fn gen_key_pair(
+        &self,
+        algorithm_id: AlgorithmId,
+    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
+        let start_time = self.metrics.now();
+        let result = self.gen_key_pair_internal(algorithm_id);
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::BasicSignature,
+            MetricsScope::Local,
+            "gen_key_pair",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
+    }
+}
+
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
+    LocalCspVault<R, S, C>
+{
+    fn sign_internal(
+        &self,
+        algorithm_id: AlgorithmId,
+        message: &[u8],
+        key_id: KeyId,
+    ) -> Result<CspSignature, CspBasicSignatureError> {
         let maybe_secret_key = self.sks_read_lock().get(&key_id);
         let secret_key: CspSecretKey =
             maybe_secret_key.ok_or(CspBasicSignatureError::SecretKeyNotFound {
@@ -49,20 +86,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
                 algorithm: algorithm_id,
             }),
         };
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::BasicSignature,
-            MetricsScope::Local,
-            "sign",
-            start_time,
-        );
         result
     }
 
-    fn gen_key_pair(
+    fn gen_key_pair_internal(
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
-        let start_time = self.metrics.now();
         let (sk, pk) = match algorithm_id {
             AlgorithmId::Ed25519 => {
                 let (sk_bytes, pk_bytes) = ed25519::keypair_from_rng(&mut *self.rng_write_lock());
@@ -76,12 +106,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
         }?;
         let sk_id = KeyId::from(&pk);
         self.store_secret_key(sk, sk_id)?;
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::BasicSignature,
-            MetricsScope::Local,
-            "gen_key_pair",
-            start_time,
-        );
         Ok(pk)
     }
 }

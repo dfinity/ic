@@ -6,7 +6,7 @@ use crate::types::{CspSignature, ThresBls12_381_Signature};
 use crate::vault::api::CspThresholdSignatureKeygenError;
 use crate::vault::api::ThresholdSignatureCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12381_clib;
 use ic_types::crypto::AlgorithmId;
@@ -101,6 +101,27 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let start_time = self.metrics.now();
+        let result = self.threshold_sign_internal(algorithm_id, message, key_id);
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::ThresholdSignature,
+            MetricsScope::Local,
+            "threshold_sign",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
+    }
+}
+
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
+    LocalCspVault<R, S, C>
+{
+    fn threshold_sign_internal(
+        &self,
+        algorithm_id: AlgorithmId,
+        message: &[u8],
+        key_id: KeyId,
+    ) -> Result<CspSignature, CspThresholdSignError> {
         let result = match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
                 let maybe_csp_key = self.sks_read_lock().get(&key_id);
@@ -121,12 +142,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
                 algorithm: algorithm_id,
             }),
         };
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::ThresholdSignature,
-            MetricsScope::Local,
-            "threshold_sign",
-            start_time,
-        );
         result
     }
 }

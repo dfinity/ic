@@ -1,11 +1,10 @@
 use super::*;
 use async_trait::async_trait;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, TlsClientHandshakeError,
-    TlsHandshake, TlsServerHandshakeError,
+    TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
 };
-use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
 use ic_logger::{debug, new_logger};
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, PrincipalId, RegistryVersion};
@@ -53,6 +52,7 @@ where
             MetricsDomain::TlsHandshake,
             MetricsScope::Full,
             "perform_tls_server_handshake",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -92,6 +92,7 @@ where
             MetricsDomain::TlsHandshake,
             MetricsScope::Full,
             "perform_tls_server_handshake_without_client_auth",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -133,6 +134,7 @@ where
             MetricsDomain::TlsHandshake,
             MetricsScope::Full,
             "perform_tls_client_handshake",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;

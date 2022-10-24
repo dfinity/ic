@@ -5,7 +5,7 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     compute_secret_shares, compute_secret_shares_with_openings,
     create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, open_dealing,
@@ -40,26 +40,19 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
     ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
         debug!(self.logger; crypto.method_name => "idkg_create_dealing");
         let start_time = self.metrics.now();
-
-        let tecdsa_shares = self.get_secret_shares(transcript_operation)?;
-
-        let seed = Seed::from_rng(&mut *self.rng_write_lock());
-        let result = tecdsa_create_dealing(
+        let result = self.idkg_create_dealing_internal(
             algorithm_id,
             context_data,
             dealer_index,
             reconstruction_threshold,
             receiver_keys,
-            &tecdsa_shares,
-            seed,
-        )
-        .map_err(|e| IDkgCreateDealingError::InternalError {
-            internal_error: format!("{:?}", e),
-        });
+            transcript_operation,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
             MetricsScope::Local,
             "idkg_create_dealing",
+            MetricsResult::from(&result),
             start_time,
         );
         result
@@ -76,23 +69,19 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private");
         let start_time = self.metrics.now();
-
-        let (receiver_public_key, receiver_secret_key) =
-            self.mega_keyset_from_sks(&receiver_key_id)?;
-
-        let result = Ok(privately_verify_dealing(
+        let result = self.idkg_verify_dealing_private_internal(
             algorithm_id,
             dealing,
-            &receiver_secret_key,
-            &receiver_public_key,
-            context_data,
             dealer_index,
             receiver_index,
-        )?);
+            receiver_key_id,
+            context_data,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
             MetricsScope::Local,
             "idkg_verify_dealing_private",
+            MetricsResult::from(&result),
             start_time,
         );
         result
@@ -107,6 +96,175 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         transcript: &IDkgTranscriptInternal,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
+        let result = self.idkg_load_transcript_internal(
+            dealings,
+            context_data,
+            receiver_index,
+            key_id,
+            transcript,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
+            "idkg_load_transcript",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
+    }
+
+    fn idkg_load_transcript_with_openings(
+        &self,
+        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: &[u8],
+        receiver_index: NodeIndex,
+        key_id: &KeyId,
+        transcript: &IDkgTranscriptInternal,
+    ) -> Result<(), IDkgLoadTranscriptError> {
+        let start_time = self.metrics.now();
+        let result = self.idkg_load_transcript_with_openings_internal(
+            dealings,
+            openings,
+            context_data,
+            receiver_index,
+            key_id,
+            transcript,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
+            "idkg_load_transcript_with_openings",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
+    }
+
+    fn idkg_gen_mega_key_pair(
+        &self,
+        algorithm_id: AlgorithmId,
+    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
+        debug!(self.logger; crypto.method_name => "idkg_gen_mega_key_pair");
+        let start_time = self.metrics.now();
+        let result = self.idkg_gen_mega_key_pair_internal(algorithm_id);
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
+            "idkg_gen_mega_key_pair",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
+    }
+
+    fn idkg_open_dealing(
+        &self,
+        dealing: IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        context_data: &[u8],
+        opener_index: NodeIndex,
+        opener_key_id: &KeyId,
+    ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
+        let start_time = self.metrics.now();
+        let result = self.idkg_open_dealing_internal(
+            dealing,
+            dealer_index,
+            context_data,
+            opener_index,
+            opener_key_id,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
+            "idkg_open_dealing",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
+    }
+
+    fn idkg_retain_threshold_keys_if_present(
+        &self,
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), IDkgRetainThresholdKeysError> {
+        debug!(self.logger; crypto.method_name => "idkg_retain_threshold_keys_if_present");
+        let start_time = self.metrics.now();
+        self.canister_sks_write_lock().retain(
+            |key_id, _| active_key_ids.contains(key_id),
+            IDKG_THRESHOLD_KEYS_SCOPE,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            MetricsScope::Local,
+            "idkg_retain_threshold_keys_if_present",
+            MetricsResult::Ok,
+            start_time,
+        );
+        Ok(())
+    }
+}
+
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
+    LocalCspVault<R, S, C>
+{
+    fn idkg_create_dealing_internal(
+        &self,
+        algorithm_id: AlgorithmId,
+        context_data: &[u8],
+        dealer_index: NodeIndex,
+        reconstruction_threshold: NumberOfNodes,
+        receiver_keys: &[MEGaPublicKey],
+        transcript_operation: &IDkgTranscriptOperationInternal,
+    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
+        let tecdsa_shares = self.get_secret_shares(transcript_operation)?;
+
+        let seed = Seed::from_rng(&mut *self.rng_write_lock());
+        tecdsa_create_dealing(
+            algorithm_id,
+            context_data,
+            dealer_index,
+            reconstruction_threshold,
+            receiver_keys,
+            &tecdsa_shares,
+            seed,
+        )
+        .map_err(|e| IDkgCreateDealingError::InternalError {
+            internal_error: format!("{:?}", e),
+        })
+    }
+
+    fn idkg_verify_dealing_private_internal(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealing: &IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
+        receiver_key_id: KeyId,
+        context_data: &[u8],
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        let (receiver_public_key, receiver_secret_key) =
+            self.mega_keyset_from_sks(&receiver_key_id)?;
+
+        Ok(privately_verify_dealing(
+            algorithm_id,
+            dealing,
+            &receiver_secret_key,
+            &receiver_public_key,
+            context_data,
+            dealer_index,
+            receiver_index,
+        )?)
+    }
+
+    fn idkg_load_transcript_internal(
+        &self,
+        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        context_data: &[u8],
+        receiver_index: NodeIndex,
+        key_id: &KeyId,
+        transcript: &IDkgTranscriptInternal,
+    ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let result = if self
             .commitment_opening_from_sks(transcript.combined_commitment.commitment())
             .is_ok()
@@ -166,16 +324,10 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 }
             }
         };
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
-            MetricsScope::Local,
-            "idkg_load_transcript",
-            start_time,
-        );
         result
     }
 
-    fn idkg_load_transcript_with_openings(
+    fn idkg_load_transcript_with_openings_internal(
         &self,
         dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
@@ -184,8 +336,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
     ) -> Result<(), IDkgLoadTranscriptError> {
-        let start_time = self.metrics.now();
-
         let result = if self
             .commitment_opening_from_sks(transcript.combined_commitment.commitment())
             .is_ok()
@@ -238,22 +388,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 }
             }
         };
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
-            MetricsScope::Local,
-            "idkg_load_transcript_with_openings",
-            start_time,
-        );
         result
     }
 
-    fn idkg_gen_mega_key_pair(
+    fn idkg_gen_mega_key_pair_internal(
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
-        debug!(self.logger; crypto.method_name => "idkg_gen_mega_key_pair");
-        let start_time = self.metrics.now();
-
         let seed = Seed::from_rng(&mut *self.rng_write_lock());
 
         let (public_key, private_key) = match algorithm_id {
@@ -278,16 +419,10 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
             }),
         )?;
 
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
-            MetricsScope::Local,
-            "idkg_gen_mega_key_pair",
-            start_time,
-        );
         Ok(public_key)
     }
 
-    fn idkg_open_dealing(
+    fn idkg_open_dealing_internal(
         &self,
         dealing: IDkgDealingInternal,
         dealer_index: NodeIndex,
@@ -295,7 +430,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         opener_index: NodeIndex,
         opener_key_id: &KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
-        let start_time = self.metrics.now();
         let (opener_public_key, opener_private_key) = self
             .mega_keyset_from_sks(opener_key_id)
             .map_err(|e| match e {
@@ -308,7 +442,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                     internal_error: format!("{:?}", e),
                 },
             })?;
-        let result = open_dealing(
+        open_dealing(
             &dealing,
             context_data,
             dealer_index,
@@ -318,39 +452,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         )
         .map_err(|e| IDkgOpenTranscriptError::InternalError {
             internal_error: format!("{:?}", e),
-        });
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
-            MetricsScope::Local,
-            "idkg_open_dealing",
-            start_time,
-        );
-        result
+        })
     }
 
-    fn idkg_retain_threshold_keys_if_present(
-        &self,
-        active_key_ids: BTreeSet<KeyId>,
-    ) -> Result<(), IDkgRetainThresholdKeysError> {
-        debug!(self.logger; crypto.method_name => "idkg_retain_threshold_keys_if_present");
-        let start_time = self.metrics.now();
-        self.canister_sks_write_lock().retain(
-            |key_id, _| active_key_ids.contains(key_id),
-            IDKG_THRESHOLD_KEYS_SCOPE,
-        );
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
-            MetricsScope::Local,
-            "idkg_retain_threshold_keys_if_present",
-            start_time,
-        );
-        Ok(())
-    }
-}
-
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    LocalCspVault<R, S, C>
-{
     fn get_secret_shares(
         &self,
         transcript_operation: &IDkgTranscriptOperationInternal,

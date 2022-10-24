@@ -41,6 +41,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "create_dealing",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -77,6 +78,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "verify_dealing",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -114,6 +116,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "create_transcript",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -151,6 +154,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "load_transcript",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -184,6 +188,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "retain_only_active_keys",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
