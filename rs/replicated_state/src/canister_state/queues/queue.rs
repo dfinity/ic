@@ -84,12 +84,12 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
         }
     }
 
-    /// Pops an item off the tail of the queue or `None` if the queue is empty.
+    /// Pops an item from the queue. Returns `None` if the queue is empty.
     fn pop(&mut self) -> Option<T> {
         self.queue.pop_front()
     }
 
-    /// Returns a reference to the item at the head of the queue or `None` if
+    /// Returns a reference to the next item in the queue; or `None` if
     /// the queue is empty.
     fn peek(&self) -> Option<&T> {
         self.queue.front()
@@ -271,7 +271,7 @@ impl From<&InputQueue> for pb_queues::InputOutputQueue {
     fn from(q: &InputQueue) -> Self {
         Self {
             queue: (&q.queue).into(),
-            index: 0,
+            begin: 0,
             capacity: q.queue.capacity as u64,
             num_slots_reserved: q.queue.num_slots_reserved as u64,
             deadline_range_ends: Vec::new(),
@@ -296,13 +296,13 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 }
 
 /// Representation of a single Canister output queue.  There is an upper bound
-/// on the number of messages it can store.  There is also a queue index which
+/// on the number of messages it can store. There is also a begin index which
 /// can be used effectively as a sequence number for the next message popped out
 /// of the queue.
 ///
 /// Uses `Option<_>` items so that requests can be dropped from anywhere in
 /// the queue, i.e. replaced with `None`. They will keep their place in the queue
-/// until they reach the front, where they will be discarded.
+/// until they reach the beginning, where they will be discarded.
 ///
 /// Additionally, an invariant is imposed such that there is always `Some` at the
 /// front. This is ensured when a message is popped off the queue by also popping
@@ -310,13 +310,17 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct OutputQueue {
     queue: QueueWithReservation<Option<RequestOrResponse>>,
-    index: usize,
+    /// Queue begin index.
+    ///
+    /// This provides consistent indices that identify each queue item, even as
+    /// items are being pushed and popped, for use e.g. in `deadline_range_ends`.
+    begin: usize,
     /// Ordered ranges of messages having the same request deadline. Each range
     /// is represented as a deadline and its end index (the index just past
     /// the last request where the deadline applies). Both the deadlines and queue
     /// indices are strictly increasing.
     deadline_range_ends: VecDeque<(Time, usize)>,
-    /// Queue index from which request timing out will resume.
+    /// Index from which request timing out will resume.
     ///
     /// Used to ensure amortized constant time for timing out requests.
     /// May point before the beginning of the queue if messages have been popped
@@ -330,7 +334,7 @@ impl OutputQueue {
     pub(super) fn new(capacity: usize) -> Self {
         Self {
             queue: QueueWithReservation::new(capacity),
-            index: 0,
+            begin: 0,
             deadline_range_ends: VecDeque::new(),
             timeout_index: 0,
             num_messages: 0,
@@ -358,18 +362,18 @@ impl OutputQueue {
 
         // Update the deadline queue.
         //
-        // If the deadline is <= the one at the tail of the deadline queue,
-        // update the `deadline_range_end`.
+        // If the deadline is less than or equal the one at the end of the deadline queue,
+        // update the `end` of the last deadline range.
         //
-        // If the new deadline is greater than the one of the previous request or
-        // there is no previous request in the queue. push a new tuple.
-        let back_index = self.index + self.queue.queue.len();
+        // If the new deadline is greater than the one of the previous request or there is
+        // no previous request in the queue. push a new tuple.
+        let end = self.begin + self.queue.queue.len();
         match self.deadline_range_ends.back_mut() {
             Some((back_deadline, deadline_range_end)) if *back_deadline >= deadline => {
-                *deadline_range_end = back_index;
+                *deadline_range_end = end;
             }
             _ => {
-                self.deadline_range_ends.push_back((deadline, back_index));
+                self.deadline_range_ends.push_back((deadline, end));
             }
         }
 
@@ -394,15 +398,15 @@ impl OutputQueue {
 
     /// Pops a message off the queue and returns it.
     ///
-    /// Ensures there is always a 'Some' at the front.
+    /// Ensures there is always a 'Some' at the beginning.
     pub(crate) fn pop(&mut self) -> Option<RequestOrResponse> {
         match self.queue.pop() {
             None => None,
             Some(None) => {
-                panic!("OutputQueue invariant violated: Found `None` at the front.");
+                unreachable!("OutputQueue invariant violated: Found `None` at the front.");
             }
             Some(Some(msg)) => {
-                self.index += 1;
+                self.begin += 1;
                 self.advance_to_next_message();
 
                 self.num_messages -= 1;
@@ -413,17 +417,17 @@ impl OutputQueue {
         }
     }
 
-    /// Consumes any empty slots at the head of the queue and discards consumed deadline ranges.
+    /// Consumes any empty slots at the beginning of the queue and discards consumed deadline ranges.
     fn advance_to_next_message(&mut self) {
-        // Remove `None` in front.
+        // Remove `None` in the beginning.
         while let Some(None) = self.queue.peek() {
             self.queue.pop();
-            self.index += 1;
+            self.begin += 1;
         }
 
         // Remove deadlines that are no longer relevant.
         while let Some((_, deadline_range_end)) = self.deadline_range_ends.front() {
-            if *deadline_range_end <= self.index || *deadline_range_end <= self.timeout_index {
+            if *deadline_range_end <= self.begin || *deadline_range_end <= self.timeout_index {
                 self.deadline_range_ends.pop_front();
             } else {
                 break;
@@ -451,7 +455,7 @@ impl OutputQueue {
     /// Queue invariant check that produces an error if any invariant does not hold.
     fn test_invariants(&self) -> Result<(), &str> {
         if let Some(None) = self.queue.queue.front() {
-            return Err("`None` at the front of the queue.");
+            return Err("`None` at the beginning of the queue.");
         }
 
         if !self
@@ -464,9 +468,9 @@ impl OutputQueue {
         }
 
         // Deadline indices must be in the
-        // `(self.index, self.index + self.queue.queue.len()]` interval.
+        // `(self.begin, self.begin + self.queue.queue.len()]` interval.
         if let Some((_, first_deadline_range_end)) = self.deadline_range_ends.front() {
-            if *first_deadline_range_end <= self.index {
+            if *first_deadline_range_end <= self.begin {
                 return Err("Deadline range end before queue begin.");
             }
             if *first_deadline_range_end <= self.timeout_index {
@@ -474,7 +478,7 @@ impl OutputQueue {
             }
         }
         if let Some((_, last_deadline_range_end)) = self.deadline_range_ends.back() {
-            if *last_deadline_range_end > self.index + self.queue.queue.len() {
+            if *last_deadline_range_end > self.begin + self.queue.queue.len() {
                 return Err("Deadline range end after queue end.");
             }
         }
@@ -483,7 +487,7 @@ impl OutputQueue {
             .queue
             .queue
             .iter()
-            .take(self.timeout_index.saturating_sub(self.index))
+            .take(self.timeout_index.saturating_sub(self.begin))
             .any(|rr| matches!(rr, Some(RequestOrResponse::Request(_))))
         {
             return Err("Request(s) before `timeout_index`.");
@@ -569,11 +573,11 @@ impl<'a> Iterator for TimedOutRequestsIter<'a> {
                 return None;
             }
 
-            self.q.timeout_index = self.q.timeout_index.max(self.q.index);
+            self.q.timeout_index = self.q.timeout_index.max(self.q.begin);
 
-            debug_assert!(deadline_range_end <= self.q.index + self.q.queue.queue.len());
+            debug_assert!(deadline_range_end <= self.q.begin + self.q.queue.queue.len());
             while self.q.timeout_index < deadline_range_end {
-                let i = self.q.timeout_index - self.q.index;
+                let i = self.q.timeout_index - self.q.begin;
                 self.q.timeout_index += 1;
 
                 if let Some(Request(request)) = match self.q.queue.queue.get_mut(i) {
@@ -605,7 +609,7 @@ impl From<&OutputQueue> for pb_queues::InputOutputQueue {
     fn from(q: &OutputQueue) -> Self {
         Self {
             queue: (&q.queue).into(),
-            index: q.index as u64,
+            begin: q.begin as u64,
             capacity: q.queue.capacity as u64,
             num_slots_reserved: q.queue.num_slots_reserved as u64,
             deadline_range_ends: q
@@ -627,7 +631,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
     type Error = ProxyDecodeError;
 
     fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        let index = q.index as usize;
+        let begin = q.begin as usize;
         let timeout_index = q.timeout_index as usize;
         let deadline_range_ends: VecDeque<(Time, usize)> = q
             .deadline_range_ends
@@ -643,7 +647,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
         let num_messages = queue.queue.iter().filter(|rr| rr.is_some()).count();
 
         let res = Self {
-            index,
+            begin,
             queue,
             deadline_range_ends,
             timeout_index,

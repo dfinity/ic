@@ -104,7 +104,7 @@ pub struct InputOutputQueue {
     #[prost(message, repeated, tag = "1")]
     pub queue: ::prost::alloc::vec::Vec<RequestOrResponse>,
     #[prost(uint64, tag = "2")]
-    pub index: u64,
+    pub begin: u64,
     #[prost(uint64, tag = "3")]
     pub capacity: u64,
     #[prost(uint64, tag = "4")]

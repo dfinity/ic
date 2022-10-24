@@ -222,7 +222,7 @@ fn output_queue_available_slots_is_correct() {
 /// An explicit example of deadlines in OutputQueue, where we manually fill
 /// and empty the queue, while checking whether we find what we'd expect.
 /// This test also ensures `push_request` and `push_response` don't increment
-/// the queue index, but `pop` does (by 1).
+/// the queue begin index, but `pop` does (by 1).
 #[test]
 fn output_queue_explicit_push_and_pop_test() {
     let mut q = OutputQueue::new(100);
@@ -240,7 +240,7 @@ fn output_queue_explicit_push_and_pop_test() {
     q.push_request(test_request, deadline2).unwrap();
 
     assert_eq!(4, q.num_messages());
-    assert_eq!(0, q.index);
+    assert_eq!(0, q.begin);
     assert_eq!(
         VecDeque::from(vec![(deadline1, 3), (deadline2, 4)]),
         q.deadline_range_ends
@@ -249,7 +249,7 @@ fn output_queue_explicit_push_and_pop_test() {
     let timeout_index = q.timeout_index;
     assert!(matches!(q.pop().unwrap(), RequestOrResponse::Request(_)));
     assert_eq!(3, q.num_messages());
-    assert_eq!(1, q.index);
+    assert_eq!(1, q.begin);
     assert_eq!(timeout_index, q.timeout_index);
 }
 
@@ -311,7 +311,7 @@ prop_compose! {
     /// pushed onto the queue by the end of the respective round) [1, 2, ... num_msgs]; and removing
     /// a random subset thereof.
     fn arb_output_queue_no_timeout(num_msgs: std::ops::RangeInclusive<usize>) (
-        index in 0..10_usize,
+        begin in 0..10_usize,
         (msgs, indices_to_remove) in num_msgs
         .prop_flat_map(|num_msgs| {
             (
@@ -322,7 +322,7 @@ prop_compose! {
     ) -> OutputQueue {
 
         let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-        q.index = index;
+        q.begin = begin;
 
         // Boundaries of execution rounds.
         let mut range_ends = (0..=msgs.len()).collect::<Vec<usize>>();
@@ -424,7 +424,7 @@ proptest! {
                 .queue
                 .queue
                 .iter()
-                .skip(q.timeout_index - q.index)
+                .skip(q.timeout_index - q.begin)
                 .all(|msg| msg.is_some()));
         }
 
@@ -514,7 +514,7 @@ fn output_queue_decode_with_deadline_indices_not_strictly_sorted_fails() {
 #[test]
 fn output_queue_decode_with_deadlines_index_out_of_bounds_fails() {
     let mut q = generate_test_queue(1);
-    q.index = 1;
+    q.begin = 1;
 
     // Check deadline index before the queue causes error.
     q.deadline_range_ends[0].1 = 0;

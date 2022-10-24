@@ -71,7 +71,7 @@ message MessageDeadline {
 
 message InputOutputQueue {
     repeated RequestOrResponse queue = 1;
-    uint64 index = 2;
+    uint64 begin = 2;
     uint64 capacity = 3;
     uint64 num_slots_reserved = 4;
     // Ordered ranges of messages having the same request deadline. Each range
