@@ -21,7 +21,7 @@ use ic_types::{
     nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
     ExecutionRound, Height, MemoryAllocation, NumInstructions, PrincipalId,
 };
-use ic_utils::fs::{sync_and_mark_files_readonly, sync_path};
+use ic_utils::fs::sync_path;
 use ic_utils::thread::parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
 use std::collections::{BTreeMap, BTreeSet};
@@ -381,16 +381,19 @@ impl StateLayout {
         &self,
         layout: CheckpointLayout<RwPolicy>,
         height: Height,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = self.checkpoint_name(height);
         let scratchpad = layout.raw_path();
-        sync_and_mark_files_readonly(scratchpad).map_err(|err| LayoutError::IoError {
-            path: scratchpad.to_path_buf(),
-            message: format!(
-                "Could not sync and mark readonly scratchpad for checkpoint {}",
-                height
-            ),
-            io_err: err,
+        sync_and_mark_files_readonly(scratchpad, thread_pool).map_err(|err| {
+            LayoutError::IoError {
+                path: scratchpad.to_path_buf(),
+                message: format!(
+                    "Could not sync and mark readonly scratchpad for checkpoint {}",
+                    height
+                ),
+                io_err: err,
+            }
         })?;
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(cp_name);
@@ -1493,6 +1496,63 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
 enum FilePermissions {
     ReadOnly,
     ReadWrite,
+}
+
+fn sync_and_mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
+    let metadata = path.metadata()?;
+    if !metadata.is_dir() {
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(path, permissions).map_err(|e| {
+            Error::new(
+                e.kind(),
+                format!(
+                    "failed to set readonly permissions for file {}: {}",
+                    path.display(),
+                    e
+                ),
+            )
+        })?;
+    }
+    sync_path(path)
+}
+
+fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut result = Vec::new();
+    fn add_content(path: &Path, result: &mut Vec<PathBuf>) -> std::io::Result<()> {
+        result.push(path.to_path_buf());
+        let metadata = path.metadata()?;
+        if metadata.is_dir() {
+            let entries = path.read_dir()?;
+            for entry_result in entries {
+                let entry = entry_result?;
+                add_content(&entry.path(), result)?;
+            }
+        }
+        Ok(())
+    }
+    add_content(path, &mut result)?;
+    Ok(result)
+}
+
+/// Recursively set permissions to readonly for all files under the given
+/// `path`.
+fn sync_and_mark_files_readonly(
+    path: &Path,
+    thread_pool: Option<&mut scoped_threadpool::Pool>,
+) -> std::io::Result<()> {
+    let paths = dir_list_recursive(path)?;
+    if let Some(thread_pool) = thread_pool {
+        let results = parallel_map(thread_pool, paths.iter(), |p| {
+            sync_and_mark_readonly_if_file(p)
+        });
+        results.into_iter().try_for_each(identity)?;
+    } else {
+        for p in paths {
+            sync_and_mark_readonly_if_file(&p)?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]

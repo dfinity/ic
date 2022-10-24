@@ -125,41 +125,6 @@ where
     })
 }
 
-/// Recursively set permissions to readonly for all files under the given
-/// `path`.
-pub fn sync_and_mark_files_readonly<P>(path: P) -> std::io::Result<()>
-where
-    P: AsRef<Path>,
-{
-    let path = path.as_ref();
-    let metadata = path.metadata()?;
-
-    if metadata.is_dir() {
-        let entries = path.read_dir()?;
-
-        for entry_result in entries {
-            let entry = entry_result?;
-            sync_and_mark_files_readonly(&entry.path())?;
-        }
-    } else {
-        // We keep directories writable to be able to rename them or delete the
-        // files.
-        let mut permissions = metadata.permissions();
-        permissions.set_readonly(true);
-        fs::set_permissions(path, permissions).map_err(|e| {
-            Error::new(
-                e.kind(),
-                format!(
-                    "failed to set readonly permissions for file {}: {}",
-                    path.display(),
-                    e
-                ),
-            )
-        })?;
-    }
-    sync_path(path)
-}
-
 #[cfg(any(target_os = "linux"))]
 /// Copies only valid regions of file preserving the sparseness
 /// of the file. Also utilizes copy_file_range which performs
