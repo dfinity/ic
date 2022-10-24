@@ -2,12 +2,12 @@
 
 .ic-build-image:
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:5a5f3be789643be04ee8eb103f75c46fbf3a0296371a4769bd6bc4b76c1d1558"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:e911f0cb1420870b1f4dfe7f20b4570ffa9d92b30937b5a3cab831521571a81c"
 
 .ic-build-nix-image:
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:5a5f3be789643be04ee8eb103f75c46fbf3a0296371a4769bd6bc4b76c1d1558"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:e911f0cb1420870b1f4dfe7f20b4570ffa9d92b30937b5a3cab831521571a81c"
 
 .ic-build-bazel-image:
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:5a5f3be789643be04ee8eb103f75c46fbf3a0296371a4769bd6bc4b76c1d1558"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:e911f0cb1420870b1f4dfe7f20b4570ffa9d92b30937b5a3cab831521571a81c"
