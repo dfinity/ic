@@ -54,7 +54,7 @@ build --build_tag_filters="-system_test"
 test --test_tag_filters="-system_test,-post_master"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
-test:ci --test_tag_filters="-post_master"
+test:ci --test_tag_filters="-post_master,-system_test" # TODO: re-enable system tests when reproducibilty issues between different runners will be fixed.
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
