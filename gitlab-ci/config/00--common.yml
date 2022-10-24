@@ -238,6 +238,7 @@ after_script:
     - dfinity
     - ubuntu
 
+# docker & k8s
 .bazel-build-k8s:
   extends:
     - .ubuntu-docker-k8s
@@ -253,6 +254,17 @@ after_script:
     BAZEL_STARTUP_ARGS: "--output_base=/cache/bazel-output/${CI_CONCURRENT_ID}"
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
     BAZEL_CI_CONFIG: "--config=ci"
+
+# docker only
+.bazel-build-docker:
+  extends:
+    - .bazel-build-k8s
+  tags:
+    - dfinity
+    - ubuntu
+    - docker
+    # Run in ZH since BuildFarm is in ZH
+    - zh
 
 .ubuntu-nix-docker:
   extends:
