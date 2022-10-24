@@ -354,19 +354,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                 })
             })
             .and_then(|mem| {
-                let mem = mem.data_mut(&mut caller);
-                let ptr = mem.as_mut_ptr();
-                let len = mem.len();
-                // SAFETY: The memory array is valid for the duration of our borrow of the
-                // `SystemApi` and the mutating the `SystemApi` cannot change the memory array
-                // so it's safe to mutate both at once.  If the memory and system_api were two
-                // fields of the `caller` struct then this would be allowed, but
-                // since we access them through opaque functions the
-                // compiler can't know that they are unrelated objects.
-                f(&mut caller.as_context_mut().data_mut().system_api, unsafe {
-                    std::slice::from_raw_parts_mut(ptr, len)
-                })
+                let (mem, store) = mem.data_and_store_mut(&mut caller);
+                f(&mut store.system_api, mem)
             });
+
         match result {
             Err(e) => Err(process_err(caller, e)),
             Ok(r) => Ok(r),
