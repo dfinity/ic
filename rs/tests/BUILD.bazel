@@ -7,6 +7,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/artifact_pool",
+    "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/bitcoin/types/public",
     "//rs/canister_client",

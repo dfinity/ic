@@ -4481,6 +4481,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ckbtc-agent"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "garcon",
+ "ic-agent",
+ "ic-ckbtc-minter",
+ "ic-icrc1",
+ "num-traits",
+]
+
+[[package]]
 name = "ic-ckbtc-minter"
 version = "0.1.0"
 dependencies = [
@@ -13486,6 +13498,7 @@ dependencies = [
  "ic-canister-client",
  "ic-cdk",
  "ic-certification",
+ "ic-ckbtc-agent",
  "ic-ckbtc-minter",
  "ic-config",
  "ic-constants",

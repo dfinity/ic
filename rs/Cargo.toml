@@ -9,6 +9,7 @@ members = [
   "bitcoin/client",
   "bitcoin/service",
   "bitcoin/canister",
+  "bitcoin/ckbtc/agent",
   "bitcoin/ckbtc/minter",
   "bitcoin/consensus",
   "bitcoin/validation",
