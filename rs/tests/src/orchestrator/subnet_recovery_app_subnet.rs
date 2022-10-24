@@ -8,7 +8,8 @@ Ensure that the subnet recovery of an app subnet works on the same nodes and on 
 
 Runbook::
 . Deploy an IC with one app subnet (and some unassigned nodes in case of recovery on failover nodes).
-  Optionally enable ECDSA signing on both NNS and the app subnet.
+. In case of ECDSA: enable signing on NNS, create the app subnet with the key, then disable signing
+  on NNS and enable it on the app subnet instead.
 . Break (halt in case of no upgrade) the subnet.
 . Make sure the subnet stalls.
 . Propose readonly key and confirm ssh access.
@@ -19,6 +20,7 @@ Runbook::
 . Upload replayed state to a node.
 . Unhalt the subnet.
 . Ensure the subnet resumes.
+. In case of ECDSA: ensure that signing on the app subnet is possible, and the key hasn't changed.
 
 Success::
 . App subnet is functional after the recovery.
@@ -117,27 +119,49 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         master_version.clone()
     };
     let master_version = ReplicaVersion::try_from(master_version).unwrap();
+    let topology_snapshot = env.topology_snapshot();
 
     // choose a node from the nns subnet
-    let nns_node = get_nns_node(&env.topology_snapshot());
+    let nns_node = get_nns_node(&topology_snapshot);
     info!(
         logger,
         "Selected NNS node: {} ({:?})",
         nns_node.node_id,
         nns_node.get_ip_addr()
     );
-    let root_subnet_id = env.topology_snapshot().root_subnet_id();
+
+    let agent = nns_node.with_default_agent(|agent| async move { agent });
+    let nns_canister = block_on(UniversalCanister::new(
+        &agent,
+        nns_node.effective_canister_id(),
+    ));
+
+    let root_subnet_id = topology_snapshot.root_subnet_id();
     let subnet_size = APP_NODES.try_into().unwrap();
 
-    if ecdsa {
-        enable_ecdsa_and_create_subnet(
-            &env,
-            &nns_node,
-            subnet_size,
-            master_version.clone(),
-            &logger,
-        );
-    }
+    let create_new_subnet = !topology_snapshot
+        .subnets()
+        .any(|s| s.subnet_type() == SubnetType::Application);
+
+    let ecdsa_pub_key = ecdsa.then(|| {
+        info!(logger, "ECDSA flag set, creating key on NNS.");
+        if create_new_subnet {
+            info!(
+                logger,
+                "No app subnet found, creating a new one with the ECDSA key."
+            );
+            enable_ecdsa_on_new_subnet(
+                &env,
+                &nns_node,
+                &nns_canister,
+                subnet_size,
+                master_version.clone(),
+                &logger,
+            )
+        } else {
+            enable_ecdsa_on_nns(&nns_node, &nns_canister, root_subnet_id, &logger)
+        }
+    });
 
     let app_subnet = env
         .topology_snapshot()
@@ -174,9 +198,6 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         app_can_id,
         msg
     ));
-
-    let ecdsa_canister_and_key =
-        ecdsa.then(|| get_canister_and_ecdsa_pub_key(&app_node, Some(app_can_id), &logger));
 
     let subnet_id = app_subnet.subnet_id;
 
@@ -216,7 +237,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         subnet_id,
         upgrade_version: upgrade
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
-        replacement_nodes: Some(unassigned_nodes_ids),
+        replacement_nodes: Some(unassigned_nodes_ids.clone()),
         pub_key: Some(pub_key),
         download_node: None,
         upload_node: Some(upload_node.get_ip_addr()),
@@ -267,19 +288,30 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     }
 
     info!(logger, "Blocking for newer registry version");
-    block_on(env.topology_snapshot().block_for_newer_registry_version())
+    let topology_snapshot = block_on(env.topology_snapshot().block_for_newer_registry_version())
         .expect("Could not block for newer registry version");
 
     print_app_and_unassigned_nodes(&env, &logger);
 
     // Confirm that ALL nodes are now healthy and running on the new version
-    let all_app_nodes: Vec<IcNodeSnapshot> = env
-        .topology_snapshot()
+    let all_app_nodes: Vec<IcNodeSnapshot> = topology_snapshot
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
         .expect("there is no application subnet")
         .nodes()
         .collect();
+
+    let mut old_unassigned_ids = unassigned_nodes_ids;
+    if !old_unassigned_ids.is_empty() {
+        old_unassigned_ids.sort();
+        let mut assigned_nodes_ids: Vec<NodeId> = all_app_nodes.iter().map(|n| n.node_id).collect();
+        assigned_nodes_ids.sort();
+        assert_eq!(
+            old_unassigned_ids, assigned_nodes_ids,
+            "Previously unassigned nodes should now be assigned"
+        );
+    }
+
     assert_subnet_is_healthy(&all_app_nodes, working_version, app_can_id, msg, &logger);
 
     for node in all_app_nodes {
@@ -294,6 +326,11 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     }
 
     if ecdsa {
-        run_ecdsa_signature_test(&upload_node, &logger, ecdsa_canister_and_key.unwrap());
+        if !create_new_subnet {
+            disable_ecdsa_on_subnet(&nns_node, root_subnet_id, &nns_canister, &logger);
+            let app_key = enable_ecdsa_on_app_subnet(&nns_node, &nns_canister, subnet_id, &logger);
+            assert_eq!(ecdsa_pub_key.unwrap(), app_key)
+        }
+        run_ecdsa_signature_test(&nns_canister, &logger, ecdsa_pub_key.unwrap());
     }
 }
