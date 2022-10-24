@@ -1,7 +1,7 @@
 use criterion::measurement::Measurement;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 
-use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, KeyManager,
 };

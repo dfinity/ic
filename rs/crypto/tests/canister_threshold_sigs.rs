@@ -1,11 +1,11 @@
 use ic_base_types::PrincipalId;
 use ic_crypto::get_tecdsa_master_public_key;
-use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     test_utils::corrupt_dealing_for_all_recipients, EccScalar, IDkgDealingInternal, MEGaCiphertext,
     Seed,
 };
 use ic_crypto_tecdsa::derive_tecdsa_public_key;
+use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils::{crypto_for, dkg::dummy_idkg_transcript_id_for_tests};
 use ic_crypto_test_utils_canister_threshold_sigs::load_previous_transcripts_and_create_signed_dealings;
 use ic_crypto_test_utils_canister_threshold_sigs::{

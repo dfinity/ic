@@ -4,8 +4,8 @@ pub mod fake_tls_handshake;
 pub use ic_crypto_test_utils::files as temp_dir;
 
 use crate::types::ids::node_test_id;
-use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
+use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     create_params_for_dealers, mock_transcript, mock_unmasked_transcript_type, set_of_nodes,
 };

@@ -15,6 +15,7 @@ ic-canister-client = { path = "../canister_client" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
+ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-crypto-sha = { path = "../crypto/sha" }

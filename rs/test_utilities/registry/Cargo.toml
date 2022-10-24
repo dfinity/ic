@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 ic-crypto = { path = "../../crypto" }
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }

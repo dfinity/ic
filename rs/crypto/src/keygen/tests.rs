@@ -1,9 +1,8 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
-use crate::utils::NodeKeysToGenerate;
-use crate::TempCryptoComponent;
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;

@@ -31,7 +31,6 @@
 use crate::internal_state::InternalState;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_config::{registry_client::DataProviderConfig, Config};
-use ic_crypto::CryptoComponentFatClient;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_logger::{debug, info, warn, ReplicaLogger};
@@ -111,8 +110,7 @@ impl RegistryReplicator {
         metrics_addr: SocketAddr,
     ) -> (Self, MetricsRuntimeImpl) {
         let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config);
-        let crypto =
-            CryptoComponentFatClient::new_for_verification_only(replicator.get_registry_client());
+        let crypto = ic_crypto_for_verification_only::new(replicator.get_registry_client());
 
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),

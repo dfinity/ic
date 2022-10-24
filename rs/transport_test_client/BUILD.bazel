@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/config",
-    "//rs/crypto",
+    "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces",
     "//rs/interfaces/transport",

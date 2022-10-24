@@ -1,6 +1,6 @@
 use super::*;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 
 #[test]

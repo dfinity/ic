@@ -23,7 +23,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto",
+    "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/registry/fake",
     "//rs/registry/keys",

@@ -6,7 +6,7 @@ use crate::mutations::node_management::do_add_node::{
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_nns_test_utils::registry::invariant_compliant_mutation;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;

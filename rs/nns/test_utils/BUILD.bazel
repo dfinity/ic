@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/config",
-    "//rs/crypto",
+    "//rs/crypto/node_key_generation",
     "//rs/crypto/sha",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",

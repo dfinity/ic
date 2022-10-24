@@ -1,8 +1,8 @@
-use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, SubnetFeatures, SubnetListRecord, SubnetRecord,
+    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetFeatures, SubnetListRecord,
+    SubnetRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
@@ -93,12 +93,12 @@ pub fn insert_initial_dkg_transcript(
         .map(|n| NodeId::from(PrincipalId::try_from(&n[..]).unwrap()))
         .collect();
     let mut transcripts = empty_ni_dkg_transcripts_with_committee(committee, version);
-    let high_threshold_transcript = initial_ni_dkg_transcript_record_from_transcript(
+    let high_threshold_transcript = InitialNiDkgTranscriptRecord::from(
         transcripts
             .remove(&NiDkgTag::HighThreshold)
             .expect("Missing HighThreshold Transcript"),
     );
-    let low_threshold_transcript = initial_ni_dkg_transcript_record_from_transcript(
+    let low_threshold_transcript = InitialNiDkgTranscriptRecord::from(
         transcripts
             .remove(&NiDkgTag::LowThreshold)
             .expect("Missing LowThreshold Transcript"),

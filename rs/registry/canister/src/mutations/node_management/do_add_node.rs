@@ -239,7 +239,7 @@ mod tests {
     use super::*;
     use ic_base_types::NodeId;
     use ic_config::crypto::CryptoConfig;
-    use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+    use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
     use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::crypto::v1::NodePublicKeys;
     use lazy_static::lazy_static;

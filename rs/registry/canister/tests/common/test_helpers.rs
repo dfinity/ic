@@ -4,7 +4,7 @@ use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_ic00_types::{ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{

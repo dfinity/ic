@@ -1,8 +1,8 @@
 use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
-use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto::THRESHOLD_SIG_DATA_STORE_CAPACITY;
+use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_threshold_sigs::non_interactive::{
     load_transcript, run_ni_dkg_and_create_single_transcript, sign_threshold_for_each,

@@ -17,7 +17,6 @@ mod keygen;
 mod sign;
 mod tls;
 
-pub use common::utils;
 pub use sign::get_tecdsa_master_public_key;
 pub use sign::utils::{
     ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, rsa_signature_from_bytes,
@@ -25,15 +24,14 @@ pub use sign::utils::{
     verify_combined_threshold_sig, KeyBytesContentType,
 };
 
-use crate::common::utils::{derive_node_id, TempCryptoComponent};
 use crate::sign::ThresholdSigDataStoreImpl;
-use crate::utils::NodeKeysToGenerate;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use ic_crypto_node_key_generation::derive_node_id;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces::crypto::{BasicSigner, Crypto, KeyManager, ThresholdSigVerifierByPublicKey};
+use ic_interfaces::crypto::{BasicSigner, KeyManager, ThresholdSigVerifierByPublicKey};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -90,14 +88,6 @@ impl<T> CryptoComponentForNonReplicaProcess for T where
         + Sync
 {
 }
-
-/// A crypto component that only allows signature verification. These operations
-/// do not require secret keys.
-pub trait CryptoComponentForVerificationOnly: Crypto + TlsHandshake + Send + Sync {}
-
-// Blanket implementation of `CryptoComponentForVerificationOnly` for all types
-// that fulfill the requirements.
-impl<T> CryptoComponentForVerificationOnly for T where T: Crypto + TlsHandshake + Send + Sync {}
 
 /// Allows Internet Computer nodes to perform crypto operations such as
 /// distributed key generation, signing, signature verification, and TLS
@@ -227,7 +217,6 @@ impl CryptoComponentFatClient<Csp> {
     /// use std::sync::Arc;
     /// use ic_registry_client_fake::FakeRegistryClient;
     /// use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    /// use ic_crypto::utils::get_node_keys_or_generate_if_missing;
     /// use ic_metrics::MetricsRegistry;
     ///
     /// CryptoConfig::run_with_temp_config(|config| {
@@ -239,7 +228,7 @@ impl CryptoComponentFatClient<Csp> {
     ///     let metrics_registry = MetricsRegistry::new();
     ///
     ///     # // generate the node keys in the secret key store needed for this example to work:
-    ///     # get_node_keys_or_generate_if_missing(&config, None);
+    ///     # ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing(&config, None);
     ///     let first_crypto_component = Arc::new(CryptoComponent::new(&config, None, Arc::new(registry_client), logger, Some(&metrics_registry)));
     ///     let second_crypto_component = Arc::clone(&first_crypto_component);
     /// });
@@ -335,26 +324,6 @@ impl CryptoComponentFatClient<Csp> {
     ) -> impl CryptoComponentForNonReplicaProcess {
         // disable metrics for crypto in orchestrator:
         CryptoComponentFatClient::new(config, tokio_runtime_handle, registry_client, logger, None)
-    }
-
-    /// Returns a crypto component that should only be used for verification.
-    ///
-    /// All keys are newly generated, and the secret parts are stored in a
-    /// temporary directory that is deleted automatically when the crypto
-    /// component goes out of scope. This is is the reason why the returned
-    /// crypto component should only be used for public key operations, i.e.,
-    /// for verification only.
-    ///
-    /// The returned crypto component is _hidden_ behind a trait, where the
-    /// trait's name acts as reminder that it should be used for verification
-    /// only.
-    pub fn new_for_verification_only(
-        registry_client: Arc<dyn RegistryClient>,
-    ) -> impl CryptoComponentForVerificationOnly {
-        TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_keys(NodeKeysToGenerate::all())
-            .build()
     }
 
     /// Returns the `NodeId` of this crypto component.

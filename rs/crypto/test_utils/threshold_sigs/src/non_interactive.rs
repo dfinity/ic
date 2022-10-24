@@ -1,6 +1,6 @@
 use crate::common::crypto_for;
-use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_internal_types::NodeIndex;
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_interfaces::crypto::{KeyManager, NiDkgAlgorithm, ThresholdSigner};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;

@@ -10,10 +10,9 @@ use anyhow::Result;
 use ic_config::subnet_config::SchedulerConfig;
 use thiserror::Error;
 
-use ic_crypto::{
-    threshold_sig_public_key_to_der,
-    utils::ni_dkg::{self, initial_ni_dkg_transcript_record_from_transcript, InitialNiDkgConfig},
-};
+use ic_crypto::threshold_sig_public_key_to_der;
+use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{CatchUpPackageContents, EcdsaConfig, SubnetFeatures, SubnetRecord},
@@ -318,7 +317,7 @@ impl SubnetConfig {
             })
             .collect();
         let random_ni_dkg_target_id = NiDkgTargetId::new(rand::random::<[u8; 32]>());
-        let ni_dkg_transcript_low_threshold = ni_dkg::initial_dkg_transcript(
+        let ni_dkg_transcript_low_threshold = initial_dkg_transcript(
             InitialNiDkgConfig::new(
                 &nodes_in_subnet,
                 SubnetId::from(PrincipalId::new_subnet_test_id(subnet_index)),
@@ -328,7 +327,7 @@ impl SubnetConfig {
             ),
             &dkg_dealing_encryption_pubkeys,
         );
-        let ni_dkg_transcript_high_threshold = ni_dkg::initial_dkg_transcript(
+        let ni_dkg_transcript_high_threshold = initial_dkg_transcript(
             InitialNiDkgConfig::new(
                 &nodes_in_subnet,
                 SubnetId::from(PrincipalId::new_subnet_test_id(subnet_index)),
@@ -343,12 +342,12 @@ impl SubnetConfig {
         ));
 
         let subnet_dkg = CatchUpPackageContents {
-            initial_ni_dkg_transcript_low_threshold: Some(
-                initial_ni_dkg_transcript_record_from_transcript(ni_dkg_transcript_low_threshold),
-            ),
-            initial_ni_dkg_transcript_high_threshold: Some(
-                initial_ni_dkg_transcript_record_from_transcript(ni_dkg_transcript_high_threshold),
-            ),
+            initial_ni_dkg_transcript_low_threshold: Some(InitialNiDkgTranscriptRecord::from(
+                ni_dkg_transcript_low_threshold,
+            )),
+            initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+                ni_dkg_transcript_high_threshold,
+            )),
             ..Default::default()
         };
 

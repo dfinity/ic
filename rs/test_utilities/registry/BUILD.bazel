@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/crypto",
+    "//rs/crypto/test_utils/ni-dkg",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/protobuf",

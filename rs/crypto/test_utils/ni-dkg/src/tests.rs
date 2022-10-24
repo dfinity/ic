@@ -115,7 +115,7 @@ fn should_panic_if_receiver_keys_dont_match_config_receivers() {
 #[test]
 fn should_have_stable_internal_csp_transcript_cbor_serialization() {
     let transcript = transcript_without_empty_or_default_data();
-    let transcript_proto = initial_ni_dkg_transcript_record_from_transcript(transcript);
+    let transcript_proto = InitialNiDkgTranscriptRecord::from(transcript);
 
     assert_eq!(
         hex::encode(transcript_proto.internal_csp_transcript),
@@ -129,7 +129,7 @@ fn should_correctly_retrieve_initial_low_threshold_ni_dkg_transcript_from_regist
     let dkg_tag = NiDkgTag::LowThreshold;
     transcript.dkg_id.dkg_tag = dkg_tag;
     let registry = registry_with_ni_dkg_transcript(
-        initial_ni_dkg_transcript_record_from_transcript(transcript.clone()),
+        InitialNiDkgTranscriptRecord::from(transcript.clone()),
         dkg_tag,
         SUBNET_1,
         REG_V1,
@@ -152,7 +152,7 @@ fn should_correctly_retrieve_initial_high_threshold_ni_dkg_transcript_from_regis
     let dkg_tag = NiDkgTag::HighThreshold;
     transcript.dkg_id.dkg_tag = dkg_tag;
     let registry = registry_with_ni_dkg_transcript(
-        initial_ni_dkg_transcript_record_from_transcript(transcript.clone()),
+        InitialNiDkgTranscriptRecord::from(transcript.clone()),
         dkg_tag,
         SUBNET_1,
         REG_V1,
@@ -220,15 +220,13 @@ fn registry_with_ni_dkg_transcript(
         // We always store both scripts, just as it happens in production.
         NiDkgTag::LowThreshold => {
             cup_contents.initial_ni_dkg_transcript_low_threshold = Some(transcript_record);
-            cup_contents.initial_ni_dkg_transcript_high_threshold = Some(
-                initial_ni_dkg_transcript_record_from_transcript(transcript()),
-            );
+            cup_contents.initial_ni_dkg_transcript_high_threshold =
+                Some(InitialNiDkgTranscriptRecord::from(transcript()));
         }
         NiDkgTag::HighThreshold => {
             cup_contents.initial_ni_dkg_transcript_high_threshold = Some(transcript_record);
-            cup_contents.initial_ni_dkg_transcript_low_threshold = Some(
-                initial_ni_dkg_transcript_record_from_transcript(transcript()),
-            );
+            cup_contents.initial_ni_dkg_transcript_low_threshold =
+                Some(InitialNiDkgTranscriptRecord::from(transcript()));
         }
     }
     let registry_data = ProtoRegistryDataProvider::new();

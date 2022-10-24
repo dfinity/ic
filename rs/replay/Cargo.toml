@@ -13,7 +13,7 @@ ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
 ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
-ic-crypto = { path = "../crypto" }
+ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }

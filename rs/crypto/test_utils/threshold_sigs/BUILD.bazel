@@ -6,8 +6,8 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     "//rs/config",
-    "//rs/crypto",
     "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/temp_crypto",
     "//rs/interfaces",
     "//rs/registry/fake",
     "//rs/registry/keys",

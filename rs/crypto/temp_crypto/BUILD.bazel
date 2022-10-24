@@ -1,0 +1,63 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto",
+    "//rs/crypto/internal/crypto_service_provider",
+    "//rs/crypto/internal/logmon",
+    "//rs/crypto/node_key_generation",
+    "//rs/crypto/tls_interfaces",
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/monitoring/logger",
+    "//rs/protobuf",
+    "//rs/registry/fake",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/test_utils",
+    "//rs/types/types_test_utils",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "temp_crypto",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_temp_crypto",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "temp_crypto_test",
+    aliases = ALIASES,
+    crate = ":temp_crypto",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "test_suite",
+    srcs = glob(["tests/**"]),
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":temp_crypto"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

@@ -1,21 +1,18 @@
-use crate::common::utils::generate_tls_keys;
-use crate::common::utils::{
-    generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
-    generate_idkg_dealing_encryption_keys, generate_node_signing_keys,
-};
-use crate::utils::csp_for_config;
-use crate::{derive_node_id, CryptoComponent, CryptoComponentFatClient};
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
+use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
-    TlsServerHandshakeError,
+use ic_crypto_node_key_generation::{
+    derive_node_id, generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
+    generate_idkg_dealing_encryption_keys, generate_node_signing_keys, generate_tls_keys,
 };
-use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
+use ic_crypto_tls_interfaces::{
+    AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake, TlsPublicKeyCert,
+    TlsServerHandshakeError, TlsStream,
+};
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, IDkgProtocol,
     KeyManager, LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
@@ -63,9 +60,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::net::{TcpStream, UnixListener};
-
-#[cfg(test)]
-mod tests;
 
 /// A crypto component set up in a temporary directory. The directory is
 /// automatically deleted when this component goes out of scope.
@@ -999,4 +993,16 @@ fn copy_crypto_root(src: &Path, dest: &Path) {
             std::fs::copy(&path, &dest_path).expect("failed to copy file");
         }
     }
+}
+
+fn csp_for_config(
+    config: &CryptoConfig,
+    tokio_runtime_handle: Option<tokio::runtime::Handle>,
+) -> Csp {
+    Csp::new(
+        config,
+        tokio_runtime_handle,
+        None,
+        Arc::new(CryptoMetrics::none()),
+    )
 }

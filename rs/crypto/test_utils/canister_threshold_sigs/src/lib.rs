@@ -1,8 +1,8 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
-use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, Seed};
+use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_interfaces::crypto::{
     BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
@@ -469,7 +469,7 @@ impl CanisterThresholdSigTestEnvironment {
         let temp_crypto = TempCryptoComponent::builder()
             .with_registry(Arc::clone(&self.registry) as Arc<_>)
             .with_node_id(node_id)
-            .with_keys(ic_crypto::utils::NodeKeysToGenerate {
+            .with_keys(ic_crypto_temp_crypto::NodeKeysToGenerate {
                 generate_node_signing_keys: true,
                 generate_committee_signing_keys: true,
                 generate_dkg_dealing_encryption_keys: false,

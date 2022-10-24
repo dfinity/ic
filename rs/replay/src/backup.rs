@@ -173,8 +173,7 @@ pub(crate) fn deserialize_consensus_artifacts(
 ) -> ExitPoint {
     let time_source = validator.get_timesource();
     let mut last_cup_height: Option<Height> = None;
-    let crypto =
-        ic_crypto::CryptoComponentFatClient::new_for_verification_only(registry_client.clone());
+    let crypto = ic_crypto_for_verification_only::new(registry_client.clone());
 
     loop {
         let height = match height_to_batches.iter().next() {

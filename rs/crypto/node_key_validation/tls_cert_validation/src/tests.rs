@@ -1,7 +1,7 @@
 use super::*;
 use chrono::{Duration, Utc};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_crypto_test_utils::tls::x509_certificates::ed25519_key_pair;
 use ic_crypto_test_utils::tls::x509_certificates::prime256v1_key_pair;
 use ic_crypto_test_utils::tls::x509_certificates::CertBuilder;

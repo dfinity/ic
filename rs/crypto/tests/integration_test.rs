@@ -1,25 +1,21 @@
 #![allow(clippy::unwrap_used)]
 
 use crate::keygen_utils::TestKeygenCrypto;
-use ic_base_types::NodeId;
 use ic_config::crypto::CryptoConfig;
 use ic_config::logger::{Config as LoggerConfig, LogTarget};
-use ic_crypto::utils::{
-    derive_node_id, get_node_keys_or_generate_if_missing, NodeKeysToGenerate, TempCryptoComponent,
-};
-use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
-use ic_crypto_internal_csp::Csp;
+use ic_crypto::CryptoComponent;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
+use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{LoggerImpl, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -141,45 +137,6 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
 }
 
 // TODO(CRP-430): check/improve the test coverage of SKS checks.
-
-#[test]
-fn should_generate_all_keys_for_new_node() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
-
-        let crypto = local_crypto_component(&config);
-        assert_eq!(node_pks, crypto.node_public_keys());
-    })
-}
-
-#[test]
-fn should_generate_all_keys_for_new_node_with_remote_csp_vault() {
-    let tokio_rt = new_tokio_runtime();
-    let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
-    let temp_dir = temp_dir(); // temp dir with correct permissions
-    let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
-
-    let (node_pks, node_id) =
-        get_node_keys_or_generate_if_missing(&config, Some(tokio_rt.handle().clone()));
-    ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
-
-    let crypto = remote_crypto_component(&config, tokio_rt.handle().clone());
-    assert_eq!(node_pks, crypto.node_public_keys());
-}
-
-#[test]
-fn should_not_generate_new_keys_if_all_keys_are_present() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let (orig_node_pks, orig_node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        assert!(all_node_keys_are_present(&orig_node_pks));
-        let (new_node_pks, new_node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        assert!(all_node_keys_are_present(&new_node_pks));
-        assert_eq!(orig_node_pks, new_node_pks);
-        assert_eq!(orig_node_id, new_node_id);
-    })
-}
 
 fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
     node_pks.node_signing_pk.is_some()
@@ -1158,43 +1115,6 @@ fn should_fail_check_keys_with_registry_and_log_error_if_idkg_dealing_encryption
         contents.contains("iDKG dealing encryption key mismatch between local and registry copies")
     );
     assert!(contents.contains(format!("iDKG dealing encryption key of node {} is not properly set up in the registry for registry version", crypto_component.get_node_id()).as_str()));
-}
-
-fn ensure_node_keys_are_generated_correctly(node_pks: &NodePublicKeys, node_id: &NodeId) {
-    assert!(all_node_keys_are_present(node_pks));
-    assert_eq!(node_pks.version, 1);
-
-    let node_signing_pk = node_pks
-        .node_signing_pk
-        .as_ref()
-        .expect("Missing node signing public key");
-    let derived_node_id = derive_node_id(node_signing_pk);
-    assert_eq!(*node_id, derived_node_id);
-}
-
-fn local_crypto_component(config: &CryptoConfig) -> Arc<CryptoComponentFatClient<Csp>> {
-    crypto_component(config, None)
-}
-fn remote_crypto_component(
-    config: &CryptoConfig,
-    tokio_runtime_handle: tokio::runtime::Handle,
-) -> Arc<CryptoComponentFatClient<Csp>> {
-    crypto_component(config, Some(tokio_runtime_handle))
-}
-fn crypto_component(
-    config: &CryptoConfig,
-    tokio_runtime_handle: Option<tokio::runtime::Handle>,
-) -> Arc<CryptoComponentFatClient<Csp>> {
-    let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    let logger = no_op_logger();
-    let metrics_registry = MetricsRegistry::new();
-    Arc::new(CryptoComponent::new(
-        config,
-        tokio_runtime_handle,
-        Arc::new(registry_client),
-        logger,
-        Some(&metrics_registry),
-    ))
 }
 
 fn new_tokio_runtime() -> tokio::runtime::Runtime {

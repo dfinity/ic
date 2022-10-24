@@ -22,6 +22,7 @@ ic-crypto-internal-threshold-sig-ecdsa = { path = "internal/crypto_lib/threshold
 ic-crypto-internal-basic-sig-iccsa = { path = "internal/crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
+ic-crypto-node-key-generation = { path = "node_key_generation" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
@@ -64,6 +65,7 @@ prost-build = "0.10.4"
 
 [dev-dependencies]
 criterion = "0.3.4"
+ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
@@ -72,6 +74,7 @@ ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-internal-tls = { path = "internal/crypto_lib/tls" }
 ic-crypto-sha = { path = "sha" }
 ic-crypto-tecdsa = { path = "tecdsa" }
+ic-crypto-temp-crypto = { path = "temp_crypto" }
 ic-crypto-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-keygen = { path = "test_utils/keygen" }
 ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
