@@ -163,6 +163,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             subnet_available_memory,
             max_canister_memory_size,
             self.max_instructions_per_query,
+            self.config.max_query_call_depth,
         );
         context.run(
             query,

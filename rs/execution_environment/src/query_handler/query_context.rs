@@ -77,6 +77,9 @@ const ENABLE_QUERY_OPTIMIZATION: bool = true;
 const LOOP_DETECTED_ERROR_MSG: &str =
     "Loop detected.  MVP inter-canister queries do not support loops.";
 
+const CALL_GRAPH_TOO_DEEP_ERROR_MSG: &str =
+    "Call exceeded the limit for maximum number of nested query calls.";
+
 /// A simple enum representing the different things that
 /// QueryContext::enqueue_requests() can return.
 enum EnqueueRequestsResult {
@@ -87,6 +90,8 @@ enum EnqueueRequestsResult {
     NoMessages,
     /// A loop in the callgraph was detected so no messages were enqueued.
     LoopDetected,
+    /// The call graph is too large
+    CallGraphTooDeep,
 }
 
 // A handy function to create a `Response` using parameters from the `Request`
@@ -110,7 +115,8 @@ pub(super) struct QueryContext<'a> {
     state: Arc<ReplicatedState>,
     network_topology: Arc<NetworkTopology>,
     data_certificate: Vec<u8>,
-    canisters: BTreeMap<CanisterId, CanisterState>,
+    // Contains all canisters that currently have pending calls.
+    call_stack: BTreeMap<CanisterId, CanisterState>,
     outstanding_requests: Vec<Arc<Request>>,
     // Response (if available) waiting to be executed. We always process
     // responses first if one is available hence, there will never be more than
@@ -119,6 +125,7 @@ pub(super) struct QueryContext<'a> {
     query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
     max_canister_memory_size: NumBytes,
     max_instructions_per_query: NumInstructions,
+    max_query_call_depth: usize,
     round_limits: RoundLimits,
 }
 
@@ -134,6 +141,7 @@ impl<'a> QueryContext<'a> {
         subnet_available_memory: SubnetAvailableMemory,
         max_canister_memory_size: NumBytes,
         max_instructions_per_query: NumInstructions,
+        max_query_call_depth: usize,
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let round_limits = RoundLimits {
@@ -146,7 +154,7 @@ impl<'a> QueryContext<'a> {
             log,
             hypervisor,
             own_subnet_type,
-            canisters: BTreeMap::new(),
+            call_stack: BTreeMap::new(),
             outstanding_requests: Vec::new(),
             outstanding_response: None,
             state,
@@ -155,6 +163,7 @@ impl<'a> QueryContext<'a> {
             network_topology,
             max_canister_memory_size,
             max_instructions_per_query,
+            max_query_call_depth,
             round_limits,
         }
     }
@@ -259,7 +268,7 @@ impl<'a> QueryContext<'a> {
 
             Ok(None) => match self.enqueue_requests(&mut canister) {
                 EnqueueRequestsResult::LoopDetected => Err(UserError::new(
-                    ErrorCode::InterCanisterQueryLoopDetected,
+                    ErrorCode::QueryCallGraphLoopDetected,
                     LOOP_DETECTED_ERROR_MSG.to_string(),
                 )),
 
@@ -276,9 +285,14 @@ impl<'a> QueryContext<'a> {
                 )),
 
                 EnqueueRequestsResult::MessagesEnqueued => {
-                    self.canisters.insert(canister.canister_id(), canister);
+                    self.call_stack.insert(canister.canister_id(), canister);
                     self.run_loop(canister_id, metrics, measurement_scope)
                 }
+
+                EnqueueRequestsResult::CallGraphTooDeep => Err(UserError::new(
+                    ErrorCode::QueryCallGraphTooDeep,
+                    CALL_GRAPH_TOO_DEEP_ERROR_MSG.to_string(),
+                )),
             },
         }
     }
@@ -377,7 +391,7 @@ impl<'a> QueryContext<'a> {
                         CallOrigin::Query(_) | CallOrigin::CanisterQuery(_, _) => {}
                     }
 
-                    if msg.receiver == canister_id || self.canisters.contains_key(&msg.receiver) {
+                    if msg.receiver == canister_id || self.call_stack.contains_key(&msg.receiver) {
                         // Call graph loop detector. There is already a canister
                         // in the call graph that is waiting for some responses
                         // to come back and this canister is trying to send it
@@ -385,6 +399,11 @@ impl<'a> QueryContext<'a> {
                         // implementation does not support loops.
                         return EnqueueRequestsResult::LoopDetected;
                     }
+
+                    if self.call_stack.len() + 1 > self.max_query_call_depth {
+                        return EnqueueRequestsResult::CallGraphTooDeep;
+                    }
+
                     sent_messages = true;
                     self.outstanding_requests.push(msg);
                 }
@@ -677,7 +696,7 @@ impl<'a> QueryContext<'a> {
         let canister_id = request.receiver;
         // As we do not support loops in the call graph, the canister that we
         // want to execute a request on should not already be loaded.
-        if self.canisters.contains_key(&canister_id) {
+        if self.call_stack.contains_key(&canister_id) {
             error!(self.log, "[EXC-BUG] The canister that we want to execute a request on should not already be loaded.");
         }
 
@@ -691,6 +710,7 @@ impl<'a> QueryContext<'a> {
         };
 
         let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
+
         let (mut canister, result) = self.execute_query(
             canister,
             request.method_name.as_str(),
@@ -727,7 +747,7 @@ impl<'a> QueryContext<'a> {
                     }
                     None => match self.enqueue_requests(&mut canister) {
                         EnqueueRequestsResult::LoopDetected => Some(UserError::new(
-                            ErrorCode::InterCanisterQueryLoopDetected,
+                            ErrorCode::QueryCallGraphLoopDetected,
                             LOOP_DETECTED_ERROR_MSG.to_string(),
                         )),
 
@@ -748,9 +768,14 @@ impl<'a> QueryContext<'a> {
                         // outgoing request(s). Save the canister for when the
                         // response(s) come back in.
                         EnqueueRequestsResult::MessagesEnqueued => {
-                            self.canisters.insert(canister.canister_id(), canister);
+                            self.call_stack.insert(canister.canister_id(), canister);
                             None
                         }
+
+                        EnqueueRequestsResult::CallGraphTooDeep => Some(UserError::new(
+                            ErrorCode::QueryCallGraphTooDeep,
+                            CALL_GRAPH_TOO_DEEP_ERROR_MSG.to_string(),
+                        )),
                     },
                 }
             }
@@ -813,12 +838,14 @@ impl<'a> QueryContext<'a> {
             // callbacks.  Enqueue any produced requests and continue
             // processing the query context.
             NotYetResponded => match self.enqueue_requests(&mut canister) {
-                EnqueueRequestsResult::LoopDetected => Some(Err(UserError::new(
-                    ErrorCode::InterCanisterQueryLoopDetected,
-                    LOOP_DETECTED_ERROR_MSG.to_string(),
-                ))),
+                EnqueueRequestsResult::LoopDetected | EnqueueRequestsResult::CallGraphTooDeep => {
+                    Some(Err(UserError::new(
+                        ErrorCode::QueryCallGraphLoopDetected,
+                        LOOP_DETECTED_ERROR_MSG.to_string(),
+                    )))
+                }
                 EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
-                    self.canisters.insert(canister.canister_id(), canister);
+                    self.call_stack.insert(canister.canister_id(), canister);
                     None
                 }
             },
@@ -927,12 +954,16 @@ impl<'a> QueryContext<'a> {
             // callbacks so enqueue any produced requests and continue
             // processing the query context.
             NotYetResponded => match self.enqueue_requests(&mut canister) {
-                EnqueueRequestsResult::LoopDetected => Some(Err(UserError::new(
-                    ErrorCode::InterCanisterQueryLoopDetected,
-                    LOOP_DETECTED_ERROR_MSG.to_string(),
-                ))),
+                EnqueueRequestsResult::LoopDetected | EnqueueRequestsResult::CallGraphTooDeep => {
+                    Some(Err(UserError::new(
+                        ErrorCode::QueryCallGraphLoopDetected,
+                        LOOP_DETECTED_ERROR_MSG.to_string(),
+                    )))
+                }
                 EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
-                    self.canisters.insert(canister.canister_id(), canister);
+                    // As we popped the canister in the caller, we need to
+                    // push it back to the stack since it isn't done executing yet.
+                    self.call_stack.insert(canister.canister_id(), canister);
                     None
                 }
             },
@@ -970,7 +1001,7 @@ impl<'a> QueryContext<'a> {
         // As we are executing a response, we must have executed a request on
         // the canister before and must have stored its state so the following
         // should not fail.
-        let canister = self.canisters.remove(&canister_id).unwrap_or_else(|| {
+        let canister = self.call_stack.remove(&canister_id).unwrap_or_else(|| {
             fatal!(
                 self.log,
                 "Expected to find canister {} in the cache",
