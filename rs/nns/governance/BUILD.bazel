@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -125,6 +125,17 @@ rust_library(
     ],
 )
 
+rust_binary(
+    name = "generate_did",
+    srcs = ["canister/canister.rs"],
+    compile_data = ["canister/governance.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":governance",
+    ],
+)
+
 rust_canister(
     name = "governance-canister-raw",
     srcs = ["canister/canister.rs"],
@@ -132,8 +143,8 @@ rust_canister(
     compile_data = ["canister/governance.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
-        ":governance",
         ":build_script",
+        ":governance",
     ],
 )
 
@@ -182,7 +193,7 @@ generated_files_check(
 rust_test(
     name = "canister_unit_test",
     crate = ":_wasm_governance-canister-raw",
-    data = [":canister/governance.did"],
+    data = ["canister/governance.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/governance",
     },

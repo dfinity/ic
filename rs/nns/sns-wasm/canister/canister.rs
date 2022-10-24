@@ -472,16 +472,17 @@ fn check_wasm_candid_file() {
     )
     .join("canister/sns-wasm.did");
 
-    let sns_wasm_did = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
+    let did_contents = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
 
     // See comments in main above
     candid::export_service!();
     let expected = __export_service();
 
-    if sns_wasm_did != expected {
+    if did_contents != expected {
         panic!(
             "Generated candid definition does not match canister/sns-wasm.did. \
-            Run `cargo run --bin sns-wasm-canister > canister/sns-wasm.did` in \
+            Run `bazel run :generate_did > canister/sns-wasm.did` (no nix and/or direnv) or \
+            `cargo run --bin sns-wasm-canister > canister/sns-wasm.did` in \
             rs/nns/sns-wasm to update canister/sns-wasm.did."
         )
     }
