@@ -2,8 +2,9 @@ use crate::orchestrator::utils::rw_message::{can_install_canister_with_retries, 
 use crate::orchestrator::utils::ssh_access::execute_bash_command;
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::tecdsa::tecdsa_signature_test::{
-    create_new_subnet_with_keys, enable_ecdsa_signing, get_public_key_with_logger,
-    get_signature_with_logger, make_key, verify_signature, KEY_ID1,
+    create_new_subnet_with_keys, empty_subnet_update, enable_ecdsa_signing,
+    execute_update_subnet_proposal, get_public_key_with_logger, get_signature_with_logger,
+    make_key, verify_signature, KEY_ID1,
 };
 use crate::util::*;
 use crate::{
@@ -23,6 +24,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
 use k256::ecdsa::VerifyingKey;
 use registry_canister::mutations::do_create_subnet::EcdsaKeyRequest;
+use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
+use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use url::Url;
 
@@ -62,18 +65,36 @@ pub(crate) fn halt_subnet(
     recovery: &Recovery,
     logger: &Logger,
 ) {
+    #[derive(Debug, Deserialize, Serialize)]
+    struct Cursor {
+        #[serde(alias = "__CURSOR")]
+        cursor: String,
+    }
+
     info!(logger, "Breaking the app subnet by halting it",);
+    let s = app_node.get_ssh_session(ADMIN).unwrap();
+    let message_str = execute_bash_command(
+        &s,
+        "journalctl -n1 -o json --output-fields='__CURSOR'".to_string(),
+    )
+    .expect("journal message");
+    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
     recovery
         .halt_subnet(subnet_id, true, &[])
         .exec()
         .expect("Failed to halt subnet.");
-    let s = app_node.get_ssh_session(ADMIN).unwrap();
     retry(logger.clone(), secs(120), secs(10), || {
-        let res = execute_bash_command(&s, "journalctl | grep -c 'is halted'".to_string());
+        let res = execute_bash_command(
+            &s,
+            format!(
+                "journalctl --after-cursor='{}' | grep -c 'is halted'",
+                message.cursor
+            ),
+        );
         if res.map_or(false, |r| r.trim().parse::<i32>().unwrap() > 0) {
             Ok(())
         } else {
-            bail!("retry...")
+            bail!("Did not find log entry that consensus is halted.")
         }
     })
     .expect("Failed to detect broken subnet.");
@@ -195,25 +216,75 @@ pub(crate) fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
     });
 }
 
-/// Enable ecdsa on the root subnet using the given NNS node, then
-/// create a new subnet of the given size initialized with the ecdsa key.
-/// Wait until nodes of the new subnet report healthy.
-pub(crate) fn enable_ecdsa_and_create_subnet(
-    env: &TestEnv,
+/// Enable ECDSA key and signing on the root subnet using the given NNS node.
+pub(crate) fn enable_ecdsa_on_nns(
     nns_node: &IcNodeSnapshot,
-    subnet_size: usize,
-    replica_version: ReplicaVersion,
+    canister: &UniversalCanister,
+    root_subnet_id: SubnetId,
     logger: &Logger,
-) {
+) -> VerifyingKey {
     info!(logger, "Enabling ECDSA signatures.");
     let nns_runtime = runtime_from_url(nns_node.get_public_url());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-    let root_subnet_id = env.topology_snapshot().root_subnet_id();
-    block_on(async {
-        enable_ecdsa_signing(&governance, root_subnet_id, make_key(KEY_ID1)).await;
-    });
 
-    get_canister_and_ecdsa_pub_key(nns_node, None, logger);
+    block_on(enable_ecdsa_signing(
+        &governance,
+        root_subnet_id,
+        make_key(KEY_ID1),
+    ));
+
+    get_ecdsa_pub_key(canister, logger)
+}
+
+/// Pre-condition: subnet has the ECDSA key and no other subnet has signing enabled for that key.
+/// Enables ECDSA signing on the given subnet and returns a public key for the given canister.
+pub(crate) fn enable_ecdsa_on_app_subnet(
+    nns_node: &IcNodeSnapshot,
+    canister: &UniversalCanister,
+    subnet_id: SubnetId,
+    logger: &Logger,
+) -> VerifyingKey {
+    info!(logger, "Enabling signing on app subnet.");
+    let nns_runtime = runtime_from_url(nns_node.get_public_url());
+    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+
+    let enable_signing_payload = UpdateSubnetPayload {
+        subnet_id,
+        ecdsa_key_signing_enable: Some(vec![make_key(KEY_ID1)]),
+        ..empty_subnet_update()
+    };
+    block_on(execute_update_subnet_proposal(
+        &governance,
+        enable_signing_payload,
+    ));
+
+    get_ecdsa_pub_key(canister, logger)
+}
+
+/// Enable ecdsa on the root subnet using the given NNS node, then
+/// create a new subnet of the given size initialized with the ecdsa key.
+/// Disable signing on NNS and enable it on the new app subnet.
+/// Assert that the key stays the same regardless of whether signing
+/// is enabled on NNS or the app subnet. Return the public key for the given canister.
+pub(crate) fn enable_ecdsa_on_new_subnet(
+    env: &TestEnv,
+    nns_node: &IcNodeSnapshot,
+    canister: &UniversalCanister,
+    subnet_size: usize,
+    replica_version: ReplicaVersion,
+    logger: &Logger,
+) -> VerifyingKey {
+    info!(logger, "Enabling ECDSA signatures on NNS.");
+    let nns_runtime = runtime_from_url(nns_node.get_public_url());
+    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+    let root_subnet_id = env.topology_snapshot().root_subnet_id();
+    block_on(enable_ecdsa_signing(
+        &governance,
+        root_subnet_id,
+        make_key(KEY_ID1),
+    ));
+
+    let nns_key = get_ecdsa_pub_key(canister, logger);
 
     let unassigned_node_ids = env
         .topology_snapshot()
@@ -222,18 +293,16 @@ pub(crate) fn enable_ecdsa_and_create_subnet(
         .map(|n| n.node_id)
         .collect();
 
-    block_on(async {
-        create_new_subnet_with_keys(
-            &governance,
-            unassigned_node_ids,
-            vec![EcdsaKeyRequest {
-                key_id: make_key(KEY_ID1),
-                subnet_id: Some(root_subnet_id.get()),
-            }],
-            replica_version,
-        )
-        .await;
-    });
+    info!(logger, "Creating new subnet with keys.");
+    block_on(create_new_subnet_with_keys(
+        &governance,
+        unassigned_node_ids,
+        vec![EcdsaKeyRequest {
+            key_id: make_key(KEY_ID1),
+            subnet_id: Some(root_subnet_id.get()),
+        }],
+        replica_version,
+    ));
 
     let topology_snapshot =
         block_on(env.topology_snapshot().block_for_newer_registry_version()).unwrap();
@@ -247,57 +316,91 @@ pub(crate) fn enable_ecdsa_and_create_subnet(
         n.await_status_is_healthy()
             .expect("Timeout while waiting for all subnets to be healthy");
     });
+
+    info!(logger, "Disabling signing on NNS.");
+    disable_ecdsa_on_subnet(nns_node, root_subnet_id, canister, logger);
+
+    let app_key = enable_ecdsa_on_app_subnet(nns_node, canister, app_subnet.subnet_id, logger);
+
+    assert_eq!(app_key, nns_key);
+    app_key
 }
 
-pub(crate) fn get_canister_and_ecdsa_pub_key(
-    node: &IcNodeSnapshot,
-    existing_can_id: Option<Principal>,
+/// Disable ecdsa signing on the given subnet and wait until sign requests fail.
+pub(crate) fn disable_ecdsa_on_subnet(
+    nns_node: &IcNodeSnapshot,
+    subnet_id: SubnetId,
+    canister: &UniversalCanister,
     logger: &Logger,
-) -> (Principal, VerifyingKey) {
-    info!(logger, "Initial run to get app ecdsa public key.");
-    let agent = node.with_default_agent(|agent| async move { agent });
-    let (canister_id, public_key) = block_on(async {
-        let uni_can = if let Some(can_id) = existing_can_id {
-            UniversalCanister::from_canister_id(&agent, can_id)
-        } else {
-            UniversalCanister::new(&agent, node.effective_canister_id()).await
-        };
-        let public_key = get_public_key_with_logger(make_key(KEY_ID1), &uni_can, logger)
-            .await
-            .unwrap();
-        (uni_can.canister_id(), public_key)
-    });
-    info!(
-        logger,
-        "Got public key of canister {}: {:?}", canister_id, public_key
-    );
-    (canister_id, public_key)
-}
-
-pub(crate) fn run_ecdsa_signature_test(
-    node: &IcNodeSnapshot,
-    logger: &Logger,
-    ecdsa_canister_and_key: (Principal, VerifyingKey),
 ) {
-    let (canister_id, public_key) = ecdsa_canister_and_key;
+    let nns_runtime = runtime_from_url(nns_node.get_public_url());
+    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+
+    let disable_signing_payload = UpdateSubnetPayload {
+        subnet_id,
+        ecdsa_key_signing_disable: Some(vec![make_key(KEY_ID1)]),
+        ..empty_subnet_update()
+    };
+    block_on(execute_update_subnet_proposal(
+        &governance,
+        disable_signing_payload,
+    ));
+
+    info!(logger, "Waiting until signing fails.");
+    let message_hash = [0xabu8; 32];
+    retry(logger.clone(), secs(20), secs(1), || {
+        let sig_result = block_on(get_signature_with_logger(
+            &message_hash,
+            ECDSA_SIGNATURE_FEE,
+            make_key(KEY_ID1),
+            canister,
+            logger,
+        ));
+        if sig_result.is_ok() {
+            bail!("Signing is still possible.")
+        } else {
+            Ok(())
+        }
+    })
+    .expect("Failed to detect disabled signing.");
+}
+
+/// Get the ECDSA public key of the given canister
+pub(crate) fn get_ecdsa_pub_key(canister: &UniversalCanister, logger: &Logger) -> VerifyingKey {
+    info!(logger, "Getting ecdsa public key.");
+    let public_key = block_on(get_public_key_with_logger(
+        make_key(KEY_ID1),
+        canister,
+        logger,
+    ))
+    .unwrap();
+    info!(logger, "Got public key {:?}", public_key);
+    public_key
+}
+
+/// The signature test consists of getting the given canister's ECDSA key, comparing it to the existing key
+/// to ensure it hasn't changed, sending a sign request, and verifying the signature
+pub(crate) fn run_ecdsa_signature_test(
+    canister: &UniversalCanister,
+    logger: &Logger,
+    existing_key: VerifyingKey,
+) {
     info!(logger, "Run through ecdsa signature test.");
     let message_hash = [0xabu8; 32];
-    let agent = node.with_default_agent(|agent| async move { agent });
     block_on(async {
-        let uni_can = UniversalCanister::from_canister_id(&agent, canister_id);
-        let public_key_ = get_public_key_with_logger(make_key(KEY_ID1), &uni_can, logger)
+        let public_key = get_public_key_with_logger(make_key(KEY_ID1), canister, logger)
             .await
             .unwrap();
-        assert_eq!(public_key, public_key_);
+        assert_eq!(existing_key, public_key);
         let signature = get_signature_with_logger(
             &message_hash,
             ECDSA_SIGNATURE_FEE,
             make_key(KEY_ID1),
-            &uni_can,
+            canister,
             logger,
         )
         .await
         .unwrap();
-        verify_signature(&message_hash, &public_key_, &signature);
+        verify_signature(&message_hash, &public_key, &signature);
     });
 }

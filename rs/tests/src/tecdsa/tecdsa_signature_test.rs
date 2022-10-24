@@ -68,7 +68,7 @@ pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
     }
 }
 
-fn empty_subnet_update() -> UpdateSubnetPayload {
+pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
     UpdateSubnetPayload {
         subnet_id: subnet_test_id(0),
         max_ingress_bytes_per_message: None,
@@ -284,7 +284,7 @@ pub(crate) async fn get_public_key_with_logger(
     Ok(VerifyingKey::from_sec1_bytes(&public_key).expect("Response is not a valid public key"))
 }
 
-async fn execute_update_subnet_proposal(
+pub(crate) async fn execute_update_subnet_proposal(
     governance: &Canister<'_>,
     proposal_payload: UpdateSubnetPayload,
 ) {

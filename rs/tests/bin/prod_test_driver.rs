@@ -958,14 +958,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
                 pot_with_setup(
-                    "subnet_recovery_app_same_nodes_with_tecdsa",
-                    orchestrator::subnet_recovery_app_subnet::setup_same_nodes_tecdsa,
-                    par(vec![sys_t(
-                        "subnet_recovery_app_same_nodes_with_tecdsa",
-                        orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
-                    )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
-                pot_with_setup(
                     "subnet_recovery_app_no_upgrade_with_tecdsa",
                     orchestrator::subnet_recovery_app_subnet::setup_same_nodes_tecdsa,
                     par(vec![sys_t(
@@ -974,10 +966,42 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
                 pot_with_setup(
+                    "subnet_recovery_app_same_nodes_with_tecdsa",
+                    orchestrator::subnet_recovery_app_subnet::setup_same_nodes_tecdsa,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_same_nodes_with_tecdsa",
+                        orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
+                    )]),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                pot_with_setup(
                     "subnet_recovery_app_failover_nodes_with_tecdsa",
                     orchestrator::subnet_recovery_app_subnet::setup_failover_nodes_tecdsa,
                     par(vec![sys_t(
                         "subnet_recovery_app_failover_nodes_with_tecdsa",
+                        orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
+                    )]),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                pot_with_setup(
+                    "subnet_recovery_app_no_upgrade_enable_tecdsa",
+                    orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_no_upgrade_enable_tecdsa",
+                        orchestrator::subnet_recovery_app_subnet::test_no_upgrade_with_tecdsa,
+                    )]),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                pot_with_setup(
+                    "subnet_recovery_app_same_nodes_enable_tecdsa",
+                    orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_same_nodes_enable_tecdsa",
+                        orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
+                    )]),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                pot_with_setup(
+                    "subnet_recovery_app_failover_nodes_enable_tecdsa",
+                    orchestrator::subnet_recovery_app_subnet::setup_failover_nodes,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_failover_nodes_enable_tecdsa",
                         orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
                     )]),
                 ).with_alert(ENG_ORCHESTRATOR_CHANNEL),

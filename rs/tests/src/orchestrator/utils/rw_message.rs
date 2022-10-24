@@ -66,7 +66,7 @@ pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg
 pub(crate) fn cannot_store_msg(log: Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
     retry(log.clone(), secs(300), secs(10), || {
         if can_store_msg(&log, url, canister_id, msg) {
-            bail!("retry...")
+            bail!("Message could still be stored.")
         } else {
             Ok(())
         }
