@@ -1,7 +1,9 @@
 ARG SRC_IMG_PATH=undefined
 FROM ${SRC_IMG_PATH} as src_img
 
-FROM ubuntu@sha256:9d42d0e3e57bc067d10a75ee33bdd1a5298e95e5fc3c5d1fce98b455cb879249
+# https://hub.docker.com/_/ubuntu
+# focal-20220922
+FROM ubuntu@sha256:e722c7335fdd0ce77044ab5942cb1fbd2b5f60d1f5416acfcdb0814b2baf7898
 
 # The image expects the following volumes mounted from the host:
 # /cache - holding the cache artifacts
