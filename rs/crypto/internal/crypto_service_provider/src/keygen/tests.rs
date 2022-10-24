@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
+use crate::keygen::fixtures::multi_bls_test_vector;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
+use crate::vault::test_utils::sks::secret_key_store_with_error_on_insert;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::X509NameEntries;
@@ -10,26 +12,164 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
-#[test]
-fn should_correctly_generate_ed25519_keys() {
-    let csprng = csprng_seeded_with(42);
-    let csp = Csp::of(csprng, volatile_key_store());
+mod gen_key_pair_tests {
+    use super::*;
 
-    let pk = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
-    let key_id = KeyId::from(&pk);
+    #[test]
+    fn should_correctly_generate_ed25519_keys() {
+        let csp = Csp::of(rng(), volatile_key_store());
+        let public_key = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
+        let key_id = KeyId::from(&public_key);
 
-    assert_eq!(
-        key_id,
-        KeyId::from(hex_to_32_bytes(
-            "be652632635fa33651721671afa29c576396beaec8af0d8ba819605fc7dea8e4"
-        )),
-    );
-    assert_eq!(
-        pk,
-        CspPublicKey::ed25519_from_hex(
-            "78eda21ba04a15e2000fe8810fe3e56741d23bb9ae44aa9d5bb21b76675ff34b"
-        )
-    );
+        assert_eq!(
+            key_id,
+            KeyId::from(hex_to_32_bytes(
+                "be652632635fa33651721671afa29c576396beaec8af0d8ba819605fc7dea8e4"
+            )),
+        );
+        assert_eq!(
+            public_key,
+            CspPublicKey::ed25519_from_hex(
+                "78eda21ba04a15e2000fe8810fe3e56741d23bb9ae44aa9d5bb21b76675ff34b"
+            )
+        );
+    }
+
+    #[test]
+    fn should_correctly_generate_multi_bls12_381_keys() {
+        let test_vector = multi_bls_test_vector();
+        let csprng = csprng_seeded_with(test_vector.seed);
+        let csp = Csp::of(csprng, volatile_key_store());
+        let public_key = csp.gen_key_pair(AlgorithmId::MultiBls12_381).unwrap();
+        let key_id = KeyId::from(&public_key);
+
+        assert_eq!(key_id, test_vector.key_id);
+        assert_eq!(public_key, test_vector.public_key);
+    }
+
+    #[test]
+    fn should_fail_generating_keys_for_unsupported_algorithms() {
+        let supported_algorithm_ids = vec![AlgorithmId::Ed25519, AlgorithmId::MultiBls12_381];
+        let csp = Csp::of(rng(), volatile_key_store());
+
+        for algorithm_id in all_algorithm_ids() {
+            if !supported_algorithm_ids.contains(&algorithm_id) {
+                let result = csp.gen_key_pair(algorithm_id).expect_err("expected error");
+                assert!(result.is_algorithm_not_supported())
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "has already been inserted")]
+    fn should_panic_upon_duplicate_key() {
+        let duplicated_key_id = KeyId::from([42; 32]);
+        let csp = Csp::of(
+            rng(),
+            secret_key_store_with_error_on_insert(duplicated_key_id),
+        );
+
+        let _ = csp.gen_key_pair(AlgorithmId::Ed25519);
+    }
+}
+
+mod gen_key_pair_with_pop_tests {
+    use super::*;
+
+    #[test]
+    fn should_correctly_generate_multi_bls12_381_keys() {
+        let test_vector = multi_bls_test_vector();
+        let csprng = csprng_seeded_with(test_vector.seed);
+        let csp = Csp::of(csprng, volatile_key_store());
+        let (public_key, pop) = csp
+            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .unwrap();
+        let key_id = KeyId::from(&public_key);
+
+        assert_eq!(key_id, test_vector.key_id);
+        assert_eq!(public_key, test_vector.public_key);
+        assert_eq!(pop, test_vector.proof_of_possession);
+    }
+
+    #[test]
+    fn should_fail_generating_keys_for_unsupported_algorithms() {
+        let supported_algorithm_ids = vec![AlgorithmId::MultiBls12_381];
+        let csp = Csp::of(rng(), volatile_key_store());
+
+        for algorithm_id in all_algorithm_ids() {
+            if !supported_algorithm_ids.contains(&algorithm_id) {
+                let result = csp
+                    .gen_key_pair_with_pop(algorithm_id)
+                    .expect_err("expected error");
+                assert!(result.is_algorithm_not_supported())
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "has already been inserted")]
+    fn should_panic_upon_duplicate_key() {
+        let duplicated_key_id = KeyId::from([42; 32]);
+        let csp = Csp::of(
+            rng(),
+            secret_key_store_with_error_on_insert(duplicated_key_id),
+        );
+
+        let _ = csp.gen_key_pair_with_pop(AlgorithmId::MultiBls12_381);
+    }
+}
+
+mod idkg_create_mega_key_pair_tests {
+    use super::*;
+    use crate::api::CspCreateMEGaKeyError;
+    use crate::keygen::fixtures::mega_test_vector;
+    use crate::CspIDkgProtocol;
+
+    #[test]
+    fn should_correctly_create_mega_key_pair() {
+        let test_vector = mega_test_vector();
+        let csprng = csprng_seeded_with(test_vector.seed);
+        let csp = Csp::of(csprng, volatile_key_store());
+        let public_key = csp
+            .idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1)
+            .expect("failed creating MEGa key pair");
+
+        assert_eq!(public_key, test_vector.public_key);
+    }
+
+    #[test]
+    fn should_fail_generating_keys_for_unsupported_algorithms() {
+        let supported_algorithm_ids = vec![AlgorithmId::ThresholdEcdsaSecp256k1];
+        let csp = Csp::of(rng(), volatile_key_store());
+
+        for algorithm_id in all_algorithm_ids() {
+            if !supported_algorithm_ids.contains(&algorithm_id) {
+                let result = csp
+                    .idkg_create_mega_key_pair(algorithm_id)
+                    .expect_err("expected error");
+
+                assert!(matches!(
+                    result,
+                    CspCreateMEGaKeyError::UnsupportedAlgorithm { .. }
+                ))
+            }
+        }
+    }
+    #[test]
+    fn should_fail_upon_duplicate_key() {
+        let duplicated_key_id = KeyId::from([42; 32]);
+        let csp = Csp::of(
+            rng(),
+            secret_key_store_with_error_on_insert(duplicated_key_id),
+        );
+
+        let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
+
+        assert!(matches!(
+            result,
+            Err(CspCreateMEGaKeyError::DuplicateKeyId { key_id }) if key_id == duplicated_key_id
+        ));
+    }
 }
 
 #[test]
@@ -78,69 +218,8 @@ fn volatile_key_store() -> VolatileSecretKeyStore {
     VolatileSecretKeyStore::new()
 }
 
-mod multi {
-    use super::*;
-    use ic_crypto_internal_multi_sig_bls12381::types::{PopBytes, PublicKeyBytes};
-    use ic_crypto_internal_test_vectors::unhex::{hex_to_48_bytes, hex_to_96_bytes};
-
-    struct TestVector {
-        seed: u64,
-        key_id: KeyId,
-        public_key: CspPublicKey,
-        proof_of_possession: CspPop,
-    }
-
-    fn test_vector_42() -> TestVector {
-        TestVector {
-            seed: 42,
-            key_id: KeyId::from(hex_to_32_bytes(
-                "6ddef5dfbbd4b641a7cc838ea5d2018c892dd6ef21d641a93f9d3b73b95c6258",
-            )),
-            public_key: CspPublicKey::MultiBls12_381(PublicKeyBytes(hex_to_96_bytes(
-                "b5077d187db1ff824d246bc7c311f909047e20375dc836087da1d7e5c3add0e8fc838af6aaa7373b41824c9bd080f47c0a50e3cdf06bf1cb4061a6cc6ab1802acce096906cece92e7487a29e89a187b618e6af1292515202640795f3359161c2",
-            ))),
-            proof_of_possession: CspPop::MultiBls12_381(PopBytes(hex_to_48_bytes(
-                "8c3a46485252433f478d733275ae3d259f6ced963cf496974ea1dc95e6ca3aee588c4a2e12de34f46e7ef0adffe664d7",
-            ))),
-        }
-    }
-
-    /// This test checks that the functionality is consistent; the values are
-    /// not "correct" but they must never change.
-    #[test]
-    fn key_generation_is_stable() {
-        let test_vector = test_vector_42();
-        let csprng = csprng_seeded_with(test_vector.seed);
-        let csp = Csp::of(csprng, volatile_key_store());
-        let public_key = csp.gen_key_pair(AlgorithmId::MultiBls12_381).unwrap();
-        let key_id = KeyId::from(&public_key);
-
-        assert_eq!(key_id, test_vector.key_id);
-        assert_eq!(public_key, test_vector.public_key);
-    }
-
-    /// This test checks that the functionality is consistent; the values are
-    /// not "correct" but they must never change.
-    #[test]
-    fn key_generation_with_pop_is_stable() {
-        let test_vector = test_vector_42();
-        let csprng = csprng_seeded_with(test_vector.seed);
-        let csp = Csp::of(csprng, volatile_key_store());
-        let (public_key, pop) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
-            .expect("Failed to generate key pair with PoP");
-        let key_id = KeyId::from(&public_key);
-
-        assert_eq!(key_id, test_vector.key_id);
-        assert_eq!(public_key, test_vector.public_key);
-        assert_eq!(pop, test_vector.proof_of_possession);
-    }
-}
-
 mod tls {
     use super::*;
-    use crate::secret_key_store::test_utils::MockSecretKeyStore;
-    use crate::secret_key_store::SecretKeyStoreError;
     use openssl::x509::X509VerifyResult;
     use std::collections::BTreeSet;
 
@@ -151,15 +230,11 @@ mod tls {
     #[test]
     #[should_panic(expected = "has already been inserted")]
     fn should_panic_if_secret_key_insertion_yields_duplicate_error() {
-        let mut sks_returning_error_on_insert = MockSecretKeyStore::new();
-        sks_returning_error_on_insert
-            .expect_insert()
-            .times(1)
-            .return_const(Err(SecretKeyStoreError::DuplicateKeyId(KeyId::from(
-                [42; 32],
-            ))));
-
-        let csp = Csp::of(rng(), sks_returning_error_on_insert);
+        let duplicated_key_id = KeyId::from([42; 32]);
+        let csp = Csp::of(
+            rng(),
+            secret_key_store_with_error_on_insert(duplicated_key_id),
+        );
 
         let _ = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
     }
@@ -302,10 +377,6 @@ mod tls {
         );
     }
 
-    fn rng() -> impl CryptoRng + Rng {
-        csprng_seeded_with(42)
-    }
-
     fn cn_entries(x509_cert: &X509) -> X509NameEntries {
         x509_cert.subject_name().entries_by_nid(Nid::COMMONNAME)
     }
@@ -313,4 +384,32 @@ mod tls {
     fn serial_number(cert: &TlsPublicKeyCert) -> BigNum {
         cert.as_x509().serial_number().to_bn().unwrap()
     }
+}
+
+fn rng() -> impl CryptoRng + Rng {
+    csprng_seeded_with(42)
+}
+
+fn all_algorithm_ids() -> Vec<AlgorithmId> {
+    let algorithm_ids = vec![
+        AlgorithmId::Placeholder,
+        AlgorithmId::MultiBls12_381,
+        AlgorithmId::ThresBls12_381,
+        AlgorithmId::SchnorrSecp256k1,
+        AlgorithmId::StaticDhSecp256k1,
+        AlgorithmId::HashSha256,
+        AlgorithmId::Tls,
+        AlgorithmId::Ed25519,
+        AlgorithmId::Secp256k1,
+        AlgorithmId::Groth20_Bls12_381,
+        AlgorithmId::NiDkg_Groth20_Bls12_381,
+        AlgorithmId::EcdsaP256,
+        AlgorithmId::EcdsaSecp256k1,
+        AlgorithmId::IcCanisterSignature,
+        AlgorithmId::RsaSha256,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        AlgorithmId::MegaSecp256k1,
+    ];
+    assert_eq!(algorithm_ids.len(), 17);
+    algorithm_ids
 }
