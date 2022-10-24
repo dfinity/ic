@@ -17,7 +17,7 @@ def gzip_compress(name, srcs):
         srcs = srcs,
         outs = [name],
         message = "Compressing into %s" % name,
-        cmd_bash = "$(location @pigz) $(SRCS) --stdout > $@",
+        cmd_bash = "$(location @pigz) --no-name $(SRCS) --stdout > $@",
     )
 
 def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):

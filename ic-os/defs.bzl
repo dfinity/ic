@@ -239,7 +239,7 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         name = "disk-img.tar_gz",
         srcs = ["disk-img.tar"],
         outs = ["disk-img.tar.gz"],
-        cmd = "gzip -9 < $< > $@",
+        cmd = "gzip --no-name -9 < $< > $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
