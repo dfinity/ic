@@ -1,4 +1,5 @@
 import abc
+from typing import List
 from typing import Optional
 
 from data_source.commit_type import CommitType
@@ -14,8 +15,8 @@ class FindingDataSource(metaclass=abc.ABCMeta):
             and callable(subclass.get_open_finding)
             and hasattr(subclass, "commit_has_block_exception")
             and callable(subclass.commit_has_block_exception)
-            and hasattr(subclass, "update_open_finding")
-            and callable(subclass.update_open_finding)
+            and hasattr(subclass, "create_or_update_open_finding")
+            and callable(subclass.create_or_update_open_finding)
             and hasattr(subclass, "get_risk_assessor")
             and callable(subclass.get_risk_assessor)
         )
@@ -33,11 +34,11 @@ class FindingDataSource(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def update_open_finding(self, finding: Finding):
+    def create_or_update_open_finding(self, finding: Finding):
         """Updates the given finding or creates a new one if none exists yet."""
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_risk_assessor(self) -> str:
-        """Get the ID of the current on duty risk assessor."""
+    def get_risk_assessor(self) -> List[str]:
+        """Get the IDs of the current on duty risk assessors."""
         raise NotImplementedError

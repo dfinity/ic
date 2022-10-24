@@ -1,3 +1,4 @@
+from typing import List
 from typing import Optional
 
 from data_source.commit_type import CommitType
@@ -14,8 +15,8 @@ class DummyFindingDataSource(FindingDataSource):
     def commit_has_block_exception(self, commit_type: CommitType, commit_hash: str) -> bool:
         return True
 
-    def update_open_finding(self, finding: Finding):
+    def create_or_update_open_finding(self, finding: Finding):
         pass
 
-    def get_risk_assessor(self) -> str:
-        return ""
+    def get_risk_assessor(self) -> List[str]:
+        return []
