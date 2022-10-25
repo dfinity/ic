@@ -8,7 +8,8 @@
 # focal-20220922
 FROM ubuntu@sha256:e722c7335fdd0ce77044ab5942cb1fbd2b5f60d1f5416acfcdb0814b2baf7898
 
-RUN apt -y update && DEBIAN_FRONTEND=noninteractive apt -y install curl unzip gpg build-essential cmake git
+RUN apt -y update && \
+    DEBIAN_FRONTEND=noninteractive apt -y install curl unzip gpg build-essential cmake git libjemalloc-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
 
 RUN mkdir -p /opt/bin
 
@@ -35,8 +36,6 @@ RUN curl --fail -sL https://download.dfinity.systems/cdk-rs/${cdk_opt_sha}/ic-cd
 ARG rocksdb_sha=0a9a05ae12943b1529ef1eabbca5ce5a71c986bf
 RUN mkdir /tmp/rocksdb && curl -fsSL https://github.com/facebook/rocksdb/archive/${rocksdb_sha}.tar.gz | tar -xz -C /tmp/rocksdb --strip-components 1
 WORKDIR /tmp/rocksdb
-
-RUN apt -y install libjemalloc-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
 
 ARG bazelisk_sha=8b739ac23a189b70d51a98041e90ba16f6559d5f991d83bbc031c740f8796310
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/bazelisk-linux-amd64 -o /opt/bin/bazel && \
