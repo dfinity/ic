@@ -180,6 +180,7 @@ type Result_2 = variant {
   Err : text;
 };
 type Result_3 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
+type RetireReplicaVersionPayload = record { replica_version_ids : vec text };
 type SetFirewallConfigPayload = record {
   ipv4_prefixes : vec text;
   firewall_config : text;
@@ -276,6 +277,7 @@ service : {
   remove_nodes : (RemoveNodesPayload) -> ();
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> (Result_1);
+  retire_replica_version : (RetireReplicaVersionPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   update_firewall_rules : (AddFirewallRulesPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_1);

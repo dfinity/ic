@@ -118,6 +118,7 @@ use registry_canister::mutations::{
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::CreateSubnetPayload, do_recover_subnet::RecoverSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+    do_retire_replica_version::RetireReplicaVersionPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_subnet::UpdateSubnetPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
@@ -277,6 +278,8 @@ enum SubCommand {
     ProposeToUpdateSubnet(ProposeToUpdateSubnetCmd),
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
+    /// Submits a proposal to remove the blessing of replica versions
+    ProposeToRetireReplicaVersion(ProposeToRetireReplicaVersionCmd),
     /// Submits a proposal to uninstall code of a canister.
     ProposeToUninstallCode(ProposeToUninstallCodeCmd),
     /// Submits a proposal to set authorized subnetworks that the cycles minting
@@ -913,6 +916,44 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
                 .clone()
                 .expect("Release package sha256 is required"),
             release_package_urls: Some(vec![release_package_url]),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to retire replica versions by their ids.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToRetireReplicaVersionCmd {
+    /// The replica version ids to retire
+    pub replica_version_ids: Vec<String>,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<RetireReplicaVersionPayload> for ProposeToRetireReplicaVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => {
+                if self.replica_version_ids.len() <= 4 {
+                    format!(
+                        "Retire replica versions from commits: {:?}",
+                        self.replica_version_ids
+                    )
+                } else {
+                    String::from("Retire replica versions from several commits")
+                }
+            }
+        }
+    }
+
+    async fn payload(&self, _: Url) -> RetireReplicaVersionPayload {
+        assert!(
+            !self.replica_version_ids.is_empty(),
+            "RetireReplicaVersionPayload cannot be empty."
+        );
+
+        RetireReplicaVersionPayload {
+            replica_version_ids: self.replica_version_ids.clone(),
         }
     }
 }
@@ -3112,6 +3153,7 @@ async fn main() {
             SubCommand::ProposeToAddNnsCanister(_) => (),
             SubCommand::ProposeToBlessReplicaVersion(_) => (),
             SubCommand::ProposeToBlessReplicaVersionFlexible(_) => (),
+            SubCommand::ProposeToRetireReplicaVersion(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToClearProvisionalWhitelist(_) => (),
             SubCommand::ProposeToUpdateRecoveryCup(_) => (),
@@ -3419,6 +3461,15 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::BlessReplicaVersion,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToRetireReplicaVersion(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::RetireReplicaVersion,
                 opts.nns_url,
                 sender,
             )
