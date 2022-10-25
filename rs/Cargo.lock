@@ -8896,6 +8896,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
+ "strum 0.24.0",
+ "strum_macros 0.24.0",
  "tempfile",
 ]
 

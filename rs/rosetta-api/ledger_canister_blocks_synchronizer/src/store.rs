@@ -1,14 +1,159 @@
+use crate::balance_book::BalanceBook;
+use ic_ledger_core::{
+    block::{BlockIndex, BlockType, EncodedBlock, HashOf},
+    Tokens,
+};
+use icp_ledger::AccountIdentifier;
+use icp_ledger::Block;
 use log::debug;
+use rusqlite::params;
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
 
-use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
-
-use crate::balance_book::BalanceBook;
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
-use icp_ledger::{AccountIdentifier, Block, Tokens};
+mod database_access {
+    use crate::store::{BlockStoreError, HashedBlock};
+    use ic_ledger_canister_core::ledger::LedgerTransaction;
+    use ic_ledger_core::block::{BlockType, EncodedBlock};
+    use icp_ledger::{Block, Operation};
+    use rusqlite::{params, types::Null, Connection};
+    pub fn push_hashed_block(
+        con: &mut Connection,
+        hb: &HashedBlock,
+    ) -> Result<(), BlockStoreError> {
+        let hash = hb.hash.into_bytes().to_vec();
+        let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
+        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)";
+        con.execute(
+            command,
+            params![hash, hb.block.clone().into_vec(), parent_hash, hb.index],
+        )
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        Ok(())
+    }
+    pub fn push_transaction(
+        connection: &mut Connection,
+        tx: &icp_ledger::Transaction,
+        index: &u64,
+    ) -> Result<(), BlockStoreError> {
+        let tx_hash = tx.hash().into_bytes().to_vec();
+        let operation_type = tx.operation.clone();
+        let command = "INSERT INTO transactions (block_idx,tx_hash,operation_type,from_account,to_account,amount,fee) VALUES (?1, ?2, ?3, ?4, ?5,?6,?7)";
+        match operation_type {
+            Operation::Burn { from, amount } => {
+                let op_string: &'static str = operation_type.into();
+                let from_account = from.to_hex();
+                let tokens = amount.get_e8s();
+                let to_account = Null;
+                let fees = Null;
+                connection
+                    .execute(
+                        command,
+                        params![
+                            index,
+                            tx_hash,
+                            op_string,
+                            from_account,
+                            to_account,
+                            tokens,
+                            fees
+                        ],
+                    )
+                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            }
+            Operation::Mint { to, amount } => {
+                let op_string: &'static str = operation_type.into();
+                let from_account = Null;
+                let tokens = amount.get_e8s();
+                let to_account = to.to_hex();
+                let fees = Null;
+                connection
+                    .execute(
+                        command,
+                        params![
+                            index,
+                            tx_hash,
+                            op_string,
+                            from_account,
+                            to_account,
+                            tokens,
+                            fees
+                        ],
+                    )
+                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            }
+            Operation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            } => {
+                let op_string: &'static str = operation_type.into();
+                let from_account = from.to_hex();
+                let tokens = amount.get_e8s();
+                let to_account = to.to_hex();
+                let fees = fee.get_e8s();
+                connection
+                    .execute(
+                        command,
+                        params![
+                            index,
+                            tx_hash,
+                            op_string,
+                            from_account,
+                            to_account,
+                            tokens,
+                            fees
+                        ],
+                    )
+                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            }
+        }
+        Ok(())
+    }
+    pub fn contains_block(
+        connection: &mut Connection,
+        block_idx: &u64,
+    ) -> Result<bool, BlockStoreError> {
+        let mut stmt = connection
+            .prepare("SELECT * FROM blocks WHERE idx = ?")
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut rows = stmt
+            .query(params![block_idx])
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let next = rows
+            .next()
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        Ok(next.is_some())
+    }
+    pub fn get_transaction(
+        connection: &mut Connection,
+        block_idx: &u64,
+    ) -> Result<Option<icp_ledger::Transaction>, BlockStoreError> {
+        let command = "SELECT block from blocks where idx = ?";
+        let mut stmt = connection
+            .prepare(command)
+            .map_err(|e| BlockStoreError::Other(e.to_string()))
+            .unwrap();
+        let block = stmt
+            .query_map(params![block_idx], |row| {
+                Ok(row
+                    .get(0)
+                    .map(|b| {
+                        Block::decode(EncodedBlock::from_vec(b))
+                            .unwrap()
+                            .transaction
+                    })
+                    .unwrap())
+            })
+            .unwrap()
+            .next()
+            .ok_or(BlockStoreError::NotFound(*block_idx))
+            .map(|block| block.unwrap())?;
+        Ok(Some(block))
+    }
+}
 
 #[derive(candid::CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct HashedBlock {
@@ -123,7 +268,7 @@ impl SQLiteStore {
         Ok(store)
     }
 
-    pub fn create_tables(&self) -> Result<(), rusqlite::Error> {
+    fn create_tables(&self) -> Result<(), rusqlite::Error> {
         let connection = self.connection.lock().unwrap();
         connection.execute(
             r#"
@@ -161,18 +306,38 @@ impl SQLiteStore {
             "#,
             [],
         )?;
-        Ok(())
-    }
-
-    fn execute_push(connection: &mut Connection, hb: HashedBlock) -> Result<(), BlockStoreError> {
-        let hash = hb.hash.into_bytes().to_vec();
-        let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
-        connection
-            .execute(
-                "INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)",
-                params![hash, hb.block.into_vec(), parent_hash, hb.index],
+        connection.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS transactions (
+                block_idx INTEGER NOT NULL,
+                tx_hash BLOB NOT NULL,
+                operation_type VARCHAR NOT NULL,
+                from_account VARCHAR(64) ,
+                to_account VARCHAR(64) ,
+                amount INTEGER NOT NULL,
+                fee INTEGER,
+                PRIMARY KEY(tx_hash),
+                FOREIGN KEY(block_idx) REFERENCES blocks(idx)
             )
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            "#,
+            [],
+        )?;
+        connection.execute(
+            r#"
+            CREATE UNIQUE INDEX IF NOT EXISTS block_hash_indexer
+            ON blocks (hash);    
+            "#,
+            [],
+        )?;
+
+        connection.execute(
+            r#"
+            CREATE UNIQUE INDEX IF NOT EXISTS block_idx_indexer
+            ON transactions (block_idx);    
+            "#,
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -311,6 +476,27 @@ impl SQLiteStore {
         Ok(())
     }
 
+    pub fn get_transaction(
+        &self,
+        block_idx: &u64,
+    ) -> Result<Option<icp_ledger::Transaction>, BlockStoreError> {
+        if 0 < *block_idx && *block_idx < self.base_idx {
+            return Err(BlockStoreError::NotAvailable(*block_idx));
+        }
+        let mut connection = self.connection.lock().unwrap();
+        if database_access::contains_block(&mut *connection, block_idx)? {
+            match database_access::get_transaction(&mut *connection, block_idx) {
+                Ok(tx) => Ok(tx),
+                Err(_) => Err(BlockStoreError::Other(format!(
+                    "Block {} is available but no transaction can be found for block {}",
+                    block_idx, block_idx
+                ))),
+            }
+        } else {
+            Err(BlockStoreError::NotFound(*block_idx))
+        }
+    }
+
     pub fn get_at(&self, index: BlockIndex) -> Result<HashedBlock, BlockStoreError> {
         if 0 < index && index < self.base_idx {
             return Err(BlockStoreError::NotAvailable(index));
@@ -368,20 +554,39 @@ impl SQLiteStore {
         Ok(res)
     }
 
-    pub fn push(&mut self, hb: HashedBlock) -> Result<(), BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
-        Self::execute_push(&mut *connection, hb)
+    pub fn push(&self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
+        let mut con = self.connection.lock().unwrap();
+        database_access::push_hashed_block(&mut *con, hb)?;
+        database_access::push_transaction(
+            &mut *con,
+            &Block::decode(hb.block.clone()).unwrap().transaction,
+            &hb.index,
+        )?;
+        //TODO: UPDATE ACCOUNT BALANCES
+
+        Ok(())
     }
 
     pub fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
-
         for hb in batch {
-            match Self::execute_push(&mut *connection, hb) {
+            match database_access::push_hashed_block(&mut *connection, &hb) {
+                Ok(_) => (),
+                Err(e) => {
+                    connection
+                        .execute_batch("ROLLBACK TRANSACTION;")
+                        .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+                    return Err(e);
+                }
+            };
+            match database_access::push_transaction(
+                &mut *connection,
+                &Block::decode(hb.block.clone()).unwrap().transaction,
+                &hb.index,
+            ) {
                 Ok(_) => (),
                 Err(e) => {
                     connection
@@ -391,16 +596,14 @@ impl SQLiteStore {
                 }
             }
         }
-
         connection
             .execute_batch("COMMIT TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
         Ok(())
     }
 
-    // FIXME: Make `prune` return `BlockStoreError` on error
-    pub fn prune(&mut self, hb: &HashedBlock, balances: &BalanceBook) -> Result<(), String> {
-        self.write_oldest_block_snapshot(hb, balances)?;
+    pub fn prune(&mut self, hb: &HashedBlock, balance_book: &BalanceBook) -> Result<(), String> {
+        self.write_oldest_block_snapshot(hb, balance_book)?;
         let mut connection = self.connection.lock().unwrap();
         let tx = connection.transaction().expect("Cannot open transaction");
         // NB: An optimization would be to update only modified accounts.
@@ -414,6 +617,13 @@ impl SQLiteStore {
             params![hb.index],
         )
         .map_err(|e| e.to_string())?;
+
+        tx.execute(
+            "DELETE FROM transactions WHERE block_idx > 0 AND block_idx < ?",
+            params![hb.index],
+        )
+        .map_err(|e| e.to_string())?;
+
         tx.execute(
             "DELETE FROM blocks WHERE idx > 0 AND idx < ?",
             params![hb.index],
