@@ -1,10 +1,10 @@
 use crate::execution_environment::RoundLimits;
 // This module defines how `canister_heartbeat` messages are executed.
 // See https://smartcontracts.org/docs/interface-spec/index.html#_heartbeat.
-use crate::{CanisterHeartbeatError, Hypervisor};
+use crate::Hypervisor;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::execution_environment::HypervisorError;
+use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, HypervisorError};
 use ic_logger::ReplicaLogger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
@@ -244,4 +244,47 @@ pub fn execute_heartbeat(
     );
 
     HeartbeatResult::new(canister, instructions_used, heap_delta)
+}
+
+/// Errors when executing `canister_heartbeat`.
+#[derive(Debug, Eq, PartialEq)]
+pub enum CanisterHeartbeatError {
+    /// The canister isn't running.
+    CanisterNotRunning {
+        status: CanisterStatusType,
+    },
+
+    OutOfCycles(CanisterOutOfCyclesError),
+
+    /// Execution failed while executing the `canister_heartbeat`.
+    CanisterExecutionFailed(HypervisorError),
+}
+
+impl std::fmt::Display for CanisterHeartbeatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CanisterHeartbeatError::CanisterNotRunning { status } => write!(
+                f,
+                "Canister in status {} instead of {}",
+                status,
+                CanisterStatusType::Running
+            ),
+            CanisterHeartbeatError::OutOfCycles(err) => write!(f, "{}", err),
+            CanisterHeartbeatError::CanisterExecutionFailed(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl CanisterHeartbeatError {
+    /// Does this error come from a problem in the execution environment?
+    /// Other errors could be caused by bad canister code.
+    pub fn is_system_error(&self) -> bool {
+        match self {
+            CanisterHeartbeatError::CanisterExecutionFailed(hypervisor_err) => {
+                hypervisor_err.is_system_error()
+            }
+            CanisterHeartbeatError::CanisterNotRunning { status: _ }
+            | CanisterHeartbeatError::OutOfCycles(_) => false,
+        }
+    }
 }

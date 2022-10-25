@@ -53,10 +53,13 @@ use maplit::btreemap;
 
 use crate::util::process_stopping_canisters;
 use crate::{
-    execute_canister, CanisterHeartbeatError, CompilationCostHandling, ExecuteMessageResult,
-    ExecutionEnvironment, ExecutionResponse, Hypervisor, IngressHistoryWriterImpl,
-    InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+    execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
+    ExecutionResponse, Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler,
+    RoundInstructions, RoundLimits,
 };
+
+use crate::execution::heartbeat::CanisterHeartbeatError;
+
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
     execution_environment::{generate_subnets, test_registry_settings},
