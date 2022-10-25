@@ -193,36 +193,40 @@ pub trait ArtifactManager: Send + Sync {
         peer_id: &NodeId,
     ) -> Result<(), OnArtifactError<artifact::Artifact>>;
 
-    /// Checks if any of the ArtifactClient already has the artifact in the pool
-    /// by the given identifier.
+    /// Check if the artifact specified by the id already exists in the
+    /// corresponding artifact pool.
     ///
-    /// P2P calls `has_artifact` after an advert is received to determine if
-    /// it should ignore the advert or proceed with downloading the corresponding
-    /// artifact.
-    ///
-    fn has_artifact(&self, message_id: &artifact::ArtifactId) -> bool;
+    /// Gossip calls `has_artifact` to determine if it should proceed with
+    /// downloading the corresponding artifact.
+    fn has_artifact(&self, artifact_id: &artifact::ArtifactId) -> bool;
 
-    /// Return a validated artifact by its identifier, or `None` if not found.
+    /// Return a `ChunkableArtifact` implementation for the validated
+    /// artifact identified by the id. If the artifact doesn't exist then None is
+    /// returned.
     ///
-    /// P2P calls `get_validated_by_identifier` when it needs to send a
-    /// `Chunk` (from a particular artifact) to the requesting peer.
-    ///
+    /// Gossip calls `get_validated_by_identifier` when it needs to send a
+    /// `Chunk`, from the artifact identified by the id, to the requesting peer.
     fn get_validated_by_identifier(
         &self,
-        message_id: &artifact::ArtifactId,
+        artifact_id: &artifact::ArtifactId,
     ) -> Option<Box<dyn chunkable::ChunkableArtifact + '_>>;
 
-    /// Gets the filter that needs to be sent with re-transmission request to
-    /// other peers. This filter should be a collection of all filters returned
-    /// by the ArtifactClients.
+    /// Return a filter that is passed along to other peers when Gossip
+    /// sends a re-transmission/bootstrap request. This filter is a collection of all
+    /// filters returned by all Gossip clients. We do this aggregration because
+    /// re-transimission/bootstrap requests happen mainly when a peer joins
+    /// the subnet, so instead of requesting the filter for each Gossip client
+    /// individually we do it in bulk.
     ///
     /// See `ArtifactClient::get_filter` for more details.
     fn get_filter(&self) -> artifact::ArtifactFilter;
 
-    /// Get adverts of all validated artifacts by the filter from all clients.
+    /// Return adverts for all existing validated artifacts accepted
+    /// by the filter.
     ///
-    /// After P2P receives a re-tranmission request it calls `get_all_validated_by_filter` to get a new set of adverts
-    /// that sends to the requesting peer.
+    /// After Gossip receives a re-tranmission/bootstrap request it calls
+    /// `get_all_validated_by_filter` to get a new set of adverts that sends to the
+    /// requesting peer.
     ///
     /// See `ArtifactClient::get_all_validated_by_filter` for more details.
     fn get_all_validated_by_filter(
@@ -230,7 +234,27 @@ pub trait ArtifactManager: Send + Sync {
         filter: &artifact::ArtifactFilter,
     ) -> Vec<p2p::GossipAdvert>;
 
-    /// Gets the remaining quota the given peer is allowed to consume for a
+    /// Return a Chunk tracker for the given artifact id.
+    ///
+    /// When Gossip decides to download an artifact it requests the corresponding
+    /// chunk tracker for that particular artifact id via the
+    /// `get_chunk_tracker` method.
+    ///
+    /// Each Gossip client is given the flexibility to chunk and serialize their
+    /// artifacts via the `Chunkable` and `ChunkableArtifact` traits.
+    /// One of the many reasons for this flexibility is that artifacts don't necessary
+    /// fit into memory.
+    ///
+    /// The purpose of this function is to allow clients to inject their
+    /// custom `Chunkable` implementation into the Gossip protocol.
+    ///
+    /// See `ArtifactClient::get_chunk_tracker` for more details
+    fn get_chunk_tracker(
+        &self,
+        artifact_id: &artifact::ArtifactId,
+    ) -> Option<Box<dyn chunkable::Chunkable + Send + Sync>>;
+
+    /// Return the remaining quota the given peer is allowed to consume for a
     /// specific client that is identified by the given artifact tag.
     ///
     /// Before P2P schedules to download an artifact it first checks that
@@ -244,21 +268,5 @@ pub trait ArtifactManager: Send + Sync {
     ///
     /// See `ArtifactClient::get_priority_function` for more details.
     fn get_priority_function(&self, tag: artifact::ArtifactTag) -> Option<ArtifactPriorityFn>;
-
-    /// Get Chunk tracker for an advert.
-    ///
-    /// Artifacts don't necessary fit into memory. So each P2P client
-    /// is given the flexibility to chunk and serialize their artifacts via
-    /// the `Chunkbable` trait.
-    ///
-    /// When P2P decided to download an artifact it requests the corresponding
-    /// chunk tracker for that particular artifact type via the
-    /// `get_chunk_tracker` method.
-    ///
-    /// See `ArtifactClient::get_chunk_tracker` for more details
-    fn get_chunk_tracker(
-        &self,
-        artifact_id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn chunkable::Chunkable + Send + Sync>>;
 }
 // end::artifact_manager[]
