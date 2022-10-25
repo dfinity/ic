@@ -62,7 +62,7 @@ use ic_nns_governance::{
         RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
     },
 };
-use ledger_canister::{AccountIdentifier, Memo, Tokens};
+use icp_ledger::{AccountIdentifier, Memo, Tokens};
 use maplit::hashmap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -90,7 +90,7 @@ use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::ProposalRewardStatus::{AcceptVotes, ReadyToSettle};
 use ic_nns_governance::pb::v1::ProposalStatus::Rejected;
 use ic_nns_governance::pb::v1::{ManageNeuronResponse, ProposalRewardStatus, RewardNodeProviders};
-use ledger_canister::Subaccount;
+use icp_ledger::Subaccount;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 

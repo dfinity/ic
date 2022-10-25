@@ -33,7 +33,7 @@ use ic_nns_test_utils::{
         UpgradeTestingScenario,
     },
 };
-use ledger_canister::{
+use icp_ledger::{
     protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
     ArchiveOptions, Block, BlockIndex, LedgerCanisterInitPayload, Memo, SendArgs, TipOfChainRes,
     Tokens, Transaction, DEFAULT_TRANSFER_FEE,

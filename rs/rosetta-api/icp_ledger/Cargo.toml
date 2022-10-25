@@ -1,15 +1,12 @@
 [package]
-name = "ledger-canister"
+name = "icp-ledger"
 version = "0.8.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Like an accountant, but on the blockchain!"
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.53"
-byteorder = "1.4"
 candid = "0.8.1"
-ciborium = "0.2"
 comparable = { version = "0.5", features = ["derive"] }
 crc32fast = "1.2.0"
 dfn_candid = {path = "../../rust_canisters/dfn_candid"}
@@ -17,34 +14,18 @@ dfn_core = {path = "../../rust_canisters/dfn_core"}
 dfn_http = {path = "../../rust_canisters/dfn_http"}
 dfn_http_metrics = {path = "../../rust_canisters/dfn_http_metrics"}
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
-digest = "0.9.0"
 hex = {version = "0.4.2", features = ["serde"] }
 ic-base-types = { path="../../types/base_types" }
-ic-constants = { path = "../../constants" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
-ic-ic00-types = { path="../../types/ic00_types" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
-ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
-ic-nns-constants = {path = "../../nns/constants" }
-ic-utils = { path = "../../utils" }
-intmap = { version = "1.1.0", features = ["serde"] }
 lazy_static = "1.4.0"
 on_wire = {path = "../../rust_canisters/on_wire"}
-phantom_newtype = { path = "../../phantom_newtype" }
 prost = "0.10.4"
 prost-derive = "0.10"
 serde = "1.0"
 serde_bytes = "0.11"
 serde_cbor = "0.11"
-
-[[bin]]
-name = "ledger-canister"
-path = "src/main.rs"
-
-[[bin]]
-name = "ledger-archive-node-canister"
-path = "src/archive_node.rs"
 
 [dev-dependencies]
 canister-test = {path = "../../rust_canisters/canister_test"}
@@ -66,6 +47,3 @@ path = "test/check_generated_files.rs"
 [[bin]]
 name = "test-notified"
 path = "test/notified.rs"
-
-[features]
-notify-method = []

@@ -9,7 +9,7 @@ use ic_nns_test_utils::{
     governance::add_node_provider,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
-use ledger_canister::AccountIdentifier;
+use icp_ledger::AccountIdentifier;
 
 #[test]
 fn test_update_node_provider() {

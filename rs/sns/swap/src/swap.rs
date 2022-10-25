@@ -24,7 +24,7 @@ use ic_sns_governance::{
         ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
     },
 };
-use ledger_canister::DEFAULT_TRANSFER_FEE;
+use icp_ledger::DEFAULT_TRANSFER_FEE;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::str::FromStr;

@@ -23,7 +23,7 @@ pub struct NodeProvider {
     pub id: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// The account where rewards earned from providing nodes will be sent.
     #[prost(message, optional, tag = "2")]
-    pub reward_account: ::core::option::Option<::ledger_canister::protobuf::AccountIdentifier>,
+    pub reward_account: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
 }
 /// Used to update node provider records
 ///
@@ -33,7 +33,7 @@ pub struct NodeProvider {
 pub struct UpdateNodeProvider {
     /// The account where rewards earned from providing nodes will be sent.
     #[prost(message, optional, tag = "1")]
-    pub reward_account: ::core::option::Option<::ledger_canister::protobuf::AccountIdentifier>,
+    pub reward_account: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
 }
 /// How did a neuron vote in the recent past? This data is used by
 /// other neurons to determine what neurons to follow.
@@ -460,7 +460,7 @@ pub mod reward_node_provider {
     )]
     pub struct RewardToAccount {
         #[prost(message, optional, tag = "1")]
-        pub to_account: ::core::option::Option<::ledger_canister::protobuf::AccountIdentifier>,
+        pub to_account: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
     }
     #[derive(
         candid::CandidType,
@@ -862,7 +862,7 @@ pub mod manage_neuron {
         pub amount: ::core::option::Option<disburse::Amount>,
         /// The principal to which to transfer the stake.
         #[prost(message, optional, tag = "2")]
-        pub to_account: ::core::option::Option<::ledger_canister::protobuf::AccountIdentifier>,
+        pub to_account: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
     }
     /// Nested message and enum types in `Disburse`.
     pub mod disburse {

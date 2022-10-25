@@ -64,7 +64,7 @@ impl TransactionOperationResults {
             match (rr, &mut operations[op_idx..]) {
                 (
                     RequestResult {
-                        _type: Request::Transfer(ledger_canister::Operation::Transfer { .. }),
+                        _type: Request::Transfer(icp_ledger::Operation::Transfer { .. }),
                         ..
                     },
                     [withdraw, deposit, fee, ..],

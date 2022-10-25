@@ -29,7 +29,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
-    config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
+    config.extern_path(".ic_ledger.pb.v1", "::icp-ledger::protobuf");
     config.extern_path(".ic_sns_root.pb.v1", "::ic-sns-root::pb::v1");
     config.extern_path(".ic_sns_swap.pb.v1", "::ic-sns-swap::pb::v1");
 

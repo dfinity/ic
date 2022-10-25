@@ -7,8 +7,8 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
+use icp_ledger::{Memo, Tokens, TransactionNotification};
 use lazy_static::lazy_static;
-use ledger_canister::{Memo, Tokens, TransactionNotification};
 use std::sync::RwLock;
 
 // This is a canister that gets notified

@@ -18,7 +18,7 @@ use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::neuron::{DissolveState, Followees};
 use ic_rosetta_api::models::{ConstructionPayloadsResponse, NeuronState, Object, PublicKey};
-use ledger_canister::{
+use icp_ledger::{
     protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
     ArchiveOptions, BlockIndex, Certification, LedgerCanisterInitPayload, Operation, Subaccount,
     TipOfChainRes, Tokens, DEFAULT_TRANSFER_FEE,
@@ -3579,7 +3579,7 @@ struct NeuronInfo {
     principal_id: PrincipalId,
     neuron_subaccount_identifier: u64,
     neuron: Neuron,
-    neuron_account: ledger_canister::AccountIdentifier,
+    neuron_account: icp_ledger::AccountIdentifier,
 }
 
 struct NeuronTestsSetup {

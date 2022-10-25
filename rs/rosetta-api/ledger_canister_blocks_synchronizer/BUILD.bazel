@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/certification",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_protobuf",

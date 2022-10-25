@@ -44,7 +44,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-ledger-canister = { path = "../rosetta-api/ledger_canister" }
+icp-ledger = { path = "../rosetta-api/icp_ledger" }
 prost = "0.10.4"
 rand = "0.8"
 serde = { version = "1.0.115", features = ["derive"] }

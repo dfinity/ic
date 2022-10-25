@@ -10,7 +10,7 @@ use ic_rosetta_api::models::{
     AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,
 };
 use ic_rosetta_api::request_types::{RequestType, Status};
-use ledger_canister::{
+use icp_ledger::{
     self, AccountIdentifier, Block, BlockIndex, Operation, SendArgs, Tokens, TransferFee,
     DEFAULT_TRANSFER_FEE,
 };
@@ -174,7 +174,7 @@ impl LedgerAccess for TestLedger {
             } = from_arg(arg.0).unwrap();
             let created_at_time = created_at_time.unwrap();
 
-            let from = ledger_canister::AccountIdentifier::new(from, from_subaccount);
+            let from = icp_ledger::AccountIdentifier::new(from, from_subaccount);
 
             let transaction = Operation::Transfer {
                 from,

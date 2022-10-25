@@ -6,7 +6,7 @@ use crate::{convert, models};
 use dfn_candid::CandidOne;
 use ic_nns_governance::pb::v1::manage_neuron::{self, configure, Command, Configure};
 use ic_types::PrincipalId;
-use ledger_canister::Tokens;
+use icp_ledger::Tokens;
 use on_wire::FromWire;
 use std::convert::{TryFrom, TryInto};
 
@@ -29,7 +29,7 @@ pub enum Request {
     /// Attempting to serialize or deserialize any Mint, or Burn will error.
     #[serde(rename = "TRANSACTION")]
     #[serde(with = "serde_transfer")]
-    Transfer(ledger_canister::Operation),
+    Transfer(icp_ledger::Operation),
     #[serde(rename = "STAKE")]
     Stake(Stake),
     #[serde(rename = "SET_DISSOLVE_TIMESTAMP")]
@@ -87,11 +87,11 @@ impl Request {
                     neuron_index: *neuron_index,
                 })
             }
-            Request::Transfer(ledger_canister::Operation::Transfer { .. }) => Ok(RequestType::Send),
-            Request::Transfer(ledger_canister::Operation::Burn { .. }) => Err(
+            Request::Transfer(icp_ledger::Operation::Transfer { .. }) => Ok(RequestType::Send),
+            Request::Transfer(icp_ledger::Operation::Burn { .. }) => Err(
                 ApiError::invalid_request("Burn operations are not supported through Rosetta"),
             ),
-            Request::Transfer(ledger_canister::Operation::Mint { .. }) => Err(
+            Request::Transfer(icp_ledger::Operation::Mint { .. }) => Err(
                 ApiError::invalid_request("Mint operations are not supported through Rosetta"),
             ),
             Request::Spawn(Spawn { neuron_index, .. }) => Ok(RequestType::Spawn {
@@ -189,7 +189,7 @@ impl TryFrom<&models::Request> for Request {
                 ))
             })?;
 
-        let account = ledger_canister::account_identifier::AccountIdentifier::from(pid);
+        let account = icp_ledger::AccountIdentifier::from(pid);
 
         let manage_neuron = || {
             {
@@ -205,10 +205,10 @@ impl TryFrom<&models::Request> for Request {
 
         match request_type {
             RequestType::Send => {
-                let ledger_canister::SendArgs {
+                let icp_ledger::SendArgs {
                     to, amount, fee, ..
                 } = convert::from_arg(payload.update_content().arg.0.clone())?;
-                Ok(Request::Transfer(ledger_canister::Operation::Transfer {
+                Ok(Request::Transfer(icp_ledger::Operation::Transfer {
                     from: account,
                     to,
                     amount,

@@ -13,7 +13,7 @@ fn check_generated_files() {
     let out = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let governance_proto = manifest_dir.join("proto");
     let base_types_proto = manifest_dir.join("../../types/base_types/proto");
-    let ledger_proto = manifest_dir.join("../../rosetta-api/ledger_canister/proto");
+    let ledger_proto = manifest_dir.join("../../rosetta-api/icp_ledger/proto");
     generate_prost_files(
         ProtoPaths {
             governance: &governance_proto,

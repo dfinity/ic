@@ -76,7 +76,7 @@ use ic_sns_swap::pb::v1::{
     self as sns_swap_pb, params::NeuronBasketConstructionParameters, Params,
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
-use ledger_canister::{AccountIdentifier, Memo, Subaccount, Tokens};
+use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
 use maplit::hashmap;
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;

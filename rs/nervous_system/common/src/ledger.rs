@@ -4,7 +4,7 @@ use dfn_core::api::PrincipalId;
 use dfn_core::{call, CanisterId};
 use dfn_protobuf::protobuf;
 use ic_crypto_sha::Sha256;
-use ledger_canister::{
+use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     TotalSupplyArgs,
 };

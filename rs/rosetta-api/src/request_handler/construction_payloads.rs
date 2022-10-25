@@ -2,7 +2,7 @@ use dfn_candid::CandidOne;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::messages::{Blob, HttpCanisterUpdate, MessageId};
 use ic_types::PrincipalId;
-use ledger_canister::{Memo, Operation, SendArgs, Tokens};
+use icp_ledger::{Memo, Operation, SendArgs, Tokens};
 use on_wire::IntoWire;
 use rand::Rng;
 use std::collections::HashMap;
@@ -93,7 +93,7 @@ impl RosettaRequestHandler {
             .iter()
             .map(|pk| {
                 let pid: PrincipalId = convert::principal_id_from_public_key(pk)?;
-                let account: ledger_canister::AccountIdentifier = pid.into();
+                let account: icp_ledger::AccountIdentifier = pid.into();
                 Ok((account, pk))
             })
             .collect::<Result<HashMap<_, _>, ApiError>>()?;
@@ -208,7 +208,7 @@ fn handle_transfer(
     ledger: &Arc<dyn LedgerAccess + Send + Sync>,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     match req {
@@ -240,8 +240,8 @@ fn handle_transfer(
 }
 
 fn handle_transfer_operation(
-    from: ledger_canister::AccountIdentifier,
-    to: ledger_canister::AccountIdentifier,
+    from: icp_ledger::AccountIdentifier,
+    to: icp_ledger::AccountIdentifier,
     amount: Tokens,
     fee: Tokens,
     memo: Memo,
@@ -249,7 +249,7 @@ fn handle_transfer_operation(
     ledger: &Arc<dyn LedgerAccess + Send + Sync>,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let pk = pks_map.get(&from).ok_or_else(|| {
@@ -296,7 +296,7 @@ fn handle_neuron_info(
     req: NeuronInfo,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -345,7 +345,7 @@ fn handle_disburse(
     req: Disburse,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -377,7 +377,7 @@ fn handle_stake(
     req: Stake,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -432,7 +432,7 @@ fn handle_start_dissolve(
     req: StartDissolve,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -461,7 +461,7 @@ fn handle_stop_dissolve(
     req: StopDissolve,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -490,7 +490,7 @@ fn handle_set_dissolve_timestamp(
     req: SetDissolveTimestamp,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -522,7 +522,7 @@ fn handle_add_hotkey(
     req: AddHotKey,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -556,7 +556,7 @@ fn handle_remove_hotkey(
     req: RemoveHotKey,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -592,7 +592,7 @@ fn handle_spawn(
     req: Spawn,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let neuron_index = req.neuron_index;
@@ -620,7 +620,7 @@ fn handle_merge_maturity(
     req: MergeMaturity,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -648,7 +648,7 @@ fn handle_follow(
     req: Follow,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let account = req.account;
@@ -683,13 +683,13 @@ fn handle_follow(
 
 fn add_neuron_management_payload(
     request_type: RequestType,
-    account: ledger_canister::AccountIdentifier,
+    account: icp_ledger::AccountIdentifier,
     controller: Option<PrincipalId>, // specify with hotkey.
     neuron_index: u64,
     command: ic_nns_governance::pb::v1::manage_neuron::Command,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let neuron_subaccount = neuron_subaccount(account, controller, neuron_index, pks_map);
@@ -772,10 +772,10 @@ fn add_payloads(
 
 // Process the neuron subaccount from controller or hotkey.
 fn neuron_subaccount(
-    account: ledger_canister::AccountIdentifier,
+    account: icp_ledger::AccountIdentifier,
     controller: Option<PrincipalId>,
     neuron_index: u64,
-    pks_map: &HashMap<ledger_canister::AccountIdentifier, &PublicKey>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
 ) -> [u8; 32] {
     match controller {
         Some(neuron_controller) => {

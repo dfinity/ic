@@ -29,7 +29,7 @@ use ic_nns_governance::pb::v1::{
     ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, Motion, NetworkEconomics,
     Neuron, Proposal, Topic,
 };
-use ledger_canister::{AccountIdentifier, Subaccount, Tokens};
+use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 
 criterion_group! {
     name = benches;

@@ -10,7 +10,7 @@ use crate::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, SetDissolveTimestamp,
     Spawn, Stake, StartDissolve, StopDissolve,
 };
-use ledger_canister::Operation;
+use icp_ledger::Operation;
 use std::collections::HashSet;
 
 impl RosettaRequestHandler {
@@ -30,7 +30,7 @@ impl RosettaRequestHandler {
                 .collect::<Result<_, _>>()?,
         });
 
-        let required_public_keys: Result<HashSet<ledger_canister::AccountIdentifier>, ApiError> =
+        let required_public_keys: Result<HashSet<icp_ledger::AccountIdentifier>, ApiError> =
             transfers.into_iter().map(required_public_key).collect();
 
         let required_public_keys: Vec<_> = required_public_keys?
@@ -46,7 +46,7 @@ impl RosettaRequestHandler {
 }
 
 /// Return the public key required to complete a request.
-fn required_public_key(request: Request) -> Result<ledger_canister::AccountIdentifier, ApiError> {
+fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier, ApiError> {
     match request {
         Request::Transfer(Operation::Transfer { from, .. }) => Ok(from),
         Request::Transfer(Operation::Burn { .. }) => Err(ApiError::invalid_request(

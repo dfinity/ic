@@ -20,12 +20,12 @@ use ic_nns_governance::{
         Proposal,
     },
 };
-use ledger_canister::{AccountIdentifier, Tokens};
+use icp_ledger::{AccountIdentifier, Tokens};
 use maplit::hashmap;
 use std::convert::TryFrom;
 
 use ic_nns_governance::governance::{HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES};
-use ledger_canister::Subaccount;
+use icp_ledger::Subaccount;
 
 struct DegradedEnv {}
 #[async_trait]

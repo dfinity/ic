@@ -14,7 +14,7 @@ use ic_crypto_sha::Sha256;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
-use ledger_canister::{AccountIdentifier, BinaryAccountBalanceArgs};
+use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{Read, Write};

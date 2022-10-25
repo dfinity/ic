@@ -12,7 +12,7 @@ use std::thread;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::governance::{Environment, Governance};
 use ic_nns_governance::pb::v1::{manage_neuron::Disburse, NetworkEconomics};
-use ledger_canister::AccountIdentifier;
+use icp_ledger::AccountIdentifier;
 
 // Using a `pub mod` works around spurious dead code warnings; see
 // https://github.com/rust-lang/rust/issues/46379

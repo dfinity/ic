@@ -16,7 +16,7 @@ use crate::models::seconds::Seconds;
 use crate::request::Request;
 use ic_types::messages::{Blob, HttpCallContent, HttpCanisterUpdate};
 use ic_types::PrincipalId;
-use ledger_canister::{AccountIdentifier, Operation, SendArgs};
+use icp_ledger::{AccountIdentifier, Operation, SendArgs};
 use std::convert::TryFrom;
 
 impl RosettaRequestHandler {
@@ -243,7 +243,7 @@ fn disburse(
     {
         requests.push(Request::Disburse(Disburse {
             account: from,
-            amount: amount.map(|a| ledger_canister::Tokens::from_e8s(a.e8s)),
+            amount: amount.map(|a| icp_ledger::Tokens::from_e8s(a.e8s)),
             recipient: to_account.map_or(Ok(None), |a| {
                 AccountIdentifier::try_from(&a)
                     .map_err(|e| {

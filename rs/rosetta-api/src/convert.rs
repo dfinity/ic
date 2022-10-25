@@ -22,9 +22,7 @@ use ic_ledger_canister_blocks_synchronizer::store::HashedBlock;
 use ic_ledger_core::block::{BlockType, HashOf};
 use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
 use ic_types::{CanisterId, PrincipalId};
-use ledger_canister::{
-    Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, Tokens,
-};
+use icp_ledger::{Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, Tokens};
 use on_wire::{FromWire, IntoWire};
 use serde_json::map::Map;
 use serde_json::{from_value, Number, Value};
@@ -258,14 +256,14 @@ pub fn block_id(block: &HashedBlock) -> Result<BlockIdentifier, ApiError> {
     Ok(BlockIdentifier::new(idx, from_hash(&block.hash)))
 }
 
-pub fn to_model_account_identifier(aid: &ledger_canister::AccountIdentifier) -> AccountIdentifier {
+pub fn to_model_account_identifier(aid: &icp_ledger::AccountIdentifier) -> AccountIdentifier {
     AccountIdentifier::new(aid.to_hex())
 }
 
 pub fn from_model_account_identifier(
     aid: &AccountIdentifier,
-) -> Result<ledger_canister::AccountIdentifier, String> {
-    ledger_canister::AccountIdentifier::from_hex(&aid.address).map_err(|e| e)
+) -> Result<icp_ledger::AccountIdentifier, String> {
+    icp_ledger::AccountIdentifier::from_hex(&aid.address).map_err(|e| e)
 }
 
 const LAST_HEIGHT: &str = "last_height";
@@ -330,7 +328,7 @@ pub fn neuron_account_from_public_key(
 ) -> Result<AccountIdentifier, ApiError> {
     let subaccount_bytes = neuron_subaccount_bytes_from_public_key(pk, neuron_index)?;
     Ok(to_model_account_identifier(
-        &ledger_canister::AccountIdentifier::new(
+        &icp_ledger::AccountIdentifier::new(
             governance_canister_id.get(),
             Some(Subaccount(subaccount_bytes)),
         ),

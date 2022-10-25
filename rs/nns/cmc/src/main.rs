@@ -20,7 +20,7 @@ use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, 
 use ic_ledger_core::block::BlockType;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
-use ledger_canister::{
+use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
     Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };

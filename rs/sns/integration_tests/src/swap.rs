@@ -44,11 +44,11 @@ use ic_types::{
     ingress::WasmResult,
     Cycles,
 };
-use lazy_static::lazy_static;
-use ledger_canister::{
+use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs, Memo, TransferArgs,
     DEFAULT_TRANSFER_FEE,
 };
+use lazy_static::lazy_static;
 use num_traits::ToPrimitive;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
@@ -1013,7 +1013,7 @@ fn participate_in_swap(
     amount: Tokens,
 ) {
     // First, transfer ICP to swap. Needs to go into a special subaccount...
-    let subaccount = ledger_canister::Subaccount(ic_sns_swap::swap::principal_to_subaccount(
+    let subaccount = icp_ledger::Subaccount(ic_sns_swap::swap::principal_to_subaccount(
         &participant_principal_id,
     ));
     let request = Encode!(&TransferArgs {

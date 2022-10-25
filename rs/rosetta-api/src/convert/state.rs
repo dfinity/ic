@@ -6,7 +6,7 @@ use crate::request_types::{
     SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
 };
 use ic_types::PrincipalId;
-use ledger_canister::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
 
 /// Helper for `from_operations` that creates `Transfer`s from related
 /// debit/credit/fee operations.
@@ -98,7 +98,7 @@ impl State {
 
     pub fn transaction(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         amount: i128,
     ) -> Result<(), ApiError> {
         if amount > 0 || self.debit.is_some() && amount == 0 {
@@ -123,7 +123,7 @@ impl State {
 
     pub fn fee(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         amount: Tokens,
     ) -> Result<(), ApiError> {
         if self.fee.is_some() {
@@ -138,7 +138,7 @@ impl State {
 
     pub fn stake(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
     ) -> Result<(), ApiError> {
         self.flush()?;
@@ -151,7 +151,7 @@ impl State {
 
     pub fn set_dissolve_timestamp(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
         timestamp: Seconds,
     ) -> Result<(), ApiError> {
@@ -167,7 +167,7 @@ impl State {
 
     pub fn start_dissolve(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
     ) -> Result<(), ApiError> {
         self.flush()?;
@@ -180,7 +180,7 @@ impl State {
 
     pub fn stop_dissolve(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
     ) -> Result<(), ApiError> {
         self.flush()?;
@@ -193,7 +193,7 @@ impl State {
 
     pub fn add_hot_key(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
         key: PublicKeyOrPrincipal,
     ) -> Result<(), ApiError> {
@@ -208,7 +208,7 @@ impl State {
 
     pub fn remove_hotkey(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
         key: PublicKeyOrPrincipal,
     ) -> Result<(), ApiError> {
@@ -223,10 +223,10 @@ impl State {
 
     pub fn disburse(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
         amount: Option<Tokens>,
-        recipient: Option<ledger_canister::AccountIdentifier>,
+        recipient: Option<icp_ledger::AccountIdentifier>,
     ) -> Result<(), ApiError> {
         self.flush()?;
         self.actions.push(Request::Disburse(Disburse {
@@ -240,7 +240,7 @@ impl State {
 
     pub fn spawn(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
         spawned_neuron_index: u64,
         percentage_to_spawn: Option<u32>,
@@ -267,7 +267,7 @@ impl State {
 
     pub fn merge_maturity(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
         percentage_to_merge: Option<u32>,
     ) -> Result<(), ApiError> {
@@ -289,7 +289,7 @@ impl State {
 
     pub fn neuron_info(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         controller: Option<PrincipalId>,
         neuron_index: u64,
     ) -> Result<(), ApiError> {
@@ -304,7 +304,7 @@ impl State {
 
     pub fn follow(
         &mut self,
-        account: ledger_canister::AccountIdentifier,
+        account: icp_ledger::AccountIdentifier,
         controller: Option<PrincipalId>,
         neuron_index: u64,
         topic: i32,
@@ -324,6 +324,6 @@ impl State {
 
 /// Structure for manipulating tokens in relation to account, for example during transfers.
 pub struct AccountTokens {
-    account: ledger_canister::AccountIdentifier,
+    account: icp_ledger::AccountIdentifier,
     tokens: Tokens,
 }

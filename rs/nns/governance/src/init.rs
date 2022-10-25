@@ -3,7 +3,7 @@ use crate::pb::v1::{neuron::DissolveState, neuron::Followees, Topic};
 #[cfg(not(target_arch = "wasm32"))]
 use ic_nervous_system_common::ledger;
 #[cfg(not(target_arch = "wasm32"))]
-use ledger_canister::Subaccount;
+use icp_ledger::Subaccount;
 #[cfg(not(target_arch = "wasm32"))]
 use rand::{RngCore, SeedableRng};
 #[cfg(not(target_arch = "wasm32"))]

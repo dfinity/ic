@@ -16,7 +16,15 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},
 };
-use ledger_canister::*;
+use icp_ledger::{
+    protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdentifier, ArchiveInfo,
+    ArchivedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
+    CandidBlock, Decimals, GetBlocksArgs, IterBlocksArgs, LedgerCanisterInitPayload, Memo, Name,
+    Operation, PaymentError, QueryArchiveFn, QueryBlocksResponse, SendArgs, Subaccount, Symbol,
+    TipOfChainRes, TotalSupplyArgs, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+    MAX_BLOCKS_PER_REQUEST,
+};
+use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
@@ -278,7 +286,7 @@ pub async fn notify(
         "sender and recipient must match the specified block"
     );
 
-    let transaction_notification_args = TransactionNotification {
+    let transaction_notification_args = icp_ledger::TransactionNotification {
         from: caller_principal_id,
         from_subaccount,
         to: to_canister,
@@ -290,7 +298,8 @@ pub async fn notify(
 
     let block_timestamp = block.timestamp();
 
-    change_notification_state(block_height, block_timestamp, true).expect("Notification failed");
+    ledger_canister::change_notification_state(block_height, block_timestamp, true)
+        .expect("Notification failed");
 
     // This transaction provides an on chain record that a notification was
     // attempted
@@ -353,7 +362,8 @@ pub async fn notify(
             // It may be that by the time this callback is made the block will have been
             // garbage collected. That is fine because we don't inspect the
             // response here.
-            let _ = change_notification_state(block_height, block_timestamp, false);
+            let _ =
+                ledger_canister::change_notification_state(block_height, block_timestamp, false);
             if err.len() > MAX_LENGTH {
                 let caller = caller();
                 Err(format!(
@@ -556,7 +566,7 @@ fn notify_() {
     // we use over_init because it doesn't reply automatically so we can do explicit
     // replies in the callback
     over_async_may_reject_explicit(
-        |ProtoBuf(NotifyCanisterArgs {
+        |ProtoBuf(icp_ledger::NotifyCanisterArgs {
              block_height,
              max_fee,
              from_subaccount,
@@ -607,7 +617,7 @@ fn notify_dfx_() {
     // we use over_init because it doesn't reply automatically so we can do explicit
     // replies in the callback
     over_async_may_reject_explicit(
-        |CandidOne(NotifyCanisterArgs {
+        |CandidOne(icp_ledger::NotifyCanisterArgs {
              block_height,
              max_fee,
              from_subaccount,
@@ -737,7 +747,7 @@ fn total_supply_() {
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
         let blocks = &LEDGER.read().unwrap().blockchain.blocks;
-        ledger_canister::iter_blocks(blocks, start, length)
+        icp_ledger::iter_blocks(blocks, start, length)
     });
 }
 
@@ -748,7 +758,7 @@ fn get_blocks_() {
     over(protobuf, |GetBlocksArgs { start, length }| {
         let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
-        ledger_canister::get_blocks(&blockchain.blocks, start_offset, start, length)
+        icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length)
     });
 }
 
@@ -903,7 +913,7 @@ fn http_request() {
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn get_canidid_interface() {
     over(candid_one, |()| -> &'static str {
-        include_str!("../ledger.did")
+        include_str!(env!("LEDGER_DID_PATH"))
     })
 }
 
@@ -952,7 +962,7 @@ mod tests {
 
         // check the public interface against the actual one
         let old_interface =
-            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("ledger.did");
+            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../ledger.did");
 
         check_service_compatible(
             "actual ledger candid interface",

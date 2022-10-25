@@ -15,8 +15,8 @@ use ic_nns_governance::{
     },
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
+use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use lazy_static::lazy_static;
-use ledger_canister::{AccountIdentifier, Subaccount, Tokens};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::hash_map::Entry;

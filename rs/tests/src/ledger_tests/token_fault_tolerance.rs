@@ -27,7 +27,7 @@ use canister_test::Canister;
 use ic_nns_constants::{LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;
-use ledger_canister::DEFAULT_TRANSFER_FEE;
+use icp_ledger::DEFAULT_TRANSFER_FEE;
 use slog::info;
 use std::convert::TryFrom;
 use std::time::Duration;

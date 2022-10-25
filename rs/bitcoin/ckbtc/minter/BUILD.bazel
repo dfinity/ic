@@ -107,9 +107,9 @@ rust_test(
     deps = [
         ":ckbtc_minter_lib",
         "//rs/bitcoin/types/public",
+        "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger",
-        "//rs/rosetta-api/ledger_canister",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",

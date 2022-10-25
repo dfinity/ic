@@ -28,7 +28,7 @@ use ic_registry_transport::{
     serialize_atomic_mutate_request,
 };
 use ic_types::{messages::SignedIngress, CanisterId, PrincipalId, SubnetId, Time};
-use ledger_canister::{AccountIdentifier, Memo, SendArgs, Tokens};
+use icp_ledger::{AccountIdentifier, Memo, SendArgs, Tokens};
 use prost::Message;
 use std::convert::TryFrom;
 use std::str::FromStr;

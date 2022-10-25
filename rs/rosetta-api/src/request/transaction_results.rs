@@ -2,7 +2,7 @@ use crate::errors::ApiError;
 use crate::models::Object;
 use crate::request::request_result::RequestResult;
 use crate::transaction_id::TransactionIdentifier;
-use ledger_canister::BlockIndex;
+use icp_ledger::BlockIndex;
 use serde_json::Value;
 
 use serde::{Deserialize, Serialize};

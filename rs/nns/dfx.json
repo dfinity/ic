@@ -15,7 +15,7 @@
     },
     "ledger": {
       "type": "custom",
-      "candid": "../rosetta-api/ledger_canister/ledger.did",
+      "candid": "../rosetta-api/icp_ledger/ledger.did",
       "wasm": "../target/wasm32-unknown-unknown/release/ledger-canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p ledger-canister"
     },

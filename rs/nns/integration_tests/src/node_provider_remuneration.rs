@@ -32,7 +32,7 @@ use ic_nns_common::pb::v1::NeuronId as ProtoNeuronId;
 use ic_nns_governance::governance::TimeWarp;
 use ic_nns_governance::pb::v1::reward_node_provider::{RewardMode, RewardToAccount};
 use ic_types::PrincipalId;
-use ledger_canister::{
+use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens, TOKEN_SUBDIVIDABLE_BY,
 };
 use std::collections::BTreeMap;

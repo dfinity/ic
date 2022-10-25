@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",

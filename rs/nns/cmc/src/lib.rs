@@ -1,7 +1,7 @@
 use candid::CandidType;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
-use ledger_canister::{
+use icp_ledger::{
     AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use serde::{Deserialize, Serialize};
@@ -159,7 +159,7 @@ impl TokensToCycles {
             icpts.get_e8s() as u128
                 * self.xdr_permyriad_per_icp as u128
                 * self.cycles_per_xdr.get() as u128
-                / (ledger_canister::TOKEN_SUBDIVIDABLE_BY as u128 * 10_000),
+                / (icp_ledger::TOKEN_SUBDIVIDABLE_BY as u128 * 10_000),
         )
     }
 }

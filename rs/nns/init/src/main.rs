@@ -243,11 +243,11 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
     let mut test_ledger_accounts = vec![];
 
     for principal in &args.initialize_ledger_with_test_accounts_for_principals {
-        test_ledger_accounts.push(ledger_canister::AccountIdentifier::new(*principal, None));
+        test_ledger_accounts.push(icp_ledger::AccountIdentifier::new(*principal, None));
     }
     for account_hex in &args.initialize_ledger_with_test_accounts {
         test_ledger_accounts.push(
-            ledger_canister::AccountIdentifier::from_hex(account_hex)
+            icp_ledger::AccountIdentifier::from_hex(account_hex)
                 .expect("failed to parse ledger account identifier"),
         );
     }
@@ -255,7 +255,7 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
     for account in test_ledger_accounts.into_iter() {
         init_payloads_builder.ledger.initial_values.insert(
             account,
-            ledger_canister::Tokens::from_tokens(1_000_000_000).expect("Couldn't create icpts"),
+            icp_ledger::Tokens::from_tokens(1_000_000_000).expect("Couldn't create icpts"),
         );
         eprintln!(
             "{}Initializing with test ledger account: {}",

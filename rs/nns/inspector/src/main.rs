@@ -8,7 +8,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance::pb::v1::{Governance as GovernanceProto, Neuron};
 use ic_nns_gtc::pb::v1::Gtc as GtcProto;
-use ledger_canister::{AccountIdentifier, Subaccount};
+use icp_ledger::{AccountIdentifier, Subaccount};
 use prost::Message;
 use std::convert::TryInto;
 use std::fs::File;
@@ -147,7 +147,7 @@ fn decode_governance_stable_memory(gov_pb: PathBuf, output: &Path, rs: &Path) {
     let cmd = cmd_base
         // -I: where to find included protos (transitively)
         .args(&["-I", "nns/governance/proto"])
-        .args(&["-I", "rosetta-api/ledger_canister/proto"])
+        .args(&["-I", "rosetta-api/icp_ledger/proto"])
         .args(&["-I", "types/base_types/proto"])
         .args(&["-I", "nns/common/proto"])
         // Main arg: the main proto file
@@ -226,7 +226,7 @@ fn decode_gtc_stable_memory(gtc_pb: PathBuf, output: &Path, rs: &Path) {
     let cmd = cmd_base
         // -I: where to find included protos (transitively)
         .args(&["-I", "nns/governance/proto"])
-        .args(&["-I", "rosetta-api/ledger_canister/proto"])
+        .args(&["-I", "rosetta-api/icp_ledger/proto"])
         .args(&["-I", "types/base_types/proto"])
         .args(&["-I", "nns/common/proto"])
         .args(&["-I", "nns/gtc/proto"])

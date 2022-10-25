@@ -2,7 +2,7 @@ use crate::models::Object;
 use crate::request::Request;
 use crate::request_types::{RequestResultMetadata, Status};
 use crate::transaction_id::TransactionIdentifier;
-use ledger_canister::BlockIndex;
+use icp_ledger::BlockIndex;
 
 use crate::errors;
 use serde::{Deserialize, Serialize};

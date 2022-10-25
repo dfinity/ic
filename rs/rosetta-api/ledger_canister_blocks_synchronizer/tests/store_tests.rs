@@ -6,7 +6,7 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::{
     create_tmp_dir, init_test_logger, sample_data::Scribe,
 };
 use ic_ledger_core::Tokens;
-use ledger_canister::{AccountIdentifier, BlockIndex};
+use icp_ledger::{AccountIdentifier, BlockIndex};
 use std::{collections::BTreeMap, path::Path};
 
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> SQLiteStore {

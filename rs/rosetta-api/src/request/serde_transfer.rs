@@ -1,4 +1,4 @@
-use ledger_canister::{AccountIdentifier, Operation, Tokens};
+use icp_ledger::{AccountIdentifier, Operation, Tokens};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
 

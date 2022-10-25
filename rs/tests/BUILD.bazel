@@ -55,7 +55,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/agent",
     "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/test_utils",
@@ -200,7 +200,7 @@ GUESTOS_RUNTIME_DEPS = {
 NNS_CANISTER_RUNTIME_DEPS = {
     "//rs/registry/canister:registry-canister": "REGISTRY_CANISTER_WASM_PATH",
     "//rs/nns/governance:governance-canister-test": "GOVERNANCE_CANISTER_TEST_WASM_PATH",
-    "//rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method": "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH",
+    "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method": "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH",
     "//rs/nns/handlers/root:root-canister": "ROOT_CANISTER_WASM_PATH",
     "//rs/nns/cmc:cycles-minting-canister": "CYCLES_MINTING_CANISTER_WASM_PATH",
     "//rs/nns/handlers/lifeline:lifeline_actor": "LIFELINE_WASM_PATH",

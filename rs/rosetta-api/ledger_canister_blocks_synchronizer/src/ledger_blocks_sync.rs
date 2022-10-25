@@ -5,7 +5,7 @@ use std::sync::Arc;
 use core::ops::Deref;
 
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
-use ledger_canister::{Block, TipOfChainRes};
+use icp_ledger::{Block, TipOfChainRes};
 use log::{debug, error, info, trace, warn};
 use tokio::sync::RwLock;
 
@@ -394,7 +394,7 @@ mod test {
     use ic_ledger_core::timestamp::TimeStamp;
     use ic_ledger_core::Tokens;
     use ic_types::PrincipalId;
-    use ledger_canister::{AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes};
+    use icp_ledger::{AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes};
 
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
@@ -460,7 +460,7 @@ mod test {
                 let to = AccountIdentifier::new(PrincipalId::new_node_test_id(1), None);
                 let amount = Tokens::from_e8s(100_000);
                 let fee = Tokens::from_e8s(10_000);
-                ledger_canister::Operation::Transfer {
+                icp_ledger::Operation::Transfer {
                     from,
                     to,
                     amount,
@@ -470,7 +470,7 @@ mod test {
             None => {
                 let to = AccountIdentifier::new(PrincipalId::new_anonymous(), None);
                 let amount = Tokens::from_e8s(100_000_000_000_000);
-                ledger_canister::Operation::Mint { amount, to }
+                icp_ledger::Operation::Mint { amount, to }
             }
         };
         let timestamp = TimeStamp::from_nanos_since_unix_epoch(

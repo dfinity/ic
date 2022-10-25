@@ -6,7 +6,7 @@ use ic_types::{
     messages::{HttpCallContent, HttpRequestEnvelope},
     PrincipalId,
 };
-use ledger_canister::{SendArgs, Transaction};
+use icp_ledger::{SendArgs, Transaction};
 use serde::{Deserialize, Serialize};
 
 use crate::{convert, errors::ApiError, request_types::RequestType};
@@ -58,7 +58,7 @@ impl TransactionIdentifier {
                     "A transaction ID cannot be generated from a constructed transaction without an explicit 'created_at_time'"
             ))?;
 
-                let from = ledger_canister::AccountIdentifier::new(from, from_subaccount);
+                let from = icp_ledger::AccountIdentifier::new(from, from_subaccount);
 
                 let hash = Transaction::new(from, to, amount, fee, memo, created_at_time).hash();
 

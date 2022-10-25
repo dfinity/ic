@@ -2,7 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -24,7 +24,7 @@ DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http_metrics",
@@ -62,7 +62,6 @@ DEV_DEPENDENCIES = [
     "//rs/nns/governance/protobuf_generator:lib",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
-    "@crate_index//:criterion",
     "@crate_index//:futures",
     "@crate_index//:lazy_static",
     "@crate_index//:pretty_assertions",
@@ -178,7 +177,7 @@ generated_files_check(
         ":protos",
         "//rs/types/base_types:protos",
         "//rs/nns/common:protos",
-        "//rs/rosetta-api/ledger_canister:protos",
+        "//rs/rosetta-api/icp_ledger:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",
     ],
@@ -206,6 +205,22 @@ rust_test(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
+    ],
+)
+
+rust_bench(
+    name = "scale_bench",
+    srcs = ["benches/scale.rs"],
+    proc_macro_deps = ["@crate_index//:async-trait"],
+    deps = [
+        ":governance",
+        "//rs/nervous_system/common",
+        "//rs/nns/common",
+        "//rs/rosetta-api/icp_ledger",
+        "//rs/types/base_types",
+        "@crate_index//:criterion",
+        "@crate_index//:futures",
+        "@crate_index//:tokio-test",
     ],
 )
 

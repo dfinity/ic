@@ -13,7 +13,7 @@ fn main() {
     // let sns_root_proto = manifest_dir.join("../../root/proto");
 
     let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
-    let ledger_proto = manifest_dir.join("../../../rosetta-api/ledger_canister/proto");
+    let ledger_proto = manifest_dir.join("../../../rosetta-api/icp_ledger/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),

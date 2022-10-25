@@ -1,7 +1,7 @@
 use crate::errors::ApiError;
 use crate::ledger_client::OperationOutput;
 use dfn_protobuf::ProtoBuf;
-use ledger_canister::BlockIndex;
+use icp_ledger::BlockIndex;
 use on_wire::FromWire;
 
 pub fn handle_send(bytes: Vec<u8>) -> Result<Result<Option<OperationOutput>, ApiError>, String> {

@@ -1,0 +1,134 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:prost.bzl", "generated_files_check")
+load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "ledge.rdid",
+    "ledger_archive.did",
+])
+
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**"]),
+)
+
+rust_library(
+    name = "icp_ledger",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    crate_name = "icp_ledger",
+    proc_macro_deps = [
+        "@crate_index//:prost-derive",
+    ],
+    version = "0.8.0",
+    deps = [
+        "//rs/crypto/sha",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:comparable",
+        "@crate_index//:crc32fast",
+        "@crate_index//:hex",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+    ],
+)
+
+rust_test(
+    name = "icp_ledger_test",
+    crate = ":icp_ledger",
+)
+
+motoko_library(
+    name = "ledger_mo_lib",
+    srcs = ["wasm/Ledger.mo"],
+)
+
+motoko_binary(
+    name = "ledger_proxy",
+    entry = "wasm/Proxy.mo",
+    deps = [":ledger_mo_lib"],
+)
+
+rust_canister(
+    name = "test_notified_canister",
+    srcs = ["test/notified.rs"],
+    deps = [
+        ":icp_ledger",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/types/base_types",
+        "@crate_index//:lazy_static",
+    ],
+)
+
+rust_test(
+    name = "ledger_canister_integration_test",
+    srcs = ["test/test.rs"],
+    data = [
+        "ledger.did",
+        "ledger_archive.did",
+        "wasm/ledger_proxy.wasm",
+        ":test_notified_canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    deps = [
+        ":icp_ledger",
+        "//rs/canister_client/sender",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand_chacha_0_3_1",
+        "@crate_index//:serde",
+    ],
+)
+
+# TODO enable this test after the refactoring
+# did_git_test(
+#     name = "ledger_did_git_test",
+#     did = ":ledger.did",
+# )
+
+generated_files_check(
+    name = "check_generated_files",
+    srcs = ["test/check_generated_files.rs"],
+    data = [
+        ":protos",
+        "//rs/types/base_types:protos",
+    ] + glob(["gen/**"]),
+    manifest_dir = "rs/rosetta-api/icp_ledger",
+    deps = [
+        "//rs/rosetta-api/icp_ledger/protobuf_generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:tempfile",
+    ],
+)

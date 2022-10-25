@@ -36,7 +36,7 @@ use ic_sns_swap::{
         SECONDS_PER_DAY,
     },
 };
-use ledger_canister::DEFAULT_TRANSFER_FEE;
+use icp_ledger::DEFAULT_TRANSFER_FEE;
 use maplit::{btreemap, hashset};
 use std::{
     collections::HashSet,

@@ -12,7 +12,7 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-rosetta-api = {path = "../"}
 ic-types = { path = "../../types/types" }
-ledger-canister = {path = "../ledger_canister"}
+icp-ledger = { path = "../icp_ledger" }
 log = "0.4.14"
 nix = "0.23.0"
 rand = "0.8"

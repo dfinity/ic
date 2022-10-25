@@ -20,7 +20,7 @@ use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use ic_types_test_utils::ids::subnet_test_id;
-use ledger_canister::{
+use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex, CyclesResponse, Memo,
     NotifyCanisterArgs, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };

@@ -12,7 +12,7 @@ use ic_types::{
     },
     PrincipalId,
 };
-use ledger_canister::{AccountIdentifier, SendArgs, Subaccount, Tokens};
+use icp_ledger::{AccountIdentifier, SendArgs, Subaccount, Tokens};
 use rand::{Rng, RngCore};
 use rand_distr::Distribution;
 use rand_distr::Uniform;
@@ -223,7 +223,7 @@ fn chunk_pid(pid: PrincipalId, chunk: usize) -> String {
 fn test_zondax_generator() {
     use rand::{prelude::StdRng, SeedableRng};
 
-    use ledger_canister::{Memo, Tokens};
+    use icp_ledger::{Memo, Tokens};
 
     let send_args = SendArgs {
         memo: Memo(0),
@@ -300,7 +300,7 @@ impl Distribution<PrincipalId> for PrincipalDistribution {
 fn main() {
     use rand::{prelude::StdRng, SeedableRng};
 
-    use ledger_canister::Memo;
+    use icp_ledger::Memo;
 
     let mut rng = StdRng::seed_from_u64(1);
 

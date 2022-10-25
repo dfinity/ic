@@ -21,9 +21,7 @@ use ic_nns_test_utils::{
     ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
-use ledger_canister::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens,
-};
+use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens};
 
 /// Tests that we can add and reward a node provider.
 #[test]

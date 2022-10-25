@@ -27,7 +27,7 @@ use ic_nns_test_utils::{
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
-use ledger_canister::{
+use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex,
     LedgerCanisterInitPayload, Memo, SendArgs, Tokens, DEFAULT_TRANSFER_FEE,
 };

@@ -30,7 +30,7 @@ use ic_nns_test_utils::{
     ids::TEST_NEURON_2_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
-use ledger_canister::{LedgerCanisterInitPayload, Tokens};
+use icp_ledger::{LedgerCanisterInitPayload, Tokens};
 use lifeline::LIFELINE_CANISTER_WASM;
 
 /// Seed Round (SR) neurons are released over 48 months in the following tests

@@ -17,7 +17,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/governance",
     "//rs/nns/gtc_accounts",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
