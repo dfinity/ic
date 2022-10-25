@@ -1,11 +1,9 @@
 ///
 /// Benchmark System API performance in `execute_update()`.
 ///
-mod common;
-mod common_wat;
-
-use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
+use execution_environment_bench::common;
+use execution_environment_bench::common_wat::*;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{

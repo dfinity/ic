@@ -1,11 +1,9 @@
 ///
 /// Benchmark System API performance in `execute_query()`
 ///
-mod common;
-mod common_wat;
-
-use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
+use execution_environment_bench::common;
+use execution_environment_bench::common_wat::*;
 use ic_execution_environment::{
     as_num_instructions, as_round_instructions,
     execution::nonreplicated_query::execute_non_replicated_query, ExecutionEnvironment,

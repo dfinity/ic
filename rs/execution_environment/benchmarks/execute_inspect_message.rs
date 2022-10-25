@@ -1,11 +1,9 @@
 ///
 /// Benchmark System API performance in `execute_inspect_message()`
 ///
-mod common;
-mod common_wat;
-
-use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
+use execution_environment_bench::common;
+use execution_environment_bench::common_wat::*;
 use ic_execution_environment::execution::inspect_message;
 
 use ic_execution_environment::ExecutionEnvironment;
