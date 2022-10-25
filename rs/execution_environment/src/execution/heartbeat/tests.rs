@@ -1,5 +1,5 @@
+use crate::execution::heartbeat::CanisterHeartbeatError;
 use crate::execution::test_utilities::{wat_compilation_cost, ExecutionTestBuilder};
-use crate::CanisterHeartbeatError;
 use assert_matches::assert_matches;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{HypervisorError, TrapCode};

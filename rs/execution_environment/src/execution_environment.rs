@@ -5,9 +5,11 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::{
-        heartbeat::execute_heartbeat, inspect_message,
+        heartbeat::{execute_heartbeat, CanisterHeartbeatError},
+        inspect_message,
         nonreplicated_query::execute_non_replicated_query,
-        replicated_query::execute_replicated_query, response::execute_response,
+        replicated_query::execute_replicated_query,
+        response::execute_response,
         update::execute_update,
     },
     execution_environment_metrics::{
@@ -26,7 +28,7 @@ use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CanisterStatusType,
+    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
     ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method as Ic00Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
@@ -34,8 +36,7 @@ use ic_ic00_types::{
 };
 use ic_interfaces::{
     execution_environment::{
-        CanisterOutOfCyclesError, ExecutionMode, HypervisorError, IngressHistoryWriter,
-        RegistryExecutionSettings, SubnetAvailableMemory,
+        ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
     },
     messages::{CanisterInputMessage, RequestOrIngress},
 };
@@ -262,49 +263,6 @@ pub struct ExecutionEnvironment {
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     paused_execution_registry: Arc<Mutex<PausedExecutionRegistry>>,
-}
-
-/// Errors when executing `canister_heartbeat`.
-#[derive(Debug, Eq, PartialEq)]
-pub enum CanisterHeartbeatError {
-    /// The canister isn't running.
-    CanisterNotRunning {
-        status: CanisterStatusType,
-    },
-
-    OutOfCycles(CanisterOutOfCyclesError),
-
-    /// Execution failed while executing the `canister_heartbeat`.
-    CanisterExecutionFailed(HypervisorError),
-}
-
-impl std::fmt::Display for CanisterHeartbeatError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CanisterHeartbeatError::CanisterNotRunning { status } => write!(
-                f,
-                "Canister in status {} instead of {}",
-                status,
-                CanisterStatusType::Running
-            ),
-            CanisterHeartbeatError::OutOfCycles(err) => write!(f, "{}", err),
-            CanisterHeartbeatError::CanisterExecutionFailed(err) => write!(f, "{}", err),
-        }
-    }
-}
-
-impl CanisterHeartbeatError {
-    /// Does this error come from a problem in the execution environment?
-    /// Other errors could be caused by bad canister code.
-    pub fn is_system_error(&self) -> bool {
-        match self {
-            CanisterHeartbeatError::CanisterExecutionFailed(hypervisor_err) => {
-                hypervisor_err.is_system_error()
-            }
-            CanisterHeartbeatError::CanisterNotRunning { status: _ }
-            | CanisterHeartbeatError::OutOfCycles(_) => false,
-        }
-    }
 }
 
 /// This is a helper enum that indicates whether the current DTS execution of
