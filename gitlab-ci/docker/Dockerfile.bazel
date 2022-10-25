@@ -51,7 +51,7 @@ RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1
 
 USER ${USER}
 # Pre-populate the Bazel installation.
-RUN USE_BAZEL_VERSION=5.3.1 bazel version
+RUN USE_BAZEL_VERSION=5.3.2 bazel version
 
 COPY entrypoint.sh /entrypoint.sh
 WORKDIR /
