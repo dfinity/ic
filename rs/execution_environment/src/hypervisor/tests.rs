@@ -1850,9 +1850,7 @@ fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
     )
 }
 
-// TODO(RUN-266): Enable the test after the bug is fixed.
 #[test]
-#[ignore]
 fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"

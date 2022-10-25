@@ -758,9 +758,7 @@ mod tests {
 
     /// Verifies that we can create a simple canister and run multiple
     /// queries with the same Wasm cache.
-    /// TODO: INF-1653 This code triggers EINVAL from lmdb fairly consistently.
     #[test]
-    #[ignore]
     fn test_simple_canister_wasm_cache() {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
@@ -828,7 +826,7 @@ mod tests {
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         let globals = result.exec_output.state.unwrap().globals;
         assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
-        assert_eq!([Global::I32(1), Global::I64(988)].to_vec(), globals);
+        assert_eq!(Global::I32(1), globals[0]);
 
         // Ensure we close Wasm and stable memory.
         close_memory(&srv, wasm_memory_id);
@@ -867,7 +865,7 @@ mod tests {
         );
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
         let globals = result.exec_output.state.unwrap().globals;
-        assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
+        assert_eq!(WasmResult::Reply([2, 0, 0, 0].to_vec()), wasm_result);
 
         // Second time around, issue a query to read the counter. We
         // expect to be able to read back the modified counter value
@@ -885,9 +883,11 @@ mod tests {
         assert!(rep.success);
 
         let result = exec_finished_sync.get();
-        assert!(result.exec_output.wasm.num_instructions_left < NumInstructions::from(500));
+        let instructions_used = NumInstructions::from(INSTRUCTION_LIMIT)
+            - result.exec_output.wasm.num_instructions_left;
+        assert!(instructions_used.get() > 0);
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        assert_eq!(WasmResult::Reply([1, 0, 0, 0].to_vec()), wasm_result);
+        assert_eq!(WasmResult::Reply([2, 0, 0, 0].to_vec()), wasm_result);
     }
 
     /// Verify that stable memory writes result in correct page being marked
