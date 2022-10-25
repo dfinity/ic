@@ -18,7 +18,7 @@ use ic_state_layout::{
     ExecutionStateBits, ReadPolicy, RwPolicy, StateLayout,
 };
 use ic_types::time::UNIX_EPOCH;
-use ic_types::{Height, LongExecutionMode, Time};
+use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
 use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
 use rand::prelude::SliceRandom;
@@ -245,6 +245,10 @@ fn serialize_canister_to_tip(
                     .clone()
                     .into_iter()
                     .collect(),
+                global_timer_nanos: canister_state
+                    .system_state
+                    .global_timer
+                    .to_nanos_since_unix_epoch(),
             }
             .into(),
         )
@@ -580,6 +584,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.cycles_balance,
         canister_state_bits.cycles_debit,
         canister_state_bits.task_queue.into_iter().collect(),
+        CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
     );
 
     let canister_state = CanisterState {

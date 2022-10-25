@@ -232,4 +232,6 @@ message CanisterStateBits {
   google.protobuf.UInt64Value time_of_last_allocation_charge_nanos = 31;
   // Postponed charges that are not applied to `cycles_balance` yet.
   state.queues.v1.Cycles cycles_debit = 32;
+  // Canister global timer, in nanoseconds since Unix epoch.
+  optional uint64 global_timer_nanos = 33;
 }

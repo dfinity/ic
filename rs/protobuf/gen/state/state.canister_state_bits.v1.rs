@@ -338,6 +338,9 @@ pub struct CanisterStateBits {
     /// Postponed charges that are not applied to `cycles_balance` yet.
     #[prost(message, optional, tag = "32")]
     pub cycles_debit: ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// Canister global timer, in nanoseconds since Unix epoch.
+    #[prost(uint64, optional, tag = "33")]
+    pub global_timer_nanos: ::core::option::Option<u64>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
