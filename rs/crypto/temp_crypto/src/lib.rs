@@ -14,15 +14,17 @@ use ic_crypto_tls_interfaces::{
     TlsServerHandshakeError, TlsStream,
 };
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, IDkgProtocol,
-    KeyManager, LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
-    PublicKeyRegistrationStatus, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
+    IDkgDealingEncryptionKeyRotationError, IDkgProtocol, KeyManager, LoadTranscriptResult,
+    MultiSigVerifier, MultiSigner, NiDkgAlgorithm, PublicKeyRegistrationStatus,
+    ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -914,6 +916,14 @@ impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
 
     fn node_public_keys(&self) -> NodePublicKeys {
         self.crypto_component.node_public_keys()
+    }
+
+    fn rotate_idkg_dealing_encryption_keys(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError> {
+        self.crypto_component
+            .rotate_idkg_dealing_encryption_keys(registry_version)
     }
 }
 

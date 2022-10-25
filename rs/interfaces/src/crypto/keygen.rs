@@ -29,10 +29,31 @@ pub trait KeyManager {
     /// created. Node public keys stay the same throughout the lifetime of
     /// the component.
     fn node_public_keys(&self) -> NodePublicKeys;
+
+    /// Rotates the I-DKG dealing encryption keys. This function shall only be called if a prior
+    /// call to `check_keys_with_registry()` has indicated that the I-DKG dealing encryption keys
+    /// shall be rotated. Returns a `PublicKeyProto` containing the new I-DKG dealing encryption
+    /// key to be registered, or an error if the key rotation failed.
+    ///
+    /// # Errors
+    /// * `IDkgDealingEncryptionKeyRotationError::LatestLocalRotationTooRecent` if the node local
+    ///   I-DKG dealing encryption keys are too recent, and the keys cannot be rotated. The caller
+    ///   needs to wait longer before the keys can be rotated. To determine whether or not the
+    ///   I-DKG dealing encryption keys can be rotated, inspect the return value of
+    ///   `check_keys_with_registry`.
+    fn rotate_idkg_dealing_encryption_keys(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError>;
 }
 
 #[derive(Clone, Debug)]
 pub enum PublicKeyRegistrationStatus {
     AllKeysRegistered,
     IDkgDealingEncPubkeyNeedsRegistration(PublicKeyProto),
+}
+
+#[derive(Clone, Debug)]
+pub enum IDkgDealingEncryptionKeyRotationError {
+    LatestLocalRotationTooRecent,
 }
