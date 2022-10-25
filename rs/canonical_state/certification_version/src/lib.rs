@@ -27,6 +27,8 @@ pub enum CertificationVersion {
     V9 = 9,
     /// Dropped `SystemMetadata::id_counter`.
     V10 = 10,
+    /// Producing `error_code` field in `request_status` subtree.
+    V11 = 11,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -65,7 +67,7 @@ pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVer
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V10;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V11;
 
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {

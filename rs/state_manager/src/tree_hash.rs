@@ -63,6 +63,7 @@ mod tests {
     use ic_base_types::{NumBytes, NumSeconds};
     use ic_canonical_state::CertificationVersion;
     use ic_crypto_tree_hash::Digest;
+    use ic_error_types::{ErrorCode, UserError};
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
@@ -81,9 +82,9 @@ mod tests {
     };
     use ic_types::{
         crypto::CryptoHash,
-        ingress::IngressStatus,
+        ingress::{IngressState, IngressStatus},
         xnet::{StreamIndex, StreamIndexedQueue},
-        CryptoHashOfPartialState, Cycles, ExecutionRound,
+        CryptoHashOfPartialState, Cycles, ExecutionRound, Time,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
@@ -215,6 +216,22 @@ mod tests {
                 );
             }
 
+            if certification_version >= CertificationVersion::V11 {
+                state.set_ingress_status(
+                    message_test_id(7),
+                    IngressStatus::Known {
+                        state: IngressState::Failed(UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            "canister not found",
+                        )),
+                        receiver: canister_id.into(),
+                        user_id: user_test_id(1),
+                        time: Time::from_nanos_since_unix_epoch(12345),
+                    },
+                    NumBytes::from(u64::MAX),
+                );
+            }
+
             let mut routing_table = RoutingTable::new();
             routing_table
                 .insert(
@@ -269,6 +286,7 @@ mod tests {
             "D963A967586652BBBAFBD630A1DB53442F01548A5AC42E5A33D1BFEF61BFD9A0",
             "D963A967586652BBBAFBD630A1DB53442F01548A5AC42E5A33D1BFEF61BFD9A0",
             "1213C1D177E064FB70CB9B62BFE20DB823A109B71B4DAC7E41AEAE07DEFDA6FC",
+            "C3F332850C080533635500BE033EF6383321032644914CF3356EFC9733A3E55D",
         ];
         for certification_version in CertificationVersion::iter() {
             assert_partial_state_hash_matches(

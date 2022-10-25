@@ -246,12 +246,14 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                             reply: HttpQueryResponseReply { arg: Blob(vec) },
                         },
                         WasmResult::Reject(message) => HttpQueryResponse::Rejected {
+                            error_code: ErrorCode::CanisterRejectedMessage.to_string(),
                             reject_code: RejectCode::CanisterReject as u64,
                             reject_message: message,
                         },
                     },
 
                     Err(user_error) => HttpQueryResponse::Rejected {
+                        error_code: user_error.code().to_string(),
                         reject_code: user_error.reject_code() as u64,
                         reject_message: user_error.to_string(),
                     },
