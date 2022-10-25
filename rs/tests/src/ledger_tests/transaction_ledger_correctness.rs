@@ -42,7 +42,7 @@ use ic_nns_constants::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
-use ledger_canister::{
+use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockIndex, BlockRes, Memo,
     Operation, Tokens, Transaction, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };

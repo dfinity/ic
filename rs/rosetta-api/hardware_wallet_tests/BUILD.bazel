@@ -6,7 +6,7 @@ DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/nns/constants",
     "//rs/rosetta-api",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/test_utils",
     "//rs/types/types",

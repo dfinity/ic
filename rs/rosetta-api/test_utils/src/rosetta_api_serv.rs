@@ -2,7 +2,7 @@ use ic_rosetta_api::models::Error as RosettaError;
 use ic_rosetta_api::models::*;
 use ic_types::CanisterId;
 
-use ledger_canister::{AccountIdentifier, BlockIndex};
+use icp_ledger::{AccountIdentifier, BlockIndex};
 
 use crate::store_threshold_sig_pk;
 use ic_rosetta_api::models::operation::Operation;

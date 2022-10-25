@@ -4,11 +4,11 @@ use dfn_core::api::{print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
 use ic_ledger_canister_core::range_utils;
-use ic_ledger_core::block::{BlockType, EncodedBlock};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
-use ledger_canister::{
-    Block, BlockIndex, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
-    GetBlocksResult, IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
+use icp_ledger::{
+    Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksResult,
+    IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
@@ -165,7 +165,7 @@ fn iter_blocks_() {
         let archive_state = ARCHIVE_STATE.read().unwrap();
         let blocks = &archive_state.blocks;
         let length = length.min(MAX_BLOCKS_PER_REQUEST);
-        ledger_canister::iter_blocks(blocks, start, length)
+        icp_ledger::iter_blocks(blocks, start, length)
     });
 }
 
@@ -178,7 +178,7 @@ fn get_blocks_() {
         let blocks = &archive_state.blocks;
         let from_offset = archive_state.block_height_offset;
         let length = length.min(MAX_BLOCKS_PER_REQUEST);
-        ledger_canister::get_blocks(blocks, from_offset, start, length)
+        icp_ledger::get_blocks(blocks, from_offset, start, length)
     });
 }
 
@@ -301,7 +301,7 @@ fn http_request() {
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn get_canidid_interface() {
     dfn_core::over(candid_one, |()| -> &'static str {
-        include_str!("../ledger_archive.did")
+        include_str!(env!("LEDGER_ARCHIVE_DID_PATH"))
     })
 }
 
@@ -313,7 +313,7 @@ fn check_archive_candid_interface_compatibility() {
 
     let actual_interface = __export_service();
     let expected_interface_path =
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ledger_archive.did");
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ledger_archive.did");
 
     candid::utils::service_compatible(
         CandidSource::Text(&actual_interface),

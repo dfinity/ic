@@ -36,7 +36,7 @@ ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 lazy_static = "1.4.0"
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 maplit = "1.0.2"
 num-traits = "0.2.14"
 on_wire = { path = "../../rust_canisters/on_wire" }

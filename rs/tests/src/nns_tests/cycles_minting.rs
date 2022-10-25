@@ -44,8 +44,8 @@ use ic_nns_test_utils::{
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_test_utils::make_user;
 use ic_types::{CanisterId, Cycles, PrincipalId};
-use ledger_canister::protobuf::TipOfChainRequest;
-use ledger_canister::{
+use icp_ledger::protobuf::TipOfChainRequest;
+use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockIndex,
     BlockRes, CyclesResponse, NotifyCanisterArgs, Operation, Subaccount, TipOfChainRes, Tokens,
     DEFAULT_TRANSFER_FEE,

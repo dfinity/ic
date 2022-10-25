@@ -1,6 +1,6 @@
 use ic_ledger_core::block::BlockType;
 use ic_types::PrincipalId;
-use ledger_canister::{
+use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, Memo, Operation, Tokens, Transaction,
     DEFAULT_TRANSFER_FEE,
 };

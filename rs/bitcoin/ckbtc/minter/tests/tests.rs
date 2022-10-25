@@ -6,7 +6,7 @@ use ic_icrc1::Account;
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
-use ledger_canister::ArchiveOptions;
+use icp_ledger::ArchiveOptions;
 use std::path::PathBuf;
 
 fn ledger_wasm() -> Vec<u8> {

@@ -13,7 +13,7 @@ DEPENDENCIES = [
     "//rs/registry/local_store",
     "//rs/registry/proto_data_provider",
     "//rs/registry/transport",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/canister_test",
     "//rs/sys",
     "//rs/test_utilities/identity",

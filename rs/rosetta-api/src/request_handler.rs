@@ -16,7 +16,7 @@ use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
 use ic_types::CanisterId;
-use ledger_canister::{Block, BlockIndex};
+use icp_ledger::{Block, BlockIndex};
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
@@ -135,10 +135,8 @@ impl RosettaRequestHandler {
             None
         };
 
-        let account_id = ledger_canister::AccountIdentifier::from_hex(
-            &msg.account_identifier.address,
-        )
-        .map_err(|e| {
+        let account_id = icp_ledger::AccountIdentifier::from_hex(&msg.account_identifier.address)
+            .map_err(|e| {
             ApiError::invalid_account_id(format!(
                 "Account {} is not valid address, {}",
                 &msg.account_identifier.address, e,

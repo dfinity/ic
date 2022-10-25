@@ -1,7 +1,7 @@
 use crate::errors::ApiError;
 use crate::models::{Currency, Object};
 use ic_ledger_core::tokens::DECIMAL_PLACES;
-use ledger_canister::Tokens;
+use icp_ledger::Tokens;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 

@@ -45,7 +45,7 @@ use ic_nns_constants::{
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse};
-use ledger_canister::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
 #[cfg(target_arch = "wasm32")]
@@ -63,7 +63,7 @@ use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::ledger;
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_sns_swap::pb::v1::RestoreDappControllersRequest;
-use ledger_canister::{Tokens, TOKEN_SUBDIVIDABLE_BY};
+use icp_ledger::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 
 // A few helper constants for durations.
@@ -2162,7 +2162,7 @@ impl Governance {
         )
     }
 
-    fn bytes_to_subaccount(bytes: &[u8]) -> Result<ledger_canister::Subaccount, GovernanceError> {
+    fn bytes_to_subaccount(bytes: &[u8]) -> Result<icp_ledger::Subaccount, GovernanceError> {
         bytes.try_into().map_err(|_| {
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Invalid subaccount")
         })

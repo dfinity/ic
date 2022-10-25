@@ -17,6 +17,6 @@ rust_library(
 protobuf_generator(
     name = "protobuf_generator",
     srcs = ["src/main.rs"],
-    manifest_dir = "rs/rosetta-api/ledger_canister/protobuf_generator",
+    manifest_dir = "rs/rosetta-api/icp_ledger/protobuf_generator",
     deps = [":lib"],
 )

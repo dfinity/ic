@@ -8,7 +8,7 @@ pub struct VerificationInfo {
 }
 
 pub(crate) fn verify_block_hash(
-    cert: &ledger_canister::Certification,
+    cert: &icp_ledger::Certification,
     hash: HashOf<EncodedBlock>,
     info: &VerificationInfo,
 ) -> Result<(), String> {

@@ -34,7 +34,7 @@ use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, GovernanceE
 use ic_types::messages::{HttpCallContent, MessageId};
 use ic_types::CanisterId;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::SignedRequestBytes};
-use ledger_canister::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
 use on_wire::{FromWire, IntoWire};
 
 use crate::convert;

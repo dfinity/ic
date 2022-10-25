@@ -23,7 +23,7 @@ use ic_universal_canister::{
 };
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
-use ledger_canister::{
+use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
 };

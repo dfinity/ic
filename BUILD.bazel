@@ -84,7 +84,7 @@ filegroup(
 
 optimized_canister(
     name = "ledger_archive_canister",
-    wasm = "//rs/rosetta-api/ledger_canister:ledger-archive-node-canister-wasm",
+    wasm = "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
 )
 
 CANISTERS = {
@@ -94,8 +94,8 @@ CANISTERS = {
     "icrc1-archive-canister": "//rs/rosetta-api/icrc1/archive:archive_canister",
     "icrc1-index-canister": "//rs/rosetta-api/icrc1/index:index_canister",
     "icrc1-ledger-canister": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "ledger-canister": "//rs/rosetta-api/ledger_canister:ledger_canister",
-    "ledger-canister__notify-method": "//rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method",
+    "ledger-canister": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
+    "ledger-canister__notify-method": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     "nns-ui-canister": "//rs/nns/nns-ui:nns-ui-canister",
     "registry-canister": "//rs/registry/canister:registry-canister",
     "root-canister": "//rs/nns/handlers/root:root-canister",

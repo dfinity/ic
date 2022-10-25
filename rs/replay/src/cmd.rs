@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
-use ledger_canister::AccountIdentifier;
+use icp_ledger::AccountIdentifier;
 use std::path::PathBuf;
 
 pub struct ClapSubnetId(pub SubnetId);

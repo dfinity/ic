@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use ic_ledger_core::block::{BlockIndex, EncodedBlock};
-use ledger_canister::TipOfChainRes;
+use icp_ledger::TipOfChainRes;
 
 use crate::canister_access::CanisterAccess;
 

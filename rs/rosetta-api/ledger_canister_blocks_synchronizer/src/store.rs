@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::balance_book::BalanceBook;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
-use ledger_canister::{AccountIdentifier, Block, Tokens};
+use icp_ledger::{AccountIdentifier, Block, Tokens};
 
 #[derive(candid::CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct HashedBlock {

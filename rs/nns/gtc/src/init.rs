@@ -4,7 +4,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::Neuron;
-use ledger_canister::Tokens;
+use icp_ledger::Tokens;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;

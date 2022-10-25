@@ -454,7 +454,7 @@ fn verify_balances(scribe: &Scribe, blocks: &Blocks, start_idx: usize) {
 
 async fn query_search_transactions(
     req_handler: &RosettaRequestHandler,
-    acc: &ledger_canister::AccountIdentifier,
+    acc: &icp_ledger::AccountIdentifier,
     max_block: Option<i64>,
     offset: Option<i64>,
     limit: Option<i64>,
@@ -483,13 +483,13 @@ async fn verify_account_search(
             .transaction
             .operation
         {
-            ledger_canister::Operation::Burn { from, .. } => {
+            icp_ledger::Operation::Burn { from, .. } => {
                 history.entry(from).or_insert_with(Vec::new).push(hb.index);
             }
-            ledger_canister::Operation::Mint { to, .. } => {
+            icp_ledger::Operation::Mint { to, .. } => {
                 history.entry(to).or_insert_with(Vec::new).push(hb.index);
             }
-            ledger_canister::Operation::Transfer { from, to, .. } => {
+            icp_ledger::Operation::Transfer { from, to, .. } => {
                 history.entry(from).or_insert_with(Vec::new).push(hb.index);
                 if from != to {
                     history.entry(to).or_insert_with(Vec::new).push(hb.index);

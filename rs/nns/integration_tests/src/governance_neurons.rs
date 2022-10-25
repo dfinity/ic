@@ -28,7 +28,7 @@ use ic_nns_test_utils::{
     state_test_helpers::{list_neurons, nns_add_hot_key, nns_remove_hot_key, setup_nns_canisters},
 };
 use ic_state_machine_tests::StateMachine;
-use ledger_canister::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
+use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
 
 #[test]
 fn test_merge_neurons() {

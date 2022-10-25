@@ -9,7 +9,7 @@ use ic_ledger_core::{
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
 };
-use ledger_canister::{
+use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs,
     Block, BlockArg, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
     GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo,
@@ -1339,7 +1339,7 @@ fn get_block_test() {
 
         // For printing and comparing blocks since they're now hidden behind a
         // trait
-        let blk = |b: &ledger_canister::Block| (b.transaction().into_owned(), b.timestamp());
+        let blk = |b: &icp_ledger::Block| (b.transaction().into_owned(), b.timestamp());
 
         let minting_account = create_sender(0);
 
@@ -1487,7 +1487,7 @@ fn get_block_test() {
 
         assert_eq!(blk(&block_from_ledger), blk(&block_from_archive));
 
-        let ledger_canister::protobuf::ArchiveIndexResponse { entries } =
+        let icp_ledger::protobuf::ArchiveIndexResponse { entries } =
             ledger.query_("get_archive_index_pb", protobuf, ()).await?;
         println!("[test] archive_index: {:?}", entries);
 
@@ -1745,7 +1745,7 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
             // Create a non-ledger sender
             let sender = create_sender(1234);
 
-            let ledger_canister::protobuf::ArchiveIndexResponse { entries } =
+            let icp_ledger::protobuf::ArchiveIndexResponse { entries } =
                 ledger.query_("get_archive_index_pb", protobuf, ()).await?;
 
             let node_canister_id = CanisterId::try_from(entries[0].canister_id.unwrap()).unwrap();

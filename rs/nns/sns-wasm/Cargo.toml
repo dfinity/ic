@@ -55,7 +55,7 @@ ic-nns-test-utils = { path = "../test_utils" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-ic00-types = { path = "../../types/ic00_types" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 pretty_assertions = "1.2.1"
 on_wire = { path = "../../rust_canisters/on_wire" }
 walrus = "0.19.0"

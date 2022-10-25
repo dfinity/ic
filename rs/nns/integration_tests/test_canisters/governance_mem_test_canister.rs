@@ -27,7 +27,7 @@ use ic_nns_governance::{
         NetworkEconomics as NetworkEconomicsProto, Neuron, Proposal, ProposalData, Topic,
     },
 };
-use ledger_canister::Subaccount;
+use icp_ledger::Subaccount;
 
 const LOG_PREFIX: &str = "[Governance mem test] ";
 

@@ -17,7 +17,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
-use ledger_canister::{
+use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
 };

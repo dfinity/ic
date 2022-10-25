@@ -37,7 +37,7 @@ ic-nervous-system-root = {path = "../../nervous_system/root"}
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 lazy_static = "1.4.0"
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"

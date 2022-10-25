@@ -19,7 +19,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
-use ledger_canister::AccountIdentifier;
+use icp_ledger::AccountIdentifier;
 
 fn get_timestamp_s() -> u64 {
     std::time::SystemTime::now()

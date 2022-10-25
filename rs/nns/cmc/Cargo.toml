@@ -25,7 +25,7 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = {path = "../../types/types"}
 lazy_static = "1.4.0"
-ledger-canister = {path = "../../rosetta-api/ledger_canister"}
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 on_wire = {path = "../../rust_canisters/on_wire"}
 
 base64 = "0.13.0"

@@ -39,8 +39,8 @@ use ic_sns_wasm::pb::v1::AddWasmRequest;
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
+use icp_ledger as ledger;
 use ledger::LedgerCanisterInitPayload;
-use ledger_canister as ledger;
 use lifeline::LIFELINE_CANISTER_WASM;
 use on_wire::{bytes, IntoWire};
 use prost::Message;

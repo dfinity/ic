@@ -29,7 +29,7 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-common = { path = "../common" }
 ic-nns-governance = { path = "../governance" }
 ic-sns-swap = { path = "../../sns/swap" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 lifeline = { path = "../handlers/lifeline" }
 prost = "0.10.4"
 strum = "0.23.0"

@@ -30,7 +30,7 @@ ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-test-utils = { path = "../test_utils" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"

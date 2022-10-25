@@ -10,8 +10,8 @@ use ic_ledger_core::{block::BlockIndex, Tokens};
 use ic_nervous_system_common::ledger::Ledger as IcpLedger;
 use ic_nervous_system_common::ledger::LedgerCanister as IcpLedgerCanister;
 use ic_nervous_system_common::NervousSystemError;
-use ledger_canister::AccountIdentifier;
-use ledger_canister::Subaccount as IcpSubaccount;
+use icp_ledger::AccountIdentifier;
+use icp_ledger::Subaccount as IcpSubaccount;
 
 // A ICRC1 client runtime that uses dfn_* functionalities
 struct DfnRuntime {}

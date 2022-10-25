@@ -6,14 +6,15 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "3.1.6", features = ["derive"] }
-prost = "0.10.4"
-hex = "0.4.3"
-ic-nns-constants={path="../constants"}
-stable_reader = {path="../../rust_canisters/stable_reader"}
-ic-base-types={path="../../types/base_types"}
-serde_cbor = "0.11.1"
 csv = "1.1"
-ic-nns-governance={path="../governance"}
+hex = "0.4.3"
+ic-base-types = { path = "../../types/base_types" }
+ic-nns-constants = { path = "../constants" }
+ic-nns-governance = { path = "../governance" }
+ic-nns-gtc = { path = "../gtc" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+ledger-canister = { path = "../../rosetta-api/icp_ledger/ledger" }
+prost = "0.10.4"
 serde = "1.0"
-ledger-canister={path="../../rosetta-api/ledger_canister"}
-ic-nns-gtc={path="../gtc"}
+serde_cbor = "0.11.1"
+stable_reader = { path = "../../rust_canisters/stable_reader" }

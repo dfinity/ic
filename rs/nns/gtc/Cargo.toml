@@ -28,7 +28,7 @@ ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 lazy_static = "1.4.0"
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 libsecp256k1 = "0.5.0"
 prost = "0.10.4"
 rand = "0.8"

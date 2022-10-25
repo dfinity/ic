@@ -163,7 +163,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
-use ledger_canister::{LedgerCanisterInitPayload, Tokens};
+use icp_ledger::{LedgerCanisterInitPayload, Tokens};
 use slog::{info, warn, Logger};
 use ssh2::Session;
 use std::collections::{HashMap, HashSet};

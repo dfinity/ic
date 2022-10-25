@@ -1,0 +1,22 @@
+[package]
+name = "ledger-archive-node-canister"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2021"
+
+[dependencies]
+
+candid = "0.8.1"
+ciborium = "0.2"
+dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
+dfn_core = { path = "../../../rust_canisters/dfn_core" }
+dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
+dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
+ic-base-types = { path = "../../../types/base_types" }
+ic-ledger-canister-core = { path = "../../ledger_canister_core" }
+ic-ledger-core = { path = "../../ledger_core" }
+ic-metrics-encoder = { path = "../../../monitoring/metrics_encoder" }
+ic-nns-constants = { path = "../../../nns/constants" }
+icp-ledger = { path = "../" }
+lazy_static = "1.4.0"
+serde = "1.0"

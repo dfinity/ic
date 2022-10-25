@@ -22,7 +22,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/index",
     "//rs/rosetta-api/icrc1/client",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
@@ -191,7 +191,7 @@ generated_files_check(
     data = glob(["gen/**"]) + [
         ":protos",
         "//rs/types/base_types:protos",
-        "//rs/rosetta-api/ledger_canister:protos",
+        "//rs/rosetta-api/icp_ledger:protos",
     ],
     manifest_dir = "rs/sns/governance",
     deps = [

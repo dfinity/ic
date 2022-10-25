@@ -17,7 +17,7 @@ use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayload
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_sns_wasm::init::{SnsWasmCanisterInitPayload, SnsWasmCanisterInitPayloadBuilder};
 use ic_utils::byte_slice_fmt::truncate_and_format;
-use ledger_canister::{
+use icp_ledger::{
     self as ledger,
     account_identifier::{AccountIdentifier, Subaccount},
     LedgerCanisterInitPayload, Tokens, DEFAULT_TRANSFER_FEE,

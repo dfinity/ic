@@ -2,7 +2,7 @@ use ic_ledger_core::{
     balances::{Balances, BalancesStore},
     block::BlockIndex,
 };
-use ledger_canister::{AccountIdentifier, Tokens};
+use icp_ledger::{AccountIdentifier, Tokens};
 use std::collections::HashMap;
 
 use crate::errors::Error;

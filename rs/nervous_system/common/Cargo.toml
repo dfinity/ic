@@ -21,7 +21,7 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-ic00-types = { path = "../../types/ic00_types" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 rand = "0.8.4"
 rand_chacha = "0.3.1"
 rust_decimal = "1.25"

@@ -13,7 +13,7 @@ fn check_generated_files() {
     let out = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let governance_proto = manifest_dir.join("proto");
     let base_types_proto = manifest_dir.join("../../types/base_types/proto");
-    let ledger_proto = manifest_dir.join("../../rosetta-api/ledger_canister/proto");
+    let ledger_proto = manifest_dir.join("../../rosetta-api/icp_ledger/proto");
     let nns_common_proto = manifest_dir.join("../common/proto");
     let sns_root_proto = manifest_dir.join("../../sns/root/proto");
     let sns_swap_proto = manifest_dir.join("../../sns/swap/proto");

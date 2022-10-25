@@ -38,7 +38,7 @@ DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/replica:replica_lib",
     "//rs/replicated_state",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/state_manager",
     "//rs/types/types",
     "//rs/utils",

@@ -8,7 +8,7 @@ use crate::{
     transaction_id::TransactionIdentifier,
 };
 use ic_types::PrincipalId;
-use ledger_canister::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
+use icp_ledger::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -201,7 +201,7 @@ impl Status {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct SetDissolveTimestamp {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
     pub neuron_index: u64,
     /// The number of seconds since Unix epoch.
@@ -210,35 +210,35 @@ pub struct SetDissolveTimestamp {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct StartDissolve {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     pub neuron_index: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct StopDissolve {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
     pub neuron_index: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Stake {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
     pub neuron_index: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Disburse {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     pub amount: Option<Tokens>,
-    pub recipient: Option<ledger_canister::AccountIdentifier>,
+    pub recipient: Option<icp_ledger::AccountIdentifier>,
     pub neuron_index: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct AddHotKey {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
     pub neuron_index: u64,
     pub key: PublicKeyOrPrincipal,
@@ -246,7 +246,7 @@ pub struct AddHotKey {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct RemoveHotKey {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
     pub neuron_index: u64,
     pub key: PublicKeyOrPrincipal,
@@ -254,7 +254,7 @@ pub struct RemoveHotKey {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Spawn {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     pub spawned_neuron_index: u64,
     pub controller: Option<PrincipalId>,
     pub percentage_to_spawn: Option<u32>,
@@ -264,7 +264,7 @@ pub struct Spawn {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct MergeMaturity {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     pub percentage_to_merge: u32,
     #[serde(default)]
     pub neuron_index: u64,
@@ -272,7 +272,7 @@ pub struct MergeMaturity {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct NeuronInfo {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     pub controller: Option<PrincipalId>,
     #[serde(default)]
     pub neuron_index: u64,
@@ -280,7 +280,7 @@ pub struct NeuronInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Follow {
-    pub account: ledger_canister::AccountIdentifier,
+    pub account: icp_ledger::AccountIdentifier,
     pub topic: i32,
     pub followees: Vec<u64>,
     pub controller: Option<PrincipalId>,

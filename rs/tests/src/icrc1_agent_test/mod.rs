@@ -9,7 +9,7 @@ use ic_icrc1_agent::{CallMode, Icrc1Agent, TransferArg, Value};
 use ic_icrc1_ledger::InitArgs;
 use ic_nns_test_utils::itest_helpers::install_rust_canister;
 use ic_registry_subnet_type::SubnetType;
-use ledger_canister::ArchiveOptions;
+use icp_ledger::ArchiveOptions;
 
 use crate::{
     driver::{

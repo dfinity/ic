@@ -1,0 +1,114 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ledger",
+    srcs = [
+        "src/dfn_runtime.rs",
+        "src/lib.rs",
+        "src/tests.rs",
+    ],
+    compile_data = [
+        "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
+    ],
+    crate_name = "ledger_canister",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    rustc_env = {
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+    },
+    version = "0.8.0",
+    deps = [
+        "//rs/constants",
+        "//rs/rosetta-api/icp_ledger",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:intmap",
+        "@crate_index//:lazy_static",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+    ],
+)
+
+rust_test(
+    name = "ledger_test",
+    compile_data = [
+        "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
+    ],
+    crate = ":ledger",
+    rustc_env = {
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+    },
+)
+
+LEDGER_CANISTER_DEPS = [
+    ":ledger",
+    "//rs/rosetta-api/icp_ledger:icp_ledger",
+    "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/on_wire",
+    "//rs/rust_canisters/dfn_http_metrics",
+    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/monitoring/metrics_encoder",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:ciborium",
+    "@crate_index//:serde_bytes",
+]
+
+LEDGER_CANISTER_DATA = [
+    "//rs/rosetta-api/icp_ledger:ledger.did",
+]
+
+LEDGER_CANISTER_RUSTC_ENV = {
+    "LEDGER_DID_PATH": "$(execpath //rs/rosetta-api/icp_ledger:ledger.did)",
+}
+
+rust_canister(
+    name = "ledger-canister-wasm-raw",
+    srcs = ["src/main.rs"],
+    compile_data = LEDGER_CANISTER_DATA,
+    data = LEDGER_CANISTER_DATA,
+    rustc_env = LEDGER_CANISTER_RUSTC_ENV,
+    deps = LEDGER_CANISTER_DEPS,
+)
+
+optimized_canister(
+    name = "ledger-canister-wasm",
+    wasm = "ledger-canister-wasm-raw",
+)
+
+rust_canister(
+    name = "ledger-canister-wasm-notify-method-raw",
+    srcs = ["src/main.rs"],
+    compile_data = LEDGER_CANISTER_DATA,
+    crate_features = ["notify-method"],
+    data = LEDGER_CANISTER_DATA,
+    rustc_env = LEDGER_CANISTER_RUSTC_ENV,
+    deps = LEDGER_CANISTER_DEPS,
+)
+
+rust_test(
+    name = "ledger_canister_unit_test",
+    compile_data = LEDGER_CANISTER_DATA,
+    crate = ":_wasm_ledger-canister-wasm-raw",
+    data = LEDGER_CANISTER_DATA,
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/ledger",
+    },
+    rustc_env = LEDGER_CANISTER_RUSTC_ENV,
+)
+
+optimized_canister(
+    name = "ledger-canister-wasm-notify-method",
+    wasm = "ledger-canister-wasm-notify-method-raw",
+)

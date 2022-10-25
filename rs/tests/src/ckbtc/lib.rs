@@ -36,7 +36,7 @@ use ic_nns_test_utils::{
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types_test_utils::ids::subnet_test_id;
-use ledger_canister::ArchiveOptions;
+use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info};
 use std::convert::TryFrom;

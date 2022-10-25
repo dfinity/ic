@@ -1,0 +1,29 @@
+[package]
+name = "ledger-canister"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1.57"
+candid = "0.8.1"
+ciborium = "0.2"
+dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
+dfn_core = { path = "../../../rust_canisters/dfn_core" }
+dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
+dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
+ic-base-types = { path = "../../../types/base_types" }
+ic-constants = { path = "../../../constants" }
+ic-ledger-canister-core = { path = "../../ledger_canister_core" }
+ic-ledger-core = { path = "../../ledger_core" }
+ic-metrics-encoder = { path = "../../../monitoring/metrics_encoder" }
+icp-ledger = { path = "../" }
+intmap = { version = "1.1.0", features = ["serde"] }
+lazy_static = "1.4.0"
+on_wire = { path = "../../../rust_canisters/on_wire" }
+serde = "1.0"
+serde_bytes = "0.11.5"
+serde_cbor = "0.11.2"
+
+[features]
+notify-method = []

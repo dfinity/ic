@@ -50,7 +50,7 @@ use ic_nns_governance::pb::v1::{governance_error::ErrorType, GovernanceError, Ne
 use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;
-use ledger_canister::{Subaccount, Tokens, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{Subaccount, Tokens, DEFAULT_TRANSFER_FEE};
 use std::convert::TryFrom;
 
 pub fn config() -> InternetComputer {
