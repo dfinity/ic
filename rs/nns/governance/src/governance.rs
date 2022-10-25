@@ -458,6 +458,7 @@ impl NnsFunction {
             NnsFunction::NnsRootUpgrade => (LIFELINE_CANISTER_ID, "upgrade_root"),
             NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
             NnsFunction::BlessReplicaVersion => (REGISTRY_CANISTER_ID, "bless_replica_version"),
+            NnsFunction::RetireReplicaVersion => (REGISTRY_CANISTER_ID, "retire_replica_version"),
             NnsFunction::UpdateNodeOperatorConfig => {
                 (REGISTRY_CANISTER_ID, "update_node_operator_config")
             }
@@ -1152,9 +1153,12 @@ impl Proposal {
                             | NnsFunction::RecoverSubnet
                             | NnsFunction::RemoveNodesFromSubnet
                             | NnsFunction::ChangeSubnetMembership
-                            | NnsFunction::UpdateConfigOfSubnet
-                            | NnsFunction::BlessReplicaVersion
-                            | NnsFunction::UpdateSubnetReplicaVersion => Topic::SubnetManagement,
+                            | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
+                            NnsFunction::BlessReplicaVersion
+                            | NnsFunction::RetireReplicaVersion => Topic::ReplicaVersionManagement,
+                            NnsFunction::UpdateSubnetReplicaVersion => {
+                                Topic::SubnetReplicaVersionManagement
+                            }
                             NnsFunction::NnsCanisterInstall
                             | NnsFunction::NnsCanisterUpgrade
                             | NnsFunction::NnsRootUpgrade

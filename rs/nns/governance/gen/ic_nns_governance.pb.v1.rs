@@ -2246,6 +2246,11 @@ pub enum Topic {
     /// OpenSnsTokenSwap. It is not expected that more types of proposals will
     /// be added to this topic.
     SnsDecentralizationSale = 11,
+    /// Proposals handling updates of a subnet's replica version.
+    /// The only proposal in this topic is UpdateSubnetReplicaVersion.
+    SubnetReplicaVersionManagement = 12,
+    /// All proposals dealing with blessing and retirement of replica versions.
+    ReplicaVersionManagement = 13,
 }
 /// Every neuron is in one of three states.
 ///
@@ -2454,7 +2459,7 @@ pub enum NnsFunction {
     PrepareCanisterMigration = 28,
     /// Remove `canister_migrations` entries.
     CompleteCanisterMigration = 29,
-    //// Add a new SNS canister WASM
+    /// Add a new SNS canister WASM
     AddSnsWasm = 30,
     //// Change the subnet node membership. In a way, this function combines the separate
     //// functions for adding and removing nodes from the subnet record, but adds the property
@@ -2472,6 +2477,10 @@ pub enum NnsFunction {
     UpdateSnsWasmSnsSubnetIds = 34,
     /// Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
     UpdateAllowedPrincipals = 35,
+    /// A proposal to retire previously elected and unused replica versions.
+    /// The specified versions are removed from the registry and the "blessed versions" record.
+    /// This ensures that the replica cannot upgrade to these versions anymore.
+    RetireReplicaVersion = 36,
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.
