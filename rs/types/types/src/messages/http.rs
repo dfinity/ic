@@ -560,6 +560,7 @@ pub enum HttpQueryResponse {
         reply: HttpQueryResponseReply,
     },
     Rejected {
+        error_code: String,
         reject_code: u64,
         reject_message: String,
     },
@@ -675,11 +676,13 @@ mod test {
             &HttpQueryResponse::Rejected {
                 reject_code: 1,
                 reject_message: "system error".to_string(),
+                error_code: "IC500".to_string(),
             },
             Value::Map(btreemap! {
                 text("status") => text("rejected"),
                 text("reject_code") => int(1),
                 text("reject_message") => text("system error"),
+                text("error_code") => text("IC500"),
             }),
         );
     }

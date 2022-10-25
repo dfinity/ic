@@ -9,6 +9,7 @@ use crate::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_crypto_tree_hash::Label;
+use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
@@ -256,7 +257,10 @@ fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
             })
             .with_tree(
                 "request_status",
-                fork(IngressHistoryFork(&state.metadata.ingress_history)),
+                fork(IngressHistoryFork(
+                    &state.metadata.ingress_history,
+                    certification_version,
+                )),
             )
             .with("subnet", move || {
                 let inverted_routing_table = Arc::new(invert_routing_table(
@@ -314,13 +318,13 @@ fn system_metadata_as_tree(
     blob(move || encode_metadata(m, certification_version))
 }
 
-struct IngressHistoryFork<'a>(&'a IngressHistoryState);
+struct IngressHistoryFork<'a>(&'a IngressHistoryState, CertificationVersion);
 
 impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         let byte_array: [u8; EXPECTED_MESSAGE_ID_LENGTH] = label.as_bytes().try_into().ok()?;
         let id = MessageId::from(byte_array);
-        self.0.get(&id).map(status_to_tree)
+        self.0.get(&id).map(|status| status_to_tree(status, self.1))
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
@@ -331,21 +335,34 @@ impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
         Box::new(
             self.0
                 .statuses()
-                .map(|(id, status)| (Label::from(id.as_bytes()), status_to_tree(status))),
+                .map(|(id, status)| (Label::from(id.as_bytes()), status_to_tree(status, self.1))),
         )
     }
 }
 
-fn status_to_tree<'a>(status: &'a IngressStatus) -> LazyTree<'a> {
+fn status_to_tree<'a>(
+    status: &'a IngressStatus,
+    certification_version: CertificationVersion,
+) -> LazyTree<'a> {
     let t = FiniteMap::default().with_tree("status", string(status.as_str()));
 
     let t = match status {
         IngressStatus::Known { state, .. } => match state {
             IngressState::Completed(WasmResult::Reply(b)) => t.with_tree("reply", Blob(&b[..])),
             IngressState::Completed(WasmResult::Reject(s)) => t
+                .with_tree_if(
+                    certification_version >= CertificationVersion::V11,
+                    "error_code",
+                    blob(|| ErrorCode::CanisterRejectedMessage.to_string().into_bytes()),
+                )
                 .with_tree("reject_code", num::<'a>(RejectCode::CanisterReject as u64))
                 .with_tree("reject_message", string(&s[..])),
             IngressState::Failed(error) => t
+                .with_tree_if(
+                    certification_version >= CertificationVersion::V11,
+                    "error_code",
+                    blob(move || error.code().to_string().into_bytes()),
+                )
                 .with_tree("reject_code", num::<'a>(error.reject_code() as u64))
                 .with_tree("reject_message", string(error.description())),
             IngressState::Processing | IngressState::Received | IngressState::Done => t,
