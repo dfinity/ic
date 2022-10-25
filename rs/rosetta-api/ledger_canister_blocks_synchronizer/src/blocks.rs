@@ -156,7 +156,7 @@ impl Blocks {
     /// Add a block to the block_store data structure, the parent_hash must
     /// match the end of the chain
     pub fn add_block(&mut self, hb: HashedBlock) -> Result<(), Error> {
-        self.block_store.push(hb.clone())?;
+        self.block_store.push(&hb)?;
         self.process_block(hb)?;
         Ok(())
     }

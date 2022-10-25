@@ -5,8 +5,8 @@ use ic_ledger_canister_blocks_synchronizer::{
 use ic_ledger_canister_blocks_synchronizer_test_utils::{
     create_tmp_dir, init_test_logger, sample_data::Scribe,
 };
-use ic_ledger_core::Tokens;
-use icp_ledger::{AccountIdentifier, BlockIndex};
+use ic_ledger_core::{block::BlockType, Tokens};
+use icp_ledger::{AccountIdentifier, Block, BlockIndex};
 use std::{collections::BTreeMap, path::Path};
 
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> SQLiteStore {
@@ -17,15 +17,20 @@ pub(crate) fn sqlite_on_disk_store(path: &Path) -> SQLiteStore {
 async fn store_smoke_test() {
     init_test_logger();
     let tmpdir = create_tmp_dir();
-    let mut store = sqlite_on_disk_store(tmpdir.path());
+    let store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb.clone()).unwrap();
+        store.push(hb).unwrap();
     }
 
     for hb in &scribe.blockchain {
         assert_eq!(store.get_at(hb.index).unwrap(), *hb);
+        let block = hb.block.clone();
+        assert_eq!(
+            store.get_transaction(&hb.index).unwrap(),
+            Some(Block::decode(block).unwrap().transaction)
+        );
     }
 
     let last_idx = scribe.blockchain.back().unwrap().index;
@@ -43,7 +48,7 @@ async fn store_prune_test() {
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb.clone()).unwrap();
+        store.push(hb).unwrap();
     }
 
     prune(&scribe, &mut store, 10);
@@ -61,7 +66,7 @@ async fn store_prune_corner_cases_test() {
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb.clone()).unwrap();
+        store.push(hb).unwrap();
     }
 
     prune(&scribe, &mut store, 0);
@@ -84,7 +89,7 @@ async fn store_prune_first_balance_test() {
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb.clone()).unwrap();
+        store.push(hb).unwrap();
     }
 
     prune(&scribe, &mut store, 10);
@@ -105,7 +110,7 @@ async fn store_prune_and_load_test() {
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
-        store.push(hb.clone()).unwrap();
+        store.push(hb).unwrap();
     }
 
     prune(&scribe, &mut store, 10);
@@ -174,6 +179,10 @@ fn verify_pruned(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
             store.get_at(i).unwrap_err(),
             BlockStoreError::NotAvailable(i)
         );
+        assert_eq!(
+            store.get_transaction(&i).unwrap_err(),
+            BlockStoreError::NotAvailable(i)
+        );
     }
 
     if oldest_idx < after_last_idx {
@@ -186,6 +195,15 @@ fn verify_pruned(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
             *scribe.blockchain.get(i as usize).unwrap()
         );
     }
+
+    for i in oldest_idx..after_last_idx {
+        let block = (*scribe.blockchain.get(i as usize).unwrap()).clone().block;
+        assert_eq!(
+            store.get_transaction(&i).unwrap(),
+            Some(Block::decode(block).unwrap().transaction)
+        );
+    }
+
     for i in after_last_idx..=scribe.blockchain.len() as u64 {
         assert_eq!(store.get_at(i).unwrap_err(), BlockStoreError::NotFound(i));
     }

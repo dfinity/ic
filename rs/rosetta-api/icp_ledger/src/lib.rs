@@ -15,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
+use strum_macros::IntoStaticStr;
 
 pub use ic_ledger_core::{
     block::BlockIndex,
@@ -59,7 +60,17 @@ pub type Certification = Option<Vec<u8>>;
 
 /// An operation which modifies account balances
 #[derive(
-    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
+    Serialize,
+    Deserialize,
+    CandidType,
+    Clone,
+    Hash,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    IntoStaticStr,
 )]
 pub enum Operation {
     Burn {

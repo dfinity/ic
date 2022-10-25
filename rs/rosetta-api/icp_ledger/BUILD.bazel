@@ -24,6 +24,7 @@ rust_library(
     crate_name = "icp_ledger",
     proc_macro_deps = [
         "@crate_index//:prost-derive",
+        "@crate_index//:strum_macros",
     ],
     version = "0.8.0",
     deps = [
@@ -42,6 +43,7 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
+        "@crate_index//:strum",
     ],
 )
 

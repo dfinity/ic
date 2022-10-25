@@ -26,6 +26,8 @@ prost-derive = "0.10"
 serde = "1.0"
 serde_bytes = "0.11"
 serde_cbor = "0.11"
+strum = "0.24"
+strum_macros = "0.24"
 
 [dev-dependencies]
 canister-test = {path = "../../rust_canisters/canister_test"}
