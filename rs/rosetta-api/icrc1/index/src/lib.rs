@@ -22,7 +22,7 @@ const MAX_SUBACCOUNTS_PER_RESPONSE: usize = 1000;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
 
-type TxId = u64;
+type TxId = Nat;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Index {
@@ -30,13 +30,13 @@ struct Index {
     pub ledger_id: CanisterId,
 
     // The next txid to query from the Ledger
-    pub next_txid: TxId,
+    pub next_txid: u64,
 
     // Whether there is a [heartbeat] running right now
     pub is_heartbeat_running: bool,
 
     // The index of transactions per account
-    pub account_index: BTreeMap<PrincipalId, BTreeMap<Subaccount, Vec<TxId>>>,
+    pub account_index: BTreeMap<PrincipalId, BTreeMap<Subaccount, Vec<u64>>>,
 
     // The number of unique (principal, subaccount) pairs in the index.
     pub accounts_num: u64,
@@ -275,7 +275,7 @@ fn add_tx(txid: u64, account: Account) {
 /// start=5     max_results=2 => [5, 3]     // last 2 after 5
 /// start=3     max_results=3 => [3, 1]     // last 3 before 3 but there are only 2 txs
 /// start=0     max_results=2 => []         // start is before oldest txid
-fn get_account_transactions_ids(args: GetAccountTransactionsArgs) -> Vec<TxId> {
+fn get_account_transactions_ids(args: GetAccountTransactionsArgs) -> Vec<u64> {
     // The SNS Ledger txid (or block index) is a u64
     if args.start.is_some() && (&args.start).as_ref().unwrap() > &Nat::from(u64::MAX) {
         return vec![];
@@ -357,7 +357,7 @@ pub async fn get_account_transactions(args: GetAccountTransactionsArgs) -> GetTr
     }
     Ok(GetTransactions {
         transactions: txs,
-        oldest_tx_id: txids.get(0).cloned(),
+        oldest_tx_id: txids.get(0).map(|n| Nat::from(*n)),
     })
 }
 
@@ -410,8 +410,7 @@ mod tests {
     use proptest::{option, proptest};
 
     use crate::{
-        add_tx, get_account_transactions_ids, with_index, GetAccountTransactionsArgs, Index, TxId,
-        INDEX,
+        add_tx, get_account_transactions_ids, with_index, GetAccountTransactionsArgs, Index, INDEX,
     };
 
     fn account(n: u64) -> Account {
@@ -421,7 +420,7 @@ mod tests {
         }
     }
 
-    fn init_state(txids: Vec<(Account, Vec<TxId>)>) {
+    fn init_state(txids: Vec<(Account, Vec<u64>)>) {
         INDEX.with(|idx| {
             let mut account_index = BTreeMap::new();
             for (account, new_txids) in txids {
