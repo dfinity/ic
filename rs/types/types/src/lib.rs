@@ -455,6 +455,22 @@ impl CanisterTimer {
             CanisterTimer::Active(time)
         }
     }
+
+    /// Convert this canister timer to nanoseconds since Unix epoch option.
+    pub fn to_nanos_since_unix_epoch(&self) -> Option<u64> {
+        match self {
+            CanisterTimer::Inactive => None,
+            CanisterTimer::Active(time) => Some(time.as_nanos_since_unix_epoch()),
+        }
+    }
+
+    /// Create a canister timer from nanoseconds since Unix epoch option.
+    pub fn from_nanos_since_unix_epoch(nanos: Option<u64>) -> Self {
+        match nanos {
+            None => CanisterTimer::Inactive,
+            Some(nanos) => CanisterTimer::Active(Time::from_nanos_since_unix_epoch(nanos)),
+        }
+    }
 }
 
 /// Represents scheduling strategy for Canisters with long execution in progress.

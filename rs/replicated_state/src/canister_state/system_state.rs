@@ -439,6 +439,7 @@ impl SystemState {
         cycles_balance: Cycles,
         cycles_debit: Cycles,
         task_queue: VecDeque<ExecutionTask>,
+        global_timer: CanisterTimer,
     ) -> Self {
         Self {
             controllers,
@@ -452,8 +453,7 @@ impl SystemState {
             cycles_balance,
             cycles_debit,
             task_queue,
-            // TODO: RUN-405: Serialize/deserialize canister global timer state
-            global_timer: CanisterTimer::Inactive,
+            global_timer,
         }
     }
 

@@ -125,6 +125,7 @@ pub struct CanisterStateBits {
     pub install_code_debit: NumInstructions,
     pub task_queue: Vec<ExecutionTask>,
     pub time_of_last_allocation_charge_nanos: Option<u64>,
+    pub global_timer_nanos: Option<u64>,
 }
 
 /// This struct contains bits of the `BitcoinState` that are not already
@@ -1236,6 +1237,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             install_code_debit: item.install_code_debit.get(),
             time_of_last_allocation_charge_nanos: item.time_of_last_allocation_charge_nanos,
             task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
+            global_timer_nanos: item.global_timer_nanos,
         }
     }
 }
@@ -1320,6 +1322,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             )
             .ok(),
             task_queue,
+            global_timer_nanos: value.global_timer_nanos,
         })
     }
 }
@@ -1743,6 +1746,7 @@ mod test {
             install_code_debit: NumInstructions::from(0),
             time_of_last_allocation_charge_nanos: None,
             task_queue: vec![],
+            global_timer_nanos: None,
         }
     }
 
