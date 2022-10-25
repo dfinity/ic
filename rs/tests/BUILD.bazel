@@ -1,6 +1,5 @@
 load("@bazel_skylib//lib:dicts.bzl", "dicts")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load(":system_tests.bzl", "system_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -184,17 +183,11 @@ rust_test(
     deps = DEPENDENCIES,
 )
 
-write_file(
-    name = "write_ic_version_id",
-    out = "ic_version_id",
-    content = ["c51e7175ad2d7c7c5327f832a5d9e1bd7f6889c5"],
-)
-
 GUESTOS_RUNTIME_DEPS = {
     "//ic-os/guestos/dev:hash_and_upload_disk-img": "",
     "//ic-os/guestos/dev:hash_and_upload_upgrade-img": "",
     "//ic-os/guestos:scripts/build-bootstrap-config-image.sh": "",
-    "//rs/tests:ic_version_id": "",
+    "//ic-os/guestos/dev:ic_version_id": "",
 }
 
 NNS_CANISTER_RUNTIME_DEPS = {

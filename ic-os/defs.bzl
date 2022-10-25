@@ -5,6 +5,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "summary_sha256sum", "tar_extract", "upgrade_image")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts", "urls_test")
 load("//bazel:output_files.bzl", "output_files")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
 img_bases = {
     "dev": "dfinity/guestos-base-dev@sha256:c54c12d710d748d776e88bedf8e9c4eb3c391cfcdbd81df3c1ed40b86358314d",
@@ -119,6 +120,15 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         name = "version.txt",
         inputs = image_deps,
         suffix = "-dev" if mode == "dev" else "",
+    )
+
+    copy_file(
+        name = "copy_ic_version_id",
+        src = ":version.txt",
+        out = "ic_version_id",
+        allow_symlink = True,
+        visibility = ["//visibility:public"],
+        tags = ["manual"],
     )
 
     ext4_image(
