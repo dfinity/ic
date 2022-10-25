@@ -55,16 +55,6 @@ class RcloneUpload:
                 subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=self.timeout)
                 break
             except subprocess.SubprocessError as e:
-                # stop-gap solution to IDX-2477
-                if e.output is not None and b"immutable file modified" in e.output:
-                    logging.warning(
-                        "rclone failed (%d) with exception: %s\n%s",
-                        e.returncode,
-                        e.output,
-                        e,
-                    )
-                    logging.warning("Tried to modify a file that already exists. Failing open, see IDX-2477")
-                    break
                 logging.warning(
                     "rclone failed (%d) with exception: %s\n%s",
                     e.returncode,
@@ -77,7 +67,7 @@ class RcloneUpload:
         else:
             raise Exception("Failed to upload too many times.")
 
-    def upload_artifacts(self, local_path, remote_subdir, version):
+    def upload_artifacts(self, local_path, remote_subdir, version, other_options):
         """Upload artifacts from local_path to the CDN in remote_subdir."""
         if os.environ.get("CI_COMMIT_REF_PROTECTED") == "true":
             # The first build of blessed binaries (prepared on verified builders) is also stored at /blessed
@@ -88,13 +78,13 @@ class RcloneUpload:
             self._upload(
                 local_path=local_path,
                 remote_subdir=f"blessed/ic/{version}/{remote_subdir}",
-                other_options=["--immutable"],
+                other_options=other_options,
             )
 
         self._upload(
             local_path=local_path,
             remote_subdir=f"ic/{version}/{remote_subdir}",
-            other_options=["--immutable"],
+            other_options=other_options,
         )
 
 
@@ -127,6 +117,12 @@ def main():
     )
 
     parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite already existing files.",
+    )
+
+    parser.add_argument(
         "local_path",
         action="store",
         help="Local path to upload.",
@@ -147,6 +143,10 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO)
 
+    other_options = []
+    if not args.overwrite:
+        other_options.append("--immutable")
+
     rclone = RcloneUpload(args.config, args.timeout, args.dry_run)
 
     local_path = str(pathlib.Path(args.local_path).absolute())
@@ -157,7 +157,7 @@ def main():
             "Cannot determine version string either from --version nor " "from CI_COMMIT_SHA environment variable"
         )
 
-    rclone.upload_artifacts(local_path, args.remote_subdir, version)
+    rclone.upload_artifacts(local_path, args.remote_subdir, version, other_options)
 
 
 if __name__ == "__main__":
