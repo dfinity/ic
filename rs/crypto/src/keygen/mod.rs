@@ -14,7 +14,9 @@ use ic_crypto_internal_types::encrypt::forward_secure::{
 };
 use ic_crypto_node_key_generation::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
+use ic_interfaces::crypto::{
+    IDkgDealingEncryptionKeyRotationError, KeyManager, PublicKeyRegistrationStatus,
+};
 use ic_logger::warn;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
@@ -66,6 +68,13 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
 
     fn node_public_keys(&self) -> NodePublicKeys {
         self.csp.node_public_keys()
+    }
+
+    fn rotate_idkg_dealing_encryption_keys(
+        &self,
+        _registry_version: RegistryVersion,
+    ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError> {
+        Err(IDkgDealingEncryptionKeyRotationError::LatestLocalRotationTooRecent)
     }
 }
 

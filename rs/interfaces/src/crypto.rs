@@ -2,7 +2,7 @@
 mod keygen;
 
 use ic_types::canister_http::CanisterHttpResponseMetadata;
-pub use keygen::{KeyManager, PublicKeyRegistrationStatus};
+pub use keygen::{IDkgDealingEncryptionKeyRotationError, KeyManager, PublicKeyRegistrationStatus};
 
 mod errors;
 
