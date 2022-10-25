@@ -84,19 +84,3 @@ sigsegv_handler_checksum = [
 	"ic-canister-sandbox-replica-controller/sigsegv_handler_checksum",
 	"memory_tracker/sigsegv_handler_checksum"
 ]
-
-[[bench]]
-name = "execute_inspect_message"
-harness = false
-
-[[bench]]
-name = "execute_query"
-harness = false
-
-[[bench]]
-name = "execute_update"
-harness = false
-
-[[bench]]
-name = "scheduler"
-harness = false
