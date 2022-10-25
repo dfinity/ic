@@ -88,19 +88,19 @@ where
             .consensus_pool_cache
             .is_replica_behind(self.state_reader_executor.latest_certified_height())
         {
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "Replicas latest certified state {} is considerably behind last finalized height {} ",
-                self.state_reader_executor.latest_certified_height(),
-                self.consensus_pool_cache.finalized_block().height
-            );
             self.health_status
                 .compare_exchange(
                     ReplicaHealthStatus::Healthy,
                     ReplicaHealthStatus::CertifiedStateBehind,
                 )
                 .map(|old| {
+                    warn!(
+                        self.log,
+                        "Replicas latest certified state {} is considerably behind last finalized height {} setting health status to {}",
+                        self.state_reader_executor.latest_certified_height(),
+                        self.consensus_pool_cache.finalized_block().height,
+                        ReplicaHealthStatus::CertifiedStateBehind.to_string(),
+                    );
                     self.metrics
                         .health_status_transitions_total
                         .with_label_values(&[
