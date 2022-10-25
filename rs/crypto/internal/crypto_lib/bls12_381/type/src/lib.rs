@@ -232,6 +232,17 @@ impl Scalar {
         }
     }
 
+    /// Return several random scalars
+    pub fn batch_random<R: RngCore + CryptoRng>(rng: &mut R, count: usize) -> Vec<Self> {
+        let mut result = Vec::with_capacity(count);
+
+        for _ in 0..count {
+            result.push(Self::random(rng));
+        }
+
+        result
+    }
+
     /// Return a random scalar within a small range
     ///
     /// Returns a scalar in range [0,n) using rejection sampling.
@@ -670,6 +681,22 @@ macro_rules! define_affine_and_projective_types {
             pub fn neg(&self) -> Self {
                 use std::ops::Neg;
                 Self::new(self.value.neg())
+            }
+
+            /// Batch multiplication
+            pub fn batch_mul(&self, scalars: &[Scalar]) -> Vec<Self> {
+
+                // Possible optimizations for this function:
+                // 1) Take advantage of the fact that we are using the same point
+                //    for several multiplications, for example by using larger
+                //    precomputed tables
+                // 2) Use a batch projective->affine conversion
+
+                let mut result = Vec::with_capacity(scalars.len());
+                for scalar in scalars {
+                    result.push(Self::from(self * scalar));
+                }
+                result
             }
         }
 
