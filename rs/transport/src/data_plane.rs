@@ -25,6 +25,7 @@ use crate::{
     },
 };
 use bytes::Bytes;
+use h2::RecvStream;
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::TlsStream;
 use ic_interfaces_transport::{
@@ -35,6 +36,7 @@ use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::Weak;
 use strum::IntoStaticStr;
+use tokio::io::AsyncRead;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
@@ -70,6 +72,11 @@ const TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS: u64 = 5000;
 enum StreamReadError {
     Failed(std::io::Error),
     TimeOut,
+}
+
+struct PayloadData {
+    header: Vec<u8>,
+    body: Vec<u8>,
 }
 
 /// Create header bytes to send with payload.
@@ -147,22 +154,30 @@ fn spawn_write_task(
                 )
                 .await;
 
-            let mut bytes_to_send = Vec::<u8>::new();
+            let mut payload_data_vec = vec![];
+            let mut total_msg_length = 0;
             if dequeued.is_empty() {
                 // There is nothing to send, so issue a heartbeat message
-                bytes_to_send.append(&mut pack_header(None, true));
+                let payload_data = PayloadData {
+                    header: pack_header(None, true),
+                    body: vec![],
+                };
+                total_msg_length = payload_data.header.len();
+                payload_data_vec.push(payload_data);
+
                 arc_self
                     .data_plane_metrics
                     .heart_beats_sent
                     .with_label_values(&[&channel_id_str])
                     .inc();
             } else {
-                for mut payload in dequeued {
-                    bytes_to_send.append(&mut pack_header(
-                        Some(&payload),
-                        false,
-                    ));
-                    bytes_to_send.append(&mut payload.0);
+                for payload in dequeued {
+                    let payload_data = PayloadData {
+                        header: pack_header(Some(&payload),false),
+                        body: payload.0,
+                    };
+                    total_msg_length += payload_data.header.len() + payload_data.body.len();
+                    payload_data_vec.push(payload_data);
                 }
             }
             arc_self
@@ -174,7 +189,7 @@ fn spawn_write_task(
             // Send the payload
             let start_time = Instant::now();
 
-            if let Err(err) = write_one_message(&mut writer, &bytes_to_send).await {
+            if let Err(err) = write_one_message(&mut writer, payload_data_vec).await {
                 warn!(
                     arc_self.log,
                     "DataPlane::spawn_write_task(): failed to write payload: peer_id = {:?}, channel_id = {:?}, error ={:?}",
@@ -195,26 +210,52 @@ fn spawn_write_task(
                 .data_plane_metrics
                 .write_bytes_total
                 .with_label_values(&[&channel_id_str])
-                .inc_by(bytes_to_send.len() as u64);
+                .inc_by(total_msg_length as u64);
         }
     })
 }
 
 async fn write_one_message(
     writer: &mut ChannelWriter,
-    bytes_to_send: &[u8],
+    data: Vec<PayloadData>,
 ) -> Result<(), std::io::Error> {
     match writer {
         ChannelWriter::Legacy(writer) => {
-            writer.write_all(bytes_to_send).await?;
+            let mut bytes_to_send = vec![];
+            for mut payload in data {
+                bytes_to_send.append(&mut payload.header);
+                bytes_to_send.append(&mut payload.body);
+            }
+            writer.write_all(&bytes_to_send).await?;
             writer.flush().await
         }
         ChannelWriter::H2SendStream(send_stream) => {
-            // TODO: flush the stream and handle the error.
+            // Send the header, followed by the message body.
+            // H2 requires flushing data on the receive stream side, so no need to flush here
             // TODO: do not use Bytes::copy_from_slice since it will do a copy
-            send_stream
-                .send_data(Bytes::copy_from_slice(bytes_to_send), false)
-                .map_err(|err| err.into_io().unwrap())
+            for payload in data {
+                send_stream
+                    .send_data(Bytes::copy_from_slice(&payload.header), false)
+                    .map_err(|err| {
+                        err.into_io().unwrap_or_else(|| {
+                            std::io::Error::new(std::io::ErrorKind::Other, "failed to send header")
+                        })
+                    })?;
+
+                if !payload.body.is_empty() {
+                    send_stream
+                        .send_data(Bytes::copy_from_slice(&payload.body), false)
+                        .map_err(|err| {
+                            err.into_io().unwrap_or_else(|| {
+                                std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    "failed to send body",
+                                )
+                            })
+                        })?
+                }
+            }
+            Ok(())
         }
     }
 }
@@ -241,9 +282,13 @@ fn spawn_read_task(
                 Some(arc_self) => arc_self,
                 _ => return,
             };
-
             // Read the next message from the socket
-            match read_one_message(&mut reader, heartbeat_timeout).await {
+            let read_one_msg_result = match reader {
+                ChannelReader::Legacy(ref mut tls_reader) => read_one_message(tls_reader, heartbeat_timeout).await,
+                ChannelReader::H2RecvStream(ref mut receive_stream) => read_one_message_h2(receive_stream, heartbeat_timeout).await,
+            };
+
+            match read_one_msg_result {
                 Err(err) => {
                     info!(
                         arc_self.log,
@@ -296,14 +341,13 @@ fn spawn_read_task(
 /// Reads and returns the next <message hdr, message payload> from the
 /// socket. The timeout is for each socket read (header, payload chunks)
 /// and not the full message.
-async fn read_one_message(
-    reader: &mut ChannelReader,
+async fn read_one_message<T: AsyncRead + Unpin>(
+    reader: &mut T,
     timeout: Duration,
 ) -> Result<(TransportHeader, TransportPayload), StreamReadError> {
     // Read the hdr
     let mut header_buffer = vec![0u8; TRANSPORT_HEADER_SIZE];
     read_into_buffer(reader, &mut header_buffer, timeout).await?;
-
     let header = unpack_header(header_buffer);
     if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
         return Ok((header, TransportPayload::default()));
@@ -331,31 +375,76 @@ async fn read_one_message(
     Ok((header, payload))
 }
 
+async fn read_one_message_h2(
+    receive_stream: &mut RecvStream,
+    timeout: Duration,
+) -> Result<(TransportHeader, TransportPayload), StreamReadError> {
+    // Read next frame to obtain the header
+    // If heartbeat, return.
+    // Otherwise, check header for message size, and call .data() until
+    // total message size is retrieved
+
+    let mut flow = receive_stream.flow_control().clone();
+
+    let read_future = receive_stream.data();
+    match tokio::time::timeout(timeout, read_future).await {
+        Err(_) => Err(StreamReadError::TimeOut),
+        Ok(Some(Ok(header_chunk))) => {
+            // First frame should be header
+            if header_chunk.len() != TRANSPORT_HEADER_SIZE {
+                return Err(StreamReadError::Failed(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "malformed header",
+                )));
+            }
+            let header = unpack_header(header_chunk.to_vec());
+            if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
+                // Process heartbeat
+                let _ = flow.release_capacity(header_chunk.len());
+                return Ok((header, TransportPayload::default()));
+            }
+
+            let payload_len = header.payload_length;
+            let mut payload_buffer = Vec::new();
+            let mut total_len = 0;
+
+            // Consume frames until we hit target length
+            while total_len < payload_len {
+                match receive_stream.data().await {
+                    Some(Ok(chunk)) => {
+                        payload_buffer.append(&mut chunk.to_vec());
+                        total_len += chunk.len() as u32;
+                        let _ = flow.release_capacity(chunk.len());
+                    }
+                    None | Some(Err(_)) => {
+                        return Err(StreamReadError::Failed(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "error fetching next data frame",
+                        )));
+                    }
+                }
+            }
+            let payload = TransportPayload(payload_buffer);
+            Ok((header, payload))
+        }
+        Ok(None) | Ok(Some(Err(_))) => Err(StreamReadError::Failed(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "error fetching next header",
+        ))),
+    }
+}
+
 /// Reads the requested bytes from the socket with a timeout
-async fn read_into_buffer(
-    reader: &mut ChannelReader,
+async fn read_into_buffer<T: AsyncRead + Unpin>(
+    reader: &mut T,
     buf: &mut [u8],
     timeout: Duration,
 ) -> Result<(), StreamReadError> {
-    match reader {
-        ChannelReader::Legacy(reader) => {
-            let read_future = reader.read_exact(buf);
-            match tokio::time::timeout(timeout, read_future).await {
-                Err(_) => Err(StreamReadError::TimeOut),
-                Ok(Ok(_)) => Ok(()),
-                Ok(Err(e)) => Err(StreamReadError::Failed(e)),
-            }
-        }
-        ChannelReader::H2RecvStream(receive_stream) => {
-            if let Some(data) = receive_stream.data().await {
-                match data {
-                    Ok(_) => Ok(()), // TODO implement
-                    Err(e) => Err(StreamReadError::Failed(e.into_io().unwrap())),
-                }
-            } else {
-                Err(StreamReadError::TimeOut)
-            }
-        }
+    let read_future = reader.read_exact(buf);
+    match tokio::time::timeout(timeout, read_future).await {
+        Err(_) => Err(StreamReadError::TimeOut),
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) => Err(StreamReadError::Failed(e)),
     }
 }
 

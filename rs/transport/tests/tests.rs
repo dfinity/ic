@@ -112,6 +112,11 @@ Establish connection with 2 peers, A and B.  Send message from A->B and B->A and
 */
 #[test]
 fn test_basic_message_send() {
+    test_basic_message_send_impl(false);
+    test_basic_message_send_impl(true);
+}
+
+fn test_basic_message_send_impl(use_h2: bool) {
     let registry_version = REG_V1;
     with_test_replica_logger(|logger| {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -131,7 +136,7 @@ fn test_basic_message_send() {
             1,
             peer_a_event_handler,
             peer_b_event_handler,
-            false,
+            use_h2,
         );
 
         let msg_1 = TransportPayload(vec![0xa; 1000000]);
@@ -156,6 +161,11 @@ no messages are being sent. (In current implementation, this is ensured by heart
 */
 #[test]
 fn test_idle_connection_active() {
+    test_idle_connection_active_impl(false);
+    test_idle_connection_active_impl(true);
+}
+
+fn test_idle_connection_active_impl(use_h2: bool) {
     let registry_version = REG_V1;
     with_test_replica_logger(|logger| {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -175,7 +185,7 @@ fn test_idle_connection_active() {
             1,
             peer_a_event_handler,
             peer_b_event_handler,
-            false,
+            use_h2,
         );
         std::thread::sleep(Duration::from_secs(20));
 
