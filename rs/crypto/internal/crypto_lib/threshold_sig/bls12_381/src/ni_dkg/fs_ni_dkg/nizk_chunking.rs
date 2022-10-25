@@ -215,13 +215,8 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     // beta = replicateM NUM_ZK_REPETITIONS $ getRandom [0..p-1]
     // bb = map (g1^) beta
     // cc = zipWith (\x pk -> y0^x * g1^pk) beta sigma
-    let beta: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
-        .map(|_| Scalar::random(rng))
-        .collect();
-    let bb: Vec<G1Affine> = beta
-        .iter()
-        .map(|beta_i| G1Affine::from(g1 * beta_i))
-        .collect();
+    let beta = Scalar::batch_random(rng, NUM_ZK_REPETITIONS);
+    let bb = g1.batch_mul(&beta);
 
     let (first_move, first_challenge, z_s) = loop {
         let sigma: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
@@ -270,13 +265,8 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     // delta <- replicate (n + 1) getRandom
     // dd = map (g1^) delta
     // Y = product [y_i^delta_i | i <- [0..n]]
-    let mut delta = Vec::with_capacity(spec_n + 1);
-    let mut dd = Vec::with_capacity(spec_n + 1);
-    for _ in 0..spec_n + 1 {
-        let delta_i = Scalar::random(rng);
-        dd.push(G1Affine::from(g1 * delta_i));
-        delta.push(delta_i);
-    }
+    let delta = Scalar::batch_random(rng, spec_n + 1);
+    let dd = g1.batch_mul(&delta);
 
     let yy = {
         let y0_and_pk = [y0]
@@ -362,26 +352,32 @@ pub fn verify_chunking(
     let xpowers = Scalar::xpowers(&x, NUM_ZK_REPETITIONS);
     let g1 = instance.g1_gen;
 
-    // Verify: all [product [R_j ^ sum [e_ijk * x^k | k <- [1..l]] | j <- [1..m]] *
-    // dd_i == g1 ^ z_r_i | i <- [1..n]]
-    let mut delta_idx = 0;
-    let mut verifies = true;
+    /*
+    Verify lhs == rhs where
+      lhs = product [R_j ^ sum [e_ijk * x^k | k <- [1..l]] | j <- [1..m]] * dd_i
+      rhs = g1 ^ z_r_i | i <- [1..n]]
+    */
 
-    e.iter().zip(nizk.z_r.iter()).for_each(|(e_i, z_ri)| {
-        delta_idx += 1;
+    let rhs = g1.batch_mul(&nizk.z_r);
 
-        let e_ijk_polynomials: Vec<_> = e_i
-            .iter()
-            .map(|e_ij| Scalar::muln_usize_vartime(&xpowers, e_ij))
-            .collect();
+    let lhs = {
+        let mut lhs = Vec::with_capacity(e.len());
+        for (i, e_i) in e.iter().enumerate() {
+            let e_ijk_polynomials: Vec<_> = e_i
+                .iter()
+                .map(|e_ij| Scalar::muln_usize_vartime(&xpowers, e_ij))
+                .collect();
 
-        let lhs = G1Projective::muln_affine_vartime(&instance.randomizers_r, &e_ijk_polynomials)
-            + nizk.dd[delta_idx];
+            let dd_i = nizk.dd[i + 1];
+            let rj_e_ijk =
+                G1Projective::muln_affine_vartime(&instance.randomizers_r, &e_ijk_polynomials);
 
-        let rhs = g1 * z_ri;
-        verifies = verifies && (lhs == rhs);
-    });
-    if !verifies {
+            lhs.push(G1Affine::from(rj_e_ijk + dd_i));
+        }
+        lhs
+    };
+
+    if lhs != rhs {
         return Err(ZkProofChunkingError::InvalidProof);
     }
 

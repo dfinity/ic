@@ -537,8 +537,8 @@ pub struct EncryptionWitness {
     pub spec_r: Vec<Scalar>,
 }
 
-/// Encrypt chunks. Returns ciphertext as well as the random spec_r's and s's
-/// chosen, for later use in NIZK proofs.
+/// Encrypt chunks. Returns ciphertext as well as the random r's chosen,
+/// for later use in NIZK proofs.
 pub fn enc_chunks<R: RngCore + CryptoRng>(
     sij: &[Vec<isize>],
     pks: &[G1Affine],
@@ -575,31 +575,21 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     //   s <- replicateM chunks getRandom
     //   let rr = (g1^) <$> spec_r
     //   let ss = (g1^) <$> s
-    let mut spec_r = Vec::with_capacity(chunks);
-    let mut s = Vec::with_capacity(chunks);
-    let mut rr = Vec::with_capacity(chunks);
-    let mut ss = Vec::with_capacity(chunks);
-    for _j in 0..chunks {
-        {
-            let tmp = Scalar::random(rng);
-            spec_r.push(tmp);
-            rr.push(G1Affine::from(g1 * tmp));
-        }
-        {
-            let tmp = Scalar::random(rng);
-            s.push(tmp);
-            ss.push(G1Affine::from(g1 * tmp));
-        }
-    }
-    // [[pk^spec_r * g1^s | (spec_r, s) <- zip rs si] | (pk, si) <- zip pks sij]
+    let s = Scalar::batch_random(rng, chunks);
+    let ss = g1.batch_mul(&s);
+
+    let r = Scalar::batch_random(rng, chunks);
+    let rr = g1.batch_mul(&r);
+
+    // [[pk^r * g1^s | (r, s) <- zip rs si] | (pk, si) <- zip pks sij]
     let cc: Vec<Vec<_>> = sij
         .iter()
         .zip(pks)
         .map(|(sj, pk)| {
             sj.iter()
-                .zip(&spec_r)
-                .map(|(s, spec_r)| {
-                    G1Projective::mul2(&pk.into(), spec_r, &g1.into(), &Scalar::from_isize(*s))
+                .zip(&r)
+                .map(|(s, r)| {
+                    G1Projective::mul2(&pk.into(), r, &g1.into(), &Scalar::from_isize(*s))
                         .to_affine()
                 })
                 .collect()
@@ -611,12 +601,12 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let mut zz = Vec::with_capacity(chunks);
 
     for j in 0..chunks {
-        zz.push(G2Projective::mul2(&id, &spec_r[j], &sys.h.into(), &s[j]).to_affine())
+        zz.push(G2Projective::mul2(&id, &r[j], &sys.h.into(), &s[j]).to_affine())
     }
 
     Some((
         FsEncryptionCiphertext { cc, rr, ss, zz },
-        EncryptionWitness { spec_r },
+        EncryptionWitness { spec_r: r },
     ))
 }
 
@@ -756,8 +746,8 @@ pub fn dec_chunks(
     let eneg = G2Prepared::from(&dk.e.neg());
 
     // zipWith4 f cj rr ss zz where
-    //   f c spec_r s z =
-    //     ate(g2, c) * ate(bneg, spec_r) * ate(z, dk_a) * ate(eneg, s)
+    //   f c r s z =
+    //     ate(g2, c) * ate(bneg, r) * ate(z, dk_a) * ate(eneg, s)
     let mut powers = Vec::with_capacity(spec_m);
 
     for i in 0..spec_m {
@@ -846,10 +836,10 @@ pub fn verify_ciphertext_integrity(
         .rr
         .iter()
         .zip(crsz.ss.iter().zip(crsz.zz.iter()))
-        .try_for_each(|(spec_r, (s, z))| {
+        .try_for_each(|(r, (s, z))| {
             let z = G2Prepared::from(z);
 
-            let v = Gt::multipairing(&[(spec_r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
+            let v = Gt::multipairing(&[(r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
 
             if v.is_identity() {
                 Ok(())

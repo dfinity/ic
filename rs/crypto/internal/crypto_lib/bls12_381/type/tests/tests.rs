@@ -79,6 +79,48 @@ fn scalar_random_generates_expected_values() {
 }
 
 #[test]
+fn scalar_batch_random_generates_expected_values() {
+    let seed = 802;
+
+    let mut rng = ChaCha20Rng::seed_from_u64(seed);
+    let random = Scalar::batch_random(&mut rng, 2);
+    assert_eq!(random.len(), 2);
+    scalar_test_encoding(
+        random[0],
+        "3257761dbdaf0bcb97fb808f7b95ed1ec1974557af790021ff073ee14811b3d9",
+    );
+    scalar_test_encoding(
+        random[1],
+        "388f4601a393e81ef4964593283d317ddd7bfd88fb89fd7a7e4fb3a1ffee335a",
+    );
+}
+
+#[test]
+fn test_scalar_batch_random_generates_unique_values() {
+    let mut rng = seeded_rng();
+
+    fn assert_no_duplicates(scalars: &[Scalar]) {
+        let mut uniq = std::collections::BTreeSet::new();
+        for s in scalars {
+            assert!(uniq.insert(s));
+        }
+    }
+
+    for i in 0..100 {
+        let random = Scalar::batch_random(&mut rng, i);
+        assert_eq!(random.len(), i);
+
+        /*
+        In a strict sense this test might fail. However the odds of it
+        doing so if everything is working as expected are well under
+        2^-250 so in practice it failing would indicate some problem in
+        the code.
+         */
+        assert_no_duplicates(&random);
+    }
+}
+
+#[test]
 fn scalar_zero_generates_expected_values() {
     scalar_test_encoding(
         Scalar::zero(),
@@ -691,6 +733,44 @@ fn test_mul_g1() {
         let integer_prod = lhs * rhs;
         let g1_prod = g1_from_u64(&lhs) * Scalar::from_u64(rhs);
         assert_eq!(g1_from_u64(&integer_prod), g1_prod);
+    }
+}
+
+#[test]
+fn test_batch_mul_g1() {
+    let mut rng = seeded_rng();
+
+    let pt = G1Affine::hash(b"ic-crypto-batch-mul-test-g1", &rng.gen::<[u8; 32]>());
+
+    for i in 0..20 {
+        let scalars = Scalar::batch_random(&mut rng, i);
+        assert_eq!(scalars.len(), i);
+
+        let batch = G1Affine::batch_mul(&pt, &scalars);
+        assert_eq!(batch.len(), scalars.len());
+
+        for j in 0..i {
+            assert_eq!(batch[j], G1Affine::from(pt * scalars[j]));
+        }
+    }
+}
+
+#[test]
+fn test_batch_mul_g2() {
+    let mut rng = seeded_rng();
+
+    let pt = G2Affine::hash(b"ic-crypto-batch-mul-test-g2", &rng.gen::<[u8; 32]>());
+
+    for i in 0..20 {
+        let scalars = Scalar::batch_random(&mut rng, i);
+        assert_eq!(scalars.len(), i);
+
+        let batch = G2Affine::batch_mul(&pt, &scalars);
+        assert_eq!(batch.len(), scalars.len());
+
+        for j in 0..i {
+            assert_eq!(batch[j], G2Affine::from(pt * scalars[j]));
+        }
     }
 }
 
