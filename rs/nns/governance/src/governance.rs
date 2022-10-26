@@ -3311,6 +3311,7 @@ impl Governance {
     /// Pre-conditions:
     /// - The parent neuron exists.
     /// - The caller is the controller of the neuron.
+    /// - The controller of the spawned neuron is self-authenticating.
     /// - The parent neuron is not already undergoing ledger updates.
     /// - The parent neuron is not spawning itself.
     /// - The maturity to move to the new neuron must be such that, with every maturity modulation, at least
@@ -3434,6 +3435,7 @@ impl Governance {
             known_neuron_data: None,
         };
 
+        // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
         self.add_neuron(child_nid.id, child_neuron)?;
 
         // Get the neurons again, but this time mutable references.
