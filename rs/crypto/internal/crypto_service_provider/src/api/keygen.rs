@@ -73,8 +73,6 @@ pub trait CspSecretKeyStoreChecker {
 pub trait NodePublicKeyData {
     /// Returns the public keys of this node.
     fn node_public_keys(&self) -> NodePublicKeys;
-    /// Returns the id of the node signing key.
-    fn node_signing_key_id(&self) -> KeyId;
     /// Returns the id of the dkg dealing encryption key.
     fn dkg_dealing_encryption_key_id(&self) -> KeyId;
 }

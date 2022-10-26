@@ -9,6 +9,48 @@ use ic_interfaces::crypto::KeyManager;
 use ic_interfaces_registry::RegistryClient;
 use ic_types_test_utils::ids::node_test_id;
 
+mod node_public_key_data {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "Missing dkg dealing encryption key id")]
+    fn should_panic_when_no_dkg_encryption_key() {
+        CryptoConfig::run_with_temp_config(|config| {
+            let csp = csp_for_config(&config, None);
+            let _ = csp.dkg_dealing_encryption_key_id();
+        })
+    }
+
+    #[test]
+    fn should_get_dkg_dealing_encryption_key_id() {
+        CryptoConfig::run_with_temp_config(|config| {
+            let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
+            let generated_dkg_dealing_enc_pk = CspFsEncryptionPublicKey::try_from(
+                node_pks.dkg_dealing_encryption_pk.expect("no dkg key"),
+            )
+            .expect("invalid dkg encryption key");
+            let csp = csp_for_config(&config, None);
+
+            let key_id = csp.dkg_dealing_encryption_key_id();
+
+            assert_eq!(key_id, KeyId::from(&generated_dkg_dealing_enc_pk))
+        })
+    }
+
+    #[test]
+    fn should_get_correct_node_public_keys() {
+        CryptoConfig::run_with_temp_config(|config| {
+            let (generated_node_pks, _node_id) =
+                get_node_keys_or_generate_if_missing(&config, None);
+            let csp = csp_for_config(&config, None);
+
+            let csp_pks = csp.node_public_keys();
+
+            assert_eq!(generated_node_pks, csp_pks);
+        })
+    }
+}
+
 #[test]
 fn should_have_the_csp_public_keys_that_were_previously_generated() {
     CryptoConfig::run_with_temp_config(|config| {
