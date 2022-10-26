@@ -3,6 +3,7 @@ use std::{
     convert::{TryFrom, TryInto},
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -51,8 +52,8 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response},
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
-    ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions, Randomness, Time,
-    UserId,
+    CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
+    Randomness, Time, UserId,
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
@@ -395,7 +396,7 @@ impl SchedulerTest {
                 .unwrap()
                 .exports_method(&WasmMethod::System(SystemMethod::CanisterHeartbeat)),
             "The canister should be created with \
-             `create_canister_with(.., Some(SystemMethod::Heartbeat))`"
+             `create_canister_with(.., Some(SystemMethod::CanisterHeartbeat))`"
         );
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         wasm_executor.push_heartbeat(canister_id, heartbeat);
@@ -483,6 +484,16 @@ impl SchedulerTest {
         let canister_id = canister_test_id(self.next_canister_id);
         self.next_canister_id += 1;
         canister_id
+    }
+
+    pub(crate) fn set_canister_global_timer(&mut self, canister: CanisterId, time: u64) {
+        let canister_state = self.canister_state_mut(canister);
+        canister_state.system_state.global_timer =
+            CanisterTimer::Active(Duration::from_secs(time).try_into().unwrap());
+    }
+
+    pub(crate) fn set_time(&mut self, time: u64) {
+        self.state_mut().metadata.batch_time = Duration::from_secs(time).try_into().unwrap();
     }
 }
 

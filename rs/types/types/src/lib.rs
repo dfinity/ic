@@ -456,6 +456,14 @@ impl CanisterTimer {
         }
     }
 
+    /// Returns true if timer has reached the deadline.
+    pub fn has_reached_deadline(&self, now: Time) -> bool {
+        match self {
+            CanisterTimer::Inactive => false,
+            CanisterTimer::Active(time) => now >= *time,
+        }
+    }
+
     /// Convert this canister timer to nanoseconds since Unix epoch option.
     pub fn to_nanos_since_unix_epoch(&self) -> Option<u64> {
         match self {

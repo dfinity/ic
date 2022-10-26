@@ -444,8 +444,13 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
+            let now = state.time();
             for canister in state.canisters_iter_mut() {
-                if canister.exports_heartbeat_method() {
+                let global_timer_has_reached_deadline =
+                    canister.system_state.global_timer.has_reached_deadline(now);
+                if (global_timer_has_reached_deadline && canister.exports_global_timer_method())
+                    || canister.exports_heartbeat_method()
+                {
                     match canister.next_execution() {
                         NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
                             // Do not add a heartbeat task if a long execution

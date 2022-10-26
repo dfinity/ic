@@ -140,6 +140,7 @@ pub mod wasm_method {
         CanisterInspectMessage = 5,
         CanisterHeartbeat = 6,
         Empty = 7,
+        CanisterGlobalTimer = 8,
     }
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum WasmMethod {
