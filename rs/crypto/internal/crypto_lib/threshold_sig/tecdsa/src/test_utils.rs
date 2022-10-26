@@ -57,18 +57,6 @@ pub fn corrupt_dealing(
     })
 }
 
-/// Corrupts this dealing for all receivers by modifying the ciphertexts
-///
-/// This is only intended for testing and should not be called in
-/// production code.
-pub fn corrupt_dealing_for_all_recipients(
-    dealing: &IDkgDealingInternal,
-    seed: Seed,
-) -> ThresholdEcdsaResult<IDkgDealingInternal> {
-    let all_recipients = (0..dealing.ciphertext.recipients() as NodeIndex).collect::<Vec<_>>();
-    corrupt_dealing(dealing, &all_recipients, seed)
-}
-
 /// Corrupts ZK proof in the complaint by incrementing the underlying ECC scalars by 1,
 /// `shared_secret` remains correct
 ///
