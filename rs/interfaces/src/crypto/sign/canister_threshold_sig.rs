@@ -69,6 +69,11 @@ pub trait IDkgProtocol {
     /// * The consistency of the decrypted share with the polynomial
     ///   commitment.
     ///
+    /// # Preconditions
+    /// * Public verification of the given dealing was successful: call first
+    ///   [Self::verify_dealing_public] and ensure that no error occurred *before* calling this method.
+    ///   Otherwise, calling this method may result in a security vulnerability!
+    ///
     /// # Errors
     /// * `IDkgVerifyDealingPrivateError::NotAReceiver` if the caller isn't in the
     ///   dealing's receivers. Only receivers can perform private verification of dealings.

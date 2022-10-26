@@ -10,15 +10,16 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
-    IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
+    IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+    IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, PreSignatureQuadruple};
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
 };
-use ic_types::crypto::{AlgorithmId, KeyPurpose};
+use ic_types::crypto::{AlgorithmId, KeyPurpose, Signed};
+use ic_types::crypto::{BasicSig, BasicSigOf};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
@@ -729,4 +730,305 @@ pub fn run_tecdsa_protocol(
     combiner_crypto_component
         .combine_sig_shares(sig_inputs, &sig_shares)
         .expect("Failed to generate signature")
+}
+
+/// Corrupts valid instances of a given type containing some binary data
+/// (e.g., signatures) for testing purposes.
+///
+/// Some types that we want to corrupt are immutable and that's the reason why this trait does
+/// not mutate its parameter but rather produces a new instance of the given type.
+pub trait CorruptBytes {
+    /// The type to corrupt.
+    type Type;
+
+    /// Produces a new instance where a bit was flipped.
+    /// Which bit was flipped is an implementation's detail.
+    /// The produced instance is *guaranteed* to be different from the original one.
+    ///
+    /// # Panics
+    /// If a bit cannot be flipped (e.g., when the binary data contained by the instance is empty)
+    /// ```should_panic
+    /// # use ic_crypto_test_utils_canister_threshold_sigs::CorruptBytes;
+    /// # use ic_types::crypto::BasicSig;
+    /// BasicSig(vec![]).clone_with_bit_flipped();
+    /// ```
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use ic_crypto_test_utils_canister_threshold_sigs::CorruptBytes;
+    /// # use ic_types::crypto::BasicSig;
+    /// let original_signature=BasicSig(vec![0b00000000]);
+    /// let corrupted_signature=original_signature.clone_with_bit_flipped();
+    ///
+    /// assert_ne!(original_signature, corrupted_signature);
+    /// assert_eq!(corrupted_signature, BasicSig(vec![0b00000001]))
+    /// ```
+    ///
+    fn clone_with_bit_flipped(&self) -> Self::Type;
+}
+
+impl<T> CorruptBytes for BasicSignature<T> {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self {
+        let corrupted_signature = self.signature.clone_with_bit_flipped();
+        BasicSignature {
+            signature: corrupted_signature,
+            signer: self.signer,
+        }
+    }
+}
+
+impl<T> CorruptBytes for BasicSigOf<T> {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self {
+        let corrupted_signature = self.get_ref().clone_with_bit_flipped();
+        BasicSigOf::new(corrupted_signature)
+    }
+}
+
+impl CorruptBytes for BasicSig {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self {
+        BasicSig(self.0.clone_with_bit_flipped())
+    }
+}
+
+impl CorruptBytes for Vec<u8> {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self {
+        assert!(!self.is_empty(), "cannot flip bit in empty vector");
+        let mut bytes = self.clone();
+        *bytes.last_mut().expect("cannot be empty") ^= 1;
+        bytes
+    }
+}
+
+/// Corrupts a collection of elements containing each some binary data.
+///
+/// A single element in the collection can be corrupted or all of them.
+pub trait CorruptBytesCollection {
+    /// Mutates a collection of elements, each containing some binary data,
+    /// by flipping a bit in the data held by a *single* element.
+    /// Which element in the collection was modified or which bit in the modified element
+    /// was flipped is an implementation's detail.
+    ///
+    /// # Panics
+    /// If the collection is empty
+    /// ```should_panic
+    /// # use std::collections::BTreeMap;
+    /// # use ic_crypto_test_utils_canister_threshold_sigs::CorruptBytesCollection;
+    /// # use ic_types::signature::BasicSignatureBatch;
+    /// let mut signatures: BasicSignatureBatch<String> = BasicSignatureBatch {signatures_map: BTreeMap::new()};
+    /// signatures.flip_a_bit_in_one();
+    /// ```
+    ///
+    /// # Examples
+    /// ```
+    /// # use ic_crypto_test_utils_canister_threshold_sigs::CorruptBytesCollection;
+    /// # use ic_types::{NodeId, PrincipalId};
+    /// # use ic_types::crypto::{BasicSig, BasicSigOf};
+    /// # use ic_types::signature::BasicSignatureBatch;
+    /// let  node_id1 = NodeId::from(PrincipalId::new_node_test_id(1));
+    /// let  node_id2 = NodeId::from(PrincipalId::new_node_test_id(2));
+    /// let mut signatures: BasicSignatureBatch<String> = BasicSignatureBatch {
+    ///     signatures_map: vec![
+    ///         (node_id1, BasicSigOf::new(BasicSig(vec![0b00000000]))),
+    ///         (node_id2, BasicSigOf::new(BasicSig(vec![0b11111111]))),
+    ///     ]
+    ///     .drain(..)
+    ///     .collect(),
+    /// };
+    ///
+    /// signatures.flip_a_bit_in_one();
+    ///
+    /// assert_eq!(signatures.signatures_map[&node_id1].get_ref(), &BasicSig(vec![0b00000001]));
+    /// assert_eq!(signatures.signatures_map[&node_id2].get_ref(), &BasicSig(vec![0b11111111]));
+    /// ```
+    fn flip_a_bit_in_one(&mut self);
+
+    /// Mutates a collection of elements, each containing some binary data,
+    /// by flipping a bit in the data held by *every* element.
+    /// Which bit was flipped is an implementation's detail.
+    ///
+    /// # Panics
+    /// If the collection is empty
+    /// ```should_panic
+    /// # use std::collections::BTreeMap;
+    /// # use ic_crypto_test_utils_canister_threshold_sigs::CorruptBytesCollection;
+    /// # use ic_types::signature::BasicSignatureBatch;
+    /// let mut signatures: BasicSignatureBatch<String> = BasicSignatureBatch {signatures_map: BTreeMap::new()};
+    /// signatures.flip_a_bit_in_all();
+    /// ```
+    ///
+    /// # Examples
+    /// ```
+    /// # use ic_crypto_test_utils_canister_threshold_sigs::CorruptBytesCollection;
+    /// # use ic_types::{NodeId, PrincipalId};
+    /// # use ic_types::crypto::{BasicSig, BasicSigOf};
+    /// # use ic_types::signature::BasicSignatureBatch;
+    /// let  node_id1 = NodeId::from(PrincipalId::new_node_test_id(1));
+    /// let  node_id2 = NodeId::from(PrincipalId::new_node_test_id(2));
+    /// let mut signatures: BasicSignatureBatch<String> = BasicSignatureBatch {
+    ///     signatures_map: vec![
+    ///         (node_id1, BasicSigOf::new(BasicSig(vec![0b00000000]))),
+    ///         (node_id2, BasicSigOf::new(BasicSig(vec![0b11111111]))),
+    ///     ]
+    ///     .drain(..)
+    ///     .collect(),
+    /// };
+    ///
+    /// signatures.flip_a_bit_in_all();
+    ///
+    /// assert_eq!(signatures.signatures_map[&node_id1].get_ref(), &BasicSig(vec![0b00000001]));
+    /// assert_eq!(signatures.signatures_map[&node_id2].get_ref(), &BasicSig(vec![0b11111110]));
+    /// ```
+    fn flip_a_bit_in_all(&mut self);
+}
+
+impl<T> CorruptBytesCollection for BasicSignatureBatch<T> {
+    fn flip_a_bit_in_one(&mut self) {
+        let signature = self
+            .signatures_map
+            .values_mut()
+            .next()
+            .expect("cannot flip a bit of a signature in an empty collection");
+        *signature = signature.clone_with_bit_flipped();
+    }
+
+    fn flip_a_bit_in_all(&mut self) {
+        assert!(
+            !self.signatures_map.is_empty(),
+            "cannot flip a bit of a signature in an empty collection"
+        );
+        self.signatures_map
+            .values_mut()
+            .for_each(|signature| *signature = signature.clone_with_bit_flipped());
+    }
+}
+
+impl<T> CorruptBytesCollection for Signed<T, BasicSignatureBatch<T>> {
+    fn flip_a_bit_in_one(&mut self) {
+        self.signature.flip_a_bit_in_one();
+    }
+
+    fn flip_a_bit_in_all(&mut self) {
+        self.signature.flip_a_bit_in_all();
+    }
+}
+
+pub trait IntoBuilder {
+    type BuilderType;
+    fn into_builder(self) -> Self::BuilderType;
+}
+
+pub struct IDkgComplaintBuilder {
+    transcript_id: IDkgTranscriptId,
+    dealer_id: NodeId,
+    internal_complaint_raw: Vec<u8>,
+}
+
+impl IDkgComplaintBuilder {
+    pub fn build(self) -> IDkgComplaint {
+        IDkgComplaint {
+            transcript_id: self.transcript_id,
+            dealer_id: self.dealer_id,
+            internal_complaint_raw: self.internal_complaint_raw,
+        }
+    }
+
+    pub fn with_transcript_id(mut self, new_transcript_id: IDkgTranscriptId) -> Self {
+        self.transcript_id = new_transcript_id;
+        self
+    }
+
+    pub fn with_dealer_id(mut self, new_dealer_id: NodeId) -> Self {
+        self.dealer_id = new_dealer_id;
+        self
+    }
+}
+
+impl IntoBuilder for IDkgComplaint {
+    type BuilderType = IDkgComplaintBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        IDkgComplaintBuilder {
+            transcript_id: self.transcript_id,
+            dealer_id: self.dealer_id,
+            internal_complaint_raw: self.internal_complaint_raw,
+        }
+    }
+}
+
+pub struct SignedIDkgDealingBuilder {
+    content: IDkgDealing,
+    signature: BasicSignature<IDkgDealing>,
+}
+
+impl SignedIDkgDealingBuilder {
+    pub fn build(self) -> SignedIDkgDealing {
+        Signed {
+            content: self.content,
+            signature: self.signature,
+        }
+    }
+    pub fn corrupt_transcript_id(mut self) -> Self {
+        self.content = IDkgDealing {
+            transcript_id: self.content.transcript_id.increment(),
+            ..self.content
+        };
+        self
+    }
+
+    pub fn build_with_signature(
+        mut self,
+        params: &IDkgTranscriptParams,
+        crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+        signer_id: NodeId,
+    ) -> SignedIDkgDealing {
+        let dealer = crypto_for(signer_id, crypto_components);
+        self.signature = BasicSignature {
+            signature: dealer
+                .sign_basic(&self.content, signer_id, params.registry_version())
+                .expect("Failed to sign a dealing"),
+            signer: signer_id,
+        };
+        self.build()
+    }
+
+    pub fn corrupt_signature(mut self) -> Self {
+        self.signature = self.signature.clone_with_bit_flipped();
+        self
+    }
+
+    pub fn with_dealer_id(mut self, dealer_id: NodeId) -> Self {
+        self.signature = BasicSignature {
+            signer: dealer_id,
+            ..self.signature
+        };
+        self
+    }
+
+    pub fn corrupt_internal_dealing_raw(mut self) -> Self {
+        self.content = IDkgDealing {
+            internal_dealing_raw: self.content.internal_dealing_raw.clone_with_bit_flipped(),
+            ..self.content
+        };
+        self
+    }
+}
+
+impl IntoBuilder for SignedIDkgDealing {
+    type BuilderType = SignedIDkgDealingBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        SignedIDkgDealingBuilder {
+            content: self.content,
+            signature: self.signature,
+        }
+    }
 }
