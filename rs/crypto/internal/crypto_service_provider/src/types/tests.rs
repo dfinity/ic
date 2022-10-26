@@ -20,8 +20,6 @@ use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPok, FsEncryptionPublicKey,
 };
 use ic_crypto_secrets_containers::SecretArray;
-use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashableTestDummy, UserPublicKey};
 use std::convert::TryFrom;
 use strum::EnumCount;
@@ -282,90 +280,6 @@ fn should_correctly_compare_csp_signatures() {
 
     assert_eq!(ed25519_s1, ed25519_s1_2);
     assert_ne!(ed25519_s1, ed25519_s2);
-}
-
-#[test]
-fn should_correctly_convert_ed25519_pk_proto_to_csp_public_key() {
-    let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmIdProto::Ed25519 as i32,
-        key_value: hex_to_byte_vec(TESTVEC_RFC8032_ED25519_SHA_ABC_PK),
-        version: 0,
-        proof_data: None,
-    };
-    let ed25519_csp_pk = CspPublicKey::try_from(pk_proto).unwrap();
-
-    assert_eq!(
-        ed25519_csp_pk.ed25519_bytes().unwrap().to_vec(),
-        hex_to_byte_vec(TESTVEC_RFC8032_ED25519_SHA_ABC_PK)
-    );
-}
-
-#[test]
-fn should_correctly_convert_multi_bls12_381_pk_proto_to_csp_public_key() {
-    let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmIdProto::MultiBls12381 as i32,
-        key_value: hex_to_byte_vec(TESTVEC_MULTI_BLS12_381_1_PK),
-        version: 0,
-        proof_data: None,
-    };
-    let multi_bls_csp_pk = CspPublicKey::try_from(pk_proto).unwrap();
-
-    assert_eq!(
-        multi_bls_csp_pk.multi_bls12_381_bytes().unwrap().to_vec(),
-        hex_to_byte_vec(TESTVEC_MULTI_BLS12_381_1_PK)
-    );
-}
-
-#[test]
-fn should_fail_conversion_to_csp_public_key_if_ed25519_pk_proto_is_too_short() {
-    let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmIdProto::Ed25519 as i32,
-        key_value: vec![0; ed25519_types::PublicKeyBytes::SIZE - 1],
-        version: 0,
-        proof_data: None,
-    };
-    let ed25519_csp_pk_result = CspPublicKey::try_from(pk_proto);
-    assert!(ed25519_csp_pk_result.is_err());
-    assert!(ed25519_csp_pk_result.unwrap_err().is_malformed_public_key());
-}
-
-#[test]
-fn should_fail_conversion_to_csp_public_key_if_ed25519_pk_proto_is_too_long() {
-    let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmIdProto::Ed25519 as i32,
-        key_value: vec![0; ed25519_types::PublicKeyBytes::SIZE + 1],
-        version: 0,
-        proof_data: None,
-    };
-    let ed25519_csp_pk_result = CspPublicKey::try_from(pk_proto);
-    assert!(ed25519_csp_pk_result.is_err());
-    assert!(ed25519_csp_pk_result.unwrap_err().is_malformed_public_key());
-}
-
-#[test]
-fn should_fail_conversion_to_csp_public_key_if_multi_bls12_381_pk_proto_is_too_short() {
-    let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmIdProto::MultiBls12381 as i32,
-        key_value: vec![0; multi_types::PublicKeyBytes::SIZE - 1],
-        version: 0,
-        proof_data: None,
-    };
-    let multi_csp_pk_result = CspPublicKey::try_from(pk_proto);
-    assert!(multi_csp_pk_result.is_err());
-    assert!(multi_csp_pk_result.unwrap_err().is_malformed_public_key());
-}
-
-#[test]
-fn should_fail_conversion_to_csp_public_key_if_multi_bls12_381_pk_proto_is_too_long() {
-    let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmIdProto::MultiBls12381 as i32,
-        key_value: vec![0; multi_types::PublicKeyBytes::SIZE + 1],
-        version: 0,
-        proof_data: None,
-    };
-    let multi_csp_pk_result = CspPublicKey::try_from(pk_proto);
-    assert!(multi_csp_pk_result.is_err());
-    assert!(multi_csp_pk_result.unwrap_err().is_malformed_public_key());
 }
 
 #[test]

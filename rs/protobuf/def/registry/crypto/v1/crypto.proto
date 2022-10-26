@@ -38,6 +38,8 @@ message PublicKey {
   AlgorithmId algorithm = 2;
   bytes key_value = 3;
   google.protobuf.BytesValue proof_data = 4;
+  // Number of non-leap-milliseconds since January 1, 1970 UTC.
+  google.protobuf.UInt64Value timestamp = 5;
 }
 
 // DER-encoded X509 public key certificate

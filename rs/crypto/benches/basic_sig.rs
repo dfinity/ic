@@ -213,6 +213,7 @@ fn add_node_signing_pubkey_to_registry(
         key_value: public_key_bytes.to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     };
 
     registry_data

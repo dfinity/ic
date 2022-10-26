@@ -14,6 +14,7 @@ fn should_get_public_key_for_node() {
         key_value: b"public key".to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: Some(42),
     };
     let node_id = node_id(1);
     let key_purpose = KeyPurpose::NodeSigning;
@@ -42,6 +43,7 @@ fn should_get_threshold_signing_public_key_for_subnet() {
         key_value: [42; ThresholdSigPublicKey::SIZE].to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: Some(42),
     };
     let subnet_id = subnet_id(1);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -73,6 +75,7 @@ fn should_panic_on_getting_invalid_threshold_signing_public_key() {
         key_value: [42; ThresholdSigPublicKey::SIZE - 1].to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     };
     let subnet_id = subnet_id(1);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());

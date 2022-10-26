@@ -16,6 +16,9 @@ pub struct PublicKey {
     pub key_value: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "4")]
     pub proof_data: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Number of non-leap-milliseconds since January 1, 1970 UTC.
+    #[prost(message, optional, tag = "5")]
+    pub timestamp: ::core::option::Option<u64>,
 }
 /// DER-encoded X509 public key certificate
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]

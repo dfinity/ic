@@ -36,6 +36,7 @@ mod tests {
         algorithm: 0,
         key_value: vec![],
         proof_data: None,
+        timestamp: None,
     });
     const SOME_X509_CERT: Option<X509PublicKeyCert> = Some(X509PublicKeyCert {
         certificate_der: vec![],

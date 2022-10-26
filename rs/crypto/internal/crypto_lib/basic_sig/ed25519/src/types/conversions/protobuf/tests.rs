@@ -62,5 +62,6 @@ fn dummy_node_signing_pubkey_proto() -> PublicKeyProto {
         key_value: [0; PublicKeyBytes::SIZE].to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     }
 }

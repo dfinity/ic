@@ -607,6 +607,7 @@ fn mega_encryption_pk_record_with_unsupported_algorithm(
             key_value: vec![],
             version: 0,
             proof_data: None,
+            timestamp: None,
         },
         registry_version,
     }

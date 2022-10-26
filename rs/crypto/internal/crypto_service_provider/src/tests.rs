@@ -28,6 +28,7 @@ mod csp_tests {
             algorithm: 0,
             key_value: vec![],
             proof_data: None,
+            timestamp: None,
         };
 
         #[test]
@@ -119,6 +120,7 @@ mod csp_tests {
                 algorithm: AlgorithmId::Ed25519 as i32,
                 key_value: [0; PublicKeyBytes::SIZE].to_vec(),
                 proof_data: None,
+                timestamp: None,
             }
         }
 
@@ -128,6 +130,7 @@ mod csp_tests {
                 algorithm: AlgorithmId::Groth20Bls12381 as i32,
                 key_value: [0u8; bls12_381::G1::SIZE].to_vec(),
                 proof_data: None,
+                timestamp: None,
             }
         }
     }

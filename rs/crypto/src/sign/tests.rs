@@ -51,6 +51,7 @@ pub fn node_signing_record_with(
             key_value: public_key,
             version: 0,
             proof_data: None,
+            timestamp: None,
         },
         registry_version,
     }
@@ -72,6 +73,7 @@ pub fn committee_signing_record_with(
             key_value: public_key,
             version: 0,
             proof_data: None,
+            timestamp: None,
         },
         registry_version,
     }
@@ -92,6 +94,7 @@ pub fn dealing_encryption_pk_record_with(
             key_value,
             version: 0,
             proof_data: None,
+            timestamp: None,
         },
         registry_version,
     }
@@ -112,6 +115,7 @@ pub fn mega_encryption_pk_record_with(
             key_value,
             version: 0,
             proof_data: None,
+            timestamp: None,
         },
         registry_version,
     }
@@ -134,6 +138,7 @@ pub fn to_new_registry_record(
         key_value: record.value.key_value.clone(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     };
     (key, record.registry_version, pk)
 }
