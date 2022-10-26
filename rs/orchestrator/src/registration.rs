@@ -189,6 +189,12 @@ impl NodeRegistration {
             Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key)) => {
                 self.try_to_register_additional_key(key).await
             }
+            Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys) => {
+                todo!(
+                    "TODO OR-278: call crypto to rotate IDKG dealing encryption keys\
+                (functionality implemented with CRP-1727)"
+                )
+            }
             Ok(PublicKeyRegistrationStatus::AllKeysRegistered) => {
                 return true; // key is properly registered, we are all good
             }

@@ -5,17 +5,32 @@ use ic_types::RegistryVersion;
 
 /// Methods for checking and retrieving key material.
 pub trait KeyManager {
-    /// Checks whether this crypto component is properly set up, i.e.
-    /// whether the registry contains the required public keys,
-    /// and whether the crypto component's secret key store
-    /// contains the corresponding secret keys. If this is the case,
-    /// `Ok(PublicKeyRegistrationStatus::AllKeysRegistered)` is returned.
+    /// Checks whether this crypto component is properly set up and in sync with the registry.
     ///
-    /// If all keys are properly set up but the I-DKG dealing encryption key
-    /// still need to be registered, i.e., it is not in the registry but it is
-    /// available locally in the public key store, then
-    /// `Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration)`
-    /// is returned.
+    /// This is done by ensuring that:
+    /// 1. the registry contains all necessary public keys
+    /// 2. the public keys coming from the registry match the ones stored in the local public key store
+    /// 3. the secret key store contains all corresponding secret keys.
+    ///
+    /// Returns the status of the public keys as follows:
+    /// * [`AllKeysRegistered`]:
+    /// Registry contains all required public keys and
+    /// secret key store contains all corresponding secret keys.
+    /// * [`IDkgDealingEncPubkeyNeedsRegistration`]:
+    /// All keys are properly set up like in [`AllKeysRegistered`] except for the
+    /// I-DKG dealing encryption key which is available locally in the public key store
+    /// but not yet in the registry and therefore needs to be registered.
+    /// * [`RotateIDkgDealingEncryptionKeys`]:
+    /// All keys are properly set up like in [`AllKeysRegistered`]
+    /// but the I-DKG dealing encryption key coming from the registry is too old
+    /// and a new I-DKG dealing key pair must be generated.
+    ///
+    /// [`AllKeysRegistered`]: PublicKeyRegistrationStatus::AllKeysRegistered
+    /// [`IDkgDealingEncPubkeyNeedsRegistration`]: PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration
+    /// [`RotateIDkgDealingEncryptionKeys`]: PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys
+    ///
+    /// # Errors
+    /// See [`ic_types::crypto::CryptoError`].
     fn check_keys_with_registry(
         &self,
         registry_version: RegistryVersion,
@@ -51,6 +66,7 @@ pub trait KeyManager {
 pub enum PublicKeyRegistrationStatus {
     AllKeysRegistered,
     IDkgDealingEncPubkeyNeedsRegistration(PublicKeyProto),
+    RotateIDkgDealingEncryptionKeys,
 }
 
 #[derive(Clone, Debug)]
