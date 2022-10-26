@@ -1,10 +1,13 @@
+#![allow(clippy::needless_range_loop)]
 #![allow(clippy::unwrap_used)]
+
 //! Tests for combined forward secure encryption and ZK proofs
 
-use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Gt, Scalar};
+use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{forward_secure::*, Epoch};
 use ic_crypto_sha::Sha256;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
 #[test]
 fn output_of_mk_sys_params_is_expected_values() {
@@ -45,15 +48,22 @@ fn output_of_mk_sys_params_is_expected_values() {
     );
 }
 
+pub fn test_rng() -> ChaCha20Rng {
+    let mut thread_rng = rand::thread_rng();
+    let seed = thread_rng.gen::<u64>();
+    println!("RNG seed {}", seed);
+    ChaCha20Rng::seed_from_u64(seed)
+}
+
 #[test]
 fn fs_keys_should_be_valid() {
     let sys = SysParam::global();
-    let mut rng = rand_chacha::ChaCha20Rng::from_seed([99; 32]);
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[3u8, 0u8, 0u8, 0u8];
+    let mut rng = test_rng();
+    let key_gen_assoc_data = rng.gen::<[u8; 32]>();
 
-    let (pk, _dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng);
+    let (pk, _dk) = kgen(&key_gen_assoc_data, sys, &mut rng);
     assert!(
-        pk.verify(KEY_GEN_ASSOCIATED_DATA),
+        pk.verify(&key_gen_assoc_data),
         "Generated public key should be valid"
     );
 }
@@ -68,29 +78,34 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
     FsEncryptionCiphertext,
 ) {
     let sys = SysParam::global();
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 1u8, 0u8, 6u8];
+    let key_gen_assoc_data = rng.gen::<[u8; 32]>();
+
+    let nodes = 3;
 
     let mut keys = Vec::new();
-    for i in 0u8..3 {
-        println!("generating key pair {}...", i);
-        let key_pair = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
-        println!("{:#?}", &key_pair.0);
+    for _ in 0..nodes {
+        let key_pair = kgen(&key_gen_assoc_data, sys, rng);
         keys.push(key_pair);
     }
-    let public_keys_with_zk: Vec<_> = keys.iter().map(|key| &key.0).collect();
-    let pks = public_keys_with_zk
-        .iter()
-        .map(|key| key.key_value)
-        .collect::<Vec<_>>();
+    let pks: Vec<_> = keys.iter().map(|key| key.0.key_value).collect();
 
-    let sij: Vec<_> = (0..keys.len())
-        .map(|receiver_index| {
-            let chunk =
-                (receiver_index | (receiver_index << 8) | 0x0FF00FF0) % (CHUNK_SIZE as usize);
-            vec![chunk as isize; NUM_CHUNKS]
-        })
-        .collect();
-    println!("Messages: {:#?}", sij);
+    let sij = {
+        let mut sij = Vec::with_capacity(nodes);
+
+        for _ in 0..nodes {
+            let mut chunks = Vec::with_capacity(NUM_CHUNKS);
+            for _ in 0..NUM_CHUNKS {
+                chunks.push(rng.gen::<u16>() as isize);
+            }
+            // this ensures that chunks is the encoding of a scalar less
+            // than the group order:
+            chunks[0] %= 0x73ee;
+
+            sij.push(chunks);
+        }
+
+        sij
+    };
 
     let tau = tau_from_epoch(sys, epoch);
     let (crsz, _witness) =
@@ -101,33 +116,32 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
 #[test]
 fn integrity_check_should_return_error_on_wrong_associated_data() {
     let sys = SysParam::global();
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng();
     let epoch = Epoch::from(0);
-    let associated_data: Vec<u8> = vec![3u8; 12];
-    let wrong_associated_data: Vec<u8> = vec![1u8; 7];
+    let associated_data = rng.gen::<[u8; 32]>();
+
+    let wrong_associated_data = {
+        let mut wrong = associated_data;
+        wrong[0] ^= 1;
+        wrong
+    };
 
     let (_keys, _message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
     let tau = tau_from_epoch(sys, epoch);
 
-    assert_eq!(
-        Err(()),
-        verify_ciphertext_integrity(&crsz, &tau, &wrong_associated_data, sys)
-    );
+    assert!(verify_ciphertext_integrity(&crsz, &tau, &wrong_associated_data, sys).is_err());
 }
 
 #[test]
 fn should_encrypt_with_empty_associated_data() {
     let sys = SysParam::global();
     let epoch = Epoch::from(0);
-    let mut rng = rand::thread_rng();
-    let associated_data: Vec<u8> = Vec::new();
+    let mut rng = test_rng();
+    let associated_data = [];
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
-    assert_eq!(
-        Ok(()),
-        verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys)
-    );
+    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let out = dec_chunks(&keys[i].1, i, &crsz, &tau, &associated_data);
@@ -135,19 +149,155 @@ fn should_encrypt_with_empty_associated_data() {
     }
 }
 
+/// Encrypt chunks as a cheating dealer. This is the same as enc_chunks
+/// except that the range checks on the input are skipped
+fn enc_chunks_cheating<R: RngCore + CryptoRng>(
+    sij: &[Vec<isize>],
+    pks: &[G1Affine],
+    tau: &[Bit],
+    associated_data: &[u8],
+    sys: &SysParam,
+    rng: &mut R,
+) -> FsEncryptionCiphertext {
+    let receivers = pks.len();
+    let chunks = sij[0].len();
+
+    let g1 = G1Affine::generator();
+
+    // do
+    //   spec_r <- replicateM chunks getRandom
+    //   s <- replicateM chunks getRandom
+    //   let rr = (g1^) <$> spec_r
+    //   let ss = (g1^) <$> s
+    let mut spec_r = Vec::with_capacity(chunks);
+    let mut s = Vec::with_capacity(chunks);
+    let mut rr = Vec::with_capacity(chunks);
+    let mut ss = Vec::with_capacity(chunks);
+    for _j in 0..chunks {
+        {
+            let tmp = Scalar::random(rng);
+            spec_r.push(tmp);
+            rr.push(G1Affine::from(g1 * tmp));
+        }
+        {
+            let tmp = Scalar::random(rng);
+            s.push(tmp);
+            ss.push(G1Affine::from(g1 * tmp));
+        }
+    }
+
+    // cc = [[pk^spec_r * g1^s | (spec_r, s) <- zip rs si] | (pk, si) <- zip pks sij]
+    let cc = {
+        let mut cc: Vec<Vec<G1Affine>> = Vec::with_capacity(pks.len());
+
+        let g1 = G1Projective::from(g1);
+
+        for i in 0..receivers {
+            let pk = G1Projective::from(pks[i]);
+
+            let mut enc_chunks = Vec::with_capacity(chunks);
+
+            for j in 0..chunks {
+                let s = Scalar::from_isize(sij[i][j]);
+                enc_chunks.push(G1Projective::mul2(&pk, &spec_r[j], &g1, &s).to_affine());
+            }
+
+            cc.push(enc_chunks);
+        }
+
+        cc
+    };
+
+    let extended_tau = extend_tau(&cc, &rr, &ss, tau, associated_data);
+    let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
+    let mut zz = Vec::with_capacity(chunks);
+
+    for j in 0..chunks {
+        zz.push(G2Projective::mul2(&id, &spec_r[j], &sys.h.into(), &s[j]).to_affine())
+    }
+
+    FsEncryptionCiphertext { cc, rr, ss, zz }
+}
+
+#[test]
+fn should_decrypt_correctly_for_cheating_dealer() {
+    let epoch = Epoch::from(0);
+    let mut rng = test_rng();
+    let associated_data = rng.gen::<[u8; 10]>();
+
+    let sys = SysParam::global();
+    let key_gen_assoc_data = rng.gen::<[u8; 32]>();
+
+    let nodes = 3;
+
+    let mut keys = Vec::new();
+    for _ in 0..nodes {
+        let key_pair = kgen(&key_gen_assoc_data, sys, &mut rng);
+        keys.push(key_pair);
+    }
+    let pks: Vec<_> = keys.iter().map(|key| key.0.key_value).collect();
+
+    let mut sij = {
+        let mut sij = Vec::with_capacity(nodes);
+
+        for _ in 0..nodes {
+            let mut chunks = Vec::with_capacity(NUM_CHUNKS);
+
+            for _ in 0..NUM_CHUNKS {
+                // ensure that multiplying by delta pushes us out of Chunk range
+                let chunk = (0x8000 | rng.gen::<u16>()) as isize;
+                chunks.push(chunk);
+            }
+            // this ensures that chunks is the encoding of a scalar less
+            // than the group order:
+            chunks[0] %= 0x73ee;
+
+            sij.push(chunks);
+        }
+
+        sij
+    };
+
+    let cheating_i = rng.gen::<usize>() % nodes;
+    let cheating_j = std::cmp::max(1, rng.gen::<usize>() % NUM_CHUNKS);
+
+    let delta = (2 + rng.gen::<usize>() % 10) as isize;
+    sij[cheating_i][cheating_j] *= delta; // doesn't overflow as delta is small and isize >> u16
+
+    // however the new sij *is* larger than the maximum "legal" chunk
+    assert!(sij[cheating_i][cheating_j] > CHUNK_MAX);
+
+    let tau = tau_from_epoch(sys, epoch);
+    let crsz = enc_chunks_cheating(&sij[..], &pks, &tau, &associated_data, sys, &mut rng);
+
+    // still a valid ciphertext
+    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
+
+    // account for overflow in chunk -> scalar conversions
+    let mut overflow = 0;
+    for idx in (0..=cheating_j).rev() {
+        sij[cheating_i][idx] += overflow;
+        overflow = sij[cheating_i][idx] >> 16;
+        sij[cheating_i][idx] &= 0xffff;
+    }
+
+    for i in 0..keys.len() {
+        let secret_key = &keys[i].1;
+        let out = dec_chunks(secret_key, i, &crsz, &tau, &associated_data);
+        assert_eq!(out.unwrap(), sij[i], "Message decrypted wrongly");
+    }
+}
+
 #[test]
 fn should_decrypt_correctly_for_epoch_0() {
     let sys = SysParam::global();
     let epoch = Epoch::from(0);
-    let mut rng = rand::thread_rng();
-    let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
+    let mut rng = test_rng();
+    let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
-    assert_eq!(
-        Ok(()),
-        verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys)
-    );
+    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
@@ -155,19 +305,17 @@ fn should_decrypt_correctly_for_epoch_0() {
         assert_eq!(out.unwrap(), message[i], "Message decrypted wrongly");
     }
 }
+
 #[test]
 fn should_decrypt_correctly_for_epoch_1() {
     let sys = SysParam::global();
     let epoch = Epoch::from(1);
-    let mut rng = rand::thread_rng();
-    let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
+    let mut rng = test_rng();
+    let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
-    assert_eq!(
-        Ok(()),
-        verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys)
-    );
+    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
@@ -179,15 +327,12 @@ fn should_decrypt_correctly_for_epoch_1() {
 fn should_decrypt_correctly_for_epoch_5() {
     let sys = SysParam::global();
     let epoch = Epoch::from(5);
-    let mut rng = rand::thread_rng();
-    let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
+    let mut rng = test_rng();
+    let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
-    assert_eq!(
-        Ok(()),
-        verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys)
-    );
+    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
@@ -199,85 +344,16 @@ fn should_decrypt_correctly_for_epoch_5() {
 fn should_decrypt_correctly_for_epoch_10() {
     let sys = SysParam::global();
     let epoch = Epoch::from(10);
-    let mut rng = rand::thread_rng();
-    let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
+    let mut rng = test_rng();
+    let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
-    assert_eq!(
-        Ok(()),
-        verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys)
-    );
+    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
         let out = dec_chunks(secret_key, i, &crsz, &tau, &associated_data);
         assert_eq!(out.unwrap(), message[i], "Message decrypted wrongly");
     }
-}
-
-// Returns a random element of Gt
-fn gt_rand() -> Gt {
-    let mut rng = rand::thread_rng();
-    let g1 = G1Affine::hash(b"ic-crypto-test-fp12-random", &rng.gen::<[u8; 32]>());
-    let g2 = G2Affine::generator();
-    Gt::pairing(&g1, g2)
-}
-
-#[test]
-fn baby_giant_1000() {
-    for x in 0..1000 {
-        let base = gt_rand();
-        let tgt = base * Scalar::from_isize(x);
-        assert!(
-            baby_giant(&tgt, &base, -24, 1024).unwrap() == x,
-            "baby-giant finds x"
-        );
-    }
-}
-
-#[test]
-fn baby_giant_negative() {
-    for x in 0..1000 {
-        let base = gt_rand();
-        let tgt = base * Scalar::from_isize(x).neg();
-        assert!(
-            baby_giant(&tgt, &base, -999, 1000).unwrap() == -x,
-            "baby-giant finds x"
-        );
-    }
-}
-
-// The bounds of the NIZK chunking proof are loose, so a malicious DKG
-// participant can force us to search around 2^40 candidates for a discrete log.
-// (This is not the entire cost. We must also search for a cofactor Delta.)
-#[test]
-fn baby_giant_big_range() {
-    let x = (1 << 39) + 123;
-    let base = gt_rand();
-    let tgt = base * Scalar::from_isize(x);
-    assert!(
-        baby_giant(&tgt, &base, -(1 << 10), 1 << 40).unwrap() == x,
-        "baby-giant finds x"
-    );
-}
-
-// Find the log for a cheater who exceeds the bounds by a little.
-#[test]
-fn slightly_dishonest_dlog() {
-    let base = Gt::generator();
-
-    // Last I checked:
-    //   E = 128
-    //   Z = 31960108800 * m * n
-    // So searching for Delta < 10 with m = n = 1 should be tolerable.
-
-    let mut answer = Scalar::from_usize(8).inverse().expect("Inverse exists");
-    answer *= Scalar::from_usize(12345678);
-    assert_eq!(solve_cheater_log(1, 1, &(base * answer)), Some(answer));
-
-    // Check negative numbers also work.
-    let mut answer = Scalar::from_usize(5).inverse().expect("Inverse exists");
-    answer *= Scalar::from_isize(-12345678);
-    assert_eq!(solve_cheater_log(1, 1, &(base * answer)), Some(answer));
 }

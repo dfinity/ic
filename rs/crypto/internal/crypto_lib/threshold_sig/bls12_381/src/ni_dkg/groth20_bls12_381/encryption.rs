@@ -134,8 +134,6 @@ pub fn encrypt_and_prove(
         .map(|(_public_key, plaintext)| plaintext_from_bytes(&plaintext.chunks))
         .collect();
 
-    // The API takes a vector of pointers so we need to keep the values but generate
-    // another vector with the values.
     let tau = Tau::from(epoch);
     let mut rng = ChaCha20Rng::from_seed(seed.into_rng().gen::<[u8; 32]>());
     let (ciphertext, encryption_witness) = crypto::enc_chunks(

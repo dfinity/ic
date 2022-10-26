@@ -343,6 +343,34 @@ fn test_gt_generator_is_expected_value() {
 }
 
 #[test]
+fn test_gt_hash_has_no_collisions_in_range() {
+    let mut seen = std::collections::HashSet::new();
+
+    let mut x = *Gt::identity();
+    for _ in 0..=0xFFFF {
+        let hash = x.short_hash_for_linear_search();
+        assert!(seen.insert(hash));
+        x += Gt::generator();
+    }
+}
+
+#[test]
+fn test_gt_mul_u16_is_correct() {
+    let mut rng = seeded_rng();
+
+    // We could do an exhaustive search here but because Gt standard
+    // mul is so slow it takes several minutes to complete. So instead
+    // just perform some random trials.
+
+    for _ in 0..500 {
+        let i = rng.gen::<u16>();
+        let fast = Gt::g_mul_u16(i);
+        let refv = Gt::generator() * Scalar::from_usize(i as usize);
+        assert_eq!(fast, refv);
+    }
+}
+
+#[test]
 fn test_pairing_bilinearity() {
     let mut rng = seeded_rng();
 
