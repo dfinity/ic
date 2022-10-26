@@ -85,7 +85,6 @@ DEPENDENCIES = [
     "@crate_index//:crossbeam-channel",
     "@crate_index//:crossbeam-utils",
     "@crate_index//:flate2",
-    "@crate_index//:fs_extra",
     "@crate_index//:futures",
     "@crate_index//:garcon",
     "@crate_index//:hex",
@@ -200,6 +199,22 @@ NNS_CANISTER_RUNTIME_DEPS = {
     "//rs/nns/gtc:genesis-token-canister": "GENESIS_TOKEN_CANISTER_WASM_PATH",
     "//rs/nns/sns-wasm:sns-wasm-canister": "SNS_WASM_CANISTER_WASM_PATH",
 }
+
+rust_binary(
+    name = "test-driver-e2e-scenarios",
+    srcs = ["bin/test_driver_e2e_scenarios.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = DEPENDENCIES + [":tests"],
+)
+
+rust_test(
+    name = "test_e2e_scenarios",
+    srcs = ["tests/test_driver_tests.rs"],
+    crate_root = "tests/test_driver_tests.rs",
+    deps = DEPENDENCIES + [":test-driver-e2e-scenarios"],
+)
 
 system_test(
     name = "basic_health_test",

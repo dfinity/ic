@@ -13,6 +13,7 @@ use url::Url;
 
 use super::cli::ValidatedCliRunTestsArgs;
 use super::farm::Farm;
+use super::test_env_api::HasDependencies;
 use serde::{Deserialize, Serialize};
 
 const ASYNC_CHAN_SIZE: usize = 8192;
@@ -65,15 +66,13 @@ impl TestEnvAttribute for IcSetup {
 }
 
 impl IcSetup {
-    pub fn from_bazel_env() -> Self {
-        fn dependency(path: &str) -> String {
-            let dep_path = format!("dependencies/{}", path);
-            fs::read_to_string(dep_path.clone())
-                .unwrap_or_else(|_| panic!("cannot read {}", dep_path))
+    pub fn from_bazel_env(env: &TestEnv) -> Self {
+        let dependency = |path: &str| -> String {
+            env.read_dependency_to_string(path)
                 .as_str()
                 .trim_end()
                 .to_string()
-        }
+        };
         Self {
             ic_os_img_url: Url::parse(&dependency(
                 "ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.url",
@@ -85,7 +84,7 @@ impl IcSetup {
             ))
             .expect("Could not parse ic_os_update_img_url"),
             ic_os_update_img_sha256: dependency("ic-os/guestos/dev/upgrade.tar.zst.sha256"),
-            initial_replica_version: dependency("rs/tests/ic_version_id")
+            initial_replica_version: dependency("ic-os/guestos/dev/ic_version_id")
                 .try_into()
                 .expect("cannot get ReplicaVersion"),
             ..Default::default()

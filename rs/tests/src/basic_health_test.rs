@@ -36,10 +36,16 @@ use std::time::Duration;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
+use crate::driver::test_setup::create_setup_and_farm_group;
 use crate::util::*; // to use the universal canister
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
+
+pub fn bazel_config_single_host(env: TestEnv) {
+    let _ = create_setup_and_farm_group(&env);
+    config_single_host(env);
+}
 
 pub fn config_single_host(env: TestEnv) {
     InternetComputer::new()

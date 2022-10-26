@@ -24,7 +24,6 @@ dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
 flate2 = "1.0.22"
-fs_extra = "1.2.0"
 futures = "0.3.10"
 garcon = "0.2"
 humantime = "2.0"
@@ -152,3 +151,7 @@ path = "bin/basic_health_test.rs"
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
 path = "bin/tecdsa_add_nodes_test.rs"
+
+[[bin]]
+name = "test-driver-e2e-scenarios"
+path = "bin/test_driver_e2e_scenarios.rs"

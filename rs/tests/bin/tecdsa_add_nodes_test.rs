@@ -6,7 +6,7 @@ use ic_tests::tecdsa;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(tecdsa::tecdsa_add_nodes_test::config)
+        .with_setup(tecdsa::tecdsa_add_nodes_test::bazel_config)
         .add_test(systest!(tecdsa::tecdsa_add_nodes_test::test))
         .execute_from_args()?;
     Ok(())

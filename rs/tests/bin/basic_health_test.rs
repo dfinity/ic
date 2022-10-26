@@ -8,7 +8,7 @@ use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(basic_health_test::config_single_host)
+        .with_setup(basic_health_test::bazel_config_single_host)
         .add_test(systest!(basic_health_test::test))
         .execute_from_args()?;
 

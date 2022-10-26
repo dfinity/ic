@@ -13520,7 +13520,6 @@ dependencies = [
  "dfn_core",
  "dfn_protobuf",
  "flate2",
- "fs_extra",
  "futures",
  "garcon",
  "hex",
