@@ -42,6 +42,7 @@ pub fn generate_node_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKeyP
             key_value: pk.0.to_vec(),
             version: 0,
             proof_data: None,
+            timestamp: None,
         },
         _ => panic!("Unexpected types"),
     }
@@ -58,6 +59,7 @@ pub fn generate_committee_signing_keys(csp: &dyn CryptoServiceProvider) -> Publi
                 key_value: pk_bytes.0.to_vec(),
                 version: 0,
                 proof_data: Some(pop_bytes.0.to_vec()),
+                timestamp: None,
             }
         }
         _ => panic!("Unexpected types"),
@@ -95,6 +97,7 @@ pub fn generate_idkg_dealing_encryption_keys(
         algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
         key_value: pubkey.serialize(),
         proof_data: None,
+        timestamp: None,
     }
 }
 

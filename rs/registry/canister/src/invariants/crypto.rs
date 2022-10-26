@@ -526,6 +526,7 @@ mod tests {
                 algorithm: 0,
                 key_value: vec![],
                 proof_data: None,
+                timestamp: None,
             }),
             idkg_dealing_encryption_pk: node_pks_2.idkg_dealing_encryption_pk,
             tls_certificate: node_pks_2.tls_certificate,
@@ -564,6 +565,7 @@ mod tests {
                 algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
                 key_value: vec![],
                 proof_data: None,
+                timestamp: None,
             }),
             tls_certificate: node_pks_2.tls_certificate,
         };

@@ -101,6 +101,7 @@ impl From<ThresholdSigPublicKey> for PublicKeyProto {
             key_value: pubkey_bytes.0.to_vec(),
             version: 0,
             proof_data: None,
+            timestamp: None,
         }
     }
 }

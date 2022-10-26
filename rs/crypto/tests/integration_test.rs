@@ -313,6 +313,7 @@ fn should_fail_check_keys_with_registry_if_node_signing_secret_key_is_missing() 
         key_value: [1u8; 32].to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -339,6 +340,7 @@ fn should_fail_check_keys_with_registry_if_committee_member_secret_key_is_missin
         key_value: [1u8; 96].to_vec(),
         version: 0,
         proof_data: Some(vec![1u8; 48]),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -421,6 +423,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_missing
         algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
         proof_data: None,
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -449,6 +452,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_empty()
         algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
         proof_data: Some(vec![]),
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -479,6 +483,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_malform
         algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
         proof_data: Some(b"malformed pop".to_vec()),
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -507,6 +512,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_missing() {
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -535,6 +541,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_empty() {
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
         version: 0,
         proof_data: Some(vec![]),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -563,6 +570,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
         version: 0,
         proof_data: Some(b"malformed pop".to_vec()),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())

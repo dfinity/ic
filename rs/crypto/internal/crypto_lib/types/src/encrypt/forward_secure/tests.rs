@@ -12,6 +12,7 @@ mod proto_to_csp_fs_enc_pubkey_conversions_tests {
             key_value: pk_data.to_vec(),
             version: 0,
             proof_data: None,
+            timestamp: None,
         };
 
         let csp_fs_enc_pk = CspFsEncryptionPublicKey::try_from(pk_proto);
@@ -33,6 +34,7 @@ mod proto_to_csp_fs_enc_pubkey_conversions_tests {
             key_value: pk_data.to_vec(),
             version: 0,
             proof_data: None,
+            timestamp: None,
         };
 
         let csp_fs_enc_pk = CspFsEncryptionPublicKey::try_from(pk_proto);
@@ -59,6 +61,7 @@ mod proto_to_csp_fs_enc_pubkey_conversions_tests {
             key_value: pk_data.to_vec(),
             version: 0,
             proof_data: None,
+            timestamp: None,
         };
 
         let csp_fs_enc_pk = CspFsEncryptionPublicKey::try_from(pk_proto);
@@ -85,6 +88,7 @@ mod proto_to_csp_fs_enc_pop_conversions_tests {
             key_value: [42; groth20_bls12_381::FsEncryptionPublicKey::SIZE].to_vec(),
             version: 0,
             proof_data: Some(serde_cbor::to_vec(&csp_pop).unwrap()),
+            timestamp: None,
         };
 
         let deserialized_pop = CspFsEncryptionPop::try_from(&pk_proto).unwrap();
@@ -99,6 +103,7 @@ mod proto_to_csp_fs_enc_pop_conversions_tests {
             key_value: [42; groth20_bls12_381::FsEncryptionPublicKey::SIZE].to_vec(),
             version: 0,
             proof_data: None,
+            timestamp: None,
         };
 
         let error = CspFsEncryptionPop::try_from(&pk_proto).unwrap_err();
@@ -117,6 +122,7 @@ mod proto_to_csp_fs_enc_pop_conversions_tests {
             key_value: [42; groth20_bls12_381::FsEncryptionPublicKey::SIZE].to_vec(),
             version: 0,
             proof_data: Some(serde_cbor::to_vec(&dummy_csp_pop()).unwrap()),
+            timestamp: None,
         };
 
         let error = CspFsEncryptionPop::try_from(&pk_proto).unwrap_err();
@@ -137,6 +143,7 @@ mod proto_to_csp_fs_enc_pop_conversions_tests {
             key_value: [42; groth20_bls12_381::FsEncryptionPublicKey::SIZE].to_vec(),
             version: 0,
             proof_data: Some(malformed_proof_data.clone()),
+            timestamp: None,
         };
 
         let error = CspFsEncryptionPop::try_from(&pk_proto).unwrap_err();

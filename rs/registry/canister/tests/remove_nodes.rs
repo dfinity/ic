@@ -180,6 +180,7 @@ fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
             algorithm: 0,
             key_value: vec![1, 2, 3, 4],
             proof_data: None,
+            timestamp: None,
         };
 
         let (init_mutation, _, mut nodes_to_remove, _) = prepare_registry(1, NUM_NODES.into());

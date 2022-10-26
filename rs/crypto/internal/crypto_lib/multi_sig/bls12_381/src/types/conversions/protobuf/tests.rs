@@ -139,5 +139,6 @@ fn dummy_committee_signing_pubkey_proto() -> PublicKeyProto {
         key_value: [1; PublicKeyBytes::SIZE].to_vec(),
         version: 0,
         proof_data: Some([2; PopBytes::SIZE].to_vec()),
+        timestamp: None,
     }
 }

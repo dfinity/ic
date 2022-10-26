@@ -101,6 +101,7 @@ pub mod utils {
                 proof_data: Some(serde_cbor::to_vec(&pop).expect(
                     "Failed to serialize DKG dealing encryption key proof of possession (PoP) to CBOR",
                 )),
+                timestamp: None
             },
             _=> panic!("Unsupported types")
         }
