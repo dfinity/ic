@@ -3935,6 +3935,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-backup"
+version = "0.8.0"
+dependencies = [
+ "clap 3.2.14",
+ "ic-recovery",
+ "ic-types",
+ "rand 0.8.5",
+ "serde_json",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "tokio",
+]
+
+[[package]]
 name = "ic-balance-exporter"
 version = "0.1.0"
 dependencies = [
