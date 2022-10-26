@@ -65,10 +65,7 @@ async fn store_coherance_test() {
     drop(con);
     for hb in &scribe.blockchain {
         assert_eq!(store.get_at(hb.index).unwrap(), *hb);
-        assert_eq!(
-            store.get_transaction_hash(&hb.index).unwrap_err(),
-            BlockStoreError::NotFound(hb.index)
-        );
+        assert_eq!(store.get_transaction_hash(&hb.index).unwrap(), None);
     }
     let store = sqlite_on_disk_store(location);
     for hb in &scribe.blockchain {
