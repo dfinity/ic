@@ -15,6 +15,123 @@ mod csp_tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
+    mod public_key_data {
+        use crate::PublicKeyData;
+        use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes;
+        use ic_crypto_internal_types::curves::bls12_381;
+        use ic_protobuf::crypto::v1::NodePublicKeys;
+        use ic_protobuf::registry::crypto::v1::AlgorithmId;
+        use ic_protobuf::registry::crypto::v1::PublicKey;
+
+        const INVALID_PUBLIC_KEY: PublicKey = PublicKey {
+            version: 0,
+            algorithm: 0,
+            key_value: vec![],
+            proof_data: None,
+        };
+
+        #[test]
+        fn should_be_ok_when_empty() {
+            let data = PublicKeyData::try_from(NodePublicKeys {
+                version: 0,
+                node_signing_pk: None,
+                committee_signing_pk: None,
+                tls_certificate: None,
+                dkg_dealing_encryption_pk: None,
+                idkg_dealing_encryption_pk: None,
+            });
+            assert!(data.is_ok());
+        }
+
+        #[test]
+        fn should_be_ok_when_valid_node_signing_key() {
+            let data = PublicKeyData::try_from(NodePublicKeys {
+                version: 0,
+                node_signing_pk: Some(valid_node_signing_key()),
+                committee_signing_pk: None,
+                tls_certificate: None,
+                dkg_dealing_encryption_pk: None,
+                idkg_dealing_encryption_pk: None,
+            });
+
+            assert!(data.is_ok());
+        }
+
+        #[test]
+        fn should_be_ok_with_valid_dkg_dealing_encryption_pk() {
+            let data = PublicKeyData::try_from(NodePublicKeys {
+                version: 0,
+                node_signing_pk: None,
+                committee_signing_pk: None,
+                tls_certificate: None,
+                dkg_dealing_encryption_pk: Some(valid_dkg_dealing_encryption_pk()),
+                idkg_dealing_encryption_pk: None,
+            });
+
+            assert!(data.is_ok());
+        }
+
+        #[test]
+        fn should_be_ok_with_node_signing_pk_and_dkg_dealing_encryption_pk() {
+            let data = PublicKeyData::try_from(NodePublicKeys {
+                version: 0,
+                node_signing_pk: Some(valid_node_signing_key()),
+                committee_signing_pk: None,
+                tls_certificate: None,
+                dkg_dealing_encryption_pk: Some(valid_dkg_dealing_encryption_pk()),
+                idkg_dealing_encryption_pk: None,
+            });
+
+            assert!(data.is_ok());
+        }
+
+        #[test]
+        fn should_err_when_invalid_dkg_dealing_encryption_key() {
+            let data = PublicKeyData::try_from(NodePublicKeys {
+                version: 0,
+                node_signing_pk: None,
+                committee_signing_pk: None,
+                tls_certificate: None,
+                dkg_dealing_encryption_pk: Some(INVALID_PUBLIC_KEY),
+                idkg_dealing_encryption_pk: None,
+            });
+
+            assert!(data.is_err())
+        }
+
+        #[test]
+        fn should_err_when_invalid_node_signing_key() {
+            let data = PublicKeyData::try_from(NodePublicKeys {
+                version: 0,
+                node_signing_pk: Some(INVALID_PUBLIC_KEY),
+                committee_signing_pk: None,
+                tls_certificate: None,
+                dkg_dealing_encryption_pk: None,
+                idkg_dealing_encryption_pk: None,
+            });
+
+            assert!(data.is_err())
+        }
+
+        fn valid_node_signing_key() -> PublicKey {
+            PublicKey {
+                version: 0,
+                algorithm: AlgorithmId::Ed25519 as i32,
+                key_value: [0; PublicKeyBytes::SIZE].to_vec(),
+                proof_data: None,
+            }
+        }
+
+        fn valid_dkg_dealing_encryption_pk() -> PublicKey {
+            PublicKey {
+                version: 0,
+                algorithm: AlgorithmId::Groth20Bls12381 as i32,
+                key_value: [0u8; bls12_381::G1::SIZE].to_vec(),
+                proof_data: None,
+            }
+        }
+    }
+
     #[test]
     fn should_contain_newly_generated_secret_key_from_store() {
         let (csp, public_key) = csp_with_key_pair();

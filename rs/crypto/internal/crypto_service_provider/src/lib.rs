@@ -84,46 +84,37 @@ impl<T> CryptoServiceProvider for T where
 {
 }
 
-struct SksKeyIds {
-    node_signing_key_id: Option<KeyId>,
-    dkg_dealing_encryption_key_id: Option<KeyId>,
-}
-
 struct PublicKeyData {
     node_public_keys: NodePublicKeys,
-    sks_key_ids: SksKeyIds,
 }
 
-impl PublicKeyData {
-    fn new(node_public_keys: NodePublicKeys) -> Self {
-        let node_signing_key_id = match node_public_keys.node_signing_pk.to_owned() {
-            None => None,
-            Some(node_signing_pk) => {
-                let csp_pk = CspPublicKey::try_from(node_signing_pk)
-                    .expect("Unsupported public key proto as node signing public key.");
-                Some(KeyId::from(&csp_pk))
-            }
-        };
+impl TryFrom<NodePublicKeys> for PublicKeyData {
+    type Error = String;
 
-        let dkg_dealing_encryption_key_id = match node_public_keys
+    fn try_from(node_public_keys: NodePublicKeys) -> Result<Self, Self::Error> {
+        let signing_pk = node_public_keys
+            .node_signing_pk
+            .to_owned()
+            .map(|pk| CspPublicKey::try_from(pk));
+        if let Some(Err(e)) = signing_pk {
+            return Err(format!(
+                "Unsupported public key proto as node signing public key: {:?}",
+                e
+            ));
+        }
+
+        let dkg_pk = node_public_keys
             .dkg_dealing_encryption_pk
             .to_owned()
-        {
-            None => None,
-            Some(dkg_dealing_encryption_pk) => {
-                let csp_pk = CspFsEncryptionPublicKey::try_from(dkg_dealing_encryption_pk)
-                    .expect("Unsupported public key proto as dkg dealing encryption public key.");
-                Some(KeyId::from(&csp_pk))
-            }
-        };
-        let sks_key_ids = SksKeyIds {
-            node_signing_key_id,
-            dkg_dealing_encryption_key_id,
-        };
-        PublicKeyData {
-            node_public_keys,
-            sks_key_ids,
+            .map(|pk| CspFsEncryptionPublicKey::try_from(pk));
+        if let Some(Err(e)) = dkg_pk {
+            return Err(format!(
+                "Unsupported public key proto as dkg dealing encryption public key: {:?}",
+                e
+            ));
         }
+
+        Ok(PublicKeyData { node_public_keys })
     }
 }
 
@@ -266,7 +257,8 @@ impl Csp {
 
     fn csp_with(pk_path: &Path, logger: ReplicaLogger, csp_vault: Arc<dyn CspVault>) -> Self {
         let node_public_keys = read_node_public_keys(pk_path).unwrap_or_default();
-        let public_key_data = PublicKeyData::new(node_public_keys);
+        let public_key_data =
+            PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
         Csp {
             public_key_data,
             csp_vault,
@@ -285,7 +277,8 @@ impl Csp {
         config: &CryptoConfig,
     ) -> Self {
         let node_public_keys = read_node_public_keys(&config.crypto_root).unwrap_or_default();
-        let public_key_data = PublicKeyData::new(node_public_keys);
+        let public_key_data =
+            PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
         Csp {
             public_key_data,
             csp_vault: Arc::new(LocalCspVault::new_for_test(
@@ -302,7 +295,8 @@ impl Csp {
     ///
     /// Note: This is for testing only and MUST NOT be used in production.
     pub fn reset_public_key_data(&mut self, node_public_keys: NodePublicKeys) {
-        self.public_key_data = PublicKeyData::new(node_public_keys);
+        self.public_key_data =
+            PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
     }
 }
 
@@ -311,20 +305,16 @@ impl NodePublicKeyData for Csp {
         self.public_key_data.node_public_keys.clone()
     }
 
-    fn node_signing_key_id(&self) -> KeyId {
-        self.public_key_data
-            .sks_key_ids
-            .node_signing_key_id
-            .to_owned()
-            .expect("Missing node signing key id")
-    }
-
     fn dkg_dealing_encryption_key_id(&self) -> KeyId {
-        self.public_key_data
-            .sks_key_ids
-            .dkg_dealing_encryption_key_id
-            .to_owned()
-            .expect("Missing dkg dealing encryption key id")
+        CspFsEncryptionPublicKey::try_from(
+            self.public_key_data
+                .node_public_keys
+                .dkg_dealing_encryption_pk
+                .to_owned()
+                .expect("Missing dkg dealing encryption key id"),
+        )
+        .map(|pk| KeyId::from(&pk))
+        .expect("Unsupported public key proto as dkg dealing encryption public key.")
     }
 }
 
@@ -337,8 +327,9 @@ impl Csp {
         csprng: R,
         secret_key_store: S,
     ) -> Self {
-        let node_public_keys = Default::default();
-        let public_key_data = PublicKeyData::new(node_public_keys);
+        let node_public_keys: NodePublicKeys = Default::default();
+        let public_key_data =
+            PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
         Csp {
             public_key_data,
             csp_vault: Arc::new(LocalCspVault::new_for_test(csprng, secret_key_store)),

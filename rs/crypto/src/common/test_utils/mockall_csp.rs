@@ -248,7 +248,6 @@ mock! {
 
     pub trait NodePublicKeyData {
         fn node_public_keys(&self) -> NodePublicKeys;
-        fn node_signing_key_id(&self) -> KeyId;
         fn dkg_dealing_encryption_key_id(&self) -> KeyId;
     }
 
