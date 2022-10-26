@@ -53,6 +53,9 @@ USER ${USER}
 # Pre-populate the Bazel installation.
 RUN USE_BAZEL_VERSION=5.3.2 bazel version
 
+RUN mkdir --mode=0700 /home/${USER}/.ssh
+COPY ./files/known_hosts /home/${USER}/.ssh/known_hosts
+
 COPY entrypoint.sh /entrypoint.sh
 WORKDIR /
 USER 0
