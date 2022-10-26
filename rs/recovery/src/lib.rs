@@ -474,7 +474,7 @@ impl Recovery {
                 None,
             );
             let registry_client = RegistryClientImpl::new(nns_data_provider, None);
-            if let Err(err) = registry_client.poll_once() {
+            if let Err(err) = registry_client.try_polling_latest_version(200) {
                 return Err(format!("couldn't poll the registry: {:?}", err));
             };
             let version = registry_client.get_latest_version();
@@ -846,7 +846,7 @@ pub fn get_member_ips(nns_url: Url, subnet_id: SubnetId) -> RecoveryResult<Vec<I
             let nns_data_provider =
                 create_nns_data_provider(tokio::runtime::Handle::current(), vec![nns_url], None);
             let registry_client = RegistryClientImpl::new(nns_data_provider, None);
-            if let Err(err) = registry_client.poll_once() {
+            if let Err(err) = registry_client.try_polling_latest_version(200) {
                 return Err(format!("couldn't poll the registry: {:?}", err));
             };
             let version = registry_client.get_latest_version();
