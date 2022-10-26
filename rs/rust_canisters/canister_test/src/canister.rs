@@ -10,7 +10,6 @@ pub use ic_ic00_types::{
 };
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_replica_tests::*;
-pub use ic_test_utilities::assert_utils::assert_balance_equals;
 pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
 

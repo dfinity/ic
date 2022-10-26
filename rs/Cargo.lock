@@ -1229,7 +1229,6 @@ dependencies = [
  "ic-ic00-types",
  "ic-registry-transport",
  "ic-replica-tests",
- "ic-test-utilities",
  "ic-types",
  "on_wire",
  "rand 0.8.5",

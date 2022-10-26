@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/replica_tests",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/on_wire",
-    "//rs/test_utilities",
     "//rs/types/ic00_types",
     "//rs/types/types",
     "@crate_index//:backoff",
