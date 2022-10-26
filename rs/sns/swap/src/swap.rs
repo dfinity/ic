@@ -16,6 +16,7 @@ use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
+use ic_nervous_system_common::i2d;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_sns_governance::{
     ledger::Ledger,
@@ -27,6 +28,11 @@ use ic_sns_governance::{
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use rust_decimal::prelude::ToPrimitive;
+use std::ops::Div;
+
+use std::num::NonZeroU128;
+use std::num::NonZeroU64;
 use std::str::FromStr;
 
 // TODO(NNS1-1589): Get these from the canonical location.
@@ -181,16 +187,18 @@ impl Swap {
 
     // The total amount of ICP contributed by the community fund.
     pub fn cf_total_icp_e8s(&self) -> u64 {
-        // TODO: use saturating add...
         self.cf_participants
             .iter()
             .map(|x| x.participant_total_icp_e8s())
-            .sum()
+            .fold(0, |sum, v| sum.saturating_add(v))
     }
 
     // The total amount of ICP contributed by direct investors.
     fn direct_investor_total_icp_e8s(&self) -> u64 {
-        self.buyers.values().map(|x| x.amount_icp_e8s()).sum()
+        self.buyers
+            .values()
+            .map(|x| x.amount_icp_e8s())
+            .fold(0, |sum, v| sum.saturating_add(v))
     }
 
     //
@@ -263,10 +271,12 @@ impl Swap {
     /// `total_icp_e8s`), but perform the computation in integer space
     /// by computing `(amount_icp_e8s * total_sns_e8s) /
     /// total_icp_e8s` in 128 bit space.
-    fn scale(amount_icp_e8s: u64, total_sns_e8s: u64, total_icp_e8s: u64) -> u64 {
-        assert!(amount_icp_e8s <= total_icp_e8s);
+    fn scale(amount_icp_e8s: u64, total_sns_e8s: u64, total_icp_e8s: NonZeroU64) -> u64 {
+        assert!(amount_icp_e8s <= u64::from(total_icp_e8s));
         // Note that the multiplication cannot overflow as both factors fit in 64 bits.
-        let r = ((amount_icp_e8s as u128) * (total_sns_e8s as u128)) / (total_icp_e8s as u128);
+        let r = (amount_icp_e8s as u128)
+            .saturating_mul(total_sns_e8s as u128)
+            .div(NonZeroU128::from(total_icp_e8s));
         // This follows logically from the initial assert `amount_icp_e8s <= total_icp_e8s`.
         assert!(r <= u64::MAX as u128);
         r as u64
@@ -341,8 +351,8 @@ impl Swap {
         assert!(sns_being_offered_e8s > 0);
         // Note that this value has to be > 0 as we have > 0
         // participants each with > 0 ICP contributed.
-        let total_participant_icp_e8s = self.participant_total_icp_e8s();
-        assert!(total_participant_icp_e8s > 0);
+        let total_participant_icp_e8s = NonZeroU64::try_from(self.participant_total_icp_e8s())
+            .expect("participant_total_icp_e8s must be greater than 0");
 
         let mut rng = {
             let mut seed = [0u8; 32];
@@ -1183,7 +1193,9 @@ impl Swap {
     /// minimal total amount has been reached.
     pub fn sufficient_participation(&self) -> bool {
         if let Some(params) = &self.params {
-            if self.cf_participants.len() + self.buyers.len() < (params.min_participants as usize) {
+            if self.cf_participants.len().saturating_add(self.buyers.len())
+                < (params.min_participants as usize)
+            {
                 false
             } else {
                 self.participant_total_icp_e8s() >= params.min_icp_e8s
@@ -1224,12 +1236,16 @@ impl Swap {
     // --- query methods on the state  -----------------------------------------
     //
 
+    /// Computes the DerivedState.
+    /// `sns_tokens_per_icp` will be 0 if `participant_total_icp_e8s` is 0.
     pub fn derived_state(&self) -> DerivedState {
         let participant_total_icp_e8s = self.participant_total_icp_e8s();
         DerivedState {
             buyer_total_icp_e8s: participant_total_icp_e8s,
-            sns_tokens_per_icp: ((self.sns_token_e8s() as f64) / (participant_total_icp_e8s as f64))
-                as f32,
+            sns_tokens_per_icp: i2d(self.sns_token_e8s())
+                .checked_div(i2d(participant_total_icp_e8s))
+                .and_then(|d| d.to_f32())
+                .unwrap_or(0.0),
         }
     }
 
@@ -1637,8 +1653,10 @@ impl CfParticipant {
         Ok(())
     }
     pub fn participant_total_icp_e8s(&self) -> u64 {
-        // TODO: use saturating add...
-        self.cf_neurons.iter().map(|x| x.amount_icp_e8s).sum()
+        self.cf_neurons
+            .iter()
+            .map(|x| x.amount_icp_e8s)
+            .fold(0, |sum, v| sum.saturating_add(v))
     }
 }
 
@@ -1767,5 +1785,24 @@ mod tests {
         };
 
         assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS));
+    }
+
+    #[test]
+    fn participant_total_icp_e8s_no_overflow() {
+        let participant = CfParticipant {
+            hotkey_principal: "".to_string(),
+            cf_neurons: vec![
+                CfNeuron {
+                    nns_neuron_id: 0,
+                    amount_icp_e8s: u64::MAX,
+                },
+                CfNeuron {
+                    nns_neuron_id: 0,
+                    amount_icp_e8s: u64::MAX,
+                },
+            ],
+        };
+        let total = participant.participant_total_icp_e8s();
+        assert_eq!(total, u64::MAX);
     }
 }
