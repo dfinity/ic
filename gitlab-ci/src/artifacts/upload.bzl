@@ -33,7 +33,25 @@ def _upload_artifact_impl(ctx):
     )
 
     out = []
+
     for f in ctx.files.inputs:
+        filesum = ctx.actions.declare_file(ctx.label.name + "/" + f.basename + ".SHA256SUM")
+        ctx.actions.run_shell(
+            command = "(cd {path} && shasum --algorithm 256 --binary {src}) > {out}".format(path = f.dirname, src = f.basename, out = filesum.path),
+            inputs = [f],
+            outputs = [filesum],
+        )
+        out.append(filesum)
+
+    checksum = ctx.actions.declare_file(ctx.label.name + "/SHA256SUMS")
+    ctx.actions.run_shell(
+        command = "cat " + " ".join([f.path for f in out]) + " | sort -k 2 >" + checksum.path,
+        inputs = out,
+        outputs = [checksum],
+    )
+
+    fileurl = []
+    for f in ctx.files.inputs + [checksum]:
         url = ctx.actions.declare_file(ctx.label.name + "_" + f.basename + ".url")
         ctx.actions.run(
             executable = uploader,
@@ -46,17 +64,18 @@ def _upload_artifact_impl(ctx):
             outputs = [url],
             tools = [ctx.file._rclone],
         )
-        out.append(url)
+        fileurl.append(url)
 
     urls = ctx.actions.declare_file(ctx.label.name + ".urls")
     ctx.actions.run_shell(
-        command = "cat " + " ".join([url.path for url in out]) + " >" + urls.path,
-        inputs = out,
+        command = "cat " + " ".join([url.path for url in fileurl]) + " >" + urls.path,
+        inputs = fileurl,
         outputs = [urls],
     )
     out.append(urls)
+    out.extend(fileurl)
 
-    executable = ctx.actions.declare_file(ctx.label.name)
+    executable = ctx.actions.declare_file(ctx.label.name + ".bin")
     ctx.actions.write(output = executable, content = "#!/bin/sh\necho;exec cat " + urls.short_path, is_executable = True)
 
     return [DefaultInfo(files = depset(out), runfiles = ctx.runfiles(files = out), executable = executable)]
