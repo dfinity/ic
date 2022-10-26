@@ -302,6 +302,7 @@ pub enum ApiType {
         message_accepted: bool,
     },
 
+    // TODO: RUN-415: Rename to `GlobalTimerOrHeartbeat`
     // For executing the `canister_heartbeat` method
     Heartbeat {
         time: Time,
@@ -335,6 +336,7 @@ impl ApiType {
         }
     }
 
+    // TODO: RUN-415: Rename to `global_timer_or_heartbeat`
     pub fn heartbeat(time: Time, call_context_id: CallContextId) -> Self {
         Self::Heartbeat {
             time,

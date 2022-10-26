@@ -481,6 +481,16 @@ impl CanisterState {
         }
     }
 
+    /// Returns true if the canister exports the `canister_global_timer`
+    /// system method.
+    pub fn exports_global_timer_method(&self) -> bool {
+        match &self.execution_state {
+            Some(execution_state) => execution_state
+                .exports_method(&WasmMethod::System(SystemMethod::CanisterGlobalTimer)),
+            None => false,
+        }
+    }
+
     /// Returns true if the canister contains an exported query method with the
     /// name provided, false otherwise.
     pub fn exports_query_method(&self, method_name: String) -> bool {

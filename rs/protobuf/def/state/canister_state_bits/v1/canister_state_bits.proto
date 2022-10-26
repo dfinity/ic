@@ -91,6 +91,7 @@ message WasmMethod {
     SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE = 5;
     SYSTEM_METHOD_CANISTER_HEARTBEAT = 6;
     SYSTEM_METHOD_EMPTY = 7;
+    SYSTEM_METHOD_CANISTER_GLOBAL_TIMER = 8;
   }
   oneof wasm_method {
     string update = 1;

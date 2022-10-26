@@ -1219,6 +1219,65 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 4.0);
 }
 
+// TODO: RUN-417: Re-enable this test once the timer execution part is done
+#[test]
+#[ignore]
+fn global_timer_is_scheduled_once_per_round() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterGlobalTimer),
+        None,
+    );
+    test.set_canister_global_timer(canister, 1);
+    test.set_time(1);
+
+    test.send_ingress(canister, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 2.0);
+}
+
+#[test]
+fn global_timer_is_not_scheduled_if_not_expired() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterGlobalTimer),
+        None,
+    );
+    test.set_canister_global_timer(canister, 2);
+    test.set_time(1);
+
+    test.send_ingress(canister, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);
+}
+
+#[test]
+fn global_timer_is_not_scheduled_if_global_timer_method_is_not_exported() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        None,
+        None,
+    );
+    test.set_canister_global_timer(canister, 1);
+    test.set_time(1);
+
+    test.send_ingress(canister, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);
+}
+
 #[test]
 fn execute_heartbeat_before_messages() {
     // This test sets up a canister on a system subnet with a heartbeat method and

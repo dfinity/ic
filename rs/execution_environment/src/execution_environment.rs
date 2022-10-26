@@ -2265,6 +2265,16 @@ pub fn execute_canister(
     match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
             ExecutionTask::Heartbeat => {
+                // TODO: RUN-417: Remove this once the timer execution part is done
+                if !canister.exports_heartbeat_method() {
+                    return ExecuteCanisterResult {
+                        canister,
+                        instructions_used: None,
+                        heap_delta: NumBytes::from(0),
+                        ingress_status: None,
+                        description: None,
+                    };
+                }
                 // A heartbeat is expected to finish quickly, so DTS is not supported for it.
                 let instruction_limits = InstructionLimits::new(
                     FlagStatus::Disabled,
