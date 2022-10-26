@@ -139,7 +139,7 @@ mod database_access {
             .prepare(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
-        let block = stmt
+        let mut transactions = stmt
             .query_map(params![block_idx], |row| {
                 Ok(row
                     .get(0)
@@ -150,11 +150,13 @@ mod database_access {
                     })
                     .unwrap())
             })
-            .unwrap()
-            .next()
-            .ok_or(BlockStoreError::NotFound(*block_idx))
-            .map(|block| block.unwrap())?;
-        Ok(Some(block))
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        match transactions.next() {
+            Some(transaction) => Ok(Some(
+                transaction.map_err(|e| BlockStoreError::Other(e.to_string()))?,
+            )),
+            None => Ok(None),
+        }
     }
     pub fn get_hashed_block(
         con: &mut Connection,
@@ -165,7 +167,7 @@ mod database_access {
             .prepare(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
-        let block = stmt
+        let mut blocks = stmt
             .query_map(params![block_idx], |row| {
                 Ok(HashedBlock {
                     hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
@@ -176,11 +178,13 @@ mod database_access {
                     index: row.get(3)?,
                 })
             })
-            .unwrap()
-            .next()
-            .ok_or(BlockStoreError::NotFound(*block_idx))
-            .map(|block| block.unwrap())?;
-        Ok(Some(block))
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        match blocks.next() {
+            Some(block) => Ok(Some(
+                block.map_err(|e| BlockStoreError::Other(e.to_string()))?,
+            )),
+            None => Ok(None),
+        }
     }
 
     pub fn get_transaction_hash(
@@ -192,21 +196,67 @@ mod database_access {
             .prepare(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
-        let block = stmt
+        let mut transactions = stmt
             .query_map(params![block_idx], |row| {
                 Ok(row
                     .get(0)
                     .map(|bytes| HashOf::new(vec_into_array(bytes)))
                     .unwrap())
             })
-            .unwrap()
-            .next()
-            .ok_or(BlockStoreError::NotFound(*block_idx))
-            .map(|block| block.unwrap())?;
-        Ok(Some(block))
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        match transactions.next() {
+            Some(transaction) => Ok(Some(
+                transaction.map_err(|e| BlockStoreError::Other(e.to_string()))?,
+            )),
+            None => Ok(None),
+        }
+    }
+    pub fn get_block_idx_by_transaction_hash(
+        connection: &mut Connection,
+        hash: &HashOf<icp_ledger::Transaction>,
+    ) -> Result<u64, BlockStoreError> {
+        let command = "SELECT block_idx from transactions where tx_hash = ?";
+        let mut stmt = connection
+            .prepare(command)
+            .map_err(|e| BlockStoreError::Other(e.to_string()))
+            .unwrap();
+        let mut blocks = stmt
+            .query_map(params![hash.into_bytes().to_vec()], |row| {
+                Ok(row.get(0).unwrap())
+            })
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        match blocks.next() {
+            Some(block) => Ok(block.map_err(|e| BlockStoreError::Other(e.to_string()))?),
+            None => Err(BlockStoreError::Other(format!(
+                "Transaction hash not found {}",
+                hash
+            ))),
+        }
+    }
+
+    pub fn get_block_idx_by_block_hash(
+        connection: &mut Connection,
+        hash: &HashOf<EncodedBlock>,
+    ) -> Result<u64, BlockStoreError> {
+        let command = "SELECT idx from blocks where hash = ?";
+        let mut stmt = connection
+            .prepare(command)
+            .map_err(|e| BlockStoreError::Other(e.to_string()))
+            .unwrap();
+        let mut hashes = stmt
+            .query_map(params![hash.into_bytes().to_vec()], |row| {
+                Ok(row.get(0).unwrap())
+            })
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        match hashes.next() {
+            Some(hash) => Ok(hash.map_err(|e| BlockStoreError::Other(e.to_string()))?),
+            None => Err(BlockStoreError::Other(format!(
+                "Block hash not found {}",
+                hash
+            ))),
+        }
     }
 }
-
 #[derive(candid::CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct HashedBlock {
     pub block: EncodedBlock,
@@ -325,7 +375,7 @@ impl SQLiteStore {
         connection.execute(
             r#"
             CREATE TABLE IF NOT EXISTS blocks (
-                hash BLOB NOT NULL,
+                hash BLOB NOT NULL UNIQUE,
                 block BLOB NOT NULL,
                 parent_hash BLOB,
                 idx INTEGER NOT NULL PRIMARY KEY,
@@ -361,7 +411,7 @@ impl SQLiteStore {
         connection.execute(
             r#"
             CREATE TABLE IF NOT EXISTS transactions (
-                block_idx INTEGER NOT NULL,
+                block_idx INTEGER NOT NULL UNIQUE,
                 tx_hash BLOB NOT NULL,
                 operation_type VARCHAR NOT NULL,
                 from_account VARCHAR(64) ,
@@ -389,8 +439,22 @@ impl SQLiteStore {
             "#,
             [],
         )?;
-
         Ok(())
+    }
+    pub fn get_block_idx_by_block_hash(
+        &self,
+        hash: &HashOf<EncodedBlock>,
+    ) -> Result<u64, BlockStoreError> {
+        let mut connection = self.connection.lock().unwrap();
+        database_access::get_block_idx_by_block_hash(&mut *connection, hash)
+    }
+
+    pub fn get_block_idx_by_transaction_hash(
+        &self,
+        hash: &HashOf<icp_ledger::Transaction>,
+    ) -> Result<u64, BlockStoreError> {
+        let mut connection = self.connection.lock().unwrap();
+        database_access::get_block_idx_by_transaction_hash(&mut *connection, hash)
     }
 
     fn read_oldest_block_snapshot(&self) -> Result<Option<(HashedBlock, BalanceBook)>, String> {
@@ -550,17 +614,7 @@ impl SQLiteStore {
             return Err(BlockStoreError::NotAvailable(*block_idx));
         }
         let mut connection = self.connection.lock().unwrap();
-        if database_access::contains_block(&mut *connection, block_idx)? {
-            match database_access::get_transaction(&mut *connection, block_idx) {
-                Ok(tx) => Ok(tx),
-                Err(_) => Err(BlockStoreError::Other(format!(
-                    "Block {} is available but no transaction can be found for block {}",
-                    block_idx, block_idx
-                ))),
-            }
-        } else {
-            Err(BlockStoreError::NotFound(*block_idx))
-        }
+        database_access::get_transaction(&mut *connection, block_idx)
     }
     fn check_table_coherance(&self) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
@@ -570,7 +624,7 @@ impl SQLiteStore {
         let indexes = stmt
             .query_map(params![], |row| row.get(0))
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        //Get all indizes for table blocks
+        //Get all indices for table blocks
         let mut block_indexes: Vec<u64> = indexes.map(|x| x.unwrap()).collect();
         drop(stmt);
 
@@ -598,7 +652,7 @@ impl SQLiteStore {
                     .clone()
                     .into_iter()
                     .all(|item| block_indexes.contains(&item)),
-                "Transaction Table has more unique block indizes than Blocks Table"
+                "Transaction Table has more unique block indices than Blocks Table"
             );
             let difference_transaction_indixes: Vec<u64> = all_indixes
                 .into_iter()

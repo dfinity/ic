@@ -1,16 +1,12 @@
 use crate::balance_book::BalanceBook;
 use crate::errors::Error;
 use crate::store::{BlockStoreError, HashedBlock, SQLiteStore};
-use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
-use icp_ledger::{apply_operation, AccountIdentifier, Block, Tokens, Transaction};
+use icp_ledger::{apply_operation, AccountIdentifier, Block, Tokens};
 use log::{error, info};
-use std::collections::HashMap;
 
 pub struct Blocks {
     pub balance_book: BalanceBook,
-    hash_location: HashMap<HashOf<EncodedBlock>, BlockIndex>,
-    pub tx_hash_location: HashMap<HashOf<Transaction>, BlockIndex>,
     pub block_store: SQLiteStore,
     last_hash: Option<HashOf<EncodedBlock>>,
 }
@@ -23,8 +19,6 @@ impl Blocks {
             .expect("Failed to initialize sql store for ledger");
         Self {
             balance_book: BalanceBook::default(),
-            hash_location: HashMap::default(),
-            tx_hash_location: HashMap::default(),
             block_store,
             last_hash: None,
         }
@@ -35,8 +29,6 @@ impl Blocks {
             SQLiteStore::new_in_memory().expect("Failed to initialize sql store for ledger");
         Self {
             balance_book: BalanceBook::default(),
-            hash_location: HashMap::default(),
-            tx_hash_location: HashMap::default(),
             block_store,
             last_hash: None,
         }
@@ -48,8 +40,6 @@ impl Blocks {
             self.balance_book.store.acc_to_hist.is_empty(),
             "Blocks is not empty"
         );
-        assert!(self.hash_location.is_empty(), "Blocks is not empty");
-        assert!(self.tx_hash_location.is_empty(), "Blocks is not empty");
 
         if let Ok(genesis) = self.block_store.get_at(0) {
             self.process_block(genesis)?;
@@ -59,11 +49,6 @@ impl Blocks {
 
         if let Some((first, balances_snapshot)) = self.block_store.first_snapshot() {
             self.balance_book = balances_snapshot;
-
-            self.hash_location.insert(first.hash, first.index);
-
-            let tx = Block::decode(first.block).unwrap().transaction;
-            self.tx_hash_location.insert(tx.hash(), first.index);
             self.last_hash = Some(first.hash);
         }
 
@@ -138,18 +123,18 @@ impl Blocks {
     }
 
     fn get(&self, hash: HashOf<EncodedBlock>) -> Result<HashedBlock, Error> {
-        let index = *self
-            .hash_location
-            .get(&hash)
-            .ok_or_else(|| Error::InvalidBlockId(format!("Block not found {}", hash)))?;
+        let index = self
+            .block_store
+            .get_block_idx_by_block_hash(&hash)
+            .map_err(|_| Error::InvalidBlockId(format!("{}", hash)))?;
         self.get_at(index)
     }
 
     pub fn get_verified(&self, hash: HashOf<EncodedBlock>) -> Result<HashedBlock, Error> {
-        let index = *self
-            .hash_location
-            .get(&hash)
-            .ok_or_else(|| Error::InvalidBlockId(format!("Block not found {}", hash)))?;
+        let index = self
+            .block_store
+            .get_block_idx_by_block_hash(&hash)
+            .map_err(|_| Error::InvalidBlockId(format!("{}", hash)))?;
         self.get_verified_at(index)
     }
 
@@ -172,7 +157,7 @@ impl Blocks {
     pub fn process_block(&mut self, hb: HashedBlock) -> Result<(), Error> {
         let HashedBlock {
             block,
-            hash,
+            hash: _,
             parent_hash,
             index,
         } = hb.clone();
@@ -195,12 +180,6 @@ impl Blocks {
         bb.store.transaction_context = Some(index);
         apply_operation(bb, &block.transaction.operation).unwrap();
         bb.store.transaction_context = None;
-
-        self.hash_location.insert(hash, index);
-
-        let tx = block.transaction;
-        self.tx_hash_location.insert(tx.hash(), index);
-
         self.last_hash = Some(hb.hash);
 
         Ok(())
@@ -252,21 +231,6 @@ impl Blocks {
             let last_idx = self.last()?.map(|hb| hb.index).unwrap_or(0);
             if first_idx + block_limit + prune_delay < last_idx {
                 let new_first_idx = last_idx - block_limit;
-                let prune_start_idx = first_idx.max(1).min(new_first_idx);
-                for i in prune_start_idx..new_first_idx {
-                    let hb = self.block_store.get_at(i)?;
-                    self.hash_location
-                        .remove(&hb.hash)
-                        .expect("failed to remove block by hash");
-                    let tx_hash = Block::decode(hb.block)
-                        .expect("failed to decode block")
-                        .transaction
-                        .hash();
-                    self.tx_hash_location
-                        .remove(&tx_hash)
-                        .expect("failed to remove transaction by hash");
-                }
-
                 let hb = self.block_store.get_at(new_first_idx)?;
                 self.balance_book.store.prune_at(hb.index);
                 self.block_store
