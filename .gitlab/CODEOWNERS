@@ -70,6 +70,7 @@
 /rs/artifact_manager/                   @dfinity-lab/teams/consensus-owners
 /rs/artifact_pool/                      @dfinity-lab/teams/consensus-owners
 /rs/async_utils/                        @dfinity-lab/teams/networking-team
+/rs/backup/                             @dfinity-lab/teams/orchestrator-owners
 /rs/bazelifier/                         @dfinity-lab/teams/idx
 /rs/bitcoin/adapter/                    @dfinity-lab/teams/networking-team
 /rs/bitcoin/canister/                   @dfinity-lab/teams/execution-owners

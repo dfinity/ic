@@ -34,7 +34,7 @@ pub mod admin_helper;
 pub mod app_subnet_recovery;
 pub mod cli;
 pub mod cmd;
-pub(crate) mod command_helper;
+pub mod command_helper;
 pub mod error;
 pub mod file_sync_helper;
 pub mod nns_recovery_failover_nodes;
