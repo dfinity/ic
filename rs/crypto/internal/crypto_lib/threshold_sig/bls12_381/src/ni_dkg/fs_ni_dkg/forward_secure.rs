@@ -2,18 +2,20 @@
 
 //! Methods for forward secure encryption
 
-// NOTE: the paper uses multiplicative notation for operations on G1, G2, GT,
-// while miracl's API uses additive naming convention, hence
-//    u*v  corresponds to u.add(v)
+// NOTE: the paper uses multiplicative notation for operations on GT,
+// while our BLS12-381 API uses additive naming convention, hence
+//    u*v  corresponds to u + v
 // and
-//    g^x  corresponds to g.mul(x)
+//    g^x  corresponds to g * x
 
+use crate::ni_dkg::fs_ni_dkg::dlog_recovery::{
+    CheatingDealerDlogSolver, HonestDealerDlogLookupTable,
+};
 use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
     prove_pop, verify_pop, EncryptionKeyInstance, EncryptionKeyPop,
 };
-use crate::ni_dkg::fs_ni_dkg::nizk_chunking::CHALLENGE_BITS;
-use crate::ni_dkg::fs_ni_dkg::nizk_chunking::NUM_ZK_REPETITIONS;
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
+
 use ic_crypto_internal_bls12_381_type::{
     G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
 };
@@ -537,8 +539,8 @@ pub struct EncryptionWitness {
     pub spec_r: Vec<Scalar>,
 }
 
-/// Encrypt chunks. Returns ciphertext as well as the random r's chosen,
-/// for later use in NIZK proofs.
+/// Encrypt chunks. Returns ciphertext as well as the witness for later use
+/// in the NIZK proofs.
 pub fn enc_chunks<R: RngCore + CryptoRng>(
     sij: &[Vec<isize>],
     pks: &[G1Affine],
@@ -547,21 +549,18 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     sys: &SysParam,
     rng: &mut R,
 ) -> Option<(FsEncryptionCiphertext, EncryptionWitness)> {
-    if sij.is_empty() {
+    if sij.is_empty() || pks.len() != sij.len() {
         return None;
     }
 
-    // do
-    //   chunks <- headMay allChunks
-    //   guard $ all (== chunks) allChunks
+    let receivers = pks.len();
+    let chunks = sij[0].len();
 
-    let all_chunks: LinkedList<_> = sij.iter().map(Vec::len).collect();
-    let chunks = *all_chunks.front().expect("sij was empty");
-    for si in sij.iter() {
-        if si.len() != chunks {
+    for i in 0..sij.len() {
+        if sij[i].len() != chunks {
             return None; // Chunk lengths disagree.
         }
-        for x in si.iter() {
+        for x in sij[i].iter() {
             if *x < CHUNK_MIN || *x > CHUNK_MAX {
                 return None; // Chunk out of range.
             }
@@ -582,19 +581,26 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let rr = g1.batch_mul(&r);
 
     // [[pk^r * g1^s | (r, s) <- zip rs si] | (pk, si) <- zip pks sij]
-    let cc: Vec<Vec<_>> = sij
-        .iter()
-        .zip(pks)
-        .map(|(sj, pk)| {
-            sj.iter()
-                .zip(&r)
-                .map(|(s, r)| {
-                    G1Projective::mul2(&pk.into(), r, &g1.into(), &Scalar::from_isize(*s))
-                        .to_affine()
-                })
-                .collect()
-        })
-        .collect();
+    let cc = {
+        let mut cc: Vec<Vec<G1Affine>> = Vec::with_capacity(pks.len());
+
+        let g1 = G1Projective::from(g1);
+
+        for i in 0..receivers {
+            let pk = G1Projective::from(pks[i]);
+
+            let mut enc_chunks = Vec::with_capacity(chunks);
+
+            for j in 0..chunks {
+                let s = Scalar::from_isize(sij[i][j]);
+                enc_chunks.push(G1Projective::mul2(&pk, &r[j], &g1, &s).to_affine());
+            }
+
+            cc.push(enc_chunks);
+        }
+
+        cc
+    };
 
     let extended_tau = extend_tau(&cc, &rr, &ss, tau, associated_data);
     let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
@@ -629,59 +635,6 @@ fn find_prefix<'a>(dks: &'a SecretKey, tau: &[Bit]) -> Option<&'a BTENode> {
     for node in dks.bte_nodes.iter() {
         if is_prefix(&node.tau, tau) {
             return Some(node);
-        }
-    }
-    None
-}
-
-/// Solves discrete log problem with baby-step giant-step.
-///
-/// Returns:
-///   find (\x -> base^x == tgt) [lo..lo + range - 1]
-///
-/// using an O(sqrt(N)) approach rather than a naive O(N) search.
-///
-/// We cut the exponent in half, that is, for a range of 2^46, we build a table
-/// of size 2^23 then perform up to 2^23 FP12 multiplications and lookups.
-/// Depending on the cost of CPU versus RAM, it may be better to split
-/// differently.
-pub fn baby_giant(tgt: &Gt, base: &Gt, lo: isize, range: isize) -> Option<isize> {
-    if range <= 0 {
-        return None;
-    }
-
-    let mut babies = std::collections::HashMap::new();
-    let mut n = 0;
-    let mut g = *Gt::identity();
-
-    loop {
-        if n * n >= range {
-            break;
-        }
-        babies.insert(g.tag(), n);
-        g += base;
-        n += 1;
-    }
-    g = g.neg();
-
-    let mut t = *base;
-    if lo >= 0 {
-        t *= Scalar::from_isize(lo);
-        t = t.neg();
-    } else {
-        t *= Scalar::from_isize(-lo);
-    }
-    t += tgt;
-
-    let mut x = lo;
-    loop {
-        if let Some(i) = babies.get(&t.tag()) {
-            return Some(x + i);
-        }
-        t += g;
-        x += n;
-        if x >= lo + range {
-            break;
         }
     }
     None
@@ -761,17 +714,19 @@ pub fn dec_chunks(
         powers.push(x);
     }
 
-    // Find discrete log of powers with baby-step-giant-step.
-    let mut dlogs = Vec::new();
-    for item in &powers {
-        match baby_giant(item, Gt::generator(), 0, CHUNK_SIZE) {
-            // Happy path: honest DKG participants.
-            Some(dlog) => dlogs.push(Scalar::from_isize(dlog)),
-            // It may take hours to brute force a cheater's discrete log.
-            None => match solve_cheater_log(spec_n, spec_m, item) {
-                Some(big) => dlogs.push(big),
-                None => panic!("Unsolvable discrete log!"),
-            },
+    // Find discrete log of the powers
+    let linear_search = HonestDealerDlogLookupTable::new();
+    let mut dlogs = linear_search.solve_several(&powers);
+
+    if dlogs.iter().any(|x| x.is_none()) {
+        // Cheating dealer case
+        let cheating_solver = CheatingDealerDlogSolver::new(spec_n, spec_m);
+
+        for i in 0..dlogs.len() {
+            if dlogs[i].is_none() {
+                // It may take hours to brute force a cheater's discrete log.
+                dlogs[i] = cheating_solver.solve(&powers[i]);
+            }
         }
     }
 
@@ -779,7 +734,7 @@ pub fn dec_chunks(
     let mut acc = Scalar::zero();
     for dlog in dlogs.iter() {
         acc *= chunk_size;
-        acc += dlog;
+        acc += dlog.expect("Unsolvable discrete logarithm in NIDKG");
     }
     let fr_bytes = acc.serialize();
 
@@ -853,7 +808,7 @@ pub fn verify_ciphertext_integrity(
 /// Returns (tau || RO(cc, rr, ss, tau, associated_data)).
 ///
 /// See the description of Deal in Section 7.1.
-fn extend_tau(
+pub fn extend_tau(
     cc: &[Vec<G1Affine>],
     rr: &[G1Affine],
     ss: &[G1Affine],
@@ -881,7 +836,7 @@ fn extend_tau(
 /// Computes the function f of the paper.
 ///
 /// The bit vector tau must have length lambda_T + lambda_H.
-fn ftau(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
+pub fn ftau(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
     if tau.len() != sys.lambda_t + sys.lambda_h {
         return None;
     }
@@ -969,37 +924,4 @@ impl SysParam {
     pub fn global() -> &'static Self {
         &SYSTEM_PARAMS
     }
-}
-
-/// Brute-forces a discrete log for a malicious DKG participant whose NIZK
-/// chunking proof checks out.
-///
-/// For some Delta in [1..E - 1] the answer s satisfies (Delta * s) in
-/// [1 - Z..Z - 1].
-pub fn solve_cheater_log(spec_n: usize, spec_m: usize, target: &Gt) -> Option<Scalar> {
-    let bb_constant = CHUNK_SIZE as usize;
-    let ee = 1 << CHALLENGE_BITS;
-    let ss = spec_n * spec_m * (bb_constant - 1) * (ee - 1);
-    let zz = (2 * NUM_ZK_REPETITIONS * ss) as isize;
-    let mut target_power = *Gt::identity();
-
-    // For each Delta in [1..E - 1] we compute target^Delta and use
-    // baby-step-giant-step to find `scaled_answer` such that:
-    //   base^scaled_answer = target^Delta
-    // Then base^(scaled_answer * invDelta) = target where
-    //   invDelta = inverse of Delta mod spec_r
-    // That is, answer = scaled_answer * invDelta.
-    for delta in 1..ee {
-        target_power += target;
-        match baby_giant(&target_power, Gt::generator(), 1 - zz, 2 * zz - 1) {
-            None => {}
-            Some(scaled_answer) => {
-                let mut answer = Scalar::from_usize(delta);
-                answer = answer.inverse().expect("Delta is always invertible");
-                answer *= Scalar::from_isize(scaled_answer);
-                return Some(answer);
-            }
-        }
-    }
-    None
 }

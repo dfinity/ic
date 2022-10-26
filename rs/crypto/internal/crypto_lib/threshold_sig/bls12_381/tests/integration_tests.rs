@@ -29,7 +29,7 @@ fn potpourri() {
     let tau10 = tau_from_epoch(sys, epoch10);
 
     let mut keys = Vec::new();
-    for i in 0..3 {
+    for i in 0..=3 {
         println!("generating key pair {}...", i);
         keys.push(kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng));
     }

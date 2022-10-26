@@ -22,6 +22,7 @@
 
 pub use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 
+pub mod dlog_recovery;
 pub mod encryption_key_pop;
 pub mod forward_secure;
 pub mod nizk_chunking;

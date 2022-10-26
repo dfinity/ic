@@ -1180,6 +1180,32 @@ impl Gt {
         &self.value
     }
 
+    /// Constant time selection
+    ///
+    /// Equivalent to from[index] except avoids leaking the index
+    /// through side channels.
+    ///
+    /// If index is out of range, returns the identity element
+    pub(crate) fn ct_select(from: &[Self], index: usize) -> Self {
+        use subtle::{ConditionallySelectable, ConstantTimeEq};
+        let mut val = ic_bls12_381::Gt::identity();
+
+        for v in 0..from.len() {
+            val.conditional_assign(from[v].inner(), usize::ct_eq(&v, &index));
+        }
+
+        Self::new(val)
+    }
+
+    pub(crate) fn conditional_select(a: &Self, b: &Self, choice: subtle::Choice) -> Self {
+        use subtle::ConditionallySelectable;
+        Self::new(ic_bls12_381::Gt::conditional_select(
+            a.inner(),
+            b.inner(),
+            choice,
+        ))
+    }
+
     /// Return the identity element in the group
     pub fn identity() -> &'static Self {
         &GT_IDENTITY
@@ -1219,6 +1245,11 @@ impl Gt {
         Self::new(self.value.neg())
     }
 
+    /// Return the doubling of this element
+    pub(crate) fn double(&self) -> Self {
+        Self::new(self.value.double())
+    }
+
     /// Return some arbitrary bytes which represent this Gt element
     ///
     /// These are not deserializable, and serve only to uniquely identify
@@ -1226,10 +1257,51 @@ impl Gt {
     pub fn tag(&self) -> [u8; Self::BYTES] {
         self.value.to_bytes()
     }
+
+    /// Return a hash value of this element suitable for linear search
+    ///
+    /// # Warning
+    ///
+    /// This function is a perfect hash function (ie, has no collisions) for the
+    /// set of elements gt*{0..2**16-1}, which is what is used to represent
+    /// ciphertext elements in the NIDKG. It is not useful in other contexts.
+    ///
+    /// This function is not stable over time; it may change in the future.
+    /// Do not serialize this value, or use it as an index in storage.
+    pub fn short_hash_for_linear_search(&self) -> u32 {
+        fn extract4(tag: &[u8], idx: usize) -> u32 {
+            let mut fbytes = [0u8; 4];
+            fbytes.copy_from_slice(&tag[idx..idx + 4]);
+            u32::from_le_bytes(fbytes)
+        }
+
+        let tag = self.tag();
+        extract4(&tag, 0) ^ extract4(&tag, 32)
+    }
+
+    /// Return the result of g*val where g is the standard generator
+    ///
+    /// This function avoids leaking val through timing side channels,
+    /// since it is used when decrypting NIDKG dealings.
+    pub fn g_mul_u16(val: u16) -> Self {
+        let g = *Gt::generator();
+        let mut r = *Gt::identity();
+
+        for b in 0..16 {
+            if b > 0 {
+                r = r.double();
+            }
+
+            let choice = subtle::Choice::from(((val >> (15 - b)) as u8) & 1);
+            r = Self::conditional_select(&r, &(r + g), choice);
+        }
+
+        r
+    }
 }
 
 declare_addsub_ops_for!(Gt);
-declare_mul_scalar_ops_for!(Gt);
+declare_windowed_scalar_mul_ops_for!(Gt, 4);
 
 /// An element of the group G2 prepared for the Miller loop
 #[derive(Clone, Debug)]

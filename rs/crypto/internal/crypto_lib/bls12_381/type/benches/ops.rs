@@ -332,6 +332,16 @@ fn pairing_ops(c: &mut Criterion) {
         )
     });
 
+    let mut rng = rand::thread_rng();
+
+    group.bench_function("multiply_u16", |b| {
+        b.iter_batched_ref(
+            || rng.gen::<u16>(),
+            |s| Gt::g_mul_u16(*s),
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("pairing", |b| {
         b.iter_batched_ref(
             || (random_g1().into(), random_g2().into()),
