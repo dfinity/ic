@@ -1,5 +1,6 @@
-#[rustfmt::skip]
+use anyhow::{bail, Result};
 
+#[rustfmt::skip]
 // TODO: rename this module as task_schedule.rs
 
 use std::{
@@ -67,7 +68,7 @@ impl TaskSchedule {
     /// `Skipped`, `Failed` or `Passed`.
     ///
     /// Every state change creates an event that is passed to the caller.
-    pub fn execute(self) {
+    pub fn execute(self) -> Result<()> {
         // * turn planned tasks into scheduled tasks
         let should_include = |s: &str| self.filter.iter().all(|p| p(s));
 
@@ -110,5 +111,12 @@ impl TaskSchedule {
         }
 
         println!("Completed {:?} phases", done_set.len());
+        let has_execution_succeeded = done_set
+            .iter()
+            .any(|x| matches!(x.state(), TaskState::Failed { failure_message: _ }));
+        if has_execution_succeeded {
+            bail!("Some tasks in the schedule failed.");
+        }
+        Ok(())
     }
 }

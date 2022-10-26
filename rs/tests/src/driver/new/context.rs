@@ -61,7 +61,14 @@ impl GroupContext {
     /// Returns the path to the setup artifact directory,
     /// ensuring that the directory actually exists.
     pub fn get_or_create_setup_dir(&self) -> Result<PathBuf> {
+        let root_env_path = self.group_dir.join(constants::ROOT_ENV_DIR);
         let setup_path = self.group_dir.join(constants::GROUP_SETUP_DIR);
+
+        if root_env_path.is_dir() && !setup_path.exists() {
+            // todo: this function should eventually just `fork` the root environment.
+            TestEnv::shell_copy(&root_env_path, &setup_path)?;
+        }
+
         Self::ensure_dir(setup_path.clone()).map(|_| setup_path)
     }
 

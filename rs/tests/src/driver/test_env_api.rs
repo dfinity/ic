@@ -133,7 +133,8 @@
 
 use super::driver_setup::{IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR};
 use super::test_setup::GroupSetup;
-use crate::driver::farm::Farm;
+use crate::driver::farm::{Farm, GroupSpec};
+use crate::driver::new::constants;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::util::{create_agent, delay};
 use anyhow::{anyhow, bail, Result};
@@ -648,6 +649,21 @@ impl HasIcName for SubnetSnapshot {
 impl HasIcName for IcNodeSnapshot {
     fn ic_name(&self) -> String {
         self.ic_name.clone()
+    }
+}
+
+pub trait HasDependencies {
+    fn get_dependency_path<P: AsRef<Path>>(&self, p: P) -> PathBuf;
+
+    fn read_dependency_to_string<P: AsRef<Path>>(&self, p: P) -> String {
+        let dep_path = self.get_dependency_path(p);
+        std::fs::read_to_string(dep_path).expect("Could not read to string")
+    }
+}
+
+impl<T: HasTestEnv> HasDependencies for T {
+    fn get_dependency_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
+        self.test_env().get_path("dependencies").join(p)
     }
 }
 
@@ -1230,3 +1246,31 @@ pub fn install_nns_canisters(
 
 /// A short wasm module that is a legal canister binary.
 pub(crate) const WASM_MAGIC_BYTES: &[u8] = &[0, 97, 115, 109];
+
+pub fn prepare_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
+    println!("SystemTestGroup.prepare_group");
+
+    let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
+    let farm = Farm::new(farm_base_url, logger);
+
+    let group_spec = GroupSpec {
+        vm_allocation: None,
+        required_host_features: vec![],
+        preferred_network: None,
+    };
+
+    Ok(farm.create_group(
+        &group_setup.farm_group_name,
+        group_setup.group_timeout,
+        group_spec,
+    )?)
+}
+
+pub fn finalize_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
+    println!("SystemTestGroup.finalize_group");
+
+    let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
+    let farm = Farm::new(farm_base_url, logger);
+
+    Ok(farm.delete_group(&group_setup.farm_group_name)?)
+}

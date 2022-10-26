@@ -93,12 +93,29 @@ impl TestEnv {
         target_dir: P,
         logger: Logger,
     ) -> Result<TestEnv> {
-        let mut options = fs_extra::dir::CopyOptions::new();
-        options.copy_inside = true;
-        options.content_only = true;
-        fs_extra::dir::copy(source_dir, &target_dir, &options)?;
+        Self::shell_copy(source_dir.as_ref(), target_dir.as_ref())?;
         sync_path(&target_dir)?;
         TestEnv::new(target_dir, logger)
+    }
+
+    // Even fs_extra does not provide a good way to copy directories with
+    // symlinks. That is why we resort to `cp`.
+    pub fn shell_copy<PS: AsRef<Path>, PT: AsRef<Path>>(
+        source_dir: PS,
+        target_dir: PT,
+    ) -> std::io::Result<()> {
+        let source_path = source_dir.as_ref().join(".");
+        std::fs::create_dir_all(&target_dir)?;
+
+        let out = std::process::Command::new("cp")
+            .arg("-R")
+            .arg(source_path)
+            .arg(target_dir.as_ref())
+            .output();
+
+        println!("{:?}", out);
+
+        Ok(())
     }
 
     pub fn fork<P: AsRef<Path>>(&self, logger: Logger, dir: P) -> Result<TestEnv> {

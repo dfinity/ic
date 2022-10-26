@@ -6,26 +6,20 @@ use std::{
     path::PathBuf,
 };
 
+use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::{
-    driver_setup::IcSetup,
     new::{
-        constants,
         context::{Command, GroupContext, ProcessContext},
         dsl::TestFunction,
         task_scheduler::TaskSchedule,
     },
     pot_dsl::{PotSetupFn, SysTestFn},
+    test_env_api::finalize_group,
     test_setup::GroupSetup,
 };
-use crate::driver::{farm::Farm, test_env::TestEnvAttribute};
-
-use crate::driver::farm::GroupSpec;
-
-use slog::Logger;
 
 use anyhow::Result;
 use clap::Parser;
-use reqwest::Url;
 
 #[derive(Parser, Debug)]
 pub struct CliArgs {
@@ -117,34 +111,6 @@ impl SystemTestGroup {
         abc.take().unwrap()
     }
 
-    fn prepare_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
-        println!("SystemTestGroup.prepare_group");
-
-        let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
-        let farm = Farm::new(farm_base_url, logger);
-
-        let group_spec = GroupSpec {
-            vm_allocation: None,
-            required_host_features: vec![],
-            preferred_network: None,
-        };
-
-        Ok(farm.create_group(
-            &group_setup.farm_group_name,
-            group_setup.group_timeout,
-            group_spec,
-        )?)
-    }
-
-    fn finalize_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
-        println!("SystemTestGroup.finalize_group");
-
-        let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
-        let farm = Farm::new(farm_base_url, logger);
-
-        Ok(farm.delete_group(&group_setup.farm_group_name)?)
-    }
-
     pub fn execute_from_args(&mut self) -> Result<()> {
         println!("SystemTestGroup.execute_from_args");
         let args = CliArgs::parse().validate()?;
@@ -162,7 +128,7 @@ impl SystemTestGroup {
                     .keys()
                     .fold(schedule, |schedule, name| schedule.append(name))
                     .append("::finalize");
-                schedule.execute();
+                schedule.execute()?;
             }
             SystemTestsSubcommand::InteractiveMode => {
                 todo!();
@@ -185,27 +151,21 @@ impl SystemTestGroup {
                         println!("Child: running setup");
                         // Step 1: create an independent driver context for this process
                         let env = process_ctx.group_context.create_setup_env()?;
-
-                        // Step 2: invoke InternetComputer interfaces
-                        let ic_setup = IcSetup::from_bazel_env();
-                        ic_setup.write_attribute(&env);
-
-                        let group_setup = GroupSetup::from_bazel_env();
-                        group_setup.write_attribute(&env);
-
-                        // Create group via Farm API
-                        Self::prepare_group(&group_setup, process_ctx.logger()).unwrap();
-
-                        // Step 3: call user-defined setup function
+                        println!("IC_ROOT variable is {:?} ", std::env::var("IC_ROOT"));
+                        // Step 2: call user-defined setup function
                         let setup_fn = self.consume_setup();
                         setup_fn(env);
                     }
                     "::finalize" => {
-                        // let group_setup = GroupSetup::from_bazel_env();
-                        // group_setup.write_attribute(&env);
                         let finalize_env = process_ctx.group_context.create_finalize_env()?;
-                        let group_setup = GroupSetup::read_attribute(&finalize_env);
-                        Self::finalize_group(&group_setup, process_ctx.logger()).unwrap();
+                        let should_finalize_farm_group = finalize_env
+                            .get_json_path(GroupSetup::attribute_name())
+                            .exists();
+                        if should_finalize_farm_group {
+                            println!("Finalizing Farm group");
+                            let group_setup = GroupSetup::read_attribute(&finalize_env);
+                            finalize_group(&group_setup, process_ctx.logger()).unwrap();
+                        }
                     }
                     test_name => {
                         println!("Child: running test");

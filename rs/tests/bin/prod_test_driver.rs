@@ -42,6 +42,8 @@ fn run_tests(validated_args: ValidatedCliRunTestsArgs) -> anyhow::Result<()> {
     );
     let system_env = validated_args.working_dir.join(config::SYSTEM_ENV_DIR);
     fs::create_dir(&system_env)?;
+    create_dependencies_directory(&system_env, validated_args.clone())?;
+
     let logger = mk_stdout_logger();
     let env = TestEnv::new(system_env, logger.clone())?;
     initialize_env(&env, validated_args.clone())?;
@@ -55,6 +57,74 @@ fn run_tests(validated_args: ValidatedCliRunTestsArgs) -> anyhow::Result<()> {
         .expect("Couldn't save test suite execution contract file.");
     // Run all tests. Each test dumps an execution result file, which indicates whether this test has succeeded or failed (with an error message).
     evaluate(&context, suite);
+    Ok(())
+}
+
+/// This makes the 'old' test driver forward compatible with the new bazel based
+/// dependency structure.
+///
+/// For now, this directory has all the dependencies contained as files. This
+/// will need to be changed to a symlink.
+fn create_dependencies_directory<P: AsRef<Path>>(
+    p: P,
+    cli_args: ValidatedCliRunTestsArgs,
+) -> anyhow::Result<()> {
+    let dep_dir = PathBuf::from(p.as_ref()).join("dependencies");
+    std::fs::create_dir_all(&dep_dir)?;
+
+    // Copy in the bash script required for creating guest os config disk images.
+    let ic_root_path = match std::env::var("IC_ROOT") {
+        Ok(val) => PathBuf::from(val),
+        Err(e) => anyhow::bail!("IC_ROOT is not set: {:?}", e),
+    };
+    let script_rel_path = PathBuf::from("ic-os/guestos/scripts/build-bootstrap-config-image.sh");
+
+    let from = ic_root_path.join(&script_rel_path);
+    let to = dep_dir.join(&script_rel_path);
+    std::fs::create_dir_all(to.parent().expect("Could not get parent of path."))?;
+    std::fs::copy(from, to)?;
+
+    // Write entries from validated args to files
+    create_parent_and_write_to(
+        &dep_dir,
+        "ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.url",
+        cli_args.ic_os_img_url.to_string().as_str(),
+    )?;
+
+    create_parent_and_write_to(
+        &dep_dir,
+        "ic-os/guestos/dev/disk-img.tar.zst.sha256",
+        cli_args.ic_os_img_sha256.as_str(),
+    )?;
+
+    create_parent_and_write_to(
+        &dep_dir,
+        "ic-os/guestos/dev/upload_update-img_upgrade.tar.zst.url",
+        cli_args.ic_os_update_img_url.to_string().as_str(),
+    )?;
+
+    create_parent_and_write_to(
+        &dep_dir,
+        "ic-os/guestos/dev/upgrade.tar.zst.sha256",
+        cli_args.ic_os_update_img_sha256.as_str(),
+    )?;
+
+    create_parent_and_write_to(
+        &dep_dir,
+        "rs/tests/ic_version_id",
+        cli_args.initial_replica_version.to_string().as_str(),
+    )?;
+    Ok(())
+}
+
+fn create_parent_and_write_to<B: AsRef<Path>, P: AsRef<Path>>(
+    base_path: B,
+    p: P,
+    content: &str,
+) -> anyhow::Result<()> {
+    let p = PathBuf::from(base_path.as_ref()).join(p);
+    std::fs::create_dir_all(p.parent().unwrap())?;
+    std::fs::write(p, content.as_bytes())?;
     Ok(())
 }
 

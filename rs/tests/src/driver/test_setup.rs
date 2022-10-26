@@ -103,3 +103,15 @@ impl IcHandleConstructor for TestEnv {
         })
     }
 }
+
+pub fn create_setup_and_farm_group(env: &TestEnv) -> (IcSetup, GroupSetup) {
+    // let exec_path = std::env::current_exe().expect("could not acquire parent process path");
+    // std::env::set_var("IC_ROOT", exec_path);
+    // println!("The IC_ROOT env is {}", std::env::var("IC_ROOT").unwrap());
+    let ic_setup = IcSetup::from_bazel_env(env);
+    ic_setup.write_attribute(env);
+    let group_setup = GroupSetup::from_bazel_env();
+    group_setup.write_attribute(env);
+    prepare_group(&group_setup, env.logger()).unwrap();
+    (ic_setup, group_setup)
+}

@@ -5,7 +5,8 @@
 ///   |- B
 ///
 /// - group_dir/
-///   |- dependencies:symlink
+///   |- root_env/               <-- the root test environment
+///      |- dependencies:symlink
 ///   |- setup/                  <-- test_env
 ///      |- ic_prep
 ///      |- test.log             <-- prefix
@@ -25,6 +26,9 @@ pub const TESTS_DIR: &str = "tests";
 
 // Name of the group setup directory within the working directory.
 pub const GROUP_SETUP_DIR: &str = "setup";
+
+// Name of the root test environment.
+pub const ROOT_ENV_DIR: &str = "root_env";
 
 pub const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
