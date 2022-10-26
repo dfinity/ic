@@ -5,10 +5,11 @@ use ic_ledger_canister_blocks_synchronizer::{
 use ic_ledger_canister_blocks_synchronizer_test_utils::{
     create_tmp_dir, init_test_logger, sample_data::Scribe,
 };
+use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::{block::BlockType, Tokens};
 use icp_ledger::{AccountIdentifier, Block, BlockIndex};
+use rusqlite::params;
 use std::{collections::BTreeMap, path::Path};
-
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> SQLiteStore {
     SQLiteStore::new_on_disk(path).expect("Unable to create store")
 }
@@ -40,6 +41,44 @@ async fn store_smoke_test() {
     );
 }
 
+#[actix_rt::test]
+async fn store_coherance_test() {
+    init_test_logger();
+    let tmpdir = create_tmp_dir();
+
+    let location = tmpdir.path();
+
+    let store = sqlite_on_disk_store(location);
+    let scribe = Scribe::new_with_sample_data(10, 100);
+    let path = location.join("db.sqlite");
+    let con = rusqlite::Connection::open(path).unwrap();
+    for hb in &scribe.blockchain {
+        let hash = hb.hash.into_bytes().to_vec();
+        let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
+        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)";
+        con.execute(
+            command,
+            params![hash, hb.block.clone().into_vec(), parent_hash, hb.index],
+        )
+        .unwrap();
+    }
+    drop(con);
+    for hb in &scribe.blockchain {
+        assert_eq!(store.get_at(hb.index).unwrap(), *hb);
+        assert_eq!(
+            store.get_transaction_hash(&hb.index).unwrap_err(),
+            BlockStoreError::NotFound(hb.index)
+        );
+    }
+    let store = sqlite_on_disk_store(location);
+    for hb in &scribe.blockchain {
+        assert_eq!(store.get_at(hb.index).unwrap(), *hb);
+        assert_eq!(
+            store.get_transaction_hash(&hb.index).unwrap(),
+            Some(Block::decode(hb.block.clone()).unwrap().transaction.hash())
+        );
+    }
+}
 #[actix_rt::test]
 async fn store_prune_test() {
     init_test_logger();

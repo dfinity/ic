@@ -90,8 +90,11 @@ impl TestLedger {
 
     async fn add_block(&self, hb: HashedBlock) -> Result<(), ApiError> {
         let mut blockchain = self.blockchain.write().await;
-        blockchain.block_store.mark_last_verified(hb.index)?;
-        blockchain.add_block(hb).map_err(ApiError::from)
+        blockchain.add_block(hb.clone()).map_err(ApiError::from)?;
+        blockchain
+            .block_store
+            .mark_last_verified(hb.index)
+            .map_err(ApiError::from)
     }
 
     fn next_block_timestamp(&self) -> TimeStamp {
@@ -131,8 +134,8 @@ impl LedgerAccess for TestLedger {
         {
             let mut blockchain = self.blockchain.write().await;
             for hb in queue.iter() {
-                blockchain.block_store.mark_last_verified(hb.index)?;
                 blockchain.add_block(hb.clone())?;
+                blockchain.block_store.mark_last_verified(hb.index)?;
             }
         }
 
