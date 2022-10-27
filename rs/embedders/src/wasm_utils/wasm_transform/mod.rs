@@ -1,7 +1,7 @@
 use wasm_encoder::Function;
 use wasmparser::{
     BinaryReaderError, Data, Element, ElementItem, ElementKind, Export, Global, Import, MemoryType,
-    Operator, Parser, Payload, SectionReader, TableType, TypeSectionReader, ValType,
+    Operator, Parser, Payload, TableType, Type, ValType,
 };
 
 mod convert;
@@ -16,7 +16,7 @@ pub struct Body<'a> {
 }
 
 pub struct Module<'a> {
-    pub type_section: Option<&'a [u8]>,
+    pub types: Vec<Type>,
     pub imports: Vec<Import<'a>>,
     /// Mapping from function index to type index.
     pub functions: Vec<u32>,
@@ -37,7 +37,7 @@ impl<'a> Module<'a> {
     pub fn parse(wasm: &'a [u8]) -> Result<Self, BinaryReaderError> {
         let parser = Parser::new(0);
         let mut imports = vec![];
-        let mut type_section = None;
+        let mut types = vec![];
         let mut data = vec![];
         let mut tables = vec![];
         let mut memories = vec![];
@@ -54,41 +54,38 @@ impl<'a> Module<'a> {
             let payload = payload?;
             match payload {
                 Payload::ImportSection(import_section_reader) => {
-                    let collected: Result<Vec<_>, _> = import_section_reader.into_iter().collect();
-                    imports = collected?;
+                    imports = import_section_reader
+                        .into_iter()
+                        .collect::<Result<_, _>>()?;
                 }
                 Payload::TypeSection(type_section_reader) => {
-                    type_section = Some(&wasm[type_section_reader.range()]);
+                    types = type_section_reader.into_iter().collect::<Result<_, _>>()?;
                 }
                 Payload::DataSection(data_section_reader) => {
-                    data = data_section_reader
-                        .into_iter()
-                        .collect::<Result<Vec<_>, _>>()?;
+                    data = data_section_reader.into_iter().collect::<Result<_, _>>()?;
                 }
                 Payload::TableSection(table_section_reader) => {
-                    tables = table_section_reader
-                        .into_iter()
-                        .collect::<Result<Vec<_>, _>>()?;
+                    tables = table_section_reader.into_iter().collect::<Result<_, _>>()?;
                 }
                 Payload::MemorySection(memory_section_reader) => {
                     memories = memory_section_reader
                         .into_iter()
-                        .collect::<Result<Vec<_>, _>>()?;
+                        .collect::<Result<_, _>>()?;
                 }
                 Payload::FunctionSection(function_section_reader) => {
                     functions = function_section_reader
                         .into_iter()
-                        .collect::<Result<Vec<_>, _>>()?;
+                        .collect::<Result<_, _>>()?;
                 }
                 Payload::GlobalSection(global_section_reader) => {
                     globals = global_section_reader
                         .into_iter()
-                        .collect::<Result<Vec<_>, _>>()?;
+                        .collect::<Result<_, _>>()?;
                 }
                 Payload::ExportSection(export_section_reader) => {
                     exports = export_section_reader
                         .into_iter()
-                        .collect::<Result<Vec<_>, _>>()?;
+                        .collect::<Result<_, _>>()?;
                 }
                 Payload::StartSection { func, range: _ } => {
                     start = Some(func);
@@ -136,7 +133,21 @@ impl<'a> Module<'a> {
                     custom_sections
                         .push((custom_section_reader.name(), custom_section_reader.data()));
                 }
-                _ => {}
+                Payload::Version { .. }
+                | Payload::TagSection(_)
+                | Payload::ModuleSection { .. }
+                | Payload::InstanceSection(_)
+                | Payload::CoreTypeSection(_)
+                | Payload::ComponentSection { .. }
+                | Payload::ComponentInstanceSection(_)
+                | Payload::ComponentAliasSection(_)
+                | Payload::ComponentTypeSection(_)
+                | Payload::ComponentCanonicalSection(_)
+                | Payload::ComponentStartSection(_)
+                | Payload::ComponentImportSection(_)
+                | Payload::ComponentExportSection(_)
+                | Payload::UnknownSection { .. }
+                | Payload::End(_) => {}
             }
         }
         assert_eq!(code_section_count as usize, code_sections.len());
@@ -144,7 +155,7 @@ impl<'a> Module<'a> {
             assert_eq!(data_count as usize, data.len());
         }
         Ok(Module {
-            type_section,
+            types,
             imports,
             functions,
             tables,
@@ -162,21 +173,20 @@ impl<'a> Module<'a> {
     pub fn encode(self) -> Result<Vec<u8>, BinaryReaderError> {
         let mut module = wasm_encoder::Module::new();
 
-        if let Some(type_section) = self.type_section {
+        if !self.types.is_empty() {
             let mut types = wasm_encoder::TypeSection::new();
-            let type_parser = TypeSectionReader::new(type_section, 0)?;
-            for t in type_parser.into_iter() {
-                match t? {
-                    wasmparser::Type::Func(t) => {
-                        let params = t.params().iter().map(convert::val_type).collect::<Vec<_>>();
-                        let results = t
-                            .results()
-                            .iter()
-                            .map(convert::val_type)
-                            .collect::<Vec<_>>();
-                        types.function(params, results);
-                    }
-                }
+            for Type::Func(ty) in self.types {
+                let params = ty
+                    .params()
+                    .iter()
+                    .map(convert::val_type)
+                    .collect::<Vec<_>>();
+                let results = ty
+                    .results()
+                    .iter()
+                    .map(convert::val_type)
+                    .collect::<Vec<_>>();
+                types.function(params, results);
             }
             module.section(&types);
         }
