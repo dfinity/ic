@@ -203,6 +203,7 @@ pub(crate) fn inspect_ecdsa_initializations(
 
 #[cfg(test)]
 pub(crate) mod test_utils {
+    use crate::consensus::crypto::ConsensusCrypto;
     use crate::consensus::mocks::{dependencies, Dependencies};
     use crate::ecdsa::complaints::{
         EcdsaComplaintHandlerImpl, EcdsaTranscriptLoader, TranscriptLoadStatus,
@@ -243,7 +244,7 @@ pub(crate) mod test_utils {
     use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
     use std::collections::{BTreeMap, BTreeSet};
     use std::convert::TryFrom;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     pub(crate) fn empty_response() -> ic_types::messages::Response {
         ic_types::messages::Response {
@@ -542,9 +543,10 @@ pub(crate) mod test_utils {
     }
 
     // Sets up the dependencies and creates the pre signer
-    pub(crate) fn create_pre_signer_dependencies(
+    pub(crate) fn create_pre_signer_dependencies_with_crypto(
         pool_config: ArtifactPoolConfig,
         logger: ReplicaLogger,
+        consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
     ) -> (EcdsaPoolImpl, EcdsaPreSignerImpl) {
         let metrics_registry = MetricsRegistry::new();
         let Dependencies {
@@ -562,7 +564,7 @@ pub(crate) mod test_utils {
             NODE_1,
             *dummy_id.source_subnet(),
             pool.get_block_cache(),
-            crypto,
+            consensus_crypto.unwrap_or(crypto),
             metrics_registry.clone(),
             logger.clone(),
             MaliciousBehaviour::new(false).malicious_flags,
@@ -572,10 +574,19 @@ pub(crate) mod test_utils {
         (ecdsa_pool, pre_signer)
     }
 
-    // Sets up the dependencies and creates the signer
-    pub(crate) fn create_signer_dependencies(
+    // Sets up the dependencies and creates the pre signer
+    pub(crate) fn create_pre_signer_dependencies(
         pool_config: ArtifactPoolConfig,
         logger: ReplicaLogger,
+    ) -> (EcdsaPoolImpl, EcdsaPreSignerImpl) {
+        create_pre_signer_dependencies_with_crypto(pool_config, logger, None)
+    }
+
+    // Sets up the dependencies and creates the signer
+    pub(crate) fn create_signer_dependencies_with_crypto(
+        pool_config: ArtifactPoolConfig,
+        logger: ReplicaLogger,
+        consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
     ) -> (EcdsaPoolImpl, EcdsaSignerImpl) {
         let metrics_registry = MetricsRegistry::new();
         let Dependencies {
@@ -590,7 +601,7 @@ pub(crate) mod test_utils {
         let signer = EcdsaSignerImpl::new(
             NODE_1,
             pool.get_block_cache(),
-            crypto,
+            consensus_crypto.unwrap_or(crypto),
             metrics_registry.clone(),
             logger.clone(),
         );
@@ -599,10 +610,19 @@ pub(crate) mod test_utils {
         (ecdsa_pool, signer)
     }
 
-    // Sets up the dependencies and creates the complaint handler
-    pub(crate) fn create_complaint_dependencies(
+    // Sets up the dependencies and creates the signer
+    pub(crate) fn create_signer_dependencies(
         pool_config: ArtifactPoolConfig,
         logger: ReplicaLogger,
+    ) -> (EcdsaPoolImpl, EcdsaSignerImpl) {
+        create_signer_dependencies_with_crypto(pool_config, logger, None)
+    }
+
+    // Sets up the dependencies and creates the complaint handler
+    pub(crate) fn create_complaint_dependencies_with_crypto(
+        pool_config: ArtifactPoolConfig,
+        logger: ReplicaLogger,
+        consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
     ) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
         let metrics_registry = MetricsRegistry::new();
         let Dependencies {
@@ -617,13 +637,20 @@ pub(crate) mod test_utils {
         let complaint_handler = EcdsaComplaintHandlerImpl::new(
             NODE_1,
             pool.get_block_cache(),
-            crypto,
+            consensus_crypto.unwrap_or(crypto),
             metrics_registry.clone(),
             logger.clone(),
         );
         let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
 
         (ecdsa_pool, complaint_handler)
+    }
+
+    pub(crate) fn create_complaint_dependencies(
+        pool_config: ArtifactPoolConfig,
+        logger: ReplicaLogger,
+    ) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
+        create_complaint_dependencies_with_crypto(pool_config, logger, None)
     }
 
     // Creates a TranscriptID for tests

@@ -1416,13 +1416,14 @@ impl TranscriptState {
 mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
+    use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_interfaces::ecdsa::MutableEcdsaPool;
     use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_test_utilities::FastForwardTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::consensus::ecdsa::EcdsaObject;
+    use ic_types::consensus::ecdsa::{EcdsaObject, EcdsaStatsNoOp};
     use ic_types::crypto::CryptoHash;
     use ic_types::Height;
 
@@ -1603,6 +1604,39 @@ mod tests {
                         &NODE_1,
                     ));
                 }
+            })
+        })
+    }
+
+    #[test]
+    fn test_crypto_verify_dealing() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(1);
+                let subnet_nodes = env.receivers().into_iter().collect::<BTreeSet<_>>();
+                let crypto = env.crypto_components.into_values().next().unwrap();
+                let (_, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(Arc::new(crypto)),
+                );
+                let id = create_transcript_id_with_height(4, Height::from(5));
+                let params = IDkgTranscriptParams::new(
+                    id,
+                    subnet_nodes.clone(),
+                    subnet_nodes,
+                    env.newest_registry_version,
+                    ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
+                    IDkgTranscriptOperation::Random,
+                )
+                .unwrap();
+                let dealing = create_dealing(id, NODE_2);
+                let changeset: Vec<_> = pre_signer
+                    .crypto_verify_dealing(&dealing.message_id(), &params, &dealing)
+                    .into_iter()
+                    .collect();
+                // assert that the mock dealing does not pass real crypto check
+                assert!(is_handle_invalid(&changeset, &dealing.message_id()));
             })
         })
     }
@@ -1880,6 +1914,45 @@ mod tests {
                     TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![]);
                 let change_set = pre_signer.send_dealing_support(&ecdsa_pool, &block_reader);
                 assert!(change_set.is_empty());
+            })
+        })
+    }
+
+    #[test]
+    fn test_crypto_verify_dealing_support() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(1);
+                let subnet_nodes = env.receivers().into_iter().collect::<BTreeSet<_>>();
+                let crypto = env.crypto_components.into_values().next().unwrap();
+                let (_, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(Arc::new(crypto)),
+                );
+                let id = create_transcript_id_with_height(4, Height::from(5));
+                let params = IDkgTranscriptParams::new(
+                    id,
+                    subnet_nodes.clone(),
+                    subnet_nodes,
+                    env.newest_registry_version,
+                    ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
+                    IDkgTranscriptOperation::Random,
+                )
+                .unwrap();
+                let (dealing, support) = create_support(id, NODE_2, NODE_3);
+                let changeset: Vec<_> = pre_signer
+                    .crypto_verify_dealing_support(
+                        &support.message_id(),
+                        &params,
+                        &dealing,
+                        &support,
+                        &(EcdsaStatsNoOp {}),
+                    )
+                    .into_iter()
+                    .collect();
+                // assert that the mock dealing support does not pass real crypto check
+                assert!(is_handle_invalid(&changeset, &support.message_id()));
             })
         })
     }
