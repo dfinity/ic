@@ -4512,6 +4512,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bech32 0.9.0",
+ "bitcoin",
  "candid",
  "canister-test",
  "ciborium",

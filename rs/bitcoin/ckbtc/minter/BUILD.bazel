@@ -74,6 +74,7 @@ rust_test(
     name = "ckbtc_minter_lib_unit_tests",
     crate = ":ckbtc_minter_lib",
     deps = [
+        "@crate_index//:bitcoin",
         "@crate_index//:proptest",
     ],
 )
