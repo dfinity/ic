@@ -71,12 +71,6 @@ pub enum PerformanceCounterType {
 pub struct ExecutionComplexity {
     /// The CPU complexity accumulated.
     pub cpu: NumInstructions,
-    /// The memory complexity accumulated.
-    pub memory: NumBytes,
-    /// The disk complexity accumulated.
-    pub disk: NumBytes,
-    /// The network complexity accumulated.
-    pub network: NumBytes,
     /// The number of dirty pages in stable memory.
     pub stable_dirty_pages: NumPages,
 }
@@ -93,9 +87,6 @@ impl ops::Add<&ExecutionComplexity> for &ExecutionComplexity {
     fn add(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
         ExecutionComplexity {
             cpu: self.cpu + rhs.cpu,
-            memory: self.memory + rhs.memory,
-            disk: self.disk + rhs.disk,
-            network: self.network + rhs.network,
             stable_dirty_pages: self
                 .stable_dirty_pages
                 .get()

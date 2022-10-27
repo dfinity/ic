@@ -376,7 +376,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CALLER_COPY,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
@@ -428,7 +427,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_ARG_DATA_COPY,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -467,7 +465,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -506,7 +503,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_REPLY_DATA_APPEND,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -549,8 +545,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_REJECT,
-                        memory: (size as u64).into(),
-                        network: (size as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -589,7 +583,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_REJECT_MSG_COPY,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -631,7 +624,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CANISTER_SELF_COPY,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
@@ -672,7 +664,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CONTROLLER_COPY,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
@@ -696,9 +687,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     length as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::DEBUG_PRINT,
-                        memory: (length as u64).into(),
-                        disk: (length as u64).into(),
-                        network: (length as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -735,9 +723,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     length as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::TRAP,
-                        memory: (length as u64).into(),
-                        disk: (length as u64).into(),
-                        network: (length as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -764,7 +749,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                   reject_env: i32,
                   src: i32,
                   len: i32| {
-                let total_len = callee_size as u64 + name_len as u64 + len as u64;
                 charge_for_system_api_call(
                     &log,
                     canister_id,
@@ -773,8 +757,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     len as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_SIMPLE,
-                        memory: (total_len as u64).into(),
-                        network: (total_len as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -811,14 +793,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                   reply_env: i32,
                   reject_fun: i32,
                   reject_env: i32| {
-                let total_len = callee_size as u64 + name_len as u64;
                 observe_execution_complexity(
                     &log,
                     canister_id,
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_NEW,
-                        memory: (total_len).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
@@ -852,8 +832,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_DATA_APPEND,
-                        memory: (size as u64).into(),
-                        network: (size as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -966,7 +944,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_READ,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -996,10 +973,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_WRITE,
-                        memory: (size as u64).into(),
-                        disk: (size as u64).into(),
                         stable_dirty_pages,
-                        ..Default::default()
                     },
                     dirty_page_cost,
                     stable_memory_dirty_page_limit,
@@ -1059,7 +1033,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_READ,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     NumInstructions::from(0),
@@ -1089,10 +1062,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     size as u32,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_WRITE,
-                        memory: size.into(),
-                        disk: size.into(),
                         stable_dirty_pages,
-                        ..Default::default()
                     },
                     dirty_page_cost,
                     stable_memory_dirty_page_limit,
@@ -1172,7 +1142,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CANISTER_CYCLES_BALANCE128,
-                        memory: (std::mem::size_of::<u64>() as u64).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
@@ -1208,7 +1177,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CYCLES_AVAILABLE128,
-                        memory: (std::mem::size_of::<u64>() as u64).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
@@ -1244,7 +1212,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CYCLES_REFUNDED128,
-                        memory: (std::mem::size_of::<u64>() as u64).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
@@ -1278,7 +1245,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CYCLES_ACCEPT128,
-                        memory: (std::mem::size_of::<u64>() as u64).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
@@ -1340,7 +1306,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CERTIFIED_DATA_SET,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
@@ -1379,7 +1344,6 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::DATA_CERTIFICATE_COPY,
-                        memory: (size as u64).into(),
                         ..Default::default()
                     },
                     stable_memory_dirty_page_limit,
