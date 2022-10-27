@@ -2,7 +2,7 @@ use crate::{
     routing, scheduling,
     state_machine::{StateMachine, StateMachineImpl},
 };
-use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::EcdsaKeyId;
@@ -332,6 +332,7 @@ struct BatchProcessorImpl {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_machine: Box<dyn StateMachine>,
     registry: Arc<dyn RegistryClient>,
+    bitcoin_config: BitcoinConfig,
     metrics: Arc<MessageRoutingMetrics>,
     log: ReplicaLogger,
 }
@@ -341,6 +342,7 @@ impl BatchProcessorImpl {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         state_machine: Box<dyn StateMachine>,
         registry: Arc<dyn RegistryClient>,
+        bitcoin_config: BitcoinConfig,
         metrics: Arc<MessageRoutingMetrics>,
         log: ReplicaLogger,
     ) -> Self {
@@ -348,6 +350,7 @@ impl BatchProcessorImpl {
             state_manager,
             state_machine,
             registry,
+            bitcoin_config,
             metrics,
             log,
         }
@@ -527,6 +530,8 @@ impl BatchProcessorImpl {
             nns_subnet_id,
             canister_migrations: Arc::new(canister_migrations),
             ecdsa_signing_subnets,
+            bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
+            bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
         })
     }
 
@@ -891,7 +896,7 @@ impl MessageRoutingImpl {
         )));
         let stream_handler = Box::new(routing::stream_handler::StreamHandlerImpl::new(
             subnet_id,
-            hypervisor_config,
+            hypervisor_config.clone(),
             metrics_registry,
             Arc::clone(&time_in_stream_metrics),
             log.clone(),
@@ -928,6 +933,7 @@ impl MessageRoutingImpl {
             state_manager.clone(),
             state_machine,
             registry,
+            hypervisor_config.bitcoin,
             Arc::clone(&metrics),
             log.clone(),
         ));

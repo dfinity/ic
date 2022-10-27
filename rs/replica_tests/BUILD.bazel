@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replica:replica_lib",
     "//rs/replicated_state",
+    "//rs/state_machine_tests",
     "//rs/state_manager",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
@@ -53,7 +54,6 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/rust_canisters/canister_test",
-    "//rs/state_machine_tests",
     "//rs/sys",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",

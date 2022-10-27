@@ -3,10 +3,12 @@ use std::{collections::BTreeSet, fmt::Write};
 
 use candid::Decode;
 use ic_base_types::{CanisterId, SubnetId};
+use ic_btc_types::NetworkInRequest as BitcoinNetwork;
 use ic_ic00_types::{
-    CanisterIdRecord, ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId,
-    InstallCodeArgs, Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs,
-    SetControllerArgs, SignWithECDSAArgs, UpdateSettingsArgs,
+    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
+    BitcoinSendTransactionArgs, CanisterIdRecord, ComputeInitialEcdsaDealingsArgs,
+    ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method, Payload,
+    ProvisionalTopUpCanisterArgs, SetControllerArgs, SignWithECDSAArgs, UpdateSettingsArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -26,6 +28,7 @@ impl From<candid::Error> for ResolveDestinationError {
 
 /// Inspect the method name and payload of a request to ic:00 to figure out to
 /// which subnet it should be sent to.
+// TODO(EXC-1275): Clean up this method to return a `PrincipalId`.
 pub(super) fn resolve_destination(
     network_topology: &NetworkTopology,
     method_name: &str,
@@ -107,16 +110,45 @@ pub(super) fn resolve_destination(
                     )
                 })
         }
-        Ok(Ic00Method::BitcoinGetBalance)
-        | Ok(Ic00Method::BitcoinGetUtxos)
-        | Ok(Ic00Method::BitcoinSendTransaction)
-        | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
-            // TODO(EXC-939): Route requests across all the bitcoin subnets, not only
-            // the first subnet.
-            Ok(*network_topology
-                .bitcoin_testnet_subnets()
-                .first()
-                .unwrap_or(&own_subnet))
+        Ok(Ic00Method::BitcoinGetBalance) => {
+            let args = Decode!(payload, BitcoinGetBalanceArgs)?;
+            Ok(route_bitcoin_message(
+                args.network,
+                network_topology,
+                own_subnet,
+                true,
+            ))
+        }
+        Ok(Ic00Method::BitcoinGetUtxos) => {
+            let args = Decode!(payload, BitcoinGetUtxosArgs)?;
+            Ok(route_bitcoin_message(
+                args.network,
+                network_topology,
+                own_subnet,
+                true,
+            ))
+        }
+        Ok(Ic00Method::BitcoinSendTransaction) => {
+            let args = Decode!(payload, BitcoinSendTransactionArgs)?;
+
+            // Do not yet route SendTransaction to the Bitcoin canister, as that endpoint isn't
+            // implemented yet.
+            // TODO(EXC-1201): Expose the send transaction endpoint on the bitcoin canister.
+            Ok(route_bitcoin_message(
+                args.network,
+                network_topology,
+                own_subnet,
+                false,
+            ))
+        }
+        Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
+            let args = Decode!(payload, BitcoinGetCurrentFeePercentilesArgs)?;
+            Ok(route_bitcoin_message(
+                args.network,
+                network_topology,
+                own_subnet,
+                true,
+            ))
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = Decode!(payload, ECDSAPublicKeyArgs)?.key_id;
@@ -226,6 +258,64 @@ fn route_ecdsa_message(
                     )))
                 }
             }
+        }
+    }
+}
+
+fn route_bitcoin_message(
+    network: BitcoinNetwork,
+    network_topology: &NetworkTopology,
+    own_subnet: SubnetId,
+    route_to_bitcoin_canister: bool,
+) -> SubnetId {
+    match network {
+        BitcoinNetwork::Testnet | BitcoinNetwork::testnet => {
+            // Route according to the following priority:
+            //
+            // 1. Route to the bitcoin testnet canister if that canister exists.
+            //
+            // 2. Route to a bitcoin subnet (a subnet with the bitcoin testnet feature
+            //    enabled if one exists).
+            //
+            // 3. Route to own subnet.
+            if route_to_bitcoin_canister {
+                if let Some(canister_id) = network_topology.bitcoin_testnet_canister_id {
+                    // Does the canister exist?
+                    if network_topology
+                        .routing_table
+                        .route(canister_id.get())
+                        .is_some()
+                    {
+                        return SubnetId::from(canister_id.get());
+                    }
+                }
+            }
+
+            network_topology
+                .bitcoin_testnet_subnets()
+                .first()
+                .cloned()
+                .unwrap_or(own_subnet)
+        }
+        BitcoinNetwork::Mainnet | BitcoinNetwork::mainnet => {
+            if route_to_bitcoin_canister {
+                // Route to the mainnet canister ID if it exists, otherwise route to
+                // own subnet.
+                //
+                // Note that the bitcoin mainnet subnet feature was never enabled/used, so, unlike
+                // the bitcoin testnet, there is no bitcoin subnet to route to.
+                network_topology
+                    .bitcoin_mainnet_canister_id
+                    .map(|c| SubnetId::from(c.get()))
+                    .unwrap_or(own_subnet)
+            } else {
+                own_subnet
+            }
+        }
+        BitcoinNetwork::Regtest | BitcoinNetwork::regtest => {
+            // We don't yet support a bitcoin regtest canister. Redirect to own
+            // subnet.
+            own_subnet
         }
     }
 }

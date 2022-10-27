@@ -50,6 +50,8 @@ message NetworkTopology {
     types.v1.SubnetId nns_subnet_id = 3;
     registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
     repeated EcdsaKeyEntry ecdsa_signing_subnets = 5;
+    repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
+    repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
 }
 
 message SetupInitialDkgContext {

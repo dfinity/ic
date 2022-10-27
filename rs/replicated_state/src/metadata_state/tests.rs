@@ -250,7 +250,7 @@ fn init_allocation_ranges_if_empty() {
         routing_table,
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        ecdsa_signing_subnets: Default::default(),
+        ..Default::default()
     };
 
     let mut system_metadata = SystemMetadata::new(own_subnet_id, SubnetType::Application);
@@ -340,7 +340,7 @@ fn generate_new_canister_id() {
         routing_table,
         canister_migrations,
         nns_subnet_id: other_subnet_id,
-        ecdsa_signing_subnets: Default::default(),
+        ..Default::default()
     };
     system_metadata.network_topology = network_topology;
 
@@ -433,7 +433,7 @@ fn roundtrip_encoding() {
         routing_table,
         canister_migrations,
         nns_subnet_id: other_subnet_id,
-        ecdsa_signing_subnets: Default::default(),
+        ..Default::default()
     };
     system_metadata.network_topology = network_topology;
 
@@ -516,7 +516,7 @@ fn empty_network_topology() {
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        ecdsa_signing_subnets: Default::default(),
+        ..Default::default()
     };
 
     assert_eq!(network_topology.bitcoin_testnet_subnets(), vec![]);
@@ -560,7 +560,7 @@ fn network_topology_bitcoin_testnet_subnets() {
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        ecdsa_signing_subnets: Default::default(),
+        ..Default::default()
     };
 
     assert_eq!(
@@ -580,6 +580,7 @@ fn network_topology_ecdsa_subnets() {
         ecdsa_signing_subnets: btreemap! {
             key.clone() => vec![subnet_test_id(1)],
         },
+        ..Default::default()
     };
 
     assert_eq!(
