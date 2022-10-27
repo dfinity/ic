@@ -21,12 +21,12 @@
   synchronize:
     mode: push
     src: "{{ ic_disk_path }}/disk-img.tar.gz"
-    dest: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic/disk-img.tar.gz"
+    dest: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux/disk-img.tar.gz"
   tags: [ "ic_guest" ]
 
 - name: unarchive file disk-img.tar.gz
   unarchive:
-    src: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic_disk-img.tar.gz"
+    src: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux_disk-img.tar.gz"
     dest: "/var/local/ic/disk"
     owner: "root"
     group: "root"

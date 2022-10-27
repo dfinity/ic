@@ -84,8 +84,7 @@
   shell: |
     set -eExuo pipefail
 
-    # Deploy replica images
-    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
     ITEMS=({{ aux_nodes }})
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 

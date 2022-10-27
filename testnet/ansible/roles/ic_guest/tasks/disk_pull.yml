@@ -4,18 +4,19 @@
   shell: |
     set -eExuo pipefail
     # check if disk image is available on the new or the old location for the given hash
-    CDN_URL="https://download.dfinity.systems"
+    CDN_URL="https://download.proxy-global.dfinity.network:8080"
+    DEFAULT_UNIVERSAL_VM_IMG_SHA256="ca2ddfab45f940564503e2edf3d2c02acc05988edde4e3a7400355bd22d69d44"
 
-    disk_types=(generic replica boundary)
+    disk_types=(aux replica boundary)
     declare -A image_cdn=(
       [replica]="${CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
-      [generic]="${CDN_URL}/ic/{{ ic_git_revision }}/generic-guest-os/disk-img"
+      [aux]="${CDN_URL}/farm/universal-vm/${DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux"
       [boundary]="${CDN_URL}/ic/{{ ic_git_revision }}/boundary-os/disk-img{{ bn_image_type }}"
     )
 
     declare -A image_dir=(
       [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
-      [generic]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+      [aux]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
       [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
     )
 
@@ -30,18 +31,26 @@
       if sha256sum -c SHA256SUMS; then return; fi
 
       CDN_BASE_URL="${image_cdn[$disk_type]}"
-      curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.gz" --output disk-img.tar.gz
-      curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.zst" --output disk-img.tar.zst
-      curl --retry 10 --fail "$CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS
+      if [ "$disk_type" == "aux" ]; then
+          curl --retry 10 --fail "$CDN_BASE_URL/universal-vm.img.zst" --output disk-img.zst
 
-      chmod 0644 "disk-img.tar.gz"
-      chown root:root "disk-img.tar.gz"
-      chmod 0644 "disk-img.tar.zst"
-      chown root:root "disk-img.tar.zst"
-      sha256sum -c SHA256SUMS
+          chmod 0644 "disk-img.zst"
+          chown root:root "disk-img.zst"
+      else
+          curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.gz" --output disk-img.tar.gz
+          curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.zst" --output disk-img.tar.zst
+          curl --retry 10 --fail "$CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS
+
+          chmod 0644 "disk-img.tar.gz"
+          chown root:root "disk-img.tar.gz"
+          chmod 0644 "disk-img.tar.zst"
+          chown root:root "disk-img.tar.zst"
+
+          sha256sum -c SHA256SUMS
+      fi
     }
 
-    # download the IC-OS disk images for replica, boundary and generic, in parallel
+    # download the IC-OS disk images for replica, boundary and aux, in parallel
     set +x
     source /usr/bin/env_parallel.bash
     env_parallel curl_disk_img ::: "${disk_types[@]}"
@@ -54,15 +63,15 @@
   until: script_res is not failed
   tags: [ "ic_guest" ]
 
-- name: unarchive file disk-img.tar.gz # noqa risky-shell-pipe
+- name: unarchive image files # noqa risky-shell-pipe
   shell: |
     # if the unpacked file does not exist or if the archive is newer than the unpacked file
     set -eExuo pipefail
 
-    disk_types=(generic replica boundary)
+    disk_types=(replica boundary)
     declare -A image_dir=(
         [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
-        [generic]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+        [aux]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
         [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
     )
 
@@ -72,6 +81,11 @@
        cd "$IMAGE_DIR"
        tar xavf disk-img.tar.gz --sparse
     done
+
+    # unarchive universal VM
+    IMAGE_DIR=${image_dir[aux]}
+    cd "$IMAGE_DIR"
+    zstd -f -d disk-img.zst -o disk.img
   args:
     executable: /bin/bash
   register: script_res

@@ -200,8 +200,6 @@ function generate_subnet_config() {
 
     cp -a ${IC_PREP_DIR}/bin/replica "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/replica"
     cp -a ${IC_PREP_DIR}/bin/orchestrator "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/orchestrator"
-    cp -a ${IC_PREP_DIR}/bin/boundary-node-control-plane "$REPO_ROOT/ic-os/generic-guestos/rootfs/opt/dfinity/boundary-node-control-plane"
-    cp -a ${IC_PREP_DIR}/bin/boundary-node-prober "$REPO_ROOT/ic-os/generic-guestos/rootfs/opt/dfinity/boundary-node-prober"
 
     NODES_NNS=()
     NODES_APP=()
@@ -423,12 +421,19 @@ function build_removable_media() {
         declare -n NODE=$n
         local subnet_idx=${NODE["subnet_idx"]}
         local node_idx=${NODE["node_idx"]}
+        local type=${NODE["type"]}
 
         #echo "${DEPLOYMENT}.$subnet_idx.$node_idx"
         NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
         truncate --size 4M "${OUTPUT}/$NODE_PREFIX.img"
-        mkfs.vfat "${OUTPUT}/$NODE_PREFIX.img"
-        mcopy -i "${OUTPUT}/$NODE_PREFIX.img" -o -s ${TARBALL_DIR}/$NODE_PREFIX/ic-bootstrap.tar ::
+        mkfs.vfat -n CONFIG "${OUTPUT}/$NODE_PREFIX.img"
+
+        # Universal VMs take keys in a different format
+        if [ $type == "aux" ]; then
+            mcopy -i "${OUTPUT}/$NODE_PREFIX.img" -o -s ${CONFIG_DIR}/$NODE_PREFIX/accounts_ssh_authorized_keys ::ssh-authorized-keys
+        else
+            mcopy -i "${OUTPUT}/$NODE_PREFIX.img" -o -s ${TARBALL_DIR}/$NODE_PREFIX/ic-bootstrap.tar ::
+        fi
     done
 }
 
