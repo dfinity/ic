@@ -2,7 +2,7 @@
 A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 """
 
-load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "summary_sha256sum", "tar_extract", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts", "urls_test")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
@@ -116,10 +116,18 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         ],
     )
 
-    summary_sha256sum(
-        name = "version.txt",
-        inputs = image_deps,
-        suffix = "-dev" if mode == "dev" else "",
+    # TODO(IDX-2538): re-enable this (or any other similar) solution when everything will be ready to have ic version that is not git revision.
+    #summary_sha256sum(
+    #    name = "version.txt",
+    #    inputs = image_deps,
+    #    suffix = "-dev" if mode == "dev" else "",
+    #)
+
+    copy_file(
+        name = "copy_version_txt",
+        src = "//bazel:version.txt",
+        out = "version.txt",
+        allow_symlink = True,
     )
 
     copy_file(
