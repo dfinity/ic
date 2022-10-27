@@ -199,6 +199,9 @@ impl Default for BitcoinStateBits {
 /// │              ├── stable_memory.(pbuf|bin)
 /// │              └── software.wasm
 /// │
+/// └── diverged_state_markers
+/// │   └──<hex(round)>
+/// │
 /// └── tmp
 /// └── fs_tmp
 /// ```
@@ -268,6 +271,7 @@ impl StateLayout {
         WriteOnly::check_dir(&self.backups())?;
         WriteOnly::check_dir(&self.checkpoints())?;
         WriteOnly::check_dir(&self.diverged_checkpoints())?;
+        WriteOnly::check_dir(&self.diverged_state_markers())?;
         WriteOnly::check_dir(&self.fs_tmp())?;
         WriteOnly::check_dir(&self.tip_path())?;
         WriteOnly::check_dir(&self.tmp())
@@ -492,36 +496,49 @@ impl StateLayout {
     /// Returns a sorted list of `Height`s for which a checkpoint is available.
     pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.checkpoints()).map_err(|err| LayoutError::IoError {
-            path: "NO_PATH".into(),
+            path: self.checkpoints(),
             message: format!("Failed to get all checkpoints (err kind: {:?})", err.kind()),
             io_err: err,
         })?;
 
-        parse_checkpoint_heights(&names[..])
+        parse_and_sort_checkpoint_heights(&names[..])
     }
 
-    /// Returns a sorted list of `Height`s of checkpoints that were marked as
+    /// Returns a sorted in ascended order list of `Height`s of checkpoints that were marked as
     /// diverged.
     pub fn diverged_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.diverged_checkpoints()).map_err(|io_err| {
             LayoutError::IoError {
-                path: "NO_PATH".into(),
+                path: self.diverged_checkpoints(),
                 message: "failed to enumerate diverged checkpoints".to_string(),
                 io_err,
             }
         })?;
-        parse_checkpoint_heights(&names[..])
+        parse_and_sort_checkpoint_heights(&names[..])
     }
 
-    /// Returns a sorted list of heights of checkpoints that were "backed up"
+    /// Returns a sorted in ascending order list of `Height`s of states that were marked as
+    /// diverged.
+    pub fn diverged_state_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let names = dir_file_names(&self.diverged_state_markers()).map_err(|io_err| {
+            LayoutError::IoError {
+                path: self.diverged_state_markers(),
+                message: "failed to enumerate diverged states".to_string(),
+                io_err,
+            }
+        })?;
+        parse_and_sort_checkpoint_heights(&names[..])
+    }
+
+    /// Returns a sorted in ascended order list of heights of checkpoints that were "backed up"
     /// for future inspection because they corresponded to diverged states.
     pub fn backup_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.backups()).map_err(|io_err| LayoutError::IoError {
-            path: "NO_PATH".into(),
+            path: self.backups(),
             message: "failed to enumerate backups".to_string(),
             io_err,
         })?;
-        parse_checkpoint_heights(&names[..])
+        parse_and_sort_checkpoint_heights(&names[..])
     }
 
     /// Returns a path to a diverged checkpoint given its height.
@@ -592,6 +609,34 @@ impl StateLayout {
                 io_err: err,
             }),
         }
+    }
+
+    /// Path of diverged state marker for the given height.
+    pub fn diverged_state_marker_path(&self, height: Height) -> PathBuf {
+        self.diverged_state_markers()
+            .join(self.checkpoint_name(height))
+    }
+
+    /// Creates a diverged state marker for the given height.
+    ///
+    /// Postcondition:
+    ///   h ∈ self.diverged_state_heights()
+    pub fn create_diverged_state_marker(&self, height: Height) -> Result<(), LayoutError> {
+        open_for_write(&self.diverged_state_marker_path(height))?;
+        Ok(())
+    }
+
+    /// Removes a diverged checkpoint given its height.
+    ///
+    /// Precondition:
+    ///   h ∈ self.diverged_state_heights()
+    pub fn remove_diverged_state_marker(&self, height: Height) -> Result<(), LayoutError> {
+        let path = self.diverged_state_marker_path(height);
+        std::fs::remove_file(&path).map_err(|err| LayoutError::IoError {
+            path,
+            message: "Failed to remove diverged state marker.".to_string(),
+            io_err: err,
+        })
     }
 
     /// Removes a diverged checkpoint given its height.
@@ -711,6 +756,10 @@ impl StateLayout {
 
     fn diverged_checkpoints(&self) -> PathBuf {
         self.root.join("diverged_checkpoints")
+    }
+
+    fn diverged_state_markers(&self) -> PathBuf {
+        self.root.join("diverged_state_markers")
     }
 
     fn backups(&self) -> PathBuf {
@@ -850,7 +899,7 @@ where
     Ok(ids)
 }
 
-fn parse_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, LayoutError> {
+fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, LayoutError> {
     let mut heights = names
         .iter()
         .map(|name| {
@@ -1720,6 +1769,8 @@ mod test {
         ids::canister_test_id,
         messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     };
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_tmpdir::tmpdir;
     use std::sync::Arc;
 
     fn default_canister_state_bits() -> CanisterStateBits {
@@ -1748,6 +1799,29 @@ mod test {
             task_queue: vec![],
             global_timer_nanos: None,
         }
+    }
+
+    #[test]
+    fn test_state_layout_diverged_state_paths() {
+        with_test_replica_logger(|log| {
+            let tempdir = tmpdir("state_layout");
+            let root_path = tempdir.path().to_path_buf();
+            let state_layout = StateLayout::try_new(log, root_path.clone()).unwrap();
+            state_layout
+                .create_diverged_state_marker(Height::new(1))
+                .unwrap();
+            assert_eq!(
+                state_layout.diverged_state_heights().unwrap(),
+                vec![Height::new(1)],
+            );
+            assert!(state_layout
+                .diverged_state_marker_path(Height::new(1))
+                .starts_with(root_path.join("diverged_state_markers")));
+            state_layout
+                .remove_diverged_state_marker(Height::new(1))
+                .unwrap();
+            assert!(state_layout.diverged_state_heights().unwrap().is_empty());
+        });
     }
 
     #[test]
