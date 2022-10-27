@@ -96,7 +96,7 @@ pub struct StateManagerMetrics {
     state_manager_error_count: IntCounterVec,
     checkpoint_op_duration: HistogramVec,
     api_call_duration: HistogramVec,
-    last_diverged: IntGauge,
+    last_diverged_state_timestamp: IntGauge,
     latest_certified_height: IntGauge,
     max_resident_height: IntGauge,
     min_resident_height: IntGauge,
@@ -208,7 +208,7 @@ impl StateManagerMetrics {
             &["source"],
         );
 
-        let last_diverged = metrics_registry.int_gauge(
+        let last_diverged_state_timestamp = metrics_registry.int_gauge(
             "state_manager_last_diverged_state_timestamp_seconds",
             "The (UTC) timestamp of the last diverged state report.",
         );
@@ -252,7 +252,7 @@ impl StateManagerMetrics {
             state_manager_error_count,
             checkpoint_op_duration,
             api_call_duration,
-            last_diverged,
+            last_diverged_state_timestamp,
             latest_certified_height,
             max_resident_height,
             min_resident_height,
@@ -625,6 +625,9 @@ const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
 /// The number of diverged states to keep before we start deleting the old ones.
 const MAX_ARCHIVED_CHECKPOINTS_TO_KEEP: usize = 2;
 
+/// The number of diverged state markers to keep.
+const MAX_DIVERGED_STATE_MARKERS_TO_KEEP: usize = 100;
+
 /// The number of extra checkpoints to keep for state sync.
 const EXTRA_CHECKPOINTS_TO_KEEP: usize = 1;
 
@@ -805,42 +808,69 @@ fn cleanup_diverged_states(log: &ReplicaLogger, layout: &StateLayout) {
             }
         }
     }
+    if let Ok(state_heights) = layout.diverged_state_heights() {
+        let to_remove = state_heights
+            .len()
+            .saturating_sub(MAX_DIVERGED_STATE_MARKERS_TO_KEEP);
+        for (i, h) in state_heights.iter().enumerate() {
+            if i < to_remove
+                || path_age(log, &layout.diverged_state_marker_path(*h))
+                    > ARCHIVED_CHECKPOINT_MAX_AGE
+            {
+                match layout.remove_diverged_state_marker(*h) {
+                    Ok(()) => info!(log, "Successfully removed diverged state marker {}", h),
+                    Err(err) => info!(log, "{}", err),
+                }
+            }
+        }
+    }
 }
 
-fn report_last_diverged_checkpoint(
+fn report_last_diverged_state(
     log: &ReplicaLogger,
     metrics: &StateManagerMetrics,
     state_layout: &StateLayout,
 ) {
+    let mut diverged_paths = std::vec::Vec::new();
+    let mut last_time = SystemTime::UNIX_EPOCH;
     match state_layout.diverged_checkpoint_heights() {
         Err(e) => warn!(log, "failed to enumerate diverged checkpoints: {}", e),
         Ok(heights) => {
-            let mut last_time = SystemTime::UNIX_EPOCH;
             for h in heights {
-                let p = state_layout.diverged_checkpoint_path(h);
-                match p
-                    .metadata()
-                    .and_then(|m| m.created().or_else(|_| m.modified()))
-                {
-                    Ok(ctime) => {
-                        last_time = last_time.max(ctime);
-                    }
-                    Err(e) => info!(
-                        log,
-                        "Failed to stat diverged checkpoint directory {}: {}",
-                        p.display(),
-                        e
-                    ),
-                }
+                diverged_paths.push(state_layout.diverged_checkpoint_path(h));
             }
-            metrics.last_diverged.set(
-                last_time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64,
-            )
         }
     }
+    match state_layout.diverged_state_heights() {
+        Err(e) => warn!(log, "failed to enumerate diverged states: {}", e),
+        Ok(heights) => {
+            for h in heights {
+                diverged_paths.push(state_layout.diverged_state_marker_path(h));
+            }
+        }
+    }
+    for p in diverged_paths {
+        match p
+            .metadata()
+            .and_then(|m| m.created().or_else(|_| m.modified()))
+        {
+            Ok(ctime) => {
+                last_time = last_time.max(ctime);
+            }
+            Err(e) => info!(
+                log,
+                "Failed to stat diverged checkpoint directory {}: {}",
+                p.display(),
+                e
+            ),
+        }
+    }
+    metrics.last_diverged_state_timestamp.set(
+        last_time
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64,
+    )
 }
 
 /// Type for the return value of populate_metadata
@@ -1465,7 +1495,7 @@ impl StateManagerImpl {
                 .expect("failed to send ComputeManifestRequest");
         }
 
-        report_last_diverged_checkpoint(&log, &metrics, &state_layout);
+        report_last_diverged_state(&log, &metrics, &state_layout);
 
         Self {
             log: log.clone(),
@@ -2550,7 +2580,6 @@ impl StateManager for StateManagerImpl {
             .api_call_duration
             .with_label_values(&["deliver_state_certification"])
             .start_timer();
-
         let certification_height = certification.height;
         let mut states = self.states.write();
         if let Some(metadata) = states
@@ -2558,13 +2587,21 @@ impl StateManager for StateManagerImpl {
             .get_mut(&certification.height)
         {
             let hash = metadata.certified_state_hash.clone();
-            assert_eq!(
-                certification.signed.content.hash.get_ref(),
-                &hash,
-                "delivered certification has invalid hash, expected {:?}, received {:?}",
-                hash,
-                certification.signed.content.hash
-            );
+            if certification.signed.content.hash.get_ref() != &hash {
+                if let Err(err) = self
+                    .state_layout
+                    .create_diverged_state_marker(certification_height)
+                {
+                    error!(
+                        self.log,
+                        "Failed to mark state @{} diverged: {}", certification_height, err
+                    );
+                }
+                panic!(
+                    "delivered certification has invalid hash, expected {:?}, received {:?}",
+                    hash, certification.signed.content.hash
+                );
+            }
             let latest_certified =
                 update_latest_height(&self.latest_certified_height, certification.height);
 

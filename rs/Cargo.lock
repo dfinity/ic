@@ -8163,6 +8163,8 @@ dependencies = [
  "ic-replicated-state",
  "ic-sys",
  "ic-test-utilities",
+ "ic-test-utilities-logger",
+ "ic-test-utilities-tmpdir",
  "ic-types",
  "ic-utils 0.8.0",
  "ic-wasm-types",

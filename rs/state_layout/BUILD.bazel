@@ -31,6 +31,8 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces",
     "//rs/test_utilities",
+    "//rs/test_utilities/logger",
+    "//rs/test_utilities/tmpdir",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

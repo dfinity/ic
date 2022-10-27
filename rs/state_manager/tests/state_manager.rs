@@ -2818,7 +2818,7 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
 // For a divergence we expect the first of the diverged state to get stored for troubleshooting
 // and the state to reset to the pre-divergence checkpoint.
 #[test]
-fn report_diverged_state() {
+fn report_diverged_checkpoint() {
     state_manager_crash_test(
         vec![Box::new(|state_manager: StateManagerImpl| {
             let (_, state) = state_manager.take_tip();
@@ -2851,6 +2851,11 @@ fn report_diverged_state() {
                     .diverged_checkpoint_heights()
                     .unwrap()
             );
+            assert!(state_manager
+                .state_layout()
+                .diverged_state_heights()
+                .unwrap()
+                .is_empty());
             let last_diverged = fetch_int_gauge(
                 metrics,
                 "state_manager_last_diverged_state_timestamp_seconds",
@@ -2862,7 +2867,44 @@ fn report_diverged_state() {
 }
 
 #[test]
-fn remove_too_many_diverged_states() {
+fn report_diverged_state() {
+    state_manager_crash_test(
+        vec![Box::new(|state_manager: StateManagerImpl| {
+            let (_height, state) = state_manager.take_tip();
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+            let mut certification = certify_height(&state_manager, height(1));
+            let (_height, state) = state_manager.take_tip();
+            state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+            // Hack the certification so it is a divergence
+            certification.height = height(2);
+
+            state_manager.deliver_state_certification(certification);
+        })],
+        |metrics, state_manager| {
+            assert_eq!(
+                vec![height(2)],
+                state_manager
+                    .state_layout()
+                    .diverged_state_heights()
+                    .unwrap()
+            );
+            assert!(state_manager
+                .state_layout()
+                .diverged_checkpoint_heights()
+                .unwrap()
+                .is_empty());
+            let last_diverged = fetch_int_gauge(
+                metrics,
+                "state_manager_last_diverged_state_timestamp_seconds",
+            )
+            .unwrap();
+            assert!(last_diverged > 0);
+        },
+    );
+}
+
+#[test]
+fn remove_too_many_diverged_checkpoints() {
     fn diverge_at(state_manager: StateManagerImpl, divergence: u64) {
         for i in 1..divergence {
             let (_, state) = state_manager.take_tip();
@@ -2890,6 +2932,47 @@ fn remove_too_many_diverged_states() {
             );
         },
     );
+}
+
+#[test]
+fn remove_too_many_diverged_states() {
+    fn diverge_state_at(state_manager: StateManagerImpl, divergence: u64) {
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        let mut certification = certify_height(&state_manager, height(1));
+        for i in 2..(divergence + 1) {
+            let (_height, state) = state_manager.take_tip();
+            state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata);
+        }
+        // Hack the certification so it is a divergence
+        certification.height = height(divergence);
+
+        state_manager.deliver_state_certification(certification);
+    }
+    let mut divergences = std::vec::Vec::<
+        Box<dyn FnOnce(StateManagerImpl) + std::panic::RefUnwindSafe + std::panic::UnwindSafe>,
+    >::new();
+
+    for i in 2..301 {
+        divergences.push(Box::new(move |state_manager: StateManagerImpl| {
+            diverge_state_at(state_manager, i)
+        }));
+    }
+    state_manager_crash_test(divergences, |_metrics, state_manager| {
+        let num_markers = state_manager
+            .state_layout()
+            .diverged_state_heights()
+            .unwrap()
+            .len();
+        assert_eq!(
+            state_manager
+                .state_layout()
+                .diverged_state_heights()
+                .unwrap()[num_markers - 1],
+            height(300)
+        );
+        assert!(num_markers <= 100);
+    });
 }
 
 #[test]
