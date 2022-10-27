@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 candid = "0.8.1"
 ic-base-types = { path = "../types/base_types" }
+ic-btc-types = { path = "../bitcoin/types/public" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }

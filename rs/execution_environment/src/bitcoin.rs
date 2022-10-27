@@ -11,7 +11,7 @@ use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext, ReplicatedState,
 };
-use ic_types::{messages::Request, Cycles, PrincipalId};
+use ic_types::{messages::Request, CanisterId, Cycles};
 
 // A number of last transactions in a block chain to calculate fee percentiles.
 // Assumed to be ~10'000 transactions to cover the last ~4-10 blocks.
@@ -188,22 +188,22 @@ pub fn send_transaction(
 /// Handles a `bitcoin_get_successors` request.
 /// Returns Ok if the request has been accepted, and an error otherwise.
 pub fn get_successors(
-    bitcoin_canisters: &[PrincipalId],
+    privileged_access: &[CanisterId],
     request: &Request,
     state: &mut ReplicatedState,
 ) -> Result<Option<Vec<u8>>, UserError> {
-    if !bitcoin_canisters.contains(&request.sender().get()) {
+    if !privileged_access.contains(&request.sender()) {
         return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             String::from("Permission denied."),
         ));
     }
 
-    // Remove follow-up responses for canisters that are no longer considered "bitcoin canisters".
+    // Remove follow-up responses for canisters that no longer have access to this API.
     state
         .metadata
         .bitcoin_get_successors_follow_up_responses
-        .retain(|sender, _| bitcoin_canisters.contains(&sender.get()));
+        .retain(|sender, _| privileged_access.contains(sender));
 
     match BitcoinGetSuccessorsArgs::decode(request.method_payload()) {
         Ok(get_successors_request) => {
