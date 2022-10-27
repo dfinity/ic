@@ -1003,6 +1003,12 @@ def external_crates_repository(name, annotations):
             "wasm-bindgen": crate.spec(
                 version = "^0.2",
             ),
+            "wasm-encoder": crate.spec(
+                version = "^0.18.0",
+            ),
+            "wasmparser": crate.spec(
+                version = "^0.92.0",
+            ),
             "wasmtime": crate.spec(
                 version = "^1.0.1",
                 default_features = False,

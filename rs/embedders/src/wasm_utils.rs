@@ -13,6 +13,7 @@ pub mod errors;
 pub mod instrumentation;
 pub mod validation;
 mod wasm_module_builder;
+pub mod wasm_transform;
 
 use instrumentation::instrument;
 use validation::validate_wasm_binary;
