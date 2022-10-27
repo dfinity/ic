@@ -218,6 +218,19 @@ export default CANISTER_ID_ALIASES;
 EOF
 }
 
+function setup_cgi() {
+    local -r IP="$(ip -brief -family inet address show scope global | grep -w UP | grep -o -m1 "[0-9]*\.[0-9*\.[0-9]*\.[0-9]*")"
+    cat >"/run/ic-node/etc/nginx/conf.d/cgi.conf" <<EOF
+# setup server for the cgi
+server {
+	listen ${IP}:80;
+
+	# Fast cgi support from fcgiwrap
+  include /etc/nginx/fcgiwrap.conf;
+}
+EOF
+}
+
 function main() {
     read_variables
     copy_certs
@@ -226,6 +239,7 @@ function main() {
     setup_geolite2_dbs
     setup_ic_router
     setup_canister_id_alises
+    setup_cgi
 }
 
 main "$@"

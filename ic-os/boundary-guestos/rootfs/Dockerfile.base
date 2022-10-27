@@ -237,7 +237,9 @@ RUN \
         udev \
         usbutils \
         vim \
-        zstd
+        zstd \
+        fcgiwrap \
+        incron
 
 # For the common image, just use common to use the default kernel of Ubuntu
 # For the SEV-SNP image, use "snp"  -- this can
