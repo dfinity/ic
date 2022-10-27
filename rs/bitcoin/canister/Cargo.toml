@@ -21,13 +21,13 @@ ic-state-layout = { path = "../../state_layout" }
 ic-types = { path = "../../types/types" }
 lazy_static = "1.4.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.10.4"
+prost = "0.11.0"
 serde = "1.0.132"
 serde_bytes = "0.11"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 
 [build-dependencies]
-prost-build = "0.10.4"
+prost-build = "0.11.0"
 
 [[example]]
 name = "build-utxo-set"

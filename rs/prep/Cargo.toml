@@ -31,7 +31,7 @@ ic-types = { path = "../types/types" }
 json5 = "0.4.1"
 openssl = "0.10.29"
 maplit = "1.0.2"
-prost = "0.10.4"
+prost = "0.11.0"
 rand = "0.8"
 reqwest = { version = "0.11.1", features = [ "blocking", "native-tls" ] }
 serde = { version = "1.0.99", features = ["derive"] }

@@ -16,8 +16,8 @@ pub struct Gtc {
     #[prost(message, optional, tag = "4")]
     pub donate_account_recipient_neuron_id:
         ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-    //// The ID of the Neuron that the funds of all unclaimed GTC accounts will be
-    //// transferred to when the `forward_whitelisted_unclaimed_accounts` GTC method is called.
+    /// The ID of the Neuron that the funds of all unclaimed GTC accounts will be
+    /// transferred to when the `forward_whitelisted_unclaimed_accounts` GTC method is called.
     #[prost(message, optional, tag = "5")]
     pub forward_whitelisted_unclaimed_accounts_recipient_neuron_id:
         ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,

@@ -35,5 +35,5 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 maplit = "1.0.2"
-prost = "0.10.4"
+prost = "0.11.0"
 reqwest = "0.11.1"

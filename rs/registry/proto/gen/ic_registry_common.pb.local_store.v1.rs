@@ -44,3 +44,16 @@ pub enum MutationType {
     /// The value was UNSET in this delta.
     Unset = 2,
 }
+impl MutationType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            MutationType::InvalidState => "INVALID_STATE",
+            MutationType::Set => "SET",
+            MutationType::Unset => "UNSET",
+        }
+    }
+}

@@ -41,8 +41,8 @@ pub mod registry_stable_storage {
     /// RegistryDelta structure, which is indexed by key:
     ///
     /// ```text
-    ///     \[key1\] => { (v1, value11), (v3, value12) }    // first delta
-    ///     \[key2\] => { (v2, value21), (v3, value22) }    // second delta
+    ///      \[key1\] => { (v1, value11), (v3, value12) }    // first delta
+    ///      \[key2\] => { (v2, value21), (v3, value22) }    // second delta
     /// ```
     ///
     /// VERSION_1 representation is based on ChangelogEntry structure
@@ -50,10 +50,10 @@ pub mod registry_stable_storage {
     /// applied to the registry:
     ///
     /// ```text
-    ///     \[v1\] => { (UPSERT, key1, value11) } // first changelog entry
-    ///     \[v2\] => { (UPSERT, key2, value21) } // second changelog entry
-    ///     \[v3\] => { (UPSERT, key1, value12)
-    ///             , (UPSERT, key2, value22) } // third changelog entry
+    ///      \[v1\] => { (UPSERT, key1, value11) } // first changelog entry
+    ///      \[v2\] => { (UPSERT, key2, value21) } // second changelog entry
+    ///      \[v3\] => { (UPSERT, key1, value12)
+    ///              , (UPSERT, key2, value22) } // third changelog entry
     /// ```
     ///
     /// Those representations are almost equivalent. It's easy to go
@@ -63,8 +63,8 @@ pub mod registry_stable_storage {
     /// In order to make the conversion unique, we normalize entries in the
     /// changelog:
     ///
-    ///   * We sort keys in each mutation request.
-    ///   * We replace INSERT/UPDATE/UPSERT with just UPSERT.
+    ///    * We sort keys in each mutation request.
+    ///    * We replace INSERT/UPDATE/UPSERT with just UPSERT.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Version {
@@ -73,6 +73,18 @@ pub mod registry_stable_storage {
         Unspecified = 0,
         /// The representation based on changelog (tag 3).
         Version1 = 1,
+    }
+    impl Version {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Version::Unspecified => "VERSION_UNSPECIFIED",
+                Version::Version1 => "VERSION_1",
+            }
+        }
     }
 }
 /// A container for the what gets written to stable storage,

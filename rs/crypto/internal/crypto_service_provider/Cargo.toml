@@ -37,7 +37,7 @@ ic-types = { path = "../../../types/types" }
 ic-utils = { path = "../../../utils" }
 openssl = "0.10.38"
 parking_lot = "0.12.1"
-prost = "0.10.4"
+prost = "0.11.0"
 rand = "0.8"
 rand_chacha = "0.3"
 serde = { version = "1.0.99", features = [ "derive" ] }

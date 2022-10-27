@@ -285,3 +285,17 @@ pub enum HttpMethod {
     Post = 2,
     Head = 3,
 }
+impl HttpMethod {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            HttpMethod::Unspecified => "HTTP_METHOD_UNSPECIFIED",
+            HttpMethod::Get => "HTTP_METHOD_GET",
+            HttpMethod::Post => "HTTP_METHOD_POST",
+            HttpMethod::Head => "HTTP_METHOD_HEAD",
+        }
+    }
+}

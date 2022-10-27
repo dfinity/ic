@@ -153,12 +153,12 @@ pub mod sns_init_payload {
 /// As more of the swap funds are swapped in future rounds, the voting power
 /// multiplier will approach 1.0. The following preconditions must be met for
 /// it to be a valid distribution:
-///    - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
-///    - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
-///    - airdrop_distribution.airdrop_neurons.stake_e8s.sum <= u64:MAX
-///    - swap_distribution.initial_swap_amount_e8s > 0
-///    - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
-///    - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
+///     - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
+///     - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
+///     - airdrop_distribution.airdrop_neurons.stake_e8s.sum <= u64:MAX
+///     - swap_distribution.initial_swap_amount_e8s > 0
+///     - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
+///     - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
 #[derive(
     candid::CandidType,
     candid::Deserialize,

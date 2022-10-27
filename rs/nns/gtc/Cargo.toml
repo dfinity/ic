@@ -30,7 +30,7 @@ ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 libsecp256k1 = "0.5.0"
-prost = "0.10.4"
+prost = "0.11.0"
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 sha3 = "0.9.1"

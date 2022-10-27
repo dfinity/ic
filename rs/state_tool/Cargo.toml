@@ -24,7 +24,7 @@ ic-crypto-sha = { path = "../crypto/sha" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-prost = "0.10.4"
+prost = "0.11.0"
 scoped_threadpool = "0.1.*"
 
 [dev-dependencies]

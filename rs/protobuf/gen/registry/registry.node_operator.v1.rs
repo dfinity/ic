@@ -38,7 +38,7 @@ pub struct NodeOperatorRecord {
     #[prost(string, optional, tag = "6")]
     pub ipv6: ::core::option::Option<::prost::alloc::string::String>,
 }
-//// The payload of a request to remove Node Operator records from the Registry
+/// The payload of a request to remove Node Operator records from the Registry
 #[derive(
     candid::CandidType,
     serde::Serialize,

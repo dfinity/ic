@@ -456,8 +456,8 @@ enum NnsFunction {
   // versions. The upgrade is performed when the subnet creates the next
   // regular CUP.
   NNS_FUNCTION_UPDATE_SUBNET_REPLICA_VERSION = 11;
-  /// Clear the provisional whitelist.
-  /// The proposal changes the provisional whitelist to the empty list.
+  // Clear the provisional whitelist.
+  // The proposal changes the provisional whitelist to the empty list.
   NNS_FUNCTION_CLEAR_PROVISIONAL_WHITELIST = 12;
   // Removes a node from a subnet. The node must be currently assigned to a
   // subnet.
@@ -502,12 +502,12 @@ enum NnsFunction {
   NNS_FUNCTION_COMPLETE_CANISTER_MIGRATION = 29;
   // Add a new SNS canister WASM
   NNS_FUNCTION_ADD_SNS_WASM = 30;
-  /// Change the subnet node membership. In a way, this function combines the separate
-  /// functions for adding and removing nodes from the subnet record, but adds the property
-  /// of atomic node replacement (node swap) on top.
-  ///
-  /// The nodes that are being added to the subnet must be currently unassigned.
-  /// The nodes that are being removed from the subnet must be currently assigned to the subnet.
+  // Change the subnet node membership. In a way, this function combines the separate
+  // functions for adding and removing nodes from the subnet record, but adds the property
+  // of atomic node replacement (node swap) on top.
+  //
+  // The nodes that are being added to the subnet must be currently unassigned.
+  // The nodes that are being removed from the subnet must be currently assigned to the subnet.
   NNS_FUNCTION_CHANGE_SUBNET_MEMBERSHIP = 31;
   // Updates the available subnet types in the cycles minting canister.
   NNS_FUNCTION_UPDATE_SUBNET_TYPE = 32;

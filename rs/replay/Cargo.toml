@@ -45,7 +45,7 @@ ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
-prost = "0.10.4"
+prost = "0.11.0"
 rand = "0.8"
 serde = { version = "1.0.115", features = ["derive"] }
 serde_json = "1.0.40"

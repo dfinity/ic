@@ -505,6 +505,33 @@ pub mod governance_error {
         /// The NeuronId is invalid.
         InvalidNeuronId = 16,
     }
+    impl ErrorType {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                ErrorType::Unspecified => "ERROR_TYPE_UNSPECIFIED",
+                ErrorType::Unavailable => "ERROR_TYPE_UNAVAILABLE",
+                ErrorType::NotAuthorized => "ERROR_TYPE_NOT_AUTHORIZED",
+                ErrorType::NotFound => "ERROR_TYPE_NOT_FOUND",
+                ErrorType::InvalidCommand => "ERROR_TYPE_INVALID_COMMAND",
+                ErrorType::RequiresNotDissolving => "ERROR_TYPE_REQUIRES_NOT_DISSOLVING",
+                ErrorType::RequiresDissolving => "ERROR_TYPE_REQUIRES_DISSOLVING",
+                ErrorType::RequiresDissolved => "ERROR_TYPE_REQUIRES_DISSOLVED",
+                ErrorType::AccessControlList => "ERROR_TYPE_ACCESS_CONTROL_LIST",
+                ErrorType::ResourceExhausted => "ERROR_TYPE_RESOURCE_EXHAUSTED",
+                ErrorType::PreconditionFailed => "ERROR_TYPE_PRECONDITION_FAILED",
+                ErrorType::External => "ERROR_TYPE_EXTERNAL",
+                ErrorType::NeuronLocked => "ERROR_TYPE_NEURON_LOCKED",
+                ErrorType::InsufficientFunds => "ERROR_TYPE_INSUFFICIENT_FUNDS",
+                ErrorType::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
+                ErrorType::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
+                ErrorType::InvalidNeuronId => "ERROR_TYPE_INVALID_NEURON_ID",
+            }
+        }
+    }
 }
 /// A ballot recording a neuron's vote and voting power.
 /// A ballot's vote can be set by a direct vote from the neuron or can be set
@@ -957,7 +984,7 @@ pub struct Governance {
     #[prost(message, optional, tag = "8")]
     pub parameters: ::core::option::Option<NervousSystemParameters>,
     /// TODO IC-1168: update when rewards are introduced
-    ///  The latest reward event.
+    ///   The latest reward event.
     #[prost(message, optional, tag = "9")]
     pub latest_reward_event: ::core::option::Option<RewardEvent>,
     /// The in-flight neuron ledger commands as a map from neuron IDs
@@ -1253,6 +1280,19 @@ pub mod governance {
         /// In this mode, various operations are not allowed in order to ensure the
         /// integrity of the initial token swap.
         PreInitializationSwap = 2,
+    }
+    impl Mode {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Mode::Unspecified => "MODE_UNSPECIFIED",
+                Mode::Normal => "MODE_NORMAL",
+                Mode::PreInitializationSwap => "MODE_PRE_INITIALIZATION_SWAP",
+            }
+        }
     }
 }
 /// Request message for 'get_metadata'.
@@ -2146,8 +2186,8 @@ pub mod claim_swap_neurons_request {
         /// Specifically, the PrincipalId who is the controller of the NNS neuron
         /// that invested in the decentralization sale via the Community Fund will
         /// be granted the following permissions:
-        ///    - NeuronPermissionType::SubmitProposal
-        ///    - NeuronPermissionType::Vote
+        ///     - NeuronPermissionType::SubmitProposal
+        ///     - NeuronPermissionType::Vote
         /// This field is not set for other types of participants, therefore it is optional.
         #[prost(message, optional, tag = "2")]
         pub hotkey: ::core::option::Option<::ic_base_types::PrincipalId>,
@@ -2267,6 +2307,27 @@ pub enum NeuronPermissionType {
     /// given ledger account.
     DisburseMaturity = 8,
 }
+impl NeuronPermissionType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NeuronPermissionType::Unspecified => "NEURON_PERMISSION_TYPE_UNSPECIFIED",
+            NeuronPermissionType::ConfigureDissolveState => {
+                "NEURON_PERMISSION_TYPE_CONFIGURE_DISSOLVE_STATE"
+            }
+            NeuronPermissionType::ManagePrincipals => "NEURON_PERMISSION_TYPE_MANAGE_PRINCIPALS",
+            NeuronPermissionType::SubmitProposal => "NEURON_PERMISSION_TYPE_SUBMIT_PROPOSAL",
+            NeuronPermissionType::Vote => "NEURON_PERMISSION_TYPE_VOTE",
+            NeuronPermissionType::Disburse => "NEURON_PERMISSION_TYPE_DISBURSE",
+            NeuronPermissionType::Split => "NEURON_PERMISSION_TYPE_SPLIT",
+            NeuronPermissionType::MergeMaturity => "NEURON_PERMISSION_TYPE_MERGE_MATURITY",
+            NeuronPermissionType::DisburseMaturity => "NEURON_PERMISSION_TYPE_DISBURSE_MATURITY",
+        }
+    }
+}
 /// The types of votes a neuron can issue.
 #[derive(
     candid::CandidType,
@@ -2292,6 +2353,19 @@ pub enum Vote {
     Yes = 1,
     /// A vote for a proposal to be rejected.
     No = 2,
+}
+impl Vote {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Vote::Unspecified => "VOTE_UNSPECIFIED",
+            Vote::Yes => "VOTE_YES",
+            Vote::No => "VOTE_NO",
+        }
+    }
 }
 #[derive(
     candid::CandidType,
@@ -2320,6 +2394,22 @@ pub enum ProposalDecisionStatus {
     Executed = 4,
     /// The proposal was adopted, but execution failed.
     Failed = 5,
+}
+impl ProposalDecisionStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ProposalDecisionStatus::Unspecified => "PROPOSAL_DECISION_STATUS_UNSPECIFIED",
+            ProposalDecisionStatus::Open => "PROPOSAL_DECISION_STATUS_OPEN",
+            ProposalDecisionStatus::Rejected => "PROPOSAL_DECISION_STATUS_REJECTED",
+            ProposalDecisionStatus::Adopted => "PROPOSAL_DECISION_STATUS_ADOPTED",
+            ProposalDecisionStatus::Executed => "PROPOSAL_DECISION_STATUS_EXECUTED",
+            ProposalDecisionStatus::Failed => "PROPOSAL_DECISION_STATUS_FAILED",
+        }
+    }
 }
 /// A proposal's status, with respect to reward distribution.
 #[derive(
@@ -2350,4 +2440,18 @@ pub enum ProposalRewardStatus {
     /// The proposal has been taken into account in a reward event, i.e.,
     /// the associated rewards have been settled.
     Settled = 3,
+}
+impl ProposalRewardStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ProposalRewardStatus::Unspecified => "PROPOSAL_REWARD_STATUS_UNSPECIFIED",
+            ProposalRewardStatus::AcceptVotes => "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES",
+            ProposalRewardStatus::ReadyToSettle => "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE",
+            ProposalRewardStatus::Settled => "PROPOSAL_REWARD_STATUS_SETTLED",
+        }
+    }
 }

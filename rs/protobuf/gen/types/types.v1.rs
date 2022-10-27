@@ -62,6 +62,19 @@ pub enum NiDkgTag {
     LowThreshold = 1,
     HighThreshold = 2,
 }
+impl NiDkgTag {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NiDkgTag::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
+            NiDkgTag::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
+            NiDkgTag::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
+        }
+    }
+}
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct DkgMessage {
     #[prost(message, optional, tag = "5")]
@@ -428,6 +441,32 @@ pub enum KeyTranscriptCreationState {
     ReshareOfUnmaskedParams = 3,
     XnetReshareOfUnmaskedParams = 4,
     Created = 5,
+}
+impl KeyTranscriptCreationState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            KeyTranscriptCreationState::BeginUnspecified => {
+                "KEY_TRANSCRIPT_CREATION_STATE_BEGIN_UNSPECIFIED"
+            }
+            KeyTranscriptCreationState::RandomTranscriptParams => {
+                "KEY_TRANSCRIPT_CREATION_STATE_RANDOM_TRANSCRIPT_PARAMS"
+            }
+            KeyTranscriptCreationState::ReshareOfMaskedParams => {
+                "KEY_TRANSCRIPT_CREATION_STATE_RESHARE_OF_MASKED_PARAMS"
+            }
+            KeyTranscriptCreationState::ReshareOfUnmaskedParams => {
+                "KEY_TRANSCRIPT_CREATION_STATE_RESHARE_OF_UNMASKED_PARAMS"
+            }
+            KeyTranscriptCreationState::XnetReshareOfUnmaskedParams => {
+                "KEY_TRANSCRIPT_CREATION_STATE_XNET_RESHARE_OF_UNMASKED_PARAMS"
+            }
+            KeyTranscriptCreationState::Created => "KEY_TRANSCRIPT_CREATION_STATE_CREATED",
+        }
+    }
 }
 #[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpPackage {

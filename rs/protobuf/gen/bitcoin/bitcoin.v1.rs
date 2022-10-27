@@ -245,3 +245,17 @@ pub enum Network {
     Mainnet = 2,
     Regtest = 3,
 }
+impl Network {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Network::Unspecified => "NETWORK_UNSPECIFIED",
+            Network::Testnet => "NETWORK_TESTNET",
+            Network::Mainnet => "NETWORK_MAINNET",
+            Network::Regtest => "NETWORK_REGTEST",
+        }
+    }
+}

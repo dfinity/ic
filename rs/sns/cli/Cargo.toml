@@ -33,7 +33,7 @@ ic-sns-wasm = { path = "../../nns/sns-wasm" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.10.4"
+prost = "0.11.0"
 rand = "0.8"
 regex = "1.5.6"
 serde_json = { version = "1.0.79", features = ["std"]}

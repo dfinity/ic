@@ -44,7 +44,7 @@ ic-sns-governance = { path = "../governance" }
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.10.4"
+prost = "0.11.0"
 rand = "0.8"
 rand_chacha = "0.3"
 registry-canister = { path = "../../registry/canister" }
@@ -65,7 +65,7 @@ build-info-build = { version = "0.0.26", default-features = false, features = [
 ] }
 
 ic-base-types = { path = "../../types/base_types" }
-prost-build = "0.10.4"
+prost-build = "0.11.0"
 
 [dev-dependencies]
 criterion = "0.3"

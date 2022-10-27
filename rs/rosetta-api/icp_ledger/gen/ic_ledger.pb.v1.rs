@@ -351,8 +351,8 @@ pub struct Burn {
 )]
 pub struct AccountIdentifier {
     /// Can contain either:
-    ///  * the 32 byte identifier (4 byte checksum + 28 byte hash)
-    ///  * the 28 byte hash
+    ///   * the 32 byte identifier (4 byte checksum + 28 byte hash)
+    ///   * the 28 byte hash
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }

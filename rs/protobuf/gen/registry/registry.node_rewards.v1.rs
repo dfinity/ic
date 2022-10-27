@@ -40,3 +40,16 @@ pub enum NodeRewardType {
     Small = 1,
     StorageUpgrade = 2,
 }
+impl NodeRewardType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NodeRewardType::Unspecified => "NODE_REWARD_TYPE_UNSPECIFIED",
+            NodeRewardType::Small => "NODE_REWARD_TYPE_SMALL",
+            NodeRewardType::StorageUpgrade => "NODE_REWARD_TYPE_STORAGE_UPGRADE",
+        }
+    }
+}

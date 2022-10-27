@@ -100,7 +100,6 @@ external_crates_repository(
         "prost-build": [crate.annotation(
             build_script_env = {
                 "PROTOC_NO_VENDOR": "1",
-                "PROTOC": "NO_PROTOC_PATH_AT_COMPILE_TIME",
             },
         )],
     },

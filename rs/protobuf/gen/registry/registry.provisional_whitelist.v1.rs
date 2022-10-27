@@ -27,4 +27,17 @@ pub mod provisional_whitelist {
         All = 1,
         Set = 2,
     }
+    impl ListType {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                ListType::Unspecified => "LIST_TYPE_UNSPECIFIED",
+                ListType::All => "LIST_TYPE_ALL",
+                ListType::Set => "LIST_TYPE_SET",
+            }
+        }
+    }
 }
