@@ -31,7 +31,9 @@ use ic_types::{
     },
     malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
-    p2p, NodeId, ReplicaVersion,
+    p2p,
+    single_chunked::*,
+    NodeId, ReplicaVersion,
 };
 use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, RwLock};
