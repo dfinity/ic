@@ -102,8 +102,13 @@ async fn main() -> Result<(), Error> {
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
-    let loader = ContextLoader::new(cli.routes_dir.clone(), cli.wallets_path.clone());
+    let loader = RoutesLoader::new(cli.routes_dir.clone());
     let loader = WithMetrics(loader, MetricParams::new(&meter, SERVICE_NAME, "load"));
+    let loader = Arc::new(loader);
+
+    let f = File::open(&cli.wallets_path)
+        .with_context(|| format!("failed to open file {}", &cli.wallets_path.display()))?;
+    let wallets: Wallets = serde_json::from_reader(f).context("failed to parse json")?;
 
     let creator = Creator::new(cli.canister_cycles_amount);
     let creator = WithMetrics(
@@ -137,36 +142,22 @@ async fn main() -> Result<(), Error> {
         MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
     );
 
-    let canister_ops = CanisterOps {
+    let canister_ops = Arc::new(CanisterOps {
         creator,
         installer,
         prober,
         stopper,
         deleter,
-    };
+    });
 
     let f = File::open(cli.identity_path).context("failed to open identity file")?;
-    let identity = BasicIdentity::from_pem(f).context("failed to create basic identity")?;
+    let identity = Arc::new(BasicIdentity::from_pem(f).context("failed to create basic identity")?);
 
     let root_key = cli
         .root_key_path
         .map(fs::read)
         .transpose()
         .context("failed to open root key")?;
-
-    let create_agent = create_agent_fn(Arc::new(identity), root_key);
-
-    let runner = Runner::new(
-        loader,
-        create_agent,
-        canister_ops,
-        cli.canister_ttl.into(),
-        cli.probe_interval.into(),
-    );
-
-    let runner = WithMetrics(runner, MetricParams::new(&meter, SERVICE_NAME, "run"));
-    let runner = WithThrottle(runner, ThrottleParams::new(1 * MINUTE));
-    let mut runner = runner;
 
     info!(
         msg = "Starting prober",
@@ -175,26 +166,46 @@ async fn main() -> Result<(), Error> {
         metrics_addr = cli.metrics_addr.to_string().as_str(),
     );
 
-    let _ = tokio::try_join!(
-        task::spawn(async move {
+    let futs = FuturesUnordered::new();
+
+    for (subnet_id, wallet_id) in wallets.subnet.into_iter() {
+        let st_runner = SubnetTestRunner::new(
+            loader.clone(),
+            create_agent_fn(identity.clone(), root_key.clone()),
+            canister_ops.clone(),
+            cli.canister_ttl.into(),
+            cli.probe_interval.into(),
+        );
+        let st_runner = WithMetrics(st_runner, MetricParams::new(&meter, SERVICE_NAME, "run"));
+        let mut st_runner = WithThrottle(st_runner, ThrottleParams::new(1 * MINUTE));
+
+        futs.push(task::spawn(async move {
+            let context = TestContext {
+                wallet_id,
+                subnet_id,
+            };
             loop {
-                let _ = runner.run().await;
+                let _ = st_runner.run(&context).await;
             }
-        }),
-        task::spawn(
-            axum::Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
-                .map_err(|err| anyhow!("server failed: {:?}", err))
-        )
-    )
-    .context("prober failed to run")?;
+        }));
+    }
+
+    futs.push(task::spawn(
+        axum::Server::bind(&cli.metrics_addr)
+            .serve(metrics_router.into_make_service())
+            .map_err(|err| anyhow!("server failed: {:?}", err)),
+    ));
+
+    for fut in futs {
+        let _ = fut.await?;
+    }
 
     Ok(())
 }
 
 #[async_trait]
 trait Run: Sync + Send {
-    async fn run(&mut self) -> Result<(), Error>;
+    async fn run(&mut self, context: &TestContext) -> Result<(), Error>;
 }
 
 struct CanisterOps<C, I, P, S, D> {
@@ -205,7 +216,7 @@ struct CanisterOps<C, I, P, S, D> {
     deleter: D,
 }
 
-struct Runner<L, C, I, P, S, D> {
+struct SubnetTestRunner<L, C, I, P, S, D> {
     loader: Arc<L>,
     create_agent: Box<dyn CreateAgentFn>,
     canister_ops: Arc<CanisterOps<C, I, P, S, D>>,
@@ -213,18 +224,18 @@ struct Runner<L, C, I, P, S, D> {
     probe_interval: Duration,
 }
 
-impl<L, C, I, P, S, D> Runner<L, C, I, P, S, D> {
+impl<L, C, I, P, S, D> SubnetTestRunner<L, C, I, P, S, D> {
     fn new(
-        loader: L,
+        loader: Arc<L>,
         create_agent: impl CreateAgentFn,
-        canister_ops: CanisterOps<C, I, P, S, D>,
+        canister_ops: Arc<CanisterOps<C, I, P, S, D>>,
         canister_ttl: Duration,
         probe_interval: Duration,
     ) -> Self {
         Self {
-            loader: Arc::new(loader),
+            loader,
             create_agent: Box::new(create_agent),
-            canister_ops: Arc::new(canister_ops),
+            canister_ops,
             canister_ttl,
             probe_interval,
         }
@@ -232,7 +243,7 @@ impl<L, C, I, P, S, D> Runner<L, C, I, P, S, D> {
 }
 
 #[async_trait]
-impl<L, C, I, P, S, D> Run for Runner<L, C, I, P, S, D>
+impl<L, C, I, P, S, D> Run for SubnetTestRunner<L, C, I, P, S, D>
 where
     L: Load,
     C: Create,
@@ -241,124 +252,98 @@ where
     S: Stop,
     D: Delete,
 {
-    async fn run(&mut self) -> Result<(), Error> {
-        let ServiceContext { wallets, routes } = self
-            .loader
-            .load()
-            .await
-            .context("failed to load service context")?;
+    async fn run(&mut self, context: &TestContext) -> Result<(), Error> {
+        // Create an agent for each node in the subnet
+        use opentelemetry::trace::FutureExt;
 
-        let futs = FuturesUnordered::new();
+        let routes = self.loader.load().await?;
 
-        for (subnet_id, wallet_id) in wallets.subnet {
-            let canister_ops = Arc::clone(&self.canister_ops);
-            let canister_ttl = self.canister_ttl;
-            let probe_interval = self.probe_interval;
+        let subnet = routes
+            .subnets
+            .iter()
+            .find(|subnet| subnet.subnet_id == context.subnet_id)
+            .ok_or_else(|| anyhow!("Subnet not found"))?;
 
-            // Find the subnet routes for the given wallet
-            let subnet = routes
-                .subnets
-                .iter()
-                .find(|subnet| subnet.subnet_id == subnet_id);
+        let agents = subnet
+            .nodes
+            .iter()
+            .cloned()
+            .map(&self.create_agent)
+            .collect::<Result<Vec<(String, String, Agent)>, Error>>()
+            .context("failed to create agent")?;
 
-            let subnet = match subnet {
-                Some(subnet) => subnet,
-                None => continue,
-            };
+        let subnet_id = context.subnet_id.as_str();
+        let canister_ops = Arc::clone(&self.canister_ops);
+        let wallet_id = context.wallet_id.as_str();
 
-            // Create an agent for each node in the subnet
-            let agents = subnet
-                .nodes
-                .iter()
-                .cloned()
-                .map(&mut self.create_agent)
-                .collect::<Result<Vec<(String, String, Agent)>, Error>>()
-                .context("failed to create agent")?;
+        let (node_id, socket_addr, agent) = &agents[0];
 
-            futs.push(task::spawn(async move {
-                use opentelemetry::trace::FutureExt;
+        let _ctx = opentelemetry::Context::current_with_baggage(vec![
+            KeyValue::new("subnet_id", subnet_id.to_string()),
+            KeyValue::new("node_id", node_id.to_string()),
+            KeyValue::new("socket_addr", socket_addr.to_string()),
+        ]);
 
-                let (node_id, socket_addr, agent) = &agents[0];
+        let canister_id = canister_ops
+            .creator
+            .create(agent, wallet_id)
+            .with_context(_ctx.clone())
+            .await?;
 
-                let _ctx = opentelemetry::Context::current_with_baggage(vec![
-                    KeyValue::new("subnet_id", subnet_id.to_string()),
-                    KeyValue::new("node_id", node_id.to_string()),
-                    KeyValue::new("socket_addr", socket_addr.to_string()),
-                ]);
+        canister_ops
+            .installer
+            .install(agent, wallet_id, canister_id)
+            .with_context(_ctx.clone())
+            .await?;
 
-                let canister_id = canister_ops
-                    .creator
-                    .create(agent, &wallet_id)
-                    .with_context(_ctx.clone())
-                    .await?;
+        let start_time = Instant::now();
+        let end_time = start_time + self.canister_ttl;
 
-                canister_ops
-                    .installer
-                    .install(agent, &wallet_id, canister_id)
-                    .with_context(_ctx.clone())
-                    .await?;
+        for (node_id, socket_addr, agent) in agents.iter().cycle() {
+            let _ctx = opentelemetry::Context::current_with_baggage(vec![
+                KeyValue::new("subnet_id", subnet_id.to_string()),
+                KeyValue::new("node_id", node_id.to_string()),
+                KeyValue::new("socket_addr", socket_addr.to_string()),
+            ]);
 
-                let start_time = Instant::now();
-                let end_time = start_time + canister_ttl;
+            // Continue probing continuously, even if probing fails
+            let _ = canister_ops
+                .prober
+                .probe(agent, canister_id)
+                .with_context(_ctx.clone())
+                .await;
 
-                for (node_id, socket_addr, agent) in agents.iter().cycle() {
-                    let _ctx = opentelemetry::Context::current_with_baggage(vec![
-                        KeyValue::new("subnet_id", subnet_id.to_string()),
-                        KeyValue::new("node_id", node_id.to_string()),
-                        KeyValue::new("socket_addr", socket_addr.to_string()),
-                    ]);
+            tokio::time::sleep(max(
+                Duration::ZERO,
+                min(self.probe_interval, end_time - Instant::now()),
+            ))
+            .await;
 
-                    // Continue probing continuously, even if probing fails
-                    let _ = canister_ops
-                        .prober
-                        .probe(agent, canister_id)
-                        .with_context(_ctx.clone())
-                        .await;
-
-                    tokio::time::sleep(max(
-                        Duration::ZERO,
-                        min(probe_interval, end_time - Instant::now()),
-                    ))
-                    .await;
-
-                    if Instant::now() > end_time {
-                        break;
-                    }
-                }
-
-                canister_ops
-                    .stopper
-                    .stop(agent, &wallet_id, canister_id)
-                    .with_context(_ctx.clone())
-                    .await?;
-
-                canister_ops
-                    .deleter
-                    .delete(agent, &wallet_id, canister_id)
-                    .with_context(_ctx.clone())
-                    .await?;
-
-                let ret: Result<(), Error> = Ok(());
-                ret
-            }));
+            if Instant::now() > end_time {
+                break;
+            }
         }
 
-        // TODO(or.ricon): runner should return error if an error was encountered
-        // or runner should return a vector of results
-        // should also flatten JoinErrors ?
-        for fut in futs {
-            let _ = fut.await?;
-        }
+        canister_ops
+            .stopper
+            .stop(agent, wallet_id, canister_id)
+            .with_context(_ctx.clone())
+            .await?;
 
+        canister_ops
+            .deleter
+            .delete(agent, wallet_id, canister_id)
+            .with_context(_ctx.clone())
+            .await?;
         Ok(())
     }
 }
 
 trait CreateAgentFn:
-    'static + FnMut(NodeRoute) -> Result<(String, String, Agent), Error> + Sync + Send
+    'static + Fn(NodeRoute) -> Result<(String, String, Agent), Error> + Sync + Send
 {
 }
-impl<F: 'static + FnMut(NodeRoute) -> Result<(String, String, Agent), Error> + Sync + Send>
+impl<F: 'static + Fn(NodeRoute) -> Result<(String, String, Agent), Error> + Sync + Send>
     CreateAgentFn for F
 {
 }
@@ -418,7 +403,7 @@ async fn metrics_handler(
         .unwrap()
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 struct Wallets {
     subnet: HashMap<String, String>,
 }
@@ -429,51 +414,42 @@ struct NodeRoute {
     socket_addr: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 struct SubnetRoute {
     subnet_id: String,
     nodes: Vec<NodeRoute>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 struct Routes {
     subnets: Vec<SubnetRoute>,
 }
 
-#[derive(Debug, PartialEq)]
-struct ServiceContext {
-    wallets: Wallets,
-    routes: Routes,
+#[derive(Debug, PartialEq, Clone)]
+struct TestContext {
+    wallet_id: String,
+    subnet_id: String,
 }
 
 #[automock]
 #[async_trait]
 trait Load: Sync + Send {
-    async fn load(&self) -> Result<ServiceContext, Error>;
+    async fn load(&self) -> Result<Routes, Error>;
 }
 
-struct ContextLoader {
+struct RoutesLoader {
     routes_dir: PathBuf,
-    wallets_path: PathBuf,
 }
 
-impl ContextLoader {
-    fn new(routes_dir: PathBuf, wallets_path: PathBuf) -> Self {
-        Self {
-            routes_dir,
-            wallets_path,
-        }
+impl RoutesLoader {
+    fn new(routes_dir: PathBuf) -> Self {
+        Self { routes_dir }
     }
 }
 
 #[async_trait]
-impl Load for ContextLoader {
-    async fn load(&self) -> Result<ServiceContext, Error> {
-        // Wallets
-        let f = File::open(&self.wallets_path)
-            .with_context(|| format!("failed to open file {}", &self.wallets_path.display()))?;
-        let wallets: Wallets = serde_json::from_reader(f).context("failed to parse json")?;
-
+impl Load for RoutesLoader {
+    async fn load(&self) -> Result<Routes, Error> {
         // Routes
         let glob_pattern = Path::new(&self.routes_dir).join("*.routes");
 
@@ -494,7 +470,7 @@ impl Load for ContextLoader {
             .with_context(|| format!("failed to open file {}", &path.display()))?;
         let routes: Routes = serde_json::from_reader(f).context("failed to parse json")?;
 
-        Ok(ServiceContext { wallets, routes })
+        Ok(routes)
     }
 }
 
@@ -790,7 +766,7 @@ struct WithThrottle<T>(T, ThrottleParams);
 
 #[async_trait]
 impl<T: Run + Send + Sync> Run for WithThrottle<T> {
-    async fn run(&mut self) -> Result<(), Error> {
+    async fn run(&mut self, context: &TestContext) -> Result<(), Error> {
         let current_time = Instant::now();
         let next_time = self.1.next_time.unwrap_or(current_time);
 
@@ -799,7 +775,7 @@ impl<T: Run + Send + Sync> Run for WithThrottle<T> {
         }
         self.1.next_time = Some(Instant::now() + self.1.throttle_duration);
 
-        self.0.run().await
+        self.0.run(context).await
     }
 }
 
@@ -840,44 +816,21 @@ mod tests {
             writeln!(file, "{}", content)?;
         }
 
-        // Create wallets file
-        let wallets_dir = tempdir()?;
-
-        let file_path = wallets_dir.path().join("wallets.json");
-        let mut file = File::create(file_path)?;
-        writeln!(
-            file,
-            "{}",
-            indoc! {r#"{
-                "subnet": {
-                    "subnet-1": "wallet-1"
-                }
-            }"#}
-        )?;
-
         // Create loader
-        let loader = ContextLoader::new(
-            routes_dir.path().to_path_buf(),
-            wallets_dir.path().join("wallets.json"),
-        );
+        let loader = RoutesLoader::new(routes_dir.path().to_path_buf());
 
         let out = loader.load().await?;
         assert_eq!(
             out,
-            ServiceContext {
-                routes: Routes {
-                    subnets: vec![SubnetRoute {
-                        subnet_id: String::from("subnet-1"),
-                        nodes: vec![NodeRoute {
-                            node_id: String::from("node-1"),
-                            socket_addr: String::from("socket-1"),
-                        }],
+            Routes {
+                subnets: vec![SubnetRoute {
+                    subnet_id: String::from("subnet-1"),
+                    nodes: vec![NodeRoute {
+                        node_id: String::from("node-1"),
+                        socket_addr: String::from("socket-1"),
                     }],
-                },
-                wallets: Wallets {
-                    subnet: HashMap::from([(String::from("subnet-1"), String::from("wallet-1"))]),
-                },
-            }
+                }],
+            },
         );
 
         Ok(())
@@ -887,21 +840,19 @@ mod tests {
     async fn it_runs() -> Result<(), Error> {
         let mut loader = MockLoad::new();
         loader.expect_load().times(1).returning(|| {
-            Ok(ServiceContext {
-                routes: Routes {
-                    subnets: vec![SubnetRoute {
-                        subnet_id: String::from("subnet-1"),
-                        nodes: vec![NodeRoute {
-                            node_id: String::from("node-1"),
-                            socket_addr: String::from("socket-1"),
-                        }],
+            Ok(Routes {
+                subnets: vec![SubnetRoute {
+                    subnet_id: String::from("subnet-1"),
+                    nodes: vec![NodeRoute {
+                        node_id: String::from("node-1"),
+                        socket_addr: String::from("socket-1"),
                     }],
-                },
-                wallets: Wallets {
-                    subnet: HashMap::from([(String::from("subnet-1"), String::from("wallet-1"))]),
-                },
+                }],
             })
         });
+        let wallets = Wallets {
+            subnet: HashMap::from([(String::from("subnet-1"), String::from("wallet-1"))]),
+        };
 
         let mut creator = MockCreate::new();
         creator
@@ -980,21 +931,31 @@ mod tests {
             Ok((route.node_id, route.socket_addr, agent))
         };
 
-        let mut runner = Runner::new(
-            loader,       // loader
+        let mut runner = SubnetTestRunner::new(
+            Arc::new(loader),
             create_agent, // create_agent
-            CanisterOps {
+            Arc::new(CanisterOps {
                 creator,
                 installer,
                 prober,
                 stopper,
                 deleter,
-            },
+            }),
             Duration::ZERO, // canister_ttl
             1 * MINUTE,     // probe_interval
         );
 
-        runner.run().await?;
+        let subnet_service_context = wallets
+            .subnet
+            .into_iter()
+            .map(|(subnet_id, wallet_id)| TestContext {
+                wallet_id,
+                subnet_id,
+            })
+            .next()
+            .expect("Loader didn't find a subnet");
+
+        runner.run(&subnet_service_context).await?;
 
         Ok(())
     }

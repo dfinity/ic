@@ -11,8 +11,9 @@ use opentelemetry::{
 };
 use tracing::info;
 
-use crate::{Create, Delete, Install, Load, Probe, Run, ServiceContext, Stop};
+use crate::{Create, Delete, Install, Load, Probe, Routes, Run, Stop, TestContext};
 
+#[derive(Clone)]
 pub struct MetricParams {
     pub counter: Counter<u64>,
     pub recorder: ValueRecorder<f64>,
@@ -35,11 +36,12 @@ impl MetricParams {
     }
 }
 
+#[derive(Clone)]
 pub struct WithMetrics<T>(pub T, pub MetricParams);
 
 #[async_trait]
 impl<T: Load> Load for WithMetrics<T> {
-    async fn load(&self) -> Result<ServiceContext, Error> {
+    async fn load(&self) -> Result<Routes, Error> {
         let start_time = Instant::now();
 
         let out = self.0.load().await;
@@ -283,10 +285,10 @@ impl<T: Delete> Delete for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Run> Run for WithMetrics<T> {
-    async fn run(&mut self) -> Result<(), Error> {
+    async fn run(&mut self, context: &TestContext) -> Result<(), Error> {
         let start_time = Instant::now();
 
-        let out = self.0.run().await;
+        let out = self.0.run(context).await;
 
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
