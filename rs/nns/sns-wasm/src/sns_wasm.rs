@@ -217,6 +217,13 @@ where
             .expect("Failed to initialize stable memory")
     }
 
+    /// Returns the amount of stable memory (in bytes) that SNS-WASM has used to store WASMs
+    pub fn get_stable_memory_usage(&self) -> u32 {
+        self.stable_memory
+            .read_wasms_end_offset()
+            .expect("Unable to get stable memory usage")
+    }
+
     /// Returns an Option(SnsWasm) in the GetWasmResponse (a struct with wasm bytecode and the install target)
     pub fn get_wasm(&self, get_wasm_payload: GetWasmRequest) -> GetWasmResponse {
         let hash = vec_to_hash(get_wasm_payload.hash).unwrap();

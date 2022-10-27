@@ -433,6 +433,41 @@ fn get_sns_subnet_ids_(_request: GetSnsSubnetIdsRequest) -> GetSnsSubnetIdsRespo
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_sns_subnet_ids())
 }
 
+/// SNS-WASM metrics
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    let number_of_wasms = SNS_WASM.with(|sns_wasm| sns_wasm.borrow().wasm_indexes.len());
+
+    w.encode_gauge(
+        "sns_wasm_number_of_wasms",
+        number_of_wasms as f64,
+        "The number of WASM binaries stored in SNS-WASM",
+    )?;
+
+    let stable_memory_usage = SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_stable_memory_usage());
+
+    w.encode_gauge(
+        "sns_wasm_stable_memory_usage",
+        stable_memory_usage as f64,
+        "The amount of stable memory that SNS-WASM has used to store WASMs",
+    )?;
+
+    let number_of_deployed_sns =
+        SNS_WASM.with(|sns_wasm| sns_wasm.borrow().deployed_sns_list.len());
+
+    w.encode_gauge(
+        "sns_wasm_number_of_deployed_sns",
+        number_of_deployed_sns as f64,
+        "The number of SNSes that SNS-WASM has deployed",
+    )?;
+
+    Ok(())
+}
+
+#[export_name = "canister_query http_request"]
+fn http_request() {
+    dfn_http_metrics::serve_metrics(encode_metrics);
+}
+
 /// This makes this Candid service self-describing, so that for example Candid
 /// UI, but also other tools, can seamlessly integrate with it.
 /// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
