@@ -135,7 +135,11 @@ impl UniversalVm {
 }
 
 pub trait UniversalVms {
+    fn get_deployed_universal_vm_dir(&self, name: &str) -> PathBuf;
+
     fn get_deployed_universal_vm(&self, name: &str) -> Result<DeployedUniversalVm>;
+
+    fn get_universal_vm_config_dir(&self, universal_vm_name: &str) -> PathBuf;
 
     fn single_activate_script_config_dir(
         &self,
@@ -145,10 +149,14 @@ pub trait UniversalVms {
 }
 
 impl UniversalVms for TestEnv {
-    fn get_deployed_universal_vm(&self, name: &str) -> Result<DeployedUniversalVm> {
+    fn get_deployed_universal_vm_dir(&self, name: &str) -> PathBuf {
         let rel_universal_vm_dir: PathBuf = [UNIVERSAL_VMS_DIR, name].iter().collect();
-        let abs_universal_vm_dir = self.get_path(rel_universal_vm_dir);
-        if abs_universal_vm_dir.is_dir() {
+        self.get_path(rel_universal_vm_dir)
+    }
+
+    fn get_deployed_universal_vm(&self, name: &str) -> Result<DeployedUniversalVm> {
+        let universal_vm_dir = self.get_deployed_universal_vm_dir(name);
+        if universal_vm_dir.is_dir() {
             Ok(DeployedUniversalVm {
                 env: self.clone(),
                 name: name.to_string(),
@@ -158,15 +166,19 @@ impl UniversalVms for TestEnv {
         }
     }
 
+    fn get_universal_vm_config_dir(&self, universal_vm_name: &str) -> PathBuf {
+        let p: PathBuf = [UNIVERSAL_VMS_DIR, universal_vm_name, CONFIG_DIR_NAME]
+            .iter()
+            .collect();
+        self.get_path(p)
+    }
+
     fn single_activate_script_config_dir(
         &self,
         universal_vm_name: &str,
         activate_script: &str,
     ) -> Result<PathBuf> {
-        let p: PathBuf = ["universal_vms", universal_vm_name, CONFIG_DIR_NAME]
-            .iter()
-            .collect();
-        let config_dir = self.get_path(p);
+        let config_dir = self.get_universal_vm_config_dir(universal_vm_name);
         fs::create_dir_all(config_dir.clone())?;
 
         setup_ssh(self, config_dir.clone())?;

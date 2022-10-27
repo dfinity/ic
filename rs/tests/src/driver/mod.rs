@@ -8,6 +8,7 @@ pub mod farm;
 pub mod ic;
 pub mod new;
 pub mod pot_dsl;
+pub mod prometheus_vm;
 pub mod resource;
 pub mod test_env;
 pub mod test_env_api;

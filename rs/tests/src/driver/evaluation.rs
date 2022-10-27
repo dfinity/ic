@@ -15,6 +15,8 @@ use ic_fondue::result::*;
 use rayon::{ScopeFifo, ThreadPoolBuilder};
 use slog::{error, info, warn, Logger};
 
+use super::prometheus_vm::HasPrometheus;
+
 // This function has a `dry-run` execution concept for the test suite.
 // Namely, it generates a test suite contract, where all tests, pots, and the suite itself are labeled
 pub fn generate_suite_execution_contract(suite: &Suite) -> TestSuiteContract {
@@ -141,6 +143,10 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: &TestPath) -> Result<()
     }
 
     evaluate_pot_with_group(ctx, pot, &pot_path, &pot_env);
+
+    // Download prometheus data directory
+    // if the prometheus universal VM exists in the environment.
+    pot_env.download_prometheus_data_dir_if_exists();
 
     // at this point we should be guaranteed to have a task_handle
     if let Some((task_handle, stop_sig_s)) = keep_alive_handle_and_signal {

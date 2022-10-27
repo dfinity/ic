@@ -189,6 +189,14 @@ GUESTOS_RUNTIME_DEPS = {
     "//ic-os/guestos/dev:ic_version_id": "",
 }
 
+exports_files([
+    "create-universal-vm-config-image.sh",
+])
+
+UNIVERSAL_VM_RUNTIME_DEPS = {
+    ":create-universal-vm-config-image.sh": "",
+}
+
 NNS_CANISTER_RUNTIME_DEPS = {
     "//rs/registry/canister:registry-canister": "REGISTRY_CANISTER_WASM_PATH",
     "//rs/nns/governance:governance-canister-test": "GOVERNANCE_CANISTER_TEST_WASM_PATH",
@@ -220,7 +228,7 @@ system_test(
     name = "basic_health_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = dicts.add(GUESTOS_RUNTIME_DEPS, UNIVERSAL_VM_RUNTIME_DEPS),
     deps = DEPENDENCIES + [":tests"],
 )
 

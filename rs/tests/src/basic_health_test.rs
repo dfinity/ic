@@ -34,6 +34,7 @@ end::catalog[] */
 use std::time::Duration;
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::prometheus_vm::HasPrometheus;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
 use crate::driver::test_setup::create_setup_and_farm_group;
@@ -48,11 +49,13 @@ pub fn bazel_config_single_host(env: TestEnv) {
 }
 
 pub fn config_single_host(env: TestEnv) {
+    env.start_prometheus_vm();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
         .setup_and_start(&env)
-        .expect("failed to setup IC under test")
+        .expect("failed to setup IC under test");
+    env.sync_prometheus_config_with_topology();
 }
 
 const MSG: &[u8] = b"this beautiful prose should be persisted for future generations";
