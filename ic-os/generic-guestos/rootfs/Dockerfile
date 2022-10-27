@@ -7,7 +7,7 @@
 # - Construct the actual target image (IC-OS root filesystem)
 #
 # Update below image when new dfinity/genericos-base image gets produced (see deploy-guest-os-baseimg CI job on master/rc).
-FROM dfinity/genericos-base@sha256:ccaa700d7bcdd254e32e7c3bfe443c5cea732dfc55930dee78eb8d85c8dcb90d
+FROM dfinity/genericos-base@sha256:f6fff1ce90723c0a6df04970796e2eb60acebcd3767707601dab1af30b5a4a01
 
 USER root:root
 
