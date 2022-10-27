@@ -170,4 +170,18 @@ pub mod canister_queues {
         Ingress = 2,
         RemoteSubnet = 3,
     }
+    impl NextInputQueue {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                NextInputQueue::Unspecified => "NEXT_INPUT_QUEUE_UNSPECIFIED",
+                NextInputQueue::LocalSubnet => "NEXT_INPUT_QUEUE_LOCAL_SUBNET",
+                NextInputQueue::Ingress => "NEXT_INPUT_QUEUE_INGRESS",
+                NextInputQueue::RemoteSubnet => "NEXT_INPUT_QUEUE_REMOTE_SUBNET",
+            }
+        }
+    }
 }

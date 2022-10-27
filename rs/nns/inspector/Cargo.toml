@@ -14,7 +14,7 @@ ic-nns-governance = { path = "../governance" }
 ic-nns-gtc = { path = "../gtc" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 ledger-canister = { path = "../../rosetta-api/icp_ledger/ledger" }
-prost = "0.10.4"
+prost = "0.11.0"
 serde = "1.0"
 serde_cbor = "0.11.1"
 stable_reader = { path = "../../rust_canisters/stable_reader" }

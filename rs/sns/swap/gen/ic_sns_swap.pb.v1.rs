@@ -10,12 +10,12 @@
 /// State (lifecycle) diagram for the swap canister's state.
 ///
 /// ```text
-///                                  sufficient_participation && (swap_due || icp_target_reached)
+///                                   sufficient_participation && (swap_due || icp_target_reached)
 /// PENDING ------------------> OPEN ------------------------------------------------------------> COMMITTED
-///                             |                                                                  |
-///                             | swap_due && not sufficient_participation                         |
-///                             v                                                                  v
-///                             ABORTED -------------------------------------------------------> <DELETED>
+///                              |                                                                  |
+///                              | swap_due && not sufficient_participation                         |
+///                              v                                                                  v
+///                              ABORTED -------------------------------------------------------> <DELETED>
 /// ```
 ///
 /// Here `sufficient_participation` means that the minimum number of
@@ -34,13 +34,13 @@
 /// - The governance canister of the SNS to be decentralized.
 ///
 /// - The ledger canister of the SNS, i.e., the ledger of the token type
-///   being sold.
+///    being sold.
 ///
 /// - The ICP ledger canister, or more generally of the base currency of
-///   the auction.
+///    the auction.
 ///
 /// - The root canister of the SNS to control aspects of the SNS not
-///   controlled by the SNS governance canister.
+///    controlled by the SNS governance canister.
 ///
 /// When the swap canister is initialized, it must be configured with
 /// the canister IDs of the other participant canisters.
@@ -102,23 +102,23 @@
 ///
 /// - A SNS is created.
 /// - Proposal to open a decentralization sale for the SNS is submitted to the NNS.
-///   - ProposalToOpenDecentralizationSale
-///     - The Community Fund investment amount
-///     - The parameters of the decentralization sale (`Params`).
-///   - Call to open swap:
-///     - Parameters
-///     - CF Investments
-///     - NNS Proposal ID of the NNS proposal to open the swap.
+///    - ProposalToOpenDecentralizationSale
+///      - The Community Fund investment amount
+///      - The parameters of the decentralization sale (`Params`).
+///    - Call to open swap:
+///      - Parameters
+///      - CF Investments
+///      - NNS Proposal ID of the NNS proposal to open the swap.
 /// - On accept of proposal to open decentralization sale:
-///   - Compute the maturity contribution of each CF neuron and deduct this amount from the CF neuron.
-///   - The swap is informed about the corresponding amount of ICP (`CfParticipant`) in the call to open.
-///   - Call back to NNS governance after the swap is committed or aborted:
-///     - On committed swap:
-///       - Ask the NNS to mint the right amount of ICP for the SNS corresponding to the CF investment (the NNS governance canister keeps track of the total).
-///     - On aborted swap:
-///       - Send the information about CF participants (`CfParticipant`) back to NNS governance which will return it to the corresponding neurons. Assign the control of the dapp (now under the SNS control) back to the specified principals.
+///    - Compute the maturity contribution of each CF neuron and deduct this amount from the CF neuron.
+///    - The swap is informed about the corresponding amount of ICP (`CfParticipant`) in the call to open.
+///    - Call back to NNS governance after the swap is committed or aborted:
+///      - On committed swap:
+///        - Ask the NNS to mint the right amount of ICP for the SNS corresponding to the CF investment (the NNS governance canister keeps track of the total).
+///      - On aborted swap:
+///        - Send the information about CF participants (`CfParticipant`) back to NNS governance which will return it to the corresponding neurons. Assign the control of the dapp (now under the SNS control) back to the specified principals.
 /// - On reject of proposal to open decentralization sale:
-///   - Assign the control of the dapp (now under the SNS control) back to the specified principals.
+///    - Assign the control of the dapp (now under the SNS control) back to the specified principals.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -375,9 +375,9 @@ pub struct BuyerState {
     ///
     /// Invariant between canisters in the OPEN state:
     ///
-    ///  ```text
-    ///  icp.amount_e8 <= icp_ledger.balance_of(subaccount(swap_canister, P)),
-    ///  ```
+    ///   ```text
+    ///   icp.amount_e8 <= icp_ledger.balance_of(subaccount(swap_canister, P)),
+    ///   ```
     ///
     /// where `P` is the principal ID associated with this buyer's state.
     ///
@@ -1011,6 +1011,35 @@ pub mod governance_error {
         /// The neuron attempted to leave the community fund but is not a member.
         NotInTheCommunityFund = 18,
     }
+    impl ErrorType {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                ErrorType::Unspecified => "ERROR_TYPE_UNSPECIFIED",
+                ErrorType::Ok => "ERROR_TYPE_OK",
+                ErrorType::Unavailable => "ERROR_TYPE_UNAVAILABLE",
+                ErrorType::NotAuthorized => "ERROR_TYPE_NOT_AUTHORIZED",
+                ErrorType::NotFound => "ERROR_TYPE_NOT_FOUND",
+                ErrorType::InvalidCommand => "ERROR_TYPE_INVALID_COMMAND",
+                ErrorType::RequiresNotDissolving => "ERROR_TYPE_REQUIRES_NOT_DISSOLVING",
+                ErrorType::RequiresDissolving => "ERROR_TYPE_REQUIRES_DISSOLVING",
+                ErrorType::RequiresDissolved => "ERROR_TYPE_REQUIRES_DISSOLVED",
+                ErrorType::HotKey => "ERROR_TYPE_HOT_KEY",
+                ErrorType::ResourceExhausted => "ERROR_TYPE_RESOURCE_EXHAUSTED",
+                ErrorType::PreconditionFailed => "ERROR_TYPE_PRECONDITION_FAILED",
+                ErrorType::External => "ERROR_TYPE_EXTERNAL",
+                ErrorType::LedgerUpdateOngoing => "ERROR_TYPE_LEDGER_UPDATE_ONGOING",
+                ErrorType::InsufficientFunds => "ERROR_TYPE_INSUFFICIENT_FUNDS",
+                ErrorType::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
+                ErrorType::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
+                ErrorType::AlreadyJoinedCommunityFund => "ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND",
+                ErrorType::NotInTheCommunityFund => "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND",
+            }
+        }
+    }
 }
 /// Copied from nns governance.proto.
 #[derive(
@@ -1162,4 +1191,19 @@ pub enum Lifecycle {
     /// occurred before the minimum (reserve) amount of ICP has been
     /// retrieved. On a call to `finalize`, participants get their ICP refunded.
     Aborted = 4,
+}
+impl Lifecycle {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Lifecycle::Unspecified => "LIFECYCLE_UNSPECIFIED",
+            Lifecycle::Pending => "LIFECYCLE_PENDING",
+            Lifecycle::Open => "LIFECYCLE_OPEN",
+            Lifecycle::Committed => "LIFECYCLE_COMMITTED",
+            Lifecycle::Aborted => "LIFECYCLE_ABORTED",
+        }
+    }
 }

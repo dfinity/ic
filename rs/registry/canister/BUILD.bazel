@@ -63,7 +63,6 @@ DEV_DEPENDENCIES = [
     "//rs/replica_tests",
     "//rs/registry/fake",
     "//rs/registry/nns_data_provider",
-    "//rs/registry/proto/generator",
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",
     "//rs/test_utilities/compare_dirs",

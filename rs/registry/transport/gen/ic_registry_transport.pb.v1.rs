@@ -35,6 +35,22 @@ pub mod registry_error {
         /// A generic internal error occurred in the registry.
         InternalError = 999,
     }
+    impl Code {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Code::MalformedMessage => "MALFORMED_MESSAGE",
+                Code::KeyNotPresent => "KEY_NOT_PRESENT",
+                Code::KeyAlreadyPresent => "KEY_ALREADY_PRESENT",
+                Code::VersionNotLatest => "VERSION_NOT_LATEST",
+                Code::VersionBeyondLatest => "VERSION_BEYOND_LATEST",
+                Code::InternalError => "INTERNAL_ERROR",
+            }
+        }
+    }
 }
 /// A single change made to a key in the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -162,6 +178,20 @@ pub mod registry_mutation {
         /// Otherwise, the value will be updated. The name is common in the
         /// database world, and means Update or Insert.
         Upsert = 4,
+    }
+    impl Type {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Type::Insert => "INSERT",
+                Type::Update => "UPDATE",
+                Type::Delete => "DELETE",
+                Type::Upsert => "UPSERT",
+            }
+        }
     }
 }
 /// A precondition on the version at which the value of a given key was

@@ -47,5 +47,5 @@ def protobuf_generator(name, srcs, manifest_dir, deps = [], data = []):
             "GENERATOR": "$(location :%s)" % binary_name,
             "RUSTFMT": "$(rootpath @rules_rust//rust/toolchain:current_rustfmt_files)",
         },
-        tags = ["local", "manual"],
+        tags = ["local", "manual", "pb-generator"],
     )

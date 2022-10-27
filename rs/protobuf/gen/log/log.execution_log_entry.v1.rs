@@ -16,4 +16,18 @@ pub mod execution_log_entry {
         CanisterRequest = 2,
         CanisterResponse = 3,
     }
+    impl MessageType {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                MessageType::Unspecified => "MESSAGE_TYPE_UNSPECIFIED",
+                MessageType::Ingress => "MESSAGE_TYPE_INGRESS",
+                MessageType::CanisterRequest => "MESSAGE_TYPE_CANISTER_REQUEST",
+                MessageType::CanisterResponse => "MESSAGE_TYPE_CANISTER_RESPONSE",
+            }
+        }
+    }
 }

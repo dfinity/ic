@@ -27,7 +27,7 @@ ic-utils = { path = "../utils" }
 nix = "0.23.0"
 parking_lot = "0.12.1"
 prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.10.4"
+prost = "0.11.0"
 rand = "0.8"
 rand_chacha = "0.3"
 scoped_threadpool = "0.1.*"

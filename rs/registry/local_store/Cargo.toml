@@ -10,7 +10,7 @@ ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 bytes = "1.0.1"
-prost = "0.10.4"
+prost = "0.11.0"
 
 [dev-dependencies]
 ic-registry-local-store-artifacts = { path = "./artifacts" }

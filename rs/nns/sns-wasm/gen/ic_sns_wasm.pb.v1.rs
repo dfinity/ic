@@ -373,3 +373,20 @@ pub enum SnsCanisterType {
     /// The type for the index canister.
     Index = 6,
 }
+impl SnsCanisterType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            SnsCanisterType::Unspecified => "SNS_CANISTER_TYPE_UNSPECIFIED",
+            SnsCanisterType::Root => "SNS_CANISTER_TYPE_ROOT",
+            SnsCanisterType::Governance => "SNS_CANISTER_TYPE_GOVERNANCE",
+            SnsCanisterType::Ledger => "SNS_CANISTER_TYPE_LEDGER",
+            SnsCanisterType::Swap => "SNS_CANISTER_TYPE_SWAP",
+            SnsCanisterType::Archive => "SNS_CANISTER_TYPE_ARCHIVE",
+            SnsCanisterType::Index => "SNS_CANISTER_TYPE_INDEX",
+        }
+    }
+}

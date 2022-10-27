@@ -30,7 +30,7 @@ message NodeOperatorRecord {
   optional string ipv6 = 6;
 }
 
-/// The payload of a request to remove Node Operator records from the Registry
+// The payload of a request to remove Node Operator records from the Registry
 message RemoveNodeOperatorsPayload {
   repeated bytes node_operators_to_remove = 1;
 }

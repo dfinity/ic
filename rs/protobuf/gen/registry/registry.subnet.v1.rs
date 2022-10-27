@@ -108,21 +108,21 @@ pub struct CatchUpPackageContents {
     /// A uri from which data to replace the registry local store should be downloaded
     #[prost(message, optional, tag = "6")]
     pub registry_store_uri: ::core::option::Option<RegistryStoreUri>,
-    //// The initial ECDSA dealings for boot strapping target subnets.
+    /// / The initial ECDSA dealings for boot strapping target subnets.
     #[prost(message, repeated, tag = "7")]
     pub ecdsa_initializations: ::prost::alloc::vec::Vec<EcdsaInitialization>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct RegistryStoreUri {
-    //// The uri at which the registry store data should be retrieved. The data
-    //// must be provided as gzipped tar archive
+    /// / The uri at which the registry store data should be retrieved. The data
+    /// / must be provided as gzipped tar archive
     #[prost(string, tag = "1")]
     pub uri: ::prost::alloc::string::String,
-    //// A SHA-256, hex encoded hash of the contents of the data stored at the
-    //// provided URI
+    /// / A SHA-256, hex encoded hash of the contents of the data stored at the
+    /// / provided URI
     #[prost(string, tag = "2")]
     pub hash: ::prost::alloc::string::String,
-    //// The registry version that should be used for the catch up package contents
+    /// / The registry version that should be used for the catch up package contents
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
 }
@@ -364,6 +364,27 @@ pub enum IDkgTranscriptOperation {
     ReshareOfUnmasked = 3,
     UnmaskedTimesMasked = 4,
 }
+impl IDkgTranscriptOperation {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            IDkgTranscriptOperation::Unspecified => "I_DKG_TRANSCRIPT_OPERATION_UNSPECIFIED",
+            IDkgTranscriptOperation::Random => "I_DKG_TRANSCRIPT_OPERATION_RANDOM",
+            IDkgTranscriptOperation::ReshareOfMasked => {
+                "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED"
+            }
+            IDkgTranscriptOperation::ReshareOfUnmasked => {
+                "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED"
+            }
+            IDkgTranscriptOperation::UnmaskedTimesMasked => {
+                "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED"
+            }
+        }
+    }
+}
 /// Represents the type of subnet. Subnets of different type might exhibit different
 /// behavior, e.g. being more restrictive in what operations are allowed or privileged
 /// compared to other subnet types.
@@ -393,6 +414,20 @@ pub enum SubnetType {
     /// additional features.
     VerifiedApplication = 4,
 }
+impl SubnetType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            SubnetType::Unspecified => "SUBNET_TYPE_UNSPECIFIED",
+            SubnetType::Application => "SUBNET_TYPE_APPLICATION",
+            SubnetType::System => "SUBNET_TYPE_SYSTEM",
+            SubnetType::VerifiedApplication => "SUBNET_TYPE_VERIFIED_APPLICATION",
+        }
+    }
+}
 /// TODO(EXC-1114): This type is kept temporarily for backward compatibility and can safely
 /// be removed once this commit is released.
 #[derive(
@@ -413,6 +448,19 @@ pub enum BitcoinFeature {
     Unspecified = 0,
     Paused = 1,
     Enabled = 2,
+}
+impl BitcoinFeature {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            BitcoinFeature::Unspecified => "BITCOIN_FEATURE_UNSPECIFIED",
+            BitcoinFeature::Paused => "BITCOIN_FEATURE_PAUSED",
+            BitcoinFeature::Enabled => "BITCOIN_FEATURE_ENABLED",
+        }
+    }
 }
 /// The status of the bitcoin feature.
 #[derive(
@@ -457,4 +505,18 @@ pub enum BitcoinFeatureStatus {
     /// API. Requests to the bitcoin API are forwarded to another subnet where the
     /// feature is enabled.
     Syncing = 3,
+}
+impl BitcoinFeatureStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            BitcoinFeatureStatus::Unspecified => "BITCOIN_FEATURE_STATUS_UNSPECIFIED",
+            BitcoinFeatureStatus::Paused => "BITCOIN_FEATURE_STATUS_PAUSED",
+            BitcoinFeatureStatus::Enabled => "BITCOIN_FEATURE_STATUS_ENABLED",
+            BitcoinFeatureStatus::Syncing => "BITCOIN_FEATURE_STATUS_SYNCING",
+        }
+    }
 }

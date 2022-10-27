@@ -64,6 +64,20 @@ pub enum FirewallAction {
     /// Reject traffic (send ICMP error back)
     Reject = 3,
 }
+impl FirewallAction {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            FirewallAction::Unspecified => "FIREWALL_ACTION_UNSPECIFIED",
+            FirewallAction::Allow => "FIREWALL_ACTION_ALLOW",
+            FirewallAction::Deny => "FIREWALL_ACTION_DENY",
+            FirewallAction::Reject => "FIREWALL_ACTION_REJECT",
+        }
+    }
+}
 #[derive(
     candid::CandidType,
     serde::Serialize,
@@ -83,4 +97,17 @@ pub enum FirewallRuleDirection {
     Unspecified = 0,
     Inbound = 1,
     Outbound = 2,
+}
+impl FirewallRuleDirection {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            FirewallRuleDirection::Unspecified => "FIREWALL_RULE_DIRECTION_UNSPECIFIED",
+            FirewallRuleDirection::Inbound => "FIREWALL_RULE_DIRECTION_INBOUND",
+            FirewallRuleDirection::Outbound => "FIREWALL_RULE_DIRECTION_OUTBOUND",
+        }
+    }
 }

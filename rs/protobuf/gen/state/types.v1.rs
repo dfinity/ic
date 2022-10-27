@@ -50,3 +50,16 @@ pub enum NiDkgTag {
     LowThreshold = 1,
     HighThreshold = 2,
 }
+impl NiDkgTag {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NiDkgTag::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
+            NiDkgTag::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
+            NiDkgTag::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
+        }
+    }
+}

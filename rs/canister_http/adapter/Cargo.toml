@@ -22,7 +22,7 @@ ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 itertools = "0.10.3"
-prost = "0.10.4"
+prost = "0.11.0"
 rand = "0.8.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -30,7 +30,7 @@ slog = "2.7.0"
 slog-async = "2.7.0"
 thiserror = "1.0.26"
 tokio = { version = "1.15.0", features = ["full"] }
-tonic = "0.7.2"
+tonic = "0.8.2"
 tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
 
 [dev-dependencies]

@@ -2,16 +2,16 @@
 ///
 /// This struct is used for two purposes:
 /// 1. As storage medium in the node's public key store. There, the `version`
-///    field indicates if the I-DKG key is included, no matter if it was
-///    generated together with all other keys (which is the case for new nodes)
-///    or if it was generated separately afterwards (which is the case for
-///    existing nodes): Version 0 means the key is *not* included. Version 1
-///    means the key is included.
+///     field indicates if the I-DKG key is included, no matter if it was
+///     generated together with all other keys (which is the case for new nodes)
+///     or if it was generated separately afterwards (which is the case for
+///     existing nodes): Version 0 means the key is *not* included. Version 1
+///     means the key is included.
 /// 2. As input parameter for node key validation performed by the
-///    `ic-crypto-node-key-validation` crate. There, the version field indicates
-///    whether the key validation shall include the I-DKG key: Version 0 means
-///    the validation shall *not* include the I-DKG key. Version 1 means the
-///    key validation shall include the I-DKG key.
+///     `ic-crypto-node-key-validation` crate. There, the version field indicates
+///     whether the key validation shall include the I-DKG key: Version 0 means
+///     the validation shall *not* include the I-DKG key. Version 1 means the
+///     key validation shall include the I-DKG key.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct NodePublicKeys {
     #[prost(uint32, tag = "1")]

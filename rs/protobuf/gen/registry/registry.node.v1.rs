@@ -39,6 +39,20 @@ pub mod connection_endpoint {
         Http1Tls13 = 2,
         P2p1Tls13 = 3,
     }
+    impl Protocol {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Protocol::Unspecified => "PROTOCOL_UNSPECIFIED",
+                Protocol::Http1 => "PROTOCOL_HTTP1",
+                Protocol::Http1Tls13 => "PROTOCOL_HTTP1_TLS_1_3",
+                Protocol::P2p1Tls13 => "PROTOCOL_P2P1_TLS_1_3",
+            }
+        }
+    }
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct FlowEndpoint {

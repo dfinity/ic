@@ -21,8 +21,8 @@ ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 lazy_static = "1.4.0"
 on_wire = {path = "../../rust_canisters/on_wire"}
-prost = "0.10.4"
-prost-derive = "0.10"
+prost = "0.11.0"
+prost-derive = "0.11"
 serde = "1.0"
 serde_bytes = "0.11"
 serde_cbor = "0.11"

@@ -142,6 +142,25 @@ pub mod wasm_method {
         Empty = 7,
         CanisterGlobalTimer = 8,
     }
+    impl SystemMethod {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                SystemMethod::Unspecified => "SYSTEM_METHOD_UNSPECIFIED",
+                SystemMethod::CanisterStart => "SYSTEM_METHOD_CANISTER_START",
+                SystemMethod::CanisterInit => "SYSTEM_METHOD_CANISTER_INIT",
+                SystemMethod::CanisterPreUpgrade => "SYSTEM_METHOD_CANISTER_PRE_UPGRADE",
+                SystemMethod::CanisterPostUpgrade => "SYSTEM_METHOD_CANISTER_POST_UPGRADE",
+                SystemMethod::CanisterInspectMessage => "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE",
+                SystemMethod::CanisterHeartbeat => "SYSTEM_METHOD_CANISTER_HEARTBEAT",
+                SystemMethod::Empty => "SYSTEM_METHOD_EMPTY",
+                SystemMethod::CanisterGlobalTimer => "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER",
+            }
+        }
+    }
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum WasmMethod {
         #[prost(string, tag = "1")]
@@ -363,4 +382,17 @@ pub enum CustomSectionType {
     Unspecified = 0,
     Public = 1,
     Private = 2,
+}
+impl CustomSectionType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            CustomSectionType::Unspecified => "CUSTOM_SECTION_TYPE_UNSPECIFIED",
+            CustomSectionType::Public => "CUSTOM_SECTION_TYPE_PUBLIC",
+            CustomSectionType::Private => "CUSTOM_SECTION_TYPE_PRIVATE",
+        }
+    }
 }

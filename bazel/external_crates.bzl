@@ -584,9 +584,8 @@ def external_crates_repository(name, annotations):
                 version = "^0.3",
             ),
             "pprof": crate.spec(
-                version = "^0.9.1",
+                version = "^0.10.1",
                 features = [
-                    "backtrace-rs",
                     "flamegraph",
                     "prost-codec",
                 ],
@@ -624,13 +623,13 @@ def external_crates_repository(name, annotations):
                 version = "^0.3.0",
             ),
             "prost": crate.spec(
-                version = "^0.10.4",
+                version = "^0.11.0",
             ),
             "prost-build": crate.spec(
-                version = "^0.10.4",
+                version = "^0.11.0",
             ),
             "prost-derive": crate.spec(
-                version = "^0.10",
+                version = "^0.11",
             ),
             "protobuf": crate.spec(
                 version = "^2.27.1",
@@ -933,10 +932,10 @@ def external_crates_repository(name, annotations):
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.7.2",
+                version = "^0.8.2",
             ),
             "tonic-build": crate.spec(
-                version = "^0.7.2",
+                version = "^0.8.2",
             ),
             "tower": crate.spec(
                 version = "^0.4.11",

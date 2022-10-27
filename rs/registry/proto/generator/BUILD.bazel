@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:prost.bzl", "protobuf_generator")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -16,8 +17,8 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "generator",
-    srcs = glob(["src/**"]),
+    name = "lib",
+    srcs = ["src/lib.rs"],
     aliases = ALIASES,
     crate_name = "ic_registry_common_proto_generator",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -25,10 +26,17 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+protobuf_generator(
+    name = "generator",
+    srcs = ["src/main.rs"],
+    manifest_dir = "rs/registry/proto/generator",
+    deps = [":lib"],
+)
+
 rust_test(
     name = "generator_test",
     aliases = ALIASES,
-    crate = ":generator",
+    crate = ":lib",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

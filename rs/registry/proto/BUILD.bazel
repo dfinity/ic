@@ -10,7 +10,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/registry/proto/generator",
+    "//rs/registry/proto/generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:tempfile",
 ]

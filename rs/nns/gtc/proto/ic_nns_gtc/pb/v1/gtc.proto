@@ -25,8 +25,8 @@ message Gtc {
   // to when they call the GTC's `donate_account` method.
   ic_nns_common.pb.v1.NeuronId donate_account_recipient_neuron_id = 4;
 
-  /// The ID of the Neuron that the funds of all unclaimed GTC accounts will be
-  /// transferred to when the `forward_whitelisted_unclaimed_accounts` GTC method is called.
+  // The ID of the Neuron that the funds of all unclaimed GTC accounts will be
+  // transferred to when the `forward_whitelisted_unclaimed_accounts` GTC method is called.
   ic_nns_common.pb.v1.NeuronId forward_whitelisted_unclaimed_accounts_recipient_neuron_id = 5;
 
   // The accounts that are whitelisted to be forwarded, once forwarding is available.

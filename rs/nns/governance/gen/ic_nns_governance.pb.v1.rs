@@ -422,7 +422,7 @@ pub mod reward_node_provider {
     /// the node provider.
     ///
     /// - The controller of the new neuron is the node provider's
-    ///   principal.
+    ///    principal.
     ///
     /// - The account is chosen at random.
     ///
@@ -431,13 +431,13 @@ pub mod reward_node_provider {
     /// - `dissolve_delay_seconds` is as specified in the proto.
     ///
     /// - `kyc_verified` is set to true, as node providers are
-    ///   (implicitly) KYC'ed.
+    ///    (implicitly) KYC'ed.
     ///
     /// - `not_for_profit` is set to false.
     ///
     /// - All other values are set as for other neurons: timestamp is
-    ///   now, following is set up per default, maturity is 0, neuron fee
-    ///   is 0.
+    ///    now, following is set up per default, maturity is 0, neuron fee
+    ///    is 0.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -1422,6 +1422,35 @@ pub mod governance_error {
         /// The neuron attempted to leave the community fund but is not a member.
         NotInTheCommunityFund = 18,
     }
+    impl ErrorType {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                ErrorType::Unspecified => "ERROR_TYPE_UNSPECIFIED",
+                ErrorType::Ok => "ERROR_TYPE_OK",
+                ErrorType::Unavailable => "ERROR_TYPE_UNAVAILABLE",
+                ErrorType::NotAuthorized => "ERROR_TYPE_NOT_AUTHORIZED",
+                ErrorType::NotFound => "ERROR_TYPE_NOT_FOUND",
+                ErrorType::InvalidCommand => "ERROR_TYPE_INVALID_COMMAND",
+                ErrorType::RequiresNotDissolving => "ERROR_TYPE_REQUIRES_NOT_DISSOLVING",
+                ErrorType::RequiresDissolving => "ERROR_TYPE_REQUIRES_DISSOLVING",
+                ErrorType::RequiresDissolved => "ERROR_TYPE_REQUIRES_DISSOLVED",
+                ErrorType::HotKey => "ERROR_TYPE_HOT_KEY",
+                ErrorType::ResourceExhausted => "ERROR_TYPE_RESOURCE_EXHAUSTED",
+                ErrorType::PreconditionFailed => "ERROR_TYPE_PRECONDITION_FAILED",
+                ErrorType::External => "ERROR_TYPE_EXTERNAL",
+                ErrorType::LedgerUpdateOngoing => "ERROR_TYPE_LEDGER_UPDATE_ONGOING",
+                ErrorType::InsufficientFunds => "ERROR_TYPE_INSUFFICIENT_FUNDS",
+                ErrorType::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
+                ErrorType::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
+                ErrorType::AlreadyJoinedCommunityFund => "ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND",
+                ErrorType::NotInTheCommunityFund => "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND",
+            }
+        }
+    }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[self_describing]
@@ -2256,6 +2285,31 @@ pub enum Topic {
     /// Proposals related to SNS and Community Fund.
     SnsAndCommunityFund = 14,
 }
+impl Topic {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Topic::Unspecified => "TOPIC_UNSPECIFIED",
+            Topic::NeuronManagement => "TOPIC_NEURON_MANAGEMENT",
+            Topic::ExchangeRate => "TOPIC_EXCHANGE_RATE",
+            Topic::NetworkEconomics => "TOPIC_NETWORK_ECONOMICS",
+            Topic::Governance => "TOPIC_GOVERNANCE",
+            Topic::NodeAdmin => "TOPIC_NODE_ADMIN",
+            Topic::ParticipantManagement => "TOPIC_PARTICIPANT_MANAGEMENT",
+            Topic::SubnetManagement => "TOPIC_SUBNET_MANAGEMENT",
+            Topic::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
+            Topic::Kyc => "TOPIC_KYC",
+            Topic::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
+            Topic::SnsDecentralizationSale => "TOPIC_SNS_DECENTRALIZATION_SALE",
+            Topic::SubnetReplicaVersionManagement => "TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT",
+            Topic::ReplicaVersionManagement => "TOPIC_REPLICA_VERSION_MANAGEMENT",
+            Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
+        }
+    }
+}
 /// Every neuron is in one of three states.
 ///
 /// Note that `Disbursed` is not a state of a neuron, as the neuron is
@@ -2318,6 +2372,21 @@ pub enum NeuronState {
     /// converted to ICP according to <https://wiki.internetcomputer.org/wiki/Maturity_modulation.>
     Spawning = 4,
 }
+impl NeuronState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NeuronState::Unspecified => "NEURON_STATE_UNSPECIFIED",
+            NeuronState::NotDissolving => "NEURON_STATE_NOT_DISSOLVING",
+            NeuronState::Dissolving => "NEURON_STATE_DISSOLVING",
+            NeuronState::Dissolved => "NEURON_STATE_DISSOLVED",
+            NeuronState::Spawning => "NEURON_STATE_SPAWNING",
+        }
+    }
+}
 /// The types of votes the Neuron can issue.
 #[derive(
     candid::CandidType,
@@ -2343,6 +2412,19 @@ pub enum Vote {
     Yes = 1,
     /// Vote for the proposal to be rejected.
     No = 2,
+}
+impl Vote {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Vote::Unspecified => "VOTE_UNSPECIFIED",
+            Vote::Yes => "VOTE_YES",
+            Vote::No => "VOTE_NO",
+        }
+    }
 }
 /// List of NNS functions that can be called by proposals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -2419,8 +2501,8 @@ pub enum NnsFunction {
     /// versions. The upgrade is performed when the subnet creates the next
     /// regular CUP.
     UpdateSubnetReplicaVersion = 11,
-    //// Clear the provisional whitelist.
-    //// The proposal changes the provisional whitelist to the empty list.
+    /// Clear the provisional whitelist.
+    /// The proposal changes the provisional whitelist to the empty list.
     ClearProvisionalWhitelist = 12,
     /// Removes a node from a subnet. The node must be currently assigned to a
     /// subnet.
@@ -2465,12 +2547,12 @@ pub enum NnsFunction {
     CompleteCanisterMigration = 29,
     /// Add a new SNS canister WASM
     AddSnsWasm = 30,
-    //// Change the subnet node membership. In a way, this function combines the separate
-    //// functions for adding and removing nodes from the subnet record, but adds the property
-    //// of atomic node replacement (node swap) on top.
-    ////
-    //// The nodes that are being added to the subnet must be currently unassigned.
-    //// The nodes that are being removed from the subnet must be currently assigned to the subnet.
+    /// Change the subnet node membership. In a way, this function combines the separate
+    /// functions for adding and removing nodes from the subnet record, but adds the property
+    /// of atomic node replacement (node swap) on top.
+    ///
+    /// The nodes that are being added to the subnet must be currently unassigned.
+    /// The nodes that are being removed from the subnet must be currently assigned to the subnet.
     ChangeSubnetMembership = 31,
     /// Updates the available subnet types in the cycles minting canister.
     UpdateSubnetType = 32,
@@ -2485,6 +2567,55 @@ pub enum NnsFunction {
     /// The specified versions are removed from the registry and the "blessed versions" record.
     /// This ensures that the replica cannot upgrade to these versions anymore.
     RetireReplicaVersion = 36,
+}
+impl NnsFunction {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NnsFunction::Unspecified => "NNS_FUNCTION_UNSPECIFIED",
+            NnsFunction::CreateSubnet => "NNS_FUNCTION_CREATE_SUBNET",
+            NnsFunction::AddNodeToSubnet => "NNS_FUNCTION_ADD_NODE_TO_SUBNET",
+            NnsFunction::NnsCanisterInstall => "NNS_FUNCTION_NNS_CANISTER_INSTALL",
+            NnsFunction::NnsCanisterUpgrade => "NNS_FUNCTION_NNS_CANISTER_UPGRADE",
+            NnsFunction::BlessReplicaVersion => "NNS_FUNCTION_BLESS_REPLICA_VERSION",
+            NnsFunction::RecoverSubnet => "NNS_FUNCTION_RECOVER_SUBNET",
+            NnsFunction::UpdateConfigOfSubnet => "NNS_FUNCTION_UPDATE_CONFIG_OF_SUBNET",
+            NnsFunction::AssignNoid => "NNS_FUNCTION_ASSIGN_NOID",
+            NnsFunction::NnsRootUpgrade => "NNS_FUNCTION_NNS_ROOT_UPGRADE",
+            NnsFunction::IcpXdrConversionRate => "NNS_FUNCTION_ICP_XDR_CONVERSION_RATE",
+            NnsFunction::UpdateSubnetReplicaVersion => "NNS_FUNCTION_UPDATE_SUBNET_REPLICA_VERSION",
+            NnsFunction::ClearProvisionalWhitelist => "NNS_FUNCTION_CLEAR_PROVISIONAL_WHITELIST",
+            NnsFunction::RemoveNodesFromSubnet => "NNS_FUNCTION_REMOVE_NODES_FROM_SUBNET",
+            NnsFunction::SetAuthorizedSubnetworks => "NNS_FUNCTION_SET_AUTHORIZED_SUBNETWORKS",
+            NnsFunction::SetFirewallConfig => "NNS_FUNCTION_SET_FIREWALL_CONFIG",
+            NnsFunction::UpdateNodeOperatorConfig => "NNS_FUNCTION_UPDATE_NODE_OPERATOR_CONFIG",
+            NnsFunction::StopOrStartNnsCanister => "NNS_FUNCTION_STOP_OR_START_NNS_CANISTER",
+            NnsFunction::RemoveNodes => "NNS_FUNCTION_REMOVE_NODES",
+            NnsFunction::UninstallCode => "NNS_FUNCTION_UNINSTALL_CODE",
+            NnsFunction::UpdateNodeRewardsTable => "NNS_FUNCTION_UPDATE_NODE_REWARDS_TABLE",
+            NnsFunction::AddOrRemoveDataCenters => "NNS_FUNCTION_ADD_OR_REMOVE_DATA_CENTERS",
+            NnsFunction::UpdateUnassignedNodesConfig => {
+                "NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG"
+            }
+            NnsFunction::RemoveNodeOperators => "NNS_FUNCTION_REMOVE_NODE_OPERATORS",
+            NnsFunction::RerouteCanisterRanges => "NNS_FUNCTION_REROUTE_CANISTER_RANGES",
+            NnsFunction::AddFirewallRules => "NNS_FUNCTION_ADD_FIREWALL_RULES",
+            NnsFunction::RemoveFirewallRules => "NNS_FUNCTION_REMOVE_FIREWALL_RULES",
+            NnsFunction::UpdateFirewallRules => "NNS_FUNCTION_UPDATE_FIREWALL_RULES",
+            NnsFunction::PrepareCanisterMigration => "NNS_FUNCTION_PREPARE_CANISTER_MIGRATION",
+            NnsFunction::CompleteCanisterMigration => "NNS_FUNCTION_COMPLETE_CANISTER_MIGRATION",
+            NnsFunction::AddSnsWasm => "NNS_FUNCTION_ADD_SNS_WASM",
+            NnsFunction::ChangeSubnetMembership => "NNS_FUNCTION_CHANGE_SUBNET_MEMBERSHIP",
+            NnsFunction::UpdateSubnetType => "NNS_FUNCTION_UPDATE_SUBNET_TYPE",
+            NnsFunction::ChangeSubnetTypeAssignment => "NNS_FUNCTION_CHANGE_SUBNET_TYPE_ASSIGNMENT",
+            NnsFunction::UpdateSnsWasmSnsSubnetIds => "NNS_FUNCTION_UPDATE_SNS_WASM_SNS_SUBNET_IDS",
+            NnsFunction::UpdateAllowedPrincipals => "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS",
+            NnsFunction::RetireReplicaVersion => "NNS_FUNCTION_RETIRE_REPLICA_VERSION",
+        }
+    }
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.
@@ -2518,6 +2649,22 @@ pub enum ProposalStatus {
     /// The proposal was adopted, but execution failed.
     Failed = 5,
 }
+impl ProposalStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ProposalStatus::Unspecified => "PROPOSAL_STATUS_UNSPECIFIED",
+            ProposalStatus::Open => "PROPOSAL_STATUS_OPEN",
+            ProposalStatus::Rejected => "PROPOSAL_STATUS_REJECTED",
+            ProposalStatus::Adopted => "PROPOSAL_STATUS_ADOPTED",
+            ProposalStatus::Executed => "PROPOSAL_STATUS_EXECUTED",
+            ProposalStatus::Failed => "PROPOSAL_STATUS_FAILED",
+        }
+    }
+}
 /// The proposal status, with respect to reward distribution.
 /// See also ProposalStatus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -2534,4 +2681,19 @@ pub enum ProposalRewardStatus {
     Settled = 3,
     /// The proposal is not eligible to be taken into account in a reward event.
     Ineligible = 4,
+}
+impl ProposalRewardStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ProposalRewardStatus::Unspecified => "PROPOSAL_REWARD_STATUS_UNSPECIFIED",
+            ProposalRewardStatus::AcceptVotes => "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES",
+            ProposalRewardStatus::ReadyToSettle => "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE",
+            ProposalRewardStatus::Settled => "PROPOSAL_REWARD_STATUS_SETTLED",
+            ProposalRewardStatus::Ineligible => "PROPOSAL_REWARD_STATUS_INELIGIBLE",
+        }
+    }
 }
