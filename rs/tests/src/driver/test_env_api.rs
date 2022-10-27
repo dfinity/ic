@@ -744,8 +744,12 @@ pub trait SshSession {
     fn block_on_ssh_session(&self, user: &str) -> Result<Session>;
 
     fn block_on_bash_script(&self, user: &str, script: &str) -> Result<String> {
-        let sess = self.block_on_ssh_session(user)?;
-        let mut channel = sess.channel_session()?;
+        let session = self.block_on_ssh_session(user)?;
+        self.block_on_bash_script_from_session(&session, script)
+    }
+
+    fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
+        let mut channel = session.channel_session()?;
         channel.exec("bash").unwrap();
 
         channel.write_all(script.as_bytes())?;

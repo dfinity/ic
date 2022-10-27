@@ -71,7 +71,7 @@ docker run  --name=bitcoind-node -d \
     regtest=1
     debug=1
     whitelist=[::]/0
-        
+
     # Dummy credentials that are required by `bitcoin-cli`.
     rpcuser=btc-dev-preview
     rpcpassword=Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=
@@ -112,15 +112,15 @@ fn get_bitcoind_log(env: &TestEnv) {
     let f = || -> Result<(), anyhow::Error> {
         let r = {
             let universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+            let session = universal_vm.block_on_ssh_session(ADMIN).unwrap();
 
             // Give log file user permission to copy it from the host.
-            universal_vm.block_on_bash_script(
-                ADMIN,
+            universal_vm.block_on_bash_script_from_session(
+                &session,
                 "sudo chown -R $(id -u):$(id -g) /tmp/regtest/debug.log",
             )?;
 
             // Log file is mapped from docker container to tmp directory.
-            let session = universal_vm.block_on_ssh_session(ADMIN).unwrap();
             let (mut remote_file, _) = session.scp_recv(Path::new("/tmp/regtest/debug.log"))?;
 
             let mut buf = String::new();
