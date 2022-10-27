@@ -217,8 +217,19 @@ RUN mkdir -p /var/www/html && chown www-data:www-data /var/www/html
 
 # Install other files (e.g. the uninstall-script)
 COPY var/www/html /var/www/html
-
 RUN chmod 0644 /var/www/html/*
+
+# Install cgi-scripts
+RUN mkdir -p /var/www/cgi-bin && \
+    chown www-data:www-data /var/www/cgi-bin
+COPY var/www/cgi-bin/* /var/www/cgi-bin/
+RUN mkdir -p /var/www/cgi-bin/artifacts && \
+    mkdir -p /var/www/cgi-bin/artifacts/certs && \
+    chown www-data:www-data /var/www/cgi-bin/artifacts && \
+    chown www-data:www-data /var/www/cgi-bin/artifacts/certs && \
+    touch /var/www/cgi-bin/cgi.log && \
+    chown www-data:www-data /var/www/cgi-bin/* && \
+    chmod 0755 /var/www/cgi-bin/*
 
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
@@ -249,3 +260,7 @@ RUN chmod 0755 /etc/nginx/* && \
     rm -rf /etc/nginx/conf.d/default.conf && \
     rm -rf /etc/nginx/sites-enabled/default && \
     rm -rf /etc/nginx/conf.d/default
+
+# Configure incron
+COPY etc/incron.tb /etc/incron.d/incron.tb
+RUN echo root >> /etc/incron.allow

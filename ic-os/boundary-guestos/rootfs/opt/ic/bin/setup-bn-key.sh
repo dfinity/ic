@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ex
+set -e
 
 TOOL=/opt/ic/bin/sev-guest-get-report
 DIR=/boot/config/sev
@@ -29,6 +29,11 @@ if [ -e /dev/sev-guest ]; then
         # Create the corresponding tarballs for the nginx to deliver
         tar -czvf ${HTML_DIR}/report_pem.tar.gz -C ${DIR} bn_pub.key guest_report_pem.bin vcek.pem ark.pem ask.pem
         tar -czvf ${HTML_DIR}/report_csr.tar.gz -C ${DIR} BN.csr guest_report_csr.bin vcek.pem ark.pem ask.pem
+
+        # Give the right permissions for the cgi scripts
+        chown www-data:www-data ${DIR}/bn_priv.key
+        chown www-data:www-data ${DIR}/guest_report_pem.bin
+        chown www-data:www-data /dev/sev-guest
 
         popd
 

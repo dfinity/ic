@@ -3,6 +3,8 @@ Description=Setup variable files (e.g. domain) for nginx
 DefaultDependencies=no
 After=bootstrap-ic-node.service
 Requires=bootstrap-ic-node.service
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 Type=oneshot
