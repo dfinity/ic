@@ -1,5 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
+load("//bazel:version.bzl", "ic_version_or_git_sha")
 
 bool_flag(
     name = "enable_malicious_code",
@@ -17,6 +18,19 @@ string_flag(
     name = "ic_version",
     build_setting_default = "",
     visibility = ["//visibility:public"],
+)
+
+# Generates version.txt file that contains the value of `--ic_version` flag if set, otherwise git sha if the working tree is clean, otherwise <git sha>-<timestamp>.
+# It has to be tagged as `no-cache` as bazel treats version_file as never changing.
+ic_version_or_git_sha(
+    name = "version.txt",
+    tags = ["no-cache"],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "ic_version_or_git_sha_sh",
+    srcs = ["ic_version_or_git_sha.sh"],
 )
 
 exports_files(
