@@ -6928,7 +6928,7 @@ fn make_proposal_with_action(
 
 // When a neuron A follows neuron B on topic Unspecified, and B votes on topic
 // T, then A votes the same was as B, except when T is Governance or
-// SnsDecentralizationSale.
+// SnsAndCommunityFund.
 #[test]
 fn test_default_followees() {
     let p = match std::env::var("NEURON_CSV_PATH") {
@@ -7010,7 +7010,7 @@ fn test_default_followees() {
     };
 
     // Despite having default followees on the Unspecified topic, topics Governance and
-    // SnsDecentralizationSale shouldn't have default following, i.e. when the voter_neuron votes in
+    // SnsAndCommunityFund shouldn't have default following, i.e. when the voter_neuron votes in
     // all other topics, the neuron we just created should follow, except in these two topics.
     let not_governance_nor_sale_proposal_id = make_proposal_with_action(
         &mut gov,
@@ -7072,7 +7072,7 @@ fn test_default_followees() {
         Topic::ExchangeRate as i32 => Followees { followees: vec![]},
         Topic::NetworkEconomics as i32 => Followees { followees: vec![voter_neuron.clone()]},
         Topic::Governance as i32 => Followees { followees: vec![]},
-        Topic::SnsDecentralizationSale as i32 => Followees { followees: vec![]},
+        Topic::SnsAndCommunityFund as i32 => Followees { followees: vec![]},
         Topic::NodeAdmin as i32 => Followees { followees: vec![voter_neuron.clone()]},
         Topic::ParticipantManagement as i32 => Followees { followees: vec![]},
         Topic::SubnetManagement as i32 => Followees { followees: vec![voter_neuron.clone()]},

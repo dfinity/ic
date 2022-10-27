@@ -1181,7 +1181,7 @@ impl Proposal {
                             NnsFunction::AddSnsWasm => Topic::NetworkCanisterManagement,
                             NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
                             NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
-                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsDecentralizationSale,
+                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                         }
                     } else {
@@ -1198,9 +1198,9 @@ impl Proposal {
                         "{}ERROR: Obsolete proposal type used: {:?}",
                         LOG_PREFIX, action
                     );
-                    Topic::SnsDecentralizationSale
+                    Topic::SnsAndCommunityFund
                 }
-                proposal::Action::OpenSnsTokenSwap(_) => Topic::SnsDecentralizationSale,
+                proposal::Action::OpenSnsTokenSwap(_) => Topic::SnsAndCommunityFund,
             }
         } else {
             Topic::Unspecified
@@ -5772,7 +5772,12 @@ impl Governance {
                                 all_followers.append(&mut more_followers.clone());
                             }
                             // Default following doesn't apply to governance or SNS decentralization sale proposals.
-                            if ![Topic::Governance, Topic::SnsDecentralizationSale].contains(&topic)
+                            if ![
+                                Topic::Governance,
+                                Topic::SnsDecentralizationSale,
+                                Topic::SnsAndCommunityFund,
+                            ]
+                            .contains(&topic)
                             {
                                 // Insert followers from 'Unspecified' (default followers)
                                 if let Some(more_followers) =
