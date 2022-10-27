@@ -3883,7 +3883,6 @@ dependencies = [
  "criterion",
  "ic-config",
  "ic-constants",
- "ic-crypto",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-logger",

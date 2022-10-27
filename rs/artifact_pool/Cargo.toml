@@ -9,7 +9,6 @@ bincode = "1.2.1"
 byteorder = "1.3.4"
 clap = { version = "3.1.6", features = ["derive"] }
 ic-config = { path = "../config" }
-ic-crypto = { path = "../crypto" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }

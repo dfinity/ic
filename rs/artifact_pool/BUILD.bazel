@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
-    "//rs/crypto",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -20,7 +19,6 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:serde",
-    "@crate_index//:serde-bytes-repr",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:strum",
@@ -75,7 +73,10 @@ rust_binary(
     srcs = ["src/bin/consensus_pool_util.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":artifact_pool"],
+    deps = DEPENDENCIES + [
+        ":artifact_pool",
+        "@crate_index//:serde-bytes-repr",
+    ],
 )
 
 rust_test(
