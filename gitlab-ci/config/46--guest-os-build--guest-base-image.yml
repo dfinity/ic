@@ -6,10 +6,6 @@
       -f Dockerfile.base .
   docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest \
       --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
-  # genericos-base
-  cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
-  docker build -q -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest \
-      -f Dockerfile.base .
   # boundaryos-base
   cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
   docker build -q -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest \
@@ -45,7 +41,6 @@ build-push-base-images:
      IMAGE_LIST=(
          dfinity/guestos-base
          dfinity/guestos-base-dev
-         dfinity/genericos-base
          dfinity/boundaryos-base
          dfinity/boundaryos-base-snp
      )
