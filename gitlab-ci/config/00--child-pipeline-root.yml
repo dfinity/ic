@@ -9,7 +9,6 @@ include:
 - local: /gitlab-ci/config/20--test--after-script.yml
 - local: /gitlab-ci/config/30--cargo-build--child-pipeline.yml
 - local: /gitlab-ci/config/40--cargo-test--child-pipeline.yml
-- local: /gitlab-ci/config/41--guest-os-build--generic-guest-os-diskimg.yml
 - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
 - local: /gitlab-ci/config/46--guest-os-build--guest-os-diskimg.yml
 - local: /gitlab-ci/config/46--guest-os-build--guest-os-updateimg.yml

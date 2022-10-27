@@ -276,7 +276,6 @@
     - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
       changes:
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/generic-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
