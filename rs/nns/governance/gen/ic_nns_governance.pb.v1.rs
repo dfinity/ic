@@ -2242,15 +2242,19 @@ pub enum Topic {
     Kyc = 9,
     /// Topic for proposals to reward node providers.
     NodeProviderRewards = 10,
-    /// Currently, the only type of proposal in this topic is
-    /// OpenSnsTokenSwap. It is not expected that more types of proposals will
-    /// be added to this topic.
+    /// Superseded by SNS_COMMUNITY_FUND.
+    ///
+    /// TODO(NNS1-1787): Delete this. In addition to clients wiping this from their
+    /// memory, I think we'll need Candid support in order to safely delete
+    /// this. There is no rush to delete this though.
     SnsDecentralizationSale = 11,
     /// Proposals handling updates of a subnet's replica version.
     /// The only proposal in this topic is UpdateSubnetReplicaVersion.
     SubnetReplicaVersionManagement = 12,
     /// All proposals dealing with blessing and retirement of replica versions.
     ReplicaVersionManagement = 13,
+    /// Proposals related to SNS and Community Fund.
+    SnsAndCommunityFund = 14,
 }
 /// Every neuron is in one of three states.
 ///
