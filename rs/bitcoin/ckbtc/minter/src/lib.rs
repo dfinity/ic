@@ -7,6 +7,7 @@ pub mod guard;
 pub mod lifecycle;
 pub mod metrics;
 pub mod state;
+pub mod tx;
 pub mod updates;
 
 #[cfg(test)]

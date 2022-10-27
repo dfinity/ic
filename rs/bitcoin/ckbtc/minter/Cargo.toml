@@ -32,6 +32,7 @@ serde = "1.0.136"
 serde_bytes = "0.11"
 
 [dev-dependencies]
+bitcoin = "0.28.1"
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-icrc1-ledger = { path = "../../../rosetta-api/icrc1/ledger" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
