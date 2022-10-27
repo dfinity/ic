@@ -1,4 +1,5 @@
 use std::{
+    fs::OpenOptions,
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
@@ -18,6 +19,7 @@ use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_p8s_service_discovery::titanium::{
     file_sd::FileSd,
     ic_discovery::{IcServiceDiscovery, IcServiceDiscoveryImpl, JOB_NAMES},
+    log_scraper::scrape_logs,
     mainnet_registry::{create_local_store_from_changelog, get_mainnet_delta_6d_c1},
     metrics::Metrics,
     rest_api::start_http_server,
@@ -80,7 +82,7 @@ fn main() -> Result<()> {
         let poll_loop = make_poll_loop(
             log.clone(),
             rt.handle().clone(),
-            ic_discovery,
+            ic_discovery.clone(),
             stop_signal_rcv,
             cli_args.poll_interval,
             Metrics::new(metrics_registry.clone()),
@@ -94,6 +96,23 @@ fn main() -> Result<()> {
         let join_handle = std::thread::spawn(poll_loop);
 
         Some((stop_signal_sender, join_handle))
+    } else {
+        None
+    };
+
+    let log_scrape_handle = if let Some(journal_file_path) = cli_args.gatewayd_logs_path {
+        let file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(journal_file_path)
+            .expect("Could not open file.");
+        Some(rt.spawn(scrape_logs(
+            log.clone(),
+            ic_discovery,
+            cli_args.gatewayd_logs_target_filter,
+            file,
+            shutdown_signal.clone(),
+        )))
     } else {
         None
     };
@@ -116,12 +135,17 @@ fn main() -> Result<()> {
     if let Some(http_handle) = http_handle {
         let _ = rt.block_on(http_handle)?;
     }
+    if let Some(log_scrape_handle) = log_scrape_handle {
+        rt.block_on(log_scrape_handle)?;
+    }
+
     std::mem::drop(metrics_runtime);
 
     if let Some((stop_signal_handler, join_handle)) = scrape_handle {
         stop_signal_handler.send(())?;
         join_handle.join().expect("join() failed.");
     }
+
     Ok(())
 }
 
@@ -289,7 +313,37 @@ The listen address on which metrics for this service should be exposed.
 "#
     )]
     metrics_listen_addr: SocketAddr,
+
+    #[clap(
+        long = "logs-target-filter",
+        help = r#"
+A filter of the format `<key>=<value>`. If specified and --pull-gatewayd-logs is
+specified, the given filter is applied to the list of targets from which to pull
+logs.
+
+Example:
+  --gatewayd-logs-target-filter node_id=n76p6-epjz2-5ensc-gwvgv-niomg-4v3mb-rj4rr-nek67-g7hez-wlv6q-vqe
+
+  Filters the list of targets used for scraping logs.
+
+"#
+    )]
+    gatewayd_logs_target_filter: Option<String>,
+
+    #[clap(
+        long = "scrape-journal-gatewayd-logs",
+        help = r#"
+If specified, scrape logs from targets and write all logs to the given file. The
+logs are scraped from the endpoint exposed by the systemd-journal-gatewayd
+service.
+
+https://www.freedesktop.org/software/systemd/man/systemd-journal-gatewayd.service.html
+        
+"#
+    )]
+    gatewayd_logs_path: Option<PathBuf>,
 }
+
 impl CliArgs {
     fn validate(self) -> Result<Self> {
         if !self.targets_dir.exists() {
@@ -302,10 +356,51 @@ impl CliArgs {
 
         if let Some(file_sd_base_path) = &self.file_sd_base_path {
             if !file_sd_base_path.is_dir() {
-                bail!("Not a directory: {:?}", file_sd_base_path)
+                bail!("Not a directory: {:?}", file_sd_base_path);
             }
         }
 
+        if let Some(gatewayd_logs_path) = &self.gatewayd_logs_path {
+            let parent_dir = gatewayd_logs_path.parent().unwrap();
+            if !parent_dir.is_dir() {
+                bail!("Directory does not exist: {:?}", parent_dir);
+            }
+        }
+
+        if let Some(log_filter) = &self.gatewayd_logs_target_filter {
+            check_logs_filter_format(log_filter)?;
+        }
+
         Ok(self)
+    }
+}
+
+fn check_logs_filter_format(log_filter: &str) -> Result<()> {
+    let items = log_filter.split('=').collect::<Vec<_>>();
+    if items.len() != 2 {
+        bail!("Invalid filter {:?}", log_filter);
+    }
+
+    let key = items[0];
+    if !(key == "node_id" || key == "subnet_id") {
+        bail!(
+            "A filter must be of the form node_id=<> or subnet_id=<>: {:?}",
+            log_filter
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn correct_filter_is_accepted() {
+        check_logs_filter_format(
+            "node_id=25p5a-3yzir-ifqqt-5lggj-g4nxg-v2qe2-vxw57-qkxtd-wjohn-kfbfp-bqe",
+        )
+        .unwrap()
     }
 }
