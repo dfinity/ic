@@ -613,14 +613,19 @@ fn resolve_sig_inputs_refs(
 mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        generate_key_transcript, generate_tecdsa_protocol_inputs,
+        CanisterThresholdSigTestEnvironment,
+    };
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_interfaces::ecdsa::MutableEcdsaPool;
     use ic_interfaces::time_source::TimeSource;
-    use ic_test_utilities::types::ids::{subnet_test_id, NODE_1, NODE_2, NODE_3};
+    use ic_test_utilities::types::ids::{subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3};
     use ic_test_utilities::FastForwardTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::*;
-    use ic_types::Height;
+    use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
+    use ic_types::{Height, Randomness};
 
     fn create_request_id(generator: &mut EcdsaUIDGenerator, height: Height) -> RequestId {
         let quadruple_id = generator.next_quadruple_id();
@@ -797,6 +802,50 @@ mod tests {
                         &NODE_1,
                     ));
                 }
+            })
+        })
+    }
+
+    #[test]
+    fn test_crypto_verify_signature_share() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(1);
+                let key_transcript =
+                    generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+                let derivation_path = ExtendedDerivationPath {
+                    caller: user_test_id(1).get(),
+                    derivation_path: vec![],
+                };
+                let sig_inputs = generate_tecdsa_protocol_inputs(
+                    &env,
+                    &key_transcript,
+                    &[0; 32],
+                    Randomness::from([0; 32]),
+                    derivation_path,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                );
+                let crypto = env.crypto_components.into_values().next().unwrap();
+                let (_, signer) = create_signer_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(Arc::new(crypto)),
+                );
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                // let time_source = FastForwardTimeSource::new();
+                let id = create_request_id(&mut uid_generator, Height::from(5));
+                let share = create_signature_share(NODE_2, id);
+                let changeset: Vec<_> = signer
+                    .crypto_verify_signature_share(
+                        &share.message_id(),
+                        &sig_inputs,
+                        &share,
+                        &(EcdsaStatsNoOp {}),
+                    )
+                    .into_iter()
+                    .collect();
+                // assert that the mock signature share does not pass real crypto check
+                assert!(is_handle_invalid(&changeset, &share.message_id()));
             })
         })
     }

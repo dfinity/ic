@@ -952,6 +952,7 @@ impl<'a> Action<'a> {
 mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
+    use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_interfaces::ecdsa::MutableEcdsaPool;
     use ic_interfaces::time_source::TimeSource;
@@ -1004,6 +1005,30 @@ mod tests {
             Action::action(&block_reader, &active_transcripts, Height::from(20), &id_2),
             Action::Process(_)
         ));
+    }
+
+    #[test]
+    fn test_crypto_verify_complaint() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(1);
+                let crypto = env.crypto_components.into_values().next().unwrap();
+                let (_, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(Arc::new(crypto)),
+                );
+                let id = create_transcript_id_with_height(2, Height::from(20));
+                let transcript = create_transcript(id, &[NODE_2]);
+                let complaint = create_complaint(id, NODE_2, NODE_3);
+                let changeset: Vec<_> = complaint_handler
+                    .crypto_verify_complaint(&complaint.message_id(), &transcript, &complaint)
+                    .into_iter()
+                    .collect();
+                // assert that the mock complaint does not pass real crypto check
+                assert!(is_handle_invalid(&changeset, &complaint.message_id()));
+            })
+        })
     }
 
     // Tests validation of the received complaints
@@ -1195,6 +1220,31 @@ mod tests {
                     &NODE_2,
                     &NODE_1
                 ));
+            })
+        })
+    }
+
+    #[test]
+    fn test_crypto_verify_opening() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(1);
+                let crypto = env.crypto_components.into_values().next().unwrap();
+                let (_, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(Arc::new(crypto)),
+                );
+                let id = create_transcript_id_with_height(2, Height::from(20));
+                let transcript = create_transcript(id, &[NODE_2]);
+                let complaint = create_complaint(id, NODE_2, NODE_3);
+                let opening = create_opening(id, NODE_2, NODE_3, NODE_4);
+                let changeset: Vec<_> = complaint_handler
+                    .crypto_verify_opening(&opening.message_id(), &transcript, &opening, &complaint)
+                    .into_iter()
+                    .collect();
+                // assert that the mock opening does not pass real crypto check
+                assert!(is_handle_invalid(&changeset, &opening.message_id()));
             })
         })
     }
