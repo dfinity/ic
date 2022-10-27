@@ -799,7 +799,7 @@ impl Step for UploadAndHostTarStep {
 
         let upload_dir = "/tmp/recovery_registry";
 
-        ssh_helper.ssh("sudo apt update && sudo apt -y install daemonize python3".to_string())?;
+        ssh_helper.ssh("nix-env -i daemonize python3".to_string())?;
         ssh_helper.ssh(format!("mkdir -p {}", upload_dir))?;
 
         let target = format!("{}@[{}]:{}/", self.aux_host, self.aux_ip, upload_dir);

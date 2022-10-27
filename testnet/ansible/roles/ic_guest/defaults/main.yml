@@ -9,7 +9,7 @@ ic_memory_gb: 16
 
 ic_disk_path: ""
 
-ic_generic_os_disk_path: ""
+ic_aux_os_disk_path: ""
 
 ic_media_path: ""
 
