@@ -1141,15 +1141,16 @@ impl TestWasmExecutorCore {
             method_name: "update".into(),
             method_payload: encode_message_id_as_payload(call_message_id),
         };
-        system_state
-            .push_output_request(
-                canister_current_memory_usage,
-                compute_allocation,
-                request,
-                prepayment_for_response_execution,
-                prepayment_for_response_transmission,
-            )
-            .map_err(|req| format!("Failed pushing request {:?} to output queue.", req))?;
+        if let Err(req) = system_state.push_output_request(
+            canister_current_memory_usage,
+            compute_allocation,
+            request,
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission,
+        ) {
+            system_state.unregister_callback(callback);
+            return Err(format!("Failed pushing request {:?} to output queue.", req));
+        }
         self.messages.insert(call_message_id, call.other_side);
         self.messages.insert(response_message_id, call.on_response);
         Ok(())

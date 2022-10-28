@@ -988,6 +988,15 @@ impl SchedulerImpl {
                 state.metadata.own_subnet_type,
                 self.exec_env.max_canister_memory_size(),
             ) {
+                // Crash in debug mode if any invariant fails.
+                debug_assert!(false,
+                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
+                    CANISTER_INVARIANT_BROKEN,
+                    current_round,
+                    state.time(),
+                    canister_id,
+                    err
+                );
                 self.metrics.canister_invariants.inc();
                 warn!(
                     round_log,
