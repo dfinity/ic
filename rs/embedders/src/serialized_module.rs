@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
 use crate::wasm_utils::{
-    instrumentation::{InstrumentationOutput, Segments},
-    validation::{WasmImportsDetails, WasmValidationDetails},
+    InstrumentationOutput, Segments, WasmImportsDetails, WasmValidationDetails,
 };
 
 /// A `wasmtime::Module` that has been serialized.

@@ -1,9 +1,10 @@
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
-        instrumentation::{export_additional_symbols, ExportModuleData, Segments},
+        instrumentation::{export_additional_symbols, ExportModuleData},
         validate_and_instrument_for_testing,
         validation::RESERVED_SYMBOLS,
+        Segments,
     },
     WasmtimeEmbedder,
 };

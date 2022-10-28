@@ -1,8 +1,9 @@
 use ic_canister_sandbox_common::protocol::sbxsvc;
 use ic_canister_sandbox_common::*;
-use ic_embedders::wasm_utils::instrumentation::Segments;
-use ic_embedders::wasm_utils::validation::WasmImportsDetails;
-use ic_embedders::{CompilationResult, SerializedModule, SerializedModuleBytes};
+use ic_embedders::{
+    wasm_utils::{Segments, WasmImportsDetails},
+    CompilationResult, SerializedModule, SerializedModuleBytes,
+};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 use ic_types::NumInstructions;
 

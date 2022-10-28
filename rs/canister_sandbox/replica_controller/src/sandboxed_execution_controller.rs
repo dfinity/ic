@@ -10,8 +10,9 @@ use ic_embedders::wasm_executor::{
     get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, PausedWasmExecution,
     WasmExecutionResult, WasmExecutor,
 };
-use ic_embedders::wasm_utils::validation::WasmImportsDetails;
-use ic_embedders::{CompilationCache, CompilationResult, WasmExecutionInput};
+use ic_embedders::{
+    wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, WasmExecutionInput,
+};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 #[cfg(target_os = "linux")]
 use ic_logger::warn;
