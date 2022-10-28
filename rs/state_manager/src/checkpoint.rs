@@ -15,7 +15,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{
     BitcoinStateBits, BitcoinStateLayout, CanisterLayout, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, ReadPolicy, RwPolicy, StateLayout,
+    ExecutionStateBits, ReadOnly, ReadPolicy, RwPolicy, StateLayout,
 };
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
@@ -537,7 +537,9 @@ pub fn load_canister_state<P: ReadPolicy>(
             );
             durations.insert("wasm_binary", starting_time.elapsed());
 
-            let canister_root = canister_layout.raw_path();
+            let canister_root = CheckpointLayout::<ReadOnly>::new("NOT_USED".into(), height)?
+                .canister(canister_id)?
+                .raw_path();
             Some(ExecutionState {
                 canister_root,
                 session_nonce,
