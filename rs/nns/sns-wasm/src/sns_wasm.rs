@@ -25,9 +25,11 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
 use std::iter::zip;
+use std::str::FromStr;
 use std::thread::LocalKey;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
+const DEFAULT_ALLOWED_PRINCIPALS: [&str; 1] = ["b6ps5-uiaaa-aaaal-abhta-cai"];
 
 impl From<SnsCanisterIds> for DeployedSns {
     fn from(src: SnsCanisterIds) -> Self {
@@ -931,6 +933,21 @@ where
                 ),
             ),
         }
+    }
+
+    /// Add the principals in `DEFAULT_ALLOWED_PRINCIPALS` to `self.allowed_principals`
+    pub fn add_default_allowed_principals(&mut self) {
+        let default_principals: HashSet<PrincipalId> = DEFAULT_ALLOWED_PRINCIPALS
+            .iter()
+            .map(|&p| PrincipalId::from_str(p))
+            .filter(|result| result.is_ok())
+            .map(|result| result.unwrap())
+            .collect();
+
+        let current_set: HashSet<PrincipalId> =
+            self.allowed_principals.clone().into_iter().collect();
+
+        self.allowed_principals = current_set.union(&default_principals).copied().collect()
     }
 
     // Get the list of principals allowed to deploy an sns.

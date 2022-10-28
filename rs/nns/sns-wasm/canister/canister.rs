@@ -308,6 +308,7 @@ fn canister_post_upgrade() {
     println!("{}Executing post upgrade", LOG_PREFIX);
 
     SNS_WASM.with(|c| c.replace(SnsWasmCanister::<CanisterStableMemory>::from_stable_memory()));
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow_mut().add_default_allowed_principals());
 
     println!("{}Completed post upgrade", LOG_PREFIX);
 }
