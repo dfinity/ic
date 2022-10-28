@@ -39,7 +39,7 @@ pub async fn main() {
     // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
     if config.incoming_source == IncomingSource::Systemd {
         unsafe {
-            start_metrics_grpc(metrics_registry, logger.clone());
+            start_metrics_grpc(metrics_registry.clone(), logger.clone());
         }
     }
 
@@ -50,7 +50,7 @@ pub async fn main() {
     );
 
     // Create server with https enforcement.
-    let server = AdapterServer::new(config.clone(), logger.clone());
+    let server = AdapterServer::new(config.clone(), logger.clone(), &metrics_registry);
     match config.incoming_source {
         IncomingSource::Path(uds_path) => server
             .serve(incoming_from_path(uds_path))

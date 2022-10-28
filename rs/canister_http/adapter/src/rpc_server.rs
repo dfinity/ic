@@ -1,3 +1,8 @@
+use crate::metrics::{
+    AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_BODY_RECEIVE_TIMEOUT, LABEL_CONNECT,
+    LABEL_HTTP_METHOD, LABEL_HTTP_SCHEME, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
+    LABEL_URL_PARSE,
+};
 use byte_unit::Byte;
 use core::convert::TryFrom;
 use http::{uri::Scheme, Uri};
@@ -12,17 +17,23 @@ use ic_canister_http_service::{
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
 use ic_logger::{debug, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use tonic::{Request, Response, Status};
 
 /// implements RPC
 pub struct CanisterHttp<C: Clone + Connect + Send + Sync + 'static> {
     client: Client<C>,
     logger: ReplicaLogger,
+    metrics: AdapterMetrics,
 }
 
 impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttp<C> {
-    pub fn new(client: Client<C>, logger: ReplicaLogger) -> Self {
-        Self { client, logger }
+    pub fn new(client: Client<C>, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
+        Self {
+            client,
+            logger,
+            metrics: AdapterMetrics::new(metrics),
+        }
     }
 }
 
@@ -32,10 +43,16 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
         &self,
         request: Request<CanisterHttpSendRequest>,
     ) -> Result<Response<CanisterHttpSendResponse>, Status> {
+        self.metrics.requests_total.inc();
+
         let req = request.into_inner();
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
+            self.metrics
+                .request_errors_total
+                .with_label_values(&[LABEL_URL_PARSE])
+                .inc();
             Status::new(
                 tonic::Code::InvalidArgument,
                 format!("Failed to parse URL: {}", err),
@@ -47,6 +64,10 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 self.logger,
                 "Got request with no or http scheme specified. {}", uri
             );
+            self.metrics
+                .request_errors_total
+                .with_label_values(&[LABEL_HTTP_SCHEME])
+                .inc();
             return Err(Status::new(
                 tonic::Code::InvalidArgument,
                 "Url need to specify https scheme",
@@ -64,10 +85,16 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 HttpMethod::Get => Ok(Method::GET),
                 HttpMethod::Post => Ok(Method::POST),
                 HttpMethod::Head => Ok(Method::HEAD),
-                _ => Err(Status::new(
-                    tonic::Code::InvalidArgument,
-                    format!("Unsupported HTTP method {:?}", method),
-                )),
+                _ => {
+                    self.metrics
+                        .request_errors_total
+                        .with_label_values(&[LABEL_HTTP_METHOD])
+                        .inc();
+                    Err(Status::new(
+                        tonic::Code::InvalidArgument,
+                        format!("Unsupported HTTP method {:?}", method),
+                    ))
+                }
             })?;
 
         // Build Http Request.
@@ -76,6 +103,10 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             HeaderMap::try_from(&req.headers.into_iter().map(|h| (h.name, h.value)).collect())
                 .map_err(|err| {
                     debug!(self.logger, "Failed to parse headers: {}", err);
+                    self.metrics
+                        .request_errors_total
+                        .with_label_values(&[LABEL_REQUEST_HEADERS])
+                        .inc();
                     Status::new(
                         tonic::Code::InvalidArgument,
                         format!("Failed to parse headers: {}", err),
@@ -87,6 +118,10 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
 
         let http_resp = self.client.request(http_req).await.map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
+            self.metrics
+                .request_errors_total
+                .with_label_values(&[LABEL_CONNECT])
+                .inc();
             Status::new(
                 tonic::Code::Unavailable,
                 format!("Failed to connect: {}", err),
@@ -108,6 +143,10 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             .collect::<Result<Vec<_>, ToStrError>>()
             .map_err(|err| {
                 debug!(self.logger, "Failed to parse headers: {}", err);
+                self.metrics
+                    .request_errors_total
+                    .with_label_values(&[LABEL_RESPONSE_HEADERS])
+                    .inc();
                 Status::new(
                     tonic::Code::Unavailable,
                     format!("Failed to parse headers: {}", err),
@@ -124,12 +163,24 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             debug!(self.logger, "Failed to fetch body: {}", err);
             match err {
                 // SysTransient error
-                BodyReceiveError::Timeout(e) | BodyReceiveError::Unavailable(e) => Status::new(
-                    tonic::Code::Unavailable,
-                    format!("Failed to fetch body: {}", e),
-                ),
+                BodyReceiveError::Timeout(e) | BodyReceiveError::Unavailable(e) => {
+                    self.metrics
+                        .request_errors_total
+                        .with_label_values(&[LABEL_BODY_RECEIVE_TIMEOUT])
+                        .inc();
+                    Status::new(
+                        tonic::Code::Unavailable,
+                        format!("Failed to fetch body: {}", e),
+                    )
+                }
                 // SysFatal error
-                BodyReceiveError::TooLarge(e) => Status::new(tonic::Code::OutOfRange, e),
+                BodyReceiveError::TooLarge(e) => {
+                    self.metrics
+                        .request_errors_total
+                        .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
+                        .inc();
+                    Status::new(tonic::Code::OutOfRange, e)
+                }
             }
         })?;
 

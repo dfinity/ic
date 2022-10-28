@@ -8,6 +8,9 @@ mod rpc_server;
 /// This module contains the basic configuration struct used to start up an adapter instance.
 mod config;
 
+/// Adapter metrics
+mod metrics;
+
 pub use cli::Cli;
 pub use config::{Config, IncomingSource};
 pub use rpc_server::CanisterHttp;
@@ -22,6 +25,7 @@ use hyper_socks2::SocksConnector;
 use hyper_tls::HttpsConnector;
 use ic_canister_http_service::canister_http_service_server::CanisterHttpServiceServer;
 use ic_logger::ReplicaLogger;
+use ic_metrics::MetricsRegistry;
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tonic::transport::{
@@ -42,7 +46,7 @@ impl AdapterServer {
     // but in this case it would be some certificate store to be used by the http
     // client. This complicates unnecessary the production code. For now we decide
     // to keep the 'enforce_https' flag.
-    pub fn new(config: Config, logger: ReplicaLogger) -> Self {
+    pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
         http_connector
@@ -60,13 +64,13 @@ impl AdapterServer {
                 let mut https_connector = HttpsConnector::new_with_connector(proxy_connector);
                 https_connector.https_only(true);
                 let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
-                Self::new_with_client(https_client, config, logger)
+                Self::new_with_client(https_client, config, logger, metrics)
             }
             None => {
                 let mut https_connector = HttpsConnector::new_with_connector(http_connector);
                 https_connector.https_only(true);
                 let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
-                Self::new_with_client(https_client, config, logger)
+                Self::new_with_client(https_client, config, logger, metrics)
             }
         }
     }
@@ -75,8 +79,9 @@ impl AdapterServer {
         client: Client<C>,
         config: Config,
         logger: ReplicaLogger,
+        metrics: &MetricsRegistry,
     ) -> Self {
-        let canister_http = CanisterHttp::new(client, logger);
+        let canister_http = CanisterHttp::new(client, logger, metrics);
         Self(
             Server::builder()
                 .timeout(Duration::from_secs(config.http_request_timeout_secs))

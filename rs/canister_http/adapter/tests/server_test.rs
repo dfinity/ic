@@ -17,6 +17,7 @@ mod test {
         HttpMethod,
     };
     use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
     use once_cell::sync::OnceCell;
     use std::convert::TryFrom;
     use std::env;
@@ -400,7 +401,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             }
         };
 
-        let server = AdapterServer::new(config, no_op_logger());
+        let server = AdapterServer::new(config, no_op_logger(), &MetricsRegistry::default());
 
         // spawn gRPC server
         tokio::spawn(async move { server.serve(incoming).await.expect("server shutdown") });

@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:hyper-socks2",
     "@crate_index//:hyper-tls",
     "@crate_index//:itertools",
+    "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:serde",

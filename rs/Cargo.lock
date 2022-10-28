@@ -4233,6 +4233,7 @@ dependencies = [
  "ic-metrics",
  "itertools 0.10.3",
  "once_cell",
+ "prometheus 0.12.0",
  "prost",
  "rand 0.8.5",
  "serde",
