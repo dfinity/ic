@@ -7,8 +7,8 @@ use crate::{
     LocalCspVault,
 };
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    PublicRandomSeedGenerator for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> PublicRandomSeedGenerator
+    for LocalCspVault<R, S, C>
 {
     fn new_public_seed(&self) -> Result<Seed, PublicRandomSeedGeneratorError> {
         unimplemented!()

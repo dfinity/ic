@@ -57,11 +57,7 @@ use tokio::net::UnixListener;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
 /// Crypto service provider (CSP) vault server based on the tarpc RPC framework.
-pub struct TarpcCspVaultServerImpl<
-    R: Rng + CryptoRng + Send + Sync,
-    S: SecretKeyStore,
-    C: SecretKeyStore,
-> {
+pub struct TarpcCspVaultServerImpl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
     local_csp_vault: Arc<LocalCspVault<R, S, C>>,
     listener: UnixListener,
     thread_pool: ThreadPool,
@@ -76,11 +72,7 @@ pub struct TarpcCspVaultServerImpl<
 /// creates a pool handle whose behavior is similar to `Arc`][1].
 ///
 /// [1]: https://docs.rs/threadpool/1.8.1/threadpool/struct.ThreadPool.html#impl-Clone
-struct TarpcCspVaultServerWorker<
-    R: Rng + CryptoRng + Send + Sync,
-    S: SecretKeyStore,
-    C: SecretKeyStore,
-> {
+struct TarpcCspVaultServerWorker<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
     local_csp_vault: Arc<LocalCspVault<R, S, C>>,
     thread_pool_handle: ThreadPool,
 }
@@ -108,7 +100,7 @@ where
     rx.await.expect("the sender was dropped")
 }
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Clone
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> Clone
     for TarpcCspVaultServerWorker<R, S, C>
 {
     fn clone(&self) -> Self {
@@ -515,12 +507,7 @@ impl TarpcCspVaultServerImpl<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     }
 }
 
-impl<
-        R: Rng + CryptoRng + Send + Sync + 'static,
-        S: SecretKeyStore + 'static,
-        C: SecretKeyStore + 'static,
-    > TarpcCspVaultServerImpl<R, S, C>
-{
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> TarpcCspVaultServerImpl<R, S, C> {
     /// Creates a remote CSP vault server for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
@@ -547,7 +534,14 @@ impl<
             logger,
         }
     }
+}
 
+impl<
+        R: Rng + CryptoRng + Send + Sync + 'static,
+        S: SecretKeyStore + Send + Sync + 'static,
+        C: SecretKeyStore + Send + Sync + 'static,
+    > TarpcCspVaultServerImpl<R, S, C>
+{
     pub async fn run(self) {
         // Wrap data in telegrams with a length header.
         let codec_builder = LengthDelimitedCodec::builder();

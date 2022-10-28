@@ -9,7 +9,7 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> SecretKeyStoreCspVault
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> SecretKeyStoreCspVault
     for LocalCspVault<R, S, C>
 {
     fn sks_contains(&self, id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError> {
