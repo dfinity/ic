@@ -54,6 +54,10 @@ pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GB);
 
 /// The maximum depth of call graphs allowed for ICQC
 pub(crate) const MAX_QUERY_CALL_DEPTH: usize = 6;
+/// Equivalent to MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS for now
+pub(crate) const MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL: u64 = 5_000_000_000;
+/// This would allow 100 calls with the current MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL
+pub(crate) const INSTRUCTION_OVERHEAD_PER_QUERY_CALL: u64 = 50_000_000;
 
 // The ID of the Bitcoin testnet canister in production.
 const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
@@ -102,6 +106,16 @@ pub struct Config {
 
     /// The maximum depth of the query call tree.
     pub max_query_call_depth: usize,
+
+    /// Maximum total number of cycles allowed for composite queries.
+    pub max_instructions_per_composite_query_call: NumInstructions,
+
+    /// Instructions to charge for each composite query call in addition to the
+    /// instructions in the actual query call. This is meant to protect from
+    /// cases where we have many calls into canister that execute little work.
+    /// This cost is meant to cover for some of the overhead associated with
+    /// the actual call.
+    pub instruction_overhead_per_query_call: NumInstructions,
 
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
@@ -153,6 +167,12 @@ impl Default for Config {
             canister_sandboxing_flag: FlagStatus::Enabled,
             query_execution_threads: QUERY_EXECUTION_THREADS,
             max_query_call_depth: MAX_QUERY_CALL_DEPTH,
+            max_instructions_per_composite_query_call: NumInstructions::from(
+                MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL,
+            ),
+            instruction_overhead_per_query_call: NumInstructions::from(
+                INSTRUCTION_OVERHEAD_PER_QUERY_CALL,
+            ),
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             rate_limiting_of_heap_delta: FlagStatus::Enabled,
             rate_limiting_of_instructions: FlagStatus::Enabled,

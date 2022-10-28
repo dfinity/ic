@@ -119,6 +119,7 @@ pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
         C::CanisterInstallCodeRateLimited => StatusCode::TOO_MANY_REQUESTS,
         C::CanisterMemoryAccessLimitExceeded => StatusCode::INTERNAL_SERVER_ERROR,
         C::QueryCallGraphTooDeep => StatusCode::INTERNAL_SERVER_ERROR,
+        C::QueryCallGraphTotalInstructionLimitExceeded => StatusCode::INTERNAL_SERVER_ERROR,
     };
     make_plaintext_response(status, user_error.description().to_string())
 }

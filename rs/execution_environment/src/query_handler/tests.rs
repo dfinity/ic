@@ -7,7 +7,7 @@ use ic_test_utilities::{
     types::ids::user_test_id,
     universal_canister::{call_args, wasm},
 };
-use ic_types::{ingress::WasmResult, messages::UserQuery, Cycles};
+use ic_types::{ingress::WasmResult, messages::UserQuery, Cycles, NumInstructions};
 use std::sync::Arc;
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -339,6 +339,92 @@ fn query_callgraph_depth_is_enforced() {
             Err(err) => {
                 assert_eq!(err.code(), ErrorCode::QueryCallGraphTooDeep)
             }
+        }
+    }
+}
+
+#[test]
+fn query_callgraph_max_instructions_is_enforced() {
+    const CANISTERS_MAX: usize = 20;
+    const CANISTERS_MAX_SUCC: usize = 5; // Number of calls expected to succeed
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System) // For now, query calls are only allowed in system subnets
+        .with_max_instructions_per_composite_query_call(NumInstructions::from(
+            (100_000 + CANISTERS_MAX_SUCC * 50_000_000) as u64, // Should be equivalent to INSTRUCTIONS_PER_COMPOSITE_QUERY
+        ))
+        .build();
+
+    let mut canisters = vec![];
+    for _ in 0..CANISTERS_MAX {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    // Generate call tree of depth 1.
+    // Canister 0 will call into each canister 1..num_canisters exactly once in a sequential manner.
+    // This will therefore *not* hit the call graph depth limit, but should hit a limit
+    // on the maximum number of instructions in a call graph.
+    fn generate_call_to(
+        canisters: &[ic_types::CanisterId],
+        canister_idx: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        assert!(canister_idx < canisters.len());
+
+        let reply = if canister_idx <= 1 {
+            wasm().stable_size().reply_int()
+        } else {
+            generate_call_to(canisters, canister_idx - 1)
+        };
+
+        wasm().stable_grow(10).inter_query(
+            canisters[canister_idx],
+            call_args()
+                .other_side(wasm().reply_data(b"ignore".as_ref()))
+                .on_reply(reply),
+        )
+    }
+
+    // Those should succeed
+    for num_calls in 1..CANISTERS_MAX_SUCC {
+        let test = test.query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canisters[0],
+                method_name: "query".to_string(),
+                method_payload: generate_call_to(&canisters, num_calls).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+        match &test {
+            Ok(_) => {}
+            Err(err) => panic!(
+                "Query with {} calls failed, when it should have succeeded: {:?}",
+                num_calls, err
+            ),
+        }
+    }
+    for num_calls in CANISTERS_MAX_SUCC..20 {
+        let test = test.query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canisters[0],
+                method_name: "query".to_string(),
+                method_payload: generate_call_to(&canisters, num_calls).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+        match &test {
+            Ok(_) => panic!("Query with {} calls should have failed!", num_calls),
+            Err(err) => assert_eq!(
+                err.code(),
+                ErrorCode::QueryCallGraphTotalInstructionLimitExceeded
+            ),
         }
     }
 }

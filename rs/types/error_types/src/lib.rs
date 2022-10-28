@@ -97,6 +97,7 @@ impl From<ErrorCode> for RejectCode {
             CanisterInstallCodeRateLimited => SysTransient,
             CanisterMemoryAccessLimitExceeded => CanisterError,
             QueryCallGraphTooDeep => CanisterError,
+            QueryCallGraphTotalInstructionLimitExceeded => CanisterError,
         }
     }
 }
@@ -145,6 +146,7 @@ pub enum ErrorCode {
     CanisterInstallCodeRateLimited = 523,
     CanisterMemoryAccessLimitExceeded = 524,
     QueryCallGraphTooDeep = 525,
+    QueryCallGraphTotalInstructionLimitExceeded = 526,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -187,6 +189,7 @@ impl TryFrom<u64> for ErrorCode {
             523 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
             525 => Ok(ErrorCode::QueryCallGraphTooDeep),
+            526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
