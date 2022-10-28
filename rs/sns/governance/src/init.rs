@@ -17,7 +17,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 parameters: Some(NervousSystemParameters::with_default_values()),
                 mode: Mode::Normal as i32,
                 sns_metadata: Some(SnsMetadata {
-                    logo: Some("X".repeat(100)),
+                    logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
                     name: Some("ServiceNervousSystemTest".to_string()),
                     url: Some("https://internetcomputer.org".to_string()),
                     description: Some("Launch an SNS Project".to_string()),

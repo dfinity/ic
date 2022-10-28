@@ -956,7 +956,7 @@ async fn zero_total_reward_shares() {
             distributed_e8s_equivalent: 0,
         }),
         sns_metadata: Some(SnsMetadata {
-            logo: Some("X".repeat(100)),
+            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
             url: Some("https://internetcomputer.org/".to_string()),
             name: Some("ServiceNervousSystemTest".to_string()),
             description: Some("A project testing the SNS".to_string()),
@@ -1166,7 +1166,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
 
         sns_metadata: Some(SnsMetadata {
             url: Some("foo bar baz".to_string()),
-            logo: Some("foo bar baz".to_string()),
+            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
             name: Some("foo bar baz".to_string()),
             description: Some("foo bar baz".to_string()),
         }),

@@ -1063,11 +1063,19 @@ impl SnsMetadata {
     }
 
     pub fn validate_logo(logo: &str) -> Result<(), String> {
+        const PREFIX: &str = "data:image/png;base64,";
+        // TODO: Should we check that it's a valid PNG?
         if logo.len() > Self::MAX_LOGO_LENGTH {
             return Err(format!(
                 "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
                 Self::MAX_LOGO_LENGTH
             ));
+        }
+        if !logo.starts_with(PREFIX) {
+            return Err(format!("SnsMetadata.logo must be a base64 encoded PNG, but the provided string does't begin with `{PREFIX}`."));
+        }
+        if base64::decode(&logo[PREFIX.len()..]).is_err() {
+            return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
         }
         Ok(())
     }
@@ -2218,7 +2226,7 @@ pub(crate) mod tests {
     #[test]
     fn test_sns_metadata_validate() {
         let default = SnsMetadata {
-            logo: Some("X".repeat(10)),
+            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
             url: Some("X".repeat(SnsMetadata::MIN_URL_LENGTH)),
             name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH)),
             description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH)),
@@ -2239,6 +2247,10 @@ pub(crate) mod tests {
             },
             SnsMetadata {
                 url: Some("X".repeat(SnsMetadata::MAX_URL_LENGTH + 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                url: Some("X".to_string()),
                 ..default.clone()
             },
             SnsMetadata {
@@ -2365,5 +2377,18 @@ pub(crate) mod tests {
         parameters.voting_rewards_parameters = None;
         // This is where we expect to panic.
         parameters.validate().unwrap();
+    }
+
+    #[test]
+    fn test_validate_logo_lets_base64_through() {
+        SnsMetadata::validate_logo("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==").unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_validate_logo_doesnt_let_non_base64_through() {
+        // `_` is not in the base64 character set we're using
+        // so we should panic here.
+        SnsMetadata::validate_logo("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==_").unwrap();
     }
 }

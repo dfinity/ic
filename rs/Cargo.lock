@@ -7766,6 +7766,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "base64 0.13.0",
  "build-info",
  "build-info-build",
  "bytes",

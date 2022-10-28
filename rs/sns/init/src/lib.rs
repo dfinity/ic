@@ -133,7 +133,7 @@ impl SnsInitPayload {
                 FractionalDVP::with_valid_values_for_testing(),
             )),
             fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(5822).to_string()],
-            logo: Some("X".repeat(100)),
+            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
             name: Some("ServiceNervousSystemTest".to_string()),
             url: Some("https://internetcomputer.org/".to_string()),
             description: Some("Description of an SNS Project".to_string()),

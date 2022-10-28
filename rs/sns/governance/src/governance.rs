@@ -4226,7 +4226,7 @@ mod tests {
             parameters: Some(NervousSystemParameters::with_default_values()),
             mode: governance::Mode::Normal as i32,
             sns_metadata: Some(SnsMetadata {
-                logo: Some("X".repeat(100)),
+                logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
                 name: Some("ServiceNervousSystem-Test".to_string()),
                 description: Some("A project to spin up a ServiceNervousSystem".to_string()),
                 url: Some("https://internetcomputer.org".to_string()),

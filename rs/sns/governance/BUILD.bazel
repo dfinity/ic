@@ -31,6 +31,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
+    "@crate_index//:base64",
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
