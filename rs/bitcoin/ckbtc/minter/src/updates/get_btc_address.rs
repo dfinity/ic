@@ -1,5 +1,5 @@
 use crate::{
-    state::{mutate_state, read_state},
+    state::{mutate_state, read_state, CkBtcMinterState},
     ECDSAPublicKey,
 };
 use bech32::{u5, Variant};
@@ -21,11 +21,7 @@ pub struct GetBtcAddressArgs {
 }
 
 /// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
-fn derive_public_key(account: Account) -> ECDSAPublicKey {
-    let ECDSAPublicKey {
-        public_key,
-        chain_code,
-    } = read_state(|s| s.ecdsa_public_key.clone().unwrap());
+fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
     let derivation_schema = vec![
         DerivationIndex(vec![SCHEMA_V1]),
         DerivationIndex(account.owner.as_slice().to_vec()),
@@ -35,7 +31,7 @@ fn derive_public_key(account: Account) -> ECDSAPublicKey {
         derived_public_key,
         derived_chain_code,
     } = DerivationPath::new(derivation_schema)
-        .key_derivation(&public_key, &chain_code)
+        .key_derivation(&ecdsa_public_key.public_key, &ecdsa_public_key.chain_code)
         .unwrap(); // the derivation should always be possible
     ECDSAPublicKey {
         public_key: derived_public_key,
@@ -55,7 +51,7 @@ pub fn hrp<'a>(network: Network) -> &'a str {
 /// Calculates the p2wpkh address as described in [BIP-0173](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki).
 ///
 /// Note: the public key must be compressed.
-fn network_and_public_key_to_p2wpkh(network: Network, public_key: Vec<u8>) -> String {
+pub fn network_and_public_key_to_p2wpkh(network: Network, public_key: Vec<u8>) -> String {
     let data: [u8; 20] = Ripemd160::digest(&Sha256::hash(&public_key)).into();
     let witness_version: u5 = u5::try_from_u8(0).unwrap();
     let data: Vec<u5> = std::iter::once(witness_version)
@@ -70,15 +66,42 @@ fn network_and_public_key_to_p2wpkh(network: Network, public_key: Vec<u8>) -> St
     bech32::encode(hrp, data, Variant::Bech32).unwrap()
 }
 
+pub fn account_to_p2wpkh_address(
+    network: Network,
+    ecdsa_public_key: &ECDSAPublicKey,
+    account: &Account,
+) -> String {
+    network_and_public_key_to_p2wpkh(
+        network,
+        derive_public_key(ecdsa_public_key, account).public_key,
+    )
+}
+
+/// PRECONDITION: s.ecdsa_public_key.is_some()
+pub fn account_to_p2wpkh_address_from_state(s: &CkBtcMinterState, account: &Account) -> String {
+    account_to_p2wpkh_address(
+        s.btc_network,
+        s.ecdsa_public_key
+            .as_ref()
+            .expect("bug: the ECDSA public key must be initialized"),
+        account,
+    )
+}
+
 pub async fn get_btc_address(args: GetBtcAddressArgs) -> String {
     let caller = PrincipalId(ic_cdk::caller());
+
     init_ecdsa_public_key().await;
-    let public_key = derive_public_key(Account {
-        owner: caller,
-        subaccount: args.subaccount,
+
+    read_state(|s| {
+        account_to_p2wpkh_address_from_state(
+            s,
+            &Account {
+                owner: caller,
+                subaccount: args.subaccount,
+            },
+        )
     })
-    .public_key;
-    network_and_public_key_to_p2wpkh(read_state(|s| s.btc_network), public_key)
 }
 
 /// Fetches the ECDSA public key of the canister
