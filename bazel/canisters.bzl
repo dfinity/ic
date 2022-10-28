@@ -81,3 +81,38 @@ def optimized_canister(name, wasm):
         exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
         cmd_bash = "$(location @crate_index//:ic-wasm__ic-wasm) $< -o $@ shrink",
     )
+
+def inject_version_into_wasm(*, name, src_wasm, visibility = None):
+    """Generates an output file named `name + '.wasm'`.
+
+    The output file is almost identical to the input (i.e. `src_wasm`), except
+    that it has an additional piece of metadata attached to in the form of a
+    WASM custom section named `icp:public git_commit_id` (no quotes, of course),
+    whose value is the contents of //bazel:version.txt (minus the trailing
+    newline character).
+    """
+    native.genrule(
+        name = name,
+        srcs = [
+            src_wasm,
+            "//bazel:version.txt",
+        ],
+        outs = [name + ".wasm"],
+        message = "Injecting version into wasm.",
+        exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
+        cmd_bash = " ".join([
+            "$(location @crate_index//:ic-wasm__ic-wasm)",
+            "$(location %s)" % src_wasm,  # Input file.
+            "--output $@",  # Output file.
+            "metadata",  # Subcommand
+
+            # The name of the custom section will be
+            # "icp:public git_commit_id"
+            "git_commit_id",
+            "--visibility public",
+
+            # Get value to inject from version.txt.
+            "--data $$(cat $(location //bazel:version.txt))",
+        ]),
+        visibility = visibility,
+    )
