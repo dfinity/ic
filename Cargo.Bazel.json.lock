@@ -1,5 +1,5 @@
 {
-  "checksum": "95658ea0bd52812bbb77e3e58153b7419a548f596ca1c22c6475093a42409dd7",
+  "checksum": "b64318b4631b526ff0e33499e53e234b08c7ac483278359758dadd180901413b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5852,13 +5852,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "cddl 0.9.0": {
+    "cddl 0.9.1": {
       "name": "cddl",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cddl/0.9.0/download",
-          "sha256": "a461d313cc995c8340c5be86f3a8d84825b60d7991bde3a08fc122af79bcedb9"
+          "url": "https://crates.io/api/v1/crates/cddl/0.9.1/download",
+          "sha256": "286a21bdd91f4cab45c26ae7310f73aedf1e8f6fe21e210d220c449991c7fcf4"
         }
       },
       "targets": [
@@ -5895,6 +5895,7 @@
         "crate_features": [
           "additional-controls",
           "ast-comments",
+          "ast-parent",
           "ast-span",
           "base64-url",
           "cbor",
@@ -6028,7 +6029,7 @@
           ],
           "selects": {}
         },
-        "version": "0.9.0"
+        "version": "0.9.1"
       },
       "license": "MIT"
     },
@@ -6907,7 +6908,7 @@
         "deps": {
           "common": [
             {
-              "id": "os_str_bytes 6.3.0",
+              "id": "os_str_bytes 6.3.1",
               "target": "os_str_bytes"
             }
           ],
@@ -11128,7 +11129,7 @@
               "target": "cc"
             },
             {
-              "id": "cddl 0.9.0",
+              "id": "cddl 0.9.1",
               "target": "cddl"
             },
             {
@@ -27354,13 +27355,13 @@
       },
       "license": "MIT"
     },
-    "os_str_bytes 6.3.0": {
+    "os_str_bytes 6.3.1": {
       "name": "os_str_bytes",
-      "version": "6.3.0",
+      "version": "6.3.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/os_str_bytes/6.3.0/download",
-          "sha256": "9ff7415e9ae3fff1225851df9e0d9e4e5479f947619774677a63572e55e80eff"
+          "url": "https://crates.io/api/v1/crates/os_str_bytes/6.3.1/download",
+          "sha256": "3baf96e39c5359d2eb0dd6ccb42c62b91d9678aa68160d261b9e0ccbf9e9dea9"
         }
       },
       "targets": [
@@ -27386,7 +27387,7 @@
           "raw_os_str"
         ],
         "edition": "2021",
-        "version": "6.3.0"
+        "version": "6.3.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -44896,6 +44897,18 @@
         },
         {
           "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -44910,18 +44923,6 @@
           "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -49113,7 +49114,7 @@
     "brotli 3.3.4",
     "brotli-decompressor 2.3.2",
     "cc 1.0.73",
-    "cddl 0.9.0",
+    "cddl 0.9.1",
     "clap 3.2.23",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",

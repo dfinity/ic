@@ -22,6 +22,7 @@ ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 itertools = "0.10.3"
+prometheus = { version = "0.12.0", features = [ "process" ] }
 prost = "0.11.0"
 rand = "0.8.3"
 serde = { version = "1.0", features = ["derive"] }
