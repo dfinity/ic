@@ -145,7 +145,7 @@ impl RosettaRequestHandler {
         let blocks = self.ledger.read_blocks().await;
         let block = get_block(&blocks, msg.block_identifier)?;
 
-        let tokens = blocks.get_balance(&account_id, block.index)?;
+        let tokens = blocks.get_account_balance(&account_id, &block.index)?;
         let amount = tokens_to_amount(tokens, self.ledger.token_symbol())?;
         let b = convert::block_id(&block)?;
         Ok(AccountBalanceResponse {
@@ -289,18 +289,14 @@ impl RosettaRequestHandler {
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
-        let first = blocks
-            .first_verified()?
-            .ok_or_else(|| ApiError::BlockchainEmpty(true, Default::default()))?;
-        let tip = blocks
-            .last_verified()?
-            .ok_or_else(|| ApiError::BlockchainEmpty(true, Default::default()))?;
+        let first = blocks.get_first_verified_hashed_block()?;
+        let tip = blocks.get_latest_verified_hashed_block()?;
         let tip_id = convert::block_id(&tip)?;
         let tip_timestamp = models::timestamp::from_system_time(
             Block::decode(tip.block).unwrap().timestamp.into(),
         )?;
-        // Block at index 0 has to be there if tip was present
-        let genesis_block = blocks.get_verified_at(0)?;
+
+        let genesis_block = blocks.block_store.get_hashed_block(&0)?;
         let genesis_block_id = convert::block_id(&genesis_block)?;
         let peers = vec![];
         let oldest_block_id = if first.index != 0 {
@@ -357,14 +353,16 @@ impl RosettaRequestHandler {
         // correctly to produce the requested transaction range.
 
         let last_idx = blocks
-            .last_verified()?
-            .ok_or_else(|| ApiError::BlockchainEmpty(true, Default::default()))?
+            .block_store
+            .get_latest_verified_hashed_block()
+            .map_err(ApiError::from)?
             .index;
-        let first_idx = blocks
-            .first_verified()?
-            .ok_or_else(|| ApiError::BlockchainEmpty(true, Default::default()))?
+        let mut first_idx = blocks
+            .block_store
+            .get_first_verified_hashed_block()
+            .map_err(ApiError::from)?
             .index;
-
+        first_idx = if first_idx == 1 { 0 } else { first_idx };
         let max_block = max_block.unwrap_or(last_idx);
         let end = max_block
             .checked_sub(offset as u64)
@@ -372,8 +370,10 @@ impl RosettaRequestHandler {
             .saturating_add(1);
         let start = end.saturating_sub(limit as u64).max(first_idx);
 
-        let block_range = blocks.block_store.get_range(start..end)?;
-
+        let block_range = blocks
+            .block_store
+            .get_hashed_block_range(start..end)
+            .map_err(ApiError::from)?;
         let mut txs: Vec<BlockTransaction> = Vec::new();
 
         for hb in block_range.into_iter().rev() {
@@ -458,10 +458,7 @@ impl RosettaRequestHandler {
 
         let blocks = self.ledger.read_blocks().await;
 
-        let last_idx = blocks
-            .last_verified()?
-            .ok_or_else(|| ApiError::BlockchainEmpty(true, Default::default()))?
-            .index;
+        let last_idx = blocks.get_latest_verified_hashed_block()?.index;
 
         let mut heights = Vec::new();
         let mut total_count = 0;
@@ -518,11 +515,15 @@ impl RosettaRequestHandler {
         let mut txs: Vec<BlockTransaction> = Vec::new();
 
         for i in heights {
-            let hb = blocks.get_verified_at(i)?;
-            txs.push(BlockTransaction::new(
-                convert::block_id(&hb)?,
-                convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
-            ));
+            if blocks.is_verified_by_idx(&i)? {
+                let hb = blocks.block_store.get_hashed_block(&i)?;
+                txs.push(BlockTransaction::new(
+                    convert::block_id(&hb)?,
+                    convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
+                ));
+            } else {
+                return Err(ApiError::InvalidBlockId(true, Default::default()));
+            }
         }
 
         Ok(SearchTransactionsResponse::new(
@@ -571,8 +572,12 @@ fn create_parent_block_id(
 ) -> Result<BlockIdentifier, ApiError> {
     // For the first block, we return the block itself as its parent
     let idx = std::cmp::max(0, block_height_to_index(block.index)? - 1);
-    let parent = blocks.get_verified_at(idx as u64)?;
-    convert::block_id(&parent)
+    if blocks.block_store.is_verified_by_idx(&(idx as u64))? {
+        let parent = blocks.block_store.get_hashed_block(&(idx as u64))?;
+        convert::block_id(&parent)
+    } else {
+        Err(ApiError::InvalidBlockId(true, Default::default()))
+    }
 }
 
 fn block_height_to_index(height: BlockIndex) -> Result<i128, ApiError> {
@@ -583,7 +588,7 @@ fn get_block(
     blocks: &Blocks,
     block_id: Option<PartialBlockIdentifier>,
 ) -> Result<HashedBlock, ApiError> {
-    let block = match block_id {
+    match block_id {
         Some(PartialBlockIdentifier {
             index: Some(block_height),
             hash: Some(block_hash),
@@ -593,13 +598,15 @@ fn get_block(
             if block_height < 0 {
                 return Err(ApiError::InvalidBlockId(false, Default::default()));
             }
-            let block = blocks.get_verified_at(block_height as u64)?;
 
+            let idx = block_height as usize;
+            assert!(blocks.block_store.is_verified_by_idx(&(idx as u64))?);
+            let block = blocks.block_store.get_hashed_block(&(idx as u64))?;
             if block.hash != hash {
                 return Err(ApiError::InvalidBlockId(false, Default::default()));
             }
 
-            block
+            Ok(block)
         }
         Some(PartialBlockIdentifier {
             index: Some(block_height),
@@ -609,7 +616,11 @@ fn get_block(
                 return Err(ApiError::InvalidBlockId(false, Default::default()));
             }
             let idx = block_height as usize;
-            blocks.get_verified_at(idx as u64)?
+            if blocks.block_store.is_verified_by_idx(&(idx as u64))? {
+                Ok(blocks.block_store.get_hashed_block(&(idx as u64))?)
+            } else {
+                Err(ApiError::InvalidBlockId(true, Default::default()))
+            }
         }
         Some(PartialBlockIdentifier {
             index: None,
@@ -617,18 +628,22 @@ fn get_block(
         }) => {
             let hash: ic_ledger_core::block::HashOf<ic_ledger_core::block::EncodedBlock> =
                 convert::to_hash(&block_hash)?;
-            blocks.get_verified(hash)?
+            if blocks.block_store.is_verified_by_hash(&hash)? {
+                let idx = blocks.block_store.get_block_idx_by_block_hash(&hash)?;
+                Ok(blocks.block_store.get_hashed_block(&(idx as u64))?)
+            } else {
+                Err(ApiError::InvalidBlockId(true, Default::default()))
+            }
         }
         Some(PartialBlockIdentifier {
             index: None,
             hash: None,
         })
         | None => blocks
-            .last_verified()?
-            .ok_or_else(|| ApiError::BlockchainEmpty(false, Default::default()))?,
-    };
-
-    Ok(block)
+            .block_store
+            .get_latest_verified_hashed_block()
+            .map_err(ApiError::from),
+    }
 }
 
 fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Result<(), ApiError> {

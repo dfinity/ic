@@ -83,19 +83,19 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             "Ledger client is up. Loaded {} blocks from store. First block at {}, last at {}",
             num_loaded,
             blocks
-                .first()?
+                .get_first_hashed_block()
                 .map(|x| format!("{}", x.index))
-                .unwrap_or_else(|| "None".to_string()),
+                .unwrap_or_else(|_| "None".to_string()),
             blocks
-                .last()?
+                .get_latest_hashed_block()
                 .map(|x| format!("{}", x.index))
-                .unwrap_or_else(|| "None".to_string())
+                .unwrap_or_else(|_| "None".to_string())
         );
-        if let Some(x) = blocks.last()? {
+        if let Ok(x) = blocks.get_latest_hashed_block() {
             metrics.set_synced_height(x.index);
         }
-        if let Some(x) = blocks.block_store.last_verified() {
-            metrics.set_verified_height(x);
+        if let Ok(x) = blocks.get_latest_verified_hashed_block() {
+            metrics.set_verified_height(x.index);
         }
 
         blocks.try_prune(&store_max_blocks, PRUNE_DELAY)?;
@@ -111,9 +111,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
     async fn verify_store(blocks: &Blocks, canister_access: &B) -> Result<(), Error> {
         debug!("Verifying store...");
-        let first_block = blocks.block_store.first()?;
-
-        match blocks.block_store.get_at(0) {
+        let first_block = blocks.get_first_hashed_block().ok();
+        match blocks.block_store.get_hashed_block(&0) {
             Ok(store_genesis) => {
                 let genesis = canister_access
                     .query_raw_block(0)
@@ -174,6 +173,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 return Err(Error::InternalError(msg));
             }
         }
+
         debug!("Verifying store done");
         Ok(())
     }
@@ -227,9 +227,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
         let mut blockchain = self.blockchain.write().await;
 
-        let (last_block_hash, next_block_index) = match blockchain.synced_to() {
-            Some((hash, index)) => (Some(hash), index + 1),
-            None => (None, 0),
+        let latest_hb_opt = blockchain.get_latest_hashed_block();
+        let (last_block_hash, next_block_index) = match latest_hb_opt {
+            Ok(hb) => (Some(hb.hash), hb.index + 1),
+            Err(_) => (None, 0),
         };
 
         if next_block_index == tip_index + 1 {
@@ -276,7 +277,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
         info!(
             "You are all caught up to block {}",
-            blockchain.last()?.unwrap().index
+            blockchain.get_latest_hashed_block()?.index
         );
 
         blockchain.try_prune(&self.store_max_blocks, PRUNE_DELAY)
@@ -368,7 +369,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 i += 1;
             }
 
-            blockchain.add_blocks_batch(hashed_batch)?;
+            blockchain.push_batch(hashed_batch)?;
             self.metrics.set_synced_height(i - 1);
 
             if print_progress && (i - range.start) % 10000 == 0 {
@@ -376,7 +377,9 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
         }
 
-        blockchain.block_store.mark_last_verified(range.end - 1)?;
+        blockchain
+            .block_store
+            .set_hashed_block_to_verified(range.end - 1)?;
         self.metrics.set_verified_height(range.end - 1);
         Ok(())
     }
@@ -495,7 +498,14 @@ mod test {
     #[tokio::test]
     async fn sync_empty_range_of_blocks() {
         let blocks_sync = new_ledger_blocks_synchronizer(vec![]).await;
-        assert_eq!(None, blocks_sync.read_blocks().await.first().unwrap());
+        assert_eq!(
+            None,
+            blocks_sync
+                .read_blocks()
+                .await
+                .get_first_hashed_block()
+                .ok()
+        );
     }
 
     #[tokio::test]
@@ -508,14 +518,14 @@ mod test {
             .unwrap();
         let actual_blocks = blocks_sync.read_blocks().await;
         // there isn't a blocks.len() to use, so we check that the last index + 1 gives error and then we check the blocks
-        assert!(actual_blocks.get_verified_at(blocks.len() as u64).is_err());
-        assert_eq!(
-            blocks,
-            vec![
-                actual_blocks.get_verified_at(0).unwrap().block,
-                actual_blocks.get_verified_at(1).unwrap().block
-            ]
-        )
+        for (idx, eb) in blocks.iter().enumerate() {
+            let hb = actual_blocks
+                .block_store
+                .get_hashed_block(&(idx as u64))
+                .unwrap();
+            assert!(actual_blocks.is_verified_by_idx(&(idx as u64)).unwrap());
+            assert_eq!(Block::block_hash(eb), Block::block_hash(&hb.block));
+        }
     }
 
     #[tokio::test]
@@ -530,10 +540,11 @@ mod test {
             .unwrap();
         {
             let actual_blocks = blocks_sync.read_blocks().await;
-            assert!(actual_blocks.get_verified_at(1).is_err());
+            let hashed_blocks = actual_blocks.block_store.get_hashed_block(&0).unwrap();
+            assert!(actual_blocks.is_verified_by_idx(&0).unwrap());
             assert_eq!(
-                *blocks.get(0).unwrap(),
-                actual_blocks.get_verified_at(0).unwrap().block
+                Block::block_hash(&blocks[0]),
+                Block::block_hash(&hashed_blocks.block)
             );
         }
 
@@ -544,10 +555,11 @@ mod test {
             .unwrap();
         {
             let actual_blocks = blocks_sync.read_blocks().await;
-            assert!(actual_blocks.get_verified_at(2).is_err());
+            let hashed_blocks = actual_blocks.block_store.get_hashed_block(&1).unwrap();
+            assert!(actual_blocks.is_verified_by_idx(&1).unwrap());
             assert_eq!(
-                *blocks.get(1).unwrap(),
-                actual_blocks.get_verified_at(1).unwrap().block
+                Block::block_hash(&blocks[1]),
+                Block::block_hash(&hashed_blocks.block)
             );
         }
     }

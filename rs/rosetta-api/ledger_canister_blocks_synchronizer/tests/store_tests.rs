@@ -30,7 +30,7 @@ async fn store_smoke_test() {
         let block = hb.block.clone();
         assert_eq!(
             store.get_transaction(&hb.index).unwrap(),
-            Some(Block::decode(block).unwrap().transaction)
+            Block::decode(block).unwrap().transaction
         );
     }
 
@@ -109,7 +109,7 @@ async fn store_prune_corner_cases_test() {
     verify_pruned(&scribe, &mut store, 0);
 
     prune(&scribe, &mut store, 1);
-    verify_pruned(&scribe, &mut store, 1);
+    verify_pruned(&scribe, &mut store, 0);
 
     let last_idx = scribe.blockchain.back().unwrap().index;
 
@@ -211,18 +211,18 @@ fn verify_pruned(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
     }
 
     for i in 1..oldest_idx {
-        assert_eq!(
-            store.get_at(i).unwrap_err(),
-            BlockStoreError::NotAvailable(i)
-        );
+        assert_eq!(store.get_at(i).unwrap_err(), BlockStoreError::NotFound(i));
         assert_eq!(
             store.get_transaction(&i).unwrap_err(),
-            BlockStoreError::NotAvailable(i)
+            BlockStoreError::NotFound(i)
         );
     }
 
     if oldest_idx < after_last_idx {
-        assert_eq!(store.first().unwrap().map(|x| x.index), Some(oldest_idx));
+        assert_eq!(
+            store.get_first_hashed_block().ok().map(|x| x.index),
+            Some(oldest_idx)
+        );
     }
 
     for i in oldest_idx..after_last_idx {
@@ -236,7 +236,7 @@ fn verify_pruned(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
         let block = (*scribe.blockchain.get(i as usize).unwrap()).clone().block;
         assert_eq!(
             store.get_transaction(&i).unwrap(),
-            Some(Block::decode(block).unwrap().transaction)
+            Block::decode(block).unwrap().transaction
         );
     }
 

@@ -8,7 +8,6 @@ use log::{error, info};
 pub struct Blocks {
     pub balance_book: BalanceBook,
     pub block_store: SQLiteStore,
-    last_hash: Option<HashOf<EncodedBlock>>,
 }
 
 impl Blocks {
@@ -20,7 +19,6 @@ impl Blocks {
         Self {
             balance_book: BalanceBook::default(),
             block_store,
-            last_hash: None,
         }
     }
 
@@ -30,123 +28,79 @@ impl Blocks {
         Self {
             balance_book: BalanceBook::default(),
             block_store,
-            last_hash: None,
         }
     }
 
     pub fn load_from_store(&mut self) -> Result<u64, Error> {
-        assert!(self.last()?.is_none(), "Blocks is not empty");
         assert!(
             self.balance_book.store.acc_to_hist.is_empty(),
             "Blocks is not empty"
         );
-
-        if let Ok(genesis) = self.block_store.get_at(0) {
-            self.process_block(genesis)?;
-        } else {
-            return Ok(0);
+        match self.block_store.get_hashed_block(&0) {
+            Ok(genesis) => {
+                self.process_block(genesis)?;
+            }
+            Err(_) => return Ok(0),
         }
 
-        if let Some((first, balances_snapshot)) = self.block_store.first_snapshot() {
-            self.balance_book = balances_snapshot;
-            self.last_hash = Some(first.hash);
+        if let Some((_, balance_book)) = self.block_store.first_snapshot() {
+            self.balance_book = balance_book;
         }
 
         let mut n = 1; // one block loaded so far (genesis or first from snapshot)
-        let mut next_idx = self.last()?.map(|hb| hb.index + 1).unwrap();
+        let mut next_idx = self
+            .get_first_hashed_block()
+            .map(|hb| hb.index + 1)
+            .unwrap();
         loop {
             let batch = self
                 .block_store
-                .get_range(next_idx..next_idx + Self::LOAD_FROM_STORE_BLOCK_BATCH_LEN)?;
-            if batch.is_empty() {
-                break;
-            }
-            for hb in batch {
-                self.process_block(hb).map_err(|e| {
-                    error!(
-                        "Processing block retrieved from store failed. Block idx: {}, error: {:?}",
-                        next_idx, e
-                    );
-                    e
-                })?;
+                .get_hashed_block_range(next_idx..next_idx + Self::LOAD_FROM_STORE_BLOCK_BATCH_LEN);
 
-                next_idx += 1;
-                n += 1;
-                if n % 30000 == 0 {
-                    info!("Loading... {} blocks processed", n);
+            match batch {
+                Ok(b) => {
+                    for hb in b {
+                        self.process_block(hb.clone()).map_err(|e| {
+                        error!(
+                            "Processing block retrieved from store failed. Block idx: {}, error: {:?}",
+                            next_idx, e
+                        );
+                        e
+                    })?;
+                        next_idx += 1;
+                        n += 1;
+                        if n % 30000 == 0 {
+                            info!("Loading... {} blocks processed", n);
+                        }
+                    }
                 }
-            }
+                Err(_) => break,
+            };
         }
 
         Ok(n)
     }
 
-    fn get_at(&self, index: BlockIndex) -> Result<HashedBlock, Error> {
-        Ok(self.block_store.get_at(index)?)
+    pub fn is_verified_by_hash(
+        &self,
+        hash: &HashOf<EncodedBlock>,
+    ) -> Result<bool, BlockStoreError> {
+        self.block_store.is_verified_by_hash(hash)
     }
 
-    pub fn get_verified_at(&self, index: BlockIndex) -> Result<HashedBlock, Error> {
-        let last_verified_idx = self
-            .block_store
-            .last_verified()
-            .map(|x| x as i128)
-            .unwrap_or(-1);
-        if index as i128 > last_verified_idx {
-            Err(BlockStoreError::NotFound(index).into())
-        } else {
-            self.get_at(index)
-        }
-    }
-
-    pub fn get_balance(&self, acc: &AccountIdentifier, h: BlockIndex) -> Result<Tokens, Error> {
-        if let Ok(Some(b)) = self.first_verified() {
-            if h < b.index {
-                return Err(Error::InvalidBlockId(format!(
-                    "Block at height: {} not available for query",
-                    h
-                )));
-            }
-        }
-        let last_verified_idx = self
-            .block_store
-            .last_verified()
-            .map(|x| x as i128)
-            .unwrap_or(-1);
-        if h as i128 > last_verified_idx {
-            Err(Error::InvalidBlockId(format!(
-                "Block not found at height: {}",
-                h
-            )))
-        } else {
-            self.balance_book.store.get_at(*acc, h)
-        }
-    }
-
-    fn get(&self, hash: HashOf<EncodedBlock>) -> Result<HashedBlock, Error> {
-        let index = self
-            .block_store
-            .get_block_idx_by_block_hash(&hash)
-            .map_err(|_| Error::InvalidBlockId(format!("{}", hash)))?;
-        self.get_at(index)
-    }
-
-    pub fn get_verified(&self, hash: HashOf<EncodedBlock>) -> Result<HashedBlock, Error> {
-        let index = self
-            .block_store
-            .get_block_idx_by_block_hash(&hash)
-            .map_err(|_| Error::InvalidBlockId(format!("{}", hash)))?;
-        self.get_verified_at(index)
+    pub fn is_verified_by_idx(&self, idx: &u64) -> Result<bool, BlockStoreError> {
+        self.block_store.is_verified_by_idx(idx)
     }
 
     /// Add a block to the block_store data structure, the parent_hash must
     /// match the end of the chain
-    pub fn add_block(&mut self, hb: HashedBlock) -> Result<(), Error> {
+    pub fn push(&mut self, hb: HashedBlock) -> Result<(), BlockStoreError> {
         self.block_store.push(&hb)?;
         self.process_block(hb)?;
         Ok(())
     }
 
-    pub fn add_blocks_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), Error> {
+    pub fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
         self.block_store.push_batch(batch.clone())?;
         for hb in batch {
             self.process_block(hb)?;
@@ -154,88 +108,90 @@ impl Blocks {
         Ok(())
     }
 
-    pub fn process_block(&mut self, hb: HashedBlock) -> Result<(), Error> {
+    pub fn process_block(&mut self, hb: HashedBlock) -> Result<(), BlockStoreError> {
         let HashedBlock {
             block,
             hash: _,
-            parent_hash,
+            parent_hash: _,
             index,
-        } = hb.clone();
-        let last = self.last()?;
-        let last_hash = last.clone().map(|hb| hb.hash);
-        let last_index = last.map(|hb| hb.index);
-        assert_eq!(
-            &parent_hash, &last_hash,
-            "When adding a block the parent_hash must match the last added block"
-        );
+        } = hb;
 
         let block = Block::decode(block).unwrap();
-
-        match last_index {
-            Some(i) => assert_eq!(i + 1, index),
-            None => assert_eq!(0, index),
-        }
-
         let mut bb = &mut self.balance_book;
         bb.store.transaction_context = Some(index);
         apply_operation(bb, &block.transaction.operation).unwrap();
         bb.store.transaction_context = None;
-        self.last_hash = Some(hb.hash);
-
         Ok(())
     }
 
-    pub(crate) fn first(&self) -> Result<Option<HashedBlock>, Error> {
-        Ok(self.block_store.first()?)
+    pub(crate) fn get_first_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+        self.block_store.get_first_hashed_block()
     }
 
-    pub fn first_verified(&self) -> Result<Option<HashedBlock>, Error> {
-        let last_verified_idx = self
-            .block_store
-            .last_verified()
-            .map(|x| x as i128)
-            .unwrap_or(-1);
-        let first_block = self.block_store.first()?;
-        if let Some(fb) = first_block.as_ref() {
-            if fb.index as i128 > last_verified_idx {
-                return Ok(None);
+    pub fn get_first_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+        self.block_store.get_first_verified_hashed_block()
+    }
+
+    pub(crate) fn get_latest_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+        self.block_store.get_latest_hashed_block()
+    }
+
+    pub fn get_latest_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+        self.block_store.get_latest_verified_hashed_block()
+    }
+    pub fn get_account_balance(
+        &self,
+        acc: &AccountIdentifier,
+        h: &BlockIndex,
+    ) -> Result<Tokens, Error> {
+        let first_verified = self.get_first_verified_hashed_block();
+        if let Ok(b) = first_verified {
+            if *h < b.index {
+                return Err(Error::InvalidBlockId(format!(
+                    "Block at height: {} not available for query",
+                    h
+                )));
             }
         }
-        Ok(first_block)
-    }
-
-    pub(crate) fn last(&self) -> Result<Option<HashedBlock>, Error> {
-        match self.last_hash {
-            Some(last_hash) => {
-                let last = self.get(last_hash)?;
-                Ok(Some(last))
-            }
-            None => Ok(None),
+        let last_verified = self.block_store.get_latest_verified_hashed_block()?;
+        if *h > last_verified.index {
+            Err(Error::InvalidBlockId(format!(
+                "Block not found at height: {}",
+                h
+            )))
+        } else {
+            self.balance_book.store.get_at(*acc, *h)
         }
-    }
-
-    pub fn last_verified(&self) -> Result<Option<HashedBlock>, Error> {
-        match self.block_store.last_verified() {
-            Some(h) => Ok(Some(self.block_store.get_at(h)?)),
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) fn synced_to(&self) -> Option<(HashOf<EncodedBlock>, u64)> {
-        self.last().ok().flatten().map(|hb| (hb.hash, hb.index))
     }
 
     pub fn try_prune(&mut self, max_blocks: &Option<u64>, prune_delay: u64) -> Result<(), Error> {
         if let Some(block_limit) = max_blocks {
-            let first_idx = self.first()?.map(|hb| hb.index).unwrap_or(0);
-            let last_idx = self.last()?.map(|hb| hb.index).unwrap_or(0);
+            let first_idx = self
+                .block_store
+                .get_first_hashed_block()
+                .map(|hb| hb.index)
+                .unwrap_or(0);
+            let last_idx = self
+                .get_latest_hashed_block()
+                .map(|hb| hb.index)
+                .unwrap_or(0);
             if first_idx + block_limit + prune_delay < last_idx {
                 let new_first_idx = last_idx - block_limit;
-                let hb = self.block_store.get_at(new_first_idx)?;
-                self.balance_book.store.prune_at(hb.index);
-                self.block_store
-                    .prune(&hb, &self.balance_book)
-                    .map_err(Error::InternalError)?;
+                let hb = self.block_store.get_hashed_block(&new_first_idx);
+                match hb {
+                    Ok(b) => {
+                        self.balance_book.store.prune_at(b.index);
+                        self.block_store
+                            .prune(&b, &self.balance_book)
+                            .map_err(Error::InternalError)?;
+                    }
+                    Err(_) => {
+                        return Err(Error::InternalError(format!(
+                            "Block ist not stored {}",
+                            new_first_idx
+                        )))
+                    }
+                }
             }
         }
         Ok(())
