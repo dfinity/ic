@@ -10,13 +10,11 @@ use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
-use crate::wasm_utils::compile;
-use crate::wasm_utils::instrumentation::Segments;
 use crate::{
-    wasm_utils::decoding::decode_wasm, wasm_utils::validation::WasmImportsDetails,
-    wasmtime_embedder::WasmtimeInstance, WasmExecutionInput, WasmtimeEmbedder,
+    wasm_utils::{compile, decoding::decode_wasm, Segments, WasmImportsDetails},
+    wasmtime_embedder::WasmtimeInstance,
+    CompilationCache, CompilationResult, SerializedModule, WasmExecutionInput, WasmtimeEmbedder,
 };
-use crate::{CompilationCache, CompilationResult, SerializedModule};
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,

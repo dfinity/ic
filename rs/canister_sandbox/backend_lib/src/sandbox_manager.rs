@@ -26,12 +26,10 @@ use ic_canister_sandbox_common::protocol::structs::{
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::wasm_utils::compile;
-use ic_embedders::wasm_utils::instrumentation::Segments;
-use ic_embedders::SerializedModule;
 use ic_embedders::{
-    wasm_executor::WasmStateChanges, wasm_utils::decoding::decode_wasm, CompilationResult,
-    SerializedModuleBytes, WasmtimeEmbedder,
+    wasm_executor::WasmStateChanges,
+    wasm_utils::{compile, decoding::decode_wasm, Segments},
+    CompilationResult, SerializedModule, SerializedModuleBytes, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,

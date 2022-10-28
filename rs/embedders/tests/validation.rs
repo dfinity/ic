@@ -3,10 +3,8 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
         validate_and_instrument_for_testing,
-        validation::{
-            extract_custom_section_name, validate_custom_section, WasmImportsDetails,
-            WasmValidationDetails, RESERVED_SYMBOLS,
-        },
+        validation::{extract_custom_section_name, validate_custom_section, RESERVED_SYMBOLS},
+        WasmImportsDetails, WasmValidationDetails,
     },
     WasmtimeEmbedder,
 };
