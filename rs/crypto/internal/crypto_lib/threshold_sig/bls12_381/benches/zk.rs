@@ -19,14 +19,8 @@ fn setup_sharing_instance_and_witness() -> (SharingInstance, SharingWitness) {
         pk.push(G1Affine::from(g1 * Scalar::random(&mut rng)))
     }
 
-    let mut a = Vec::new();
-    let mut aa = Vec::new();
-
-    for _ in 0..THRESHOLD {
-        let apow = Scalar::random(&mut rng);
-        a.push(apow);
-        aa.push(G2Affine::from(g2 * apow));
-    }
+    let a = Scalar::batch_random(&mut rng, THRESHOLD);
+    let aa = G2Affine::batch_mul(g2, &a);
 
     let mut s = Vec::with_capacity(NODE_COUNT);
     // s = [sum [a_k ^ i^k | (a_k, k) <- zip a [0..t-1]] | i <- [1..n]]
@@ -35,14 +29,14 @@ fn setup_sharing_instance_and_witness() -> (SharingInstance, SharingWitness) {
         let mut ipow = Scalar::one();
         let mut acc = Scalar::zero();
         for ak in &a {
-            acc += *ak * ipow;
-            ipow *= ibig;
+            acc += ak * &ipow;
+            ipow *= &ibig;
         }
         s.push(acc);
     }
 
     let r = Scalar::random(&mut rng);
-    let rr = G1Affine::from(g1 * r);
+    let rr = G1Affine::from(g1 * &r);
 
     let cc: Vec<_> = pk
         .iter()
@@ -88,13 +82,8 @@ fn setup_chunking_instance_and_witness() -> (ChunkingInstance, ChunkingWitness) 
         y.push(G1Affine::from(g1 * Scalar::random(&mut rng)));
     }
 
-    let mut r = Vec::with_capacity(THRESHOLD);
-    let mut rr = Vec::with_capacity(THRESHOLD);
-    for _ in 0..THRESHOLD {
-        let r_i = Scalar::random(&mut rng);
-        rr.push(G1Affine::from(g1 * r_i));
-        r.push(r_i);
-    }
+    let r = Scalar::batch_random(&mut rng, THRESHOLD);
+    let rr = G1Affine::batch_mul(g1, &r);
 
     let mut s = Vec::with_capacity(y.len());
     let mut chunk = Vec::new();

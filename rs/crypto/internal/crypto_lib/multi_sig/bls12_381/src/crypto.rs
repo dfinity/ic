@@ -54,25 +54,25 @@ pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
 
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
     let secret_key = Scalar::random(rng);
-    let public_key = G2Projective::generator() * secret_key;
+    let public_key = G2Projective::generator() * &secret_key;
     (secret_key, public_key)
 }
 
-pub fn sign_point(point: G1Projective, secret_key: SecretKey) -> IndividualSignature {
+pub fn sign_point(point: &G1Projective, secret_key: &SecretKey) -> IndividualSignature {
     point * secret_key
 }
-pub fn sign_message(message: &[u8], secret_key: SecretKey) -> IndividualSignature {
-    sign_point(hash_message_to_g1(message), secret_key)
+pub fn sign_message(message: &[u8], secret_key: &SecretKey) -> IndividualSignature {
+    sign_point(&hash_message_to_g1(message), secret_key)
 }
 
-pub fn create_pop(public_key: PublicKey, secret_key: SecretKey) -> Pop {
-    let public_key_bytes = PublicKeyBytes::from(public_key);
+pub fn create_pop(public_key: &PublicKey, secret_key: &SecretKey) -> Pop {
+    let public_key_bytes = PublicKeyBytes::from(public_key.clone());
     let mut domain_separated_public_key: Vec<u8> = vec![];
     domain_separated_public_key
         .extend(DomainSeparationContext::new(DOMAIN_MULTI_SIG_BLS12_381_POP).as_bytes());
     domain_separated_public_key.extend(&public_key_bytes.0[..]);
     sign_point(
-        hash_public_key_to_g1(&domain_separated_public_key),
+        &hash_public_key_to_g1(&domain_separated_public_key),
         secret_key,
     )
 }
@@ -84,33 +84,33 @@ pub fn combine_public_keys(public_keys: &[PublicKey]) -> CombinedPublicKey {
     G2Projective::sum(public_keys)
 }
 
-pub fn verify_point(hash: G1Projective, signature: G1Projective, public_key: PublicKey) -> bool {
+pub fn verify_point(hash: &G1Projective, signature: &G1Projective, public_key: &PublicKey) -> bool {
     verify_bls_signature(&signature.into(), &public_key.into(), &hash.into())
 }
 pub fn verify_individual_message_signature(
     message: &[u8],
-    signature: IndividualSignature,
-    public_key: PublicKey,
+    signature: &IndividualSignature,
+    public_key: &PublicKey,
 ) -> bool {
     let hash = hash_message_to_g1(message);
-    verify_point(hash, signature, public_key)
+    verify_point(&hash, signature, public_key)
 }
-pub fn verify_pop(pop: Pop, public_key: PublicKey) -> bool {
-    let public_key_bytes = PublicKeyBytes::from(public_key);
+pub fn verify_pop(pop: &Pop, public_key: &PublicKey) -> bool {
+    let public_key_bytes = PublicKeyBytes::from(public_key.clone());
     let mut domain_separated_public_key: Vec<u8> = vec![];
     domain_separated_public_key
         .extend(DomainSeparationContext::new(DOMAIN_MULTI_SIG_BLS12_381_POP).as_bytes());
     domain_separated_public_key.extend(&public_key_bytes.0[..]);
     let hash = hash_public_key_to_g1(&domain_separated_public_key);
-    verify_point(hash, pop, public_key)
+    verify_point(&hash, pop, public_key)
 }
 
 pub fn verify_combined_message_signature(
     message: &[u8],
-    signature: CombinedSignature,
+    signature: &CombinedSignature,
     public_keys: &[PublicKey],
 ) -> bool {
     let hash = hash_message_to_g1(message);
     let public_key = combine_public_keys(public_keys);
-    verify_point(hash, signature, public_key)
+    verify_point(&hash, signature, &public_key)
 }

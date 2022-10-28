@@ -22,7 +22,7 @@ fn check_dlog_solution(solutions: &[Scalar], solved: &[Option<Scalar>]) {
     assert_eq!(solved.len(), solutions.len());
 
     for (x, y) in solutions.iter().zip(solved) {
-        assert_eq!(*x, y.expect("Unable to solve dlog"));
+        assert_eq!(x, y.as_ref().expect("Unable to solve dlog"));
     }
 }
 

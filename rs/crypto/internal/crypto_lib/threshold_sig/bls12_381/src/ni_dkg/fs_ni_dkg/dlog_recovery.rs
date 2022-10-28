@@ -12,7 +12,7 @@ lazy_static::lazy_static! {
 
 impl HonestDealerDlogLookupTable {
     fn create() -> Self {
-        let mut x = *Gt::identity();
+        let mut x = Gt::identity();
 
         let mut table = vec![0u32; CHUNK_SIZE as usize];
         for i in CHUNK_MIN..=CHUNK_MAX {
@@ -95,7 +95,7 @@ impl BabyStepGiantStep {
         let n = (range as f64).sqrt().ceil() as isize;
 
         let mut table = std::collections::HashMap::new();
-        let mut accum = *Gt::identity();
+        let mut accum = Gt::identity();
 
         for i in 0..n {
             table.insert(accum.tag(), i);
@@ -127,14 +127,14 @@ impl BabyStepGiantStep {
             0
         };
 
-        let mut step = *tgt + self.offset;
+        let mut step = tgt + &self.offset;
 
         for baby_step in 0..baby_steps {
             if let Some(i) = self.table.get(&step.tag()) {
                 let x = self.lo + self.n * baby_step;
                 return Some(Scalar::from_isize(x + i));
             }
-            step += self.giant_step;
+            step += &self.giant_step;
         }
 
         None
@@ -180,7 +180,7 @@ impl CheatingDealerDlogSolver {
           (here division is modulo the group order
          That is, the discrete log of target is `scaled_answer / delta`.
         */
-        let mut target_power = *Gt::identity();
+        let mut target_power = Gt::identity();
         for delta in 1..self.scale_range {
             target_power += target;
 

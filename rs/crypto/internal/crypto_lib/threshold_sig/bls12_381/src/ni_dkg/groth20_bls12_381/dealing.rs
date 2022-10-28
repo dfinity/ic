@@ -117,8 +117,10 @@ pub fn create_dealing(
         let key_message_pairs: Vec<(FsEncryptionPublicKey, FsEncryptionPlaintext)> = (0..)
             .zip(&threshold_secret_key_shares)
             .map(|(index, share)| {
-                let share =
-                    (*share).expect("The keys should be contiguous but we have a missing entry.");
+                let share = match share {
+                    None => panic!("The keys should be contiguous but we have a missing entry."),
+                    Some(share) => share.clone(),
+                };
                 let share = FrBytes(share.serialize());
                 let share = FsEncryptionPlaintext::from(&share);
                 (

@@ -118,15 +118,12 @@ impl<'a, B: Borrow<Polynomial>> ops::Mul<B> for &'a Polynomial {
         }
         let n_coeffs = self.coefficients.len() + rhs.coefficients.len() - 1;
         let mut coeffs = vec![Scalar::zero(); n_coeffs];
-        let mut tmp = Scalar::zero();
         for (i, ca) in self.coefficients.iter().enumerate() {
             for (j, cb) in rhs.coefficients.iter().enumerate() {
-                tmp = *ca;
-                tmp.mul_assign(cb);
+                let tmp = ca * cb;
                 coeffs[i + j].add_assign(&tmp);
             }
         }
-        tmp.zeroize();
         Polynomial::from(coeffs)
     }
 }
@@ -152,7 +149,7 @@ impl ops::MulAssign<Scalar> for Polynomial {
             self.coefficients.clear();
         } else {
             for c in &mut self.coefficients {
-                *c *= rhs;
+                *c *= &rhs;
             }
         }
     }

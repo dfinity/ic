@@ -7,39 +7,39 @@ use crate::{
 use ic_crypto_internal_bls12_381_type::G1Projective;
 
 fn check_single_point_signature_verifies(
-    secret_key: SecretKey,
-    public_key: PublicKey,
-    point: G1Projective,
+    secret_key: &SecretKey,
+    public_key: &PublicKey,
+    point: &G1Projective,
 ) {
     let signature = multi_crypto::sign_point(point, secret_key);
-    assert!(multi_crypto::verify_point(point, signature, public_key));
+    assert!(multi_crypto::verify_point(point, &signature, public_key));
 }
 
 fn check_individual_multi_signature_contribution_verifies(
-    secret_key: SecretKey,
-    public_key: PublicKey,
+    secret_key: &SecretKey,
+    public_key: &PublicKey,
     message: &[u8],
 ) {
     let signature = multi_crypto::sign_message(message, secret_key);
     assert!(multi_crypto::verify_individual_message_signature(
-        message, signature, public_key
+        message, &signature, public_key
     ));
 }
 
 fn check_multi_signature_verifies(keys: &[(SecretKey, PublicKey)], message: &[u8]) {
     let signatures: Vec<IndividualSignature> = keys
         .iter()
-        .map(|(secret_key, _)| multi_crypto::sign_message(message, *secret_key))
+        .map(|(secret_key, _)| multi_crypto::sign_message(message, secret_key))
         .collect();
     let signature: CombinedSignature = multi_crypto::combine_signatures(&signatures);
     let public_keys: Vec<PublicKey> = keys
         .iter()
         .map(|(_, public_key)| public_key)
-        .copied()
+        .cloned()
         .collect();
     assert!(multi_crypto::verify_combined_message_signature(
         message,
-        signature,
+        &signature,
         &public_keys
     ));
 }
@@ -147,7 +147,7 @@ mod advanced_functionality {
     #[test]
     fn zero_signatures_yields_signature_zero() {
         assert_eq!(
-            &multi_crypto::combine_signatures(&[]),
+            multi_crypto::combine_signatures(&[]),
             multi_types::CombinedSignature::identity()
         );
     }
@@ -156,25 +156,25 @@ mod advanced_functionality {
     fn single_point_signature_verifies() {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
         let point = multi_crypto::hash_message_to_g1(b"abba");
-        check_single_point_signature_verifies(secret_key, public_key, point);
+        check_single_point_signature_verifies(&secret_key, &public_key, &point);
     }
 
     #[test]
     fn individual_multi_signature_contribution_verifies() {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
-        check_individual_multi_signature_contribution_verifies(secret_key, public_key, b"abba");
+        check_individual_multi_signature_contribution_verifies(&secret_key, &public_key, b"abba");
     }
     #[test]
     fn pop_verifies() {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
-        let pop = multi_crypto::create_pop(public_key, secret_key);
-        assert!(multi_crypto::verify_pop(pop, public_key));
+        let pop = multi_crypto::create_pop(&public_key, &secret_key);
+        assert!(multi_crypto::verify_pop(&pop, &public_key));
     }
 
     #[test]
     fn verify_pop_throws_error_on_public_key_bytes_with_unset_compressed_flag() {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
-        let pop = multi_crypto::create_pop(public_key, secret_key);
+        let pop = multi_crypto::create_pop(&public_key, &secret_key);
         let pop_bytes = PopBytes::from(pop);
         let mut public_key_bytes = PublicKeyBytes::from(public_key);
         public_key_bytes.0[G2::FLAG_BYTE_OFFSET] &= !G2::COMPRESSED_FLAG;
@@ -187,7 +187,7 @@ mod advanced_functionality {
     #[test]
     fn verify_pop_throws_error_on_public_key_bytes_not_on_curve() {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
-        let pop = multi_crypto::create_pop(public_key, secret_key);
+        let pop = multi_crypto::create_pop(&public_key, &secret_key);
         let pop_bytes = PopBytes::from(pop);
         let mut public_key_bytes = PublicKeyBytes::from(public_key);
         // Zero out the bytes, set the compression flag.
@@ -206,7 +206,7 @@ mod advanced_functionality {
     #[test]
     fn verify_pop_throws_error_on_public_key_bytes_not_in_subgroup() {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
-        let pop = multi_crypto::create_pop(public_key, secret_key);
+        let pop = multi_crypto::create_pop(&public_key, &secret_key);
         let pop_bytes = PopBytes::from(pop);
         let mut public_key_bytes = PublicKeyBytes::from(public_key);
         // By manual rejection sampling, we found an x-coordinate with a

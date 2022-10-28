@@ -457,7 +457,7 @@ mod util {
     /// Combine a big endian array of group elements (first chunk is the
     /// most significant) into a single group element.
     pub fn g1_from_big_endian_chunks(terms: &[G1Affine]) -> G1Affine {
-        let mut acc = *G1Projective::identity();
+        let mut acc = G1Projective::identity();
 
         for term in terms {
             for _ in 0..16 {
@@ -477,7 +477,7 @@ mod util {
 
         let mut acc = Scalar::zero();
         for term in terms {
-            acc *= factor;
+            acc *= &factor;
             acc += term;
         }
 
@@ -491,7 +491,7 @@ mod util {
 
         let mut acc = Scalar::zero();
         for term in terms {
-            acc *= factor;
+            acc *= &factor;
             acc += Scalar::from_isize(*term);
         }
 

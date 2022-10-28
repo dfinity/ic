@@ -39,12 +39,12 @@ fn setup_sharing_instance_and_witness<R: RngCore + CryptoRng>(
 
     for _ in 0..THRESHOLD {
         let apow = Scalar::random(rng);
-        a.push(apow);
+        a.push(apow.clone());
         aa.push(G2Affine::from(g2 * apow));
     }
 
     let r = Scalar::random(rng);
-    let rr = G1Affine::from(g1 * r);
+    let rr = G1Affine::from(g1 * &r);
 
     let mut s = Vec::with_capacity(NODE_COUNT);
     // s = [sum [a_k ^ i^k | (a_k, k) <- zip a [0..t-1]] | i <- [1..n]]
@@ -53,8 +53,8 @@ fn setup_sharing_instance_and_witness<R: RngCore + CryptoRng>(
         let mut ipow = Scalar::one();
         let mut acc = Scalar::zero();
         for ak in &a {
-            acc += *ak * ipow;
-            ipow *= ibig;
+            acc += ak * &ipow;
+            ipow *= &ibig;
         }
         s.push(acc);
     }
@@ -156,7 +156,7 @@ fn sharing_prover_should_panic_on_empty_coefficients() {
 fn sharing_prover_should_panic_on_invalid_instance() {
     let mut rng = rand::thread_rng();
     let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
-    pk.push(*G1Affine::generator());
+    pk.push(G1Affine::generator().clone());
 
     let instance = SharingInstance::new(pk, aa, rr, cc);
 
@@ -169,9 +169,9 @@ fn sharing_nizk_should_fail_on_invalid_instance() {
     let mut rng = rand::thread_rng();
     let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
-    let instance = SharingInstance::new(pk.clone(), aa.clone(), rr, cc.clone());
+    let instance = SharingInstance::new(pk.clone(), aa.clone(), rr.clone(), cc.clone());
 
-    pk.push(*G1Affine::generator());
+    pk.push(G1Affine::generator().clone());
 
     let invalid_instance = SharingInstance::new(pk, aa, rr, cc);
 
@@ -200,7 +200,7 @@ fn sharing_nizk_should_fail_on_invalid_proof() {
     let invalid_proof = ProofSharing {
         ff: sharing_proof.ff,
         aa: sharing_proof.aa,
-        yy: *G1Affine::generator(),
+        yy: G1Affine::generator().clone(),
         z_r: sharing_proof.z_r,
         z_alpha: sharing_proof.z_alpha,
     };
@@ -228,7 +228,7 @@ fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
     let mut rr = Vec::with_capacity(THRESHOLD);
     for _ in 0..THRESHOLD {
         let r_i = Scalar::random(rng);
-        rr.push(G1Affine::from(g1 * r_i));
+        rr.push(G1Affine::from(g1 * &r_i));
         r.push(r_i);
     }
 
@@ -303,7 +303,7 @@ fn chunking_prover_should_panic_on_invalid_instance() {
     let mut rng = rand::thread_rng();
     let (mut instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
-    instance.public_keys.push(*G1Affine::generator());
+    instance.public_keys.push(G1Affine::generator().clone());
 
     let _panic = prove_chunking(&instance, &witness, &mut rng);
 }
@@ -314,7 +314,9 @@ fn chunking_nizk_should_fail_on_invalid_instance() {
     let (valid_instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     let mut invalid_instance = valid_instance.clone();
-    invalid_instance.public_keys.push(*G1Affine::generator());
+    invalid_instance
+        .public_keys
+        .push(G1Affine::generator().clone());
 
     let chunking_proof = prove_chunking(&valid_instance, &witness, &mut rng);
     assert_eq!(

@@ -50,7 +50,7 @@ pub mod util {
         let coordinates: Vec<(Scalar, SecretKey)> = secret_keys
             .iter()
             .zip(0_u32..)
-            .map(|(y, index)| (crypto::x_for_index(index), *y))
+            .map(|(y, index)| (crypto::x_for_index(index), y.clone()))
             .collect();
         Polynomial::interpolate(&coordinates)
             .coefficients
@@ -100,7 +100,7 @@ pub mod util {
 
             // Correct values validate:
             assert_eq!(
-                crypto::verify(message, *signature, public_key),
+                crypto::verify(message, signature, &public_key),
                 Ok(()),
                 "Individual signature failed verification for signatory number {}/{}",
                 index,
@@ -113,7 +113,7 @@ pub mod util {
                 let wrong_public_key =
                     crypto::individual_public_key(public_coefficients, wrong_index as NodeIndex);
                 assert!(
-                    crypto::verify(message, *signature, wrong_public_key).is_err(),
+                    crypto::verify(message, signature, &wrong_public_key).is_err(),
                     "Individual signature verification accepted incorrect signatory {} instead of {}/{}",
                     wrong_index,
                     index,
@@ -133,7 +133,7 @@ pub mod util {
             .expect("Failed to combine signatures");
 
         // Correct values validate:
-        assert_eq!(crypto::verify(message, signature, public_key), Ok(()));
+        assert_eq!(crypto::verify(message, &signature, &public_key), Ok(()));
 
         // Incorrect values are rejected:
         if !public_coefficients.coefficients.is_empty() {
@@ -142,12 +142,12 @@ pub mod util {
                 incorrect_message != message,
                 "Bad test: The messages should be different"
             );
-            assert!(crypto::verify(&incorrect_message, signature, public_key).is_err());
+            assert!(crypto::verify(&incorrect_message, &signature, &public_key).is_err());
         }
         if public_coefficients.coefficients.len() > 1 {
-            let some_individual_signature = signatures[0];
+            let some_individual_signature = signatures[0].clone();
             assert!(
-                crypto::verify(message, some_individual_signature, public_key).is_err(),
+                crypto::verify(message, &some_individual_signature, &public_key).is_err(),
                 "Signature verification passed with incorrect signature: got {:?} expected {:?}",
                 some_individual_signature,
                 signature
@@ -156,7 +156,7 @@ pub mod util {
         if public_coefficients.coefficients.len() > 1 {
             let some_individual_public_key =
                 crypto::individual_public_key(public_coefficients, 11_u32);
-            assert!(crypto::verify(message, signature, some_individual_public_key).is_err());
+            assert!(crypto::verify(message, &signature, &some_individual_public_key).is_err());
         }
     }
 
@@ -185,7 +185,7 @@ pub mod util {
     ) -> Result<(PublicCoefficients, Vec<SecretKey>), InvalidArgumentError> {
         let which_shares = vec![true; number_of_shares.get() as usize];
         crypto::keygen(seed, threshold, &which_shares).map(|(public_coefficients, keys_maybe)| {
-            let keys: Vec<SecretKey> = keys_maybe.iter().cloned().flatten().collect();
+            let keys: Vec<SecretKey> = keys_maybe.iter().flatten().cloned().collect();
             (public_coefficients, keys)
         })
     }
@@ -279,7 +279,7 @@ fn omnipotent_dealer() {
             let signature = crypto::sign_message(message, secret_key);
             let public_key =
                 crypto::individual_public_key(&public_coefficients, index as NodeIndex);
-            assert!(crypto::verify(&message[..], signature, public_key).is_ok());
+            assert!(crypto::verify(&message[..], &signature, &public_key).is_ok());
             Some(signature)
         })
         .collect();
@@ -289,7 +289,7 @@ fn omnipotent_dealer() {
             .expect("Combining signatures failed");
 
     assert_eq!(
-        crypto::verify(&message[..], combined_signature, public_key),
+        crypto::verify(&message[..], &combined_signature, &public_key),
         Ok(())
     );
 }
@@ -405,7 +405,7 @@ mod resharing_util {
         original_receiver_shares
             .iter()
             .map(|key_maybe| {
-                key_maybe.map(|secret_key| {
+                key_maybe.clone().map(|secret_key| {
                     crypto::keygen_with_secret(
                         Seed::from_rng(&mut rng),
                         new_threshold,
@@ -425,10 +425,12 @@ mod resharing_util {
             .iter()
             .enumerate()
             .filter_map(|(index, share_maybe)| {
-                share_maybe.map(|share| (crypto::x_for_index(index as NodeIndex), share))
+                share_maybe
+                    .clone()
+                    .map(|share| (crypto::x_for_index(index as NodeIndex), share))
             })
             .collect();
-        Polynomial::interpolate(&shares).coefficients[0]
+        Polynomial::interpolate(&shares).coefficients[0].clone()
     }
 
     /// Given multiple public keys (y values) at different points (which give x
@@ -438,7 +440,9 @@ mod resharing_util {
             .iter()
             .enumerate()
             .filter_map(|(index, share_maybe)| {
-                share_maybe.map(|share| (crypto::x_for_index(index as NodeIndex), share.0))
+                share_maybe
+                    .clone()
+                    .map(|share| (crypto::x_for_index(index as NodeIndex), share.0))
             })
             .collect();
         PublicKey(PublicCoefficients::interpolate_g2(&shares).unwrap())
@@ -458,8 +462,10 @@ mod resharing_util {
                         let new_receiver_shares: Vec<Option<SecretKey>> = dealings
                             .iter()
                             .map(|dealing_maybe| {
-                                dealing_maybe.as_ref().map(|dealing| {
-                                    dealing.1[new_receiver_index].expect("Missing share")
+                                dealing_maybe.clone().map(|dealing| {
+                                    dealing.1[new_receiver_index]
+                                        .clone()
+                                        .expect("Missing share")
                                 })
                             })
                             .collect();
@@ -485,8 +491,8 @@ mod resharing_util {
                         .iter()
                         .map(|dealing_maybe| {
                             dealing_maybe
-                                .as_ref()
-                                .map(|dealing| dealing.0.coefficients[coefficient_index])
+                                .clone()
+                                .map(|dealing| dealing.0.coefficients[coefficient_index].clone())
                         })
                         .collect();
                     resharing_util::interpolate_public_key(&new_receiver_shares)
@@ -606,7 +612,7 @@ fn resharing_with_encryption_should_preserve_the_threshold_key() {
             .iter()
             .enumerate()
             .map(|(new_receiver_index, new_share_maybe)| {
-                new_share_maybe.map(|new_encrypted_share| {
+                new_share_maybe.clone().map(|new_encrypted_share| {
                     let dh_keys: Vec<Option<SecretKey>> = original_eligibility
                         .iter()
                         .enumerate()

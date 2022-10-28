@@ -134,7 +134,9 @@ fn test_threshold_sig_api_and_core_match(
     assert_eq!(
         core_signature_selection
             .iter()
-            .map(|option| option.map(|signature| IndividualSignatureBytes::from(&signature)))
+            .map(|option| option
+                .clone()
+                .map(|signature| IndividualSignatureBytes::from(&signature)))
             .collect::<Vec<_>>(),
         tsig_signature_selection
     );
@@ -151,10 +153,13 @@ fn test_threshold_sig_api_and_core_match(
     let core_public_key = crypto::combined_public_key(&core_public_coefficients);
     let tsig_public_key = tsig::combined_public_key(&tsig_public_coefficients)
         .expect("Threshold sig failed to get combined public key");
-    assert_eq!(PublicKeyBytes::from(core_public_key), tsig_public_key);
+    assert_eq!(
+        PublicKeyBytes::from(core_public_key.clone()),
+        tsig_public_key
+    );
 
     assert_eq!(
-        crypto::verify_combined_sig(message, core_signature, core_public_key),
+        crypto::verify_combined_sig(message, &core_signature, &core_public_key),
         Ok(())
     );
     assert_eq!(

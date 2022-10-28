@@ -18,27 +18,27 @@ proptest! {
 
     #[test]
     fn secret_key_serde(key in arbitrary::secret_key()) {
-        let bytes: SecretKeyBytes = key.into();
+        let bytes: SecretKeyBytes = key.clone().into();
         assert_eq!(key, bytes.into());
     }
     #[test]
     fn public_key_serde(key in arbitrary::public_key()) {
-        let bytes: PublicKeyBytes = key.into();
+        let bytes: PublicKeyBytes = key.clone().into();
         assert_eq!(Ok(key), bytes.try_into());
     }
     #[test]
     fn individual_signature_serde(signature in arbitrary::individual_signature()) {
-        let bytes: IndividualSignatureBytes = signature.into();
+        let bytes: IndividualSignatureBytes = signature.clone().into();
         assert_eq!(Ok(signature), bytes.try_into());
     }
     #[test]
     fn pop_serde(pop in arbitrary::pop()) {
-        let bytes: PopBytes = pop.into();
+        let bytes: PopBytes = pop.clone().into();
         assert_eq!(Ok(pop), bytes.try_into());
     }
     #[test]
     fn combined_signature_serde(signature in arbitrary::combined_signature()) {
-        let bytes: CombinedSignatureBytes = signature.into();
+        let bytes: CombinedSignatureBytes = signature.clone().into();
         assert_eq!(Ok(signature), bytes.try_into());
     }
     #[test]

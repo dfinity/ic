@@ -48,8 +48,8 @@ mod basic_functionality {
                .prop_filter("poly must have at least one coefficient", |p| !p.coefficients.is_empty()),
             shareholders in proptest::collection::vec(arbitrary::fr(), 1..300)
         ) {
-            poly.coefficients[0] = secret;
-            let shares: Vec<(Scalar,Scalar)> = shareholders.iter().map(|x| (*x, poly.evaluate_at(x))).collect();
+            poly.coefficients[0] = secret.clone();
+            let shares: Vec<(Scalar,Scalar)> = shareholders.iter().map(|x| (x.clone(), poly.evaluate_at(x))).collect();
             if shares.len() >= poly.coefficients.len() {
                 assert_eq!(Polynomial::interpolate(&shares[0..poly.coefficients.len()]).coefficients[0], secret);
             } else {

@@ -57,15 +57,15 @@ fn scalar_multiexp_naive(lhs: &[Scalar], rhs: &[Scalar]) -> Scalar {
     let terms = std::cmp::min(lhs.len(), rhs.len());
     let mut accum = Scalar::zero();
     for i in 0..terms {
-        accum += lhs[i] * rhs[i];
+        accum += &lhs[i] * &rhs[i];
     }
     accum
 }
 
 fn g1_multiexp_naive(terms: &[(G1Projective, Scalar)]) -> G1Projective {
-    let mut accum = *G1Projective::identity();
+    let mut accum = G1Projective::identity();
     for (pt, s) in terms {
-        accum += *pt * s;
+        accum += pt * s;
     }
     accum
 }
@@ -88,7 +88,7 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     group.bench_function("addition", |b| {
         b.iter_batched_ref(
             || (random_scalar(), random_scalar()),
-            |(s1, s2)| *s1 + *s2,
+            |(s1, s2)| s1.clone() + s2.clone(),
             BatchSize::SmallInput,
         )
     });
@@ -96,7 +96,7 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     group.bench_function("multiply", |b| {
         b.iter_batched_ref(
             || (random_scalar(), random_scalar()),
-            |(s1, s2)| *s1 * *s2,
+            |(s1, s2)| s1.clone() * s2.clone(),
             BatchSize::SmallInput,
         )
     });
@@ -154,7 +154,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("addition", |b| {
         b.iter_batched_ref(
             || (random_g1(), random_g1()),
-            |(pt1, pt2)| *pt1 + *pt2,
+            |(pt1, pt2)| pt1.clone() + pt2.clone(),
             BatchSize::SmallInput,
         )
     });
@@ -162,7 +162,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("mixed addition", |b| {
         b.iter_batched_ref(
             || (random_g1(), G1Affine::from(random_g1())),
-            |(pt1, pt2)| *pt1 + *pt2,
+            |(pt1, pt2)| pt1.clone() + pt2.clone(),
             BatchSize::SmallInput,
         )
     });
@@ -170,13 +170,17 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("multiply", |b| {
         b.iter_batched_ref(
             || (random_g1(), random_scalar()),
-            |(pt, scalar)| *pt * *scalar,
+            |(pt, scalar)| pt.clone() * scalar.clone(),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("to_affine", |b| {
-        b.iter_batched_ref(random_g1, |pt| G1Affine::from(*pt), BatchSize::SmallInput)
+        b.iter_batched_ref(
+            random_g1,
+            |pt| G1Affine::from(pt.clone()),
+            BatchSize::SmallInput,
+        )
     });
 
     group.bench_function("multiexp_naive2", |b| {
@@ -263,7 +267,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("addition", |b| {
         b.iter_batched_ref(
             || (random_g2(), random_g2()),
-            |(pt1, pt2)| *pt1 + *pt2,
+            |(pt1, pt2)| pt1.clone() + pt2.clone(),
             BatchSize::SmallInput,
         )
     });
@@ -271,7 +275,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("mixed addition", |b| {
         b.iter_batched_ref(
             || (random_g2(), G2Affine::from(random_g2())),
-            |(pt1, pt2)| *pt1 + *pt2,
+            |(pt1, pt2)| pt1.clone() + pt2.clone(),
             BatchSize::SmallInput,
         )
     });
@@ -279,19 +283,23 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("multiply", |b| {
         b.iter_batched_ref(
             || (random_g2(), random_scalar()),
-            |(pt, scalar)| *pt * *scalar,
+            |(pt, scalar)| pt.clone() * scalar.clone(),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("to_affine", |b| {
-        b.iter_batched_ref(random_g2, |pt| G2Affine::from(*pt), BatchSize::SmallInput)
+        b.iter_batched_ref(
+            random_g2,
+            |pt| G2Affine::from(pt.clone()),
+            BatchSize::SmallInput,
+        )
     });
 
     group.bench_function("prepare", |b| {
         b.iter_batched_ref(
             || G2Affine::from(random_g2()),
-            |pt| G2Prepared::from(*pt),
+            |pt| G2Prepared::from(pt.clone()),
             BatchSize::SmallInput,
         )
     });
@@ -319,7 +327,7 @@ fn pairing_ops(c: &mut Criterion) {
     group.bench_function("addition", |b| {
         b.iter_batched_ref(
             || (random_gt(), random_gt()),
-            |(gt1, gt2)| *gt1 + *gt2,
+            |(gt1, gt2)| gt1.clone() + gt2.clone(),
             BatchSize::SmallInput,
         )
     });
@@ -327,7 +335,7 @@ fn pairing_ops(c: &mut Criterion) {
     group.bench_function("multiply", |b| {
         b.iter_batched_ref(
             || (random_gt(), random_scalar()),
-            |(gt, scalar)| *gt * *scalar,
+            |(gt, scalar)| gt.clone() * scalar.clone(),
             BatchSize::SmallInput,
         )
     });
@@ -372,7 +380,11 @@ fn pairing_ops(c: &mut Criterion) {
                 )
             },
             |(g1a, g2a, g1b, g2b, g1c, g2c)| {
-                Gt::multipairing(&[(g1a, g2a), (g1b, g2b), (g1c, &G2Prepared::from(*g2c))])
+                Gt::multipairing(&[
+                    (g1a, g2a),
+                    (g1b, g2b),
+                    (g1c, &G2Prepared::from(g2c.clone())),
+                ])
             },
             BatchSize::SmallInput,
         )

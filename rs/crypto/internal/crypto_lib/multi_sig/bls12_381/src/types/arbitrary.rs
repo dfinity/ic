@@ -21,7 +21,7 @@ pub fn individual_signature() -> impl Strategy<Value = IndividualSignature> {
         .prop_map(|(seed, message)| (keypair_from_seed(seed), message))
         .prop_map(|(keypair, message)| {
             let (secret_key, _public_key) = keypair;
-            sign_message(&message, secret_key)
+            sign_message(&message, &secret_key)
         })
 }
 pub fn pop() -> impl Strategy<Value = Pop> {
@@ -29,7 +29,7 @@ pub fn pop() -> impl Strategy<Value = Pop> {
         .prop_map(keypair_from_seed)
         .prop_map(|keypair| {
             let (secret_key, public_key) = keypair;
-            create_pop(public_key, secret_key)
+            create_pop(&public_key, &secret_key)
         })
 }
 pub fn combined_signature() -> impl Strategy<Value = CombinedSignature> {

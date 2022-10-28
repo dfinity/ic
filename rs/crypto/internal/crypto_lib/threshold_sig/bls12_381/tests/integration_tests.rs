@@ -33,7 +33,10 @@ fn potpourri() {
         println!("generating key pair {}...", i);
         keys.push(kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng));
     }
-    let pks = keys.iter().map(|key| key.0.key_value).collect::<Vec<_>>();
+    let pks = keys
+        .iter()
+        .map(|key| key.0.key_value.clone())
+        .collect::<Vec<_>>();
     let sij: Vec<_> = vec![
         vec![27, 18, 28],
         vec![31415, 8192, 8224],
@@ -105,7 +108,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     // One takes refs, one takes values:
     let receiver_fs_public_keys: Vec<_> = public_keys_with_zk
         .iter()
-        .map(|key| key.key_value)
+        .map(|key| key.key_value.clone())
         .collect();
 
     let polynomial: Vec<_> = (0..threshold).map(|_| Scalar::random(&mut rng)).collect();
@@ -122,8 +125,8 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             let mut ipow = Scalar::one();
             let mut acc = Scalar::zero();
             for ak in &polynomial {
-                acc += *ak * ipow;
-                ipow *= ibig;
+                acc += ak * &ipow;
+                ipow *= &ibig;
             }
             acc
         })
@@ -209,7 +212,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         /// Combine a big endian array of group elements (first chunk is the
         /// most significant) into a single group element.
         fn g1_from_big_endian_chunks(terms: &[G1Affine]) -> G1Affine {
-            let mut acc = *G1Projective::identity();
+            let mut acc = G1Projective::identity();
 
             for term in terms {
                 for _ in 0..16 {
@@ -229,7 +232,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
 
             let mut acc = Scalar::zero();
             for term in terms {
-                acc *= factor;
+                acc *= &factor;
                 acc += term;
             }
 
