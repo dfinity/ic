@@ -413,7 +413,9 @@ impl SandboxSafeSystemState {
         }
     }
 
-    pub(super) fn unregister_callback(&mut self, id: CallbackId) {
+    /// Only public for use in tests.
+    #[doc(hidden)]
+    pub fn unregister_callback(&mut self, id: CallbackId) {
         self.system_state_changes
             .callback_updates
             .push(CallbackUpdate::Unregister(id))
