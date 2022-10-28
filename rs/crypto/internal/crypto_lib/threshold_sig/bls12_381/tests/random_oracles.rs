@@ -181,7 +181,7 @@ mod unique_hashing {
 
     #[test]
     fn should_hash_vectors_of_points() {
-        let point = *G1Affine::generator();
+        let point = G1Affine::generator().clone();
         let other_point = (G1Affine::generator() * Scalar::from_usize(42)).to_affine();
 
         let vec = vec![point, other_point];
@@ -190,8 +190,8 @@ mod unique_hashing {
 
     #[test]
     fn should_hash_vectors_of_vectors_of_points() {
-        let point = *G1Affine::generator();
-        let other_point = *G1Affine::generator();
+        let point = G1Affine::generator().clone();
+        let other_point = G1Affine::generator().clone();
 
         let vec_in = vec![point, other_point];
         let vec_out = vec![vec_in; 3];
@@ -205,7 +205,7 @@ mod unique_hashing {
         let point1 = G1Affine::generator() * Scalar::from_usize(17);
         let point2 = G1Affine::generator() * Scalar::from_usize(13);
         let hashable_struct = StructToBeHashed {
-            point: *G1Affine::generator(),
+            point: G1Affine::generator().clone(),
             string: "some string".to_string(),
             integer: 4usize,
             scalar: Scalar::from_usize(36),
@@ -225,7 +225,7 @@ mod unique_hashing {
     #[test]
     fn should_hash_structs_with_domain() {
         let hashable_struct = StructToBeHashed {
-            point: *G1Affine::generator(),
+            point: G1Affine::generator().clone(),
             string: "some string".to_string(),
             integer: 4usize,
             scalar: Scalar::from_usize(36),
@@ -247,7 +247,7 @@ mod unique_hashing {
     #[test]
     fn test_expected_output_for_random_oracle_to_scalar() {
         let hashable_struct = StructToBeHashed {
-            point: *G1Affine::generator(),
+            point: G1Affine::generator().clone(),
             string: "some string".to_string(),
             integer: 4usize,
             scalar: Scalar::from_usize(36),
@@ -282,7 +282,7 @@ mod random_oracles {
             prop_assume!(domain_1!=domain_2);
 
             let hashable_struct = StructToBeHashed {
-                point: *G1Affine::generator(),
+                point: G1Affine::generator().clone(),
                 string: "some string".to_string(),
                 integer: 4usize,
                 scalar: Scalar::from_usize(36),
@@ -300,7 +300,7 @@ mod random_oracles {
             prop_assume!(domain_1!=domain_2);
 
             let hashable_struct = StructToBeHashed {
-                point: *G1Affine::generator(),
+                point: G1Affine::generator().clone(),
                 string: "some string".to_string(),
                 integer: 4usize,
                 scalar: Scalar::from_usize(36),
@@ -318,7 +318,7 @@ mod random_oracles {
             prop_assume!(domain_1!=domain_2);
 
             let hashable_struct = StructToBeHashed {
-                point: *G1Affine::generator(),
+                point: G1Affine::generator().clone(),
                 string: "some string".to_string(),
                 integer: 4usize,
                 scalar: Scalar::from_usize(36),

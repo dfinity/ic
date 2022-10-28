@@ -86,11 +86,11 @@ fn scalar_batch_random_generates_expected_values() {
     let random = Scalar::batch_random(&mut rng, 2);
     assert_eq!(random.len(), 2);
     scalar_test_encoding(
-        random[0],
+        random[0].clone(),
         "3257761dbdaf0bcb97fb808f7b95ed1ec1974557af790021ff073ee14811b3d9",
     );
     scalar_test_encoding(
-        random[1],
+        random[1].clone(),
         "388f4601a393e81ef4964593283d317ddd7bfd88fb89fd7a7e4fb3a1ffee335a",
     );
 }
@@ -279,15 +279,15 @@ fn test_scalar_addition() {
         let s1 = Scalar::random(&mut rng);
         let s2 = Scalar::random(&mut rng);
 
-        let s3 = s1 + s2;
+        let s3 = &s1 + &s2;
 
-        let mut s4 = s3;
+        let mut s4 = s3.clone();
         assert_eq!(s4, s3);
-        s4 -= s2;
+        s4 -= &s2;
         assert_eq!(s4, s1);
-        s4 += s2;
+        s4 += &s2;
         assert_eq!(s4, s3);
-        s4 -= s1;
+        s4 -= &s1;
         assert_eq!(s4, s2);
     }
 }
@@ -346,7 +346,7 @@ fn test_gt_generator_is_expected_value() {
 fn test_gt_hash_has_no_collisions_in_range() {
     let mut seen = std::collections::HashSet::new();
 
-    let mut x = *Gt::identity();
+    let mut x = Gt::identity();
     for _ in 0..=0xFFFF {
         let hash = x.short_hash_for_linear_search();
         assert!(seen.insert(hash));
@@ -382,14 +382,14 @@ fn test_pairing_bilinearity() {
         let s2 = Scalar::random(&mut rng);
         let s3 = Scalar::random(&mut rng);
 
-        let mul_123 = Gt::pairing(&(g1 * s1).into(), &(g2 * s2).into()) * s3;
-        let mul_132 = Gt::pairing(&(g1 * s1).into(), &(g2 * s3).into()) * s2;
-        let mul_213 = Gt::pairing(&(g1 * s2).into(), &(g2 * s1).into()) * s3;
-        let mul_231 = Gt::pairing(&(g1 * s2).into(), &(g2 * s3).into()) * s1;
-        let mul_312 = Gt::pairing(&(g1 * s3).into(), &(g2 * s1).into()) * s2;
-        let mul_321 = Gt::pairing(&(g1 * s3).into(), &(g2 * s2).into()) * s1;
+        let mul_123 = Gt::pairing(&(g1 * &s1).into(), &(g2 * &s2).into()) * &s3;
+        let mul_132 = Gt::pairing(&(g1 * &s1).into(), &(g2 * &s3).into()) * &s2;
+        let mul_213 = Gt::pairing(&(g1 * &s2).into(), &(g2 * &s1).into()) * &s3;
+        let mul_231 = Gt::pairing(&(g1 * &s2).into(), &(g2 * &s3).into()) * &s1;
+        let mul_312 = Gt::pairing(&(g1 * &s3).into(), &(g2 * &s1).into()) * &s2;
+        let mul_321 = Gt::pairing(&(g1 * &s3).into(), &(g2 * &s2).into()) * &s1;
 
-        let mul_gt = ((Gt::generator() * s1) * s2) * s3;
+        let mul_gt = ((Gt::generator() * &s1) * &s2) * &s3;
 
         assert_eq!(mul_123, mul_gt);
         assert_eq!(mul_132, mul_gt);
@@ -417,14 +417,14 @@ fn test_g1_addition() {
     for _ in 0..30 {
         let s0 = Scalar::random(&mut rng);
         let s1 = Scalar::random(&mut rng);
-        let s2 = s0 - s1;
+        let s2 = &s0 - &s1;
 
-        let gs0 = g * s0;
-        let gs1 = g * s1;
-        let gs2 = g * s2;
-        assert_eq!(gs0, gs1 + gs2);
-        assert_eq!(gs0 - gs1, gs2);
-        assert_eq!(gs0 - gs2, gs1);
+        let gs0 = g * &s0;
+        let gs1 = g * &s1;
+        let gs2 = g * &s2;
+        assert_eq!(gs0, &gs1 + &gs2);
+        assert_eq!(gs1, &gs0 - &gs2);
+        assert_eq!(gs2, &gs0 - &gs1);
     }
 }
 
@@ -437,14 +437,14 @@ fn test_g2_addition() {
     for _ in 0..30 {
         let s0 = Scalar::random(&mut rng);
         let s1 = Scalar::random(&mut rng);
-        let s2 = s0 - s1;
+        let s2 = &s0 - &s1;
 
-        let gs0 = g * s0;
-        let gs1 = g * s1;
-        let gs2 = g * s2;
-        assert_eq!(gs0, gs1 + gs2);
-        assert_eq!(gs0 - gs1, gs2);
-        assert_eq!(gs0 - gs2, gs1);
+        let gs0 = g * &s0;
+        let gs1 = g * &s1;
+        let gs2 = g * &s2;
+        assert_eq!(gs0, &gs1 + &gs2);
+        assert_eq!(gs1, &gs0 - &gs2);
+        assert_eq!(gs2, &gs0 - &gs1);
     }
 }
 
@@ -457,14 +457,14 @@ fn test_gt_addition() {
     for _ in 0..30 {
         let s0 = Scalar::random(&mut rng);
         let s1 = Scalar::random(&mut rng);
-        let s2 = s0 - s1;
+        let s2 = &s0 - &s1;
 
-        let gs0 = g * s0;
-        let gs1 = g * s1;
-        let gs2 = g * s2;
-        assert_eq!(gs0, gs1 + gs2);
-        assert_eq!(gs0 - gs1, gs2);
-        assert_eq!(gs0 - gs2, gs1);
+        let gs0 = g * &s0;
+        let gs1 = g * &s1;
+        let gs2 = g * &s2;
+        assert_eq!(gs0, &gs1 + &gs2);
+        assert_eq!(gs1, &gs0 - &gs2);
+        assert_eq!(gs2, &gs0 - &gs1);
     }
 }
 
@@ -517,19 +517,19 @@ fn test_identity_is_identity() {
 
     let s = Scalar::from_u64(9);
 
-    assert!((G1Affine::identity() * s).is_identity());
-    assert!((G1Projective::identity() * s).is_identity());
-    assert!((G2Affine::identity() * s).is_identity());
-    assert!((G2Projective::identity() * s).is_identity());
-    assert!((Gt::identity() * s).is_identity());
+    assert!((G1Affine::identity() * &s).is_identity());
+    assert!((G1Projective::identity() * &s).is_identity());
+    assert!((G2Affine::identity() * &s).is_identity());
+    assert!((G2Projective::identity() * &s).is_identity());
+    assert!((Gt::identity() * &s).is_identity());
 }
 
 #[test]
 fn test_point_neg() {
-    assert_eq!(G1Affine::identity(), &G1Affine::identity().neg());
-    assert_eq!(G1Projective::identity(), &G1Projective::identity().neg());
-    assert_eq!(G2Affine::identity(), &G2Affine::identity().neg());
-    assert_eq!(G2Projective::identity(), &G2Projective::identity().neg());
+    assert_eq!(G1Affine::identity(), G1Affine::identity().neg());
+    assert_eq!(G1Projective::identity(), G1Projective::identity().neg());
+    assert_eq!(G2Affine::identity(), G2Affine::identity().neg());
+    assert_eq!(G2Projective::identity(), G2Projective::identity().neg());
 
     let pt_pos = G1Projective::generator() * Scalar::from_u32(42);
     let pt_neg = G1Projective::generator() * Scalar::from_i32(-42);
@@ -553,7 +553,7 @@ fn test_multipairing() {
     let g2p = G2Prepared::generator();
     let g2pn = G2Prepared::neg_generator();
 
-    assert_eq!(Gt::multipairing(&[]), *Gt::identity());
+    assert_eq!(Gt::multipairing(&[]), Gt::identity());
 
     assert_eq!(Gt::multipairing(&[(g1, g2p)]), *Gt::generator());
 
@@ -570,13 +570,13 @@ fn test_multipairing() {
         let b = Scalar::random(&mut rng);
         let c = Scalar::random(&mut rng);
 
-        let g1a = G1Affine::from(G1Projective::generator() * a);
-        let g1b = G1Affine::from(G1Projective::generator() * b);
-        let g1c = G1Affine::from(G1Projective::generator() * c);
+        let g1a = G1Affine::from(G1Projective::generator() * &a);
+        let g1b = G1Affine::from(G1Projective::generator() * &b);
+        let g1c = G1Affine::from(G1Projective::generator() * &c);
 
-        let g2a = G2Prepared::from(G2Projective::generator() * a);
-        let g2b = G2Prepared::from(G2Projective::generator() * b);
-        let g2c = G2Prepared::from(G2Projective::generator() * c);
+        let g2a = G2Prepared::from(G2Projective::generator() * &a);
+        let g2b = G2Prepared::from(G2Projective::generator() * &b);
+        let g2c = G2Prepared::from(G2Projective::generator() * &c);
 
         let g2 = G2Prepared::generator();
 
@@ -778,7 +778,7 @@ fn test_batch_mul_g1() {
         assert_eq!(batch.len(), scalars.len());
 
         for j in 0..i {
-            assert_eq!(batch[j], G1Affine::from(pt * scalars[j]));
+            assert_eq!(batch[j], G1Affine::from(&pt * &scalars[j]));
         }
     }
 }
@@ -797,7 +797,7 @@ fn test_batch_mul_g2() {
         assert_eq!(batch.len(), scalars.len());
 
         for j in 0..i {
-            assert_eq!(batch[j], G2Affine::from(pt * scalars[j]));
+            assert_eq!(batch[j], G2Affine::from(&pt * &scalars[j]));
         }
     }
 }
@@ -887,10 +887,10 @@ fn test_g1_test_vectors() {
     let g = G1Affine::generator();
     let identity = G1Affine::identity();
 
-    g1_test_encoding(*identity, test_vectors::g1::INFINITY);
-    g1_test_encoding(*g, test_vectors::g1::GENERATOR);
+    g1_test_encoding(identity.clone(), test_vectors::g1::INFINITY);
+    g1_test_encoding(g.clone(), test_vectors::g1::GENERATOR);
 
-    assert_eq!(identity, &G1Affine::from(G1Projective::identity()));
+    assert_eq!(identity, G1Affine::from(G1Projective::identity()));
     assert_eq!(g, &G1Affine::from(G1Projective::generator()));
 
     for (i, expected) in test_vectors::g1::POSITIVE_NUMBERS.iter().enumerate() {
@@ -914,10 +914,10 @@ fn test_g2_test_vectors() {
     let g = G2Affine::generator();
     let identity = G2Affine::identity();
 
-    g2_test_encoding(*identity, test_vectors::g2::INFINITY);
-    g2_test_encoding(*g, test_vectors::g2::GENERATOR);
+    g2_test_encoding(identity.clone(), test_vectors::g2::INFINITY);
+    g2_test_encoding(g.clone(), test_vectors::g2::GENERATOR);
 
-    assert_eq!(identity, &G2Affine::from(G2Projective::identity()));
+    assert_eq!(identity, G2Affine::from(G2Projective::identity()));
     assert_eq!(g, &G2Affine::from(G2Projective::generator()));
 
     for (i, expected) in test_vectors::g2::POSITIVE_NUMBERS.iter().enumerate() {
@@ -954,9 +954,9 @@ fn biased_g1<R: RngCore + CryptoRng>(rng: &mut R) -> G1Projective {
     let coin = rng.gen::<u8>();
 
     if coin < 10 {
-        *G1Projective::identity()
+        G1Projective::identity()
     } else if coin < 20 {
-        *G1Projective::generator()
+        G1Projective::generator().clone()
     } else if coin < 30 {
         G1Projective::generator().neg()
     } else {
@@ -968,9 +968,9 @@ fn biased_g2<R: RngCore + CryptoRng>(rng: &mut R) -> G2Projective {
     let coin = rng.gen::<u8>();
 
     if coin < 10 {
-        *G2Projective::identity()
+        G2Projective::identity()
     } else if coin < 20 {
-        *G2Projective::generator()
+        G2Projective::generator().clone()
     } else if coin < 30 {
         G2Projective::generator().neg()
     } else {
@@ -988,7 +988,7 @@ fn test_g1_mul2() {
 
     assert_eq!(
         G1Projective::mul2(g, &zero, g, &zero),
-        *G1Projective::identity()
+        G1Projective::identity()
     );
     assert_eq!(G1Projective::mul2(g, &one, g, &zero), *g);
     assert_eq!(G1Projective::mul2(g, &zero, g, &one), *g);
@@ -1000,7 +1000,7 @@ fn test_g1_mul2() {
         let p1 = biased_g1(&mut rng);
         let p2 = biased_g1(&mut rng);
 
-        let reference = p1 * s1 + p2 * s2;
+        let reference = &p1 * &s1 + &p2 * &s2;
 
         assert_eq!(G1Projective::mul2(&p1, &s1, &p2, &s2), reference);
         assert_eq!(G1Projective::mul2(&p2, &s2, &p1, &s1), reference);
@@ -1017,7 +1017,7 @@ fn test_g2_mul2() {
 
     assert_eq!(
         G2Projective::mul2(g, &zero, g, &zero),
-        *G2Projective::identity()
+        G2Projective::identity()
     );
     assert_eq!(G2Projective::mul2(g, &one, g, &zero), *g);
     assert_eq!(G2Projective::mul2(g, &zero, g, &one), *g);
@@ -1029,7 +1029,7 @@ fn test_g2_mul2() {
         let p1 = biased_g2(&mut rng);
         let p2 = biased_g2(&mut rng);
 
-        let reference = p1 * s1 + p2 * s2;
+        let reference = &p1 * &s1 + &p2 * &s2;
 
         assert_eq!(G2Projective::mul2(&p1, &s1, &p2, &s2), reference);
         assert_eq!(G2Projective::mul2(&p2, &s2, &p1, &s1), reference);
@@ -1053,7 +1053,7 @@ fn test_scalar_muln() {
 
         let mut reference_val = Scalar::zero();
         for i in 0..t {
-            reference_val += lhs[i] * rhs[i];
+            reference_val += &lhs[i] * &rhs[i];
         }
 
         let computed = Scalar::muln_vartime(&lhs, &rhs);
@@ -1066,7 +1066,7 @@ fn test_scalar_muln() {
 fn test_g1_muln() {
     let mut rng = seeded_rng();
 
-    assert_eq!(G1Projective::muln_vartime(&[]), *G1Projective::identity());
+    assert_eq!(G1Projective::muln_vartime(&[]), G1Projective::identity());
 
     for t in 1..100 {
         let mut terms = Vec::with_capacity(t);
@@ -1075,9 +1075,9 @@ fn test_g1_muln() {
             terms.push((biased_g1(&mut rng), biased_scalar(&mut rng)));
         }
 
-        let mut reference_val = *G1Projective::identity();
+        let mut reference_val = G1Projective::identity();
         for (p, s) in &terms {
-            reference_val += *p * *s;
+            reference_val += p * s;
         }
 
         let computed = G1Projective::muln_vartime(&terms);
@@ -1090,7 +1090,7 @@ fn test_g1_muln() {
 fn test_g2_muln() {
     let mut rng = seeded_rng();
 
-    assert_eq!(G2Projective::muln_vartime(&[]), *G2Projective::identity());
+    assert_eq!(G2Projective::muln_vartime(&[]), G2Projective::identity());
 
     for t in 1..100 {
         let mut terms = Vec::with_capacity(t);
@@ -1099,9 +1099,9 @@ fn test_g2_muln() {
             terms.push((biased_g2(&mut rng), biased_scalar(&mut rng)));
         }
 
-        let mut reference_val = *G2Projective::identity();
+        let mut reference_val = G2Projective::identity();
         for (p, s) in &terms {
-            reference_val += *p * *s;
+            reference_val += p * s;
         }
 
         let computed = G2Projective::muln_vartime(&terms);
@@ -1115,9 +1115,9 @@ fn test_verify_bls_signature() {
     let mut rng = seeded_rng();
 
     let sk = Scalar::random(&mut rng);
-    let pk = G2Affine::from(G2Affine::generator() * sk);
+    let pk = G2Affine::from(G2Affine::generator() * &sk);
     let message = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
-    let signature = G1Affine::from(message * sk);
+    let signature = G1Affine::from(&message * &sk);
 
     assert!(verify_bls_signature(&signature, &pk, &message));
     assert!(!verify_bls_signature(&message, &pk, &signature));

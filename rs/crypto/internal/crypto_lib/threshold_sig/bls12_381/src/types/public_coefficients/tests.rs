@@ -171,7 +171,7 @@ mod public_coefficients {
             let divided: Vec<Scalar> = as_fr
                 .iter()
                 .map(|(numerator, denominator)| {
-                    let mut ans = *numerator;
+                    let mut ans = numerator.clone();
                     let inv = denominator.inverse().expect("No inverse");
                     ans.mul_assign(&inv);
                     ans
@@ -193,7 +193,7 @@ mod public_coefficients {
 
             let dup_r = Scalar::random(&mut rng);
 
-            inputs.push(dup_r);
+            inputs.push(dup_r.clone());
 
             for _i in 0..=num_coefficients {
                 let r = Scalar::random(&mut rng);
@@ -222,14 +222,14 @@ mod public_coefficients {
             let dup_p_r = poly.evaluate_at(&dup_r);
 
             for _i in 0..=num_coefficients {
-                samples.push((dup_r, dup_p_r));
+                samples.push((dup_r.clone(), dup_p_r.clone()));
             }
 
             for _i in 0..=num_coefficients {
                 let r = Scalar::random(&mut rng);
                 let p_r = poly.evaluate_at(&r);
                 samples.push((r, p_r));
-                samples.push((dup_r, dup_p_r));
+                samples.push((dup_r.clone(), dup_p_r.clone()));
             }
 
             let interp = Polynomial::interpolate(&samples);

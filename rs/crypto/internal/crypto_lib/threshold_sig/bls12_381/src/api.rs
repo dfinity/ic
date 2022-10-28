@@ -89,6 +89,7 @@ pub fn keygen(
         .map(|(public_coefficients, shares)| {
             let shares = shares
                 .iter()
+                .cloned()
                 .map(|key_maybe| key_maybe.map(SecretKeyBytes::from))
                 .collect();
             (PublicCoefficientsBytes::from(&public_coefficients), shares)
@@ -224,11 +225,9 @@ pub fn verify_individual_signature(
     signature: IndividualSignatureBytes,
     public_key: PublicKeyBytes,
 ) -> CryptoResult<()> {
-    crypto::verify_individual_sig(
-        message,
-        (&signature).try_into()?,
-        PublicKey::try_from(&public_key)?,
-    )
+    let signature = (&signature).try_into()?;
+    let pk = PublicKey::try_from(&public_key)?;
+    crypto::verify_individual_sig(message, &signature, &pk)
 }
 
 /// Verifies that a combined signature is valid.
@@ -248,11 +247,9 @@ pub fn verify_combined_signature(
     signature: CombinedSignatureBytes,
     public_key: PublicKeyBytes,
 ) -> CryptoResult<()> {
-    crypto::verify_combined_sig(
-        message,
-        (&signature).try_into()?,
-        PublicKey::try_from(&public_key)?,
-    )
+    let signature = (&signature).try_into()?;
+    let pk = PublicKey::try_from(&public_key)?;
+    crypto::verify_combined_sig(message, &signature, &pk)
 }
 
 /// Converts public key bytes into its DER-encoded form.

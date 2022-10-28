@@ -8,11 +8,11 @@ fn setup_pop_instance_and_witness<R: RngCore + CryptoRng>(
 ) -> (EncryptionKeyInstance, Scalar) {
     let g1 = G1Affine::generator();
     let witness = Scalar::random(rng);
-    let public_key = G1Affine::from(g1 * witness);
+    let public_key = G1Affine::from(g1 * &witness);
     let associated_data = rng.gen::<[u8; 10]>().to_vec();
 
     let instance = EncryptionKeyInstance {
-        g1_gen: *g1,
+        g1_gen: g1.clone(),
         public_key,
         associated_data,
     };

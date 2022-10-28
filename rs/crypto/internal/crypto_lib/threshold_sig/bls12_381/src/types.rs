@@ -59,7 +59,7 @@ impl SecretKeyBytes {
 ///
 /// Doing this (instead of a type) allows for From conversions in
 /// this crate.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PublicKey(pub G2Projective);
 
 /// Interpolation failed because of duplicate x-coordinates.

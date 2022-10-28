@@ -38,7 +38,8 @@ pub enum PairingInvalidScalar {
 }
 
 /// An integer of the order of the groups G1/G2/Gt
-#[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
+#[derive(Clone, Eq, PartialEq, Zeroize)]
+#[zeroize(drop)]
 pub struct Scalar {
     value: ic_bls12_381::Scalar,
 }
@@ -126,7 +127,7 @@ impl Scalar {
         let mut xpow = Self::one();
         for _ in 0..cnt {
             xpow *= x;
-            r.push(xpow);
+            r.push(xpow.clone());
         }
 
         r
@@ -345,7 +346,7 @@ impl Scalar {
         let terms = std::cmp::min(lhs.len(), rhs.len());
         let mut accum = Self::zero();
         for i in 0..terms {
-            accum += lhs[i] * rhs[i];
+            accum += &lhs[i] * &rhs[i];
         }
         accum
     }
@@ -371,7 +372,7 @@ impl Scalar {
         let terms = std::cmp::min(lhs.len(), rhs.len());
         let mut accum = Self::zero();
         for i in 0..terms {
-            accum += lhs[i] * Scalar::from_usize(rhs[i]);
+            accum += &lhs[i] * Scalar::from_usize(rhs[i]);
         }
         accum
     }
@@ -449,19 +450,51 @@ impl Scalar {
 
 macro_rules! declare_addsub_ops_for {
     ( $typ:ty ) => {
-        impl std::ops::Add for $typ {
-            type Output = Self;
+        impl std::ops::Add<&$typ> for &$typ {
+            type Output = $typ;
 
-            fn add(self, other: Self) -> Self {
-                Self::new(self.inner() + other.inner())
+            fn add(self, other: &$typ) -> $typ {
+                <$typ>::new(self.inner() + other.inner())
             }
         }
 
-        impl std::ops::Sub for $typ {
-            type Output = Self;
+        impl std::ops::Add<$typ> for $typ {
+            type Output = $typ;
 
-            fn sub(self, other: Self) -> Self {
-                Self::new(self.inner() - other.inner())
+            fn add(self, other: $typ) -> $typ {
+                &self + &other
+            }
+        }
+
+        impl std::ops::Add<&$typ> for $typ {
+            type Output = $typ;
+
+            fn add(self, other: &$typ) -> $typ {
+                &self + other
+            }
+        }
+
+        impl std::ops::Sub<&$typ> for &$typ {
+            type Output = $typ;
+
+            fn sub(self, other: &$typ) -> $typ {
+                <$typ>::new(self.inner() - other.inner())
+            }
+        }
+
+        impl std::ops::Sub<$typ> for $typ {
+            type Output = $typ;
+
+            fn sub(self, other: $typ) -> $typ {
+                &self - &other
+            }
+        }
+
+        impl std::ops::Sub<&$typ> for $typ {
+            type Output = $typ;
+
+            fn sub(self, other: &$typ) -> $typ {
+                &self - other
             }
         }
 
@@ -493,19 +526,27 @@ macro_rules! declare_addsub_ops_for {
 
 macro_rules! declare_mixed_addition_ops_for {
     ( $proj:ty, $affine:ty ) => {
-        impl std::ops::Add<$affine> for $proj {
-            type Output = Self;
+        impl std::ops::Add<&$affine> for &$proj {
+            type Output = $proj;
 
-            fn add(self, other: $affine) -> Self {
-                Self::new(self.inner().add_mixed(other.inner()))
+            fn add(self, other: &$affine) -> $proj {
+                <$proj>::new(self.inner().add_mixed(other.inner()))
+            }
+        }
+
+        impl std::ops::Add<$affine> for $proj {
+            type Output = $proj;
+
+            fn add(self, other: $affine) -> $proj {
+                &self + &other
             }
         }
 
         impl std::ops::Add<&$affine> for $proj {
-            type Output = Self;
+            type Output = $proj;
 
-            fn add(self, other: &$affine) -> Self {
-                Self::new(self.inner().add_mixed(other.inner()))
+            fn add(self, other: &$affine) -> $proj {
+                &self + other
             }
         }
 
@@ -525,24 +566,31 @@ macro_rules! declare_mixed_addition_ops_for {
 
 macro_rules! declare_mul_scalar_ops_for {
     ( $typ:ty ) => {
-        impl std::ops::Mul<Scalar> for $typ {
-            type Output = Self;
-            fn mul(self, scalar: Scalar) -> Self {
-                Self::new(self.inner() * scalar.inner())
+        impl std::ops::Mul<&Scalar> for &$typ {
+            type Output = $typ;
+            fn mul(self, scalar: &Scalar) -> $typ {
+                <$typ>::new(self.inner() * scalar.inner())
             }
         }
 
         impl std::ops::Mul<&Scalar> for $typ {
-            type Output = Self;
-            fn mul(self, scalar: &Scalar) -> Self {
-                Self::new(self.inner() * scalar.inner())
+            type Output = $typ;
+            fn mul(self, scalar: &Scalar) -> $typ {
+                &self * scalar
             }
         }
 
         impl std::ops::Mul<Scalar> for &$typ {
             type Output = $typ;
             fn mul(self, scalar: Scalar) -> $typ {
-                *self * scalar
+                self * &scalar
+            }
+        }
+
+        impl std::ops::Mul<Scalar> for $typ {
+            type Output = $typ;
+            fn mul(self, scalar: Scalar) -> $typ {
+                &self * &scalar
             }
         }
 
@@ -568,12 +616,12 @@ macro_rules! define_affine_and_projective_types {
         paste! {
             lazy_static::lazy_static! {
                 static ref [<$affine:upper _GENERATOR>] : $affine = $affine::new(ic_bls12_381::$affine::generator());
-                static ref [<$affine:upper _IDENTITY>] : $affine = $affine::new(ic_bls12_381::$affine::identity());
             }
         }
 
         /// An element of the group in affine form
-        #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
+        #[derive(Clone, Eq, PartialEq, Zeroize)]
+        #[zeroize(drop)]
         pub struct $affine {
             value: ic_bls12_381::$affine
         }
@@ -593,8 +641,8 @@ macro_rules! define_affine_and_projective_types {
             }
 
             /// Return the identity element in this group
-            pub fn identity() -> &'static Self {
-                paste! { &[<$affine:upper _IDENTITY>] }
+            pub fn identity() -> Self {
+                Self::new(ic_bls12_381::$affine::identity())
             }
 
             /// Return the generator element in this group
@@ -703,12 +751,12 @@ macro_rules! define_affine_and_projective_types {
         paste! {
             lazy_static::lazy_static! {
                 static ref [<$projective:upper _GENERATOR>] : $projective = $projective::new(ic_bls12_381::$projective::generator());
-                static ref [<$projective:upper _IDENTITY>] : $projective = $projective::new(ic_bls12_381::$projective::identity());
             }
         }
 
         /// An element of the group in projective form
-        #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
+        #[derive(Clone, Eq, PartialEq, Zeroize)]
+        #[zeroize(drop)]
         pub struct $projective {
             value: ic_bls12_381::$projective
         }
@@ -789,8 +837,17 @@ macro_rules! define_affine_and_projective_types {
             }
 
             /// Return the identity element in this group
-            pub fn identity() -> &'static Self {
-                paste! { &[<$projective:upper _IDENTITY>] }
+            pub fn identity() -> Self {
+                Self::new(ic_bls12_381::$projective::identity())
+            }
+
+            /// Return a list of n elements all of which are the identity element
+            pub(crate) fn identities(count: usize) -> Vec<Self> {
+                let mut v = Vec::with_capacity(count);
+                for _ in 0..count {
+                    v.push(Self::identity());
+                }
+                v
             }
 
             /// Return the generator element in this group
@@ -832,10 +889,10 @@ macro_rules! define_affine_and_projective_types {
             }
         }
 
-        impl std::ops::Mul<Scalar> for $affine {
+        impl std::ops::Mul<&Scalar> for &$affine {
             type Output = $projective;
 
-            fn mul(self, scalar: Scalar) -> $projective {
+            fn mul(self, scalar: &Scalar) -> $projective {
                 <$projective>::from(self).windowed_mul(&scalar)
             }
         }
@@ -852,15 +909,15 @@ macro_rules! define_affine_and_projective_types {
             type Output = $projective;
 
             fn mul(self, scalar: Scalar) -> $projective {
-               *self * scalar
+                self * &scalar
             }
         }
 
-        impl std::ops::Mul<&Scalar> for &$affine {
+        impl std::ops::Mul<Scalar> for $affine {
             type Output = $projective;
 
-            fn mul(self, scalar: &Scalar) -> $projective {
-               *self * scalar
+            fn mul(self, scalar: Scalar) -> $projective {
+                &self * &scalar
             }
         }
 
@@ -931,7 +988,7 @@ macro_rules! declare_mul2_impl_for {
                 We build up the table incrementally using additions and doubling, to
                 avoid the cost of full scalar mul.
                  */
-                let mut tbl = [*Self::identity(); TABLE_SIZE];
+                let mut tbl = Self::identities(TABLE_SIZE);
 
                 // Precompute the table (tbl[0] is left as the identity)
                 for i in 1..TABLE_SIZE {
@@ -943,18 +1000,18 @@ macro_rules! declare_mul2_impl_for {
                     if xi % 2 == 0 && yi % 2 == 0 {
                         tbl[i] = tbl[i / 2].double();
                     } else if xi > 0 && yi > 0 {
-                        tbl[i] = tbl[tbl_col(xi)] + tbl[tbl_row(yi)];
+                        tbl[i] = &tbl[tbl_col(xi)] + &tbl[tbl_row(yi)];
                     } else if xi > 0 {
-                        tbl[i] = tbl[tbl_col(xi - 1)] + *x;
+                        tbl[i] = &tbl[tbl_col(xi - 1)] + x;
                     } else if yi > 0 {
-                        tbl[i] = tbl[tbl_row(yi - 1)] + *y;
+                        tbl[i] = &tbl[tbl_row(yi - 1)] + y;
                     }
                 }
 
                 let s1 = a.serialize();
                 let s2 = b.serialize();
 
-                let mut accum = *Self::identity();
+                let mut accum = Self::identity();
 
                 for i in 0..Window::WINDOWS {
                     // skip on first iteration: doesn't leak secrets as index is public
@@ -1004,17 +1061,16 @@ macro_rules! declare_muln_vartime_impl_for {
                     windows.push(window);
                 }
 
-                let id = *Self::identity();
-                let mut accum = id;
+                let mut accum = Self::identity();
 
-                let mut buckets = [id; Window::ELEMENTS];
+                let mut buckets = Self::identities(Window::ELEMENTS);
 
                 for i in 0..Window::WINDOWS {
                     let mut max_bucket = 0;
                     for j in 0..terms.len() {
                         let bucket_index = windows[j][i] as usize;
                         if bucket_index > 0 {
-                            buckets[bucket_index] += terms[j].0;
+                            buckets[bucket_index] += &terms[j].0;
                             max_bucket = std::cmp::max(max_bucket, bucket_index);
                         }
                     }
@@ -1025,12 +1081,12 @@ macro_rules! declare_muln_vartime_impl_for {
                         }
                     }
 
-                    let mut t = id;
+                    let mut t = Self::identity();
 
                     for j in (1..=max_bucket).rev() {
-                        t += buckets[j];
-                        accum += t;
-                        buckets[j] = id;
+                        t += &buckets[j];
+                        accum += &t;
+                        buckets[j] = Self::identity();
                     }
                 }
 
@@ -1057,7 +1113,7 @@ macro_rules! declare_muln_vartime_affine_impl_for {
                 let mut terms = Vec::with_capacity(count);
 
                 for i in 0..count {
-                    terms.push((<$proj>::from(points[i]), scalars[i]));
+                    terms.push((<$proj>::from(&points[i]), scalars[i].clone()));
                 }
 
                 Self::muln_vartime(&terms)
@@ -1076,15 +1132,15 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
                 // Derived constants
                 const TABLE_SIZE: usize = Window::ELEMENTS;
 
-                let mut tbl = [*Self::identity(); TABLE_SIZE];
+                let mut tbl = Self::identities(TABLE_SIZE);
 
                 for i in 1..TABLE_SIZE {
-                    tbl[i] = tbl[i - 1] + *self;
+                    tbl[i] = &tbl[i - 1] + self;
                 }
 
                 let s = scalar.serialize();
 
-                let mut accum = *Self::identity();
+                let mut accum = Self::identity();
 
                 for i in 0..Window::WINDOWS {
                     // skip on first iteration: doesn't leak secrets as index is public
@@ -1102,24 +1158,31 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
             }
         }
 
-        impl std::ops::Mul<Scalar> for $typ {
-            type Output = Self;
-            fn mul(self, scalar: Scalar) -> Self {
-                self.windowed_mul(&scalar)
+        impl std::ops::Mul<&Scalar> for &$typ {
+            type Output = $typ;
+            fn mul(self, scalar: &Scalar) -> $typ {
+                self.windowed_mul(scalar)
             }
         }
 
         impl std::ops::Mul<&Scalar> for $typ {
-            type Output = Self;
-            fn mul(self, scalar: &Scalar) -> Self {
-                self.windowed_mul(scalar)
+            type Output = $typ;
+            fn mul(self, scalar: &Scalar) -> $typ {
+                &self * scalar
             }
         }
 
         impl std::ops::Mul<Scalar> for &$typ {
             type Output = $typ;
             fn mul(self, scalar: Scalar) -> Self::Output {
-                *self * scalar
+                self * &scalar
+            }
+        }
+
+        impl std::ops::Mul<Scalar> for $typ {
+            type Output = $typ;
+            fn mul(self, scalar: Scalar) -> Self::Output {
+                &self * &scalar
             }
         }
 
@@ -1157,14 +1220,14 @@ impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);
 
 /// An element of the group Gt
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
+#[zeroize(drop)]
 pub struct Gt {
     value: ic_bls12_381::Gt,
 }
 
 lazy_static::lazy_static! {
     static ref GT_GENERATOR : Gt = Gt::new(ic_bls12_381::Gt::generator());
-    static ref GT_IDENTITY : Gt = Gt::new(ic_bls12_381::Gt::identity());
 }
 
 impl Gt {
@@ -1207,8 +1270,17 @@ impl Gt {
     }
 
     /// Return the identity element in the group
-    pub fn identity() -> &'static Self {
-        &GT_IDENTITY
+    pub fn identity() -> Self {
+        Self::new(ic_bls12_381::Gt::identity())
+    }
+
+    /// Return a vector of the identity element
+    pub(crate) fn identities(count: usize) -> Vec<Self> {
+        let mut v = Vec::with_capacity(count);
+        for _ in 0..count {
+            v.push(Self::identity());
+        }
+        v
     }
 
     /// Return the generator element in the group
@@ -1284,8 +1356,8 @@ impl Gt {
     /// This function avoids leaking val through timing side channels,
     /// since it is used when decrypting NIDKG dealings.
     pub fn g_mul_u16(val: u16) -> Self {
-        let g = *Gt::generator();
-        let mut r = *Gt::identity();
+        let g = Gt::generator().clone();
+        let mut r = Gt::identity();
 
         for b in 0..16 {
             if b > 0 {
@@ -1293,7 +1365,7 @@ impl Gt {
             }
 
             let choice = subtle::Choice::from(((val >> (15 - b)) as u8) & 1);
-            r = Self::conditional_select(&r, &(r + g), choice);
+            r = Self::conditional_select(&r, &(&r + &g), choice);
         }
 
         r

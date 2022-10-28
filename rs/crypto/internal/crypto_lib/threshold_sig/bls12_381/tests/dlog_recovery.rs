@@ -12,7 +12,7 @@ fn gt_rand() -> Gt {
 
 #[test]
 fn baby_giant_empty_range() {
-    let base = *Gt::generator();
+    let base = Gt::generator().clone();
     let baby_giant = BabyStepGiantStep::new(&base, 0, 0);
 
     assert_eq!(baby_giant.solve(&base), None);
@@ -23,16 +23,16 @@ fn baby_giant_1000() {
     let base = gt_rand();
     let baby_giant = BabyStepGiantStep::new(&base, -24, 1024);
 
-    let mut accum = *Gt::identity();
+    let mut accum = Gt::identity();
     for x in 0..1000 {
         assert_eq!(baby_giant.solve(&accum), Some(Scalar::from_usize(x)));
-        accum += base;
+        accum += &base;
     }
 
     // now out of range:
     for _ in 1000..2000 {
         assert_eq!(baby_giant.solve(&accum), None);
-        accum += base;
+        accum += &base;
     }
 }
 
@@ -43,7 +43,7 @@ fn baby_giant_negative() {
 
     for x in 0..1000 {
         let x = Scalar::from_isize(-x);
-        let tgt = base * x;
+        let tgt = &base * &x;
         assert_eq!(baby_giant.solve(&tgt), Some(x))
     }
 }
@@ -58,7 +58,7 @@ fn baby_giant_big_range() {
     let baby_giant = BabyStepGiantStep::new(&base, -(1 << 10), 1 << 40);
 
     let x = Scalar::from_isize(x);
-    let tgt = base * x;
+    let tgt = &base * &x;
 
     assert_eq!(baby_giant.solve(&tgt), Some(x));
 }
@@ -72,13 +72,13 @@ fn honest_dealer_search_works_exhaustive_test() {
     println!("gen table");
     let search = HonestDealerDlogLookupTable::new();
 
-    let mut accum = *Gt::identity();
+    let mut accum = Gt::identity();
 
     let mut dlogs = vec![];
     let mut targets = vec![];
     for i in 0..=0xFFFF {
         dlogs.push(i);
-        targets.push(accum);
+        targets.push(accum.clone());
         accum += Gt::generator();
     }
 
@@ -186,12 +186,12 @@ fn slightly_dishonest_dlog() {
 
     let mut answer = Scalar::from_usize(8).inverse().expect("Inverse exists");
     answer *= Scalar::from_usize(12345678);
-    assert_eq!(cheat_solver.solve(&(base * answer)), Some(answer));
+    assert_eq!(cheat_solver.solve(&(base * &answer)), Some(answer));
 
     // Check negative numbers also work.
     let mut answer = Scalar::from_usize(5).inverse().expect("Inverse exists");
     answer *= Scalar::from_isize(-12345678);
-    assert_eq!(cheat_solver.solve(&(base * answer)), Some(answer));
+    assert_eq!(cheat_solver.solve(&(base * &answer)), Some(answer));
 }
 
 fn cheating_dlog_instance(m: usize) -> (Scalar, Gt) {
@@ -206,8 +206,10 @@ fn cheating_dlog_instance(m: usize) -> (Scalar, Gt) {
 
     let delta_inv = delta.inverse().expect("Delta not invertible");
 
-    let p = Gt::generator() * s * delta_inv;
-    (s * delta_inv, p)
+    let s_div_delta = s * delta_inv;
+
+    let p = Gt::generator() * &s_div_delta;
+    (s_div_delta, p)
 }
 
 #[test]

@@ -24,7 +24,7 @@ pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKeyBytes, Pub
 /// Note: This hashes the message to be signed.  If we pre-hash, the hashing
 /// can be skipped. https://docs.rs/threshold_crypto/0.3.2/threshold_crypto/struct.SecretKey.html#method.sign
 pub fn sign(message: &[u8], secret_key: SecretKeyBytes) -> IndividualSignatureBytes {
-    crypto::sign_message(message, secret_key.into()).into()
+    crypto::sign_message(message, &secret_key.into()).into()
 }
 
 /// Creates a proof of possession (PoP) of `secret_key_bytes`.
@@ -39,7 +39,7 @@ pub fn create_pop(
     secret_key_bytes: SecretKeyBytes,
 ) -> Result<PopBytes, CryptoError> {
     let public_key = public_key_bytes.try_into()?;
-    Ok(crypto::create_pop(public_key, secret_key_bytes.into()).into())
+    Ok(crypto::create_pop(&public_key, &secret_key_bytes.into()).into())
 }
 
 /// Verifies a public key's proof of possession (PoP).
@@ -59,7 +59,7 @@ pub fn verify_pop(
 ) -> Result<(), CryptoError> {
     let pop = Pop::try_from(pop_bytes)?;
     let public_key = PublicKey::try_from(public_key_bytes)?;
-    if crypto::verify_pop(pop, public_key) {
+    if crypto::verify_pop(&pop, &public_key) {
         Ok(())
     } else {
         Err(CryptoError::PopVerification {
@@ -105,7 +105,7 @@ pub fn verify_individual(
 ) -> Result<(), CryptoError> {
     let signature = signature_bytes.try_into()?;
     let public_key = public_key_bytes.try_into()?;
-    if crypto::verify_individual_message_signature(message, signature, public_key) {
+    if crypto::verify_individual_message_signature(message, &signature, &public_key) {
         Ok(())
     } else {
         Err(CryptoError::SignatureVerification {
@@ -135,7 +135,7 @@ pub fn verify_combined(
 ) -> Result<(), CryptoError> {
     let public_keys: Result<Vec<PublicKey>, CryptoError> =
         public_keys.iter().cloned().map(|x| x.try_into()).collect();
-    if crypto::verify_combined_message_signature(message, signature.try_into()?, &public_keys?[..])
+    if crypto::verify_combined_message_signature(message, &signature.try_into()?, &public_keys?[..])
     {
         Ok(())
     } else {

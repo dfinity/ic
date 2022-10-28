@@ -5,7 +5,6 @@ use crate::ni_dkg::fs_ni_dkg::random_oracles::{
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use rand::{CryptoRng, RngCore};
-use zeroize::Zeroize;
 
 const DOMAIN_POP_ENCRYPTION_KEY: &str = "ic-pop-encryption";
 
@@ -65,18 +64,18 @@ pub fn prove_pop<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> Result<EncryptionKeyPop, EncryptionKeyPopError> {
     // Check validity of the instance
-    if instance.public_key != G1Affine::from(instance.g1_gen * witness) {
+    if instance.public_key != (&instance.g1_gen * witness).to_affine() {
         return Err(EncryptionKeyPopError::InvalidInstance);
     }
 
     // First Move
     let pop_base = random_oracle_to_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
-    let pop_key = G1Affine::from(pop_base * witness);
+    let pop_key = G1Affine::from(&pop_base * witness);
 
-    let mut random_scalar = Scalar::random(rng);
+    let random_scalar = Scalar::random(rng);
 
-    let blinder_public_key = G1Affine::from(instance.g1_gen * random_scalar);
-    let blinder_pop_key = G1Affine::from(pop_base * random_scalar);
+    let blinder_public_key = G1Affine::from(&instance.g1_gen * &random_scalar);
+    let blinder_pop_key = G1Affine::from(&pop_base * &random_scalar);
 
     // Challenge
     let challenge = generate_pop_challenge(
@@ -88,9 +87,7 @@ pub fn prove_pop<R: RngCore + CryptoRng>(
     );
 
     // Response
-    let response = challenge * witness + random_scalar;
-
-    random_scalar.zeroize();
+    let response = &challenge * witness + random_scalar;
 
     Ok(EncryptionKeyPop {
         pop_key,
@@ -108,16 +105,16 @@ pub fn verify_pop(
     let pop_base = random_oracle_to_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
 
     let blinder_public_key = G1Projective::mul2(
-        &instance.public_key.into(),
+        &G1Projective::from(&instance.public_key),
         &minus_challenge,
-        &instance.g1_gen.into(),
+        &G1Projective::from(&instance.g1_gen),
         &pop.response,
     );
 
     let blinder_pop_key = G1Projective::mul2(
-        &pop.pop_key.into(),
+        &G1Projective::from(&pop.pop_key),
         &minus_challenge,
-        &pop_base.into(),
+        &G1Projective::from(&pop_base),
         &pop.response,
     );
 

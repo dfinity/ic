@@ -22,7 +22,7 @@ impl<B: Borrow<PublicCoefficients>> ops::AddAssign<B> for PublicCoefficients {
         let rhs_len = rhs.borrow().coefficients.len();
         if rhs_len > len {
             self.coefficients
-                .resize(rhs_len, PublicKey(*G2Projective::identity()));
+                .resize(rhs_len, PublicKey(G2Projective::identity()));
         }
         for (self_c, rhs_c) in self.coefficients.iter_mut().zip(&rhs.borrow().coefficients) {
             self_c.0.add_assign(&rhs_c.0);
@@ -44,7 +44,7 @@ impl<B: Borrow<PublicCoefficients>> ops::Add<B> for PublicCoefficients {
 impl ops::MulAssign<Scalar> for PublicCoefficients {
     fn mul_assign(&mut self, rhs: Scalar) {
         for self_c in self.coefficients.iter_mut() {
-            self_c.0.mul_assign(rhs);
+            self_c.0.mul_assign(&rhs);
         }
         self.remove_zeros();
     }

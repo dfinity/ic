@@ -87,7 +87,7 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
         let key_pair = kgen(&key_gen_assoc_data, sys, rng);
         keys.push(key_pair);
     }
-    let pks: Vec<_> = keys.iter().map(|key| key.0.key_value).collect();
+    let pks: Vec<_> = keys.iter().map(|key| key.0.key_value.clone()).collect();
 
     let sij = {
         let mut sij = Vec::with_capacity(nodes);
@@ -176,12 +176,12 @@ fn enc_chunks_cheating<R: RngCore + CryptoRng>(
     for _j in 0..chunks {
         {
             let tmp = Scalar::random(rng);
-            spec_r.push(tmp);
+            spec_r.push(tmp.clone());
             rr.push(G1Affine::from(g1 * tmp));
         }
         {
             let tmp = Scalar::random(rng);
-            s.push(tmp);
+            s.push(tmp.clone());
             ss.push(G1Affine::from(g1 * tmp));
         }
     }
@@ -193,7 +193,7 @@ fn enc_chunks_cheating<R: RngCore + CryptoRng>(
         let g1 = G1Projective::from(g1);
 
         for i in 0..receivers {
-            let pk = G1Projective::from(pks[i]);
+            let pk = G1Projective::from(&pks[i]);
 
             let mut enc_chunks = Vec::with_capacity(chunks);
 
@@ -213,7 +213,7 @@ fn enc_chunks_cheating<R: RngCore + CryptoRng>(
     let mut zz = Vec::with_capacity(chunks);
 
     for j in 0..chunks {
-        zz.push(G2Projective::mul2(&id, &spec_r[j], &sys.h.into(), &s[j]).to_affine())
+        zz.push(G2Projective::mul2(&id, &spec_r[j], &G2Projective::from(&sys.h), &s[j]).to_affine())
     }
 
     FsEncryptionCiphertext { cc, rr, ss, zz }
@@ -235,7 +235,7 @@ fn should_decrypt_correctly_for_cheating_dealer() {
         let key_pair = kgen(&key_gen_assoc_data, sys, &mut rng);
         keys.push(key_pair);
     }
-    let pks: Vec<_> = keys.iter().map(|key| key.0.key_value).collect();
+    let pks: Vec<_> = keys.iter().map(|key| key.0.key_value.clone()).collect();
 
     let mut sij = {
         let mut sij = Vec::with_capacity(nodes);

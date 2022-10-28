@@ -131,7 +131,7 @@ pub fn keygen_with_secret(
     let mut rng = seed.into_rng();
     let polynomial = {
         let mut polynomial = Polynomial::random(threshold.get() as usize, &mut rng);
-        polynomial.coefficients[0] = *secret;
+        polynomial.coefficients[0] = secret.clone();
         polynomial
     };
     Ok(keygen_from_polynomial(polynomial, share_indices))
@@ -256,10 +256,11 @@ pub fn combine_signatures(
         });
     }
     if signatures.is_empty() {
-        return Ok(*Signature::identity());
+        return Ok(Signature::identity());
     }
     let signatures: Vec<(Scalar, Signature)> = signatures
         .iter()
+        .cloned()
         .zip(0_u32..)
         .filter_map(|(signature, index)| signature.map(|signature| (x_for_index(index), signature)))
         .collect();
@@ -273,8 +274,8 @@ pub fn combine_signatures(
 /// * Err, otherwise
 pub fn verify_individual_sig(
     message: &[u8],
-    signature: IndividualSignature,
-    public_key: PublicKey,
+    signature: &IndividualSignature,
+    public_key: &PublicKey,
 ) -> CryptoResult<()> {
     verify(message, signature, public_key).map_err(|_| CryptoError::SignatureVerification {
         algorithm: AlgorithmId::ThresBls12_381,
@@ -291,8 +292,8 @@ pub fn verify_individual_sig(
 /// * Err, otherwise
 pub fn verify_combined_sig(
     message: &[u8],
-    signature: CombinedSignature,
-    public_key: PublicKey,
+    signature: &CombinedSignature,
+    public_key: &PublicKey,
 ) -> CryptoResult<()> {
     verify(message, signature, public_key).map_err(|_| CryptoError::SignatureVerification {
         algorithm: AlgorithmId::ThresBls12_381,
@@ -307,10 +308,11 @@ pub fn verify_combined_sig(
 // TODO(DFN-1408): Optimize signature verification by combining the miller
 // loops inside the pairings, thus performing only a single final
 // exponentiation.
-fn verify(message: &[u8], signature: Signature, public_key: PublicKey) -> Result<(), ()> {
-    let point = hash_message_to_g1(message);
+fn verify(message: &[u8], signature: &Signature, public_key: &PublicKey) -> Result<(), ()> {
+    let point = hash_message_to_g1(message).to_affine();
+    let pk = public_key.0.to_affine();
 
-    if verify_bls_signature(&signature.into(), &public_key.0.into(), &point.into()) {
+    if verify_bls_signature(&signature.into(), &pk, &point) {
         Ok(())
     } else {
         Err(())

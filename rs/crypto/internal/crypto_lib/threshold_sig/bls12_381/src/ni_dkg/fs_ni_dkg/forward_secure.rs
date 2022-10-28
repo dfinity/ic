@@ -168,8 +168,8 @@ pub struct PublicKeyWithPop {
 impl PublicKeyWithPop {
     pub fn verify(&self, associated_data: &[u8]) -> bool {
         let instance = EncryptionKeyInstance {
-            g1_gen: *G1Affine::generator(),
-            public_key: self.key_value,
+            g1_gen: G1Affine::generator().clone(),
+            public_key: self.key_value.clone(),
             associated_data: associated_data.to_vec(),
         };
         verify_pop(&instance, &self.proof_data).is_ok()
@@ -211,17 +211,23 @@ pub fn kgen<R: RngCore + CryptoRng>(
     // return (pk, dk)
     let spec_x = Scalar::random(rng);
     let rho = Scalar::random(rng);
-    let a = G1Affine::from(g1 * rho);
-    let b = G2Projective::mul2(&g2.into(), &spec_x, &sys.f0.into(), &rho).to_affine();
+    let a = G1Affine::from(g1 * &rho);
+    let b = G2Projective::mul2(
+        &G2Projective::from(g2),
+        &spec_x,
+        &G2Projective::from(&sys.f0),
+        &rho,
+    )
+    .to_affine();
     let mut d_t = LinkedList::new();
     for f in sys.f.iter() {
-        d_t.push_back(G2Affine::from(*f * rho));
+        d_t.push_back(G2Affine::from(f * &rho));
     }
     let mut d_h = Vec::new();
     for h in sys.f_h.iter() {
-        d_h.push(G2Affine::from(*h * rho));
+        d_h.push(G2Affine::from(h * &rho));
     }
-    let e = G2Affine::from(sys.h * rho);
+    let e = G2Affine::from(&sys.h * &rho);
     let bte_root = BTENode {
         tau: Vec::new(),
         a,
@@ -232,11 +238,11 @@ pub fn kgen<R: RngCore + CryptoRng>(
     };
     let sk = SecretKey::new(bte_root);
 
-    let y = G1Affine::from(g1 * spec_x);
+    let y = G1Affine::from(g1 * &spec_x);
 
     let pop_instance = EncryptionKeyInstance {
-        g1_gen: *G1Affine::generator(),
-        public_key: y,
+        g1_gen: G1Affine::generator().clone(),
+        public_key: y.clone(),
         associated_data: associated_data.to_vec(),
     };
 
@@ -376,23 +382,23 @@ impl SecretKey {
                 tau_1.push(Bit::One);
                 let delta = Scalar::random(rng);
 
-                let a_blind = (g1 * delta) + node.a;
+                let a_blind = (g1 * &delta) + &node.a;
                 let mut b_blind =
                     G2Projective::from(d_t.pop_front().expect("d_t not sufficiently large"));
-                b_blind += b_acc;
-                b_blind += (f_acc + sys.f[n]) * delta;
+                b_blind += &b_acc;
+                b_blind += (&f_acc + &sys.f[n]) * &delta;
 
-                let e_blind = (sys.h * delta) + node.e;
+                let e_blind = (&sys.h * &delta) + &node.e;
                 let mut d_t_blind = LinkedList::new();
                 let mut k = n + 1;
                 d_t.iter().for_each(|d| {
-                    let tmp = (sys.f[k] * delta) + d;
+                    let tmp = (&sys.f[k] * &delta) + d;
                     d_t_blind.push_back(tmp.to_affine());
                     k += 1;
                 });
                 let mut d_h_blind = Vec::new();
                 node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-                    let tmp = (*f * delta) + d;
+                    let tmp = (f * &delta) + d;
                     d_h_blind.push(tmp.to_affine());
                 });
                 self.bte_nodes.push_back(BTENode {
@@ -405,7 +411,7 @@ impl SecretKey {
                 });
             } else {
                 // Update accumulators.
-                f_acc += sys.f[n];
+                f_acc += &sys.f[n];
                 b_acc += d_t.pop_front().expect("d_t not sufficiently large");
             }
             tau.push(epoch[n]);
@@ -413,22 +419,22 @@ impl SecretKey {
         }
 
         let delta = Scalar::random(rng);
-        let a = g1 * delta + node.a;
-        let e = sys.h * delta + node.e;
-        b_acc += f_acc * delta;
+        let a = g1 * &delta + &node.a;
+        let e = &sys.h * &delta + &node.e;
+        b_acc += f_acc * &delta;
 
         let mut d_t_blind = LinkedList::new();
         // Typically `d_t_blind` remains empty.
         // It is only nontrivial if `epoch` is less than LAMBDA_T bits.
         let mut k = n;
         d_t.iter().for_each(|d| {
-            let tmp = (sys.f[k] * delta) + d;
+            let tmp = (&sys.f[k] * &delta) + d;
             d_t_blind.push_back(tmp.to_affine());
             k += 1;
         });
         let mut d_h_blind = Vec::new();
         node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-            let tmp = *f * delta + d;
+            let tmp = f * &delta + d;
             d_h_blind.push(tmp.to_affine());
         });
 
@@ -587,7 +593,7 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
         let g1 = G1Projective::from(g1);
 
         for i in 0..receivers {
-            let pk = G1Projective::from(pks[i]);
+            let pk = G1Projective::from(&pks[i]);
 
             let mut enc_chunks = Vec::with_capacity(chunks);
 
@@ -607,7 +613,7 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let mut zz = Vec::with_capacity(chunks);
 
     for j in 0..chunks {
-        zz.push(G2Projective::mul2(&id, &r[j], &sys.h.into(), &s[j]).to_affine())
+        zz.push(G2Projective::mul2(&id, &r[j], &G2Projective::from(&sys.h), &s[j]).to_affine())
     }
 
     Some((
@@ -688,7 +694,7 @@ pub fn dec_chunks(
     }
     for k in 0..LAMBDA_H {
         if extended_tau[LAMBDA_T + k] == Bit::One {
-            bneg += dk.d_h[k];
+            bneg += &dk.d_h[k];
         }
     }
     bneg = bneg.neg();
@@ -733,8 +739,12 @@ pub fn dec_chunks(
     let chunk_size = Scalar::from_isize(CHUNK_SIZE);
     let mut acc = Scalar::zero();
     for dlog in dlogs.iter() {
-        acc *= chunk_size;
-        acc += dlog.expect("Unsolvable discrete logarithm in NIDKG");
+        let dlog = match dlog {
+            None => panic!("Unsolvable discrete logarithm in NIDKG"),
+            Some(solution) => solution.clone(),
+        };
+        acc *= &chunk_size;
+        acc += dlog;
     }
     let fr_bytes = acc.serialize();
 
@@ -840,13 +850,13 @@ pub fn ftau(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
     if tau.len() != sys.lambda_t + sys.lambda_h {
         return None;
     }
-    let mut id = G2Projective::from(sys.f0);
+    let mut id = G2Projective::from(&sys.f0);
     for (n, t) in tau.iter().enumerate() {
         if *t == Bit::One {
             if n < sys.lambda_t {
-                id += sys.f[n];
+                id += &sys.f[n];
             } else {
-                id += sys.f_h[n - sys.lambda_t];
+                id += &sys.f_h[n - sys.lambda_t];
             }
         }
     }
@@ -907,7 +917,7 @@ impl SysParam {
 
         let h = G2Affine::hash(dst, b"h");
 
-        let h_prep = G2Prepared::from(h);
+        let h_prep = G2Prepared::from(&h);
 
         SysParam {
             lambda_t: LAMBDA_T,

@@ -3,21 +3,20 @@
 use super::super::ThresholdError;
 use super::*;
 use ic_crypto_internal_bls12_381_type::{G1Projective, G2Projective, Scalar};
-use std::borrow::Borrow;
-use std::ops::{AddAssign, Mul, MulAssign, SubAssign};
+use std::ops::MulAssign;
 
 impl PublicCoefficients {
     /// Evaluate the public coefficients at x
     pub fn evaluate_at(&self, x: &Scalar) -> G2Projective {
         let mut coefficients = self.coefficients.iter().rev();
-        let first = coefficients.next().map(|pk| pk.0);
+        let first = coefficients.next().map(|pk| pk.0.clone());
         match first {
-            None => *G2Projective::identity(),
+            None => G2Projective::identity(),
             Some(ans) => {
                 let mut ans: G2Projective = ans;
                 for coeff in coefficients {
-                    ans.mul_assign(*x);
-                    ans.add_assign(&coeff.0);
+                    ans *= x;
+                    ans += &coeff.0;
                 }
                 ans
             }
@@ -34,11 +33,11 @@ impl PublicCoefficients {
     pub fn interpolate_g1(
         samples: &[(Scalar, G1Projective)],
     ) -> Result<G1Projective, ThresholdError> {
-        let all_x: Vec<Scalar> = samples.iter().map(|(x, _)| *x).collect();
+        let all_x: Vec<Scalar> = samples.iter().map(|(x, _)| x.clone()).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
-        let mut result = *G1Projective::identity();
+        let mut result = G1Projective::identity();
         for (coefficient, sample) in coefficients.iter().zip(samples.iter().map(|(_, y)| y)) {
-            result.add_assign(&sample.borrow().mul(*coefficient))
+            result += sample * coefficient;
         }
         Ok(result)
     }
@@ -53,11 +52,11 @@ impl PublicCoefficients {
     pub fn interpolate_g2(
         samples: &[(Scalar, G2Projective)],
     ) -> Result<G2Projective, ThresholdError> {
-        let all_x: Vec<Scalar> = samples.iter().map(|(x, _)| *x).collect();
+        let all_x: Vec<Scalar> = samples.iter().map(|(x, _)| x.clone()).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
-        let mut result = *G2Projective::identity();
+        let mut result = G2Projective::identity();
         for (coefficient, sample) in coefficients.iter().zip(samples.iter().map(|(_, y)| y)) {
-            result.add_assign(&sample.borrow().mul(*coefficient))
+            result += sample * coefficient;
         }
         Ok(result)
     }
@@ -106,15 +105,15 @@ impl PublicCoefficients {
         // coefficient at zero.
         let mut x_prod: Vec<Scalar> = Vec::with_capacity(len);
         let mut tmp = Scalar::one();
-        x_prod.push(tmp);
+        x_prod.push(tmp.clone());
         for x in samples.iter().take(len - 1) {
-            tmp.mul_assign(x);
-            x_prod.push(tmp);
+            tmp *= x;
+            x_prod.push(tmp.clone());
         }
         tmp = Scalar::one();
         for (i, x) in samples[1..].iter().enumerate().rev() {
-            tmp.mul_assign(x);
-            x_prod[i].mul_assign(&tmp);
+            tmp *= x;
+            x_prod[i] *= &tmp;
         }
 
         for (lagrange_0, x_i) in x_prod.iter_mut().zip(samples) {
@@ -122,16 +121,17 @@ impl PublicCoefficients {
             // data points but `1` at `x`.
             let mut denom = Scalar::one();
             for x_j in samples.iter().filter(|x_j| *x_j != x_i) {
-                let mut diff = *x_j;
-                diff.sub_assign(x_i);
-                denom.mul_assign(&diff);
+                let diff = x_j - x_i;
+                denom *= &diff;
             }
 
-            if let Some(inv) = denom.inverse() {
-                lagrange_0.mul_assign(inv);
-            } else {
-                return Err(ThresholdError::DuplicateX);
-            }
+            let inv = match denom.inverse() {
+                None => return Err(ThresholdError::DuplicateX),
+                Some(i) => i,
+            };
+
+            //lagrange_0 *= inv;
+            lagrange_0.mul_assign(inv);
         }
         Ok(x_prod)
     }
