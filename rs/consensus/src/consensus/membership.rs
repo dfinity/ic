@@ -262,8 +262,8 @@ impl Membership {
         &self,
         height: Height,
     ) -> Result<Threshold, MembershipError> {
-        let committee_size = get_committee_size(self.get_nodes(height)?.len());
-        Ok(committee_size - get_faults_tolerated(committee_size))
+        let subnet_size = self.get_nodes(height)?.len();
+        Ok(subnet_size - get_faults_tolerated(subnet_size))
     }
 }
 

@@ -966,6 +966,7 @@ mod tests {
             );
             // Responses get evicted, and timeouts fill most of the available space
             assert!(payload.timeouts.len() == timeout_count as usize);
+            assert!(payload.responses.len() < response_count as usize);
         });
     }
 
@@ -1152,6 +1153,7 @@ mod tests {
         });
     }
 
+    /// Check that the payload builder includes a divergence responses
     #[test]
     fn divergence_response_inclusion_test() {
         test_config_with_http_feature(10, |payload_builder, canister_http_pool| {
@@ -1201,7 +1203,7 @@ mod tests {
 
                 add_received_shares_to_pool(
                     pool_access.deref_mut(),
-                    (0..10_u8)
+                    (4..8_u8)
                         .map(|i| {
                             let (_, metadata) = test_response_and_metadata_with_content(
                                 1,
@@ -1226,7 +1228,7 @@ mod tests {
     }
 
     /// Submit a very large number of valid responses, then check that the
-    /// payload builder does not all of them but only CANISTER_HTTP_RESPONSES_PER_BLOCK
+    /// payload builder does not process all of them but only CANISTER_HTTP_RESPONSES_PER_BLOCK
     #[test]
     fn max_responses() {
         test_config_with_http_feature(4, |payload_builder, canister_http_pool| {
@@ -1433,6 +1435,11 @@ mod tests {
         });
     }
 
+    /// Test the divergence response detection validation.
+    ///
+    /// - Test that a divergence (2 vs. 2 split out of 4) response validates
+    /// - Test that insufficient reports (2 out of 4) do not validate
+    /// - Test that insufficient reports (2 vs. 1 out of 4) do not validate
     #[test]
     fn divergence_response_validation_test() {
         test_config_with_http_feature(4, |payload_builder, _| {
@@ -1551,7 +1558,7 @@ mod tests {
         test_response_and_metadata_full(callback_id, mock_time() + Duration::from_secs(10), content)
     }
 
-    ///
+    /// Create a response and a supporting metadata object from the response content.
     fn test_response_and_metadata_full(
         callback_id: u64,
         timeout: Time,
