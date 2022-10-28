@@ -1,0 +1,23 @@
+load("//bazel:canisters.bzl", "inject_version_into_wasm")
+
+# Test subject
+inject_version_into_wasm(
+    name = "stamped_trivial",
+    src_wasm = "trivial.wasm",
+)
+
+# Inspects test subject.
+py_test(
+    name = "inspect_stamped_trivial_wasm",
+    srcs = ["inspect_stamped_trivial_wasm.py"],
+    data = [
+        ":stamped_trivial",
+        "//bazel:version.txt",
+        "@crate_index//:ic-wasm__ic-wasm",
+    ],
+    env = {
+        "IC_WASM_PATH": "$(location @crate_index//:ic-wasm__ic-wasm)",
+        "STAMPED_WASM_PATH": "$(location :stamped_trivial)",
+        "VERSION_TXT_PATH": "$(location //bazel:version.txt)",
+    },
+)
