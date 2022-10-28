@@ -11,7 +11,7 @@ use serde_json::json;
 use slog::info;
 
 use super::{
-    ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
@@ -205,7 +205,7 @@ fn new_prometheus_vm(name: String) -> UniversalVm {
         .with_vm_resources(VmResources {
             vcpus: Some(NrOfVCPUs::new(2)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(12582912)), // 12GiB
-            boot_image_minimal_size_gibibytes: None,
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
         })
         .disable_ipv4()
 }
@@ -227,7 +227,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf) -> Result<()> {
     let node_exporter_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join("node_exporter.json");
     let prometheus_config = json!({
-        "global": {"scrape_interval": "1s"},
+        "global": {"scrape_interval": "10s"},
         "scrape_configs": [
             {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
             {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},
