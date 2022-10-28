@@ -218,6 +218,7 @@ pub enum CallOrigin {
     CanisterUpdate(CanisterId, CallbackId),
     Query(UserId),
     CanisterQuery(CanisterId, CallbackId),
+    // TODO: RUN-415: Rename to `SystemMethod`
     Heartbeat,
 }
 

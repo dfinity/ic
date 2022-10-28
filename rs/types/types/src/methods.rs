@@ -36,7 +36,7 @@ impl WasmMethod {
         match self {
             Self::Update(name) => name.to_string(),
             Self::Query(name) => name.to_string(),
-            Self::System(system_method) => system_method.to_string(),
+            Self::System(heartbeat_or_timer) => heartbeat_or_timer.to_string(),
         }
     }
 }
@@ -46,7 +46,7 @@ impl fmt::Display for WasmMethod {
         match self {
             Self::Update(name) => write!(f, "canister_update {}", name),
             Self::Query(name) => write!(f, "canister_query {}", name),
-            Self::System(system_method) => system_method.fmt(f),
+            Self::System(heartbeat_or_timer) => heartbeat_or_timer.fmt(f),
         }
     }
 }
@@ -65,7 +65,7 @@ impl TryFrom<String> for WasmMethod {
             Ok(WasmMethod::Query(parts[1].to_string()))
         } else {
             match SystemMethod::try_from(name.as_ref()) {
-                Ok(system_method) => Ok(WasmMethod::System(system_method)),
+                Ok(heartbeat_or_timer) => Ok(WasmMethod::System(heartbeat_or_timer)),
                 _ => Err(format!("Cannot convert {} to WasmFunction.", name)),
             }
         }

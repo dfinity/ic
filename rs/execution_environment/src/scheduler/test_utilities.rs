@@ -184,7 +184,7 @@ impl SchedulerTest {
     }
 
     /// Creates a canister with the given balance and allocations.
-    /// The `system_method` parameter can be used to optionally enable the
+    /// The `heartbeat_or_timer` parameter can be used to optionally enable the
     /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
     /// In that case the heartbeat execution must be specified before each
     /// round using `expect_heartbeat()`.
@@ -193,11 +193,11 @@ impl SchedulerTest {
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
-        system_method: Option<SystemMethod>,
+        heartbeat_or_timer: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
     ) -> CanisterId {
         let canister_id = self.next_canister_id();
-        let wasm_source = system_method
+        let wasm_source = heartbeat_or_timer
             .map(|x| x.to_string().as_bytes().to_vec())
             .unwrap_or_default();
         let time_of_last_allocation_charge =
@@ -1053,8 +1053,8 @@ impl TestWasmExecutorCore {
         ];
         if !canister_module.as_slice().is_empty() {
             if let Ok(text) = std::str::from_utf8(canister_module.as_slice()) {
-                if let Ok(system_method) = SystemMethod::try_from(text) {
-                    exported_functions.push(WasmMethod::System(system_method));
+                if let Ok(heartbeat_or_timer) = SystemMethod::try_from(text) {
+                    exported_functions.push(WasmMethod::System(heartbeat_or_timer));
                 }
             }
         }

@@ -239,6 +239,7 @@ impl CanisterState {
             (None, false) => NextExecution::None,
             (None, true) => NextExecution::StartNew,
             (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
+            (Some(ExecutionTask::GlobalTimer), _) => NextExecution::StartNew,
             (Some(ExecutionTask::AbortedExecution { .. }), _)
             | (Some(ExecutionTask::PausedExecution(..)), _) => NextExecution::ContinueLong,
             (Some(ExecutionTask::AbortedInstallCode { .. }), _)
@@ -257,6 +258,7 @@ impl CanisterState {
             Some(ExecutionTask::AbortedExecution { .. }) => true,
             None
             | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
             | Some(ExecutionTask::PausedExecution(..))
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -269,6 +271,7 @@ impl CanisterState {
             Some(ExecutionTask::PausedExecution(..)) => true,
             None
             | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -281,6 +284,7 @@ impl CanisterState {
             Some(ExecutionTask::PausedInstallCode(..)) => true,
             None
             | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
             | Some(ExecutionTask::PausedExecution(..))
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -293,6 +297,7 @@ impl CanisterState {
             Some(ExecutionTask::AbortedInstallCode { .. }) => true,
             None
             | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
             | Some(ExecutionTask::PausedExecution(..))
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. }) => false,

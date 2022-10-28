@@ -40,6 +40,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::InstructionLimits;
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
+use ic_types::methods::SystemMethod;
 use ic_types::{
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -757,15 +758,17 @@ impl ExecutionTest {
             self.instruction_limit_without_dts,
             self.instruction_limit_without_dts,
         );
-        let (canister, instructions_used, result) = self.exec_env.execute_canister_heartbeat(
-            canister,
-            instruction_limits,
-            network_topology,
-            self.time,
-            &mut round_limits,
-            self.subnet_size(),
-            &self.log,
-        );
+        let (canister, instructions_used, result) =
+            self.exec_env.execute_canister_heartbeat_or_timer(
+                canister,
+                SystemMethod::CanisterHeartbeat,
+                instruction_limits,
+                network_topology,
+                self.time,
+                &mut round_limits,
+                self.subnet_size(),
+                &self.log,
+            );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         state.put_canister_state(canister);
         if let Ok(heap_delta) = result {
