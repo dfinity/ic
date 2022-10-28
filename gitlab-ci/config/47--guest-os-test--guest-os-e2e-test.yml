@@ -33,8 +33,6 @@
 .run-farm-based-test: &run-farm-based-test |
   IC_VERSION_ID=$CI_COMMIT_SHA
   export IC_VERSION_ID
-  GUESTOS_VERSION_OVERRIDE=$(cat version.txt)
-  export GUESTOS_VERSION_OVERRIDE
   #XXX(marko): we need to change this
   # binaries are needed for run-system-tests.py
   "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
@@ -70,10 +68,8 @@
   extends:
     - .e2e-test-base-k8s
   needs:
-    - job: guest-os-diskimg
-      artifacts: false
-    - job: guest-os-diskimg-dev
-    - job: guest-os-diskimg-dev-malicious
+    - pipeline: $PARENT_PIPELINE_ID
+      job: bazel-test-all
       artifacts: false
     - job: guest-os-updateimg-build
       artifacts: false
@@ -148,8 +144,6 @@ test-prod-test-driver-e2e:
       # IC_VERSION_ID is needed for run-system-tests.py.
       IC_VERSION_ID="$CI_COMMIT_SHA"
       export IC_VERSION_ID
-      GUESTOS_VERSION_OVERRIDE=$(cat version.txt)
-      export GUESTOS_VERSION_OVERRIDE
       # required binary artifacts
       mkdir -p artifacts/release
       pushd artifacts/release
@@ -195,7 +189,9 @@ upgrade-compatibility-pre-master:
   needs:
     - job: cargo-build-release-linux-native
       artifacts: false
-    - job: guest-os-diskimg-dev
+    - pipeline: $PARENT_PIPELINE_ID
+      job: bazel-test-all
+      artifacts: false
     - job: guest-os-updateimg-build
       artifacts: false
     - job: guest-os-updateimg-build-dev
@@ -242,8 +238,6 @@ spec-compliance-pre-master:
       # requirement of run-system-tests.py
       IC_VERSION_ID=$CI_COMMIT_SHA
       export IC_VERSION_ID
-      GUESTOS_VERSION_OVERRIDE=$(cat version.txt)
-      export GUESTOS_VERSION_OVERRIDE
 
       "$SHELL_WRAPPER" nix-shell -p "(import ./nix {}).ic-ref" --run "
         ${CI_PROJECT_DIR}/rs/tests/run-system-tests.py --suite=spec_compliance

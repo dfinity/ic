@@ -13,13 +13,14 @@
       junit: bazel-testlogs-gitlab/**/test.xml
   variables:
     BAZEL_COMMAND: "test"
-    BAZEL_TARGETS: "//... //:upload_sdk"
+    BAZEL_TARGETS: "//..."
   script:
     - set -eufo pipefail
     - bazel version
     - AWS_CREDS="${HOME}/.aws/credentials"
     - mkdir -p "$(dirname "${AWS_CREDS}")"
     - ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
+    - ln -fs "${DEV_ROOT_CA}" ic-os/guestos/dev-root-ca.crt # https://gitlab.com/dfinity-lab/public/ic/-/blob/master/ic-os/defs.bzl#L85
     - "# shellcheck disable=SC2086 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
     - >
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel
@@ -49,6 +50,7 @@ bazel-test-all:
     - .bazel-test-all
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going"
+    BAZEL_TARGETS: "//... //:upload_sdk //ic-os/guestos/dev:upload_disk-img"
 
 bazel-cache-perf-test-linux:
   extends:
