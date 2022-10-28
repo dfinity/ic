@@ -15,8 +15,8 @@ use ic_types::Randomness;
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    ThresholdEcdsaSignerCspVault for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdEcdsaSignerCspVault
+    for LocalCspVault<R, S, C>
 {
     fn ecdsa_sign_share(
         &self,
@@ -53,9 +53,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    LocalCspVault<R, S, C>
-{
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
     fn combined_commitment_opening_from_sks(
         &self,
         combined_commitment: &CombinedCommitment,

@@ -6,7 +6,7 @@ mod public_seed;
 mod secret_key_store;
 mod tecdsa;
 #[cfg(test)]
-pub(crate) mod test_utils;
+mod test_utils;
 #[cfg(test)]
 mod tests;
 mod threshold_sig;
@@ -34,7 +34,7 @@ use std::sync::Arc;
 /// Public methods of this struct may be called by implementers of the
 /// [crate::vault::remote_csp_vault::TarpcCspVault] trait in a separate
 /// thread. Panicking should therefore be avoided not to kill that thread.
-pub struct LocalCspVault<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> {
+pub struct LocalCspVault<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
     // CSPRNG stands for cryptographically secure random number generator.
     csprng: CspRwLock<R>,
     node_secret_key_store: CspRwLock<S>,
@@ -93,9 +93,7 @@ impl<S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<OsRng, S, C> {
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore>
-    LocalCspVault<R, S, VolatileSecretKeyStore>
-{
+impl<R: Rng + CryptoRng, S: SecretKeyStore> LocalCspVault<R, S, VolatileSecretKeyStore> {
     /// Creates a local CSP vault for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
@@ -119,9 +117,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore>
 }
 
 // CRP-1248: inline the following methods
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    LocalCspVault<R, S, C>
-{
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
     fn rng_write_lock(&self) -> RwLockWriteGuard<'_, R> {
         self.csprng.write()
     }

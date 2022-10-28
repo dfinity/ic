@@ -26,7 +26,7 @@ use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDkgProtocolCspVault
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> IDkgProtocolCspVault
     for LocalCspVault<R, S, C>
 {
     fn idkg_create_dealing(
@@ -205,9 +205,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    LocalCspVault<R, S, C>
-{
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
     fn idkg_create_dealing_internal(
         &self,
         algorithm_id: AlgorithmId,
