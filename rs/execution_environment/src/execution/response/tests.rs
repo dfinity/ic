@@ -1660,3 +1660,58 @@ fn cleanup_callback_cannot_make_calls() {
         .description()
         .contains("\"ic0_call_new\" cannot be executed in cleanup mode"));
 }
+
+#[test]
+fn dts_uninstall_with_aborted_response() {
+    let instruction_limit = 1_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(10_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let wasm_payload = wasm()
+        .call_simple(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(wasm().push_bytes(&[42]).append_and_reply())
+                .on_reply(
+                    wasm()
+                        .stable64_grow(1)
+                        .stable64_write(0, 0, 10_000)
+                        .stable64_write(0, 0, 10_000)
+                        .stable64_write(0, 0, 10_000)
+                        .stable64_write(0, 0, 10_000),
+                ),
+        )
+        .build();
+
+    // Enqueue ingress message to canister A and execute it.
+    let (ingress, _) = test.ingress_raw(a_id, "update", wasm_payload);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    test.abort_all_paused_executions();
+
+    test.uninstall_code(a_id).unwrap();
+
+    test.execute_message(a_id);
+
+    // Execute response with deleted call context.
+    let err = check_ingress_status(test.ingress_status(&ingress)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(err.description(), "Canister has been uninstalled.");
+}

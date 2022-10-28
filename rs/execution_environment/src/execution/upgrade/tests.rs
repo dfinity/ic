@@ -4,7 +4,7 @@ use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, Exec
 use ic_error_types::ErrorCode;
 use ic_ic00_types::{EmptyBlob, Payload};
 use ic_logger::replica_logger::LogEntryLogger;
-use ic_replicated_state::CanisterState;
+use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
 use ic_test_utilities::types::ids::user_test_id;
 use ic_test_utilities_metrics::fetch_int_counter;
@@ -843,4 +843,38 @@ fn upgrade_ok_with_long_pre_upgrade_long_start_long_post_upgrade() {
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(result, Ok(WasmResult::Reply(EmptyBlob.encode())));
     assert_canister_state_after_ok(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn dts_uninstall_with_aborted_upgrade() {
+    let mut test = execution_test_with_max_rounds(6);
+    let old_binary = binary(&[(Function::PreUpgrade, Execution::Long)]);
+    let canister_id = test.canister_from_binary(old_binary).unwrap();
+
+    let new_binary = binary(&[(Function::PostUpgrade, Execution::Long)]);
+
+    let message_id = test.dts_upgrade_canister(canister_id, new_binary);
+    assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+
+    test.abort_all_paused_executions();
+
+    test.uninstall_code(canister_id).unwrap();
+
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
+        test.execute_slice(canister_id);
+    }
+
+    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Attempt to execute a message on canister {} which contains no Wasm module",
+            canister_id,
+        )
+    );
 }
