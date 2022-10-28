@@ -80,6 +80,9 @@ const LOOP_DETECTED_ERROR_MSG: &str =
 const CALL_GRAPH_TOO_DEEP_ERROR_MSG: &str =
     "Call exceeded the limit for maximum number of nested query calls.";
 
+const TOTAL_NUM_INSTRUCTIONS_EXCEEDED: &str =
+    "Query call graph exceeded the limit for the total maximum number of instructions.";
+
 /// A simple enum representing the different things that
 /// QueryContext::enqueue_requests() can return.
 enum EnqueueRequestsResult {
@@ -92,6 +95,8 @@ enum EnqueueRequestsResult {
     LoopDetected,
     /// The call graph is too large
     CallGraphTooDeep,
+    /// The total number of instructions executed in call context is too large.
+    TotalNumInstructionsExceeded,
 }
 
 // A handy function to create a `Response` using parameters from the `Request`
@@ -102,6 +107,27 @@ fn generate_response(request: Arc<Request>, payload: Payload) -> Response {
         originator_reply_callback: request.sender_reply_callback,
         response_payload: payload,
         refund: Cycles::zero(),
+    }
+}
+
+/// Map an error occurred when enqueuing a new request to a user error.
+///
+/// Unless NoMessages or MessagesEnqueued, this is guaranteed to return Some.
+fn map_enqueue_error_to_user(enqueue_error: EnqueueRequestsResult) -> Option<UserError> {
+    match enqueue_error {
+        EnqueueRequestsResult::LoopDetected => Some(UserError::new(
+            ErrorCode::QueryCallGraphLoopDetected,
+            LOOP_DETECTED_ERROR_MSG.to_string(),
+        )),
+        EnqueueRequestsResult::CallGraphTooDeep => Some(UserError::new(
+            ErrorCode::QueryCallGraphTooDeep,
+            CALL_GRAPH_TOO_DEEP_ERROR_MSG.to_string(),
+        )),
+        EnqueueRequestsResult::TotalNumInstructionsExceeded => Some(UserError::new(
+            ErrorCode::QueryCallGraphTotalInstructionLimitExceeded,
+            TOTAL_NUM_INSTRUCTIONS_EXCEEDED.to_string(),
+        )),
+        EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => None,
     }
 }
 
@@ -126,6 +152,9 @@ pub(super) struct QueryContext<'a> {
     max_canister_memory_size: NumBytes,
     max_instructions_per_query: NumInstructions,
     max_query_call_depth: usize,
+    remaining_instructions_for_composite_query: NumInstructions,
+    // Number of instructions to charge for each query call
+    instructions_per_composite_query_call: NumInstructions,
     round_limits: RoundLimits,
 }
 
@@ -142,6 +171,8 @@ impl<'a> QueryContext<'a> {
         max_canister_memory_size: NumBytes,
         max_instructions_per_query: NumInstructions,
         max_query_call_depth: usize,
+        initial_instructions_for_composite_query: NumInstructions,
+        instructions_per_composite_query_call: NumInstructions,
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let round_limits = RoundLimits {
@@ -154,16 +185,18 @@ impl<'a> QueryContext<'a> {
             log,
             hypervisor,
             own_subnet_type,
+            state,
+            network_topology,
+            data_certificate,
             call_stack: BTreeMap::new(),
             outstanding_requests: Vec::new(),
             outstanding_response: None,
-            state,
-            data_certificate,
             query_allocations_used,
-            network_topology,
             max_canister_memory_size,
             max_instructions_per_query,
             max_query_call_depth,
+            remaining_instructions_for_composite_query: initial_instructions_for_composite_query,
+            instructions_per_composite_query_call,
             round_limits,
         }
     }
@@ -265,35 +298,23 @@ impl<'a> QueryContext<'a> {
             // We can simply return the response we have.
             Err(err) => Err(err),
             Ok(Some(wasm_result)) => Ok(wasm_result),
-
-            Ok(None) => match self.enqueue_requests(&mut canister) {
-                EnqueueRequestsResult::LoopDetected => Err(UserError::new(
-                    ErrorCode::QueryCallGraphLoopDetected,
-                    LOOP_DETECTED_ERROR_MSG.to_string(),
-                )),
-
-                // The canister did not produce a response and did not enqueue
-                // any requests either. As this is the very first canister in
-                // the call graph, we can declare that the query execution
-                // finished without producing an output.
-                EnqueueRequestsResult::NoMessages => Err(UserError::new(
-                    ErrorCode::CanisterDidNotReply,
-                    format!(
-                        "Canister {} did not reply to the call",
-                        canister.canister_id()
-                    ),
-                )),
-
-                EnqueueRequestsResult::MessagesEnqueued => {
-                    self.call_stack.insert(canister.canister_id(), canister);
-                    self.run_loop(canister_id, metrics, measurement_scope)
+            Ok(None) => {
+                let r = self.enqueue_requests(&mut canister);
+                match r {
+                    EnqueueRequestsResult::NoMessages => Err(UserError::new(
+                        ErrorCode::CanisterDidNotReply,
+                        format!(
+                            "Canister {} did not reply to the call",
+                            canister.canister_id()
+                        ),
+                    )),
+                    EnqueueRequestsResult::MessagesEnqueued => {
+                        self.call_stack.insert(canister.canister_id(), canister);
+                        self.run_loop(canister_id, metrics, measurement_scope)
+                    }
+                    _ => Err(map_enqueue_error_to_user(r).unwrap()),
                 }
-
-                EnqueueRequestsResult::CallGraphTooDeep => Err(UserError::new(
-                    ErrorCode::QueryCallGraphTooDeep,
-                    CALL_GRAPH_TOO_DEEP_ERROR_MSG.to_string(),
-                )),
-            },
+            }
         }
     }
 
@@ -404,6 +425,18 @@ impl<'a> QueryContext<'a> {
                         return EnqueueRequestsResult::CallGraphTooDeep;
                     }
 
+                    if self.remaining_instructions_for_composite_query
+                        < self.instructions_per_composite_query_call
+                    {
+                        return EnqueueRequestsResult::TotalNumInstructionsExceeded;
+                    }
+
+                    self.remaining_instructions_for_composite_query = NumInstructions::from(
+                        self.remaining_instructions_for_composite_query
+                            .get()
+                            .saturating_sub(self.instructions_per_composite_query_call.get()),
+                    );
+
                     sent_messages = true;
                     self.outstanding_requests.push(msg);
                 }
@@ -454,6 +487,11 @@ impl<'a> QueryContext<'a> {
             &mut self.round_limits,
         );
         let instructions_executed = instruction_limit - instructions_left;
+        self.remaining_instructions_for_composite_query = NumInstructions::from(
+            self.remaining_instructions_for_composite_query
+                .get()
+                .saturating_sub(instructions_executed.get()),
+        );
         measurement_scope.add(
             instructions_executed,
             NumSlices::from(1),
@@ -549,6 +587,7 @@ impl<'a> QueryContext<'a> {
                 execution_parameters.execution_mode.clone(),
             ),
         };
+
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
@@ -601,6 +640,12 @@ impl<'a> QueryContext<'a> {
             .on_canister_result(call_context_id, Some(callback_id), result);
 
         let instructions_executed = instruction_limit - instructions_left;
+        self.remaining_instructions_for_composite_query = NumInstructions::from(
+            self.remaining_instructions_for_composite_query
+                .get()
+                .saturating_sub(instructions_executed.get()),
+        );
+
         measurement_scope.add(
             instructions_executed,
             NumSlices::from(1),
@@ -745,38 +790,30 @@ impl<'a> QueryContext<'a> {
                         self.outstanding_response = Some(generate_response(request, payload));
                         None
                     }
-                    None => match self.enqueue_requests(&mut canister) {
-                        EnqueueRequestsResult::LoopDetected => Some(UserError::new(
-                            ErrorCode::QueryCallGraphLoopDetected,
-                            LOOP_DETECTED_ERROR_MSG.to_string(),
-                        )),
-
-                        // The canister did not produce a response and did not
-                        // produce any outgoing requests. So produce a "did not
-                        // reply" response on its behalf.
-                        EnqueueRequestsResult::NoMessages => {
-                            let error_msg = format!("Canister {} did not reply", request.receiver);
-                            let payload = Payload::Reject(RejectContext::new(
-                                RejectCode::CanisterError,
-                                error_msg,
-                            ));
-                            self.outstanding_response = Some(generate_response(request, payload));
-                            None
+                    None => {
+                        let r = self.enqueue_requests(&mut canister);
+                        match r {
+                            // The canister did not produce a response and did not
+                            // produce any outgoing requests. So produce a "did not
+                            // reply" response on its behalf.
+                            EnqueueRequestsResult::NoMessages => {
+                                let error_msg =
+                                    format!("Canister {} did not reply", request.receiver);
+                                let payload = Payload::Reject(RejectContext::new(
+                                    RejectCode::CanisterError,
+                                    error_msg,
+                                ));
+                                self.outstanding_response =
+                                    Some(generate_response(request, payload));
+                                None
+                            }
+                            EnqueueRequestsResult::MessagesEnqueued => {
+                                self.call_stack.insert(canister.canister_id(), canister);
+                                None
+                            }
+                            _ => map_enqueue_error_to_user(r),
                         }
-
-                        // Canister did not produce a response but did produce
-                        // outgoing request(s). Save the canister for when the
-                        // response(s) come back in.
-                        EnqueueRequestsResult::MessagesEnqueued => {
-                            self.call_stack.insert(canister.canister_id(), canister);
-                            None
-                        }
-
-                        EnqueueRequestsResult::CallGraphTooDeep => Some(UserError::new(
-                            ErrorCode::QueryCallGraphTooDeep,
-                            CALL_GRAPH_TOO_DEEP_ERROR_MSG.to_string(),
-                        )),
-                    },
+                    }
                 }
             }
         }
@@ -837,18 +874,16 @@ impl<'a> QueryContext<'a> {
             // No response available and there are still outstanding
             // callbacks.  Enqueue any produced requests and continue
             // processing the query context.
-            NotYetResponded => match self.enqueue_requests(&mut canister) {
-                EnqueueRequestsResult::LoopDetected | EnqueueRequestsResult::CallGraphTooDeep => {
-                    Some(Err(UserError::new(
-                        ErrorCode::QueryCallGraphLoopDetected,
-                        LOOP_DETECTED_ERROR_MSG.to_string(),
-                    )))
+            NotYetResponded => {
+                let r = self.enqueue_requests(&mut canister);
+                match r {
+                    EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
+                        self.call_stack.insert(canister.canister_id(), canister);
+                        None
+                    }
+                    _ => map_enqueue_error_to_user(r).map(|s| Err(s)),
                 }
-                EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
-                    self.call_stack.insert(canister.canister_id(), canister);
-                    None
-                }
-            },
+            }
             // This state indicates that the canister produced a
             // response or reject earlier and we continued to keep
             // executing it.  This should not happen as once the
@@ -953,20 +988,16 @@ impl<'a> QueryContext<'a> {
             // No response available and there are still outstanding
             // callbacks so enqueue any produced requests and continue
             // processing the query context.
-            NotYetResponded => match self.enqueue_requests(&mut canister) {
-                EnqueueRequestsResult::LoopDetected | EnqueueRequestsResult::CallGraphTooDeep => {
-                    Some(Err(UserError::new(
-                        ErrorCode::QueryCallGraphLoopDetected,
-                        LOOP_DETECTED_ERROR_MSG.to_string(),
-                    )))
+            NotYetResponded => {
+                let r = self.enqueue_requests(&mut canister);
+                match r {
+                    EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
+                        self.call_stack.insert(canister.canister_id(), canister);
+                        None
+                    }
+                    _ => map_enqueue_error_to_user(r).map(|s| Err(s)),
                 }
-                EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
-                    // As we popped the canister in the caller, we need to
-                    // push it back to the stack since it isn't done executing yet.
-                    self.call_stack.insert(canister.canister_id(), canister);
-                    None
-                }
-            },
+            }
 
             // This state indicates that the canister produced a
             // response or reject earlier and we continued to keep

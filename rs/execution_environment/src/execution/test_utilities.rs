@@ -1275,6 +1275,7 @@ pub struct ExecutionTestBuilder {
     bitcoin_privileged_access: Vec<CanisterId>,
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     cost_to_compile_wasm_instruction: u64,
+    max_instructions_per_composite_query_call: NumInstructions,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1289,6 +1290,9 @@ impl Default for ExecutionTestBuilder {
         let subnet_message_memory = ic_config::execution_environment::Config::default()
             .subnet_message_memory_capacity
             .get() as i64;
+        let max_instructions_per_composite_query_call =
+            ic_config::execution_environment::Config::default()
+                .max_instructions_per_composite_query_call;
         Self {
             nns_subnet_id: subnet_test_id(2),
             own_subnet_id: subnet_test_id(1),
@@ -1319,6 +1323,7 @@ impl Default for ExecutionTestBuilder {
             cost_to_compile_wasm_instruction: ic_config::execution_environment::Config::default()
                 .cost_to_compile_wasm_instruction
                 .get(),
+            max_instructions_per_composite_query_call,
         }
     }
 }
@@ -1355,6 +1360,16 @@ impl ExecutionTestBuilder {
     pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
         Self {
             subnet_type,
+            ..self
+        }
+    }
+
+    pub fn with_max_instructions_per_composite_query_call(
+        self,
+        max_instructions_per_composite_query_call: NumInstructions,
+    ) -> Self {
+        Self {
+            max_instructions_per_composite_query_call,
             ..self
         }
     }
@@ -1607,6 +1622,8 @@ impl ExecutionTestBuilder {
                 ..Default::default()
             },
             cost_to_compile_wasm_instruction: self.cost_to_compile_wasm_instruction.into(),
+            max_instructions_per_composite_query_call: self
+                .max_instructions_per_composite_query_call,
             ..Config::default()
         };
         let hypervisor = Hypervisor::new(
@@ -1641,14 +1658,14 @@ impl ExecutionTestBuilder {
             // Compute capacity for 2-core scheduler is 100%
             // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
             100,
-            config,
+            config.clone(),
             Arc::clone(&cycles_account_manager),
         );
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
             hypervisor,
             self.subnet_type,
-            Config::default(),
+            config,
             &metrics_registry,
             self.instruction_limit_without_dts,
             Arc::clone(&cycles_account_manager),
