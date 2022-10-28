@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+grafana_dashboards_repo="dfinity-lab/pfops"
+grafana_dashboards_path="environments/mainnet/dashboards"
+
 function usage() {
     cat <<EOF
 Usage:
@@ -24,6 +27,16 @@ Usage:
 
     Let grafana listen on port GRAFANA_PORT.
     Defaults to 3000.
+
+  --dont-provision-grafana-dashboards
+
+    By default the mainnet grafana dashboards from the repo:
+
+      https://github.com/$grafana_dashboards_repo/tree/master/$grafana_dashboards_path
+
+    are automatically provisioned in the local grafana server.
+
+    This option disables that default behaviour.
 
   --help
 
@@ -50,6 +63,10 @@ while [[ $# -gt 0 ]]; do
         --grafana-port)
             GRAFANA_PORT="$2"
             shift
+            shift
+            ;;
+        --dont-provision-grafana-dashboards)
+            DONT_PROVISION_GRAFANA_DASHBOARDS="1"
             shift
             ;;
         *)
@@ -131,9 +148,33 @@ cat <<EOF >"$grafana_data_dir/datasources/datasource.yaml"
 }
 EOF
 
+if [ -z "${DONT_PROVISION_GRAFANA_DASHBOARDS:-}" ]; then
+    tmp_grafana_dashboards_repo="$(mktemp -d -t grafana_dashboards_repo.XXXX)"
+    git clone --depth=1 "git@github.com:$grafana_dashboards_repo" "$tmp_grafana_dashboards_repo"
+    provisioned_grafana_dashboards="$grafana_data_dir/dashboards/provisioned"
+    mv "$tmp_grafana_dashboards_repo/$grafana_dashboards_path" "$provisioned_grafana_dashboards"
+    rm -rf "$tmp_grafana_dashboards_repo"
+    cat <<EOF >"$grafana_data_dir/dashboards/dashboard.yaml"
+{
+    "apiVersion": 1,
+    "providers": [
+       {
+         "name": "provisioned-grafana-dashboards",
+         "options": {
+           "path": "$provisioned_grafana_dashboards",
+           "foldersFromFilesStructure": true
+         }
+       }
+    ]
+}
+EOF
+
+fi
+
 cd "$grafana_data_dir"
 
 export GF_PATHS_DATA="$grafana_data_dir"
+export GF_PATHS_PROVISIONING="$grafana_data_dir"
 export GF_PATHS_LOGS="$grafana_data_dir/log"
 export GF_SERVER_PROTOCOL="http"
 export GF_SERVER_HTTP_ADDR="127.0.0.1"
@@ -144,7 +185,6 @@ export GF_AUTH_ANONYMOUS_ENABLED="true"
 export GF_AUTH_ANONYMOUS_ORG_NAME="Main Org."
 export GF_AUTH_ANONYMOUS_ORG_ROLE="Admin"
 export GF_AUTH_DISABLE_LOGIN_FORM="true"
-export GF_PATHS_PROVISIONING="$grafana_data_dir"
 
 grafana-server -homepath "$grafana_data_dir" &
 

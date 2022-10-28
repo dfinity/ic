@@ -33,7 +33,10 @@ DISK_IMAGE_KIND = "disk-img-dev"
 # The SHA-256 hash of the Prometheus VM disk image.
 # The latest hash can be retrieved by downloading the SHA256SUMS file from:
 # https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
-PROMETHEUS_VM_DISK_IMG_SHA256 = "f0f743b7ae37cdbe5a0e438cf62f67b319984f14ac471ddeb59eb582d2c93efe"
+#
+# Please also keep this in sync with the DEFAULT_PROMETHEUS_VM_IMG_SHA256 constant in:
+# rs/tests/src/driver/prometheus_vm.rs
+PROMETHEUS_VM_DISK_IMG_SHA256 = "6ee39a3f87bb08727b1c1cfb6082c4633a82810f3a335ba7771f7757da37daf8"
 PROMETHEUS_VM_DISK_IMG_URL = (
     f"{DOWNLOAD_BASE_URL}/farm/prometheus-vm/{PROMETHEUS_VM_DISK_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst"
 )
