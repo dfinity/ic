@@ -5,7 +5,7 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::{
-        heartbeat::{execute_heartbeat, CanisterHeartbeatError},
+        heartbeat::{execute_heartbeat_or_timer, CanisterHeartbeatError},
         inspect_message,
         nonreplicated_query::execute_non_replicated_query,
         replicated_query::execute_replicated_query,
@@ -54,7 +54,6 @@ use ic_replicated_state::{
     CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
-use ic_types::messages::MessageId;
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
@@ -66,6 +65,7 @@ use ic_types::{
     },
     CanisterId, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
+use ic_types::{messages::MessageId, methods::SystemMethod};
 use ic_wasm_types::WasmHash;
 use lazy_static::lazy_static;
 use phantom_newtype::AmountOf;
@@ -1032,10 +1032,11 @@ impl ExecutionEnvironment {
         }
     }
 
-    /// Executes a heartbeat of a given canister.
-    pub fn execute_canister_heartbeat(
+    /// Executes a heartbeat or a global timer of a given canister.
+    pub fn execute_canister_heartbeat_or_timer(
         &self,
         canister: CanisterState,
+        heartbeat_or_timer: SystemMethod,
         instruction_limits: InstructionLimits,
         network_topology: Arc<NetworkTopology>,
         time: Time,
@@ -1049,8 +1050,9 @@ impl ExecutionEnvironment {
     ) {
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
-        let (canister, instructions_used, result) = execute_heartbeat(
+        let (canister, instructions_used, result) = execute_heartbeat_or_timer(
             canister,
+            heartbeat_or_timer,
             network_topology,
             execution_parameters,
             self.own_subnet_type,
@@ -1939,6 +1941,7 @@ impl ExecutionEnvironment {
             .unwrap();
         match task {
             ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
             | ExecutionTask::PausedExecution(_)
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
@@ -2024,7 +2027,8 @@ impl ExecutionEnvironment {
                 .map(|task| match task {
                     ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. }
-                    | ExecutionTask::Heartbeat => task,
+                    | ExecutionTask::Heartbeat
+                    | ExecutionTask::GlobalTimer => task,
                     ExecutionTask::PausedExecution(id) => {
                         let paused = self.take_paused_execution(id).unwrap();
                         let (message, prepaid_execution_cycles) = paused.abort(log);
@@ -2265,31 +2269,23 @@ pub fn execute_canister(
     match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
             ExecutionTask::Heartbeat => {
-                // TODO: RUN-417: Remove this once the timer execution part is done
-                if !canister.exports_heartbeat_method() {
-                    return ExecuteCanisterResult {
-                        canister,
-                        instructions_used: None,
-                        heap_delta: NumBytes::from(0),
-                        ingress_status: None,
-                        description: None,
-                    };
-                }
                 // A heartbeat is expected to finish quickly, so DTS is not supported for it.
                 let instruction_limits = InstructionLimits::new(
                     FlagStatus::Disabled,
                     max_instructions_per_message_without_dts,
                     max_instructions_per_message_without_dts,
                 );
-                let (canister, instructions_used, result) = exec_env.execute_canister_heartbeat(
-                    canister,
-                    instruction_limits,
-                    network_topology,
-                    time,
-                    round_limits,
-                    subnet_size,
-                    &exec_env.log,
-                );
+                let (canister, instructions_used, result) = exec_env
+                    .execute_canister_heartbeat_or_timer(
+                        canister,
+                        SystemMethod::CanisterHeartbeat,
+                        instruction_limits,
+                        network_topology,
+                        time,
+                        round_limits,
+                        subnet_size,
+                        &exec_env.log,
+                    );
                 let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
                 ExecuteCanisterResult {
                     canister,
@@ -2297,6 +2293,33 @@ pub fn execute_canister(
                     heap_delta,
                     ingress_status: None,
                     description: Some("heartbeat".to_string()),
+                }
+            }
+            ExecutionTask::GlobalTimer => {
+                // A timer is expected to finish quickly, so DTS is not supported for it.
+                let instruction_limits = InstructionLimits::new(
+                    FlagStatus::Disabled,
+                    max_instructions_per_message_without_dts,
+                    max_instructions_per_message_without_dts,
+                );
+                let (canister, instructions_used, result) = exec_env
+                    .execute_canister_heartbeat_or_timer(
+                        canister,
+                        SystemMethod::CanisterGlobalTimer,
+                        instruction_limits,
+                        network_topology,
+                        time,
+                        round_limits,
+                        subnet_size,
+                        &exec_env.log,
+                    );
+                let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
+                ExecuteCanisterResult {
+                    canister,
+                    instructions_used: Some(instructions_used),
+                    heap_delta,
+                    ingress_status: None,
+                    description: Some("global timer".to_string()),
                 }
             }
             ExecutionTask::PausedExecution(id) => {

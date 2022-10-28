@@ -21,6 +21,7 @@ use std::sync::Arc;
 mod tests;
 
 /// Holds the result of heartbeat execution.
+// TODO: RUN-415: Rename to `HeartbeatOrTimerResult`
 pub struct HeartbeatResult {
     /// The canister state resulted from the heartbeat execution.
     pub canister_state: CanisterState,
@@ -106,17 +107,17 @@ fn validate_canister(
     Ok((execution_state, old_system_state, scheduler_state))
 }
 
-/// Executes a heartbeat of a given canister.
+/// Executes a heartbeat or a global timer method of a given canister.
 ///
-/// Before executing the heartbeat, the canister is validated to meet the following
-/// conditions:
+/// Before executing, the canister is validated to meet the following conditions:
 ///     - The status of the canister is Running.
-///     Otherwise, `CanisterHeartbeatError::CanisterNotRunning` error is returned.
+///       Otherwise, `CanisterHeartbeatError::CanisterNotRunning` error is returned.
 ///     - Wasm module is present.
-///     Otherwise, `CanisterHeartbeatError::CanisterExecutionFailed` error is returned.
-///     - Wasm module exports the heartbeat method.
+///       Otherwise, `CanisterHeartbeatError::CanisterExecutionFailed` error is returned.
+///     - Wasm module exports `canister_heartbeat` or `canister_global_timer`
+///       system method.
 ///    
-/// When the heartbeat method is not exported, the execution succeeds as a no-op operation.
+/// When the system method is not exported, the execution succeeds as a no-op operation.
 /// No changes are applied to the canister state if the canister cannot be validated.
 ///
 /// Returns:
@@ -129,8 +130,9 @@ fn validate_canister(
 /// - A result containing the size of the heap delta change if
 /// execution was successful or the relevant `CanisterHeartbeatError` error if execution fails.
 #[allow(clippy::too_many_arguments)]
-pub fn execute_heartbeat(
+pub fn execute_heartbeat_or_timer(
     canister: CanisterState,
+    heartbeat_or_timer: SystemMethod,
     network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
     own_subnet_type: SubnetType,
@@ -148,15 +150,21 @@ pub fn execute_heartbeat(
             // We should never try to execute a heartbeat if there is a
             // pending long execution.
             panic!(
-                "Heartbeat execution with another pending DTS execution: {:?}",
+                "System method {:?} execution with another pending DTS execution: {:?}",
+                heartbeat_or_timer,
                 canister.next_execution()
             );
         }
     }
-    // Heartbeat runs without DTS.
+    // Only `canister_heartbeat` and `canister_global_timer` are allowed for now.
+    assert!(
+        heartbeat_or_timer == SystemMethod::CanisterHeartbeat
+            || heartbeat_or_timer == SystemMethod::CanisterGlobalTimer
+    );
+    // Heartbeat System methods run without DTS.
     let instruction_limits = &execution_parameters.instruction_limits;
     assert_eq!(instruction_limits.message(), instruction_limits.slice());
-    let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
+    let method = WasmMethod::System(heartbeat_or_timer);
     let memory_usage = canister.memory_usage(own_subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
     let message_instruction_limit = instruction_limits.message();
@@ -170,7 +178,7 @@ pub fn execute_heartbeat(
             Err(err) => return err,
         };
 
-    // Charge for heartbeat execution.
+    // Charge for system method execution.
     let prepaid_execution_cycles = match cycles_account_manager.prepay_execution_cycles(
         &mut system_state,
         memory_usage,
@@ -188,7 +196,7 @@ pub fn execute_heartbeat(
         }
     };
 
-    // Execute canister heartbeat.
+    // Execute canister system method.
     let call_context_id = system_state
         .call_context_manager_mut()
         .unwrap()
@@ -247,6 +255,7 @@ pub fn execute_heartbeat(
 }
 
 /// Errors when executing `canister_heartbeat`.
+// TODO: RUN-415: Rename to `CanisterHeartbeatOrTimerError`
 #[derive(Debug, Eq, PartialEq)]
 pub enum CanisterHeartbeatError {
     /// The canister isn't running.

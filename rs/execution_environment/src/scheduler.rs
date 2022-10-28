@@ -438,7 +438,7 @@ impl SchedulerImpl {
 
         let mut total_heap_delta = NumBytes::from(0);
 
-        // Add `Heartbeat` tasks to be executed before input messages.
+        // Add `Heartbeat` and `GlobalTimer` tasks to be executed before input messages.
         {
             let _timer = self
                 .metrics
@@ -448,19 +448,25 @@ impl SchedulerImpl {
             for canister in state.canisters_iter_mut() {
                 let global_timer_has_reached_deadline =
                     canister.system_state.global_timer.has_reached_deadline(now);
-                if (global_timer_has_reached_deadline && canister.exports_global_timer_method())
-                    || canister.exports_heartbeat_method()
-                {
-                    match canister.next_execution() {
-                        NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                            // Do not add a heartbeat task if a long execution
-                            // is pending.
-                        }
-                        NextExecution::None | NextExecution::StartNew => {
+                match canister.next_execution() {
+                    NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
+                        // Do not add a heartbeat task if a long execution
+                        // is pending.
+                    }
+                    NextExecution::None | NextExecution::StartNew => {
+                        if canister.exports_heartbeat_method() {
                             canister
                                 .system_state
                                 .task_queue
                                 .push_front(ExecutionTask::Heartbeat);
+                        }
+                        if global_timer_has_reached_deadline
+                            && canister.exports_global_timer_method()
+                        {
+                            canister
+                                .system_state
+                                .task_queue
+                                .push_front(ExecutionTask::GlobalTimer);
                         }
                     }
                 }
@@ -565,11 +571,11 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
-            // Remove all remaining `Heartbeat` tasks because they will be added
-            // again in the next round.
+            // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
+            // because they will be added again in the next round.
             for canister in state.canisters_iter_mut() {
                 canister.system_state.task_queue.retain(|task| match task {
-                    ExecutionTask::Heartbeat => false,
+                    ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
                     ExecutionTask::PausedExecution(..)
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
@@ -1078,7 +1084,8 @@ impl SchedulerImpl {
             .iter()
             .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
 
-        // 1. Heartbeat tasks exist only during the round and must not exist after the round.
+        // 1. Heartbeat and GlobalTimer tasks exist only during the round
+        //    and must not exist after the round.
         // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
         // 3. If deterministic time slicing is disabled, then there are no paused tasks.
         //    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
@@ -1090,6 +1097,12 @@ impl SchedulerImpl {
                     ExecutionTask::Heartbeat => {
                         panic!(
                             "Unexpected heartbeat task after a round in canister {:?}",
+                            id
+                        );
+                    }
+                    ExecutionTask::GlobalTimer => {
+                        panic!(
+                            "Unexpected global timer task after a round in canister {:?}",
                             id
                         );
                     }
@@ -1734,7 +1747,7 @@ fn observe_replicated_state_metrics(
             Some(&ExecutionTask::AbortedInstallCode { .. }) => {
                 num_aborted_install += 1;
             }
-            Some(&ExecutionTask::Heartbeat) | None => {}
+            Some(&ExecutionTask::Heartbeat) | Some(&ExecutionTask::GlobalTimer) | None => {}
         }
         consumed_cycles_total += canister
             .system_state

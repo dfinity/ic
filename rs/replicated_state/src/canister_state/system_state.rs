@@ -204,6 +204,10 @@ pub enum ExecutionTask {
     // serialized.
     Heartbeat,
 
+    /// Canister global timer task.
+    /// The task exists only within an execution round, it never gets serialized.
+    GlobalTimer,
+
     // A paused execution task exists only within an epoch (between
     // checkpoints). It is never serialized, and it turns into `AbortedExecution`
     // before the checkpoint or when there are too many long-running executions.
@@ -241,6 +245,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
     fn from(item: &ExecutionTask) -> Self {
         match item {
             ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
             | ExecutionTask::PausedExecution(_)
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);

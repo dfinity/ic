@@ -372,7 +372,7 @@ impl SchedulerMetrics {
             },
             round_inner_heartbeat_overhead_duration: duration_histogram(
                 "execution_round_inner_heartbeat_overhead_duration_seconds",
-                "The duration of iterating canisters to prepare/remove heartbeat tasks",
+                "The duration of iterating canisters to prepare/remove heartbeat and global timer tasks",
                 metrics_registry,
             ),
             round_inner_iteration: ScopedMetrics {
