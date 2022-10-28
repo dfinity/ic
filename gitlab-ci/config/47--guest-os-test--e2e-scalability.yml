@@ -2,7 +2,9 @@ e2e-scalability-suite-test:
   extends:
     - .e2e-test-base-k8s
   needs:
-    - job: guest-os-diskimg-dev
+    - pipeline: $PARENT_PIPELINE_ID
+      job: bazel-test-all
+      artifacts: false
     - job: guest-os-updateimg-build
       artifacts: false
   artifacts:
@@ -10,7 +12,6 @@ e2e-scalability-suite-test:
     - scalability/
   script:
     - |
-      ICOS_VER=$(cat version.txt)
       # release
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
           --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
@@ -49,7 +50,7 @@ e2e-scalability-suite-test:
 
       pipenv run python3 "common/tests/e2e-scalability-tests.py" \
           --timeout "$GUEST_OS_TEST_TIMEOUT" \
-          --ic_os_version "$ICOS_VER" \
+          --ic_os_version "$CI_COMMIT_SHA" \
           --ic_admin_bin "${CI_PROJECT_DIR}/artifacts/release/ic-admin" \
           --nns_canisters "${CI_PROJECT_DIR}/artifacts/canisters/" \
           --ic_prep_bin "${CI_PROJECT_DIR}/artifacts/release/ic-prep" \
