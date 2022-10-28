@@ -4,7 +4,7 @@
   shell: |
     set -eExuo pipefail
     # check if disk image is available on the new or the old location for the given hash
-    CDN_URL="https://download.proxy-global.dfinity.network:8080"
+    CDN_URL="http://download.proxy-global.dfinity.network:8080"
     DEFAULT_UNIVERSAL_VM_IMG_SHA256="ca2ddfab45f940564503e2edf3d2c02acc05988edde4e3a7400355bd22d69d44"
 
     disk_types=(aux replica boundary)
