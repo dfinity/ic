@@ -77,23 +77,23 @@ impl TestLedger {
         }
     }
 
-    async fn last_submitted(&self) -> Result<Option<HashedBlock>, ApiError> {
+    async fn last_submitted(&self) -> Result<HashedBlock, ApiError> {
         match self.submit_queue.read().await.last() {
-            Some(b) => Ok(Some(b.clone())),
+            Some(b) => Ok(b.clone()),
             None => self
                 .read_blocks()
                 .await
-                .last_verified()
+                .get_latest_verified_hashed_block()
                 .map_err(ApiError::from),
         }
     }
 
     async fn add_block(&self, hb: HashedBlock) -> Result<(), ApiError> {
         let mut blockchain = self.blockchain.write().await;
-        blockchain.add_block(hb.clone()).map_err(ApiError::from)?;
+        blockchain.push(hb.clone()).map_err(ApiError::from)?;
         blockchain
             .block_store
-            .mark_last_verified(hb.index)
+            .set_hashed_block_to_verified(hb.index)
             .map_err(ApiError::from)
     }
 
@@ -134,8 +134,10 @@ impl LedgerAccess for TestLedger {
         {
             let mut blockchain = self.blockchain.write().await;
             for hb in queue.iter() {
-                blockchain.add_block(hb.clone())?;
-                blockchain.block_store.mark_last_verified(hb.index)?;
+                blockchain.push(hb.clone())?;
+                blockchain
+                    .block_store
+                    .set_hashed_block_to_verified(hb.index)?;
             }
         }
 
@@ -186,13 +188,13 @@ impl LedgerAccess for TestLedger {
                 fee,
             };
 
-            let (parent_hash, index) = match self.last_submitted().await? {
+            let (parent_hash, index) = match self.last_submitted().await.ok() {
                 None => (None, 0),
                 Some(hb) => (Some(hb.hash), hb.index + 1),
             };
 
             let block = Block::new(
-                None, /* FIXME */
+                parent_hash,
                 transaction.clone(),
                 memo,
                 created_at_time,

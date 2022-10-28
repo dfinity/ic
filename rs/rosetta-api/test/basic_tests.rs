@@ -6,10 +6,6 @@ use ic_ledger_core::block::BlockType;
 use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
 use ic_rosetta_api::ledger_client::LedgerAccess;
 use ic_rosetta_api::models::amount::{tokens_to_amount, Amount};
-use ic_rosetta_api::request_handler::RosettaRequestHandler;
-use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
-
 use ic_rosetta_api::models::{
     AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
     BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
@@ -18,6 +14,9 @@ use ic_rosetta_api::models::{
     NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest, SearchTransactionsResponse,
     SyncStatus,
 };
+use ic_rosetta_api::request_handler::RosettaRequestHandler;
+use ic_rosetta_api::transaction_id::TransactionIdentifier;
+use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
 use std::sync::Arc;
 
 #[actix_rt::test]
@@ -48,8 +47,7 @@ async fn smoke_test() {
         ledger
             .read_blocks()
             .await
-            .last_verified()
-            .unwrap()
+            .get_latest_verified_hashed_block()
             .unwrap()
             .index
             + 1
@@ -95,8 +93,7 @@ async fn smoke_test() {
         ledger
             .read_blocks()
             .await
-            .first_verified()
-            .unwrap()
+            .get_first_verified_hashed_block()
             .unwrap()
             .index as usize,
         expected_first_block
@@ -104,15 +101,13 @@ async fn smoke_test() {
     let b = ledger
         .read_blocks()
         .await
-        .last_verified()
-        .unwrap()
+        .get_latest_verified_hashed_block()
         .unwrap()
         .index;
     let a = ledger
         .read_blocks()
         .await
-        .first_verified()
-        .unwrap()
+        .get_first_verified_hashed_block()
         .unwrap()
         .index;
     assert_eq!(b - a, 10);
@@ -436,10 +431,21 @@ async fn balances_test() {
 
 fn verify_balances(scribe: &Scribe, blocks: &Blocks, start_idx: usize) {
     for hb in scribe.blockchain.iter().skip(start_idx) {
-        assert_eq!(*hb, blocks.get_verified_at(hb.index).unwrap());
-        assert_eq!(*hb, blocks.get_verified(hb.hash).unwrap());
+        assert_eq!(
+            *hb,
+            blocks
+                .block_store
+                .get_hashed_block(&hb.index)
+                .ok()
+                .ok_or(false)
+                .unwrap()
+        );
+        assert!(blocks.is_verified_by_hash(&hb.hash).unwrap());
         for (account, amount) in scribe.balance_history.get(hb.index as usize).unwrap() {
-            assert_eq!(blocks.get_balance(account, hb.index).unwrap(), *amount);
+            assert_eq!(
+                blocks.get_account_balance(account, &hb.index).unwrap(),
+                *amount
+            );
         }
     }
     let mut sum_icpt = Tokens::ZERO;
@@ -598,19 +604,22 @@ async fn load_from_store_test() {
     let mut blocks = Blocks::new_persistent(location);
     let mut last_verified = 0;
     for hb in &scribe.blockchain {
-        blocks.add_block(hb.clone()).unwrap();
+        blocks.push(hb.clone()).unwrap();
         if hb.index < 20 {
-            blocks.block_store.mark_last_verified(hb.index).unwrap();
+            blocks
+                .block_store
+                .set_hashed_block_to_verified(hb.index)
+                .unwrap();
             last_verified = hb.index;
         }
     }
 
     let some_acc = scribe.accounts.front().cloned().unwrap();
 
-    assert!(blocks.get_verified_at(10).is_ok());
-    assert!(blocks.get_balance(&some_acc, 10).is_ok());
-    assert!(blocks.get_verified_at(20).is_err());
-    assert!(blocks.get_balance(&some_acc, 20).is_err());
+    assert!(blocks.is_verified_by_idx(&10).unwrap());
+    assert!(blocks.get_account_balance(&some_acc, &10).is_ok());
+    assert!(!blocks.is_verified_by_idx(&20).unwrap());
+    assert!(blocks.get_account_balance(&some_acc, &20).is_err());
 
     let ledger = Arc::new(TestLedger::from_blockchain(blocks));
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger);
@@ -621,17 +630,17 @@ async fn load_from_store_test() {
     let mut blocks = Blocks::new_persistent(location);
     blocks.load_from_store().unwrap();
 
-    assert!(blocks.get_verified_at(10).is_ok());
-    assert!(blocks.get_balance(&some_acc, 10).is_ok());
-    assert!(blocks.get_verified_at(20).is_err());
-    assert!(blocks.get_balance(&some_acc, 20).is_err());
+    assert!(blocks.is_verified_by_idx(&10).unwrap());
+    assert!(blocks.get_account_balance(&some_acc, &10).is_ok());
+    assert!(!blocks.is_verified_by_idx(&20).unwrap());
+    assert!(blocks.get_account_balance(&some_acc, &20).is_err());
     last_verified = (scribe.blockchain.len() - 1) as u64;
     blocks
         .block_store
-        .mark_last_verified(last_verified)
+        .set_hashed_block_to_verified(last_verified)
         .unwrap();
 
-    assert!(blocks.get_balance(&some_acc, 20).is_ok());
+    assert!(blocks.get_account_balance(&some_acc, &20).is_ok());
 
     drop(blocks);
 
@@ -645,8 +654,8 @@ async fn load_from_store_test() {
         .try_prune(&Some((scribe.blockchain.len() - 11) as u64), 0)
         .unwrap();
 
-    assert!(blocks.get_verified_at(9).is_err());
-    assert!(blocks.get_verified_at(10).is_ok());
+    assert!(blocks.is_verified_by_idx(&9).is_err());
+    assert!(blocks.is_verified_by_idx(&10).unwrap());
     verify_balances(&scribe, &blocks, 10);
     // height 10 is the first block available for balance query, but not for
     // transaction search. Transaction search is available from 11
@@ -694,9 +703,12 @@ async fn load_unverified_test() {
 
     let mut blocks = Blocks::new_persistent(location);
     for hb in &scribe.blockchain {
-        blocks.add_block(hb.clone()).unwrap();
+        blocks.push(hb.clone()).unwrap();
         if hb.index < 20 {
-            blocks.block_store.mark_last_verified(hb.index).unwrap();
+            blocks
+                .block_store
+                .set_hashed_block_to_verified(hb.index)
+                .unwrap();
         }
     }
 
@@ -704,8 +716,8 @@ async fn load_unverified_test() {
         .try_prune(&Some((scribe.blockchain.len() - 51) as u64), 0)
         .unwrap();
 
-    assert!(blocks.get_verified_at(49).is_err());
-    assert!(blocks.get_verified_at(50).is_err());
+    assert!(blocks.is_verified_by_idx(&49).is_err());
+    assert!(!blocks.is_verified_by_idx(&50).unwrap());
 
     drop(blocks);
 
@@ -714,11 +726,11 @@ async fn load_unverified_test() {
     let last_verified = (scribe.blockchain.len() - 1) as u64;
     blocks
         .block_store
-        .mark_last_verified(last_verified)
+        .set_hashed_block_to_verified(last_verified)
         .unwrap();
 
-    assert!(blocks.get_verified_at(49).is_err());
-    assert!(blocks.get_verified_at(50).is_ok());
+    assert!(blocks.is_verified_by_idx(&49).is_err());
+    assert!(blocks.is_verified_by_idx(&50).unwrap());
 
     verify_balances(&scribe, &blocks, 50);
 
@@ -737,45 +749,53 @@ async fn store_batch_test() {
     let mut blocks = Blocks::new_persistent(location);
     for hb in &scribe.blockchain {
         if hb.index < 21 {
-            blocks.add_block(hb.clone()).unwrap();
+            blocks.push(hb.clone()).unwrap();
         }
     }
 
     assert_eq!(
-        blocks.block_store.get_at(20).unwrap(),
+        blocks.block_store.get_hashed_block(&20).unwrap(),
         *scribe.blockchain.get(20).unwrap()
     );
-    assert!(blocks.block_store.get_at(21).is_err());
+    assert!(blocks.block_store.get_hashed_block(&21).ok().is_none());
 
     let mut part2: Vec<HashedBlock> = scribe.blockchain.iter().skip(21).cloned().collect();
 
     let mut part3 = part2.split_off(10);
     part3.push(scribe.blockchain.get(30).unwrap().clone()); // this will cause an error
 
-    blocks.add_blocks_batch(part2).unwrap();
-    assert_eq!(
-        blocks.block_store.get_at(30).unwrap(),
-        *scribe.blockchain.get(30).unwrap()
-    );
-    assert!(blocks.block_store.get_at(31).is_err());
+    blocks.push_batch(part2.clone()).unwrap();
 
-    assert!(blocks.add_blocks_batch(part3.clone()).is_err());
     assert_eq!(
-        blocks.block_store.get_at(30).unwrap(),
+        blocks.block_store.get_hashed_block(&30).unwrap(),
         *scribe.blockchain.get(30).unwrap()
     );
-    assert!(blocks.block_store.get_at(31).is_err());
+    assert!(blocks.block_store.get_hashed_block(&31).ok().is_none());
+
+    assert!(blocks.push_batch(part3.clone()).is_err());
+    assert_eq!(
+        blocks.block_store.get_hashed_block(&30).unwrap(),
+        *scribe.blockchain.get(30).unwrap()
+    );
+    assert!(blocks.block_store.get_hashed_block(&31).ok().is_none());
 
     part3.pop();
 
-    blocks.add_blocks_batch(part3).unwrap();
+    blocks.push_batch(part3).unwrap();
     let last_idx = scribe.blockchain.back().unwrap().index;
     assert_eq!(
-        blocks.block_store.get_at(last_idx).unwrap(),
+        blocks.block_store.get_hashed_block(&last_idx).unwrap(),
         *scribe.blockchain.back().unwrap()
     );
-    assert!(blocks.block_store.get_at(last_idx + 1).is_err());
+    assert!(blocks
+        .block_store
+        .get_hashed_block(&(last_idx + 1))
+        .ok()
+        .is_none());
 
-    blocks.block_store.mark_last_verified(last_idx).unwrap();
+    blocks
+        .block_store
+        .set_hashed_block_to_verified(last_idx)
+        .unwrap();
     verify_balances(&scribe, &blocks, 0);
 }
