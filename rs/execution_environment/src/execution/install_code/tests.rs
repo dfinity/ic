@@ -495,7 +495,7 @@ fn install_code_with_start_with_success() {
     assert!(check_ingress_status(test.ingress_status(&message_id)).is_ok());
 }
 
-fn execute_install_code_init_dts_helper(
+fn start_install_code_dts(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
     wasm: &str,
@@ -525,6 +525,16 @@ fn execute_install_code_init_dts_helper(
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueInstallCode
     );
+
+    message_id
+}
+
+fn execute_install_code_init_dts_helper(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    wasm: &str,
+) -> MessageId {
+    let message_id = start_install_code_dts(test, canister_id, wasm);
 
     // Execute next slice.
     test.execute_slice(canister_id);
@@ -694,4 +704,49 @@ fn install_code_running_out_of_instructions() {
             )
         ))
     );
+}
+
+#[test]
+fn dts_uninstall_with_aborted_install_code() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let wasm: &str = r#"
+    (module
+         (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+         (func (export "canister_init")
+            (drop (memory.grow (i32.const 1)))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+        )
+        (memory 0 20)
+    )"#;
+
+    let message_id = start_install_code_dts(&mut test, canister_id, wasm);
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode,
+    );
+
+    test.abort_all_paused_executions();
+
+    test.uninstall_code(canister_id).unwrap();
+
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
+        test.execute_slice(canister_id);
+    }
+
+    let result = check_ingress_status(test.ingress_status(&message_id)).unwrap();
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }

@@ -642,3 +642,48 @@ fn dts_cycles_debit_is_applied_on_aborts() {
         Cycles::new(initial_canister_cycles) - test.canister_execution_cost(a_id) - cycles_debit
     );
 }
+
+#[test]
+fn dts_uninstall_with_aborted_update() {
+    let instruction_limit = 1_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(10_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    let wasm_payload = wasm()
+        .stable64_grow(1)
+        .stable64_write(0, 0, 10_000)
+        .stable64_write(0, 0, 10_000)
+        .stable64_write(0, 0, 10_000)
+        .stable64_write(0, 0, 10_000)
+        .build();
+
+    let (message_id, _) = test.ingress_raw(canister_id, "update", wasm_payload);
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    test.abort_all_paused_executions();
+
+    test.uninstall_code(canister_id).unwrap();
+
+    test.execute_message(canister_id);
+
+    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Attempt to execute a message on canister {} which contains no Wasm module",
+            canister_id
+        )
+    );
+}

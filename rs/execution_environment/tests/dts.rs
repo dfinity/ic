@@ -1568,3 +1568,149 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
 
     env.await_ingress(update, 100).unwrap();
 }
+
+#[test]
+fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(10_000),
+    );
+
+    let binary = wat2wasm(DTS_WAT);
+
+    let user_id = PrincipalId::new_anonymous();
+
+    let settings = Some(CanisterSettingsArgs {
+        controller: None,
+        controllers: None,
+        compute_allocation: Some(1u32.into()),
+        memory_allocation: None,
+        freezing_threshold: None,
+    });
+
+    let canister = env
+        .install_canister_with_cycles(binary.clone(), vec![], settings, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    // Make sure that the upgrade message gets aborted after each round.
+    env.set_checkpoints_enabled(true);
+
+    let upgrade = {
+        let args = InstallCodeArgs::new(
+            CanisterInstallMode::Upgrade,
+            canister,
+            binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
+    };
+
+    env.tick();
+
+    // Advance the time so that the canister gets uninstalled due to the
+    // resource usage.
+    env.advance_time(Duration::from_secs(10_000_000));
+
+    env.tick();
+
+    // Enable normal message execution.
+    env.set_checkpoints_enabled(false);
+
+    let result = env.await_ingress(upgrade, 30).unwrap();
+
+    // The canister is uninstalled after the execution completes because an
+    // aborted install_code is always restarted and becomes a paused execution
+    // by the time we charge canister for resource allocation.
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+}
+
+#[test]
+fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(10_000),
+    );
+
+    let binary = wat2wasm(DTS_WAT);
+
+    let user_id = PrincipalId::new_anonymous();
+
+    let n = 10;
+
+    let mut canisters = vec![];
+    for _ in 0..n {
+        let settings = Some(CanisterSettingsArgs {
+            controller: None,
+            controllers: None,
+            compute_allocation: Some(1u32.into()),
+            memory_allocation: None,
+            freezing_threshold: None,
+        });
+
+        let id = env
+            .install_canister_with_cycles(binary.clone(), vec![], settings, INITIAL_CYCLES_BALANCE)
+            .unwrap();
+        canisters.push(id);
+    }
+
+    // Make sure that the update messages get aborted after each round.
+    env.set_checkpoints_enabled(true);
+
+    let mut updates = vec![];
+    for canister in canisters.iter() {
+        let update = env.send_ingress(user_id, *canister, "update", vec![]);
+        updates.push(update);
+    }
+
+    // Ensure that each update message starts executing.
+    for _ in 0..n {
+        env.tick();
+    }
+
+    // Advance the time so that the canister gets uninstalled due to the
+    // resource usage.
+    env.advance_time(Duration::from_secs(10_000_000));
+
+    env.tick();
+
+    // Enable normal message execution.
+    env.set_checkpoints_enabled(false);
+
+    let mut errors = 0;
+
+    // Canisters that were chosen for execution before charging for resources
+    // become paused and don't get uninstalled until their execution completes.
+    // All other canister are uninstalled before resuming their aborted
+    // executions.
+    for i in 0..n {
+        match env.await_ingress(updates[i].clone(), 100) {
+            Ok(result) => {
+                assert_eq!(result, WasmResult::Reply(vec![]));
+            }
+            Err(err) => {
+                assert_eq!(
+                    err.description(),
+                    format!(
+                        "Attempt to execute a message on canister {} which contains no Wasm module",
+                        canisters[i]
+                    )
+                );
+                errors += 1;
+            }
+        }
+    }
+    assert!(errors >= 1);
+}
