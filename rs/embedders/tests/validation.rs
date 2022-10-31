@@ -86,6 +86,7 @@ fn can_validate_valid_export_section() {
                   (func $x)
                   (export "canister_init" (func $x))
                   (export "canister_heartbeat" (func $x))
+                  (export "canister_global_timer" (func $x))
                   (export "canister_pre_upgrade" (func $x))
                   (export "canister_post_upgrade" (func $x))
                   (export "canister_query read" (func $x)))"#,
@@ -108,6 +109,7 @@ fn can_validate_valid_export_section_with_reserved_functions() {
                   (func $x)
                   (export "canister_init" (func $x))
                   (export "canister_heartbeat" (func $x))
+                  (export "canister_global_timer" (func $x))
                   (export "canister_pre_upgrade" (func $x))
                   (export "canister_post_upgrade" (func $x))
                   (export "canister_query read" (func $x))
@@ -169,11 +171,39 @@ fn can_validate_canister_heartbeat_with_invalid_return() {
 }
 
 #[test]
+fn can_validate_canister_global_timer_with_invalid_return() {
+    let wasm = wat2wasm(
+        r#"(module
+                  (func $x (result i32) (i32.const 0))
+                  (export "canister_global_timer" (func $x)))"#,
+    )
+    .unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidFunctionSignature(_))
+    );
+}
+
+#[test]
 fn can_validate_canister_heartbeat_with_invalid_params() {
     let wasm = wat2wasm(
         r#"(module
                   (func $x (param $y i32))
                   (export "canister_heartbeat" (func $x)))"#,
+    )
+    .unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidFunctionSignature(_))
+    );
+}
+
+#[test]
+fn can_validate_canister_global_timer_with_invalid_params() {
+    let wasm = wat2wasm(
+        r#"(module
+                  (func $x (param $y i32))
+                  (export "canister_global_timer" (func $x)))"#,
     )
     .unwrap();
     assert_matches!(

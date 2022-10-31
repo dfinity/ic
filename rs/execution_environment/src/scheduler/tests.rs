@@ -1219,10 +1219,8 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 4.0);
 }
 
-// TODO: RUN-417: Re-enable this test once the timer execution part is done
 #[test]
-#[ignore]
-fn global_timer_is_scheduled_once_per_round() {
+fn execute_global_timer_once_per_round_in_system_subnet() {
     let mut test = SchedulerTestBuilder::new().build();
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
@@ -1235,6 +1233,7 @@ fn global_timer_is_scheduled_once_per_round() {
     test.set_time(1);
 
     test.send_ingress(canister, ingress(1));
+    test.expect_global_timer(canister, instructions(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let metrics = &test.scheduler().metrics;
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 2.0);
@@ -1305,6 +1304,39 @@ fn execute_heartbeat_before_messages() {
     test.send_ingress(canister, ingress(1));
     test.send_ingress(canister, ingress(1));
     test.expect_heartbeat(canister, instructions(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);
+    assert_eq!(test.ingress_queue_size(canister), 3);
+}
+
+#[test]
+fn execute_global_timer_before_messages() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::new(1),
+            max_instructions_per_message: NumInstructions::new(1),
+            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_slice: NumInstructions::new(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
+            ..SchedulerConfig::system_subnet()
+        })
+        .build();
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterGlobalTimer),
+        None,
+    );
+    test.set_canister_global_timer(canister, 1);
+    test.set_time(1);
+
+    test.send_ingress(canister, ingress(1));
+    test.send_ingress(canister, ingress(1));
+    test.send_ingress(canister, ingress(1));
+    test.expect_global_timer(canister, instructions(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let metrics = &test.scheduler().metrics;
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);

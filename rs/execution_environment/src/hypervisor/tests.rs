@@ -21,6 +21,7 @@ use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
 use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::methods::SystemMethod;
 use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, methods::WasmMethod,
     CanisterId, Cycles, NumBytes, NumInstructions,
@@ -1721,7 +1722,31 @@ fn subnet_available_memory_is_updated_in_heartbeat() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
-    let result = test.heartbeat(canister_id);
+    let result = test.heartbeat_or_timer(canister_id, SystemMethod::CanisterHeartbeat);
+    assert_eq!(result, Ok(()));
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    )
+}
+
+#[test]
+fn subnet_available_memory_is_updated_in_global_timer() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_global_timer")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let result = test.heartbeat_or_timer(canister_id, SystemMethod::CanisterGlobalTimer);
     assert_eq!(result, Ok(()));
     assert_eq!(
         initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
