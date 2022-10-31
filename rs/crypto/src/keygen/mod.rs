@@ -18,10 +18,9 @@ use ic_interfaces::crypto::{
     IDkgDealingEncryptionKeyRotationError, KeyManager, PublicKeyRegistrationStatus,
 };
 use ic_logger::warn;
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_registry_client_helpers::crypto::CryptoRegistry;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, KeyPurpose};
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, CurrentNodePublicKeys, KeyPurpose};
 use ic_types::RegistryVersion;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -40,7 +39,11 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         if let Some(pubkey) = self.unregistered_idkg_dealing_encryption_key(registry_version) {
             return Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(pubkey));
         }
-        if self.node_public_keys().idkg_dealing_encryption_pk.is_none() {
+        if self
+            .current_node_public_keys()
+            .idkg_dealing_encryption_public_key
+            .is_none()
+        {
             warn!(
                 self.logger,
                 "iDKG dealing encryption key of node {} is missing in local public key store",
@@ -66,8 +69,8 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
             .observe_node_key_counts(self.collect_key_count_metrics(registry_version));
     }
 
-    fn node_public_keys(&self) -> NodePublicKeys {
-        self.csp.node_public_keys()
+    fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
+        self.csp.current_node_public_keys()
     }
 
     fn rotate_idkg_dealing_encryption_keys(
@@ -83,7 +86,9 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
     pub fn collect_key_count_metrics(&self, registry_version: RegistryVersion) -> KeyCounts {
         let mut pub_keys_in_reg: u8 = 0;
         let mut secret_keys_in_sks: u8 = 0;
-        let pub_keys_local = self.node_public_keys().get_pub_keys_and_cert_count();
+        let pub_keys_local = self
+            .current_node_public_keys()
+            .get_pub_keys_and_cert_count();
         let reg_and_secret_key_results = vec![
             self.ensure_node_signing_key_material_is_set_up(registry_version),
             self.ensure_committee_signing_key_material_is_set_up(registry_version),
@@ -127,7 +132,9 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             });
         }
         self.compare_local_and_registry_public_keys_and_certificates(
-            self.node_public_keys().node_signing_pk.as_ref(),
+            self.current_node_public_keys()
+                .node_signing_public_key
+                .as_ref(),
             &pk_proto,
             registry_version,
             "node signing public key",
@@ -147,7 +154,9 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             registry_version,
         )?;
         self.compare_local_and_registry_public_keys_and_certificates(
-            self.node_public_keys().committee_signing_pk.as_ref(),
+            self.current_node_public_keys()
+                .committee_signing_public_key
+                .as_ref(),
             &pk_proto,
             registry_version,
             "committee signing public key",
@@ -167,7 +176,9 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             registry_version,
         )?;
         self.compare_local_and_registry_public_keys_and_certificates(
-            self.node_public_keys().dkg_dealing_encryption_pk.as_ref(),
+            self.current_node_public_keys()
+                .dkg_dealing_encryption_public_key
+                .as_ref(),
             &pk_proto,
             registry_version,
             "NI-DKG dealing encryption key",
@@ -182,7 +193,10 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
     ) -> Option<PublicKeyProto> {
         let result = get_mega_pubkey(&self.node_id, &self.registry_client, registry_version);
         if let Err(MegaKeyFromRegistryError::PublicKeyNotFound { .. }) = result {
-            if let Some(idkg_dealing_enc_pk) = self.node_public_keys().idkg_dealing_encryption_pk {
+            if let Some(idkg_dealing_enc_pk) = self
+                .current_node_public_keys()
+                .idkg_dealing_encryption_public_key
+            {
                 return Some(idkg_dealing_enc_pk);
             }
         }
@@ -200,7 +214,9 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             registry_version,
         )?;
         self.compare_local_and_registry_public_keys_and_certificates(
-            self.node_public_keys().idkg_dealing_encryption_pk.as_ref(),
+            self.current_node_public_keys()
+                .idkg_dealing_encryption_public_key
+                .as_ref(),
             &pk_proto,
             registry_version,
             "iDKG dealing encryption key",
@@ -221,7 +237,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 registry_version,
             })?;
         self.compare_local_and_registry_public_keys_and_certificates(
-            self.node_public_keys().tls_certificate.as_ref(),
+            self.current_node_public_keys().tls_certificate.as_ref(),
             &public_key_cert,
             registry_version,
             "TLS certificate",

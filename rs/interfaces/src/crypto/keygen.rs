@@ -1,6 +1,5 @@
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_types::crypto::CryptoResult;
+use ic_types::crypto::{CryptoResult, CurrentNodePublicKeys};
 use ic_types::RegistryVersion;
 
 /// Methods for checking and retrieving key material.
@@ -40,10 +39,11 @@ pub trait KeyManager {
     /// in the metrics component.
     fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion);
 
-    /// Returns node public keys that were read when this crypto component was
-    /// created. Node public keys stay the same throughout the lifetime of
-    /// the component.
-    fn node_public_keys(&self) -> NodePublicKeys;
+    /// Returns the node's public keys currently stored in the public key store.
+    ///
+    /// Calling this method multiple times may lead to different results
+    /// depending on the state of the public key store.
+    fn current_node_public_keys(&self) -> CurrentNodePublicKeys;
 
     /// Rotates the I-DKG dealing encryption keys. This function shall only be called if a prior
     /// call to `check_keys_with_registry()` has indicated that the I-DKG dealing encryption keys

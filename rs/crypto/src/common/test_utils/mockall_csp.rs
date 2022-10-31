@@ -29,7 +29,6 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
@@ -39,6 +38,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
+use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use mockall::predicate::*;
@@ -247,7 +247,7 @@ mock! {
     }
 
     pub trait NodePublicKeyData {
-        fn node_public_keys(&self) -> NodePublicKeys;
+        fn current_node_public_keys(&self) -> CurrentNodePublicKeys;
         fn dkg_dealing_encryption_key_id(&self) -> KeyId;
     }
 

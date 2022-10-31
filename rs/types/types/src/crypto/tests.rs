@@ -137,3 +137,54 @@ fn ensure_all_algorithm_ids_are_compared(tested_algorithm_ids: &[isize]) {
     let all_algorithm_ids: Vec<isize> = (0..=16).collect();
     assert_eq!(tested_algorithm_ids, all_algorithm_ids);
 }
+
+mod current_node_public_keys {
+    use super::*;
+
+    const SOME_PUBLIC_KEY: Option<PublicKey> = Some(PublicKey {
+        version: 0,
+        algorithm: 0,
+        key_value: vec![],
+        proof_data: None,
+        timestamp: None,
+    });
+    const SOME_X509_CERT: Option<X509PublicKeyCert> = Some(X509PublicKeyCert {
+        certificate_der: vec![],
+    });
+
+    #[test]
+    fn should_count_correctly_empty_node_public_keys() {
+        let node_public_keys = CurrentNodePublicKeys {
+            node_signing_public_key: None,
+            committee_signing_public_key: None,
+            tls_certificate: None,
+            dkg_dealing_encryption_public_key: None,
+            idkg_dealing_encryption_public_key: None,
+        };
+        assert_eq!(0, node_public_keys.get_pub_keys_and_cert_count());
+    }
+
+    #[test]
+    fn should_count_correctly_full_node_public_keys() {
+        let node_public_keys = CurrentNodePublicKeys {
+            node_signing_public_key: SOME_PUBLIC_KEY,
+            committee_signing_public_key: SOME_PUBLIC_KEY,
+            tls_certificate: SOME_X509_CERT,
+            dkg_dealing_encryption_public_key: SOME_PUBLIC_KEY,
+            idkg_dealing_encryption_public_key: SOME_PUBLIC_KEY,
+        };
+        assert_eq!(5, node_public_keys.get_pub_keys_and_cert_count());
+    }
+
+    #[test]
+    fn should_count_correctly_partial_node_public_keys() {
+        let node_public_keys = CurrentNodePublicKeys {
+            node_signing_public_key: SOME_PUBLIC_KEY,
+            committee_signing_public_key: None,
+            tls_certificate: SOME_X509_CERT,
+            dkg_dealing_encryption_public_key: None,
+            idkg_dealing_encryption_public_key: SOME_PUBLIC_KEY,
+        };
+        assert_eq!(3, node_public_keys.get_pub_keys_and_cert_count());
+    }
+}

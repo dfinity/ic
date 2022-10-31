@@ -191,11 +191,11 @@ fn temp_crypto(
         .with_node_id(node_id)
         .with_keys(NodeKeysToGenerate::only_node_signing_key())
         .build();
-    let node_pubkeys = crypto_component.node_public_keys();
+    let node_pubkeys = crypto_component.current_node_public_keys();
 
     add_node_signing_pubkey_to_registry(
         node_id,
-        &node_pubkeys.node_signing_pk.unwrap().key_value,
+        &node_pubkeys.node_signing_public_key.unwrap().key_value,
         &registry,
         &registry_data,
     );

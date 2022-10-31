@@ -16,7 +16,8 @@ mod csp_tests {
     use rand_chacha::ChaCha20Rng;
 
     mod public_key_data {
-        use crate::PublicKeyData;
+        use super::*;
+        use crate::{NodePublicKeyData, PublicKeyData};
         use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes;
         use ic_crypto_internal_types::curves::bls12_381;
         use ic_protobuf::crypto::v1::NodePublicKeys;
@@ -112,6 +113,65 @@ mod csp_tests {
             });
 
             assert!(data.is_err())
+        }
+
+        #[test]
+        fn should_retrieve_current_node_public_keys() {
+            let csp = csp_with_public_keys(NodePublicKeys {
+                version: 0,
+                node_signing_pk: Some(valid_node_signing_key()),
+                committee_signing_pk: None,
+                tls_certificate: None,
+                dkg_dealing_encryption_pk: Some(valid_dkg_dealing_encryption_pk()),
+                idkg_dealing_encryption_pk: None,
+            });
+
+            let current_public_keys = csp.current_node_public_keys();
+
+            assert_eq!(
+                current_public_keys.node_signing_public_key,
+                Some(valid_node_signing_key())
+            );
+            assert!(current_public_keys.committee_signing_public_key.is_none());
+            assert!(current_public_keys.tls_certificate.is_none());
+            assert_eq!(
+                current_public_keys.dkg_dealing_encryption_public_key,
+                Some(valid_dkg_dealing_encryption_pk())
+            );
+            assert!(current_public_keys
+                .idkg_dealing_encryption_public_key
+                .is_none());
+        }
+
+        #[test]
+        fn should_not_panic_when_no_public_keys() {
+            let csp = csp_with_public_keys(NodePublicKeys {
+                version: 0,
+                node_signing_pk: None,
+                committee_signing_pk: None,
+                tls_certificate: None,
+                dkg_dealing_encryption_pk: None,
+                idkg_dealing_encryption_pk: None,
+            });
+
+            let current_public_keys = csp.current_node_public_keys();
+
+            assert!(current_public_keys.node_signing_public_key.is_none());
+            assert!(current_public_keys.committee_signing_public_key.is_none());
+            assert!(current_public_keys.tls_certificate.is_none());
+            assert!(current_public_keys
+                .dkg_dealing_encryption_public_key
+                .is_none());
+            assert!(current_public_keys
+                .idkg_dealing_encryption_public_key
+                .is_none());
+        }
+
+        fn csp_with_public_keys(public_keys: NodePublicKeys) -> Csp {
+            let mut csp = Csp::of(csprng(), VolatileSecretKeyStore::new());
+            csp.public_key_data =
+                PublicKeyData::try_from(public_keys).expect("invalid public key data");
+            csp
         }
 
         fn valid_node_signing_key() -> PublicKey {

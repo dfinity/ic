@@ -52,7 +52,8 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::{
 use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgDealing, NiDkgTranscript};
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
-    IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf, UserPublicKey,
+    CurrentNodePublicKeys, IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf,
+    UserPublicKey,
 };
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
@@ -440,7 +441,7 @@ impl TempCryptoComponent {
 
     pub fn node_tls_public_key_certificate(&self) -> TlsPublicKeyCert {
         let tls_certificate = self
-            .node_public_keys()
+            .current_node_public_keys()
             .tls_certificate
             .expect("missing tls_certificate");
         TlsPublicKeyCert::new_from_der(tls_certificate.certificate_der)
@@ -914,8 +915,8 @@ impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
             .collect_and_store_key_count_metrics(registry_version)
     }
 
-    fn node_public_keys(&self) -> NodePublicKeys {
-        self.crypto_component.node_public_keys()
+    fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
+        self.crypto_component.current_node_public_keys()
     }
 
     fn rotate_idkg_dealing_encryption_keys(

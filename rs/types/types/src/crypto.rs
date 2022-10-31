@@ -24,6 +24,7 @@ use core::fmt::Formatter;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use phantom_newtype::Id;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 use proptest_derive::Arbitrary;
@@ -713,5 +714,36 @@ impl fmt::Display for CanisterSig {
 impl fmt::Debug for CanisterSig {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "CanisterSig: 0x{}", hex::encode(&self.0))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CurrentNodePublicKeys {
+    pub node_signing_public_key: Option<PublicKey>,
+    pub committee_signing_public_key: Option<PublicKey>,
+    pub tls_certificate: Option<X509PublicKeyCert>,
+    pub dkg_dealing_encryption_public_key: Option<PublicKey>,
+    pub idkg_dealing_encryption_public_key: Option<PublicKey>,
+}
+
+impl CurrentNodePublicKeys {
+    pub fn get_pub_keys_and_cert_count(&self) -> u8 {
+        let mut count: u8 = 0;
+        if self.node_signing_public_key.is_some() {
+            count += 1;
+        }
+        if self.committee_signing_public_key.is_some() {
+            count += 1;
+        }
+        if self.tls_certificate.is_some() {
+            count += 1;
+        }
+        if self.dkg_dealing_encryption_public_key.is_some() {
+            count += 1;
+        }
+        if self.idkg_dealing_encryption_public_key.is_some() {
+            count += 1;
+        }
+        count
     }
 }

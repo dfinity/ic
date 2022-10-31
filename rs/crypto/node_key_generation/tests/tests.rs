@@ -7,6 +7,7 @@ use ic_crypto_node_key_generation::{
     derive_node_id, get_node_keys_or_generate_if_missing, mega_public_key_from_proto,
     MEGaPublicKeyFromProtoError,
 };
+use ic_crypto_test_utils::assert_public_keys_eq;
 use ic_crypto_test_utils::files::temp_dir;
 use ic_interfaces::crypto::KeyManager;
 use ic_logger::replica_logger::no_op_logger;
@@ -24,7 +25,7 @@ fn should_generate_all_keys_for_new_node() {
         ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
 
         let crypto = local_crypto_component(&config);
-        assert_eq!(node_pks, crypto.node_public_keys());
+        assert_public_keys_eq(&node_pks, &crypto.current_node_public_keys());
     })
 }
 
@@ -41,7 +42,7 @@ fn should_generate_all_keys_for_new_node_with_remote_csp_vault() {
     ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
 
     let crypto = remote_crypto_component(&config, tokio_rt.handle().clone());
-    assert_eq!(node_pks, crypto.node_public_keys());
+    assert_public_keys_eq(&node_pks, &crypto.current_node_public_keys());
 }
 
 #[test]

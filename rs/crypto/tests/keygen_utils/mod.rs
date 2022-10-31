@@ -90,30 +90,30 @@ impl TestKeygenCryptoBuilder {
             .with_node_id(node_id)
             .with_keys(self.node_keys_to_generate.clone())
             .build();
-        let node_pubkeys = temp_crypto.node_public_keys();
+        let node_pubkeys = temp_crypto.current_node_public_keys();
         self.add_node_signing_key_to_registry_if_present(
             registry_version,
             node_id,
             &data_provider,
-            &node_pubkeys.node_signing_pk,
+            &node_pubkeys.node_signing_public_key,
         )
         .add_committee_signing_key_to_registry_if_present(
             registry_version,
             node_id,
             &data_provider,
-            &node_pubkeys.committee_signing_pk,
+            &node_pubkeys.committee_signing_public_key,
         )
         .add_dkg_dealing_enc_key_to_registry_if_present(
             registry_version,
             node_id,
             &data_provider,
-            &node_pubkeys.dkg_dealing_encryption_pk,
+            &node_pubkeys.dkg_dealing_encryption_public_key,
         )
         .add_idkg_dealing_enc_key_to_registry_if_present(
             registry_version,
             node_id,
             &data_provider,
-            &node_pubkeys.idkg_dealing_encryption_pk,
+            &node_pubkeys.idkg_dealing_encryption_public_key,
         )
         .add_tls_cert_to_registry_if_present(
             registry_version,

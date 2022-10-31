@@ -92,11 +92,11 @@ impl MultiSigTestEnvironment {
             .with_node_id(node_id)
             .with_keys(NodeKeysToGenerate::only_committee_signing_key())
             .build();
-        let node_keys = temp_crypto.node_public_keys();
+        let node_keys = temp_crypto.current_node_public_keys();
         self.crypto_components.insert(node_id, temp_crypto);
 
         let committee_pubkey = node_keys
-            .committee_signing_pk
+            .committee_signing_public_key
             .expect("failed to generate committee key");
         self.registry_data
             .add(

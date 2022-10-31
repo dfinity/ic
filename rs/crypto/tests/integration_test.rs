@@ -10,19 +10,19 @@ use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_test_utils::assert_public_keys_eq;
 use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{LoggerImpl, ReplicaLogger};
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::{AlgorithmId, CryptoError, KeyPurpose};
+use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys, KeyPurpose};
 use ic_types::RegistryVersion;
 use ic_types_test_utils::ids::node_test_id;
 use openssl::asn1::Asn1Time;
@@ -130,20 +130,20 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
             Arc::new(registry_client),
             no_op_logger(),
         );
-        let retrieved_node_pks = crypto.node_public_keys();
+        let retrieved_node_pks = crypto.current_node_public_keys();
         assert!(all_node_keys_are_present(&retrieved_node_pks));
-        assert_eq!(created_node_pks, retrieved_node_pks);
+        assert_public_keys_eq(&created_node_pks, &retrieved_node_pks);
     })
 }
 
 // TODO(CRP-430): check/improve the test coverage of SKS checks.
 
-fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
-    node_pks.node_signing_pk.is_some()
-        && node_pks.committee_signing_pk.is_some()
+fn all_node_keys_are_present(node_pks: &CurrentNodePublicKeys) -> bool {
+    node_pks.node_signing_public_key.is_some()
+        && node_pks.committee_signing_public_key.is_some()
         && node_pks.tls_certificate.is_some()
-        && node_pks.dkg_dealing_encryption_pk.is_some()
-        && node_pks.idkg_dealing_encryption_pk.is_some()
+        && node_pks.dkg_dealing_encryption_public_key.is_some()
+        && node_pks.idkg_dealing_encryption_public_key.is_some()
 }
 
 #[test]
@@ -232,8 +232,10 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missin
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
         .build(NODE_ID, REG_V1);
-    let idkg_dealing_encryption_pk_in_public_key_store =
-        crypto.get().node_public_keys().idkg_dealing_encryption_pk;
+    let idkg_dealing_encryption_pk_in_public_key_store = crypto
+        .get()
+        .current_node_public_keys()
+        .idkg_dealing_encryption_public_key;
     assert!(idkg_dealing_encryption_pk_in_public_key_store.is_none());
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -750,8 +752,10 @@ fn should_succeed_check_keys_with_registry_if_idkg_key_requires_registration() {
         .add_generated_tls_cert_to_registry()
         // explicitly not adding the I-DKG dealing encryption key to the registry
         .build(NODE_ID, REG_V1);
-    let idkg_dealing_encryption_pk_in_public_key_store =
-        crypto.get().node_public_keys().idkg_dealing_encryption_pk;
+    let idkg_dealing_encryption_pk_in_public_key_store = crypto
+        .get()
+        .current_node_public_keys()
+        .idkg_dealing_encryption_public_key;
     assert!(idkg_dealing_encryption_pk_in_public_key_store.is_some());
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -874,7 +878,10 @@ fn should_fail_check_keys_with_registry_and_log_error_if_node_signing_public_key
         .build();
 
     let node_signing_pk_without_corresponding_secret_key = {
-        let mut nspk = crypto_component.node_public_keys().node_signing_pk.unwrap();
+        let mut nspk = crypto_component
+            .current_node_public_keys()
+            .node_signing_public_key
+            .unwrap();
         nspk.key_value[0] ^= 0xff; // flip some bits
         nspk
     };
@@ -928,8 +935,8 @@ fn should_fail_check_keys_with_registry_and_log_error_if_committee_signing_publi
         .build();
     let committee_signing_pk_without_corresponding_secret_key = {
         let mut cspk = crypto_component
-            .node_public_keys()
-            .committee_signing_pk
+            .current_node_public_keys()
+            .committee_signing_public_key
             .unwrap();
         cspk.key_value[0] ^= 0xff; // flip some bits
         cspk
@@ -982,8 +989,8 @@ fn should_fail_check_keys_with_registry_and_log_error_if_dkg_dealing_encryption_
         .build();
     let dkg_dealing_encryption_pk_without_corresponding_secret_key = {
         let mut ddepk = crypto_component
-            .node_public_keys()
-            .dkg_dealing_encryption_pk
+            .current_node_public_keys()
+            .dkg_dealing_encryption_public_key
             .unwrap();
         ddepk.key_value[0] ^= 0xff; // flip some bits
         ddepk
@@ -1094,8 +1101,8 @@ fn should_fail_check_keys_with_registry_and_log_error_if_idkg_dealing_encryption
         .build();
     let idkg_dealing_encryption_pk_without_corresponding_secret_key = {
         let mut idepk = crypto_component
-            .node_public_keys()
-            .idkg_dealing_encryption_pk
+            .current_node_public_keys()
+            .idkg_dealing_encryption_public_key
             .unwrap();
         idepk.key_value[0] ^= 0xff; // flip some bits
         idepk
@@ -1133,8 +1140,8 @@ fn well_formed_dkg_dealing_encryption_pk() -> PublicKey {
     let temp_crypto =
         new_temp_crypto_component(NodeKeysToGenerate::only_dkg_dealing_encryption_key());
     temp_crypto
-        .node_public_keys()
-        .dkg_dealing_encryption_pk
+        .current_node_public_keys()
+        .dkg_dealing_encryption_public_key
         .unwrap()
 }
 
@@ -1142,8 +1149,8 @@ fn well_formed_idkg_dealing_encryption_pk() -> PublicKey {
     let temp_crypto =
         new_temp_crypto_component(NodeKeysToGenerate::only_idkg_dealing_encryption_key());
     temp_crypto
-        .node_public_keys()
-        .idkg_dealing_encryption_pk
+        .current_node_public_keys()
+        .idkg_dealing_encryption_public_key
         .unwrap()
 }
 
