@@ -3196,6 +3196,7 @@ fn trillion_cycles(value: f64) -> Cycles {
     Cycles::new((value * trillion) as u128)
 }
 
+// TODO(EXC-1168): remove after full migration is done.
 #[test]
 fn test_subnet_size_one_gib_storage_default_cost() {
     let subnet_size_lo = 13;
@@ -3217,6 +3218,7 @@ fn test_subnet_size_one_gib_storage_default_cost() {
     assert_eq!(adjusted_cost * per_year, trillion_cycles(1_779.008_800_464));
 }
 
+// TODO(EXC-1168): remove after full migration is done.
 // Storage cost tests split into 2: zero and non-zero compute allocation.
 // Reasons:
 // - storage cost includes both memory cost and compute allocation cost
@@ -3299,6 +3301,7 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation() {
     }
 }
 
+// TODO(EXC-1168): remove after full migration is done.
 #[test]
 fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
     for compute_allocation in [

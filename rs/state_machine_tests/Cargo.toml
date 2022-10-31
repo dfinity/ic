@@ -7,14 +7,15 @@ edition = "2021"
 
 [dependencies]
 candid = "0.8.1"
+ic-config = { path = "../config" }
+ic-constants = { path = "../constants" }
 ic-crypto-internal-seed = { path= "../crypto/internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path= "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-types = { path= "../crypto/internal/crypto_lib/types" }
 ic-crypto-tree-hash = { path= "../crypto/tree_hash" }
-ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-execution-environment = { path = "../execution_environment/" }
 ic-error-types = { path = "../types/error_types" }
+ic-execution-environment = { path = "../execution_environment/" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }

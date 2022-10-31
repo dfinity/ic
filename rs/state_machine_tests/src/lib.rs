@@ -3,6 +3,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{SubnetConfig, SubnetConfigs},
 };
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
     combine_signatures, combined_public_key, keygen, sign_message,
@@ -104,12 +105,11 @@ impl Verifier for FakeVerifier {
 const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 
 /// Constructs the initial version of the registry containing a subnet with the
-/// specified SUBNET_ID, with the node with the specified NODE_ID assigned to
-/// it.
-fn make_single_node_registry(
+/// specified SUBNET_ID, with the nodes with the specified NODE_IDs.
+fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    node_id: NodeId,
+    node_ids: &[NodeId],
 ) -> (Arc<ProtoRegistryDataProvider>, Arc<FakeRegistryClient>) {
     let registry_version = RegistryVersion::from(1);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -145,31 +145,34 @@ fn make_single_node_registry(
             Some(pb_whitelist),
         )
         .unwrap();
-    let node_record = NodeRecord {
-        node_operator_id: vec![0],
-        xnet: None,
-        http: Some(ConnectionEndpoint {
-            ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
-            port: 1234,
-            protocol: 0,
-        }),
-        p2p_flow_endpoints: vec![],
-        prometheus_metrics_http: None,
-        public_api: vec![],
-        private_api: vec![],
-        prometheus_metrics: vec![],
-        xnet_api: vec![],
-    };
-    data_provider
-        .add(
-            &make_node_record_key(node_id),
-            registry_version,
-            Some(node_record),
-        )
-        .unwrap();
+
+    for node_id in node_ids {
+        let node_record = NodeRecord {
+            node_operator_id: vec![0],
+            xnet: None,
+            http: Some(ConnectionEndpoint {
+                ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
+                port: 1234,
+                protocol: 0,
+            }),
+            p2p_flow_endpoints: vec![],
+            prometheus_metrics_http: None,
+            public_api: vec![],
+            private_api: vec![],
+            prometheus_metrics: vec![],
+            xnet_api: vec![],
+        };
+        data_provider
+            .add(
+                &make_node_record_key(*node_id),
+                registry_version,
+                Some(node_record),
+            )
+            .unwrap();
+    }
 
     // Set subnetwork list(needed for filling network_topology.nns_subnet_id)
-    let record = SubnetRecordBuilder::from(&[node_id])
+    let record = SubnetRecordBuilder::from(node_ids)
         .with_subnet_type(subnet_type)
         .build();
 
@@ -239,28 +242,107 @@ impl fmt::Debug for StateMachine {
     }
 }
 
+pub struct StateMachineBuilder {
+    state_dir: TempDir,
+    nonce: u64,
+    time: Time,
+    config: Option<StateMachineConfig>,
+    checkpoints_enabled: bool,
+    subnet_type: SubnetType,
+    subnet_size: usize,
+    use_cost_scaling_flag: bool,
+}
+
+impl StateMachineBuilder {
+    pub fn new() -> Self {
+        Self {
+            state_dir: TempDir::new().expect("failed to create a temporary directory"),
+            nonce: 0,
+            time: GENESIS,
+            config: None,
+            checkpoints_enabled: false,
+            subnet_type: SubnetType::System,
+            use_cost_scaling_flag: false,
+            subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
+        }
+    }
+
+    fn with_state_dir(self, state_dir: TempDir) -> Self {
+        Self { state_dir, ..self }
+    }
+
+    fn with_nonce(self, nonce: u64) -> Self {
+        Self { nonce, ..self }
+    }
+
+    fn with_time(self, time: Time) -> Self {
+        Self { time, ..self }
+    }
+
+    pub fn with_config(self, config: Option<StateMachineConfig>) -> Self {
+        Self { config, ..self }
+    }
+
+    pub fn with_checkpoints_enabled(self, checkpoints_enabled: bool) -> Self {
+        Self {
+            checkpoints_enabled,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
+        Self {
+            subnet_type,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_size(self, subnet_size: usize) -> Self {
+        Self {
+            subnet_size,
+            ..self
+        }
+    }
+
+    pub fn with_use_cost_scaling_flag(self, use_cost_scaling_flag: bool) -> Self {
+        Self {
+            use_cost_scaling_flag,
+            ..self
+        }
+    }
+
+    pub fn build(self) -> StateMachine {
+        StateMachine::setup_from_dir(
+            self.state_dir,
+            self.nonce,
+            self.time,
+            self.config,
+            self.checkpoints_enabled,
+            self.subnet_type,
+            self.subnet_size,
+            self.use_cost_scaling_flag,
+        )
+    }
+}
+
+impl Default for StateMachineBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StateMachine {
+    // TODO: cleanup, replace external calls with `StateMachineBuilder`.
     /// Constructs a new environment that uses a temporary directory for storing
     /// states.
     pub fn new() -> Self {
-        Self::setup_from_dir(
-            TempDir::new().expect("failed to create a temporary directory"),
-            0,
-            GENESIS,
-            None,
-            false,
-        )
+        StateMachineBuilder::new().build()
     }
 
+    // TODO: cleanup, replace external calls with `StateMachineBuilder`.
     /// Constructs a new environment with the specified configuration.
     pub fn new_with_config(config: StateMachineConfig) -> Self {
-        Self::setup_from_dir(
-            TempDir::new().expect("failed to create a temporary directory"),
-            0,
-            GENESIS,
-            Some(config),
-            false,
-        )
+        StateMachineBuilder::new().with_config(Some(config)).build()
     }
 
     /// Constructs and initializes a new state machine that uses the specified
@@ -271,6 +353,9 @@ impl StateMachine {
         time: Time,
         config: Option<StateMachineConfig>,
         checkpoints_enabled: bool,
+        subnet_type: SubnetType,
+        subnet_size: usize,
+        use_cost_scaling_flag: bool,
     ) -> Self {
         use slog::Drain;
 
@@ -287,9 +372,13 @@ impl StateMachine {
         let replica_logger: ReplicaLogger = logger.into();
 
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
-        let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
+        let mut node_ids = vec![];
+        for id in 0..subnet_size {
+            let node_id = NodeId::from(PrincipalId::new_node_test_id(id as u64));
+            node_ids.push(node_id);
+        }
         let metrics_registry = MetricsRegistry::new();
-        let subnet_type = SubnetType::System;
+
         let (subnet_config, mut hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (
@@ -299,7 +388,7 @@ impl StateMachine {
         };
 
         let (registry_data_provider, registry_client) =
-            make_single_node_registry(subnet_id, subnet_type, node_id);
+            make_nodes_registry(subnet_id, subnet_type, &node_ids);
 
         let sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
 
@@ -308,12 +397,14 @@ impl StateMachine {
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
+        let mut cycles_account_manager = CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
             subnet_type,
             subnet_id,
             subnet_config.cycles_account_manager_config,
-        ));
+        );
+        cycles_account_manager.set_using_cost_scaling(use_cost_scaling_flag);
+        let cycles_account_manager = Arc::new(cycles_account_manager);
         let state_manager = Arc::new(StateManagerImpl::new(
             Arc::new(FakeVerifier),
             subnet_id,
@@ -410,7 +501,12 @@ impl StateMachine {
         // to the same root.
         let (state_dir, nonce, time, checkpoints_enabled) = self.into_components();
 
-        Self::setup_from_dir(state_dir, nonce, time, None, checkpoints_enabled)
+        StateMachineBuilder::new()
+            .with_state_dir(state_dir)
+            .with_nonce(nonce)
+            .with_time(time)
+            .with_checkpoints_enabled(checkpoints_enabled)
+            .build()
     }
 
     /// Same as [restart_node], but the subnet will have the specified `config`
@@ -420,7 +516,13 @@ impl StateMachine {
         // to the same root.
         let (state_dir, nonce, time, checkpoints_enabled) = self.into_components();
 
-        Self::setup_from_dir(state_dir, nonce, time, Some(config), checkpoints_enabled)
+        StateMachineBuilder::new()
+            .with_state_dir(state_dir)
+            .with_nonce(nonce)
+            .with_time(time)
+            .with_config(Some(config))
+            .with_checkpoints_enabled(checkpoints_enabled)
+            .build()
     }
 
     /// If the argument is true, the state machine will create an on-disk

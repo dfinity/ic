@@ -2,73 +2,92 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/constants",
+    "//rs/crypto/internal/crypto_lib/seed",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/tree_hash",
+    "//rs/cycles_account_manager",
+    "//rs/execution_environment",
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/interfaces/state_manager",
+    "//rs/messaging",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/fake",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/registry/provisional_whitelist",
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/state_layout",
+    "//rs/state_manager",
+    "//rs/test_utilities/metrics",
+    "//rs/test_utilities/registry",
+    "//rs/types/error_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:candid",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:slog",
+    "@crate_index//:slog-term",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@wabt_rs//:wabt",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/crypto/sha",
+    "//rs/registry/subnet_type",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "//rs/universal_canister/lib",
+    "@crate_index//:candid",
+    "@crate_index//:libflate",
+    "@wabt_rs//:wabt",
+]
+
+DATA = [
+    # Keep sorted.
+    "//rs/canister_sandbox",
+    "//rs/canister_sandbox/sandbox_launcher",
+]
+
+ENV = {
+    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+}
+
 rust_library(
     name = "state_machine_tests",
     srcs = glob(["src/**"]),
     crate_name = "ic_state_machine_tests",
     version = "0.8.0",
-    deps = [
-        "//rs/config",
-        "//rs/crypto/internal/crypto_lib/seed",
-        "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/crypto/tree_hash",
-        "//rs/cycles_account_manager",
-        "//rs/execution_environment",
-        "//rs/interfaces",
-        "//rs/interfaces/registry",
-        "//rs/interfaces/state_manager",
-        "//rs/messaging",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/protobuf",
-        "//rs/registry/fake",
-        "//rs/registry/helpers",
-        "//rs/registry/keys",
-        "//rs/registry/proto_data_provider",
-        "//rs/registry/provisional_whitelist",
-        "//rs/registry/routing_table",
-        "//rs/registry/subnet_type",
-        "//rs/replicated_state",
-        "//rs/state_layout",
-        "//rs/state_manager",
-        "//rs/test_utilities/metrics",
-        "//rs/test_utilities/registry",
-        "//rs/types/error_types",
-        "//rs/types/ic00_types",
-        "//rs/types/types",
-        "@crate_index//:candid",
-        "@crate_index//:serde",
-        "@crate_index//:serde_cbor",
-        "@crate_index//:slog",
-        "@crate_index//:slog-term",
-        "@crate_index//:tempfile",
-        "@crate_index//:tokio",
-        "@wabt_rs//:wabt",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "execution_test",
     srcs = ["tests/execution_test.rs"],
-    data = [
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
-    ],
-    env = {
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
-    },
-    deps = [
-        ":state_machine_tests",
-        "//rs/config",
-        "//rs/crypto/sha",
-        "//rs/registry/subnet_type",
-        "//rs/types/ic00_types",
-        "//rs/types/types",
-        "//rs/universal_canister/lib",
-        "@crate_index//:candid",
-        "@crate_index//:libflate",
-        "@wabt_rs//:wabt",
-    ],
+    data = DATA,
+    env = ENV,
+    deps = [":state_machine_tests"] + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "subnet_size_test",
+    srcs = ["tests/subnet_size_test.rs"],
+    data = DATA,
+    env = ENV,
+    deps = [":state_machine_tests"] + DEV_DEPENDENCIES,
 )

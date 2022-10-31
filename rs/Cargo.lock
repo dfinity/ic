@@ -8186,6 +8186,7 @@ version = "0.8.0"
 dependencies = [
  "candid",
  "ic-config",
+ "ic-constants",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
