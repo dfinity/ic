@@ -11,6 +11,7 @@ use pairing::group::{ff::Field, Group};
 use paste::paste;
 use rand::{CryptoRng, RngCore};
 use std::fmt;
+use std::sync::Arc;
 use zeroize::Zeroize;
 
 macro_rules! ctoption_ok_or {
@@ -615,15 +616,209 @@ macro_rules! define_affine_and_projective_types {
     ( $affine:ident, $projective:ident, $size:expr ) => {
         paste! {
             lazy_static::lazy_static! {
-                static ref [<$affine:upper _GENERATOR>] : $affine = $affine::new(ic_bls12_381::$affine::generator());
+                static ref [<$affine:upper _GENERATOR>] : $affine = $affine::new_with_precomputation(ic_bls12_381::$affine::generator());
+            }
+        }
+
+        paste! {
+            #[derive(Zeroize)]
+            #[zeroize(drop)]
+            /// Structure for fast multiplication for known/fixed points
+            ///
+            /// This algorithm works by precomputing a table such that by adding
+            /// together selected elements of the table, a scalar multiplication is
+            /// effected without any doublings.
+            ///
+            /// Each window of the scalar has its own set of elements in the table,
+            /// which are not used for any other window. An implicit element of each
+            /// set is the identity element, which is omitted to save space in the
+            /// table. (However this does make some of the indexing operations less
+            /// obvious.)
+            ///
+            /// The simplest version to understand is the 1-bit window case.  There, we
+            /// compute a table containing P,P*2^1,...,P*2^255, and for each bit of the
+            /// scalar conditionally add that power of P.  To make this constant time
+            /// one must always add, choosing between the identity and the point.
+            ///
+            /// For the two bit case, we instead have a set of [P'*0,P'*1,P'*2,P'*3]
+            /// where P' = P*2^(2*i). Note that P'*0 is always the identity, and can be
+            /// omitted from the table.
+            ///
+            /// This approach expands similarly for the higher window sizes. The
+            /// tradeoff becomes an issue of table size (and precomputation cost)
+            /// versus the number of additions in the online phase.
+            ///
+            /// At larger window sizes, extracting the needed element from the table in
+            /// constant time becomes the dominating cost.
+            struct [<$affine PrecomputedTable>] {
+                tbl: Vec<ic_bls12_381::$affine>,
+            }
+
+            impl [<$affine PrecomputedTable>] {
+                /// The size of the windows
+                ///
+                /// This algorithm uses just `SUBGROUP_BITS/WINDOW_BITS` additions in
+                /// the online phase, at the cost of storing a table of size
+                /// `(SUBGROUP_BITS + WINDOW_BITS - 1)/WINDOW_BITS * (1 << WINDOW_BITS - 1)`
+                ///
+                /// This constant is configurable and can take values between 1 and 7
+                /// (inclusive)
+                ///
+                /// | WINDOW_BITS | TABLE_SIZE | online additions |
+                /// | ----------- | ---------- | ---------------- |
+                /// |           1 |       255  |              255 |
+                /// |           2 |       384  |              128 |
+                /// |           3 |       595  |               85 |
+                /// |           4 |       960  |               64 |
+                /// |           5 |      1581  |               51 |
+                /// |           6 |      2709  |               43 |
+                /// |           7 |      4699  |               37 |
+                ///
+                const WINDOW_BITS: usize = 4;
+
+                /// The bit length of the BLS12-381 subgroup
+                const SUBGROUP_BITS: usize = 255;
+
+                // A bitmask of all 1s that is WINDOW_BITS long
+                const WINDOW_MASK: u8 = (1 << Self::WINDOW_BITS) - 1;
+
+                // The total number of windows in a scalar
+                const WINDOWS : usize = (Self::SUBGROUP_BITS + Self::WINDOW_BITS - 1) / Self::WINDOW_BITS;
+
+                // We must select from 2^WINDOW_BITS elements in each table
+                // group. However one element of the table group is always the
+                // identity, and so can be omitted, which is the reason for the
+                // subtraction by 1 here.
+                const WINDOW_ELEMENTS : usize = (1 << Self::WINDOW_BITS) - 1;
+
+                // The total size of the table we will use
+                const TABLE_SIZE: usize = Self::WINDOW_ELEMENTS * Self::WINDOWS;
+
+                /// Precompute a table for fast multiplication
+                fn new(pt: &$affine) -> Self {
+                    let mut ptbl = vec![ic_bls12_381::$projective::identity(); Self::TABLE_SIZE];
+
+                    let mut accum = ic_bls12_381::$projective::from(pt.value);
+
+                    for i in 0..Self::WINDOWS {
+                        let tbl_i = &mut ptbl[Self::WINDOW_ELEMENTS*i..Self::WINDOW_ELEMENTS*(i+1)];
+
+                        tbl_i[0] = accum;
+                        for j in 1..Self::WINDOW_ELEMENTS {
+                            // Our table indexes are off by one due to the ommitted
+                            // identity element. So here we are checking if we are
+                            // about to compute a point that is a doubling of a point
+                            // we have previously computed. If so we can compute it
+                            // using a (faster) doubling rather than using addition.
+
+                            tbl_i[j] = if j % 2 == 1 {
+                                tbl_i[j / 2].double()
+                            } else {
+                                tbl_i[j - 1] + tbl_i[0]
+                            };
+                        }
+
+                        // move on to the next power
+                        accum = tbl_i[Self::WINDOW_ELEMENTS/2].double();
+                    }
+
+                    // batch convert the table to affine form, so we can use mixed addition
+                    // in the online phase.
+                    let mut tbl = vec![ic_bls12_381::$affine::identity(); Self::TABLE_SIZE];
+                    <ic_bls12_381::$projective>::batch_normalize(&ptbl, &mut tbl);
+
+                    Self { tbl }
+                }
+
+
+                /// Perform scalar multiplication using the precomputed table
+                fn mul(&self, scalar: &Scalar) -> $projective {
+                    let s = scalar.serialize();
+
+                    let mut accum = <ic_bls12_381::$projective>::identity();
+
+                    for i in 0..Self::WINDOWS {
+                        let tbl_for_i = &self.tbl[Self::WINDOW_ELEMENTS*i..Self::WINDOW_ELEMENTS*(i+1)];
+
+                        let b = Self::get_window(&s, Self::WINDOW_BITS*i);
+                        accum += Self::ct_select(tbl_for_i, b as usize);
+                    }
+
+                    <$projective>::new(accum)
+                }
+
+                // Extract a WINDOW_BITS sized window out of s, depending on offset.
+                #[inline(always)]
+                fn get_window(s: &[u8], offset: usize) -> u8 {
+                    const BITS_IN_BYTE: usize = 8;
+
+                    let shift = offset % BITS_IN_BYTE;
+                    let byte_offset = s.len() - 1 - (offset / BITS_IN_BYTE);
+
+                    let w0 = s[byte_offset];
+
+                    let single_byte_window =
+                        shift <= (BITS_IN_BYTE - Self::WINDOW_BITS) || byte_offset == 0;
+
+                    let bits = if single_byte_window {
+                        // If we can get the window out of single byte, do so
+                        (w0 >> shift)
+                    } else {
+                        // Otherwise we must join two bytes and extract the result
+                        let w1 = s[byte_offset - 1];
+                        ((w0 >> shift) | (w1 << (BITS_IN_BYTE - shift)))
+                    };
+
+                    bits & Self::WINDOW_MASK
+                }
+
+                // Constant time table lookup
+                //
+                // This version is specifically adapted to this algorithm. If
+                // index is zero, then it returns the identity element. Otherwise
+                // it returns from[index-1].
+                #[inline(always)]
+                fn ct_select(from: &[ic_bls12_381::$affine], index: usize) -> ic_bls12_381::$affine {
+                    use subtle::{ConditionallySelectable, ConstantTimeEq};
+
+                    let mut val = ic_bls12_381::$affine::identity();
+
+                    let index = index.wrapping_sub(1);
+                    for v in 0..from.len() {
+                        val.conditional_assign(&from[v], usize::ct_eq(&v, &index));
+                    }
+
+                    val
+                }
             }
         }
 
         /// An element of the group in affine form
-        #[derive(Clone, Eq, PartialEq, Zeroize)]
-        #[zeroize(drop)]
+        #[derive(Clone)]
         pub struct $affine {
-            value: ic_bls12_381::$affine
+            value: ic_bls12_381::$affine,
+            precomputed: Option<Arc<paste! { [<$affine PrecomputedTable>] }>>,
+        }
+
+        impl Eq for $affine {}
+
+        impl PartialEq for $affine {
+            fn eq(&self, other: &Self) -> bool {
+                self.value == other.value
+            }
+        }
+
+        impl Zeroize for $affine {
+            fn zeroize(&mut self) {
+                self.value.zeroize();
+                self.precomputed = None;
+            }
+        }
+
+        impl Drop for $affine {
+            fn drop(&mut self) {
+                self.zeroize();
+            }
         }
 
         impl $affine {
@@ -632,7 +827,34 @@ macro_rules! define_affine_and_projective_types {
 
             /// Create a struct from the inner type
             pub(crate) fn new(value: ic_bls12_381::$affine) -> Self {
-                Self { value }
+                Self { value, precomputed: None }
+            }
+
+            /// Create a struct from the inner type, with precomputation
+            pub(crate) fn new_with_precomputation(value: ic_bls12_381::$affine) -> Self {
+                let mut s = Self::new(value);
+                s.precompute();
+                s
+            }
+
+            /// Precompute values for multiplication
+            pub fn precompute(&mut self) {
+                if self.precomputed.is_some() {
+                    // already precomputed, no need to redo
+                    return;
+                }
+
+                let tbl = <paste! { [<$affine PrecomputedTable>] }>::new(self);
+                self.precomputed = Some(Arc::new(tbl));
+            }
+
+            /// Perform point multiplication
+            pub(crate) fn mul_dispatch(&self, scalar: &Scalar) -> $projective {
+                if let Some(ref tbl) = self.precomputed {
+                    tbl.mul(scalar)
+                } else {
+                    <$projective>::from(self).windowed_mul(scalar)
+                }
             }
 
             /// Return the inner value
@@ -661,6 +883,21 @@ macro_rules! define_affine_and_projective_types {
             /// * `input` - the input which will be hashed
             pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
                 $projective::hash(domain_sep, input).into()
+            }
+
+            /// Hash into the group, returning a point with precomputations
+            ///
+            /// This follows draft-irtf-cfrg-hash-to-curve-16 using the
+            /// BLS12381G1_XMD:SHA-256_SSWU_RO_ or
+            /// BLS12381G2_XMD:SHA-256_SSWU_RO_ suite.
+            ///
+            /// # Arguments
+            /// * `domain_sep` - some protocol specific domain seperator
+            /// * `input` - the input which will be hashed
+            pub fn hash_with_precomputation(domain_sep: &[u8], input: &[u8]) -> Self {
+                let mut pt = Self::hash(domain_sep, input);
+                pt.precompute();
+                pt
             }
 
             /// Deserialize a point (compressed format only)
@@ -893,7 +1130,7 @@ macro_rules! define_affine_and_projective_types {
             type Output = $projective;
 
             fn mul(self, scalar: &Scalar) -> $projective {
-                <$projective>::from(self).windowed_mul(&scalar)
+                self.mul_dispatch(scalar)
             }
         }
 
@@ -901,7 +1138,7 @@ macro_rules! define_affine_and_projective_types {
             type Output = $projective;
 
             fn mul(self, scalar: &Scalar) -> $projective {
-                <$projective>::from(self).windowed_mul(scalar)
+                self.mul_dispatch(&scalar)
             }
         }
 
@@ -1318,7 +1555,7 @@ impl Gt {
     }
 
     /// Return the doubling of this element
-    pub(crate) fn double(&self) -> Self {
+    pub fn double(&self) -> Self {
         Self::new(self.value.double())
     }
 

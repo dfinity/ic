@@ -159,6 +159,10 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("double", |b| {
+        b.iter_batched_ref(random_g1, |g1| g1.double(), BatchSize::SmallInput)
+    });
+
     group.bench_function("mixed addition", |b| {
         b.iter_batched_ref(
             || (random_g1(), G1Affine::from(random_g1())),
@@ -170,6 +174,31 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("multiply", |b| {
         b.iter_batched_ref(
             || (random_g1(), random_scalar()),
+            |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("precompute", |b| {
+        b.iter_batched_ref(
+            || random_g1().to_affine(),
+            |pt| pt.precompute(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g1().to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(),
+                )
+            },
             |(pt, scalar)| pt.clone() * scalar.clone(),
             BatchSize::SmallInput,
         )
@@ -272,6 +301,10 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("double", |b| {
+        b.iter_batched_ref(random_g2, |g2| g2.double(), BatchSize::SmallInput)
+    });
+
     group.bench_function("mixed addition", |b| {
         b.iter_batched_ref(
             || (random_g2(), G2Affine::from(random_g2())),
@@ -283,6 +316,31 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("multiply", |b| {
         b.iter_batched_ref(
             || (random_g2(), random_scalar()),
+            |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("precompute", |b| {
+        b.iter_batched_ref(
+            || random_g2().to_affine(),
+            |pt| pt.precompute(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g2().to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(),
+                )
+            },
             |(pt, scalar)| pt.clone() * scalar.clone(),
             BatchSize::SmallInput,
         )
@@ -330,6 +388,10 @@ fn pairing_ops(c: &mut Criterion) {
             |(gt1, gt2)| gt1.clone() + gt2.clone(),
             BatchSize::SmallInput,
         )
+    });
+
+    group.bench_function("double", |b| {
+        b.iter_batched_ref(random_gt, |gt| gt.double(), BatchSize::SmallInput)
     });
 
     group.bench_function("multiply", |b| {
