@@ -979,6 +979,52 @@ fn biased_g2<R: RngCore + CryptoRng>(rng: &mut R) -> G2Projective {
 }
 
 #[test]
+fn test_g1_mul_precompute() {
+    let mut rng = seeded_rng();
+
+    let g = G1Affine::hash(b"random-g1-for-precompute-test", &rng.gen::<[u8; 32]>());
+
+    let mut g_with_precompute = g.clone();
+    g_with_precompute.precompute();
+
+    let assert_same_result = |s: Scalar| {
+        let no_precomp = &g * &s;
+        let with_precomp = &g_with_precompute * &s;
+        assert_eq!(no_precomp, with_precomp);
+    };
+
+    assert_same_result(Scalar::zero());
+    assert_same_result(Scalar::one());
+    assert_same_result(Scalar::one().neg());
+    for _ in 0..500 {
+        assert_same_result(Scalar::random(&mut rng));
+    }
+}
+
+#[test]
+fn test_g2_mul_precompute() {
+    let mut rng = seeded_rng();
+
+    let g = G2Affine::hash(b"random-g2-for-precompute-test", &rng.gen::<[u8; 32]>());
+
+    let mut g_with_precompute = g.clone();
+    g_with_precompute.precompute();
+
+    let assert_same_result = |s: Scalar| {
+        let no_precomp = &g * &s;
+        let with_precomp = &g_with_precompute * &s;
+        assert_eq!(no_precomp, with_precomp);
+    };
+
+    assert_same_result(Scalar::zero());
+    assert_same_result(Scalar::one());
+    assert_same_result(Scalar::one().neg());
+    for _ in 0..500 {
+        assert_same_result(Scalar::random(&mut rng));
+    }
+}
+
+#[test]
 fn test_g1_mul2() {
     let mut rng = seeded_rng();
 

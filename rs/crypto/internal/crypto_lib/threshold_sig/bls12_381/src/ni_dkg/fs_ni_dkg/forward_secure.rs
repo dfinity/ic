@@ -902,20 +902,20 @@ lazy_static! {
 impl SysParam {
     /// Create a set of system parameters
     fn create(dst: &[u8]) -> Self {
-        let f0 = G2Affine::hash(dst, b"f0");
+        let f0 = G2Affine::hash_with_precomputation(dst, b"f0");
 
         let mut f = Vec::with_capacity(LAMBDA_T);
         for i in 0..LAMBDA_T {
             let s = format!("f{}", i + 1);
-            f.push(G2Affine::hash(dst, s.as_bytes()));
+            f.push(G2Affine::hash_with_precomputation(dst, s.as_bytes()));
         }
         let mut f_h = Vec::with_capacity(LAMBDA_H);
         for i in 0..LAMBDA_H {
             let s = format!("f_h{}", i);
-            f_h.push(G2Affine::hash(dst, s.as_bytes()));
+            f_h.push(G2Affine::hash_with_precomputation(dst, s.as_bytes()));
         }
 
-        let h = G2Affine::hash(dst, b"h");
+        let h = G2Affine::hash_with_precomputation(dst, b"h");
 
         let h_prep = G2Prepared::from(&h);
 

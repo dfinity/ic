@@ -35,3 +35,7 @@ harness = false
 [[bench]]
 name = "dlog"
 harness = false
+
+[[bench]]
+name = "fs_nidkg"
+harness = false
