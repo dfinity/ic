@@ -100,22 +100,17 @@ pub fn initialize_env(env: &TestEnv, cli_args: ValidatedCliRunTestsArgs) -> Resu
     if let Some(authorized_ssh_accounts) = cli_args.authorized_ssh_accounts.clone() {
         copy_ssh_keys(env, authorized_ssh_accounts)?;
     }
-    IcSetup {
-        farm_base_url,
-        ic_os_img_url: cli_args.ic_os_img_url,
-        ic_os_img_sha256: cli_args.ic_os_img_sha256,
-        ic_os_update_img_url: cli_args.ic_os_update_img_url,
-        ic_os_update_img_sha256: cli_args.ic_os_update_img_sha256,
-        boundary_node_img_url: cli_args.boundary_node_img_url,
-        boundary_node_img_sha256: cli_args.boundary_node_img_sha256,
-        boundary_node_snp_img_url: cli_args.boundary_node_snp_img_url,
-        boundary_node_snp_img_sha256: cli_args.boundary_node_snp_img_sha256,
-        journalbeat_hosts: cli_args.journalbeat_hosts,
-        initial_replica_version: cli_args.initial_replica_version,
-        log_debug_overrides: cli_args.log_debug_overrides,
-        preferred_network: cli_args.preferred_network,
-    }
-    .write_attribute(env);
+    let mut ic_setup = IcSetup::from_bazel_env(env);
+    // For now the rest part of the arguments are taken from the CLI.
+    ic_setup.farm_base_url = farm_base_url;
+    ic_setup.boundary_node_img_url = cli_args.boundary_node_img_url;
+    ic_setup.boundary_node_img_sha256 = cli_args.boundary_node_img_sha256;
+    ic_setup.boundary_node_snp_img_url = cli_args.boundary_node_snp_img_url;
+    ic_setup.boundary_node_snp_img_sha256 = cli_args.boundary_node_snp_img_sha256;
+    ic_setup.journalbeat_hosts = cli_args.journalbeat_hosts;
+    ic_setup.log_debug_overrides = cli_args.log_debug_overrides;
+    ic_setup.preferred_network = cli_args.preferred_network;
+    ic_setup.write_attribute(env);
     Ok(())
 }
 
