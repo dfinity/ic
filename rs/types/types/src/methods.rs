@@ -26,6 +26,11 @@ pub enum WasmMethod {
     /// execution.
     Query(String),
 
+    /// An exported composite query method along with its name.
+    /// It is similar to `Query` method above, but support query calls
+    /// and for now does not support replicated execution.
+    CompositeQuery(String),
+
     /// An exported system method. Unlike query or update method, there
     /// are a few fixed system methods as defined in `SystemMethod`.
     System(SystemMethod),
@@ -36,7 +41,8 @@ impl WasmMethod {
         match self {
             Self::Update(name) => name.to_string(),
             Self::Query(name) => name.to_string(),
-            Self::System(heartbeat_or_timer) => heartbeat_or_timer.to_string(),
+            Self::CompositeQuery(name) => name.to_string(),
+            Self::System(system_method) => system_method.to_string(),
         }
     }
 }
@@ -46,7 +52,8 @@ impl fmt::Display for WasmMethod {
         match self {
             Self::Update(name) => write!(f, "canister_update {}", name),
             Self::Query(name) => write!(f, "canister_query {}", name),
-            Self::System(heartbeat_or_timer) => heartbeat_or_timer.fmt(f),
+            Self::CompositeQuery(name) => write!(f, "canister_composite_query {}", name),
+            Self::System(system_method) => system_method.fmt(f),
         }
     }
 }
@@ -56,16 +63,20 @@ impl TryFrom<String> for WasmMethod {
 
     fn try_from(name: String) -> Result<Self, Self::Error> {
         if name.starts_with("canister_update ") {
-            // Take the part after the first space
+            // Take the part after the first space.
             let parts: Vec<&str> = name.splitn(2, ' ').collect();
             Ok(WasmMethod::Update(parts[1].to_string()))
         } else if name.starts_with("canister_query ") {
-            // Take the part after the first space
+            // Take the part after the first space.
             let parts: Vec<&str> = name.splitn(2, ' ').collect();
             Ok(WasmMethod::Query(parts[1].to_string()))
+        } else if name.starts_with("canister_composite_query ") {
+            // Take the part after the first space.
+            let parts: Vec<&str> = name.splitn(2, ' ').collect();
+            Ok(WasmMethod::CompositeQuery(parts[1].to_string()))
         } else {
             match SystemMethod::try_from(name.as_ref()) {
-                Ok(heartbeat_or_timer) => Ok(WasmMethod::System(heartbeat_or_timer)),
+                Ok(name) => Ok(WasmMethod::System(name)),
                 _ => Err(format!("Cannot convert {} to WasmFunction.", name)),
             }
         }
@@ -82,6 +93,9 @@ impl From<&WasmMethod> for pb::WasmMethod {
             },
             WasmMethod::Query(value) => Self {
                 wasm_method: Some(PbWasmMethod::Query(value.clone())),
+            },
+            WasmMethod::CompositeQuery(value) => Self {
+                wasm_method: Some(PbWasmMethod::CompositeQuery(value.clone())),
             },
             WasmMethod::System(value) => Self {
                 wasm_method: Some(PbWasmMethod::System(match value {
@@ -108,6 +122,7 @@ impl TryFrom<pb::WasmMethod> for WasmMethod {
         match try_from_option_field(method.wasm_method, "WasmMethod::wasm_method")? {
             PbWasmMethod::Update(update) => Ok(Self::Update(update)),
             PbWasmMethod::Query(query) => Ok(Self::Query(query)),
+            PbWasmMethod::CompositeQuery(query) => Ok(Self::CompositeQuery(query)),
             PbWasmMethod::System(system) => {
                 let method =
                     PbSystemMethod::from_i32(system).unwrap_or(PbSystemMethod::Unspecified);
@@ -352,26 +367,4 @@ pub enum FuncRef {
     UpdateClosure(WasmClosure),
 
     QueryClosure(WasmClosure),
-}
-
-impl FuncRef {
-    /// We utilize the function reference `FuncRef` to decide if a
-    /// state modification resulting from evaluating of the proposed
-    /// function reference should be committed or not.
-    pub fn to_commit(&self) -> bool {
-        match self {
-            Self::Method(WasmMethod::Update(_))
-            | Self::Method(WasmMethod::System(SystemMethod::CanisterStart))
-            | Self::Method(WasmMethod::System(SystemMethod::CanisterInit))
-            | Self::Method(WasmMethod::System(SystemMethod::CanisterPreUpgrade))
-            | Self::Method(WasmMethod::System(SystemMethod::CanisterPostUpgrade))
-            | Self::Method(WasmMethod::System(SystemMethod::CanisterHeartbeat))
-            | Self::Method(WasmMethod::System(SystemMethod::CanisterGlobalTimer))
-            | Self::UpdateClosure(_) => true,
-            Self::QueryClosure(_)
-            | Self::Method(WasmMethod::Query(_))
-            | Self::Method(WasmMethod::System(SystemMethod::Empty))
-            | Self::Method(WasmMethod::System(SystemMethod::CanisterInspectMessage)) => false,
-        }
-    }
 }

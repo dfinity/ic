@@ -37,7 +37,7 @@
 
 use super::query_allocations::QueryAllocationsUsed;
 use crate::{
-    execution::common,
+    execution::common::{self, validate_method},
     execution::nonreplicated_query::execute_non_replicated_query,
     execution_environment::{as_round_instructions, RoundLimits},
     hypervisor::Hypervisor,
@@ -61,6 +61,7 @@ use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery,
     },
+    methods::WasmMethod,
     CanisterId, Cycles, NumInstructions, NumMessages, QueryAllocation, Time,
 };
 use ic_types::{
@@ -241,30 +242,52 @@ impl<'a> QueryContext<'a> {
         }
 
         let call_origin = CallOrigin::Query(query.source);
-        // EXC-500: Contain the usage of inter-canister query calls to the subnets
-        // that currently use it until we decide on the future of this feature and
-        // get a proper spec for it.
-        let cross_canister_query_calls_enabled = self.own_subnet_type == SubnetType::System
-            || self.own_subnet_type == SubnetType::VerifiedApplication;
-        let try_pure_query = ENABLE_QUERY_OPTIMIZATION || !cross_canister_query_calls_enabled;
-        let query_kind = if try_pure_query {
-            NonReplicatedQueryKind::Pure {
-                caller: query.source.get(),
-            }
-        } else {
-            NonReplicatedQueryKind::Stateful {
-                call_origin: call_origin.clone(),
+        let (method, query_kind, retry_as_stateful) = {
+            let method = WasmMethod::CompositeQuery(query.method_name.clone());
+            match validate_method(&method, &old_canister) {
+                Ok(_) => {
+                    let query_kind = NonReplicatedQueryKind::Stateful {
+                        call_origin: call_origin.clone(),
+                    };
+                    (method, query_kind, false)
+                }
+                Err(_) => {
+                    // EXC-500: Contain the usage of inter-canister query calls to the subnets
+                    // that currently use it until we decide on the future of this feature and
+                    // get a proper spec for it.
+                    let cross_canister_query_calls_enabled = self.own_subnet_type
+                        == SubnetType::System
+                        || self.own_subnet_type == SubnetType::VerifiedApplication;
+                    let try_pure_query_first =
+                        ENABLE_QUERY_OPTIMIZATION || !cross_canister_query_calls_enabled;
+
+                    let method = WasmMethod::Query(query.method_name.clone());
+                    // First try to run the query as `Pure` assuming that it is not going to
+                    // call other queries. `Pure` queries are about 2x faster than `Stateful`.
+                    let query_kind = if try_pure_query_first {
+                        NonReplicatedQueryKind::Pure {
+                            caller: query.source.get(),
+                        }
+                    } else {
+                        // TODO(RUN-427): Remove this case after all existing users
+                        // transition to composite queries.
+                        NonReplicatedQueryKind::Stateful {
+                            call_origin: call_origin.clone(),
+                        }
+                    };
+                    let retry_as_stateful =
+                        try_pure_query_first && cross_canister_query_calls_enabled;
+                    (method, query_kind, retry_as_stateful)
+                }
             }
         };
 
-        // First try to run the query as `Pure` assuming that it is not going to
-        // call other queries. `Pure` queries are about 2x faster than `Stateful`.
         let (mut canister, mut result) = {
             let measurement_scope =
                 MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
             self.execute_query(
                 old_canister,
-                query.method_name.as_str(),
+                method.clone(),
                 query.method_payload.as_slice(),
                 query_kind,
                 &measurement_scope,
@@ -273,7 +296,7 @@ impl<'a> QueryContext<'a> {
 
         // An attempt to call another query will result in `ContractViolation`.
         // If that's the case then retry query execution as `Stateful`.
-        if try_pure_query && cross_canister_query_calls_enabled {
+        if retry_as_stateful {
             if let Err(err) = &result {
                 if err.code() == ErrorCode::CanisterContractViolation {
                     let measurement_scope =
@@ -281,7 +304,7 @@ impl<'a> QueryContext<'a> {
                     let old_canister = self.state.get_active_canister(&canister_id)?;
                     let (new_canister, new_result) = self.execute_query(
                         old_canister,
-                        query.method_name.as_str(),
+                        method,
                         query.method_payload.as_slice(),
                         NonReplicatedQueryKind::Stateful { call_origin },
                         &measurement_scope,
@@ -458,7 +481,7 @@ impl<'a> QueryContext<'a> {
     fn execute_query(
         &mut self,
         canister: CanisterState,
-        method_name: &str,
+        method_name: WasmMethod,
         method_payload: &[u8],
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
@@ -756,9 +779,17 @@ impl<'a> QueryContext<'a> {
 
         let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
 
+        let method = {
+            let method = WasmMethod::CompositeQuery(request.method_name.clone());
+            match validate_method(&method, &canister) {
+                Ok(_) => method,
+                Err(_) => WasmMethod::Query(request.method_name.clone()),
+            }
+        };
+
         let (mut canister, result) = self.execute_query(
             canister,
-            request.method_name.as_str(),
+            method,
             request.method_payload.as_slice(),
             NonReplicatedQueryKind::Stateful { call_origin },
             measurement_scope,

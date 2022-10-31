@@ -19,7 +19,7 @@ use ic_types::{Cycles, NumInstructions, Time};
 #[allow(clippy::too_many_arguments)]
 pub fn execute_non_replicated_query(
     query_kind: NonReplicatedQueryKind,
-    method: &str,
+    method: WasmMethod,
     payload: &[u8],
     mut canister: CanisterState,
     data_certificate: Option<Vec<u8>>,
@@ -42,7 +42,6 @@ pub fn execute_non_replicated_query(
         );
     }
 
-    let method = WasmMethod::Query(method.to_string());
     let memory_usage = canister.memory_usage(hypervisor.subnet_type());
 
     // Validate that the Wasm module is present and exports the method

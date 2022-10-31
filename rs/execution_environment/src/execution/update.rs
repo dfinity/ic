@@ -33,6 +33,7 @@ mod tests;
 pub fn execute_update(
     clean_canister: CanisterState,
     message: RequestOrIngress,
+    method: WasmMethod,
     prepaid_execution_cycles: Option<Cycles>,
     execution_parameters: ExecutionParameters,
     time: Time,
@@ -79,7 +80,7 @@ pub fn execute_update(
 
     let original = OriginalContext {
         call_origin: CallOrigin::from(&message),
-        method: WasmMethod::Update(message.method_name().to_string()),
+        method,
         message,
         prepaid_execution_cycles,
         execution_parameters,

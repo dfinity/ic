@@ -124,7 +124,7 @@ pub mod global {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WasmMethod {
-    #[prost(oneof = "wasm_method::WasmMethod", tags = "1, 2, 3")]
+    #[prost(oneof = "wasm_method::WasmMethod", tags = "1, 2, 3, 4")]
     pub wasm_method: ::core::option::Option<wasm_method::WasmMethod>,
 }
 /// Nested message and enum types in `WasmMethod`.
@@ -169,6 +169,8 @@ pub mod wasm_method {
         Query(::prost::alloc::string::String),
         #[prost(enumeration = "SystemMethod", tag = "3")]
         System(i32),
+        #[prost(string, tag = "4")]
+        CompositeQuery(::prost::alloc::string::String),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

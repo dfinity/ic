@@ -65,7 +65,7 @@ use ic_types::{
     },
     CanisterId, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
-use ic_types::{messages::MessageId, methods::SystemMethod};
+use ic_types::{messages::MessageId, methods::SystemMethod, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
 use lazy_static::lazy_static;
 use phantom_newtype::AmountOf;
@@ -998,37 +998,68 @@ impl ExecutionEnvironment {
             time,
         };
 
-        if canister.exports_query_method(req.method_name().to_string()) {
-            // A query call is expected to finish quickly, so DTS is not supported for it.
-            let instruction_limits = InstructionLimits::new(
-                FlagStatus::Disabled,
-                max_instructions_per_message_without_dts,
-                max_instructions_per_message_without_dts,
-            );
-            let execution_parameters =
-                self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
-            execute_replicated_query(
-                canister,
-                req,
-                execution_parameters,
-                time,
-                round,
-                round_limits,
-                subnet_size,
-            )
-        } else {
-            let execution_parameters =
-                self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
-            execute_update(
-                canister,
-                req,
-                prepaid_execution_cycles,
-                execution_parameters,
-                time,
-                round,
-                round_limits,
-                subnet_size,
-            )
+        let method = {
+            // Note that Wasm validation guarantees that a name cannot be
+            // exported multiple times as different types. So the order of
+            // checks here matters only for performance, not correctness.
+            let method = WasmMethod::Query(req.method_name().to_string());
+            if canister.exports_method(&method) {
+                method
+            } else {
+                let method = WasmMethod::CompositeQuery(req.method_name().to_string());
+                if canister.exports_method(&method) {
+                    method
+                } else {
+                    WasmMethod::Update(req.method_name().to_string())
+                }
+            }
+        };
+
+        match &method {
+            WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
+                // A query call is expected to finish quickly, so DTS is not supported for it.
+                let instruction_limits = InstructionLimits::new(
+                    FlagStatus::Disabled,
+                    max_instructions_per_message_without_dts,
+                    max_instructions_per_message_without_dts,
+                );
+                let execution_parameters = self.execution_parameters(
+                    &canister,
+                    instruction_limits,
+                    ExecutionMode::Replicated,
+                );
+                execute_replicated_query(
+                    canister,
+                    req,
+                    method,
+                    execution_parameters,
+                    time,
+                    round,
+                    round_limits,
+                    subnet_size,
+                )
+            }
+            WasmMethod::Update(_) => {
+                let execution_parameters = self.execution_parameters(
+                    &canister,
+                    instruction_limits,
+                    ExecutionMode::Replicated,
+                );
+                execute_update(
+                    canister,
+                    req,
+                    method,
+                    prepaid_execution_cycles,
+                    execution_parameters,
+                    time,
+                    round,
+                    round_limits,
+                    subnet_size,
+                )
+            }
+            WasmMethod::System(_) => {
+                unreachable!("Unreachable based on the previous statement");
+            }
         }
     }
 
@@ -1419,7 +1450,7 @@ impl ExecutionEnvironment {
             NonReplicatedQueryKind::Pure {
                 caller: IC_00.get(),
             },
-            &anonymous_query.method_name,
+            WasmMethod::Query(anonymous_query.method_name.to_string()),
             &anonymous_query.method_payload,
             canister,
             None,

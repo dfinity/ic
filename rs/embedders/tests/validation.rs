@@ -89,7 +89,8 @@ fn can_validate_valid_export_section() {
                   (export "canister_global_timer" (func $x))
                   (export "canister_pre_upgrade" (func $x))
                   (export "canister_post_upgrade" (func $x))
-                  (export "canister_query read" (func $x)))"#,
+                  (export "canister_query read" (func $x))
+                  (export "canister_composite_query query" (func $x)))"#,
     )
     .unwrap();
 
@@ -283,12 +284,11 @@ fn can_validate_invalid_canister_query() {
 }
 
 #[test]
-fn can_validate_duplicate_method_for_canister_query_and_canister_update() {
+fn can_validate_invalid_canister_composite_query() {
     let wasm = wat2wasm(
         r#"(module
-                    (func $read (param i64) (drop (i32.const 0)))
-                    (export "canister_query read" (func $read))
-                    (export "canister_update read" (func $read)))"#,
+                    (func $read (param i64 i32) (result i32) (local.get 1))
+                    (export "canister_composite_query read" (func $read)))"#,
     )
     .unwrap();
     assert_matches!(
@@ -298,12 +298,70 @@ fn can_validate_duplicate_method_for_canister_query_and_canister_update() {
 }
 
 #[test]
+fn can_validate_duplicate_update_and_query_methods() {
+    let wasm = wat2wasm(
+        r#"(module
+                    (func $read)
+                    (export "canister_query read" (func $read))
+                    (export "canister_update read" (func $read)))"#,
+    )
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "Duplicate function 'read' exported multiple times \
+             with different call types: update, query, or composite_query."
+                .to_string()
+        ))
+    );
+}
+
+#[test]
+fn can_validate_duplicate_update_and_composite_query_methods() {
+    let wasm = wat2wasm(
+        r#"(module
+                    (func $read)
+                    (export "canister_composite_query read" (func $read))
+                    (export "canister_update read" (func $read)))"#,
+    )
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "Duplicate function 'read' exported multiple times \
+             with different call types: update, query, or composite_query."
+                .to_string()
+        ))
+    );
+}
+
+#[test]
+fn can_validate_duplicate_query_and_composite_query_methods() {
+    let wasm = wat2wasm(
+        r#"(module
+                    (func $read)
+                    (export "canister_composite_query read" (func $read))
+                    (export "canister_query read" (func $read)))"#,
+    )
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "Duplicate function 'read' exported multiple times \
+             with different call types: update, query, or composite_query."
+                .to_string()
+        ))
+    );
+}
+
+#[test]
 fn can_validate_canister_query_update_method_name_with_whitespace() {
     let wasm = wat2wasm(
         r#"(module
                     (func $x)
                     (export "canister_query my_func x" (func $x))
-                    (export "canister_update my_func y" (func $x)))"#,
+                    (export "canister_composite_query my_func y" (func $x))
+                    (export "canister_update my_func z" (func $x)))"#,
     )
     .unwrap();
     assert_eq!(

@@ -156,6 +156,7 @@ pub struct InstrumentationOutput {
     /// All exported methods that are relevant to the IC.
     /// Methods relevant to the IC are:
     ///     - Queries (e.g. canister_query ___)
+    ///     - Composite queries (e.g. canister_composite_query ___)
     ///     - Updates (e.g. canister_update ___)
     ///     - System methods (e.g. canister_init)
     /// Other methods are assumed to be private to the module and are ignored.

@@ -632,6 +632,13 @@ fn get_valid_exported_functions() -> HashMap<String, FunctionSignature> {
             },
         ),
         (
+            "canister_composite_query",
+            FunctionSignature {
+                param_types: vec![],
+                return_type: vec![],
+            },
+        ),
+        (
             "canister_pre_upgrade",
             FunctionSignature {
                 param_types: vec![],
@@ -809,18 +816,20 @@ fn validate_export_section(module: &Module) -> Result<usize, WasmValidationError
                 // - the entire exported non-IC function names, or
                 // - canister_query or canister_update part in case of the IC functions.
                 if func_name.starts_with("canister_query ")
+                    || func_name.starts_with("canister_composite_query ")
                     || func_name.starts_with("canister_update ")
                 {
                     let parts: Vec<&str> = func_name.splitn(2, ' ').collect();
+                    func_name = parts[0];
                     let unmangled_func_name = parts[1];
                     if seen_funcs.contains(unmangled_func_name) {
                         return Err(WasmValidationError::InvalidExportSection(format!(
-                            "Duplicate function '{}' exported for both update calls and queries.",
+                            "Duplicate function '{}' exported multiple times \
+                             with different call types: update, query, or composite_query.",
                             unmangled_func_name
                         )));
                     }
                     seen_funcs.insert(unmangled_func_name);
-                    func_name = parts[0];
                 } else if func_name.starts_with("canister_") {
                     // The "canister_" prefix is reserved and only functions allowed by the spec
                     // can be exported.

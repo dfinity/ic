@@ -291,5 +291,6 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         }
         QueryCallGraphTooDeep => "Query call graph contains too many nested calls",
         QueryCallGraphTotalInstructionLimitExceeded => "Total instructions limit exceeded for query call graph",
+        CompositeQueryCalledInReplicatedMode => "Composite query cannot be called in replicated mode",
     }
 }
