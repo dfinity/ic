@@ -19,9 +19,12 @@ const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
 const DTS_WAT: &str = r#"
         (module
-           (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply" (func $msg_reply))
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32))
+            )
+            (import "ic0" "global_timer_set"
+                (func $global_timer_set (param i64) (result i64))
             )
             (func $work
                 (memory.fill (i32.const 0) (i32.const 12) (i32.const 10000))
@@ -44,6 +47,7 @@ const DTS_WAT: &str = r#"
 
             (func (export "canister_init")
                 (call $work)
+                (drop (call $global_timer_set (i64.const 1)))
             )
 
             (func (export "canister_query read")
@@ -60,6 +64,10 @@ const DTS_WAT: &str = r#"
 
             (func (export "canister_heartbeat")
                 (memory.fill (i32.const 0) (i32.const 12) (i32.const 10))
+            )
+
+            (func (export "canister_global_timer")
+                (memory.fill (i32.const 10) (i32.const 13) (i32.const 5))
             )
 
             (memory 1)
@@ -391,7 +399,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
 }
 
 #[test]
-fn dts_pending_upgrade_with_heartbeat() {
+fn dts_pending_upgrade_with_system_method() {
     if should_skip_test_due_to_disabled_dts() {
         // Skip this test if DTS is not supported.
         return;
@@ -470,8 +478,10 @@ fn dts_pending_upgrade_with_heartbeat() {
 
     let read = env.send_ingress(user_id, canister, "read", vec![]);
     let result = env.await_ingress(read, 10).unwrap();
-    let mut expected = vec![12; 10];
-    expected.extend([78; 10].iter());
+
+    let mut expected = vec![12; 10]; // heartbeat
+    expected.extend([13; 5].iter()); // global timer
+    expected.extend([78; 5].iter()); // work()
     assert_eq!(result, WasmResult::Reply(expected));
 }
 

@@ -402,6 +402,20 @@ impl SchedulerTest {
         wasm_executor.push_heartbeat(canister_id, heartbeat);
     }
 
+    pub fn expect_global_timer(&mut self, canister_id: CanisterId, heartbeat: TestMessage) {
+        assert!(
+            self.canister_state(canister_id)
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .exports_method(&WasmMethod::System(SystemMethod::CanisterGlobalTimer)),
+            "The canister should be created with \
+             `create_canister_with(.., Some(SystemMethod::CanisterGlobalTimer))`"
+        );
+        let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
+        wasm_executor.push_heartbeat(canister_id, heartbeat);
+    }
+
     pub fn execute_round(&mut self, round_type: ExecutionRoundType) {
         let state = self.state.take().unwrap();
         let state = self.scheduler.execute_round(

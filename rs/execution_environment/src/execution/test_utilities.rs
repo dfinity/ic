@@ -742,8 +742,12 @@ impl ExecutionTest {
         (ingress_id.clone(), self.ingress_status(&ingress_id))
     }
 
-    /// Executes the heartbeat method of the given canister.
-    pub fn heartbeat(&mut self, canister_id: CanisterId) -> Result<(), CanisterHeartbeatError> {
+    /// Executes a heartbeat or timer method of the given canister.
+    pub fn heartbeat_or_timer(
+        &mut self,
+        canister_id: CanisterId,
+        heartbeat_or_timer: SystemMethod,
+    ) -> Result<(), CanisterHeartbeatError> {
         let mut state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
@@ -761,7 +765,7 @@ impl ExecutionTest {
         let (canister, instructions_used, result) =
             self.exec_env.execute_canister_heartbeat_or_timer(
                 canister,
-                SystemMethod::CanisterHeartbeat,
+                heartbeat_or_timer,
                 instruction_limits,
                 network_topology,
                 self.time,
