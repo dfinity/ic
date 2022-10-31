@@ -16,7 +16,7 @@ use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{
-    state_sync::{ChunkInfo, FileInfo, Manifest},
+    state_sync::{encode_manifest, ChunkInfo, FileInfo, Manifest},
     CryptoHashOfState, Height,
 };
 use rand::{Rng, SeedableRng};
@@ -805,7 +805,11 @@ pub fn compute_manifest(
         assert_eq!(chunk_table, seq_chunk_table);
     }
 
-    Ok(Manifest::new(version, file_table, chunk_table))
+    let manifest = Manifest::new(version, file_table, chunk_table);
+    metrics
+        .manifest_size
+        .set(encode_manifest(&manifest).len() as i64);
+    Ok(manifest)
 }
 
 /// Validates manifest contents and checks that the hash of the manifest matches
