@@ -11,7 +11,6 @@ use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_types::crypto::dkg::EncryptionPublicKeyPop;
 use ic_types::crypto::{AlgorithmId, CryptoError, UserPublicKey};
 use std::convert::TryFrom;
 use std::fmt;
@@ -177,7 +176,6 @@ impl AsRef<[u8]> for CspPop {
     fn as_ref(&self) -> &[u8] {
         match self {
             CspPop::MultiBls12_381(sig_bytes) => &sig_bytes.0,
-            CspPop::Secp256k1(sig_bytes) => &sig_bytes.0,
         }
     }
 }
@@ -299,13 +297,5 @@ impl SigConverter {
         SigConverter {
             target_algorithm: algorithm,
         }
-    }
-}
-
-impl From<&CspPop> for EncryptionPublicKeyPop {
-    fn from(csp_pop: &CspPop) -> Self {
-        EncryptionPublicKeyPop(
-            serde_cbor::to_vec(csp_pop).expect("Cannot serialize csp encryption public key pop"),
-        )
     }
 }

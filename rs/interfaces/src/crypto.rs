@@ -6,8 +6,6 @@ pub use keygen::{IDkgDealingEncryptionKeyRotationError, KeyManager, PublicKeyReg
 
 mod errors;
 
-mod dkg;
-
 pub use sign::threshold_sig::ni_dkg::{LoadTranscriptResult, NiDkgAlgorithm};
 
 mod sign;

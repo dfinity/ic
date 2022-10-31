@@ -149,12 +149,8 @@ mod proto_to_csp_pop_tests {
 
         let deserialized_pop = CspPop::try_from(&pk_proto).unwrap();
 
-        if let CspPop::MultiBls12_381(multi_types::PopBytes(deserialized_bytes)) = deserialized_pop
-        {
-            assert_eq!(deserialized_bytes.to_vec(), pop_bytes.to_vec());
-        } else {
-            panic!("Unexpected POP");
-        }
+        let CspPop::MultiBls12_381(multi_types::PopBytes(deserialized_bytes)) = deserialized_pop;
+        assert_eq!(deserialized_bytes.to_vec(), pop_bytes.to_vec());
     }
 
     #[test]
