@@ -21,7 +21,7 @@ ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
-ic-http-handler = { path = "../http_handler" }
+ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-bitcoin-adapter-client = { path = "../interfaces/bitcoin_adapter_client" }
 ic-interfaces-p2p = { path = "../interfaces/p2p" }
@@ -94,6 +94,6 @@ path = "src/main.rs"
 profiler = ["thread_profiler/thread_profiler", "pprof"]
 malicious_code = [
   "ic-consensus/malicious_code",
-  "ic-http-handler/malicious_code",
+  "ic-http-endpoints-public/malicious_code",
   "ic-state-manager/malicious_code",
 ]

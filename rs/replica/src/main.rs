@@ -304,7 +304,7 @@ fn main() -> io::Result<()> {
 
     let malicious_behaviour = &config.malicious_behaviour;
 
-    ic_http_handler::start_server(
+    ic_http_endpoints_public::start_server(
         rt_http.handle().clone(),
         metrics_registry,
         config.http_handler.clone(),

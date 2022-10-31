@@ -93,7 +93,7 @@ members = [
   "embedders",
   "execution_environment",
   "guestos_vsock_agent",
-  "http_handler",
+  "http_endpoints/public",
   "http_utils",
   "ic_fondue",
   "ic_p8s_service_discovery",

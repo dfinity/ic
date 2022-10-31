@@ -15,7 +15,7 @@ https://sdk.dfinity.org/docs/interface-spec/index.html#http-interface[IC specifi
 
 === Startup
 
-The HTTP handler starts serving requests as soon as `+ic_http_handler::start_server+` is called. This is driven by operational needs,
+The HTTP endpoints starts serving requests as soon as `+start_server+` is called. This is driven by operational needs,
 we want to serve `+/status+`, `+/_/dashboard+`, `+/_/pprof+`,`+/catch_up_package+` endpoints as soon as possible.
 
 In order to serve `+query+`, `+read_state+` or `+call+` requests the replica needs to meet a few preconditions. The precondidation are
