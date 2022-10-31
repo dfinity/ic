@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from dataclasses import field
 from typing import Dict
 from typing import List
 
@@ -13,7 +14,7 @@ class Dependency:
     """version of the dependency"""
     version: str
     """maps vulnerability id to list of fix versions, list of fix versions should be non-empty"""
-    fix_version_for_vulnerability: Dict[str, List[str]]
+    fix_version_for_vulnerability: Dict[str, List[str]] = field(default_factory=lambda: {})
 
     def __post_init__(self):
         """Validate field values after initialization"""
