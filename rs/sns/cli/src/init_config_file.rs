@@ -708,8 +708,8 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
             format!(
                 r##"#
 # It is possible to give a higher voting weight to older neurons by setting 
-# `max_age_bonus_percentage` to a value other than zero. This parameter, 
-# `max_neuron_age_for_age_bonus`, sets the age at which the maximum bonus will 
+# `max_age_bonus_multiplier` to a value greater than 1. This parameter, 
+# `max_neuron_age_seconds_for_age_bonus`, sets the age at which the maximum bonus will 
 # be given. All older neurons will be treated as if they are this age. The unit 
 # is seconds. 
 #
