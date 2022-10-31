@@ -335,6 +335,8 @@ fn canister_post_upgrade() {
         Ok(proto) => {
             // Remove once deployed (OR-262)
             let proto = copy_subnet_management_followees_to_new_topics(proto);
+            // TODO(NNS1-1817): remove `copy_governance_followees_to_sns_and_cf_topic` once deployed
+            let proto = copy_governance_followees_to_sns_and_cf_topic(proto);
             canister_init_(proto);
             Ok(())
         }
@@ -364,6 +366,27 @@ fn copy_subnet_management_followees_to_new_topics(mut proto: GovernanceProto) ->
             neuron
                 .followees
                 .insert(Topic::SubnetReplicaVersionManagement as i32, followees);
+        }
+    }
+    proto
+}
+
+// TODO(NNS1-1817): remove once deployed
+fn copy_governance_followees_to_sns_and_cf_topic(mut proto: GovernanceProto) -> GovernanceProto {
+    use ic_nns_governance::pb::v1::Topic;
+    for neuron in proto.neurons.values_mut() {
+        let governance_followees = neuron.followees.get(&(Topic::Governance as i32));
+        if let Some(followees) = governance_followees {
+            if neuron
+                .followees
+                .contains_key(&(Topic::SnsAndCommunityFund as i32))
+            {
+                continue;
+            }
+            let followees = followees.clone();
+            neuron
+                .followees
+                .insert(Topic::SnsAndCommunityFund as i32, followees);
         }
     }
     proto
@@ -1077,4 +1100,69 @@ fn test_set_time_warp() {
 
     assert!(delta_s >= 1000, "delta_s = {}", delta_s);
     assert!(delta_s < 1005, "delta_s = {}", delta_s);
+}
+
+#[test]
+fn test_copy_governance_followees_to_sns_and_cf_copies_followees() {
+    use ic_nns_governance::pb::v1::{neuron, Topic};
+    let mut governance_proto = GovernanceProto {
+        ..Default::default()
+    };
+    let ids: Vec<u64> = vec![7, 11, 42, 101, 12345];
+    let id_protos: Vec<NeuronIdProto> = ids.iter().map(|id| NeuronIdProto { id: *id }).collect();
+    let mut neurons: Vec<Neuron> = ids
+        .iter()
+        .map(|id| Neuron {
+            id: Some(NeuronIdProto { id: *id }),
+            ..Default::default()
+        })
+        .collect();
+
+    let followees_a = neuron::Followees {
+        followees: vec![id_protos[1].clone(), id_protos[3].clone()],
+    };
+    let followees_b = neuron::Followees {
+        followees: vec![id_protos[2].clone(), id_protos[3].clone()],
+    };
+    let followees_c = neuron::Followees {
+        followees: vec![id_protos[0].clone(), id_protos[3].clone()],
+    };
+    let followees_d = neuron::Followees {
+        followees: vec![id_protos[4].clone()],
+    };
+    neurons[0]
+        .followees
+        .insert(Topic::Governance as i32, followees_a.clone());
+    neurons[0]
+        .followees
+        .insert(Topic::SubnetManagement as i32, followees_b.clone());
+    neurons[1]
+        .followees
+        .insert(Topic::Governance as i32, followees_c.clone());
+    neurons[1]
+        .followees
+        .insert(Topic::SnsAndCommunityFund as i32, followees_d.clone());
+    for (id, neuron) in ids.iter().zip(neurons.iter()) {
+        governance_proto.neurons.insert(*id, neuron.clone());
+    }
+    let governance_proto = copy_governance_followees_to_sns_and_cf_topic(governance_proto);
+    let ns = &governance_proto.neurons;
+    let fs = &ns.get(&ids[0]).expect("Missing neuron 0.").followees;
+    assert_eq!(*fs.get(&(Topic::Governance as i32)).unwrap(), followees_a);
+    assert_eq!(
+        *fs.get(&(Topic::SnsAndCommunityFund as i32)).unwrap(),
+        followees_a
+    );
+    assert_eq!(
+        *fs.get(&(Topic::SubnetManagement as i32)).unwrap(),
+        followees_b
+    );
+
+    let fs = &ns.get(&ids[1]).expect("Missing neuron 1.").followees;
+    assert_ne!(followees_c, followees_d);
+    assert_eq!(*fs.get(&(Topic::Governance as i32)).unwrap(), followees_c);
+    assert_eq!(
+        *fs.get(&(Topic::SnsAndCommunityFund as i32)).unwrap(),
+        followees_d
+    );
 }
