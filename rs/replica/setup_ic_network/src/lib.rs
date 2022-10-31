@@ -141,7 +141,7 @@ pub fn create_networking_stack(
         message_router,
         ingress_history_reader,
         artifact_pools,
-        malicious_flags.clone(),
+        malicious_flags,
         cycles_account_manager,
         local_store_time_reader,
         registry_poll_delay_duration_ms,
@@ -184,7 +184,6 @@ pub fn create_networking_stack(
         transport,
         artifact_pools.consensus_pool_cache.clone(),
         artifact_manager,
-        malicious_flags,
         &advert_subscriber,
     );
     (ingress_event_handler, p2p_thread)

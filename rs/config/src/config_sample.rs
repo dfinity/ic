@@ -316,11 +316,6 @@ pub const SAMPLE_CONFIG: &str = r#"
        maliciously_seg_fault: false,
 
        malicious_flags: {
-         maliciously_gossip_drop_requests: false,
-         maliciously_gossip_artifact_not_found: false,
-         maliciously_gossip_send_many_artifacts: false,
-         maliciously_gossip_send_invalid_artifacts: false,
-         maliciously_gossip_send_late_artifacts: false,
          maliciously_propose_equivocating_blocks: false,
          maliciously_propose_empty_blocks: false,
          maliciously_finalize_all: false,

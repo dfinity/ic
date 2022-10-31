@@ -95,6 +95,5 @@ profiler = ["thread_profiler/thread_profiler", "pprof"]
 malicious_code = [
   "ic-consensus/malicious_code",
   "ic-http-handler/malicious_code",
-  "ic-p2p/malicious_code",
   "ic-state-manager/malicious_code",
 ]

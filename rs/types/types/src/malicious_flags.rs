@@ -14,12 +14,6 @@ use serde::{Deserialize, Serialize};
 /// Groups all available malicious flags.
 #[derive(Clone, Default, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct MaliciousFlags {
-    // malicious gossip does not send requested artifacts
-    pub maliciously_gossip_drop_requests: bool,
-    pub maliciously_gossip_artifact_not_found: bool,
-    pub maliciously_gossip_send_many_artifacts: bool,
-    pub maliciously_gossip_send_invalid_artifacts: bool,
-    pub maliciously_gossip_send_late_artifacts: bool,
     pub maliciously_propose_equivocating_blocks: bool,
     pub maliciously_propose_empty_blocks: bool,
     pub maliciously_finalize_all: bool,

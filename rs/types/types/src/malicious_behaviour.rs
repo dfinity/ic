@@ -47,42 +47,6 @@ impl MaliciousBehaviour {
         })
     }
 
-    // Each flag gets its own set function
-    pub fn set_maliciously_gossip_drop_requests(self) -> Self {
-        self.set_malicious_behaviour(|mut s| {
-            s.malicious_flags.maliciously_gossip_drop_requests = true;
-            s
-        })
-    }
-
-    pub fn set_maliciously_gossip_artifact_not_found(self) -> Self {
-        self.set_malicious_behaviour(|mut s| {
-            s.malicious_flags.maliciously_gossip_artifact_not_found = true;
-            s
-        })
-    }
-
-    pub fn set_maliciously_gossip_send_many_artifacts(self) -> Self {
-        self.set_malicious_behaviour(|mut s| {
-            s.malicious_flags.maliciously_gossip_send_many_artifacts = true;
-            s
-        })
-    }
-
-    pub fn set_maliciously_gossip_send_invalid_artifacts(self) -> Self {
-        self.set_malicious_behaviour(|mut s| {
-            s.malicious_flags.maliciously_gossip_send_invalid_artifacts = true;
-            s
-        })
-    }
-
-    pub fn set_maliciously_gossip_send_late_artifacts(self) -> Self {
-        self.set_malicious_behaviour(|mut s| {
-            s.malicious_flags.maliciously_gossip_send_late_artifacts = true;
-            s
-        })
-    }
-
     pub fn set_maliciously_propose_equivocating_blocks(self) -> Self {
         self.set_malicious_behaviour(|mut s| {
             s.malicious_flags.maliciously_propose_equivocating_blocks = true;
