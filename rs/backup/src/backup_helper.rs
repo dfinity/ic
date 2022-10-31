@@ -5,7 +5,7 @@ use ic_recovery::file_sync_helper::download_binary;
 use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};
 use serde_json::Value;
-use slog::{info, warn, Logger};
+use slog::{error, info, warn, Logger};
 use std::convert::TryFrom;
 use std::ffi::OsStr;
 use std::net::{IpAddr, Ipv6Addr};
@@ -45,7 +45,7 @@ impl BackupHelper {
 
     fn binary_dir(&self) -> PathBuf {
         self.root_dir
-            .join(format!("binaries/{}/", self.replica_version))
+            .join(format!("binaries/{}", self.replica_version))
     }
 
     fn binary_file(&self, executable: &str) -> PathBuf {
@@ -53,23 +53,31 @@ impl BackupHelper {
     }
 
     fn spool_root_dir(&self) -> PathBuf {
-        self.root_dir.join("spool/")
+        self.root_dir.join("spool")
     }
 
     fn spool_dir(&self) -> PathBuf {
         self.spool_root_dir().join(self.subnet_id.to_string())
     }
 
+    fn local_store_dir(&self) -> PathBuf {
+        self.root_dir.join("ic_registry_local_store")
+    }
+
     fn data_dir(&self) -> PathBuf {
-        self.root_dir.join(format!("data/{}/", self.subnet_id))
+        self.root_dir.join(format!("data/{}", self.subnet_id))
     }
 
     fn ic_config_dir(&self) -> PathBuf {
-        self.data_dir().join("config/")
+        self.data_dir().join("config")
     }
 
     fn ic_config_file_local(&self) -> PathBuf {
         self.ic_config_dir().join("ic.json5")
+    }
+
+    fn state_dir(&self) -> PathBuf {
+        self.data_dir().join("ic_state")
     }
 
     fn username(&self) -> String {
@@ -244,5 +252,71 @@ impl BackupHelper {
             }
         }
         Vec::new()
+    }
+
+    fn last_checkpoint(&self) -> u64 {
+        if !self.state_dir().exists() {
+            return 0u64;
+        }
+        match std::fs::read_dir(self.state_dir().join("checkpoints")) {
+            Ok(file_list) => file_list
+                .flatten()
+                .map(|filename| {
+                    filename
+                        .path()
+                        .file_name()
+                        .unwrap_or_else(|| OsStr::new("0"))
+                        .to_os_string()
+                        .into_string()
+                        .unwrap_or_else(|_| "0".to_string())
+                })
+                .map(|s| u64::from_str_radix(&s, 16).unwrap_or(0))
+                .fold(0u64, |a, b| -> u64 { a.max(b) }),
+            Err(_) => 0,
+        }
+    }
+
+    pub fn replay(&self) {
+        let start_height = self.last_checkpoint();
+        info!(
+            self.log,
+            "Replaying from height #{} of subnet {:?}", start_height, self.subnet_id
+        );
+        if !self.state_dir().exists() {
+            std::fs::create_dir_all(self.state_dir()).expect("Failure creating a directory");
+        }
+
+        let ic_admin = self.binary_file("ic-replay");
+        let mut cmd = Command::new(ic_admin);
+        cmd.arg("--data-root")
+            .arg(&self.data_dir())
+            .arg("--subnet-id")
+            .arg(&self.subnet_id.to_string())
+            .arg(&self.ic_config_file_local())
+            .arg("restore-from-backup")
+            .arg(&self.local_store_dir())
+            .arg(&self.spool_root_dir())
+            .arg(&self.replica_version.to_string())
+            .arg(start_height.to_string())
+            .stdout(Stdio::piped());
+        info!(self.log, "Will execute: {:?}", cmd);
+        match exec_cmd(&mut cmd) {
+            Err(e) => {
+                error!(self.log, "Error: {}", e.to_string());
+            }
+            Ok(Some(stdout)) => {
+                info!(self.log, "Replay result:");
+                info!(self.log, "{}", stdout);
+                info!(
+                    self.log,
+                    "Finished replaying. Last checkpoint height: #{}",
+                    self.last_checkpoint()
+                );
+            }
+            _ => {}
+        }
+        if self.last_checkpoint() > start_height {
+            info!(self.log, "Replay was successful!");
+        }
     }
 }
