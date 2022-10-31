@@ -68,6 +68,10 @@
   extends:
     - .e2e-test-base-k8s
   needs:
+    - job: guest-os-diskimg
+      artifacts: false
+    - job: guest-os-diskimg-dev-malicious
+      artifacts: false
     - pipeline: $PARENT_PIPELINE_ID
       job: bazel-test-all
       artifacts: false
