@@ -23,9 +23,9 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
+    HasGroupSetup, HasIcSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    NnsInstallationExt, ADMIN,
 };
-use crate::driver::test_setup::create_setup_and_farm_group;
 use crate::tecdsa::tecdsa_signature_test::{enable_ecdsa_signing, make_key};
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
@@ -45,12 +45,9 @@ use super::tecdsa_signature_test::DKG_INTERVAL;
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: i32 = 3;
 
-pub fn bazel_config(env: TestEnv) {
-    let _ = create_setup_and_farm_group(&env);
-    config(env);
-}
-
 pub fn config(env: TestEnv) {
+    env.ensure_ic_setup_created();
+    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
 
     InternetComputer::new()
