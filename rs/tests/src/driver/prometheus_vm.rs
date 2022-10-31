@@ -31,7 +31,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// Please also keep this in sync with the PROMETHEUS_VM_DISK_IMG_SHA256 variable in:
 /// /scalability/common/farm.py.
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "6ee39a3f87bb08727b1c1cfb6082c4633a82810f3a335ba7771f7757da37daf8";
+    "b95ce8a9730b13d86e41815e88d3b2aef291642dbf20fa4f77d4bbbee9a7c9d9";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
@@ -47,6 +47,7 @@ const PROMETHEUS_WEB_UI_PORT: u16 = 9090;
 const REPLICA_METRICS_PORT: u16 = 9090;
 const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 const NODE_EXPORTER_METRICS_PORT: u16 = 9100;
+const GRAFANA_PORT: u16 = 3000;
 
 /// The Prometheus trait allows starting a Prometheus VM,
 /// periodically configuring its scraping targets based on the latest IC topology
@@ -105,6 +106,10 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
         info!(
             log,
             "Prometheus Web UI at http://[{:?}]:{PROMETHEUS_WEB_UI_PORT}", prometheus_vm.ipv6
+        );
+        info!(
+            log,
+            "Grafana at http://[{:?}]:{GRAFANA_PORT}", prometheus_vm.ipv6
         );
     }
 
