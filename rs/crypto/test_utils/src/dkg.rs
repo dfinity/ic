@@ -4,23 +4,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
-use ic_types::{Height, IDkgId, NodeId, PrincipalId, SubnetId};
+use ic_types::{Height, NodeId, PrincipalId, SubnetId};
 use ic_types_test_utils::ids::node_test_id;
-use rand::Rng;
-
-/// Generate a random `IDkgId`.
-///
-/// Note: There is a proptest strategy for `IDkgId` which is useful in many
-/// circumstances but cumbersome in others.  Please use the appropriate method
-/// for each circumstance.
-pub fn random_dkg_id<R: Rng>(rng: &mut R) -> IDkgId {
-    let instance_id = Height::from(rng.gen::<u64>());
-    let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-    IDkgId {
-        instance_id,
-        subnet_id,
-    }
-}
 
 pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {
     use ni_dkg_groth20_bls12_381 as scheme;

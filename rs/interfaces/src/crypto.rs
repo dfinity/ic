@@ -6,8 +6,6 @@ pub use keygen::{KeyManager, PublicKeyRegistrationStatus};
 
 mod errors;
 
-mod dkg;
-
 pub use sign::threshold_sig::ni_dkg::{LoadTranscriptResult, NiDkgAlgorithm};
 
 mod sign;
