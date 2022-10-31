@@ -151,7 +151,6 @@ impl SystemTestGroup {
                         println!("Child: running setup");
                         // Step 1: create an independent driver context for this process
                         let env = process_ctx.group_context.create_setup_env()?;
-                        println!("IC_ROOT variable is {:?} ", std::env::var("IC_ROOT"));
                         // Step 2: call user-defined setup function
                         let setup_fn = self.consume_setup();
                         setup_fn(env);

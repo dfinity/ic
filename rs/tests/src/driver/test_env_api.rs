@@ -536,6 +536,54 @@ impl HasRegistryLocalStore for TestEnv {
     }
 }
 
+pub trait HasIcSetup {
+    fn ensure_ic_setup_created(&self);
+}
+
+impl HasIcSetup for TestEnv {
+    fn ensure_ic_setup_created(&self) {
+        let is_ic_setup_existing = self.get_json_path(IcSetup::attribute_name()).exists();
+        // This `if` is executed only for Bazel runs.
+        if !is_ic_setup_existing {
+            let log = self.logger();
+            info!(log, "Creating IcSetup.");
+            let ic_setup = IcSetup::from_bazel_env(self);
+            ic_setup.write_attribute(self);
+        }
+    }
+}
+
+pub trait HasGroupSetup {
+    fn ensure_group_setup_created(&self);
+}
+
+impl HasGroupSetup for TestEnv {
+    fn ensure_group_setup_created(&self) {
+        let is_group_setup_existing = self.get_json_path(GroupSetup::attribute_name()).exists();
+        // This `if` is executed only for Bazel runs.
+        if !is_group_setup_existing {
+            let log = self.logger();
+            info!(log, "Creating GroupSetup.");
+            let group_setup = GroupSetup::from_bazel_env();
+            group_setup.write_attribute(self);
+            info!(log, "SystemTestGroup.prepare_group");
+            let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
+            let farm = Farm::new(farm_base_url, self.logger());
+            let group_spec = GroupSpec {
+                vm_allocation: None,
+                required_host_features: vec![],
+                preferred_network: None,
+            };
+            farm.create_group(
+                &group_setup.farm_group_name,
+                group_setup.group_timeout,
+                group_spec,
+            )
+            .unwrap();
+        }
+    }
+}
+
 /// Construct `IcHandle` for backwards compatibility with the older test API.
 pub trait IcHandleConstructor {
     fn ic_handle(&self) -> Result<IcHandle>;
