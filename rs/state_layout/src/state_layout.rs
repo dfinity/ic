@@ -363,23 +363,11 @@ impl StateLayout {
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let height = tip.height;
-        let cp_name = self.checkpoint_name(height);
-        let new_cp = self.checkpoints().join(&cp_name);
-
-        if new_cp.exists() {
-            return Err(LayoutError::AlreadyExists(height));
-        }
-        self.copy_and_sync_checkpoint(&cp_name, tip.raw_path(), new_cp.as_path(), thread_pool)
-            .map_err(|err| LayoutError::IoError {
-                path: tip.raw_path().to_path_buf(),
-                message: format!(
-                    "Failed to convert tip to checkpoint to {} (err kind: {:?})",
-                    cp_name,
-                    err.kind()
-                ),
-                io_err: err,
-            })?;
-        CheckpointLayout::new(new_cp, height)
+        let mut thread_pool = thread_pool;
+        #[allow(clippy::needless_option_as_deref)]
+        let cp = self.scratchpad_to_checkpoint(tip, height, thread_pool.as_deref_mut())?;
+        self.reset_tip_to(height, thread_pool)?;
+        Ok(cp)
     }
 
     pub fn scratchpad_to_checkpoint(
@@ -388,8 +376,12 @@ impl StateLayout {
         height: Height,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        let cp_name = self.checkpoint_name(height);
         let scratchpad = layout.raw_path();
+        let checkpoints_path = self.checkpoints();
+        let cp_path = checkpoints_path.join(self.checkpoint_name(height));
+        if cp_path.exists() {
+            return Err(LayoutError::AlreadyExists(height));
+        }
         sync_and_mark_files_readonly(scratchpad, thread_pool).map_err(|err| {
             LayoutError::IoError {
                 path: scratchpad.to_path_buf(),
@@ -400,11 +392,6 @@ impl StateLayout {
                 io_err: err,
             }
         })?;
-        let checkpoints_path = self.checkpoints();
-        let cp_path = checkpoints_path.join(cp_name);
-        if cp_path.exists() {
-            return Err(LayoutError::AlreadyExists(height));
-        }
         std::fs::rename(scratchpad, &cp_path).map_err(|err| LayoutError::IoError {
             path: scratchpad.to_path_buf(),
             message: format!("Failed to rename scratchpad to checkpoint {}", height),
