@@ -51,7 +51,10 @@ fn should_count_correctly_inconsistent_numbers_of_node_signing_keys() {
         .build();
 
     let node_signing_pk_without_corresponding_secret_key = {
-        let mut nspk = crypto_component.node_public_keys().node_signing_pk.unwrap();
+        let mut nspk = crypto_component
+            .current_node_public_keys()
+            .node_signing_public_key
+            .unwrap();
         nspk.key_value[0] ^= 0xff; // flip some bits
         nspk
     };

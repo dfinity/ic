@@ -478,21 +478,21 @@ impl CanisterThresholdSigTestEnvironment {
                 generate_tls_keys_and_certificate: false,
             })
             .build();
-        let node_keys = temp_crypto.node_public_keys();
+        let node_keys = temp_crypto.current_node_public_keys();
         self.crypto_components.insert(node_id, temp_crypto);
 
         self.registry_data
             .add(
                 &make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
                 registry_version,
-                node_keys.node_signing_pk,
+                node_keys.node_signing_public_key,
             )
             .expect("failed to add committee public key to registry");
         self.registry_data
             .add(
                 &make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning),
                 registry_version,
-                node_keys.committee_signing_pk,
+                node_keys.committee_signing_public_key,
             )
             .expect("failed to add committee public key to registry");
 
@@ -500,7 +500,7 @@ impl CanisterThresholdSigTestEnvironment {
             .add(
                 &make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
                 registry_version,
-                node_keys.idkg_dealing_encryption_pk,
+                node_keys.idkg_dealing_encryption_public_key,
             )
             .expect("Could not add MEGa public key to registry");
     }

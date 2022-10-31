@@ -617,8 +617,8 @@ impl NiDkgTestEnvironment {
             .with_keys(NodeKeysToGenerate::only_dkg_dealing_encryption_key())
             .build();
         let dkg_dealing_encryption_pubkey = temp_crypto
-            .node_public_keys()
-            .dkg_dealing_encryption_pk
+            .current_node_public_keys()
+            .dkg_dealing_encryption_public_key
             .expect("missing dkg_dealing_encryption_pk");
         self.crypto_components.insert(node_id, temp_crypto);
 

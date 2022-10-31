@@ -4,6 +4,7 @@ use super::*;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_test_utils::assert_public_keys_eq;
 use ic_crypto_test_utils::empty_fake_registry;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces_registry::RegistryClient;
@@ -44,9 +45,9 @@ mod node_public_key_data {
                 get_node_keys_or_generate_if_missing(&config, None);
             let csp = csp_for_config(&config, None);
 
-            let csp_pks = csp.node_public_keys();
+            let csp_pks = csp.current_node_public_keys();
 
-            assert_eq!(generated_node_pks, csp_pks);
+            assert_public_keys_eq(&generated_node_pks, &csp_pks);
         })
     }
 }
@@ -56,7 +57,7 @@ fn should_have_the_csp_public_keys_that_were_previously_generated() {
     CryptoConfig::run_with_temp_config(|config| {
         let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
         let csp = csp_for_config(&config, None);
-        assert_eq!(node_pks, csp.node_public_keys());
+        assert_public_keys_eq(&node_pks, &csp.current_node_public_keys());
     })
 }
 
@@ -75,7 +76,7 @@ fn should_generate_all_keys_for_a_node_without_public_keys() {
         );
 
         let csp = csp_for_config(&config, None);
-        assert_eq!(node_pks, csp.node_public_keys());
+        assert_public_keys_eq(&node_pks, &csp.current_node_public_keys());
     })
 }
 
@@ -491,7 +492,15 @@ fn crypto_with_node_keys_generation(
         .with_node_id(node_id)
         .with_keys(selector)
         .build();
-    let node_public_keys = temp_crypto.node_public_keys();
+    let current_node_public_keys = temp_crypto.current_node_public_keys();
+    let node_public_keys = NodePublicKeys {
+        version: 1,
+        node_signing_pk: current_node_public_keys.node_signing_public_key,
+        committee_signing_pk: current_node_public_keys.committee_signing_public_key,
+        tls_certificate: current_node_public_keys.tls_certificate,
+        dkg_dealing_encryption_pk: current_node_public_keys.dkg_dealing_encryption_public_key,
+        idkg_dealing_encryption_pk: current_node_public_keys.idkg_dealing_encryption_public_key,
+    };
     (temp_crypto, node_public_keys)
 }
 

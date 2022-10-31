@@ -37,6 +37,7 @@ use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_protobuf::crypto::v1::NodePublicKeys;
+use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use rand::{CryptoRng, Rng};
@@ -301,8 +302,15 @@ impl Csp {
 }
 
 impl NodePublicKeyData for Csp {
-    fn node_public_keys(&self) -> NodePublicKeys {
-        self.public_key_data.node_public_keys.clone()
+    fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
+        let public_keys = self.public_key_data.node_public_keys.clone();
+        CurrentNodePublicKeys {
+            node_signing_public_key: public_keys.node_signing_pk,
+            committee_signing_public_key: public_keys.committee_signing_pk,
+            tls_certificate: public_keys.tls_certificate,
+            dkg_dealing_encryption_public_key: public_keys.dkg_dealing_encryption_pk,
+            idkg_dealing_encryption_public_key: public_keys.idkg_dealing_encryption_pk,
+        }
     }
 
     fn dkg_dealing_encryption_key_id(&self) -> KeyId {

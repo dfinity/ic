@@ -17,7 +17,6 @@ use ic_interfaces::crypto::{
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -34,8 +33,9 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 };
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
-    CombinedThresholdSig, CombinedThresholdSigOf, CryptoResult, IndividualMultiSig,
-    IndividualMultiSigOf, Signable, ThresholdSigShare, ThresholdSigShareOf, UserPublicKey,
+    CombinedThresholdSig, CombinedThresholdSigOf, CryptoResult, CurrentNodePublicKeys,
+    IndividualMultiSig, IndividualMultiSigOf, Signable, ThresholdSigShare, ThresholdSigShareOf,
+    UserPublicKey,
 };
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::*;
@@ -466,7 +466,7 @@ impl KeyManager for CryptoReturningOk {
 
     fn collect_and_store_key_count_metrics(&self, _registry_version: RegistryVersion) {}
 
-    fn node_public_keys(&self) -> NodePublicKeys {
+    fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
         unimplemented!()
     }
 

@@ -247,9 +247,9 @@ impl CryptoComponentFatClient<Csp> {
             Some(new_logger!(&logger)),
             Arc::clone(&metrics),
         );
-        let node_pks = csp.node_public_keys();
+        let node_pks = csp.current_node_public_keys();
         let node_signing_pk = node_pks
-            .node_signing_pk
+            .node_signing_public_key
             .as_ref()
             .expect("Missing node signing public key");
         let node_id = derive_node_id(node_signing_pk);

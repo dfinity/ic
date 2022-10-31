@@ -142,18 +142,20 @@ impl NodeRegistration {
     }
 
     fn assemble_add_node_message(&self) -> AddNodePayload {
-        let node_pub_keys = self.key_handler.node_public_keys();
+        let node_pub_keys = self.key_handler.current_node_public_keys();
 
         AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...
-            node_signing_pk: protobuf_to_vec(node_pub_keys.node_signing_pk.unwrap()),
-            committee_signing_pk: protobuf_to_vec(node_pub_keys.committee_signing_pk.unwrap()),
+            node_signing_pk: protobuf_to_vec(node_pub_keys.node_signing_public_key.unwrap()),
+            committee_signing_pk: protobuf_to_vec(
+                node_pub_keys.committee_signing_public_key.unwrap(),
+            ),
             ni_dkg_dealing_encryption_pk: protobuf_to_vec(
-                node_pub_keys.dkg_dealing_encryption_pk.unwrap(),
+                node_pub_keys.dkg_dealing_encryption_public_key.unwrap(),
             ),
             transport_tls_cert: protobuf_to_vec(node_pub_keys.tls_certificate.unwrap()),
             idkg_dealing_encryption_pk: node_pub_keys
-                .idkg_dealing_encryption_pk
+                .idkg_dealing_encryption_public_key
                 .map(protobuf_to_vec),
             xnet_endpoint: msg_routing_config_to_endpoint(
                 &self.log,
@@ -212,7 +214,11 @@ impl NodeRegistration {
         };
         let node_id = self.node_id;
 
-        let node_pub_key = if let Some(pk) = self.key_handler.node_public_keys().node_signing_pk {
+        let node_pub_key = if let Some(pk) = self
+            .key_handler
+            .current_node_public_keys()
+            .node_signing_public_key
+        {
             pk
         } else {
             warn!(self.log, "Missing node signing key.");

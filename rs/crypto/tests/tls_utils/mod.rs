@@ -23,7 +23,7 @@ pub fn temp_crypto_component_with_tls_keys(
         .with_remote_vault()
         .build();
     let tls_certificate = temp_crypto
-        .node_public_keys()
+        .current_node_public_keys()
         .tls_certificate
         .expect("missing tls_certificate");
     let tls_pubkey = TlsPublicKeyCert::new_from_der(tls_certificate.certificate_der)

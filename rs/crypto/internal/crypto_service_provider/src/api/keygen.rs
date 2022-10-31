@@ -1,8 +1,7 @@
 use super::super::types::{CspPop, CspPublicKey};
 use crate::key_id::KeyId;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
 use ic_types::NodeId;
 
 /// A trait that can be used to generate cryptographic key pairs
@@ -71,8 +70,8 @@ pub trait CspSecretKeyStoreChecker {
 /// A trait that exposes the information about node public keys and key
 /// identifiers.
 pub trait NodePublicKeyData {
-    /// Returns the public keys of this node.
-    fn node_public_keys(&self) -> NodePublicKeys;
+    /// Returns the node's current public keys.
+    fn current_node_public_keys(&self) -> CurrentNodePublicKeys;
     /// Returns the id of the dkg dealing encryption key.
     fn dkg_dealing_encryption_key_id(&self) -> KeyId;
 }
