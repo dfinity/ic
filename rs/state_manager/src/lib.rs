@@ -105,6 +105,7 @@ pub struct StateManagerMetrics {
     checkpoints_on_disk_count: IntGauge,
     state_sync_metrics: StateSyncMetrics,
     state_size: IntGauge,
+    states_metadata_pbuf_size: IntGauge,
     checkpoint_metrics: CheckpointMetrics,
     manifest_metrics: ManifestMetrics,
 }
@@ -248,6 +249,11 @@ impl StateManagerMetrics {
             "Total size of the state on disk in bytes.",
         );
 
+        let states_metadata_pbuf_size = metrics_registry.int_gauge(
+            "state_manager_states_metadata_pbuf_size_bytes",
+            "Size of states_metadata.pbuf in bytes.",
+        );
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -261,6 +267,7 @@ impl StateManagerMetrics {
             checkpoints_on_disk_count,
             state_sync_metrics: StateSyncMetrics::new(metrics_registry),
             state_size,
+            states_metadata_pbuf_size,
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
         }
@@ -1207,6 +1214,7 @@ fn persist_metadata_or_die(
         pb_meta.encode(&mut buf).unwrap_or_else(|e| {
             fatal!(log, "Failed to encode states metadata to protobuf: {}", e);
         });
+        metrics.states_metadata_pbuf_size.set(buf.len() as i64);
         w.write_all(&buf[..])
     })
     .unwrap_or_else(|err| {
