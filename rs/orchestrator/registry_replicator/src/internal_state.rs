@@ -31,6 +31,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
 
+const MAX_CONSECUTIVE_FAILURES: i64 = 3;
+
 /// The `InternalState` encompasses a locally persisted registry changelog which
 /// is kept up to date by repeated calls to [`Self::poll()`]. If this node is
 /// part of a subnet that is starting up as the NNS after a switch-over, the
@@ -53,7 +55,9 @@ pub(crate) struct InternalState {
     nns_pub_key: Option<ThresholdSigPublicKey>,
     nns_urls: Vec<Url>,
     registry_canister: Option<Arc<RegistryCanister>>,
+    registry_canister_fallback: Option<Arc<RegistryCanister>>,
     poll_delay: Duration,
+    failed_poll_count: i64,
 }
 
 impl InternalState {
@@ -62,9 +66,18 @@ impl InternalState {
         node_id: Option<NodeId>,
         registry_client: Arc<dyn RegistryClient>,
         local_store: Arc<dyn LocalStore>,
+        config_urls: Vec<Url>,
         poll_delay: Duration,
     ) -> Self {
         let last_certified_time = local_store.read_certified_time();
+        let registry_canister_fallback = if !config_urls.is_empty() {
+            Some(Arc::new(RegistryCanister::new_with_query_timeout(
+                config_urls,
+                poll_delay,
+            )))
+        } else {
+            None
+        };
         Self {
             logger,
             node_id,
@@ -75,7 +88,9 @@ impl InternalState {
             nns_pub_key: None,
             nns_urls: vec![],
             registry_canister: None,
+            registry_canister_fallback,
             poll_delay,
+            failed_poll_count: 0,
         }
     }
 
@@ -102,8 +117,22 @@ impl InternalState {
             }
         }
 
+        let registry_canister = if self.failed_poll_count >= MAX_CONSECUTIVE_FAILURES
+            && self.registry_canister_fallback.is_some()
+        {
+            info!(
+                self.logger,
+                "Polling NNS failed {} times consecutively, trying config urls once...",
+                self.failed_poll_count
+            );
+            self.failed_poll_count = -1;
+            self.registry_canister_fallback.as_ref()
+        } else {
+            self.registry_canister.as_ref()
+        };
+
         // Poll registry canister and apply changes to local changelog
-        if let Some(registry_canister_ref) = self.registry_canister.as_ref() {
+        if let Some(registry_canister_ref) = registry_canister {
             let registry_canister = Arc::clone(registry_canister_ref);
             let nns_pub_key = self
                 .nns_pub_key
@@ -113,8 +142,12 @@ impl InternalState {
                 .get_certified_changes_since(latest_version.get(), &nns_pub_key)
                 .await
             {
-                Ok((records, _, t)) => (records, t),
+                Ok((records, _, t)) => {
+                    self.failed_poll_count = 0;
+                    (records, t)
+                }
                 Err(e) => {
+                    self.failed_poll_count += 1;
                     return Err(format!(
                         "Error when trying to fetch updates from NNS: {:?}",
                         e

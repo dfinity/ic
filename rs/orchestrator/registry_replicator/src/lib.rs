@@ -299,13 +299,15 @@ impl RegistryReplicator {
 
         // Initialize the registry local store. Will not return if the nns is not
         // reachable.
-        self.initialize_local_store(nns_urls, nns_pub_key).await;
+        self.initialize_local_store(nns_urls.clone(), nns_pub_key)
+            .await;
 
         let mut internal_state = InternalState::new(
             self.logger.clone(),
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
+            nns_urls,
             self.poll_delay,
         );
 
