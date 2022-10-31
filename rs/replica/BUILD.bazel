@@ -15,7 +15,7 @@ DEPENDENCIES = [
     "//rs/crypto/utils/threshold_sig",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
-    "//rs/http_handler",
+    "//rs/http_endpoints/public",
     "//rs/interfaces",
     "//rs/interfaces/bitcoin_adapter_client",
     "//rs/interfaces/p2p",

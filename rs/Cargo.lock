@@ -5794,7 +5794,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-http-handler"
+name = "ic-http-endpoints-public"
 version = "0.8.0"
 dependencies = [
  "askama",
@@ -7395,7 +7395,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-error-types",
  "ic-execution-environment",
- "ic-http-handler",
+ "ic-http-endpoints-public",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",

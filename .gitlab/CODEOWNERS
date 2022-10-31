@@ -101,7 +101,7 @@
 /rs/execution_environment/              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/gitlab-ci-config.yml                @dfinity-lab/teams/idx
 /rs/guestos_vsock_agent/                @dfinity-lab/teams/node-team
-/rs/http_handler/                       @dfinity-lab/teams/networking-team
+/rs/http_endpoints/                     @dfinity-lab/teams/networking-team
 /rs/ic_fondue/                          @dfinity-lab/teams/ic-testing-verification
 /rs/ic_p8s_service_discovery/           @dfinity-lab/teams/ic-testing-verification
 /rs/ingress_manager/                    @dfinity-lab/teams/consensus-owners

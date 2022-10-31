@@ -71,23 +71,23 @@ cargo_build_script(
 )
 
 rust_library(
-    name = "http_handler",
+    name = "public",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_features = select({
         "//bazel:malicious_code_enabled": ["malicious_code"],
         "//conditions:default": [],
     }),
-    crate_name = "ic_http_handler",
+    crate_name = "ic_http_endpoints_public",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
 rust_test(
-    name = "http_handler_test",
+    name = "public_test",
     aliases = ALIASES,
-    crate = ":http_handler",
+    crate = ":public",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )

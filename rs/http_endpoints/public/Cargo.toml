@@ -1,0 +1,56 @@
+[package]
+name = "ic-http-endpoints-public"
+version = "0.8.0"
+edition = "2021"
+
+[dependencies]
+askama = "0.11.1"
+byte-unit = "4.0.14"
+crossbeam = "0.8.2"
+hex = "0.4.2"
+http = "0.2.5"
+futures = "0.3.13"
+futures-util = "0.3.13"
+hyper = { version = "0.14.18", features = ["full"] }
+ic-async-utils = { path = "../../async_utils" }
+ic-certification = { path = "../../certification" }
+ic-config = { path = "../../config" }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+ic-error-types = { path = "../../types/error_types" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
+ic-interfaces-p2p = { path = "../../interfaces/p2p" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-pprof = { path = "../../monitoring/pprof" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-types = { path = "../../types/types" }
+ic-validator = { path = "../../validator" }
+prometheus = { version = "0.12.0", features = [ "process" ] }
+prost = "0.11.0"
+rand = "0.8.3"
+serde = "1.0.99"
+serde_cbor = "0.11.1"
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+strum = { version = "0.24", features = ["derive"] }
+tempfile = "3.1.0"
+threadpool = "1.8.1"
+tokio = { version = "1.15.0", features = [ "full" ] }
+tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
+url = "2.1.1"
+
+[dev-dependencies]
+bytes = "1.0.1"
+ic-test-utilities = { path = "../../test_utilities" }
+maplit = "1.0.2"
+pretty_assertions = "0.7.1"
+proptest = "1.0.0"
+
+[features]
+malicious_code = ["ic-validator/malicious_code"]
