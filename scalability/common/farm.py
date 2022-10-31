@@ -36,7 +36,7 @@ DISK_IMAGE_KIND = "disk-img-dev"
 #
 # Please also keep this in sync with the DEFAULT_PROMETHEUS_VM_IMG_SHA256 constant in:
 # rs/tests/src/driver/prometheus_vm.rs
-PROMETHEUS_VM_DISK_IMG_SHA256 = "6ee39a3f87bb08727b1c1cfb6082c4633a82810f3a335ba7771f7757da37daf8"
+PROMETHEUS_VM_DISK_IMG_SHA256 = "b95ce8a9730b13d86e41815e88d3b2aef291642dbf20fa4f77d4bbbee9a7c9d9"
 PROMETHEUS_VM_DISK_IMG_URL = (
     f"{DOWNLOAD_BASE_URL}/farm/prometheus-vm/{PROMETHEUS_VM_DISK_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst"
 )
@@ -331,6 +331,7 @@ class Farm(object):
         response.raise_for_status()
         print(f"Prometheus-vm's serial console at {self.prometheus_vm_url}/console")
         print(f"Prometheus Web UI at http://[{self.prometheus_ipv6}]:9090")
+        print(f"Grafana at http://[{self.prometheus_ipv6}]:3000")
 
     def download_prometheus_data_dir(self):
         destination = "prometheus_vm/prometheus-data-dir.tar.zst"
