@@ -250,6 +250,10 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/*
 
+COPY boot /boot
+# Update POSIX permissions in /boot/
+RUN chmod 0644 /boot/extra_boot_args
+
 # Take care of nginx files
 RUN chmod 0755 /etc/nginx/* && \
     chmod 0644 /etc/nginx/nginx.conf && \
