@@ -150,7 +150,6 @@ def remove_folders(folders: List[str]) -> None:
 def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: str, tmp_dir: str) -> Dict:
     env = os.environ.copy()
     env["TMPDIR"] = tmp_dir
-    env["IC_ROOT"] = ci_project_dir
     env["PATH"] = f"{artifact_dir}:" + env["PATH"]
     env["PATH"] = f"{ci_project_dir}/rs/tests:" + env["PATH"]
     if not is_local_run:
@@ -261,6 +260,55 @@ def get_external_ipv6_address():
         return None
 
 
+def list_files(root_path: str) -> None:
+    for root, _, files in os.walk(root_path):
+        level = root.replace(root_path, "").count(os.sep)
+        indent = " " * 4 * (level)
+        print("{}{}/".format(indent, os.path.basename(root)))
+        sub_indent = " " * 4 * (level + 1)
+        for f in files:
+            print("{}{}".format(sub_indent, f))
+
+
+def populate_dependencies_dir(
+    dependencies_dir: str,
+    ic_root_dir: str,
+    ic_os_img_url: str,
+    ic_os_img_sha256: str,
+    ic_os_update_img_url: str,
+    ic_os_update_img_sha256: str,
+    ic_version_id: str,
+) -> None:
+    # Start: create symlinks for scripts
+    scripts_rel_paths = [
+        "ic-os/guestos/scripts/build-bootstrap-config-image.sh",
+        "ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh",
+    ]
+
+    for src_rel_path in scripts_rel_paths:
+        src = os.path.join(ic_root_dir, src_rel_path)
+        dst = os.path.join(dependencies_dir, src_rel_path)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        os.symlink(src, dst)
+    # End: create symlinks for scripts
+
+    # Start: create files with content
+    files_with_content = [
+        ("ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.url", ic_os_img_url),
+        ("ic-os/guestos/dev/disk-img.tar.zst.sha256", ic_os_img_sha256),
+        ("ic-os/guestos/dev/upload_update-img_upgrade.tar.zst.url", ic_os_update_img_url),
+        ("ic-os/guestos/dev/upgrade.tar.zst.sha256", ic_os_update_img_sha256),
+        ("ic-os/guestos/dev/ic_version_id", ic_version_id),
+    ]
+
+    for (file_rel_path, content) in files_with_content:
+        dst = os.path.join(dependencies_dir, file_rel_path)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "w") as f:
+            f.write(content)
+    # End: create files with content
+
+
 def main(
     runner_args: List[str], working_dir: str, folders_to_remove: List[str], keep_tmp_artifacts_folder: bool
 ) -> int:
@@ -348,6 +396,19 @@ def main(
     IC_OS_UPD_DEV_IMG_SHA256, IC_OS_UPD_DEV_IMG_URL = get_ic_os_image_sha(
         f"{IMG_BASE_URL}/guest-os/update-img-dev/", filename="update-img.tar.zst"
     )
+    dependencies_dir = os.path.join(working_dir, "system_env/dependencies")
+    logging.info(f"Populating dependencies dir {dependencies_dir}")
+    populate_dependencies_dir(
+        dependencies_dir=dependencies_dir,
+        ic_root_dir=CI_PROJECT_DIR,
+        ic_os_img_url=IC_OS_DEV_IMG_URL,
+        ic_os_img_sha256=IC_OS_DEV_IMG_SHA256,
+        ic_os_update_img_url=IC_OS_UPD_DEV_IMG_URL,
+        ic_os_update_img_sha256=IC_OS_UPD_DEV_IMG_SHA256,
+        ic_version_id=IC_VERSION_ID,
+    )
+    logging.debug("dependencies dir has been populated with content:")
+    list_files(dependencies_dir)
 
     if SSH_KEY_DIR is None:
         logging.info("SSH_KEY_DIR variable is not set, generating keys.")

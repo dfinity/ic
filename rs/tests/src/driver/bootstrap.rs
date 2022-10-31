@@ -1,7 +1,6 @@
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
 use std::convert::Into;
-use std::env;
 use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
@@ -221,29 +220,15 @@ pub fn create_config_disk_image(
     group_name: &str,
 ) -> anyhow::Result<()> {
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-    let ci_project_dir: PathBuf = PathBuf::from(env::var("IC_ROOT").expect(
-        "Expected the IC_ROOT environment variable to be set to the root of the IC repository!",
-    ));
-
-    match std::env::var("IC_ROOT") {
-        Ok(val) => {
-            println!("IC_ROOT: {:?}", val);
-            val
-        }
-        Err(e) => {
-            bail!("couldn't interpret {}: {}", "IC_ROOT", e)
-        }
-    };
-
-    // TODO: the following script should be a Bazel dependency
-    let script_path = ci_project_dir.join("ic-os/guestos/scripts/build-bootstrap-config-image.sh");
+    let script_path = test_env
+        .base_path()
+        .join("dependencies/ic-os/guestos/scripts/build-bootstrap-config-image.sh");
     let tmp_out = Command::new("ls")
         .arg("-alh")
         .arg(script_path.clone())
         .output();
     println!("ls -alh {:?}: {:?}", script_path, tmp_out);
-    let mut cmd =
-        Command::new(ci_project_dir.join("ic-os/guestos/scripts/build-bootstrap-config-image.sh"));
+    let mut cmd = Command::new(script_path);
     let ic_setup = IcSetup::read_attribute(test_env);
     let journalbeat_hosts: Vec<String> = ic_setup.journalbeat_hosts;
 
