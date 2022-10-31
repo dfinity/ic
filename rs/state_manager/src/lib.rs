@@ -114,6 +114,7 @@ pub struct StateManagerMetrics {
 pub struct ManifestMetrics {
     chunk_bytes: IntCounterVec,
     reused_chunk_hash_error_count: IntCounter,
+    manifest_size: IntGauge,
 }
 
 #[derive(Clone)]
@@ -290,6 +291,11 @@ impl ManifestMetrics {
             chunk_bytes.with_label_values(&[*tp]);
         }
 
+        let manifest_size = metrics_registry.int_gauge(
+            "state_manager_manifest_state_size_bytes",
+            "Size of manifest in bytes.",
+        );
+
         Self {
             // Number of bytes that are either reused, hashed, or hashed and compared during the
             // manifest computation
@@ -298,6 +304,7 @@ impl ManifestMetrics {
             // one.
             reused_chunk_hash_error_count: metrics_registry
                 .error_counter(CRITICAL_ERROR_REUSED_CHUNK_HASH),
+            manifest_size,
         }
     }
 }
