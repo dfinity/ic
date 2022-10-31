@@ -186,6 +186,7 @@ impl HypervisorError {
                 let kind = match wasm_method {
                     WasmMethod::Update(_) => "update",
                     WasmMethod::Query(_) => "query",
+                    WasmMethod::CompositeQuery(_) => "composite_query",
                     WasmMethod::System(_) => "system",
                 };
 

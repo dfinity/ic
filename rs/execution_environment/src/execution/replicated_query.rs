@@ -22,6 +22,7 @@ use ic_types::methods::{FuncRef, WasmMethod};
 pub fn execute_replicated_query(
     mut canister: CanisterState,
     req: RequestOrIngress,
+    method: WasmMethod,
     execution_parameters: ExecutionParameters,
     time: Time,
     round: RoundContext,
@@ -56,7 +57,22 @@ pub fn execute_replicated_query(
         }
     };
 
-    let method = WasmMethod::Query(req.method_name().to_string());
+    if let WasmMethod::CompositeQuery(_) = &method {
+        round.cycles_account_manager.refund_unused_execution_cycles(
+            &mut canister.system_state,
+            instruction_limit,
+            instruction_limit,
+            prepaid_execution_cycles,
+            round.execution_refund_error_counter,
+            subnet_size,
+            round.log,
+        );
+        let user_error = UserError::new(
+            ErrorCode::CompositeQueryCalledInReplicatedMode,
+            "Composite query cannot be called in replicated mode",
+        );
+        return finish_call_with_error(user_error, canister, req, NumInstructions::from(0), time);
+    }
 
     if let Err(user_error) = validate_message(&canister, &method) {
         round.cycles_account_manager.refund_unused_execution_cycles(

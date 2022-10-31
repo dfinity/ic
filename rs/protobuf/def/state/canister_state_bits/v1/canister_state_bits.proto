@@ -97,6 +97,7 @@ message WasmMethod {
     string update = 1;
     string query = 2;
     SystemMethod system = 3;
+    string composite_query = 4;
   }
 }
 

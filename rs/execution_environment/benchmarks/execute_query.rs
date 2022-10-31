@@ -10,6 +10,7 @@ use ic_execution_environment::{
     NonReplicatedQueryKind, RoundLimits,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
+use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
 
 use lazy_static::lazy_static;
@@ -62,7 +63,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
             let instructions_before = round_limits.instructions;
             let (_, _, result) = execute_non_replicated_query(
                 NonReplicatedQueryKind::Pure { caller: sender },
-                "test",
+                WasmMethod::Query("test".to_string()),
                 &[],
                 canister_state,
                 Some(vec![0; 256]),

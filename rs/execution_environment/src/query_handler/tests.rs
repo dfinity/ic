@@ -558,3 +558,59 @@ fn queries_to_frozen_canisters_are_rejected() {
     );
     assert!(result.is_ok());
 }
+
+const COMPOSITE_QUERY_WAT: &str = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32) (param i32))
+            )
+            (func (export "canister_composite_query query")
+                (call $msg_reply_data_append (i32.const 0) (i32.const 5))
+                (call $msg_reply)
+            )
+            (memory 1 1)
+            (data (i32.const 0) "hello")
+        )"#;
+
+#[test]
+fn composite_query_works_in_non_replicated_mode() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister = test.canister_from_wat(COMPOSITE_QUERY_WAT).unwrap();
+
+    let result = test
+        .query(
+            UserQuery {
+                source: user_test_id(0),
+                receiver: canister,
+                method_name: "query".to_string(),
+                method_payload: vec![],
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply("hello".as_bytes().to_vec()));
+}
+
+#[test]
+fn composite_query_fails_in_replicated_mode() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister = test.canister_from_wat(COMPOSITE_QUERY_WAT).unwrap();
+
+    let balance_before = test.canister_state(canister).system_state.balance();
+    let err = test.ingress(canister, "query", vec![]).unwrap_err();
+    let balance_after = test.canister_state(canister).system_state.balance();
+    assert_eq!(err.code(), ErrorCode::CompositeQueryCalledInReplicatedMode);
+    assert_eq!(
+        err.description(),
+        "Composite query cannot be called in replicated mode"
+    );
+    // Verify that we consume some cycles.
+    assert!(balance_before > balance_after);
+}

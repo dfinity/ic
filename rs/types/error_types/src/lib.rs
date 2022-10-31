@@ -98,6 +98,7 @@ impl From<ErrorCode> for RejectCode {
             CanisterMemoryAccessLimitExceeded => CanisterError,
             QueryCallGraphTooDeep => CanisterError,
             QueryCallGraphTotalInstructionLimitExceeded => CanisterError,
+            CompositeQueryCalledInReplicatedMode => CanisterError,
         }
     }
 }
@@ -147,6 +148,7 @@ pub enum ErrorCode {
     CanisterMemoryAccessLimitExceeded = 524,
     QueryCallGraphTooDeep = 525,
     QueryCallGraphTotalInstructionLimitExceeded = 526,
+    CompositeQueryCalledInReplicatedMode = 527,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -190,6 +192,7 @@ impl TryFrom<u64> for ErrorCode {
             524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
             525 => Ok(ErrorCode::QueryCallGraphTooDeep),
             526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
+            527 => Ok(ErrorCode::CompositeQueryCalledInReplicatedMode),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
