@@ -774,25 +774,25 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         canister_http::http_fault_tolerance::test,
                     )]),
                 ),
-                pot_with_setup(
-                    "large_subnet_workload_pot",
-                    networking::subnet_update_workload::large_config,
-                    seq(vec![
-                        sys_t(
-                            "large_subnet_update_workload_test",
-                            networking::subnet_update_workload::large_subnet_test,
-                        ),
-                        sys_t(
-                            "large_subnet_query_workload_test",
-                            networking::subnet_query_workload::large_subnet_test,
-                        ),
-                    ]),
-                )
-                .with_default_vm_resources(Some(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(16)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(67108864)), // 64GiB
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })),
+                // pot_with_setup(
+                //     "large_subnet_workload_pot",
+                //     networking::subnet_update_workload::large_config,
+                //     seq(vec![
+                //         sys_t(
+                //             "large_subnet_update_workload_test",
+                //             networking::subnet_update_workload::large_subnet_test,
+                //         ),
+                //         sys_t(
+                //             "large_subnet_query_workload_test",
+                //             networking::subnet_query_workload::large_subnet_test,
+                //         ),
+                //     ]),
+                // )
+                // .with_default_vm_resources(Some(VmResources {
+                //     vcpus: Some(NrOfVCPUs::new(16)),
+                //     memory_kibibytes: Some(AmountOfMemoryKiB::new(67108864)), // 64GiB
+                //     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+                // })),
                 //.with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
             ],
         )
