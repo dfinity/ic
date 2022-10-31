@@ -102,7 +102,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::{malicious_flags::MaliciousFlags, NodeId, SubnetId};
+use ic_types::{NodeId, SubnetId};
 use serde::{Deserialize, Serialize};
 use std::{
     error,
@@ -117,7 +117,6 @@ mod download_prioritization;
 mod event_handler;
 mod gossip_protocol;
 mod gossip_types;
-mod malicious_gossip;
 mod metrics;
 mod peer_context;
 
@@ -164,7 +163,6 @@ pub fn start_p2p(
     transport: Arc<dyn Transport>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
-    malicious_flags: MaliciousFlags,
     advert_broadcaster: &AdvertBroadcaster,
 ) -> P2PThreadJoiner {
     let p2p_transport_channels = vec![TransportChannelId::from(transport_config.legacy_flow_tag)];
@@ -178,7 +176,6 @@ pub fn start_p2p(
         p2p_transport_channels,
         log.clone(),
         &metrics_registry,
-        malicious_flags,
     ));
 
     let event_handler = event_handler::AsyncTransportEventHandlerImpl::new(

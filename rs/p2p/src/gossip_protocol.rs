@@ -57,7 +57,6 @@ use crate::{
     gossip_types::{GossipChunk, GossipChunkRequest},
     metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics, GossipMetrics},
     peer_context::PeerContextMap,
-    use_gossip_malicious_behavior_on_chunk_request,
     utils::TransportChannelIdMapper,
     P2PError, P2PErrorCode, P2PResult,
 };
@@ -65,15 +64,11 @@ use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
-use ic_logger::{info, replica_logger::ReplicaLogger, warn};
+use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_types::{
-    artifact::ArtifactFilter,
-    chunkable::{ArtifactChunk, ArtifactChunkData},
-    crypto::CryptoHash,
-    malicious_flags::MaliciousFlags,
-    p2p::GossipAdvert,
+    artifact::ArtifactFilter, chunkable::ArtifactChunk, crypto::CryptoHash, p2p::GossipAdvert,
     NodeId, SubnetId,
 };
 use lru::LruCache;
@@ -172,8 +167,6 @@ pub(crate) struct GossipImpl {
     pub log: ReplicaLogger,
     /// The *Gossip* metrics.
     pub gossip_metrics: GossipMetrics,
-    /// Flags for malicious behavior used in testing.
-    pub malicious_flags: MaliciousFlags,
 
     /// The node ID of the peer.
     pub node_id: NodeId,
@@ -225,7 +218,6 @@ impl GossipImpl {
         transport_channels: Vec<TransportChannelId>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
-        malicious_flags: MaliciousFlags,
     ) -> Self {
         let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
             artifact_manager.as_ref(),
@@ -233,7 +225,6 @@ impl GossipImpl {
         ));
         let gossip_config = crate::fetch_gossip_config(registry_client.clone(), subnet_id);
         let gossip = GossipImpl {
-            malicious_flags,
             artifact_manager,
             log: log.clone(),
             gossip_metrics: GossipMetrics::new(metrics_registry),
@@ -275,58 +266,6 @@ impl GossipImpl {
                     p2p_error_code: P2PErrorCode::NotFound,
                 }
             })
-    }
-
-    /// The method reacts in a malicious way when receiving a chunk
-    /// request from a certain peer.
-    ///
-    /// The malicious flags define the actual behavior, which may
-    /// either drop the request, respond that the artifact could not
-    /// be found, sending too many artifacts back, or sending invalid
-    /// artifacts.
-    fn malicious_behavior_on_chunk_request(&self, gossip_chunk: GossipChunk, node_id: NodeId) {
-        if self.malicious_flags.maliciously_gossip_drop_requests {
-            warn!(self.log, "Malicious behavior: dropping requests");
-        } else if self.malicious_flags.maliciously_gossip_artifact_not_found {
-            warn!(self.log, "Malicious behavior: artifact not found");
-            let chunk_not_found = GossipChunk {
-                artifact_id: gossip_chunk.artifact_id,
-                integrity_hash: gossip_chunk.integrity_hash,
-                chunk_id: gossip_chunk.chunk_id,
-                artifact_chunk: Err(P2PError {
-                    p2p_error_code: P2PErrorCode::NotFound,
-                }),
-            };
-            self.send_chunk_to_peer(chunk_not_found, node_id);
-        } else if self.malicious_flags.maliciously_gossip_send_many_artifacts {
-            warn!(self.log, "Malicious behavior: sending too many artifacts");
-            for _n in 1..10000 {
-                self.send_chunk_to_peer(gossip_chunk.clone(), node_id);
-            }
-        } else if self
-            .malicious_flags
-            .maliciously_gossip_send_invalid_artifacts
-        {
-            warn!(self.log, "Malicious behavior: sending invalid artifacts");
-            let artifact_id = gossip_chunk.artifact_id;
-            let integrity_hash = gossip_chunk.integrity_hash;
-            let chunk_id = gossip_chunk.chunk_id;
-            let artifact_chunk_data = ArtifactChunkData::SemiStructuredChunkData([].to_vec());
-            let artifact_chunk = Ok(ArtifactChunk {
-                chunk_id,
-                witness: Default::default(),
-                artifact_chunk_data,
-            });
-            let invalid_chunk = GossipChunk {
-                artifact_id,
-                integrity_hash,
-                chunk_id,
-                artifact_chunk,
-            };
-            self.send_chunk_to_peer(invalid_chunk, node_id);
-        } else {
-            warn!(self.log, "Malicious behavior: This should never happen!");
-        }
     }
 }
 
@@ -374,13 +313,7 @@ impl Gossip for GossipImpl {
             chunk_id: gossip_request.chunk_id,
             artifact_chunk,
         };
-        use_gossip_malicious_behavior_on_chunk_request!(
-            self,
-            self.malicious_behavior_on_chunk_request(gossip_chunk, node_id),
-            {
-                self.send_chunk_to_peer(gossip_chunk, node_id);
-            }
-        );
+        self.send_chunk_to_peer(gossip_chunk, node_id);
     }
 
     /// The method adds the given chunk to the corresponding artifact

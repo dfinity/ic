@@ -49,6 +49,3 @@ ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 mockall = "0.7.2"
 tempfile = "3.1.0"
-
-[features]
-malicious_code = ["ic-artifact-manager/malicious_code"]

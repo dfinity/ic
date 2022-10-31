@@ -1259,7 +1259,6 @@ pub mod tests {
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         {CryptoHash, CryptoHashOf},
     };
-    use ic_types::malicious_flags::MaliciousFlags;
     use ic_types::signature::BasicSignature;
     use ic_types::SubnetId;
     use ic_types::{
@@ -1449,7 +1448,6 @@ pub mod tests {
             transport_channels,
             log,
             &metrics_registry,
-            MaliciousFlags::default(),
         )
     }
 
