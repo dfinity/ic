@@ -830,13 +830,13 @@ struct ProposeToBlessReplicaVersionCmd {
     /// of upgrading individual subnets.
     pub replica_version_id: String,
 
-    /// The URLs against which an HTTP GET request will return a release
-    /// package that corresponds to this version.
-    pub release_package_urls: Vec<String>,
-
     /// The hex-formatted SHA-256 hash of the archive served by
     /// 'release_package_urls'.
     release_package_sha256_hex: String,
+
+    /// The URLs against which an HTTP GET request will return a release
+    /// package that corresponds to this version.
+    pub release_package_urls: Vec<String>,
 }
 
 #[async_trait]
@@ -849,20 +849,17 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
     }
 
     async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
-        let release_package_url = self
-            .release_package_urls
-            .first()
-            .expect("At least one release package url is required")
-            .clone();
-
         BlessReplicaVersionPayload {
             replica_version_id: self.replica_version_id.clone(),
             binary_url: "".into(),
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
-            // OR-253 should stop setting 'release_package_url'.
-            release_package_url,
+            release_package_url: self
+                .release_package_urls
+                .get(0)
+                .expect("Release package url is required")
+                .clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: Some(self.release_package_urls.clone()),
         }
@@ -882,12 +879,12 @@ struct ProposeToBlessReplicaVersionFlexibleCmd {
     /// The URL against which a HTTP GET request will return a release
     /// package that corresponds to this version. If set,
     /// {replica, orchestrator}_{url, sha256_hex} will be ignored
-    pub release_package_urls: Vec<String>,
+    pub release_package_url: Option<String>,
 
     /// The hex-formatted SHA-256 hash of the archive served by
     /// 'release_package_url'. Must be present if release_package_url is
     /// present.
-    release_package_sha256_hex: String,
+    release_package_sha256_hex: Option<String>,
 }
 
 #[async_trait]
@@ -903,10 +900,9 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
 
     async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
         let release_package_url = self
-            .release_package_urls
-            .first()
-            .expect("At least one release package url is required")
-            .clone();
+            .release_package_url
+            .clone()
+            .expect("Release package url is required");
 
         BlessReplicaVersionPayload {
             replica_version_id: self.replica_version_id.clone(),
@@ -914,10 +910,12 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
-            // OR-253 should stop setting 'release_package_url'.
-            release_package_url,
-            release_package_sha256_hex: self.release_package_sha256_hex.clone(),
-            release_package_urls: Some(self.release_package_urls.clone()),
+            release_package_url: release_package_url.clone(),
+            release_package_sha256_hex: self
+                .release_package_sha256_hex
+                .clone()
+                .expect("Release package sha256 is required"),
+            release_package_urls: Some(vec![release_package_url]),
         }
     }
 }
