@@ -31,7 +31,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// Please also keep this in sync with the PROMETHEUS_VM_DISK_IMG_SHA256 variable in:
 /// /scalability/common/farm.py.
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "b95ce8a9730b13d86e41815e88d3b2aef291642dbf20fa4f77d4bbbee9a7c9d9";
+    "209b6e695adcea30edf70910abfd5f93d4462ca1eaa91774c8bd1c7f02f07e4d";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
@@ -171,9 +171,15 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
 
         // First create a tarball of the p8s data directory.
         let tarball_full_path = PathBuf::from("/home").join(ADMIN).join(tarball);
+        // Note that p8s is configured with --enable-feature=memory-snapshot-on-shutdown.
+        // This causes p8s to snapshot its memory to its data directory on shutdown.
+        // This means we can remove most of the contents of the wal directory
+        // from the tarball saving significant space.
         let create_tarball_script = &format!(
             r#"
     sudo systemctl stop prometheus.service &&
+    sudo rm -rf /var/lib/prometheus/wal/* &&
+    sudo touch /var/lib/prometheus/wal/00000000 &&
     sudo tar -cf "{tarball_full_path:?}" \
         --sparse \
         --use-compress-program="zstd --threads=0 -10" \

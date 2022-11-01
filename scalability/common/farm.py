@@ -36,7 +36,7 @@ DISK_IMAGE_KIND = "disk-img-dev"
 #
 # Please also keep this in sync with the DEFAULT_PROMETHEUS_VM_IMG_SHA256 constant in:
 # rs/tests/src/driver/prometheus_vm.rs
-PROMETHEUS_VM_DISK_IMG_SHA256 = "b95ce8a9730b13d86e41815e88d3b2aef291642dbf20fa4f77d4bbbee9a7c9d9"
+PROMETHEUS_VM_DISK_IMG_SHA256 = "209b6e695adcea30edf70910abfd5f93d4462ca1eaa91774c8bd1c7f02f07e4d"
 PROMETHEUS_VM_DISK_IMG_URL = (
     f"{DOWNLOAD_BASE_URL}/farm/prometheus-vm/{PROMETHEUS_VM_DISK_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst"
 )
@@ -345,9 +345,15 @@ class Farm(object):
             )
             channel = ssh_client.get_transport().open_session()
             tarball = "/home/admin/prometheus-data-dir.tar.zst"
+            # Note that p8s is configured with --enable-feature=memory-snapshot-on-shutdown.
+            # This causes p8s to snapshot its memory to its data directory on shutdown.
+            # This means we can remove most of the contents of the wal directory
+            # from the tarball saving significant space.
             channel.exec_command(
                 f"""
                     sudo systemctl stop prometheus.service &&
+                    sudo rm -rf /var/lib/prometheus/wal/* &&
+                    sudo touch /var/lib/prometheus/wal/00000000 &&
                     sudo tar -cf "{tarball}" \
                         --sparse \
                         --use-compress-program="zstd --threads=0 -10" \
