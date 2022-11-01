@@ -140,7 +140,6 @@ fn spawn_write_task(
         let _ = &data_plane_metrics;
         let _raii_gauge = IntGaugeResource::new(data_plane_metrics.write_tasks.clone());
         loop {
-            let loop_start_time = Instant::now();
             // If the TransportImpl has been deleted, abort.
             let arc_self = match weak_self.upgrade() {
                 Some(arc_self) => arc_self,
@@ -168,7 +167,7 @@ fn spawn_write_task(
                 arc_self
                     .data_plane_metrics
                     .heart_beats_sent
-                    .with_label_values(&[&channel_id_str])
+                    .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
                     .inc();
             } else {
                 for payload in dequeued {
@@ -180,12 +179,6 @@ fn spawn_write_task(
                     payload_data_vec.push(payload_data);
                 }
             }
-            arc_self
-                .data_plane_metrics
-                .send_message_overhead_duration
-                .with_label_values(&[&channel_id_str])
-                .observe(loop_start_time.elapsed().as_secs() as f64);
-
             // Send the payload
             let start_time = Instant::now();
 
@@ -204,12 +197,12 @@ fn spawn_write_task(
             arc_self
                 .data_plane_metrics
                 .send_message_duration
-                .with_label_values(&[&channel_id_str])
+                .with_label_values(&[&channel_id_str,  arc_self.transport_api_label()])
                 .observe(start_time.elapsed().as_secs() as f64);
             arc_self
                 .data_plane_metrics
                 .write_bytes_total
-                .with_label_values(&[&channel_id_str])
+                .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
                 .inc_by(total_msg_length as u64);
         }
     })
@@ -300,7 +293,7 @@ fn spawn_read_task(
 
                     arc_self.data_plane_metrics
                         .message_read_errors_total
-                        .with_label_values(&[&channel_id_str, err.into()])
+                        .with_label_values(&[&channel_id_str, err.into(), arc_self.transport_api_label()])
                         .inc();
                     arc_self.on_disconnect(peer_id, channel_id).await;
                     return;
@@ -310,7 +303,7 @@ fn spawn_read_task(
                         // It's an empty heartbeat message -- do nothing
                         arc_self.data_plane_metrics
                             .heart_beats_received
-                            .with_label_values(&[&channel_id_str])
+                            .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
                             .inc();
                         continue;
                     }
@@ -320,11 +313,11 @@ fn spawn_read_task(
                     // shutdowns.
                     arc_self.data_plane_metrics
                         .read_bytes_total
-                        .with_label_values(&[&channel_id_str])
+                        .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
                         .inc_by(payload.0.len() as u64);
                     let _callback_start_time = arc_self.data_plane_metrics
                         .event_handler_message_duration
-                        .with_label_values(&[&channel_id_str]).start_timer();
+                        .with_label_values(&[&channel_id_str, arc_self.transport_api_label()]).start_timer();
                     event_handler
                         .call(TransportEvent::Message(TransportMessage {
                             peer_id,
