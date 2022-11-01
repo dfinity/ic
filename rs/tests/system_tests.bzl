@@ -30,7 +30,7 @@ def _run_system_test(ctx):
         runtime_deps.append(target.files)
         if env_var != "" and has_single_file(target):
             file = target[DefaultInfo].files.to_list()[0]
-            runtime_env[env_var] = "dependencies/" + file.short_path
+            runtime_env[env_var] = "root_env/dependencies/" + file.short_path
 
     return [
         DefaultInfo(
