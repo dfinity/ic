@@ -6,9 +6,15 @@ use serde_bytes::ByteBuf;
 
 pub use ic_btc_types::{OutPoint, Satoshi};
 
-// The current Bitcoin transaction encoding version.
-// https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291
+/// The current Bitcoin transaction encoding version.
+/// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
 pub const TX_VERSION: u32 = 2;
+
+/// The length of the transaction signature.
+pub const SIGNATURE_LEN: usize = 72;
+
+/// The length of the public key.
+pub const PUBKEY_LEN: usize = 32;
 
 // The marker indicating the segregated witness encoding.
 const MARKER: u8 = 0;
@@ -112,7 +118,11 @@ pub fn write_compact_size(n: usize, buf: &mut impl Buffer) {
 pub struct SignedInput {
     pub previous_output: OutPoint,
     pub sequence: u32,
+    // DER-encoded ECDSA signature of the txid.
+    // Must be SIGNATURE_LEN bytes long.
     pub signature: ByteBuf,
+    // The public key bytes.
+    // Must be PUBKEY_LEN bytes long.
     pub pubkey: ByteBuf,
 }
 
@@ -122,16 +132,19 @@ pub struct UnsignedInput {
     pub sequence: u32,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxOut {
     pub value: Satoshi,
     pub pubkey: Vec<u8>,
 }
 
+/// REQUIRES: pk.len() == PUBKEY_LEN
 pub fn script_from_pubkey(pk: &[u8]) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(34);
+    assert!(pk.len() == PUBKEY_LEN);
+
+    let mut buf = Vec::with_capacity(PUBKEY_LEN + 2);
     buf.push(0);
-    buf.push(32);
+    buf.push(PUBKEY_LEN as u8);
     buf.extend(pk);
     buf
 }
@@ -239,7 +252,7 @@ impl Encode for TxOut {
     fn encode(&self, buf: &mut impl Buffer) {
         self.value.encode(buf);
         // Encode the scriptPubkey.
-        buf.write(&[34, 0, 32]);
+        buf.write(&[34, 0, PUBKEY_LEN as u8]);
         buf.write(&self.pubkey);
     }
 }
