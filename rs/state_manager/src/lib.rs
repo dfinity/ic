@@ -42,7 +42,7 @@ use ic_types::{
     consensus::certification::Certification,
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
-    state_sync::Manifest,
+    state_sync::{FileGroupChunks, Manifest},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
@@ -408,6 +408,8 @@ struct StateMetadata {
     // None before the values are computed.
     root_hash: Option<CryptoHashOfState>,
     manifest: Option<Manifest>,
+    // The field is set as `None` until we serve a state sync for the first time.
+    state_sync_file_group: Option<Arc<FileGroupChunks>>,
 }
 
 impl From<&StateMetadata> for pb::StateMetadata {
@@ -433,6 +435,7 @@ impl TryFrom<pb::StateMetadata> for StateMetadata {
                     checkpoint_ref: None,
                     manifest: Some(manifest),
                     root_hash: Some(root_hash),
+                    state_sync_file_group: None,
                 })
             }
         }
@@ -1865,6 +1868,7 @@ impl StateManagerImpl {
                     checkpoint_ref: Some(checkpoint_ref.clone()),
                     manifest,
                     root_hash,
+                    state_sync_file_group: None,
                 },
             );
         } else {
@@ -1879,6 +1883,7 @@ impl StateManagerImpl {
                     checkpoint_ref: Some(checkpoint_ref.clone()),
                     manifest: None,
                     root_hash: None,
+                    state_sync_file_group: None,
                 },
             );
         }
@@ -2078,6 +2083,7 @@ impl StateManagerImpl {
                 manifest: Some(manifest),
                 checkpoint_ref: Some(self.new_checkpoint_ref(height)),
                 root_hash: Some(root_hash),
+                state_sync_file_group: None,
             },
         );
 
@@ -2974,6 +2980,7 @@ impl StateManager for StateManagerImpl {
                             checkpoint_ref: Some(checkpoint_ref.clone()),
                             manifest: None,
                             root_hash: None,
+                            state_sync_file_group: None,
                         },
                     );
 

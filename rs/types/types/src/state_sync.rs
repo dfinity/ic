@@ -66,12 +66,27 @@ pub mod proto;
 
 use crate::chunkable::ChunkId;
 use ic_protobuf::state::sync::v1 as pb;
-use std::fmt;
-use std::ops::{Deref, Range};
-use std::sync::Arc;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::BTreeMap,
+    fmt,
+    ops::{Deref, Range},
+    sync::Arc,
+};
 
 /// Id of the manifest chunk in StateSync artifact.
 pub const MANIFEST_CHUNK: ChunkId = ChunkId::new(0);
+
+/// Some small files are grouped into chunks during state sync and
+/// they need to use a separate range of chunk id to avoid conflicts with normal chunks.
+//
+// The value of `FILE_GROUP_CHUNK_ID_OFFSET` is set as 1 << 30 (1_073_741_824).
+// It is within the whole chunk id range and also large enough to avoid conflicts as shown in the calculations below.
+// Every subnet starts off with an allocation of 1 << 20 canister IDs. Suppose a subnet ends up with 10 * 1 << 20 canisters and 100 TiB state.
+// Given that each canister has fewer than 10 files in a checkpoint and 1 TiB of state has approximately 1 << 20 chunks,
+// the length of chunk table will be smaller than 10 * 10 * 1 << 20 + 100 * 1 << 20 = 209_715_200.
+// The real number of canisters and size of state are not even close to the assumption so the value of `FILE_GROUP_CHUNK_ID_OFFSET` is chosen safely.
+pub const FILE_GROUP_CHUNK_ID_OFFSET: u32 = 1 << 30;
 
 /// An entry of the file table.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -260,4 +275,36 @@ pub fn decode_manifest(bytes: &[u8]) -> Result<Manifest, String> {
     pb_manifest
         .try_into()
         .map_err(|err| format!("failed to convert Manifest proto into an object: {}", err))
+}
+
+type P2PChunkId = u32;
+type ManifestChunkTableIndex = u32;
+
+/// A chunk id from the P2P level is mapped to a group of indices from the manifest chunk table.
+/// `FileGroupChunks` stores the mapping and can be used to assemble or split the file group chunk.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileGroupChunks(BTreeMap<P2PChunkId, Vec<ManifestChunkTableIndex>>);
+
+impl FileGroupChunks {
+    pub fn new(value: BTreeMap<P2PChunkId, Vec<ManifestChunkTableIndex>>) -> Self {
+        FileGroupChunks(value)
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &ManifestChunkTableIndex> {
+        self.0.keys()
+    }
+
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&ManifestChunkTableIndex, &Vec<ManifestChunkTableIndex>)> {
+        self.0.iter()
+    }
+
+    pub fn get(&self, chunk_id: &P2PChunkId) -> Option<&Vec<ManifestChunkTableIndex>> {
+        self.0.get(chunk_id)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }

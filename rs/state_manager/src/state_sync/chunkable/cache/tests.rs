@@ -41,6 +41,7 @@ fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>) {
     let fetch_chunks: HashSet<usize> = maplit::hashset! { (seed + 1) as usize };
     let state = DownloadState::Loading {
         manifest: manifest.clone(),
+        state_sync_file_group: Default::default(),
         fetch_chunks: fetch_chunks.clone(),
     };
     (state, manifest, fetch_chunks)
@@ -54,6 +55,7 @@ fn fake_complete() -> DownloadState {
         root_hash: CryptoHashOfState::from(CryptoHash(vec![0; 32])),
         checkpoint_root: PathBuf::new(),
         manifest,
+        state_sync_file_group: Default::default(),
     });
     DownloadState::Complete(Box::new(artifact))
 }
@@ -90,6 +92,7 @@ fn incomplete_state_for_tests(
     // contained in manifest
     if let DownloadState::Loading {
         ref manifest,
+        state_sync_file_group: _,
         fetch_chunks: _,
     } = &result.state
     {

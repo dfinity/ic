@@ -343,6 +343,31 @@ pub fn insert_dummy_canister(state: &mut ReplicatedState, canister_id: CanisterI
     state.put_canister_state(canister_state);
 }
 
+pub fn insert_canister_with_many_controllers(
+    state: &mut ReplicatedState,
+    canister_id: CanisterId,
+    num_controllers: u64,
+) {
+    let wasm = empty_wasm();
+    let mut canister_state = new_canister_state(
+        canister_id,
+        user_test_id(24).get(),
+        INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+
+    let mut controllers = std::mem::take(&mut canister_state.system_state.controllers);
+    for i in 25..(24 + num_controllers) {
+        controllers.insert(user_test_id(i).get());
+    }
+    canister_state.system_state.controllers = controllers;
+
+    let mut execution_state = initial_execution_state();
+    execution_state.wasm_binary = WasmBinary::new(wasm);
+    canister_state.execution_state = Some(execution_state);
+    state.put_canister_state(canister_state);
+}
+
 pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
     let wasm = alternate_wasm();
 

@@ -1,5 +1,5 @@
 use crate::{
-    manifest::{filter_out_zero_chunks, DiffScript},
+    manifest::{build_file_group_chunks, filter_out_zero_chunks, DiffScript},
     CheckpointRef, StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
     LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
@@ -16,7 +16,9 @@ use ic_types::{
         ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
         ChunkId, Chunkable,
     },
-    state_sync::{decode_manifest, Manifest, MANIFEST_CHUNK},
+    state_sync::{
+        decode_manifest, FileGroupChunks, Manifest, FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK,
+    },
     CryptoHashOfState, Height,
 };
 use std::os::unix::fs::FileExt;
@@ -42,6 +44,7 @@ enum DownloadState {
     Loading {
         /// The received manifest
         manifest: Manifest,
+        state_sync_file_group: FileGroupChunks,
         /// Set of chunks that still need to be fetched. For the purpose of this
         /// set chunk 0 is the manifest. To get indices into the manifests's
         /// chunk table subtract 1.
@@ -97,6 +100,7 @@ impl Drop for IncompleteState {
             }
             DownloadState::Loading {
                 manifest: _,
+                state_sync_file_group: _,
                 fetch_chunks: _,
             } => {
                 self.metrics
@@ -112,6 +116,7 @@ impl Drop for IncompleteState {
 
         if let DownloadState::Loading {
             manifest: _,
+            state_sync_file_group: _,
             ref fetch_chunks,
         } = self.state
         {
@@ -256,6 +261,15 @@ impl IncompleteState {
                         *new_index,
                     );
 
+                    let original_perms = std::fs::metadata(&dst_path).unwrap_or_else(|err| {
+                        fatal!(
+                            log,
+                            "Failed to get metadata of file {}: {}",
+                            dst_path.display(),
+                            err
+                        )
+                    })
+                        .permissions();
                     if validate_data || ALWAYS_VALIDATE {
 
                         let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
@@ -465,6 +479,14 @@ impl IncompleteState {
                             .remaining
                             .sub(new_chunk_range.len() as i64);
                     }
+                    std::fs::set_permissions(&dst_path, original_perms).unwrap_or_else(|err| {
+                        fatal!(
+                            log,
+                            "failed to set permissions for file {}: {}",
+                            dst_path.display(),
+                            err
+                        )
+                    });
                 });
             }
         });
@@ -721,6 +743,9 @@ impl IncompleteState {
                 .raw_path()
                 .to_path_buf(),
             manifest: manifest.clone(),
+            // `state_sync_file_group` and `checkpoint_root` are not included in the integrity hash of this artifact.
+            // Therefore it is OK to pass a default value here as it is only used when fetching chunks.
+            state_sync_file_group: Default::default(),
         })
     }
 
@@ -1079,6 +1104,7 @@ impl Chunkable for IncompleteState {
             DownloadState::Complete(_) => Box::new(std::iter::empty()),
             DownloadState::Loading {
                 manifest: _,
+                state_sync_file_group: _,
                 ref fetch_chunks,
             } => {
                 #[allow(clippy::needless_collect)]
@@ -1138,7 +1164,7 @@ impl Chunkable for IncompleteState {
 
                     trace!(self.log, "Received manifest:\n{}", manifest);
 
-                    let fetch_chunks = self.initialize_state_on_disk(&manifest);
+                    let mut fetch_chunks = self.initialize_state_on_disk(&manifest);
 
                     if fetch_chunks.is_empty() {
                         debug!(
@@ -1171,9 +1197,30 @@ impl Chunkable for IncompleteState {
                             .register_successful_sync(self.height);
                         Ok(artifact)
                     } else {
+                        let state_sync_file_group = build_file_group_chunks(&manifest);
+                        if manifest.chunk_table.len() >= FILE_GROUP_CHUNK_ID_OFFSET as usize {
+                            assert!(state_sync_file_group.is_empty());
+                            warn!(
+                                self.log,
+                                "The chunk table has {} chunks so file group chunks will not be used due to ID conflicts. \
+                                Please consider increasing the id offset (currently: {})",
+                                manifest.chunk_table.len(),
+                                FILE_GROUP_CHUNK_ID_OFFSET,
+                            );
+                        }
+                        for (&chunk_id, chunk_table_indices) in state_sync_file_group.iter() {
+                            for &chunk_table_index in chunk_table_indices.iter() {
+                                fetch_chunks.remove(&(chunk_table_index as usize + 1));
+                            }
+                            // We decide to fetch all the file group chunks unconditionally for two reasons:
+                            //     1. `canister.pbuf` files change between checkpoints and are unlikely to be covered in the copy phase.
+                            //     2. `canister.pbuf` files are small so there will be only a handful of chunks after grouping.
+                            fetch_chunks.insert(chunk_id as usize);
+                        }
                         let num_fetch_chunks = fetch_chunks.len();
                         self.state = DownloadState::Loading {
                             manifest,
+                            state_sync_file_group,
                             fetch_chunks,
                         };
                         self.fetch_started_at = Some(Instant::now());
@@ -1195,6 +1242,7 @@ impl Chunkable for IncompleteState {
             DownloadState::Loading {
                 ref manifest,
                 ref mut fetch_chunks,
+                ref state_sync_file_group,
             } => {
                 if artifact_chunk.chunk_id == MANIFEST_CHUNK {
                     // Have already seen the manifest chunk
@@ -1213,12 +1261,49 @@ impl Chunkable for IncompleteState {
                     return Err(ChunksMoreNeeded);
                 }
 
-                let chunk_table_index = ix - 1;
+                // Each index in `chunk_table_indices` is mapped to a piece of payload bytes
+                // with its corresponding start and end position.
+                let (chunk_table_indices, payload_pieces) =
+                    if ix < FILE_GROUP_CHUNK_ID_OFFSET as usize {
+                        // If it is a normal chunk, there is only one index mapped to the whole payload.
+                        (vec![ix as u32 - 1], vec![(0, payload.len())])
+                    } else {
+                        // If it is a file group chunk, divide it into pieces according to the `FileGroupChunks`.
+                        let chunk_table_indices = state_sync_file_group
+                            .get(&(ix as u32))
+                            .ok_or(ChunkVerificationFailed)?
+                            .clone();
+
+                        let mut cur_offset = 0;
+                        let mut payload_pieces: Vec<(usize, usize)> = Vec::new();
+                        for chunk_table_index in &chunk_table_indices {
+                            let chunk_size = manifest.chunk_table[*chunk_table_index as usize]
+                                .size_bytes as usize;
+                            payload_pieces.push((cur_offset, cur_offset + chunk_size));
+                            cur_offset += chunk_size;
+                        }
+
+                        if cur_offset != payload.len() {
+                            warn!(self.log, "Received invalid file group chunk {}", ix);
+                            return Err(ChunkVerificationFailed);
+                        }
+                        (chunk_table_indices, payload_pieces)
+                    };
 
                 let log = &self.log;
                 let metrics = &self.metrics;
-                crate::manifest::validate_chunk(chunk_table_index, payload, manifest).map_err(
-                    |err| {
+
+                // If any of the chunks is invalid, the whole file group chunk is considered as invalid.
+                // In this case, none of them will be applied.
+                for (chunk_table_index, &(start, end)) in
+                    chunk_table_indices.iter().zip(payload_pieces.iter())
+                {
+                    crate::manifest::validate_chunk(
+                        *chunk_table_index as usize,
+                        &payload[start..end],
+                        manifest,
+                    )
+                    .map_err(|err| {
                         warn!(log, "Received invalid chunk: {}", err);
                         metrics
                             .state_sync_metrics
@@ -1226,17 +1311,21 @@ impl Chunkable for IncompleteState {
                             .with_label_values(&[LABEL_FETCH])
                             .inc();
                         ChunkVerificationFailed
-                    },
-                )?;
+                    })?;
+                }
 
-                Self::apply_chunk(
-                    &self.log,
-                    &self.metrics.state_sync_metrics,
-                    &self.root,
-                    chunk_table_index,
-                    payload,
-                    manifest,
-                );
+                for (chunk_table_index, &(start, end)) in
+                    chunk_table_indices.iter().zip(payload_pieces.iter())
+                {
+                    Self::apply_chunk(
+                        &self.log,
+                        &self.metrics.state_sync_metrics,
+                        &self.root,
+                        *chunk_table_index as usize,
+                        &payload[start..end],
+                        manifest,
+                    );
+                }
 
                 fetch_chunks.remove(&ix);
 

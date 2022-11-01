@@ -164,6 +164,7 @@ impl StateSyncCache {
         match std::mem::replace(&mut sync.state, DownloadState::Blank) {
             DownloadState::Loading {
                 manifest,
+                state_sync_file_group: _,
                 fetch_chunks,
             } => {
                 if self.entry.is_some() {

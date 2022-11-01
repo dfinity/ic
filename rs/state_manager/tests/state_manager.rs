@@ -33,6 +33,7 @@ use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
+    state_sync::FILE_GROUP_CHUNK_ID_OFFSET,
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
 };
@@ -1771,8 +1772,18 @@ fn can_state_sync_from_cache() {
                 let result = pipe_manifest(&msg, &mut *chunkable);
                 assert!(result.is_none());
 
-                // Only the chunks not fetched in the first state sync should still be requested
-                assert_eq!(omit, chunkable.chunks_to_download().collect());
+                let file_group_chunks: HashSet<ChunkId> = msg
+                    .state_sync_file_group
+                    .keys()
+                    .copied()
+                    .map(ChunkId::from)
+                    .collect();
+
+                let fetch_chunks: HashSet<ChunkId> =
+                    omit.union(&file_group_chunks).copied().collect();
+
+                // Only the chunks not fetched in the first state sync plus chunks of the file group should still be requested
+                assert_eq!(fetch_chunks, chunkable.chunks_to_download().collect());
 
                 // Download chunk 1
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
@@ -1878,6 +1889,84 @@ fn can_state_sync_into_existing_checkpoint() {
                 0,
                 fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
             );
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
+fn can_group_small_files_in_state_sync() {
+    state_manager_test(|src_metrics, src_state_manager| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        let num_canisters = 200;
+        for id in 100..(100 + num_canisters) {
+            insert_canister_with_many_controllers(&mut state, canister_test_id(id), 400);
+        }
+
+        // With 1000 controllers' Principal ID serialized to the 'canister.pbuf' file,
+        // the size will be larger than the `MAX_FILE_SIZE_TO_GROUP` and thus it will not be grouped.
+        insert_canister_with_many_controllers(
+            &mut state,
+            canister_test_id(100 + num_canisters),
+            1000,
+        );
+
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let hash = wait_for_checkpoint(&src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash,
+        };
+
+        let state = src_state_manager.get_latest_state().take();
+
+        let msg = src_state_manager
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync messages");
+
+        let num_files: usize = msg
+            .state_sync_file_group
+            .iter()
+            .map(|(_, indices)| indices.len())
+            .sum();
+
+        // `canister.pbuf` files of all the canisters should be grouped, except for the one with 1000 controllers.
+        assert_eq!(num_files, num_canisters as usize);
+
+        // In this test, each canister has a `canister.pubf` file of about 6.0 KiB in the checkpoint.
+        // Therefore, it needs more than one 1-MiB chunk to group these files.
+        //
+        // Note that the file size estimation in this test is based on the current serialization mechanism
+        // and if the assertion does not hold, we will need to revisit this test and check the file size.
+        let num_file_group_chunks = msg.state_sync_file_group.keys().count();
+        assert!(num_file_group_chunks > 1);
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
+            let mut chunkable = dst_state_manager.create_chunkable_state(&id);
+
+            let result = pipe_manifest(&msg, &mut *chunkable);
+            assert!(result.is_none());
+
+            assert!(chunkable
+                .chunks_to_download()
+                .any(|chunk_id| chunk_id.get() == FILE_GROUP_CHUNK_ID_OFFSET));
+
+            let dst_msg = pipe_state_sync(msg, chunkable);
+
+            dst_state_manager
+                .check_artifact_acceptance(dst_msg, &node_test_id(0))
+                .expect("Failed to process state sync artifact");
+
+            let recovered_state = dst_state_manager
+                .get_state_at(height(1))
+                .expect("Destination state manager didn't receive the state")
+                .take();
+
+            assert_eq!(height(1), dst_state_manager.latest_state_height());
+            assert_eq!(state, recovered_state);
+
             assert_error_counters(dst_metrics);
         })
     })

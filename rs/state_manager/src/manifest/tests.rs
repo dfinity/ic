@@ -1,7 +1,8 @@
 use super::{
-    compute_manifest, diff_manifest, file_chunk_range, filter_out_zero_chunks, hash::ManifestHash,
-    manifest_hash, validate_chunk, validate_manifest, ChunkValidationError, DiffScript,
-    ManifestValidationError, CURRENT_STATE_SYNC_VERSION, STATE_SYNC_V1,
+    build_file_group_chunks, compute_manifest, diff_manifest, file_chunk_range,
+    filter_out_zero_chunks, hash::ManifestHash, manifest_hash, validate_chunk, validate_manifest,
+    ChunkValidationError, DiffScript, ManifestValidationError, CURRENT_STATE_SYNC_VERSION,
+    DEFAULT_CHUNK_SIZE, MAX_FILE_SIZE_TO_GROUP, STATE_SYNC_V1,
 };
 use crate::ManifestMetrics;
 
@@ -9,7 +10,10 @@ use ic_crypto_sha::Sha256;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     crypto::CryptoHash,
-    state_sync::{decode_manifest, encode_manifest, ChunkInfo, FileInfo, Manifest},
+    state_sync::{
+        decode_manifest, encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest,
+        FILE_GROUP_CHUNK_ID_OFFSET,
+    },
     CryptoHashOfState,
 };
 
@@ -785,4 +789,107 @@ fn test_file_chunk_range() {
                 .sum::<u64>()
         );
     }
+}
+
+#[test]
+fn test_build_file_group_chunks() {
+    let dummy_file_hash = [0u8; 32];
+    let dummy_chunk_hash = [0u8; 32];
+    let file_group_file_info = |id: u32| -> FileInfo {
+        FileInfo {
+            relative_path: std::path::PathBuf::from(id.to_string()).join("canister.pbuf"),
+            size_bytes: 500,
+            hash: dummy_file_hash,
+        }
+    };
+
+    let normal_file_info = |id: u32| -> Vec<FileInfo> {
+        vec![
+            FileInfo {
+                relative_path: std::path::PathBuf::from(id.to_string()).join("software.wasm"),
+                size_bytes: 500,
+                hash: dummy_file_hash,
+            },
+            FileInfo {
+                relative_path: std::path::PathBuf::from(id.to_string()).join("vmemory_0.bin"),
+                size_bytes: DEFAULT_CHUNK_SIZE as u64 + 500,
+                hash: dummy_file_hash,
+            },
+        ]
+    };
+
+    let file_group_chunk_info = |id: u32| -> ChunkInfo {
+        ChunkInfo {
+            file_index: 3 * id,
+            size_bytes: 500,
+            offset: 0,
+            hash: dummy_chunk_hash,
+        }
+    };
+
+    let normal_chunk_info = |id: u32| -> Vec<ChunkInfo> {
+        vec![
+            ChunkInfo {
+                file_index: 3 * id + 1,
+                size_bytes: 500,
+                offset: 0,
+                hash: dummy_chunk_hash,
+            },
+            ChunkInfo {
+                file_index: 3 * id + 2,
+                size_bytes: DEFAULT_CHUNK_SIZE,
+                offset: 0,
+                hash: dummy_chunk_hash,
+            },
+            ChunkInfo {
+                file_index: 3 * id + 2,
+                size_bytes: 500,
+                offset: DEFAULT_CHUNK_SIZE as u64,
+                hash: dummy_chunk_hash,
+            },
+        ]
+    };
+
+    let mut file_table = Vec::new();
+    let mut chunk_table = Vec::new();
+    let total_num = 10_000;
+    for id in 0..total_num {
+        file_table.push(file_group_file_info(id));
+        file_table.extend(normal_file_info(id));
+        chunk_table.push(file_group_chunk_info(id));
+        chunk_table.extend(normal_chunk_info(id))
+    }
+
+    // A "canister.pbuf" file larger than `MAX_FILE_SIZE_TO_GROUP` bytes will not be grouped.
+    file_table.push(FileInfo {
+        relative_path: std::path::PathBuf::from(10_000.to_string()).join("canister.pbuf"),
+        size_bytes: MAX_FILE_SIZE_TO_GROUP as u64 + 1,
+        hash: dummy_file_hash,
+    });
+    chunk_table.push(ChunkInfo {
+        file_index: 30_000,
+        size_bytes: 500,
+        offset: MAX_FILE_SIZE_TO_GROUP as u64 + 1,
+        hash: dummy_chunk_hash,
+    });
+
+    let manifest = Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, chunk_table);
+    let computed_file_group_chunks = build_file_group_chunks(&manifest);
+
+    // Each chunk is expected to have 2097 files in it. Note: floor(1MiB / 500B) = 2097
+    let indices_0: Vec<u32> = (0..2097).map(|i| i * 4).collect();
+    let indices_1: Vec<u32> = (2097..2097 * 2).map(|i| i * 4).collect();
+    let indices_2: Vec<u32> = (2097 * 2..2097 * 3).map(|i| i * 4).collect();
+    let indices_3: Vec<u32> = (2097 * 3..2097 * 4).map(|i| i * 4).collect();
+    let indices_4: Vec<u32> = (2097 * 4..total_num).map(|i| i * 4).collect();
+
+    let expected = FileGroupChunks::new(maplit::btreemap! {
+        FILE_GROUP_CHUNK_ID_OFFSET => indices_0,
+        FILE_GROUP_CHUNK_ID_OFFSET + 1 => indices_1,
+        FILE_GROUP_CHUNK_ID_OFFSET + 2 => indices_2,
+        FILE_GROUP_CHUNK_ID_OFFSET + 3 => indices_3,
+        FILE_GROUP_CHUNK_ID_OFFSET + 4 => indices_4,
+    });
+
+    assert_eq!(computed_file_group_chunks, expected);
 }

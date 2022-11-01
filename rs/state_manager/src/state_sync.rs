@@ -1,7 +1,7 @@
 pub(crate) mod chunkable;
 
 use super::StateManagerImpl;
-use crate::EXTRA_CHECKPOINTS_TO_KEEP;
+use crate::{manifest::build_file_group_chunks, EXTRA_CHECKPOINTS_TO_KEEP};
 use ic_interfaces::{
     artifact_manager::{ArtifactAcceptance, ArtifactClient, ArtifactProcessor, ProcessingResult},
     artifact_pool::{ArtifactPoolError, UnvalidatedArtifact},
@@ -16,8 +16,10 @@ use ic_types::{
     },
     chunkable::Chunkable,
     crypto::crypto_hash,
+    state_sync::FileGroupChunks,
     Height, NodeId,
 };
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct StateSyncArtifact;
@@ -83,24 +85,45 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
         &self,
         msg_id: &StateSyncArtifactId,
     ) -> Option<StateSyncMessage> {
-        self.states
-            .read()
-            .states_metadata
-            .iter()
-            .find_map(|(height, metadata)| {
-                if metadata.root_hash.as_ref() == Some(&msg_id.hash) {
-                    let manifest = metadata.manifest.as_ref()?;
-                    let checkpoint_root = self.state_layout.checkpoint(*height).ok()?;
-                    Some(StateSyncMessage {
-                        height: *height,
-                        root_hash: msg_id.hash.clone(),
-                        checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
-                        manifest: manifest.clone(),
-                    })
-                } else {
-                    None
-                }
-            })
+        let mut file_group_to_populate: Option<Arc<FileGroupChunks>> = None;
+        let state_sync_message =
+            self.states
+                .read()
+                .states_metadata
+                .iter()
+                .find_map(|(height, metadata)| {
+                    if metadata.root_hash.as_ref() == Some(&msg_id.hash) {
+                        let manifest = metadata.manifest.as_ref()?;
+                        let checkpoint_root = self.state_layout.checkpoint(*height).ok()?;
+                        let state_sync_file_group = match &metadata.state_sync_file_group {
+                            Some(value) => value.clone(),
+                            None => {
+                                // Note that this code path will be called at most once because the value is then populated.
+                                let computed_file_group_chunks =
+                                    Arc::new(build_file_group_chunks(manifest));
+                                file_group_to_populate = Some(computed_file_group_chunks.clone());
+                                computed_file_group_chunks
+                            }
+                        };
+
+                        Some(StateSyncMessage {
+                            height: *height,
+                            root_hash: msg_id.hash.clone(),
+                            checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
+                            manifest: manifest.clone(),
+                            state_sync_file_group,
+                        })
+                    } else {
+                        None
+                    }
+                });
+
+        if let Some(state_sync_file_group) = file_group_to_populate {
+            if let Some(metadata) = self.states.write().states_metadata.get_mut(&msg_id.height) {
+                metadata.state_sync_file_group = Some(state_sync_file_group);
+            }
+        }
+        state_sync_message
     }
 
     fn has_artifact(&self, msg_id: &StateSyncArtifactId) -> bool {
@@ -143,6 +166,7 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
                         root_hash: metadata.root_hash.as_ref()?.clone(),
                         checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
                         manifest: manifest.clone(),
+                        state_sync_file_group: Default::default(),
                     };
                     Some(StateSyncArtifact::message_to_advert(&msg))
                 } else {
