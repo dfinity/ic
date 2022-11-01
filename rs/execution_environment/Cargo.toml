@@ -59,6 +59,7 @@ criterion = { version = "0.3", features = ["html_reports"] }
 iai = "0.1"
 ic-btc-test-utils = { path = "../bitcoin/test-utils" }
 ic-btc-types = { path = "../bitcoin/types/public" }
+ic-crypto-sha = { path = "../crypto/sha" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
@@ -70,8 +71,8 @@ libflate = "1.1.2"
 maplit = "1.0.2"
 mockall = "0.7.2"
 proptest = "1.0"
-test-strategy = "0.2"
 tempfile = "3.1.0"
+test-strategy = "0.2"
 tokio = "1.15.0"
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 

@@ -3475,6 +3475,7 @@ fn test_subnet_size_execute_message() {
     }
 }
 
+// TODO(EXC-1168): remove after full migration is done.
 #[test]
 fn test_subnet_size_execute_install_code() {
     let subnet_type = SubnetType::Application;

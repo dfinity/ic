@@ -20,106 +20,107 @@ const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 ///  * "persist"   copy the counter value to stable memory
 ///  * "load"      restore the counter value from stable memory
 ///  * "copy_to"   copy the counter value to the specified address on the heap
-///  * "read_at"   read an 32-bit integer at the specified address on the heap
+///  * "read_at"   read a 32-bit integer at the specified address on the heap
 ///  * "grow_page" grow stable memory by 1 page
 ///  * "grow_mem"  grow memory by the current counter value
 const TEST_CANISTER: &str = r#"
-            (module
-              (import "ic0" "msg_arg_data_copy"
-                (func $msg_arg_data_copy (param $dst i32) (param $offset i32) (param $size i32)))
-              (import "ic0" "msg_reply" (func $msg_reply))
-              (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32)))
-              (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
-              (import "ic0" "stable_read"
-                (func $stable_read (param $dst i32) (param $offset i32) (param $size i32)))
-              (import "ic0" "stable_write"
-                (func $stable_write (param $offset i32) (param $src i32) (param $size i32)))
+(module
+    (import "ic0" "msg_arg_data_copy"
+    (func $msg_arg_data_copy (param $dst i32) (param $offset i32) (param $size i32)))
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (import "ic0" "msg_reply_data_append"
+    (func $msg_reply_data_append (param i32 i32)))
+    (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+    (import "ic0" "stable_read"
+    (func $stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+    (import "ic0" "stable_write"
+    (func $stable_write (param $offset i32) (param $src i32) (param $size i32)))
 
-              (func $inc
+    (func $inc
 
-                ;; load the old counter value, increment, and store it back
-                (i32.store
+    ;; load the old counter value, increment, and store it back
+    (i32.store
 
-                  ;; store at the beginning of the heap
-                  (i32.const 0) ;; store at the beginning of the heap
+        ;; store at the beginning of the heap
+        (i32.const 0) ;; store at the beginning of the heap
 
-                  ;; increment heap[0]
-                  (i32.add
+        ;; increment heap[0]
+        (i32.add
 
-                    ;; the old value at heap[0]
-                    (i32.load (i32.const 0))
+        ;; the old value at heap[0]
+        (i32.load (i32.const 0))
 
-                    ;; "1"
-                    (i32.const 1)
-                  )
-                )
-                (call $msg_reply_data_append (i32.const 0) (i32.const 0))
-                (call $msg_reply)
-              )
+        ;; "1"
+        (i32.const 1)
+        )
+    )
+    (call $msg_reply_data_append (i32.const 0) (i32.const 0))
+    (call $msg_reply)
+    )
 
-              (func $read
-                ;; now we copied the counter address into heap[0]
-                (call $msg_reply_data_append
-                  (i32.const 0) ;; the counter address from heap[0]
-                  (i32.const 4) ;; length
-                )
-                (call $msg_reply)
-              )
+    (func $read
+    ;; now we copied the counter address into heap[0]
+    (call $msg_reply_data_append
+        (i32.const 0) ;; the counter address from heap[0]
+        (i32.const 4) ;; length
+    )
+    (call $msg_reply)
+    )
 
-              (func $copy_to
-                (call $msg_arg_data_copy (i32.const 4) (i32.const 0) (i32.const 4))
-                (i32.store (i32.load (i32.const 4)) (i32.load (i32.const 0)))
-                (call $msg_reply)
-              )
+    (func $copy_to
+    (call $msg_arg_data_copy (i32.const 4) (i32.const 0) (i32.const 4))
+    (i32.store (i32.load (i32.const 4)) (i32.load (i32.const 0)))
+    (call $msg_reply)
+    )
 
-              (func $read_at
-                (call $msg_arg_data_copy (i32.const 4) (i32.const 0) (i32.const 4))
-                (call $msg_reply_data_append (i32.load (i32.const 4)) (i32.const 4))
-                (call $msg_reply)
-              )
+    (func $read_at
+    (call $msg_arg_data_copy (i32.const 4) (i32.const 0) (i32.const 4))
+    (call $msg_reply_data_append (i32.load (i32.const 4)) (i32.const 4))
+    (call $msg_reply)
+    )
 
-              (func $grow_page
-                (drop (call $stable_grow (i32.const 1)))
-                (call $msg_reply)
-              )
+    (func $grow_page
+    (drop (call $stable_grow (i32.const 1)))
+    (call $msg_reply)
+    )
 
-              (func $grow_mem
-                (call $msg_arg_data_copy (i32.const 4) (i32.const 0) (i32.const 4))
-                (i32.store (i32.const 4)
-                  (memory.grow (i32.load (i32.const 4))))
-                (call $msg_reply_data_append (i32.const 4) (i32.const 4))
-                (call $msg_reply)
-              )
+    (func $grow_mem
+    (call $msg_arg_data_copy (i32.const 4) (i32.const 0) (i32.const 4))
+    (i32.store (i32.const 4)
+        (memory.grow (i32.load (i32.const 4))))
+    (call $msg_reply_data_append (i32.const 4) (i32.const 4))
+    (call $msg_reply)
+    )
 
-              (func $persist
-                (call $stable_write
-                  (i32.const 0) ;; offset
-                  (i32.const 0) ;; src
-                  (i32.const 4) ;; length
-                )
-                (call $msg_reply)
-              )
+    (func $persist
+    (call $stable_write
+        (i32.const 0) ;; offset
+        (i32.const 0) ;; src
+        (i32.const 4) ;; length
+    )
+    (call $msg_reply)
+    )
 
-              (func $load
-                (call $stable_read
-                  (i32.const 0) ;; dst
-                  (i32.const 0) ;; offset
-                  (i32.const 4) ;; length
-                )
-                (call $msg_reply)
-              )
+    (func $load
+    (call $stable_read
+        (i32.const 0) ;; dst
+        (i32.const 0) ;; offset
+        (i32.const 4) ;; length
+    )
+    (call $msg_reply)
+    )
 
-              (memory $memory 1)
-              (export "memory" (memory $memory))
-              (export "canister_query read" (func $read))
-              (export "canister_query read_at" (func $read_at))
-              (export "canister_update inc" (func $inc))
-              (export "canister_update persist" (func $persist))
-              (export "canister_update load" (func $load))
-              (export "canister_update copy_to" (func $copy_to))
-              (export "canister_update grow_page" (func $grow_page))
-              (export "canister_update grow_mem" (func $grow_mem)))"#;
+    (memory $memory 1)
+    (export "memory" (memory $memory))
+    (export "canister_query read" (func $read))
+    (export "canister_query read_at" (func $read_at))
+    (export "canister_update inc" (func $inc))
+    (export "canister_update persist" (func $persist))
+    (export "canister_update load" (func $load))
+    (export "canister_update copy_to" (func $copy_to))
+    (export "canister_update grow_page" (func $grow_page))
+    (export "canister_update grow_mem" (func $grow_mem))
+)"#;
 
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
 
