@@ -7,6 +7,7 @@ pub(crate) const STATUS_SUCCESS: &str = "success";
 pub(crate) const STATUS_ERROR: &str = "error";
 pub(crate) const LABEL_DETAIL: &str = "detail";
 pub(crate) const LABEL_CHANNEL_ID: &str = "channel_id";
+pub(crate) const TRANSPORT_API: &str = "transport_api";
 
 /// This is intended to be used as RAII type that will increment the gauge
 /// at construction and decrease the gauge on Drop.
@@ -73,7 +74,7 @@ impl ControlPlaneMetrics {
             retry_connection: metrics_registry.int_counter_vec(
                 "transport_retry_connection",
                 "Connection retries to reconnect to a peer from Transport",
-                &["peer_id", "flow_tag"],
+                &["peer_id", "flow_tag", TRANSPORT_API],
             ),
             tls_handshakes: metrics_registry.int_counter_vec(
                 "transport_tls_handshakes_total",
@@ -95,7 +96,6 @@ pub(crate) struct DataPlaneMetrics {
     pub(crate) heart_beats_received: IntCounterVec,
     pub(crate) write_tasks: IntGauge,
     pub(crate) read_tasks: IntGauge,
-    pub(crate) send_message_overhead_duration: HistogramVec,
 }
 
 impl DataPlaneMetrics {
@@ -107,13 +107,13 @@ impl DataPlaneMetrics {
                     "Time spent by the client callback processing a message event.",
                 )
                 .buckets(decimal_buckets(-3, 1)),
-                &[LABEL_CHANNEL_ID],
+                &[LABEL_CHANNEL_ID, TRANSPORT_API],
             )
             .unwrap(),
             write_bytes_total: metrics_registry.int_counter_vec(
                 "transport_write_bytes_total",
                 "Total bytes written at the application-level",
-                &[LABEL_CHANNEL_ID],
+                &[LABEL_CHANNEL_ID, TRANSPORT_API],
             ),
             send_message_duration: HistogramVec::new(
                 HistogramOpts::new(
@@ -123,42 +123,33 @@ impl DataPlaneMetrics {
                 .buckets(
                     decimal_buckets(-3, 1),
                 ),
-                &[LABEL_CHANNEL_ID],
+                &[LABEL_CHANNEL_ID, TRANSPORT_API],
             )
             .unwrap(),
             read_bytes_total: metrics_registry.int_counter_vec(
                 "transport_read_bytes_total",
                 "Total bytes read at the application-level",
-                &[LABEL_CHANNEL_ID],
+                &[LABEL_CHANNEL_ID, TRANSPORT_API],
             ),
             message_read_errors_total: metrics_registry.int_counter_vec(
                 "transport_read_message_errors_total",
                 "Number of times reading a single message failed",
-                &[LABEL_CHANNEL_ID, LABEL_DETAIL],
+                &[LABEL_CHANNEL_ID, LABEL_DETAIL, TRANSPORT_API],
             ),
             heart_beats_received: metrics_registry.int_counter_vec(
                 "transport_heart_beats_received",
                 "Number of heart beats as seen by receiver",
-                &[LABEL_CHANNEL_ID],
+                &[LABEL_CHANNEL_ID, TRANSPORT_API],
             ),
             heart_beats_sent: metrics_registry.int_counter_vec(
                 "transport_heart_beats_sent",
                 "Number of heart beats sent by sender",
-                &[LABEL_CHANNEL_ID],
+                &[LABEL_CHANNEL_ID, TRANSPORT_API],
             ),
             write_tasks: metrics_registry
                 .int_gauge("transport_write_tasks", "Active data plane write tasks"),
             read_tasks: metrics_registry
                 .int_gauge("transport_read_tasks", "Active data plane read tasks"),
-            send_message_overhead_duration: HistogramVec::new(
-                HistogramOpts::new(
-                    "transport_send_message_overhead_duration_seconds",
-                    "Time spent assembling a message before being sent over the lower level transport",
-                )
-                .buckets(decimal_buckets(-3, 1)),
-                &[LABEL_CHANNEL_ID],
-            )
-            .unwrap(),
         }
     }
 }
