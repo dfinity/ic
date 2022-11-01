@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -44,50 +44,10 @@ DEPENDENCIES = [
     "@wabt_rs//:wabt",
 ]
 
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/crypto/sha",
-    "//rs/registry/subnet_type",
-    "//rs/types/ic00_types",
-    "//rs/types/types",
-    "//rs/universal_canister/lib",
-    "@crate_index//:candid",
-    "@crate_index//:libflate",
-    "@wabt_rs//:wabt",
-]
-
-DATA = [
-    # Keep sorted.
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
-]
-
-ENV = {
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-}
-
 rust_library(
     name = "state_machine_tests",
     srcs = glob(["src/**"]),
     crate_name = "ic_state_machine_tests",
     version = "0.8.0",
     deps = DEPENDENCIES,
-)
-
-rust_test(
-    name = "execution_test",
-    srcs = ["tests/execution_test.rs"],
-    data = DATA,
-    env = ENV,
-    deps = [":state_machine_tests"] + DEV_DEPENDENCIES,
-)
-
-rust_test(
-    name = "subnet_size_test",
-    srcs = ["tests/subnet_size_test.rs"],
-    data = DATA,
-    env = ENV,
-    deps = [":state_machine_tests"] + DEV_DEPENDENCIES,
 )
