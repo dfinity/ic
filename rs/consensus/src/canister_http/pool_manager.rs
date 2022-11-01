@@ -2,70 +2,28 @@
 //! responsible for managing the flow of requests from execution to the
 //! networking component, and ensuring that the resulting responses are signed
 //! and eventually make it into consensus.
-use crate::consensus::utils::registry_version_at_height;
-use crate::consensus::{ConsensusCrypto, Membership};
+use crate::{
+    canister_http::metrics::CanisterHttpPoolManagerMetrics,
+    consensus::{utils::registry_version_at_height, ConsensusCrypto, Membership},
+};
 use ic_interfaces::{canister_http::*, consensus_pool::ConsensusPoolCache};
 use ic_interfaces_canister_http_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::*;
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
     replica_config::ReplicaConfig, Height,
 };
-use prometheus::{HistogramVec, IntCounter, IntGauge};
-use std::collections::BTreeSet;
-use std::convert::TryInto;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-
-struct CanisterHttpPoolManagerMetrics {
-    /// Records the time it took to perform an operation
-    op_duration: HistogramVec,
-    /// The total number of requests that are currently in flight according to
-    /// the latest state.
-    in_flight_requests: IntGauge,
-    /// The total number of requests for which we are currently waiting for responses.
-    in_client_requests: IntGauge,
-    /// A count of the total number of shares signed.
-    shares_signed: IntCounter,
-    /// A count of the total number of shares validated.
-    shares_validated: IntCounter,
-    /// A count of the total number of shares marked invalid.
-    shares_marked_invalid: IntCounter,
-}
-
-impl CanisterHttpPoolManagerMetrics {
-    fn new(metrics_registry: &MetricsRegistry) -> Self {
-        Self {
-            op_duration: metrics_registry.histogram_vec(
-                "canister_http_pool_manager_op_duration",
-                "The time it took the pool manager to perform an operation",
-                // 0.1ms - 5s
-                decimal_buckets(-4, 0),
-                &["operation"],
-            ),
-            in_flight_requests: metrics_registry.int_gauge(
-                "canister_http_in_flight_requests", "The total number of requests that are currently in flight according to the latest state."
-            ),
-            in_client_requests: metrics_registry.int_gauge(
-                "canister_http_in_client_requests", "The total number of requests for which we are currently waiting for responses from the http client."
-            ),
-            shares_signed: metrics_registry.int_counter(
-                "canister_http_shares_signed", "A count of the total number of shares signed."
-            ),
-            shares_validated: metrics_registry.int_counter(
-                "canister_http_shares_validated", "A count of the total number of shares validated."
-            ),
-            shares_marked_invalid: metrics_registry.int_counter(
-                "canister_http_shares_marked_invalid", "A count of the total number of shares marked invalid."
-            )
-        }
-    }
-}
+use std::{
+    collections::BTreeSet,
+    convert::TryInto,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 /// CanisterHttpPoolManagerImpl implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and

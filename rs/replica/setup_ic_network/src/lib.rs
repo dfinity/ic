@@ -277,17 +277,18 @@ fn setup_artifact_manager(
     );
     let ingress_manager = Arc::new(ingress_manager);
 
-    let canister_http_payload_builder = canister_http::CanisterHttpPayloadBuilderImpl::new(
-        artifact_pools.canister_http_pool.clone(),
-        artifact_pools.consensus_pool_cache.clone(),
-        consensus_crypto.clone(),
-        state_manager.clone(),
-        membership.clone(),
-        subnet_id,
-        registry_client.clone(),
-        &metrics_registry,
-        replica_logger.clone(),
-    );
+    let canister_http_payload_builder =
+        canister_http::payload_builder::CanisterHttpPayloadBuilderImpl::new(
+            artifact_pools.canister_http_pool.clone(),
+            artifact_pools.consensus_pool_cache.clone(),
+            consensus_crypto.clone(),
+            state_manager.clone(),
+            membership.clone(),
+            subnet_id,
+            registry_client.clone(),
+            &metrics_registry,
+            replica_logger.clone(),
+        );
 
     let canister_http_payload_builder = Arc::new(canister_http_payload_builder);
 
@@ -451,7 +452,7 @@ fn setup_artifact_manager(
             move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
             || {
                 (
-                    canister_http::CanisterHttpPoolManagerImpl::new(
+                    canister_http::pool_manager::CanisterHttpPoolManagerImpl::new(
                         Arc::clone(&state_manager) as Arc<_>,
                         Arc::new(Mutex::new(canister_http_adapter_client)),
                         Arc::clone(&consensus_crypto),
@@ -461,7 +462,7 @@ fn setup_artifact_manager(
                         metrics_registry.clone(),
                         replica_logger.clone(),
                     ),
-                    canister_http::CanisterHttpGossipImpl::new(
+                    canister_http::gossip::CanisterHttpGossipImpl::new(
                         Arc::clone(&artifact_pools.consensus_pool_cache),
                         Arc::clone(&state_manager) as Arc<_>,
                         replica_logger.clone(),
