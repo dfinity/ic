@@ -22,7 +22,7 @@ use super::{
     test_setup::GroupSetup,
     universal_vm::{UniversalVm, UniversalVms},
 };
-use crate::driver::test_env::{SshKeyGen, TestEnvAttribute};
+use crate::driver::test_env::TestEnvAttribute;
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -76,10 +76,6 @@ pub trait HasPrometheus {
 
 impl HasPrometheus for TestEnv {
     fn start_prometheus_vm(&self) {
-        // Generate an SSH key-pair, if it doesn't already exists,
-        // such that `sync_prometheus_config_with_topology()` can later SSH to the prometheus-vm.
-        self.ssh_keygen(ADMIN).expect("ssh-keygen failed");
-
         // Create a config directory containing the prometheus.yml configuration file.
         let vm_name = String::from(PROMETHEUS_VM_NAME);
         let log = self.logger();
@@ -103,7 +99,7 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
         new_prometheus_vm(vm_name.clone())
             .with_config_dir(config_dir)
             .start(self)
-            .unwrap_or_else(|_| panic!("failed to setup {vm_name}"));
+            .unwrap_or_else(|e| panic!("failed to setup {vm_name} because: {e:?}"));
 
         // Log the Prometheus URL so users can browse to it while the test is running.
         let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
@@ -205,8 +201,9 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
         let (mut remote_tarball, _) = session
             .scp_recv(&tarball_full_path)
             .expect("Failed to scp the tarball of the prometheus data directory {vm_name}:{tarball_full_path:?}");
-        let mut destination_file = File::create(&destination)
-            .unwrap_or_else(|_| panic!("Failed to open destination {:?}", destination));
+        let mut destination_file = File::create(&destination).unwrap_or_else(|e| {
+            panic!("Failed to open destination {destination:?} because: {e:?}")
+        });
         std::io::copy(&mut remote_tarball, &mut destination_file).expect(
             "Failed to write the tarball of prometheus data directory {vm_name}:{tarball_full_path:?} to {destination:?}",
         );
