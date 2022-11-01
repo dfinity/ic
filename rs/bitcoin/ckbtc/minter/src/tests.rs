@@ -1,14 +1,14 @@
-use crate::{greedy, tx};
+use crate::{build_unsigned_transaction, greedy, signed_transaction_length, tx, BuildTxError};
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use ic_btc_types::{OutPoint, Satoshi, Utxo};
 use proptest::proptest;
 use proptest::{
-    collection::vec as pvec,
+    collection::{btree_set, vec as pvec},
     prelude::{any, Strategy},
 };
 use proptest::{prop_assert, prop_assert_eq};
 use serde_bytes::ByteBuf;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 fn dummy_utxo_from_value(v: u64) -> Utxo {
     Utxo {
@@ -135,6 +135,14 @@ fn arb_tx_out() -> impl Strategy<Value = tx::TxOut> {
     (arb_amount(), pvec(any::<u8>(), 32)).prop_map(|(value, pubkey)| tx::TxOut { value, pubkey })
 }
 
+fn arb_utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utxo> {
+    (amount, pvec(any::<u8>(), 32), 0..5u32).prop_map(|(value, txid, vout)| Utxo {
+        outpoint: OutPoint { txid, vout },
+        value,
+        height: 0,
+    })
+}
+
 proptest! {
     #[test]
     fn greedy_solution_properties(
@@ -233,5 +241,105 @@ proptest! {
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
         prop_assert_eq!(&arb_tx.wtxid(), &*btc_tx.wtxid());
+    }
+
+    #[test]
+    fn build_tx_splits_utxos(
+        mut utxos in btree_set(arb_utxo(5_000u64..1_000_000_000), 1..20),
+        dst_pubkey in pvec(any::<u8>(), 32),
+        main_pubkey in pvec(any::<u8>(), 32),
+        fee_per_vbyte in 1000..2000u64,
+    ) {
+        let value_by_outpoint: HashMap<_, _> = utxos
+            .iter()
+            .map(|utxo| (utxo.outpoint.clone(), utxo.value))
+            .collect();
+
+        let utxo_count = utxos.len();
+        let total_value = utxos.iter().map(|u| u.value).sum::<u64>();
+
+        let target = total_value / 2;
+        let unsigned_tx = build_unsigned_transaction(&mut utxos, dst_pubkey, main_pubkey, target, None, fee_per_vbyte)
+            .expect("failed to build transaction");
+
+        let fee = signed_transaction_length(&unsigned_tx) as u64 * fee_per_vbyte / 1000;
+
+        let inputs_value = unsigned_tx.inputs
+            .iter()
+            .map(|input| value_by_outpoint.get(&input.previous_output).unwrap())
+            .sum::<u64>();
+
+        prop_assert!(inputs_value >= target);
+        prop_assert!(fee < target);
+        prop_assert_eq!(utxo_count, unsigned_tx.inputs.len() + utxos.len());
+        prop_assert_eq!(utxos.iter().map(|u| u.value).sum::<u64>(), total_value - inputs_value);
+    }
+
+    #[test]
+    fn build_tx_handles_change_from_inputs(
+        mut utxos in btree_set(arb_utxo(1_000_000u64..1_000_000_000), 1..20),
+        dst_pubkey in pvec(any::<u8>(), 32),
+        main_pubkey in pvec(any::<u8>(), 32),
+        target in 10000..50000u64,
+        fee_per_vbyte in 1000..2000u64,
+    ) {
+        let value_by_outpoint: HashMap<_, _> = utxos
+            .iter()
+            .map(|utxo| (utxo.outpoint.clone(), utxo.value))
+            .collect();
+
+        let user_fee = 5000u64;
+        let unsigned_tx = build_unsigned_transaction(&mut utxos, dst_pubkey.clone(), main_pubkey.clone(), target, Some(user_fee), fee_per_vbyte)
+            .expect("failed to build transaction");
+
+        let fee = signed_transaction_length(&unsigned_tx) as u64 * fee_per_vbyte / 1000;
+
+        prop_assert!(fee <= user_fee);
+
+        let inputs_value = unsigned_tx.inputs
+            .iter()
+            .map(|input| value_by_outpoint.get(&input.previous_output).unwrap())
+            .sum::<u64>();
+
+        prop_assert_eq!(
+            &unsigned_tx.outputs,
+            &vec![
+                tx::TxOut { pubkey: dst_pubkey, value: target - user_fee },
+                tx::TxOut { pubkey: main_pubkey, value: inputs_value - target },
+            ]
+        );
+    }
+
+    #[test]
+    fn build_tx_does_not_modify_utxos_on_error(
+        mut utxos in btree_set(arb_utxo(5_000u64..1_000_000_000), 1..20),
+        dst_pubkey in pvec(any::<u8>(), 32),
+        main_pubkey in pvec(any::<u8>(), 32),
+        fee_per_vbyte in 1000..2000u64,
+    ) {
+        let utxos_copy = utxos.clone();
+
+        let total_value = utxos.iter().map(|u| u.value).sum::<u64>();
+
+        prop_assert_eq!(
+            build_unsigned_transaction(&mut utxos, dst_pubkey.clone(), main_pubkey.clone(), total_value * 2, None, fee_per_vbyte)
+                .expect_err("build transaction should fail because the amount is too high"),
+            BuildTxError::NotEnoughFunds
+        );
+        prop_assert_eq!(&utxos_copy, &utxos);
+
+        prop_assert_eq!(
+            build_unsigned_transaction(&mut utxos, dst_pubkey.clone(), main_pubkey.clone(), 1000, Some(1), fee_per_vbyte)
+                .expect_err("build transaction should fail because max fee is too low"),
+            BuildTxError::UserFeeTooLow
+        );
+        prop_assert_eq!(&utxos_copy, &utxos);
+
+        prop_assert_eq!(
+            build_unsigned_transaction(&mut utxos, dst_pubkey, main_pubkey, 1, None, fee_per_vbyte)
+                .expect_err("build transaction should fail because the amount is too low to pay the fee"),
+            BuildTxError::AmountTooLow
+        );
+        prop_assert_eq!(&utxos_copy, &utxos);
     }
 }
