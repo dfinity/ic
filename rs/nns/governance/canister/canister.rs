@@ -333,8 +333,6 @@ fn canister_post_upgrade() {
             Err(err)
         }
         Ok(proto) => {
-            // Remove once deployed (OR-262)
-            let proto = copy_subnet_management_followees_to_new_topics(proto);
             // TODO(NNS1-1817): remove `copy_governance_followees_to_sns_and_cf_topic` once deployed
             let proto = copy_governance_followees_to_sns_and_cf_topic(proto);
             canister_init_(proto);
@@ -342,33 +340,6 @@ fn canister_post_upgrade() {
         }
     }
     .expect("Couldn't upgrade canister.");
-}
-
-/// Remove once deployed (OR-262)
-fn copy_subnet_management_followees_to_new_topics(mut proto: GovernanceProto) -> GovernanceProto {
-    use ic_nns_governance::pb::v1::Topic;
-    for neuron in proto.neurons.values_mut() {
-        let subnet_mgmt_followees = neuron.followees.get(&(Topic::SubnetManagement as i32));
-        if let Some(followees) = subnet_mgmt_followees {
-            if neuron
-                .followees
-                .contains_key(&(Topic::ReplicaVersionManagement as i32))
-                || neuron
-                    .followees
-                    .contains_key(&(Topic::SubnetReplicaVersionManagement as i32))
-            {
-                continue;
-            }
-            let followees = followees.clone();
-            neuron
-                .followees
-                .insert(Topic::ReplicaVersionManagement as i32, followees.clone());
-            neuron
-                .followees
-                .insert(Topic::SubnetReplicaVersionManagement as i32, followees);
-        }
-    }
-    proto
 }
 
 // TODO(NNS1-1817): remove once deployed
