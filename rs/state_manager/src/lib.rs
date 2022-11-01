@@ -1,4 +1,4 @@
-// Needs to be `pub` so that the benchmarking code in `state_manager/benches`
+// Needs to be `pub` so that the benchmarking code in `state_benches`
 // can access it.
 pub mod checkpoint;
 pub mod labeled_tree_visitor;
@@ -548,9 +548,14 @@ impl fmt::Debug for CheckpointRef {
     }
 }
 
-struct ComputeManifestRequest {
-    checkpoint_ref: CheckpointRef,
-    manifest_delta: Option<manifest::ManifestDelta>,
+enum ComputeManifestRequest {
+    /// Compute manifest and store the result as a side effect.
+    Compute {
+        checkpoint_ref: CheckpointRef,
+        manifest_delta: Option<manifest::ManifestDelta>,
+    },
+    /// When the request gets through the queue, notify by sending () into the provided channel.
+    Wait { sender: Sender<()> },
 }
 
 /// StateSyncRefs keeps track of the ongoing and aborted state syncs.
@@ -652,8 +657,7 @@ pub struct StateManagerImpl {
     /// The main metadata. Different threads will need to access this field.
     ///
     /// To avoid the risk of deadlocks, this lock should be held as short a time
-    /// as possible, and not held together with other locks by the same thread,
-    /// particularly the lock for `checkpoint_thread_pool`
+    /// as possible.
     states: Arc<parking_lot::RwLock<SharedState>>,
     verifier: Arc<dyn Verifier>,
     own_subnet_id: SubnetId,
@@ -665,16 +669,6 @@ pub struct StateManagerImpl {
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
     state_sync_refs: StateSyncRefs,
-    /// A thread pool for creating checkpoints and computing manifests.
-    ///
-    /// Since the thread pool is behind a mutex, only one thread can use it at
-    /// a time. Hence it's not possible to do a manifest computation and write a
-    /// checkpoint at the same time. This is intentional. The thread pool should
-    /// however not be used in other contexts, such as the situations where
-    /// checkpoints need to be loaded, as this would be unnecessary lock contention.
-    /// The lock should also only be held when no other locks are being held by the
-    /// same thread. This applies particularly to the lock for `states`.
-    checkpoint_thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     _state_hasher_handle: JoinOnDrop<()>,
     _deallocation_handle: JoinOnDrop<()>,
     persist_metadata_guard: Arc<Mutex<()>>,
@@ -1452,10 +1446,6 @@ impl StateManagerImpl {
             tip: Some(height_and_state),
         }));
 
-        let checkpoint_thread_pool = Arc::new(Mutex::new(scoped_threadpool::Pool::new(
-            NUMBER_OF_CHECKPOINT_THREADS,
-        )));
-
         let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
@@ -1467,13 +1457,15 @@ impl StateManagerImpl {
                     let log = log.clone();
                     let states = Arc::clone(&states);
                     let metrics = metrics.clone();
-                    let checkpoint_thread_pool = Arc::clone(&checkpoint_thread_pool);
                     let state_layout = state_layout.clone();
                     let persist_metadata_guard = persist_metadata_guard.clone();
+                    let mut manifest_thread_pool =
+                        scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+
                     move || {
                         while let Ok(req) = compute_manifest_request_receiver.recv() {
                             Self::handle_compute_manifest_request(
-                                &checkpoint_thread_pool,
+                                &mut manifest_thread_pool,
                                 &metrics,
                                 &log,
                                 &states,
@@ -1525,7 +1517,6 @@ impl StateManagerImpl {
             latest_state_height,
             latest_certified_height,
             state_sync_refs: StateSyncRefs::new(log),
-            checkpoint_thread_pool,
             _state_hasher_handle,
             _deallocation_handle,
             persist_metadata_guard,
@@ -1555,7 +1546,9 @@ impl StateManagerImpl {
             self.latest_manifest(),
             self.metrics.clone(),
             self.own_subnet_type,
-            Arc::clone(&self.checkpoint_thread_pool),
+            Arc::new(Mutex::new(scoped_threadpool::Pool::new(
+                NUMBER_OF_CHECKPOINT_THREADS,
+            ))),
             self.state_sync_refs.clone(),
         ))
     }
@@ -1649,7 +1642,7 @@ impl StateManagerImpl {
 
     #[allow(clippy::too_many_arguments)]
     fn handle_compute_manifest_request(
-        thread_pool: &Mutex<scoped_threadpool::Pool>,
+        thread_pool: &mut scoped_threadpool::Pool,
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
         states: &parking_lot::RwLock<SharedState>,
@@ -1658,98 +1651,105 @@ impl StateManagerImpl {
         persist_metadata_lock: &Arc<Mutex<()>>,
         #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
     ) {
-        // As long as CheckpointRef object is in scope, it should be safe to
-        // access the checkpoint data as it's guaranteed to not be removed.
-        let height = req.checkpoint_ref.0.height;
-        let checkpoint_layout = req
-            .checkpoint_ref
-            .0
-            .state_layout
-            .checkpoint(height)
-            .unwrap_or_else(|err| {
-                fatal!(
+        match req {
+            ComputeManifestRequest::Wait { sender } => {
+                sender.send(()).expect("failed to sync hasher")
+            }
+            ComputeManifestRequest::Compute {
+                checkpoint_ref,
+                manifest_delta,
+            } => {
+                // As long as CheckpointRef object is in scope, it should be safe to
+                // access the checkpoint data as it's guaranteed to not be removed.
+                let height = checkpoint_ref.0.height;
+                let checkpoint_layout = checkpoint_ref
+                    .0
+                    .state_layout
+                    .checkpoint(height)
+                    .unwrap_or_else(|err| {
+                        fatal!(
+                            log,
+                            "Failed to get checkpoint path for height {}: {}",
+                            height,
+                            err
+                        )
+                    });
+
+                let system_metadata = checkpoint_layout
+                    .system_metadata()
+                    .deserialize()
+                    .unwrap_or_else(|err| {
+                        fatal!(log, "Failed to decode system metadata @{}: {}", height, err)
+                    });
+
+                let start = Instant::now();
+                let manifest = crate::manifest::compute_manifest(
+                    thread_pool,
+                    &metrics.manifest_metrics,
                     log,
-                    "Failed to get checkpoint path for height {}: {}",
-                    height,
-                    err
+                    system_metadata.state_sync_version,
+                    checkpoint_layout.raw_path(),
+                    crate::manifest::DEFAULT_CHUNK_SIZE,
+                    manifest_delta,
                 )
-            });
+                .unwrap_or_else(|err| {
+                    fatal!(
+                        log,
+                        "Failed to compute manifest for checkpoint @{} after {:?}: {}",
+                        height,
+                        start.elapsed(),
+                        err
+                    )
+                });
 
-        let system_metadata = checkpoint_layout
-            .system_metadata()
-            .deserialize()
-            .unwrap_or_else(|err| {
-                fatal!(log, "Failed to decode system metadata @{}: {}", height, err)
-            });
+                let elapsed = start.elapsed();
+                metrics
+                    .checkpoint_op_duration
+                    .with_label_values(&["compute_manifest"])
+                    .observe(elapsed.as_secs_f64());
 
-        let start = Instant::now();
-        // NB. we should lock the pool for the shortest amount of time possible.
-        // If we didn't release it until the next request, State
-        // Manager wouldn't be able to commit new states.
-        let manifest = crate::manifest::compute_manifest(
-            &mut thread_pool.lock().unwrap(),
-            &metrics.manifest_metrics,
-            log,
-            system_metadata.state_sync_version,
-            checkpoint_layout.raw_path(),
-            crate::manifest::DEFAULT_CHUNK_SIZE,
-            req.manifest_delta,
-        )
-        .unwrap_or_else(|err| {
-            fatal!(
-                log,
-                "Failed to compute manifest for checkpoint @{} after {:?}: {}",
-                height,
-                start.elapsed(),
-                err
-            )
-        });
+                info!(
+                    log,
+                    "Computed manifest of state @{} in {:?}", height, elapsed
+                );
 
-        let elapsed = start.elapsed();
-        metrics
-            .checkpoint_op_duration
-            .with_label_values(&["compute_manifest"])
-            .observe(elapsed.as_secs_f64());
+                let state_size_bytes: i64 = manifest
+                    .file_table
+                    .iter()
+                    .map(|f| f.size_bytes as i64)
+                    .sum();
 
-        info!(
-            log,
-            "Computed manifest of state @{} in {:?}", height, elapsed
-        );
+                metrics.state_size.set(state_size_bytes);
+                metrics
+                    .last_computed_manifest_height
+                    .set(height.get() as i64);
 
-        let state_size_bytes: i64 = manifest
-            .file_table
-            .iter()
-            .map(|f| f.size_bytes as i64)
-            .sum();
+                #[cfg(not(feature = "malicious_code"))]
+                let root_hash = CryptoHashOfState::from(CryptoHash(
+                    crate::manifest::manifest_hash(&manifest).to_vec(),
+                ));
 
-        metrics.state_size.set(state_size_bytes);
-        metrics
-            .last_computed_manifest_height
-            .set(height.get() as i64);
+                // This is where we maliciously alter the root_hash!
+                #[cfg(feature = "malicious_code")]
+                let root_hash =
+                    maliciously_return_wrong_hash(&manifest, log, malicious_flags, height);
 
-        #[cfg(not(feature = "malicious_code"))]
-        let root_hash = CryptoHashOfState::from(CryptoHash(
-            crate::manifest::manifest_hash(&manifest).to_vec(),
-        ));
+                let mut states = states.write();
 
-        // This is where we maliciously alter the root_hash!
-        #[cfg(feature = "malicious_code")]
-        let root_hash = maliciously_return_wrong_hash(&manifest, log, malicious_flags, height);
+                if let Some(metadata) = states.states_metadata.get_mut(&height) {
+                    metadata.root_hash = Some(root_hash);
+                    metadata.manifest = Some(manifest);
+                }
 
-        let mut states = states.write();
-
-        if let Some(metadata) = states.states_metadata.get_mut(&height) {
-            metadata.root_hash = Some(root_hash);
-            metadata.manifest = Some(manifest);
+                release_lock_and_persist_metadata(
+                    log,
+                    metrics,
+                    state_layout,
+                    states,
+                    persist_metadata_lock,
+                );
+            }
         }
-
-        release_lock_and_persist_metadata(
-            log,
-            metrics,
-            state_layout,
-            states,
-            persist_metadata_lock,
-        );
     }
 
     fn latest_certified_state(
@@ -1868,7 +1868,7 @@ impl StateManagerImpl {
                 },
             );
         } else {
-            compute_manifest_requests.push(ComputeManifestRequest {
+            compute_manifest_requests.push(ComputeManifestRequest::Compute {
                 checkpoint_ref: checkpoint_ref.clone(),
                 manifest_delta: None,
             });
@@ -2809,6 +2809,20 @@ impl StateManager for StateManagerImpl {
         let checkpointed_state = match scope {
             CertificationScope::Full => {
                 let start = Instant::now();
+                {
+                    let _timer = self
+                        .metrics
+                        .checkpoint_metrics
+                        .make_checkpoint_step_duration
+                        .with_label_values(&["wait_for_manifest"])
+                        .start_timer();
+                    let (sender, recv) = unbounded();
+                    self.compute_manifest_request_sender
+                        .send(ComputeManifestRequest::Wait { sender })
+                        .expect("failed to send ComputeManifestRequest Wait message");
+                    recv.recv()
+                        .expect("failed to wait for ComputeManifest thread");
+                }
                 previous_checkpoint_info = {
                     let states = self.states.read();
                     states
@@ -2836,14 +2850,13 @@ impl StateManager for StateManagerImpl {
                 // flush deltas separately every round, see flush_page_maps.
                 strip_page_map_deltas(&mut state);
                 let result = {
-                    let mut thread_pool = self.checkpoint_thread_pool.lock().unwrap();
                     checkpoint::make_checkpoint(
                         &state,
                         height,
                         &self.state_layout,
                         &self.log,
                         &self.metrics.checkpoint_metrics,
-                        &mut thread_pool,
+                        &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
                     )
                 };
 
@@ -2982,7 +2995,7 @@ impl StateManager for StateManagerImpl {
                         self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
 
                     self.compute_manifest_request_sender
-                        .send(ComputeManifestRequest {
+                        .send(ComputeManifestRequest::Compute {
                             checkpoint_ref,
                             manifest_delta: if is_nns { None } else { manifest_delta },
                         })
