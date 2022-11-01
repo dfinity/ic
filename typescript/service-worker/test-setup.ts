@@ -7,7 +7,10 @@
 global.TextEncoder = require('text-encoding').TextEncoder;
 global.TextDecoder = require('text-encoding').TextDecoder;
 Object.defineProperty(self, 'location', {
-  value: 'https://rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.app',
+  value: {
+    host: 'rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.app',
+    toString: () => 'https://rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.app',
+  },
 });
 process.env.FORCE_FETCH_ROOT_KEY = 'true';
 Object.defineProperty(global.self, 'crypto', {

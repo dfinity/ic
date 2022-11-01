@@ -286,7 +286,7 @@ export async function handleRequest(request: Request): Promise<Response> {
         maybeCanisterId,
         shouldFetchRootKey
       );
-      const requestHeaders: [string, string][] = [];
+      const requestHeaders: [string, string][] = [['Host', url.hostname]];
       request.headers.forEach((value, key) => {
         if (key.toLowerCase() === 'if-none-match') {
           // Drop the if-none-match header because we do not want a "304 not modified" response back.
