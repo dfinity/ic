@@ -70,6 +70,7 @@ impl NNSRecoverySameNodes {
     ) -> Self {
         let recovery = Recovery::new(logger.clone(), recovery_args, None, !test)
             .expect("Failed to init recovery");
+        recovery.init_registry_local_store();
         let new_state_dir = recovery.work_dir.join("new_ic_state");
         create_dir(&new_state_dir).expect("Failed to create state directory for upload.");
         Self {

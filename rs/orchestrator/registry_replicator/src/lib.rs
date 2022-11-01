@@ -66,6 +66,26 @@ pub struct RegistryReplicator {
 }
 
 impl RegistryReplicator {
+    pub fn new_with_clients(
+        logger: ReplicaLogger,
+        local_store: Arc<dyn LocalStore>,
+        registry_client: Arc<dyn RegistryClient>,
+        poll_delay: Duration,
+    ) -> Self {
+        let metrics = Arc::new(RegistryreplicatorMetrics::new(&MetricsRegistry::new()));
+
+        Self {
+            logger,
+            node_id: None,
+            registry_client,
+            local_store,
+            started: Arc::new(AtomicBool::new(false)),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            poll_delay,
+            metrics,
+        }
+    }
+
     pub fn new_from_config(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
@@ -190,7 +210,7 @@ impl RegistryReplicator {
         (nns_urls, nns_pub_key)
     }
 
-    async fn initialize_local_store(
+    pub async fn initialize_local_store(
         &self,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
@@ -202,6 +222,10 @@ impl RegistryReplicator {
             .expect("Could not read registry local store.")
             .is_empty()
         {
+            info!(
+                self.logger,
+                "Local registry store is not empty, skipping initialization."
+            );
             return;
         }
 
@@ -249,15 +273,15 @@ impl RegistryReplicator {
                         })
                         .expect("Could not write to local store.");
 
+                    registry_version += RegistryVersion::from(entries as u64);
+                    timeout = 1;
+
                     if entries > 0 {
                         info!(
                             self.logger,
                             "Stored registry versions up to: {}", registry_version
                         );
                     }
-
-                    registry_version += RegistryVersion::from(entries as u64);
-                    timeout = 1;
                 }
                 Err(e) => {
                     warn!(

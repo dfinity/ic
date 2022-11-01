@@ -73,11 +73,13 @@ impl AppSubnetRecovery {
         subnet_args: AppSubnetRecoveryArgs,
     ) -> Self {
         let ssh_confirmation = neuron_args.is_some();
+        let recovery = Recovery::new(logger.clone(), recovery_args, neuron_args, ssh_confirmation)
+            .expect("Failed to init recovery");
+        recovery.init_registry_local_store();
         Self {
             step_iterator: Box::new(StepType::iter()),
             params: subnet_args,
-            recovery: Recovery::new(logger.clone(), recovery_args, neuron_args, ssh_confirmation)
-                .expect("Failed to init recovery"),
+            recovery,
             logger,
         }
     }

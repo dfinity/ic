@@ -102,6 +102,7 @@ impl NNSRecoveryFailoverNodes {
         let ssh_confirmation = neuron_args.is_some();
         let recovery = Recovery::new(logger.clone(), recovery_args, neuron_args, ssh_confirmation)
             .expect("Failed to init recovery");
+        recovery.init_registry_local_store_with_url(&subnet_args.validate_nns_url);
         let new_registry_local_store = recovery.work_dir.join(IC_REGISTRY_LOCAL_STORE);
         Self {
             step_iterator: Box::new(StepType::iter()),
@@ -188,13 +189,10 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                 )?,
             )),
 
-            StepType::ValidateReplayOutput => {
-                Ok(Box::new(self.recovery.get_validate_replay_step_with_nns(
-                    self.params.subnet_id,
-                    self.params.validate_nns_url.clone(),
-                    0,
-                )))
-            }
+            StepType::ValidateReplayOutput => Ok(Box::new(
+                self.recovery
+                    .get_validate_replay_step(self.params.subnet_id, 0),
+            )),
 
             StepType::UpdateRegistryLocalStore => Ok(Box::new(
                 self.recovery

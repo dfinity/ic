@@ -13,14 +13,15 @@ use crate::{
     IC_STATE_EXCLUDES,
 };
 use ic_base_types::CanisterId;
+use ic_registry_client::client::RegistryClientImpl;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
 use std::{thread, time};
-use url::Url;
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -53,7 +54,6 @@ impl Step for AdminStep {
         Recovery::exec_admin_cmd(&self.logger, &self.ic_admin_cmd)
     }
 }
-
 pub struct DownloadIcStateStep {
     pub logger: Logger,
     pub try_readonly: bool,
@@ -251,7 +251,7 @@ impl Step for ReplayStep {
 pub struct ValidateReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
-    pub validate_nns_url: Url,
+    pub registry_client: Arc<RegistryClientImpl>,
     pub work_dir: PathBuf,
     pub extra_batches: u64,
 }
@@ -267,7 +267,7 @@ impl Step for ValidateReplayStep {
 
         let heights = get_node_heights_from_metrics(
             &self.logger,
-            self.validate_nns_url.clone(),
+            self.registry_client.clone(),
             self.subnet_id,
         )?;
         let cert_height = &heights
@@ -599,7 +599,7 @@ impl Step for CopyIcStateStep {
 
 pub struct UploadCUPAndTar {
     pub logger: Logger,
-    pub nns_url: Url,
+    pub registry_client: Arc<RegistryClientImpl>,
     pub subnet_id: SubnetId,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
@@ -641,7 +641,7 @@ impl Step for UploadCUPAndTar {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let ips = get_member_ips(self.nns_url.clone(), self.subnet_id)?;
+        let ips = get_member_ips(self.registry_client.clone(), self.subnet_id)?;
 
         ips.into_iter()
             .map(|ip| {

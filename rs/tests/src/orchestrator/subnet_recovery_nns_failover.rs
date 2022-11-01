@@ -223,9 +223,9 @@ pub fn test(env: TestEnv) {
     ));
 
     info!(logger, "Check if download node is behind...");
-    let ot_node_metrics = get_node_metrics(&logger, &nns_node.get_ip_addr())
+    let ot_node_metrics = block_on(get_node_metrics(&logger, &nns_node.get_ip_addr()))
         .expect("Missing metrics for upload node");
-    let dn_node_metrics = get_node_metrics(&logger, &download_node.get_ip_addr())
+    let dn_node_metrics = block_on(get_node_metrics(&logger, &download_node.get_ip_addr()))
         .expect("Missing metrics for download node");
     if dn_node_metrics.finalization_height < ot_node_metrics.finalization_height {
         info!(logger, "Use the other node for download.");
