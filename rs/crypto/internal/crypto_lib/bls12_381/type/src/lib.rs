@@ -1372,7 +1372,11 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
                 let mut tbl = Self::identities(TABLE_SIZE);
 
                 for i in 1..TABLE_SIZE {
-                    tbl[i] = &tbl[i - 1] + self;
+                    tbl[i] = if i % 2 == 0 {
+                        tbl[i / 2].double()
+                    } else {
+                        &tbl[i - 1] + self
+                    };
                 }
 
                 let s = scalar.serialize();
