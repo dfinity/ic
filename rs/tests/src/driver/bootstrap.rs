@@ -223,11 +223,6 @@ pub fn create_config_disk_image(
     let script_path = test_env
         .base_path()
         .join("dependencies/ic-os/guestos/scripts/build-bootstrap-config-image.sh");
-    let tmp_out = Command::new("ls")
-        .arg("-alh")
-        .arg(script_path.clone())
-        .output();
-    println!("ls -alh {:?}: {:?}", script_path, tmp_out);
     let mut cmd = Command::new(script_path);
     let ic_setup = IcSetup::read_attribute(test_env);
     let journalbeat_hosts: Vec<String> = ic_setup.journalbeat_hosts;

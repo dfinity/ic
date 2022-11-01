@@ -6,6 +6,7 @@ use super::ic::VmAllocationStrategy;
 use super::ic::VmResources;
 use super::resource::AllocatedVm;
 use super::resource::{allocate_resources, get_resource_request_for_universal_vm, DiskImage};
+use super::test_env::SshKeyGen;
 use super::test_env::{TestEnv, TestEnvAttribute};
 use super::test_env_api::{
     get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, ADMIN,
@@ -105,7 +106,21 @@ impl UniversalVm {
             let config_img = universal_vm_dir.join(CONF_IMG_FNAME);
             std::fs::create_dir_all(universal_vm_dir)?;
 
-            let mut cmd = Command::new("create-universal-vm-config-image.sh");
+            let script_path = env
+                .base_path()
+                .join("dependencies/rs/tests/create-universal-vm-config-image.sh");
+            let mut cmd = Command::new(script_path);
+
+            // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.
+            let path_env_var = "PATH";
+            let path_prefix = match std::env::var(path_env_var) {
+                Ok(old_path) => {
+                    format!("{old_path}:")
+                }
+                Err(_) => String::from(""),
+            };
+            cmd.env(path_env_var, format!("{path_prefix}{}", "/usr/sbin"));
+
             cmd.arg("--input")
                 .arg(config_dir)
                 .arg("--output")
@@ -180,6 +195,8 @@ impl UniversalVms for TestEnv {
     ) -> Result<PathBuf> {
         let config_dir = self.get_universal_vm_config_dir(universal_vm_name);
         fs::create_dir_all(config_dir.clone())?;
+
+        self.ssh_keygen(ADMIN)?;
 
         setup_ssh(self, config_dir.clone())?;
 

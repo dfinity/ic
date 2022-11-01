@@ -283,6 +283,7 @@ def populate_dependencies_dir(
     scripts_rel_paths = [
         "ic-os/guestos/scripts/build-bootstrap-config-image.sh",
         "ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh",
+        "rs/tests/create-universal-vm-config-image.sh",
     ]
 
     for src_rel_path in scripts_rel_paths:
