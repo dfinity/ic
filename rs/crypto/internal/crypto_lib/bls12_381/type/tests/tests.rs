@@ -137,6 +137,15 @@ fn scalar_one_generates_expected_values() {
 }
 
 #[test]
+fn scalar_neg_one_generates_expected_values() {
+    // This value is the BLS12-381 group order, minus 1
+    scalar_test_encoding(
+        Scalar::one().neg(),
+        "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000000",
+    );
+}
+
+#[test]
 fn scalar_two_generates_expected_values() {
     scalar_test_encoding(
         Scalar::one() + Scalar::one(),
