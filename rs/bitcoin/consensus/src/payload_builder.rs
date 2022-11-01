@@ -9,7 +9,7 @@ use ic_interfaces::self_validating_payload::{
 };
 use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{log, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -58,7 +58,7 @@ impl GetPayloadError {
 }
 
 pub struct BitcoinPayloadBuilder {
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: Arc<BitcoinPayloadBuilderMetrics>,
     bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
     bitcoin_testnet_adapter_client: Box<dyn BitcoinAdapterClient>,
@@ -69,7 +69,7 @@ pub struct BitcoinPayloadBuilder {
 
 impl BitcoinPayloadBuilder {
     pub fn new(
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
         bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
         bitcoin_testnet_adapter_client: Box<dyn BitcoinAdapterClient>,
