@@ -27,7 +27,10 @@ use derive_more::{AsMut, AsRef, From, TryInto};
 use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use serde::{Deserialize, Serialize};
-use std::convert::{TryFrom, TryInto};
+use std::{
+    convert::{TryFrom, TryInto},
+    sync::Arc,
+};
 use strum_macros::{EnumIter, IntoStaticStr};
 
 pub use crate::{
@@ -38,6 +41,7 @@ pub use crate::{
         ConsensusMessage, ConsensusMessageAttribute,
     },
     messages::SignedIngress,
+    state_sync::FILE_GROUP_CHUNK_ID_OFFSET,
 };
 
 /// The artifact type
@@ -511,6 +515,9 @@ pub struct StateSyncMessage {
     pub checkpoint_root: std::path::PathBuf,
     /// The manifest containing the summary of the content.
     pub manifest: crate::state_sync::Manifest,
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    pub state_sync_file_group: Arc<crate::state_sync::FileGroupChunks>,
 }
 
 impl ChunkableArtifact for StateSyncMessage {
@@ -523,24 +530,31 @@ impl ChunkableArtifact for StateSyncMessage {
         #[cfg(target_family = "unix")]
         {
             use std::os::unix::fs::FileExt;
-            let payload = if chunk_id == crate::state_sync::MANIFEST_CHUNK {
-                crate::state_sync::encode_manifest(&self.manifest)
-            } else if let Some(chunk) = self
-                .manifest
-                .chunk_table
-                .get((chunk_id.get() - 1) as usize)
-                .cloned()
-            {
+
+            let get_single_chunk = |chunk_index: usize| -> Option<Vec<u8>> {
+                let chunk = self.manifest.chunk_table.get(chunk_index).cloned()?;
                 let path = self
                     .checkpoint_root
                     .join(&self.manifest.file_table[chunk.file_index as usize].relative_path);
                 let mut buf = vec![0; chunk.size_bytes as usize];
                 let f = std::fs::File::open(&path).ok()?;
                 f.read_exact_at(&mut buf[..], chunk.offset).ok()?;
-                buf
-            } else {
-                return None;
+                Some(buf)
             };
+
+            let mut payload: Vec<u8> = Vec::new();
+            if chunk_id == crate::state_sync::MANIFEST_CHUNK {
+                payload = crate::state_sync::encode_manifest(&self.manifest);
+            } else if chunk_id.get() < FILE_GROUP_CHUNK_ID_OFFSET
+                || self.state_sync_file_group.get(&chunk_id.get()).is_none()
+            {
+                payload = get_single_chunk((chunk_id.get() - 1) as usize)?;
+            } else {
+                let chunk_table_indices = self.state_sync_file_group.get(&chunk_id.get())?;
+                for chunk_table_index in chunk_table_indices {
+                    payload.extend(get_single_chunk(*chunk_table_index as usize)?);
+                }
+            }
 
             Some(ArtifactChunk {
                 chunk_id,

@@ -16,7 +16,9 @@ use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{
-    state_sync::{encode_manifest, ChunkInfo, FileInfo, Manifest},
+    state_sync::{
+        encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, FILE_GROUP_CHUNK_ID_OFFSET,
+    },
     CryptoHashOfState, Height,
 };
 use rand::{Rng, SeedableRng};
@@ -39,6 +41,23 @@ pub const DEFAULT_CHUNK_SIZE: u32 = 1 << 20; // 1 MiB.
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
 /// have a hash computed earlier by this replica process.
 const REHASH_EVERY_NTH_CHUNK: u64 = 10;
+
+/// During the downloading phase of state sync, We group certain files together
+/// which have filenames ending with `FILE_TO_GROUP`.
+///
+/// We make the decision to group `canister.pbuf` files for two main reasons:
+///     1. They are small in general, usually less than 1 KiB.
+///     2. They change between checkpoints, so we always have to fetch them.
+const FILE_TO_GROUP: &str = "canister.pbuf";
+
+/// The size of files to group should be less or equal to the `FILE_GROUP_SIZE_LIMIT`
+/// to guarantee the efficiency of grouping.
+///
+/// The number is chosen heuristically for two reasons:
+///     1. It will cover most of `canister.pbuf` files if not all of them.
+///     2. `DEFAULT_CHUNK_SIZE` is 128 times of it. It means the number of chunks
+///     will decrease by at least two orders of magnitude, which is significant enough.
+const MAX_FILE_SIZE_TO_GROUP: u32 = 1 << 13; // 8 KiB
 
 #[derive(Debug, PartialEq)]
 pub enum ManifestValidationError {
@@ -183,6 +202,47 @@ pub struct ManifestDelta {
     /// Wasm memory and stable memory pages that might have changed since the
     /// state at `base_height`.
     pub(crate) dirty_memory_pages: DirtyPages,
+}
+
+/// Groups small files into larger chunks.
+///
+/// Builds the grouping of how files should be put together into a single chunk and
+/// returns the mapping from chunk id to the grouped chunk indices.
+/// The grouping is deterministic to ensure that the sender assembles the file
+/// in such a way that the receiver can split it back just by looking at the manifest.
+pub(crate) fn build_file_group_chunks(manifest: &Manifest) -> FileGroupChunks {
+    let mut file_group_chunks: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    if manifest.chunk_table.len() >= FILE_GROUP_CHUNK_ID_OFFSET as usize {
+        return FileGroupChunks::new(file_group_chunks);
+    }
+    let mut chunk_id_p2p = FILE_GROUP_CHUNK_ID_OFFSET;
+    let mut chunk_table_indices: Vec<u32> = Vec::new();
+
+    let mut bytes_left = DEFAULT_CHUNK_SIZE as u64;
+
+    for (file_index, f) in manifest.file_table.iter().enumerate() {
+        if !f.relative_path.ends_with(FILE_TO_GROUP)
+            || f.size_bytes > MAX_FILE_SIZE_TO_GROUP as u64
+            || f.size_bytes >= DEFAULT_CHUNK_SIZE as u64
+        {
+            continue;
+        }
+
+        if bytes_left < f.size_bytes {
+            file_group_chunks.insert(chunk_id_p2p, std::mem::take(&mut chunk_table_indices));
+            chunk_id_p2p += 1;
+            bytes_left = DEFAULT_CHUNK_SIZE as u64;
+        }
+
+        bytes_left -= f.size_bytes;
+        let chunk_range = file_chunk_range(&manifest.chunk_table, file_index);
+        chunk_table_indices.extend(chunk_range.map(|i| i as u32));
+    }
+
+    if !chunk_table_indices.is_empty() {
+        file_group_chunks.insert(chunk_id_p2p, chunk_table_indices);
+    }
+    FileGroupChunks::new(file_group_chunks)
 }
 
 fn write_chunk_hash(hasher: &mut Sha256, chunk_info: &ChunkInfo) {
