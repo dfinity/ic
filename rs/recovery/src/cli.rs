@@ -10,11 +10,13 @@ use crate::steps::Step;
 use crate::util::subnet_id_from_str;
 use crate::{app_subnet_recovery, util};
 use crate::{NeuronArgs, RecoveryArgs};
+use ic_registry_client::client::RegistryClientImpl;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use slog::{info, warn, Logger};
 use std::convert::TryFrom;
 use std::io::{stdin, stdout, Write};
 use std::net::IpAddr;
+use std::sync::Arc;
 use url::Url;
 
 /// Application subnets are recovered by:
@@ -45,7 +47,6 @@ pub fn app_subnet_recovery(
         neuron_args = Some(read_neuron_args(&logger));
     }
 
-    let nns_url = args.nns_url.clone();
     let mut subnet_recovery =
         AppSubnetRecovery::new(logger.clone(), args, neuron_args, subnet_recovery_args);
 
@@ -70,7 +71,11 @@ pub fn app_subnet_recovery(
 
                 // We could pick a node with highest finalization height automatically,
                 // but we might have a preference between nodes of the same finalization height.
-                print_height_info(&logger, nns_url.clone(), subnet_recovery.params.subnet_id);
+                print_height_info(
+                    &logger,
+                    subnet_recovery.get_recovery_api().registry_client.clone(),
+                    subnet_recovery.params.subnet_id,
+                );
 
                 if subnet_recovery.params.download_node.is_none() {
                     subnet_recovery.params.download_node =
@@ -129,10 +134,13 @@ pub fn nns_recovery_same_nodes(
     print_summary(&logger, &args, nns_recovery_args.subnet_id);
     wait_for_confirmation(&logger);
 
-    let nns_url = args.nns_url.clone();
     let mut nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args, nns_recovery_args, test);
 
-    print_height_info(&logger, nns_url, nns_recovery.params.subnet_id);
+    print_height_info(
+        &logger,
+        nns_recovery.get_recovery_api().registry_client.clone(),
+        nns_recovery.params.subnet_id,
+    );
 
     if nns_recovery.params.download_node.is_none() {
         nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
@@ -184,11 +192,14 @@ pub fn nns_recovery_failover_nodes(
         neuron_args = Some(read_neuron_args(&logger));
     }
 
-    let validate_nns_url = nns_recovery_args.validate_nns_url.clone();
     let mut nns_recovery =
         NNSRecoveryFailoverNodes::new(logger.clone(), args, neuron_args, nns_recovery_args);
 
-    print_height_info(&logger, validate_nns_url, nns_recovery.params.subnet_id);
+    print_height_info(
+        &logger,
+        nns_recovery.get_recovery_api().registry_client.clone(),
+        nns_recovery.params.subnet_id,
+    );
 
     if nns_recovery.params.download_node.is_none() {
         nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
@@ -274,9 +285,13 @@ pub fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) 
     info!(logger, "Creating recovery directory in {:?}", args.dir);
 }
 
-pub fn print_height_info(logger: &Logger, nns_url: Url, subnet_id: SubnetId) {
+pub fn print_height_info(
+    logger: &Logger,
+    registry_client: Arc<RegistryClientImpl>,
+    subnet_id: SubnetId,
+) {
     info!(logger, "Select a node with highest finalization height:");
-    match get_node_heights_from_metrics(logger, nns_url, subnet_id) {
+    match get_node_heights_from_metrics(logger, registry_client, subnet_id) {
         Ok(heights) => info!(logger, "{:#?}", heights),
         Err(err) => warn!(logger, "Failed to query height info: {:?}", err),
     }

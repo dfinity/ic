@@ -315,7 +315,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     assert_subnet_is_healthy(&all_app_nodes, working_version, app_can_id, msg, &logger);
 
     for node in all_app_nodes {
-        let height = get_node_metrics(&logger, &node.get_ip_addr())
+        let height = block_on(get_node_metrics(&logger, &node.get_ip_addr()))
             .unwrap()
             .finalization_height;
         info!(

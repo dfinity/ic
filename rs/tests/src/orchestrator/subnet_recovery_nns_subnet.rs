@@ -170,9 +170,9 @@ pub fn test(env: TestEnv) {
         msg
     ));
 
-    let up_node_metrics = get_node_metrics(&logger, &upload_node.get_ip_addr())
+    let up_node_metrics = block_on(get_node_metrics(&logger, &upload_node.get_ip_addr()))
         .expect("Missing metrics for upload node");
-    let dn_node_metrics = get_node_metrics(&logger, &download_node.get_ip_addr())
+    let dn_node_metrics = block_on(get_node_metrics(&logger, &download_node.get_ip_addr()))
         .expect("Missing metrics for download node");
     if dn_node_metrics.finalization_height < up_node_metrics.finalization_height {
         // swap the two nodes, so that download one has highest height in the subnet

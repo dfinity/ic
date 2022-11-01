@@ -184,7 +184,7 @@ pub(crate) fn select_download_node(
 ) -> (IcNodeSnapshot, NodeMetrics) {
     let node = subnet
         .nodes()
-        .filter_map(|n| get_node_metrics(logger, &n.get_ip_addr()).map(|m| (n, m)))
+        .filter_map(|n| block_on(get_node_metrics(logger, &n.get_ip_addr())).map(|m| (n, m)))
         .max_by_key(|(_, metric)| metric.finalization_height)
         .expect("No download node found");
     info!(
