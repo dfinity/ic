@@ -35,7 +35,6 @@
 //! - For a lack of a better strategy, always prioritise responses over
 //! requests.
 
-use super::query_allocations::QueryAllocationsUsed;
 use crate::{
     execution::common::{self, validate_method},
     execution::nonreplicated_query::execute_non_replicated_query,
@@ -62,16 +61,13 @@ use ic_types::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery,
     },
     methods::WasmMethod,
-    CanisterId, Cycles, NumInstructions, NumMessages, QueryAllocation, Time,
+    CanisterId, Cycles, NumInstructions, NumMessages, Time,
 };
 use ic_types::{
     methods::{FuncRef, WasmClosure},
     NumSlices,
 };
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, RwLock},
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 const ENABLE_QUERY_OPTIMIZATION: bool = true;
 
@@ -149,7 +145,6 @@ pub(super) struct QueryContext<'a> {
     // responses first if one is available hence, there will never be more than
     // one outstanding response.
     outstanding_response: Option<Response>,
-    query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
     max_canister_memory_size: NumBytes,
     max_instructions_per_query: NumInstructions,
     max_query_call_depth: usize,
@@ -167,7 +162,6 @@ impl<'a> QueryContext<'a> {
         own_subnet_type: SubnetType,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
-        query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
         subnet_available_memory: SubnetAvailableMemory,
         max_canister_memory_size: NumBytes,
         max_instructions_per_query: NumInstructions,
@@ -192,7 +186,6 @@ impl<'a> QueryContext<'a> {
             call_stack: BTreeMap::new(),
             outstanding_requests: Vec::new(),
             outstanding_response: None,
-            query_allocations_used,
             max_canister_memory_size,
             max_instructions_per_query,
             max_query_call_depth,
@@ -486,13 +479,9 @@ impl<'a> QueryContext<'a> {
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
-        let instruction_limit = self.max_instructions_per_query.min(
-            self.query_allocations_used
-                .write()
-                .unwrap()
-                .allocation_before_execution(&canister.canister_id())
-                .into(),
-        );
+        let instruction_limit = self
+            .max_instructions_per_query
+            .min(self.remaining_instructions_for_composite_query);
         let instruction_limits =
             InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
@@ -520,13 +509,6 @@ impl<'a> QueryContext<'a> {
             NumSlices::from(1),
             NumMessages::from(1),
         );
-        self.query_allocations_used
-            .write()
-            .unwrap()
-            .update_allocation_after_execution(
-                &canister,
-                QueryAllocation::from(instructions_executed),
-            );
         (canister, result)
     }
 
@@ -582,13 +564,9 @@ impl<'a> QueryContext<'a> {
         // No cycles are refunded in a response to a query call.
         let incoming_cycles = Cycles::zero();
 
-        let instruction_limit = self.max_instructions_per_query.min(
-            self.query_allocations_used
-                .write()
-                .unwrap()
-                .allocation_before_execution(&canister_id)
-                .into(),
-        );
+        let instruction_limit = self
+            .max_instructions_per_query
+            .min(self.remaining_instructions_for_composite_query);
         let instruction_limits =
             InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
@@ -674,14 +652,6 @@ impl<'a> QueryContext<'a> {
             NumSlices::from(1),
             NumMessages::from(1),
         );
-        self.query_allocations_used
-            .write()
-            .unwrap()
-            .update_allocation_after_execution(
-                &canister,
-                QueryAllocation::from(instructions_executed),
-            );
-
         (canister, call_origin, action)
     }
 

@@ -1,7 +1,6 @@
 //! This module implements the `QueryHandler` trait which is used to execute
 //! query methods via query calls.
 
-mod query_allocations;
 mod query_context;
 #[cfg(test)]
 mod tests;
@@ -29,13 +28,12 @@ use ic_types::{
     },
     CanisterId, NumInstructions,
 };
-use query_allocations::QueryAllocationsUsed;
 use serde::Serialize;
 use std::{
     convert::Infallible,
     future::Future,
     pin::Pin,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 use tokio::sync::oneshot;
@@ -90,7 +88,6 @@ pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
     own_subnet_type: SubnetType,
-    query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
     config: Config,
     metrics: QueryHandlerMetrics,
     max_instructions_per_query: NumInstructions,
@@ -119,7 +116,6 @@ impl InternalHttpQueryHandler {
             log,
             hypervisor,
             own_subnet_type,
-            query_allocations_used: Arc::new(RwLock::new(QueryAllocationsUsed::new())),
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
@@ -138,15 +134,6 @@ impl QueryHandler for InternalHttpQueryHandler {
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
-        // Note that This assumes that the QueryHandler is always called with the
-        // "latest" state.  If and when we start supporting queries against older
-        // versions of the state, we will need the caller of the QueryHandler to
-        // still supply its view of the "latest" state to allow looking up the
-        // "current" time.
-        self.query_allocations_used
-            .write()
-            .unwrap()
-            .purge(state.metadata.batch_time);
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
@@ -159,7 +146,6 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.own_subnet_type,
             state,
             data_certificate,
-            self.query_allocations_used.clone(),
             subnet_available_memory,
             max_canister_memory_size,
             self.max_instructions_per_query,
