@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -15,7 +16,8 @@ use super::{
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession, TopologySnapshot, ADMIN,
+        retry, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession, TopologySnapshot,
+        ADMIN,
     },
     test_setup::GroupSetup,
     universal_vm::{UniversalVm, UniversalVms},
@@ -48,6 +50,9 @@ const REPLICA_METRICS_PORT: u16 = 9090;
 const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 const NODE_EXPORTER_METRICS_PORT: u16 = 9100;
 const GRAFANA_PORT: u16 = 3000;
+
+pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+pub const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
 /// The Prometheus trait allows starting a Prometheus VM,
 /// periodically configuring its scraping targets based on the latest IC topology
@@ -140,13 +145,16 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
                 .join(name)
                 .with_extension("json");
             let size = fs::metadata(from).unwrap().len();
-            let mut remote_file = session
-                .scp_send(to, 0o644, size, None)
-                .unwrap_or_else(|_| panic!("Failed to scp {from:?} to {vm_name}:{to:?}!"));
-            let mut from_file =
-                File::open(&from).unwrap_or_else(|_| panic!("Failed to open source {:?}", from));
-            std::io::copy(&mut from_file, &mut remote_file)
-                .unwrap_or_else(|_| panic!("Failed to copy {from:?} to {vm_name}:{to:?}!"));
+
+            retry(self.logger(), SCP_RETRY_TIMEOUT, SCP_RETRY_BACKOFF, || {
+                let mut remote_file = session.scp_send(to, 0o644, size, None)?;
+                let mut from_file = File::open(&from)?;
+                std::io::copy(&mut from_file, &mut remote_file)?;
+                Ok(())
+            })
+            .unwrap_or_else(|e| {
+                panic!("Failed to scp {from:?} to {vm_name}:{to:?} because: {e:?}!")
+            });
         }
     }
 
