@@ -2,8 +2,8 @@ use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError,
-    CspTlsKeygenError, CspTlsSignError,
+    CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
+    CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -24,7 +24,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -129,6 +129,9 @@ pub trait TarpcCspVault {
 
     // Corresponds to `SecretKeyStoreCspVault.sks_contains()`.
     async fn sks_contains(key_id: KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
+
+    // Corresponds to `PublicKeyStoreCspVault.current_node_public_keys()`.
+    async fn current_node_public_keys() -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 
     // Corresponds to `TlsHandshakeCspVault.gen_tls_key_pair()`.
     async fn gen_tls_key_pair(

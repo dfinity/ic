@@ -3,9 +3,9 @@ use crate::key_id::KeyId;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
-    BasicSignatureCspVault, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
-    PublicRandomSeedGenerator, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
-    ThresholdSignatureCspVault, TlsHandshakeCspVault,
+    BasicSignatureCspVault, CspPublicKeyStoreError, IDkgProtocolCspVault, MultiSignatureCspVault,
+    NiDkgCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator, SecretKeyStoreCspVault,
+    ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault, TlsHandshakeCspVault,
 };
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
@@ -40,7 +40,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
@@ -279,6 +279,16 @@ impl<
     ) -> Result<bool, CspSecretKeyStoreContainsError> {
         let vault = self.local_csp_vault;
         let job = move || vault.sks_contains(&key_id);
+        execute_on_thread_pool(self.thread_pool_handle, job).await
+    }
+
+    // PublicKeyStoreCspVault-methods.
+    async fn current_node_public_keys(
+        self,
+        _: context::Context,
+    ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
+        let vault = self.local_csp_vault;
+        let job = move || vault.current_node_public_keys();
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

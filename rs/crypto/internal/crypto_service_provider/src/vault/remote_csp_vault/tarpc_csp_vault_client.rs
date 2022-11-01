@@ -3,11 +3,11 @@ use crate::key_id::KeyId;
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
-    CspMultiSignatureError, CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
-    CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault,
-    MultiSignatureCspVault, NiDkgCspVault, PublicRandomSeedGenerator,
-    PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
-    ThresholdSignatureCspVault,
+    CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
+    CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError, CspTlsKeygenError,
+    CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
+    PublicKeyStoreCspVault, PublicRandomSeedGenerator, PublicRandomSeedGeneratorError,
+    SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault,
 };
 use crate::vault::remote_csp_vault::TarpcCspVaultClient;
 use crate::TlsHandshakeCspVault;
@@ -35,7 +35,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -253,6 +253,20 @@ impl SecretKeyStoreCspVault for RemoteCspVault {
             Err(CspSecretKeyStoreContainsError::InternalError {
                 internal_error: rpc_error.to_string(),
             })
+        })
+    }
+}
+
+impl PublicKeyStoreCspVault for RemoteCspVault {
+    fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .current_node_public_keys(context_with_timeout(self.rpc_timeout)),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspPublicKeyStoreError::TransientInternalError(
+                rpc_error.to_string(),
+            ))
         })
     }
 }

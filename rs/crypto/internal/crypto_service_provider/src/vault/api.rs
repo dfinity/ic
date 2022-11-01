@@ -20,7 +20,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -102,6 +102,12 @@ pub enum CspSecretKeyStoreContainsError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CspPublicKeyStoreError {
+    // TODO: CRP-1719 add more error variants if necessary
+    TransientInternalError(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspTlsKeygenError {
     InvalidNotAfterDate { message: String, not_after: String },
     InternalError { internal_error: String },
@@ -140,6 +146,7 @@ pub trait CspVault:
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
     + PublicRandomSeedGenerator
+    + PublicKeyStoreCspVault
 {
 }
 
@@ -155,6 +162,7 @@ impl<T> CspVault for T where
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
         + PublicRandomSeedGenerator
+        + PublicKeyStoreCspVault
 {
 }
 
@@ -397,6 +405,15 @@ pub trait SecretKeyStoreCspVault {
     /// # Arguments
     /// * `key_id` identifies the key whose presence should be checked.
     fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
+}
+
+/// Operations of `CspVault` related to querying the public key store.
+pub trait PublicKeyStoreCspVault {
+    /// Returns the node's current public keys.
+    ///
+    /// # Errors
+    /// * if a transient error (e.g., RPC timeout) occurs when accessing the public key store
+    fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 }
 
 /// Operations of `CspVault` related to TLS handshakes.
