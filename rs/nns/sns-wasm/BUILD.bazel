@@ -12,9 +12,11 @@ filegroup(
 
 DEPENDENCIES = [
     "//rs/crypto/sha",
+    "//rs/monitoring/metrics_encoder",
     "//rs/nns/constants",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_http_metrics",
     "//rs/sns/governance",
     "//rs/sns/init",
     "//rs/sns/root",
