@@ -37,7 +37,18 @@ type UpdateBalanceError = variant {
   NoNewUtxos;
 };
 type UpdateBalanceResult = record { block_index : nat64; amount : nat64 };
-service : {
+type BtcNetwork = variant {Mainnet; Regtest; Testnet};
+
+// The initialization parameters of the minter canister.
+type InitArgs = record {
+    btc_network: BtcNetwork;
+    ledger_id : principal;
+    ecdsa_key_name: text;
+    retrieve_btc_min_fee: nat64;
+    retrieve_btc_min_amount: nat64;
+};
+
+service : (InitArgs) -> {
   get_btc_address : (GetBtcAddressArgs) -> (text);
   get_withdrawal_account : () -> (GetWithdrawalAccountResult);
   retrieve_btc : (RetrieveBtcArgs) -> (Result);
