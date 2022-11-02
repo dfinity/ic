@@ -11,6 +11,7 @@ use bitcoin::network::{
     Address,
 };
 use ic_logger::{error, info, trace, warn, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use rand::prelude::*;
 use thiserror::Error;
 use tokio::{
@@ -27,6 +28,7 @@ use crate::{
     common::*,
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
+    metrics::ConnectionManagerMetrics,
     stream::{StreamConfig, StreamEvent, StreamEventKind},
     Channel, ChannelError, Command, ProcessBitcoinNetworkMessage,
     ProcessBitcoinNetworkMessageError, ProcessEvent,
@@ -101,6 +103,7 @@ pub struct ConnectionManager {
     network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
     /// This field is used for the version nonce generation.
     rng: StdRng,
+    metrics: ConnectionManagerMetrics,
 }
 
 impl ConnectionManager {
@@ -109,6 +112,7 @@ impl ConnectionManager {
         config: &Config,
         logger: ReplicaLogger,
         network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
+        metrics_registry: &MetricsRegistry,
     ) -> Self {
         let address_book = AddressBook::new(config, logger.clone());
         let (stream_event_sender, stream_event_receiver) =
@@ -130,6 +134,7 @@ impl ConnectionManager {
             stream_event_sender,
             network_message_sender,
             stream_event_receiver,
+            metrics: ConnectionManagerMetrics::new(metrics_registry),
         }
     }
 
@@ -183,6 +188,12 @@ impl ConnectionManager {
         self.flag_version_handshake_timeouts();
         self.flag_seed_addr_retrieval_timeouts();
         self.reap_disconnected();
+        self.metrics
+            .available_connections
+            .set(self.available_connections().len() as i64);
+        self.metrics
+            .known_peer_addresses
+            .set(self.address_book.size() as i64);
         while self.connections.len() < self.get_max_number_of_connections() {
             self.make_connection(handle)?;
         }
@@ -280,6 +291,7 @@ impl ConnectionManager {
         &mut self,
         handle: fn(StreamConfig) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
+        self.metrics.connections.inc();
         let address_entry_result = if !self.address_book.has_enough_addresses() {
             self.address_book.pop_seed()
         } else {
@@ -699,7 +711,12 @@ mod test {
         let (network_message_sender, _network_message_receiver) =
             channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        let manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let manager = ConnectionManager::new(
+            &config,
+            no_op_logger(),
+            network_message_sender,
+            &MetricsRegistry::default(),
+        );
         assert!(!manager.validate_received_version(&version_message));
     }
 
@@ -726,7 +743,12 @@ mod test {
         let (network_message_sender, _network_message_receiver) =
             channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let mut manager = ConnectionManager::new(
+            &config,
+            no_op_logger(),
+            network_message_sender,
+            &MetricsRegistry::default(),
+        );
         manager.current_height = 100_000;
 
         assert!(!manager.validate_received_version(&version_message));
@@ -755,7 +777,12 @@ mod test {
         let (network_message_sender, _network_message_receiver) =
             channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        let manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let manager = ConnectionManager::new(
+            &config,
+            no_op_logger(),
+            network_message_sender,
+            &MetricsRegistry::default(),
+        );
 
         assert!(!manager.validate_received_version(&version_message));
     }
@@ -842,7 +869,12 @@ mod test {
             .build();
         let (network_message_sender, mut network_message_receiver) =
             channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
-        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let mut manager = ConnectionManager::new(
+            &config,
+            no_op_logger(),
+            network_message_sender,
+            &MetricsRegistry::default(),
+        );
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         assert!(manager.initial_address_discovery);
         assert_eq!(manager.current_height, 0);
@@ -902,7 +934,12 @@ mod test {
         let (network_message_sender, _network_message_receiver) =
             channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let mut manager = ConnectionManager::new(
+            &config,
+            no_op_logger(),
+            network_message_sender,
+            &MetricsRegistry::default(),
+        );
         let timestamp = SystemTime::now() - Duration::from_secs(60);
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
@@ -941,7 +978,12 @@ mod test {
             .build();
         let (network_message_sender, _network_message_receiver) =
             channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
-        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let mut manager = ConnectionManager::new(
+            &config,
+            no_op_logger(),
+            network_message_sender,
+            &MetricsRegistry::default(),
+        );
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let (writer, _) = unbounded_channel();
@@ -1005,7 +1047,12 @@ mod test {
         let (network_message_sender, _network_message_receiver) =
             channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let mut manager = ConnectionManager::new(
+            &config,
+            no_op_logger(),
+            network_message_sender,
+            &MetricsRegistry::default(),
+        );
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let (writer, _) = unbounded_channel();
@@ -1062,7 +1109,12 @@ mod test {
         let (network_message_sender, _network_message_receiver) =
             channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let mut manager = ConnectionManager::new(
+            &config,
+            no_op_logger(),
+            network_message_sender,
+            &MetricsRegistry::default(),
+        );
         let (writer, _) = unbounded_channel();
         let conn = Connection::new_with_state(
             ConnectionConfig {
@@ -1103,7 +1155,12 @@ mod test {
         let (network_message_sender, _network_message_receiver) =
             channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let mut manager = ConnectionManager::new(
+            &config,
+            no_op_logger(),
+            network_message_sender,
+            &MetricsRegistry::default(),
+        );
         let (writer, _) = unbounded_channel();
         let conn = Connection::new_with_state(
             ConnectionConfig {
