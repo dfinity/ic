@@ -89,8 +89,6 @@ impl SystemStateChanges {
                 universal_cycle_change + CyclesBalanceChange::added(req.payment);
         }
         if is_cmc_canister || universal_cycle_change <= CyclesBalanceChange::zero() {
-            // TODO(RUN-287): Check that the change does not bring the canister
-            // below its freezing threshold, which may happen with DTS.
             Ok(())
         } else {
             Err(HypervisorError::WasmEngineError(
