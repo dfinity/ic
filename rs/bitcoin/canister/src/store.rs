@@ -281,58 +281,6 @@ mod test {
     }
 
     #[test]
-    fn to_from_proto() {
-        let root: PathBuf = tempfile::Builder::new()
-            .prefix("bitcoin")
-            .tempdir()
-            .unwrap()
-            .path()
-            .into();
-
-        let mut block = BlockBuilder::genesis()
-            .with_transaction(TransactionBuilder::coinbase().build())
-            .build();
-        let mut state = State::new(2, Network::Bitcoin, block.clone());
-
-        for _ in 0..100 {
-            block = BlockBuilder::with_prev_header(block.header)
-                .with_transaction(TransactionBuilder::coinbase().build())
-                .build();
-            insert_block(&mut state, block.clone()).unwrap();
-        }
-
-        state.serialize(&root).unwrap();
-
-        let new_state = State::load(&root).unwrap();
-
-        assert_eq!(new_state.height, state.height);
-        assert_eq!(new_state.unstable_blocks, state.unstable_blocks);
-        assert_eq!(new_state.utxos.network, state.utxos.network);
-        assert_eq!(
-            new_state.utxos.utxos.large_utxos,
-            state.utxos.utxos.large_utxos
-        );
-
-        for (new_entry, old_entry) in new_state.utxos.utxos.iter().zip(state.utxos.utxos.iter()) {
-            assert_eq!(new_entry, old_entry);
-        }
-
-        assert_eq!(
-            new_state.utxos.address_to_outpoints.len(),
-            state.utxos.address_to_outpoints.len()
-        );
-
-        for (new_entry, old_entry) in new_state
-            .utxos
-            .address_to_outpoints
-            .iter()
-            .zip(state.utxos.address_to_outpoints.iter())
-        {
-            assert_eq!(new_entry, old_entry);
-        }
-    }
-
-    #[test]
     fn utxos_forks() {
         let secp = Secp256k1::new();
         let mut rng = OsRng::new().unwrap();
