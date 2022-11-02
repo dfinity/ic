@@ -257,7 +257,17 @@ impl Csp {
     }
 
     fn csp_with(pk_path: &Path, logger: ReplicaLogger, csp_vault: Arc<dyn CspVault>) -> Self {
-        let node_public_keys = read_node_public_keys(pk_path).unwrap_or_default();
+        let mut node_public_keys: NodePublicKeys =
+            read_node_public_keys(pk_path).unwrap_or_default();
+        if node_public_keys.idkg_dealing_encryption_pks.is_empty() {
+            if let Some(legacy_idkg_dealing_enc_pk) = &node_public_keys.idkg_dealing_encryption_pk {
+                node_public_keys
+                    .idkg_dealing_encryption_pks
+                    .push(legacy_idkg_dealing_enc_pk.clone());
+                public_key_store::store_node_public_keys(pk_path, &node_public_keys)
+                    .unwrap_or_else(|err| panic!("Failed to store public key material: {err:?}"));
+            }
+        }
         let public_key_data =
             PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
         Csp {

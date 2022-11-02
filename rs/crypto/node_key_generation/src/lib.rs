@@ -179,10 +179,13 @@ pub fn get_node_keys_or_generate_if_missing(
             // set the key material version to 1, so that afterwards the
             // version will be consistent on all nodes, no matter what it was
             // before.
-            if node_pks.idkg_dealing_encryption_pk.is_none() {
+            if node_pks.idkg_dealing_encryption_pk.is_none()
+                && node_pks.idkg_dealing_encryption_pks.is_empty()
+            {
                 let mut csp = csp_for_config(config, tokio_runtime_handle.clone());
                 let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(&mut csp);
-                node_pks.idkg_dealing_encryption_pk = Some(idkg_dealing_encryption_pk);
+                node_pks.idkg_dealing_encryption_pk = Some(idkg_dealing_encryption_pk.clone());
+                node_pks.idkg_dealing_encryption_pks = vec![idkg_dealing_encryption_pk];
                 node_pks.version = 1;
                 public_key_store::store_node_public_keys(crypto_root, &node_pks)
                     .unwrap_or_else(|_| panic!("Failed to store public key material"));
