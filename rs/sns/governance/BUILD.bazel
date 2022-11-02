@@ -69,6 +69,7 @@ DEV_DEPENDENCIES = [
     "//rs/sns/test_utils",
     "//rs/test_utilities",
     "//rs/test_utilities/compare_dirs",
+    "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:futures",
     "@crate_index//:pretty_assertions",

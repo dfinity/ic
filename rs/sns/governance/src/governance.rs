@@ -66,6 +66,7 @@ use crate::proposal::{
 };
 
 use crate::pb::v1::governance::{SnsMetadata, UpgradeInProgress, Version};
+use crate::pb::v1::manage_neuron_response::StakeMaturityResponse;
 use crate::sns_upgrade::{
     get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, UpgradeSnsParams,
 };
@@ -911,6 +912,13 @@ impl Governance {
         }
     }
 
+    pub fn get_neuron_mut(&mut self, nid: &NeuronId) -> Result<&mut Neuron, GovernanceError> {
+        self.proto
+            .neurons
+            .get_mut(&nid.to_string())
+            .ok_or_else(|| Self::neuron_not_found_error(nid))
+    }
+
     /// Returns a deterministically ordered list of size `limit` containing
     /// Neurons starting at but not including the neuron with ID `start_page_at`.
     fn list_neurons_ordered(&self, start_page_at: &Option<NeuronId>, limit: usize) -> Vec<Neuron> {
@@ -1209,6 +1217,8 @@ impl Governance {
             dissolve_state: parent_neuron.dissolve_state.clone(),
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
             source_nns_neuron_id: parent_neuron.source_nns_neuron_id,
+            staked_maturity_e8s_equivalent: None,
+            auto_stake_maturity: parent_neuron.auto_stake_maturity,
         };
 
         // Add the child neuron's id to the set of neurons with ongoing operations.
@@ -1353,6 +1363,70 @@ impl Governance {
         Ok(MergeMaturityResponse {
             merged_maturity_e8s: maturity_to_merge,
             new_stake_e8s,
+        })
+    }
+
+    /// Stakes the maturity of a neuron.
+    ///
+    /// This method allows a neuron controller to stake the currently
+    /// existing maturity of a neuron. The caller can choose a percentage
+    /// of maturity to merge.
+    ///
+    /// Pre-conditions:
+    /// - The neuron is locked for exclusive use (ALL manage_neuron operation lock the neuron)
+    /// - The neuron is controlled by `caller`
+    /// - The neuron has some maturity to stake.
+    /// - The neuron is not in spawning state.
+    pub fn stake_maturity_of_neuron(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        stake_maturity: &manage_neuron::StakeMaturity,
+    ) -> Result<StakeMaturityResponse, GovernanceError> {
+        let neuron = self.get_neuron_result(id)?.clone();
+
+        let nid = neuron.id.as_ref().expect("Neurons must have an id");
+
+        if !neuron.is_authorized(caller, NeuronPermissionType::StakeMaturity) {
+            return Err(GovernanceError::new(ErrorType::NotAuthorized));
+        }
+
+        let percentage_to_stake = stake_maturity.percentage_to_stake.unwrap_or(100);
+
+        if percentage_to_stake > 100 || percentage_to_stake == 0 {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "The percentage of maturity to stake must be a value between 0 (exclusive) and 100 (inclusive)."));
+        }
+
+        let mut maturity_to_stake = (neuron
+            .maturity_e8s_equivalent
+            .saturating_mul(percentage_to_stake as u64))
+            / 100;
+
+        if maturity_to_stake > neuron.maturity_e8s_equivalent {
+            maturity_to_stake = neuron.maturity_e8s_equivalent;
+        }
+
+        // Adjust the maturity of the neuron
+        let neuron = self
+            .get_neuron_result_mut(nid)
+            .expect("Expected the neuron to exist");
+
+        neuron.maturity_e8s_equivalent = neuron
+            .maturity_e8s_equivalent
+            .saturating_sub(maturity_to_stake);
+
+        neuron.staked_maturity_e8s_equivalent = Some(
+            neuron
+                .staked_maturity_e8s_equivalent
+                .unwrap_or(0)
+                .saturating_add(maturity_to_stake),
+        );
+
+        Ok(StakeMaturityResponse {
+            maturity_e8s: neuron.maturity_e8s_equivalent,
+            staked_maturity_e8s: neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
         })
     }
 
@@ -3013,6 +3087,8 @@ impl Governance {
             // have the default voting power multiplier applied.
             voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
             source_nns_neuron_id: None,
+            staked_maturity_e8s_equivalent: None,
+            auto_stake_maturity: None,
         };
 
         // This also verifies that there are not too many neurons already.
@@ -3148,6 +3224,8 @@ impl Governance {
                 )),
                 voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
                 source_nns_neuron_id: neuron_parameter.source_nns_neuron_id,
+                staked_maturity_e8s_equivalent: None,
+                auto_stake_maturity: None,
             };
 
             // This also verifies that there are not too many neurons already. This is a best effort
@@ -3425,6 +3503,9 @@ impl Governance {
                 .merge_maturity(&neuron_id, caller, m)
                 .await
                 .map(ManageNeuronResponse::merge_maturity_response),
+            C::StakeMaturity(m) => self
+                .stake_maturity_of_neuron(&neuron_id, caller, m)
+                .map(ManageNeuronResponse::stake_maturity_response),
             C::DisburseMaturity(d) => self
                 .disburse_maturity(&neuron_id, caller, d)
                 .await
@@ -3479,6 +3560,22 @@ impl Governance {
             }
 
             By::NeuronId(_) => self.refresh_neuron(neuron_id).await,
+        }
+    }
+
+    /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
+    /// which can be spawned.
+    pub(crate) fn maybe_move_staked_maturity(&mut self) {
+        let now_seconds = self.env.now();
+        // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
+        for neuron in self.proto.neurons.values_mut().filter(|n| {
+            n.state(now_seconds) == NeuronState::Dissolved
+                && n.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
+        }) {
+            neuron.maturity_e8s_equivalent = neuron
+                .maturity_e8s_equivalent
+                .saturating_add(neuron.staked_maturity_e8s_equivalent.unwrap_or(0));
+            neuron.staked_maturity_e8s_equivalent = None;
         }
     }
 
@@ -3579,6 +3676,7 @@ impl Governance {
             self.check_upgrade_status().await;
         }
 
+        self.maybe_move_staked_maturity();
         self.maybe_gc();
     }
 
@@ -3603,7 +3701,6 @@ impl Governance {
     /// can no longer accept votes for the purpose of rewards and that have
     /// not yet been considered in a reward event
     /// * associates those proposals to the new reward event and cleans their ballots
-    /// * currently, does not actually pay out rewards
     fn distribute_rewards(&mut self, supply: Tokens) {
         println!("{}distribute_rewards. Supply: {:?}", log_prefix(), supply);
 
@@ -3768,8 +3865,15 @@ impl Governance {
                         err,
                     )
                 });
-
-                neuron.maturity_e8s_equivalent += neuron_reward_e8s;
+                // If the neuron has auto-stake-maturity on, add the new maturity to the
+                // staked maturity, otherwise add it to the un-staked maturity.
+                if neuron.auto_stake_maturity.unwrap_or(false) {
+                    neuron.staked_maturity_e8s_equivalent = Some(
+                        neuron.staked_maturity_e8s_equivalent.unwrap_or(0) + neuron_reward_e8s,
+                    );
+                } else {
+                    neuron.maturity_e8s_equivalent += neuron_reward_e8s;
+                }
                 distributed_e8s_equivalent += neuron_reward_e8s;
             }
         }
@@ -4157,6 +4261,7 @@ fn get_neuron_id_from_memo_and_controller(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pb::v1::neuron;
     use crate::sns_upgrade::{
         CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
         GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
@@ -4174,6 +4279,7 @@ mod tests {
         tests::assert_is_ok,
         types::test_helpers::NativeEnvironment,
     };
+    use assert_matches::assert_matches;
     use async_trait::async_trait;
     use futures::FutureExt;
     use ic_base_types::NumBytes;
@@ -4181,7 +4287,11 @@ mod tests {
     use ic_ic00_types::{
         CanisterIdRecord, CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType,
     };
-    use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
+    use ic_nervous_system_common::assert_is_ok;
+    use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
+    use ic_nervous_system_common_test_keys::{
+        TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
+    };
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_sns_test_utils::itest_helpers::UserInfo;
     use ic_test_utilities::types::ids::canister_test_id;
@@ -5940,6 +6050,320 @@ mod tests {
             )),
         };
         assert_is_ok(governance.perform_add_generic_nervous_system_function(valid));
+    }
+
+    fn default_governance_with_proto(governance_proto: GovernanceProto) -> Governance {
+        Governance::new(
+            governance_proto
+                .try_into()
+                .expect("Failed validating governance proto"),
+            Box::new(NativeEnvironment::default()),
+            Box::new(DoNothingLedger {}),
+        )
+    }
+
+    fn test_neuron_id(controller: PrincipalId) -> NeuronId {
+        NeuronId::from(compute_neuron_staking_subaccount_bytes(controller, 0))
+    }
+
+    #[test]
+    fn test_stake_maturity_succeeds() {
+        // Step 1: Prepare the world and parameters.
+        let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let neuron_id = test_neuron_id(controller);
+        let permission = NeuronPermission {
+            principal: Some(controller),
+            permission_type: vec![NeuronPermissionType::StakeMaturity as i32],
+        };
+        let initial_staked_maturity: u64 = 100000;
+        let earned_maturity: u64 = 12345;
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            permissions: vec![permission],
+            staked_maturity_e8s_equivalent: Some(initial_staked_maturity),
+            maturity_e8s_equivalent: earned_maturity,
+            ..Default::default()
+        };
+        let mut governance_proto = basic_governance_proto();
+        governance_proto
+            .neurons
+            .insert(neuron_id.to_string(), neuron);
+        let mut governance = default_governance_with_proto(governance_proto);
+        let stake_maturity = manage_neuron::StakeMaturity {
+            ..Default::default()
+        };
+
+        // Step 2: Run code under test.
+        let result = governance.stake_maturity_of_neuron(&neuron_id, &controller, &stake_maturity);
+
+        // Step 3: Inspect result(s).
+        assert_is_ok!(result);
+        let neuron = governance
+            .proto
+            .neurons
+            .get(&neuron_id.to_string())
+            .expect("Missing neuron!");
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+        assert_eq!(
+            neuron
+                .staked_maturity_e8s_equivalent
+                .expect("staked_maturity must be set"),
+            initial_staked_maturity + earned_maturity
+        );
+    }
+
+    #[test]
+    fn test_stake_maturity_succeeds_without_initial_stake() {
+        // Step 1: Prepare the world and parameters.
+        let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let neuron_id = test_neuron_id(controller);
+        let permission = NeuronPermission {
+            principal: Some(controller),
+            permission_type: vec![NeuronPermissionType::StakeMaturity as i32],
+        };
+        let earned_maturity: u64 = 12345;
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            permissions: vec![permission],
+            staked_maturity_e8s_equivalent: None,
+            maturity_e8s_equivalent: earned_maturity,
+            ..Default::default()
+        };
+        let mut governance_proto = basic_governance_proto();
+        governance_proto
+            .neurons
+            .insert(neuron_id.to_string(), neuron);
+        let mut governance = default_governance_with_proto(governance_proto);
+        let stake_maturity = manage_neuron::StakeMaturity {
+            ..Default::default()
+        };
+
+        // Step 2: Run code under test.
+        let result = governance.stake_maturity_of_neuron(&neuron_id, &controller, &stake_maturity);
+
+        // Step 3: Inspect result(s).
+        assert_is_ok!(result);
+        let neuron = governance
+            .proto
+            .neurons
+            .get(&neuron_id.to_string())
+            .expect("Missing neuron!");
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+        assert_eq!(
+            neuron
+                .staked_maturity_e8s_equivalent
+                .expect("staked_maturity must be set"),
+            earned_maturity
+        );
+    }
+
+    #[test]
+    fn test_stake_maturity_succeeds_with_partial_percentage() {
+        // Step 1: Prepare the world and parameters.
+        let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let neuron_id = test_neuron_id(controller);
+        let permission = NeuronPermission {
+            principal: Some(controller),
+            permission_type: vec![NeuronPermissionType::StakeMaturity as i32],
+        };
+        let initial_staked_maturity: u64 = 100000;
+        let earned_maturity: u64 = 12345;
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            permissions: vec![permission],
+            staked_maturity_e8s_equivalent: Some(initial_staked_maturity),
+            maturity_e8s_equivalent: earned_maturity,
+            ..Default::default()
+        };
+        let mut governance_proto = basic_governance_proto();
+        governance_proto
+            .neurons
+            .insert(neuron_id.to_string(), neuron);
+        let mut governance = default_governance_with_proto(governance_proto);
+        let partial_percentage = 42;
+        let stake_maturity = manage_neuron::StakeMaturity {
+            percentage_to_stake: Some(partial_percentage),
+        };
+
+        // Step 2: Run code under test.
+        let result = governance.stake_maturity_of_neuron(&neuron_id, &controller, &stake_maturity);
+
+        // Step 3: Inspect result(s).
+        assert_is_ok!(result);
+        let neuron = governance
+            .proto
+            .neurons
+            .get(&neuron_id.to_string())
+            .expect("Missing neuron!");
+        let expected_newly_staked_maturity =
+            earned_maturity.saturating_mul(partial_percentage as u64) / 100;
+        assert_eq!(
+            neuron.maturity_e8s_equivalent,
+            earned_maturity - expected_newly_staked_maturity
+        );
+        assert_eq!(
+            neuron
+                .staked_maturity_e8s_equivalent
+                .expect("staked_maturity must be set"),
+            initial_staked_maturity + expected_newly_staked_maturity
+        );
+    }
+
+    #[test]
+    fn test_stake_maturity_fails_on_non_exisiting_neuron() {
+        // Step 1: Prepare the world and parameters.
+        let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let neuron_id = test_neuron_id(controller);
+        let mut governance = default_governance_with_proto(basic_governance_proto());
+        let stake_maturity = manage_neuron::StakeMaturity {
+            ..Default::default()
+        };
+
+        // Step 2: Run code under test.
+        let result = governance.stake_maturity_of_neuron(&neuron_id, &controller, &stake_maturity);
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::NotFound as i32 && msg.to_lowercase().contains("neuron not found")
+        );
+    }
+
+    #[test]
+    fn test_stake_maturity_fails_if_not_authorized() {
+        // Step 1: Prepare the world and parameters.
+        let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let neuron_id = test_neuron_id(controller);
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            ..Default::default()
+        };
+        let mut governance_proto = basic_governance_proto();
+        governance_proto
+            .neurons
+            .insert(neuron_id.to_string(), neuron);
+        let mut governance = default_governance_with_proto(governance_proto);
+        let stake_maturity = manage_neuron::StakeMaturity {
+            ..Default::default()
+        };
+
+        // Step 2: Run code under test.
+        let result = governance.stake_maturity_of_neuron(&neuron_id, &controller, &stake_maturity);
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: _msg})
+            if code == ErrorType::NotAuthorized as i32);
+    }
+
+    #[test]
+    fn test_stake_maturity_fails_if_invalid_percentage_to_stake() {
+        // Step 1: Prepare the world and parameters.
+        let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let neuron_id = test_neuron_id(controller);
+        let permission = NeuronPermission {
+            principal: Some(controller),
+            permission_type: vec![NeuronPermissionType::StakeMaturity as i32],
+        };
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            permissions: vec![permission],
+            ..Default::default()
+        };
+        let mut governance_proto = basic_governance_proto();
+        governance_proto
+            .neurons
+            .insert(neuron_id.to_string(), neuron);
+        let mut governance = default_governance_with_proto(governance_proto);
+
+        for percentage in &[0, 101, 120] {
+            let stake_maturity = manage_neuron::StakeMaturity {
+                percentage_to_stake: Some(*percentage),
+            };
+
+            // Step 2: Run code under test.
+            let result =
+                governance.stake_maturity_of_neuron(&neuron_id, &controller, &stake_maturity);
+
+            // Step 3: Inspect result(s).
+            assert_matches!(
+            result,
+            Err(GovernanceError{error_type: code, error_message: msg})
+                if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("percentage of maturity"),
+            "Didn't reject invalid percentage_to_stake value {}", percentage
+            );
+        }
+    }
+
+    #[test]
+    fn test_move_staked_maturity_on_dissolved_neurons_works() {
+        // Step 1: Prepare the world and parameters.
+        let controller_1 = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let controller_2 = *TEST_NEURON_2_OWNER_PRINCIPAL;
+        let neuron_id_1 = test_neuron_id(controller_1);
+        let neuron_id_2 = test_neuron_id(controller_2);
+        let regular_maturity: u64 = 1000000;
+        let staked_maturity: u64 = 424242;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // Dissolved neuron.
+        let neuron_1 = Neuron {
+            id: Some(neuron_id_1.clone()),
+            maturity_e8s_equivalent: regular_maturity,
+            staked_maturity_e8s_equivalent: Some(staked_maturity),
+            dissolve_state: Some(neuron::DissolveState::WhenDissolvedTimestampSeconds(
+                now - 100,
+            )),
+            ..Default::default()
+        };
+        // Non-dissolved neuron.
+        let neuron_2 = Neuron {
+            id: Some(neuron_id_2.clone()),
+            maturity_e8s_equivalent: regular_maturity,
+            staked_maturity_e8s_equivalent: Some(staked_maturity),
+            dissolve_state: Some(neuron::DissolveState::WhenDissolvedTimestampSeconds(
+                now + 100,
+            )),
+            ..Default::default()
+        };
+
+        let mut governance_proto = basic_governance_proto();
+        governance_proto
+            .neurons
+            .insert(neuron_id_1.to_string(), neuron_1);
+        governance_proto
+            .neurons
+            .insert(neuron_id_2.to_string(), neuron_2);
+        let mut governance = default_governance_with_proto(governance_proto);
+
+        // Step 2: Run code under test.
+        governance.maybe_move_staked_maturity();
+
+        // Step 3: Inspect result(s).
+        let neuron_1 = governance
+            .proto
+            .neurons
+            .get(&neuron_id_1.to_string())
+            .expect("Missing neuron!");
+        assert_eq!(
+            neuron_1.maturity_e8s_equivalent,
+            regular_maturity + staked_maturity
+        );
+        assert_eq!(neuron_1.staked_maturity_e8s_equivalent.unwrap_or(0), 0);
+        let neuron_2 = governance
+            .proto
+            .neurons
+            .get(&neuron_id_2.to_string())
+            .expect("Missing neuron!");
+        assert_eq!(neuron_2.maturity_e8s_equivalent, regular_maturity);
+        assert_eq!(
+            neuron_2.staked_maturity_e8s_equivalent,
+            Some(staked_maturity)
+        );
     }
 
     #[test]
