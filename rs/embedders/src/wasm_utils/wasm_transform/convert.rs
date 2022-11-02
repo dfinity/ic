@@ -9,6 +9,8 @@ use wasmparser::{
     Operator, TableType, TagKind, TagType, TypeRef, ValType,
 };
 
+use super::ElementItems;
+
 pub(super) fn block_type(ty: &wasmparser::BlockType) -> BlockType {
     match ty {
         wasmparser::BlockType::Empty => BlockType::Empty,
@@ -162,6 +164,13 @@ fn memarg(memarg: &MemArg) -> wasm_encoder::MemArg {
         offset: memarg.offset,
         align: memarg.align as u32,
         memory_index: memarg.memory,
+    }
+}
+
+pub(super) fn element_items(element_items: &ElementItems) -> wasm_encoder::Elements<'_> {
+    match element_items {
+        ElementItems::Functions(funcs) => wasm_encoder::Elements::Functions(funcs),
+        ElementItems::ConstExprs(exprs) => wasm_encoder::Elements::Expressions(exprs),
     }
 }
 
