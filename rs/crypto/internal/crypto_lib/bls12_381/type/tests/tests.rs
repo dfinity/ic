@@ -1,6 +1,7 @@
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Bytes};
 use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
+use paste::paste;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -409,66 +410,6 @@ fn test_pairing_bilinearity() {
 }
 
 #[test]
-fn test_g1_addition() {
-    let mut rng = seeded_rng();
-
-    let g = G1Affine::generator();
-
-    for _ in 0..30 {
-        let s0 = Scalar::random(&mut rng);
-        let s1 = Scalar::random(&mut rng);
-        let s2 = &s0 - &s1;
-
-        let gs0 = g * &s0;
-        let gs1 = g * &s1;
-        let gs2 = g * &s2;
-        assert_eq!(gs0, &gs1 + &gs2);
-        assert_eq!(gs1, &gs0 - &gs2);
-        assert_eq!(gs2, &gs0 - &gs1);
-    }
-}
-
-#[test]
-fn test_g2_addition() {
-    let mut rng = seeded_rng();
-
-    let g = G2Affine::generator();
-
-    for _ in 0..30 {
-        let s0 = Scalar::random(&mut rng);
-        let s1 = Scalar::random(&mut rng);
-        let s2 = &s0 - &s1;
-
-        let gs0 = g * &s0;
-        let gs1 = g * &s1;
-        let gs2 = g * &s2;
-        assert_eq!(gs0, &gs1 + &gs2);
-        assert_eq!(gs1, &gs0 - &gs2);
-        assert_eq!(gs2, &gs0 - &gs1);
-    }
-}
-
-#[test]
-fn test_gt_addition() {
-    let mut rng = seeded_rng();
-
-    let g = Gt::generator();
-
-    for _ in 0..30 {
-        let s0 = Scalar::random(&mut rng);
-        let s1 = Scalar::random(&mut rng);
-        let s2 = &s0 - &s1;
-
-        let gs0 = g * &s0;
-        let gs1 = g * &s1;
-        let gs2 = g * &s2;
-        assert_eq!(gs0, &gs1 + &gs2);
-        assert_eq!(gs1, &gs0 - &gs2);
-        assert_eq!(gs2, &gs0 - &gs1);
-    }
-}
-
-#[test]
 fn test_g1_generator_is_expected_value() {
     /*
     The generators of G1 and and G2 are computed by finding the
@@ -525,28 +466,6 @@ fn test_identity_is_identity() {
 }
 
 #[test]
-fn test_point_neg() {
-    assert_eq!(G1Affine::identity(), G1Affine::identity().neg());
-    assert_eq!(G1Projective::identity(), G1Projective::identity().neg());
-    assert_eq!(G2Affine::identity(), G2Affine::identity().neg());
-    assert_eq!(G2Projective::identity(), G2Projective::identity().neg());
-
-    let pt_pos = G1Projective::generator() * Scalar::from_u32(42);
-    let pt_neg = G1Projective::generator() * Scalar::from_i32(-42);
-
-    assert_eq!(pt_pos.neg(), pt_neg);
-    assert_eq!(pt_neg.neg(), pt_pos);
-    assert!((pt_pos + pt_neg).is_identity());
-
-    let pt_pos = G2Projective::generator() * Scalar::from_u32(42);
-    let pt_neg = G2Projective::generator() * Scalar::from_i32(-42);
-
-    assert_eq!(pt_pos.neg(), pt_neg);
-    assert_eq!(pt_neg.neg(), pt_pos);
-    assert!((pt_pos + pt_neg).is_identity());
-}
-
-#[test]
 fn test_multipairing() {
     let g1 = G1Affine::generator();
     let g1n = G1Affine::generator().neg();
@@ -584,74 +503,6 @@ fn test_multipairing() {
             Gt::multipairing(&[(&g1a, g2), (&g1b, g2), (&g1c, g2)]),
             Gt::multipairing(&[(g1, &g2a), (g1, &g2b), (g1, &g2c)]),
         );
-    }
-}
-
-#[test]
-fn test_g1_is_torsion_free() {
-    let mut rng = seeded_rng();
-
-    for _ in 0..30 {
-        let mut buf = [0u8; G1Affine::BYTES];
-        rng.fill_bytes(&mut buf);
-
-        let pt_c = G1Affine::deserialize(&buf);
-        let pt_u = G1Affine::deserialize_unchecked(&buf);
-
-        match (pt_c, pt_u) {
-            (Ok(pt_c), Ok(pt_u)) => {
-                assert_eq!(pt_c, pt_u);
-                assert!(pt_c.is_torsion_free());
-            }
-
-            (Err(_), Ok(pt_u)) => {
-                // we always use compressed format so as a consequence it's not
-                // actually possible to create a point that is not on the curve.
-                // so if deserialize rejected it is because we are not in the subgroup:
-                assert!(!pt_u.is_torsion_free());
-            }
-            (Ok(_), Err(_)) => {
-                // this should never happen
-                panic!("deserialize accepted but deserialize_unchecked did not");
-            }
-            (Err(_), Err(_)) => {
-                // was so invalid that even deserialize_unchecked didn't like it
-            }
-        }
-    }
-}
-
-#[test]
-fn test_g2_is_torsion_free() {
-    let mut rng = seeded_rng();
-
-    for _ in 0..30 {
-        let mut buf = [0u8; G2Affine::BYTES];
-        rng.fill_bytes(&mut buf);
-
-        let pt_c = G2Affine::deserialize(&buf);
-        let pt_u = G2Affine::deserialize_unchecked(&buf);
-
-        match (pt_c, pt_u) {
-            (Ok(pt_c), Ok(pt_u)) => {
-                assert_eq!(pt_c, pt_u);
-                assert!(pt_c.is_torsion_free());
-            }
-
-            (Err(_), Ok(pt_u)) => {
-                // we always use compressed format so as a consequence it's not
-                // actually possible to create a point that is not on the curve.
-                // so if deserialize rejected it is because we are not in the subgroup:
-                assert!(!pt_u.is_torsion_free());
-            }
-            (Ok(_), Err(_)) => {
-                // this should never happen
-                panic!("deserialize accepted but deserialize_unchecked did not");
-            }
-            (Err(_), Err(_)) => {
-                // was so invalid that even deserialize_unchecked didn't like it
-            }
-        }
     }
 }
 
@@ -711,123 +562,6 @@ fn test_g2_deserialize_rejects_out_of_range_x_value() {
     assert!(G2Affine::deserialize_unchecked(&invalid_x1).is_err());
 }
 
-fn g1_from_u64(i: &u64) -> G1Projective {
-    G1Projective::generator() * Scalar::from_u64(*i)
-}
-
-fn g2_from_u64(i: &u64) -> G2Projective {
-    G2Projective::generator() * Scalar::from_u64(*i)
-}
-
-fn gt_from_u64(i: &u64) -> Gt {
-    Gt::generator() * Scalar::from_u64(*i)
-}
-
-#[test]
-fn test_sum_g1() {
-    let mut rng = seeded_rng();
-
-    for t in 1..20 {
-        let inputs: Vec<u64> = (0..t).map(|_| rng.gen::<u32>() as u64).collect();
-        let g1_elements: Vec<G1Projective> = inputs.iter().map(g1_from_u64).collect();
-        assert_eq!(
-            g1_from_u64(&inputs.iter().sum()),
-            G1Projective::sum(&g1_elements)
-        )
-    }
-}
-
-#[test]
-fn test_sum_g2() {
-    let mut rng = seeded_rng();
-
-    for t in 1..20 {
-        let inputs: Vec<u64> = (0..t).map(|_| rng.gen::<u32>() as u64).collect();
-        let g2_elements: Vec<G2Projective> = inputs.iter().map(g2_from_u64).collect();
-        assert_eq!(
-            g2_from_u64(&inputs.iter().sum()),
-            G2Projective::sum(&g2_elements)
-        )
-    }
-}
-
-#[test]
-fn test_mul_g1() {
-    let mut rng = seeded_rng();
-
-    for _ in 1..20 {
-        let lhs = rng.gen::<u32>() as u64;
-        let rhs = rng.gen::<u32>() as u64;
-        let integer_prod = lhs * rhs;
-        let g1_prod = g1_from_u64(&lhs) * Scalar::from_u64(rhs);
-        assert_eq!(g1_from_u64(&integer_prod), g1_prod);
-    }
-}
-
-#[test]
-fn test_batch_mul_g1() {
-    let mut rng = seeded_rng();
-
-    let pt = G1Affine::hash(b"ic-crypto-batch-mul-test-g1", &rng.gen::<[u8; 32]>());
-
-    for i in 0..20 {
-        let scalars = Scalar::batch_random(&mut rng, i);
-        assert_eq!(scalars.len(), i);
-
-        let batch = G1Affine::batch_mul(&pt, &scalars);
-        assert_eq!(batch.len(), scalars.len());
-
-        for j in 0..i {
-            assert_eq!(batch[j], G1Affine::from(&pt * &scalars[j]));
-        }
-    }
-}
-
-#[test]
-fn test_batch_mul_g2() {
-    let mut rng = seeded_rng();
-
-    let pt = G2Affine::hash(b"ic-crypto-batch-mul-test-g2", &rng.gen::<[u8; 32]>());
-
-    for i in 0..20 {
-        let scalars = Scalar::batch_random(&mut rng, i);
-        assert_eq!(scalars.len(), i);
-
-        let batch = G2Affine::batch_mul(&pt, &scalars);
-        assert_eq!(batch.len(), scalars.len());
-
-        for j in 0..i {
-            assert_eq!(batch[j], G2Affine::from(&pt * &scalars[j]));
-        }
-    }
-}
-
-#[test]
-fn test_mul_g2() {
-    let mut rng = seeded_rng();
-
-    for _ in 1..20 {
-        let lhs = rng.gen::<u32>() as u64;
-        let rhs = rng.gen::<u32>() as u64;
-        let integer_prod = lhs * rhs;
-        let g2_prod = g2_from_u64(&lhs) * Scalar::from_u64(rhs);
-        assert_eq!(g2_from_u64(&integer_prod), g2_prod);
-    }
-}
-
-#[test]
-fn test_mul_gt() {
-    let mut rng = seeded_rng();
-
-    for _ in 1..20 {
-        let lhs = rng.gen::<u32>() as u64;
-        let rhs = rng.gen::<u32>() as u64;
-        let integer_prod = lhs * rhs;
-        let gt_prod = gt_from_u64(&lhs) * Scalar::from_u64(rhs);
-        assert_eq!(gt_from_u64(&integer_prod), gt_prod);
-    }
-}
-
 #[test]
 fn test_scalar_serialization_round_trips() {
     let mut rng = seeded_rng();
@@ -843,42 +577,6 @@ fn test_scalar_serialization_round_trips() {
         let s_du = Scalar::deserialize_unchecked(s_bits);
         assert_eq!(s_orig, s_du);
         assert_eq!(s_du.serialize(), s_bits);
-    }
-}
-
-#[test]
-fn test_g1_serialization_round_trips() {
-    let mut rng = seeded_rng();
-
-    for _ in 1..30 {
-        let g1_orig = G1Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>());
-        let g1_bits = g1_orig.serialize();
-
-        let g1_d = G1Projective::deserialize(&g1_bits).expect("Invalid serialization");
-        assert_eq!(g1_orig, g1_d);
-        assert_eq!(g1_d.serialize(), g1_bits);
-
-        let g1_du = G1Projective::deserialize_unchecked(&g1_bits).expect("Invalid serialization");
-        assert_eq!(g1_orig, g1_du);
-        assert_eq!(g1_du.serialize(), g1_bits);
-    }
-}
-
-#[test]
-fn test_g2_serialization_round_trips() {
-    let mut rng = seeded_rng();
-
-    for _ in 1..30 {
-        let g2_orig = G2Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>());
-        let g2_bits = g2_orig.serialize();
-
-        let g2_d = G2Projective::deserialize(&g2_bits).expect("Invalid serialization");
-        assert_eq!(g2_orig, g2_d);
-        assert_eq!(g2_d.serialize(), g2_bits);
-
-        let g2_du = G2Projective::deserialize_unchecked(&g2_bits).expect("Invalid serialization");
-        assert_eq!(g2_orig, g2_du);
-        assert_eq!(g2_du.serialize(), g2_bits);
     }
 }
 
@@ -936,154 +634,10 @@ fn test_g2_test_vectors() {
     }
 }
 
-fn biased_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
-    let coin = rng.gen::<u8>();
-
-    if coin < 10 {
-        Scalar::zero()
-    } else if coin < 20 {
-        Scalar::one()
-    } else if coin < 30 {
-        Scalar::one().neg()
-    } else {
-        Scalar::random(rng)
-    }
-}
-
-fn biased_g1<R: RngCore + CryptoRng>(rng: &mut R) -> G1Projective {
-    let coin = rng.gen::<u8>();
-
-    if coin < 10 {
-        G1Projective::identity()
-    } else if coin < 20 {
-        G1Projective::generator().clone()
-    } else if coin < 30 {
-        G1Projective::generator().neg()
-    } else {
-        G1Projective::hash(b"random-g1-for-testing", &rng.gen::<[u8; 32]>())
-    }
-}
-
-fn biased_g2<R: RngCore + CryptoRng>(rng: &mut R) -> G2Projective {
-    let coin = rng.gen::<u8>();
-
-    if coin < 10 {
-        G2Projective::identity()
-    } else if coin < 20 {
-        G2Projective::generator().clone()
-    } else if coin < 30 {
-        G2Projective::generator().neg()
-    } else {
-        G2Projective::hash(b"random-g2-for-testing", &rng.gen::<[u8; 32]>())
-    }
-}
-
-#[test]
-fn test_g1_mul_precompute() {
-    let mut rng = seeded_rng();
-
-    let g = G1Affine::hash(b"random-g1-for-precompute-test", &rng.gen::<[u8; 32]>());
-
-    let mut g_with_precompute = g.clone();
-    g_with_precompute.precompute();
-
-    let assert_same_result = |s: Scalar| {
-        let no_precomp = &g * &s;
-        let with_precomp = &g_with_precompute * &s;
-        assert_eq!(no_precomp, with_precomp);
-    };
-
-    assert_same_result(Scalar::zero());
-    assert_same_result(Scalar::one());
-    assert_same_result(Scalar::one().neg());
-    for _ in 0..500 {
-        assert_same_result(Scalar::random(&mut rng));
-    }
-}
-
-#[test]
-fn test_g2_mul_precompute() {
-    let mut rng = seeded_rng();
-
-    let g = G2Affine::hash(b"random-g2-for-precompute-test", &rng.gen::<[u8; 32]>());
-
-    let mut g_with_precompute = g.clone();
-    g_with_precompute.precompute();
-
-    let assert_same_result = |s: Scalar| {
-        let no_precomp = &g * &s;
-        let with_precomp = &g_with_precompute * &s;
-        assert_eq!(no_precomp, with_precomp);
-    };
-
-    assert_same_result(Scalar::zero());
-    assert_same_result(Scalar::one());
-    assert_same_result(Scalar::one().neg());
-    for _ in 0..500 {
-        assert_same_result(Scalar::random(&mut rng));
-    }
-}
-
-#[test]
-fn test_g1_mul2() {
-    let mut rng = seeded_rng();
-
-    let g = G1Projective::generator();
-    let zero = Scalar::zero();
-    let one = Scalar::one();
-
-    assert_eq!(
-        G1Projective::mul2(g, &zero, g, &zero),
-        G1Projective::identity()
-    );
-    assert_eq!(G1Projective::mul2(g, &one, g, &zero), *g);
-    assert_eq!(G1Projective::mul2(g, &zero, g, &one), *g);
-
-    for _ in 0..1000 {
-        let s1 = biased_scalar(&mut rng);
-        let s2 = biased_scalar(&mut rng);
-
-        let p1 = biased_g1(&mut rng);
-        let p2 = biased_g1(&mut rng);
-
-        let reference = &p1 * &s1 + &p2 * &s2;
-
-        assert_eq!(G1Projective::mul2(&p1, &s1, &p2, &s2), reference);
-        assert_eq!(G1Projective::mul2(&p2, &s2, &p1, &s1), reference);
-    }
-}
-
-#[test]
-fn test_g2_mul2() {
-    let mut rng = seeded_rng();
-
-    let g = G2Projective::generator();
-    let zero = Scalar::zero();
-    let one = Scalar::one();
-
-    assert_eq!(
-        G2Projective::mul2(g, &zero, g, &zero),
-        G2Projective::identity()
-    );
-    assert_eq!(G2Projective::mul2(g, &one, g, &zero), *g);
-    assert_eq!(G2Projective::mul2(g, &zero, g, &one), *g);
-
-    for _ in 0..1000 {
-        let s1 = biased_scalar(&mut rng);
-        let s2 = biased_scalar(&mut rng);
-
-        let p1 = biased_g2(&mut rng);
-        let p2 = biased_g2(&mut rng);
-
-        let reference = &p1 * &s1 + &p2 * &s2;
-
-        assert_eq!(G2Projective::mul2(&p1, &s1, &p2, &s2), reference);
-        assert_eq!(G2Projective::mul2(&p2, &s2, &p1, &s1), reference);
-    }
-}
-
 #[test]
 fn test_scalar_muln() {
+    use BiasedValue;
+
     let mut rng = seeded_rng();
 
     assert_eq!(Scalar::muln_vartime(&[], &[]), Scalar::zero());
@@ -1093,8 +647,8 @@ fn test_scalar_muln() {
         let mut rhs = Vec::with_capacity(t);
 
         for _ in 0..t {
-            lhs.push(biased_scalar(&mut rng));
-            rhs.push(biased_scalar(&mut rng));
+            lhs.push(Scalar::biased(&mut rng));
+            rhs.push(Scalar::biased(&mut rng));
         }
 
         let mut reference_val = Scalar::zero();
@@ -1103,54 +657,6 @@ fn test_scalar_muln() {
         }
 
         let computed = Scalar::muln_vartime(&lhs, &rhs);
-
-        assert_eq!(computed, reference_val);
-    }
-}
-
-#[test]
-fn test_g1_muln() {
-    let mut rng = seeded_rng();
-
-    assert_eq!(G1Projective::muln_vartime(&[]), G1Projective::identity());
-
-    for t in 1..100 {
-        let mut terms = Vec::with_capacity(t);
-
-        for _ in 0..t {
-            terms.push((biased_g1(&mut rng), biased_scalar(&mut rng)));
-        }
-
-        let mut reference_val = G1Projective::identity();
-        for (p, s) in &terms {
-            reference_val += p * s;
-        }
-
-        let computed = G1Projective::muln_vartime(&terms);
-
-        assert_eq!(computed, reference_val);
-    }
-}
-
-#[test]
-fn test_g2_muln() {
-    let mut rng = seeded_rng();
-
-    assert_eq!(G2Projective::muln_vartime(&[]), G2Projective::identity());
-
-    for t in 1..100 {
-        let mut terms = Vec::with_capacity(t);
-
-        for _ in 0..t {
-            terms.push((biased_g2(&mut rng), biased_scalar(&mut rng)));
-        }
-
-        let mut reference_val = G2Projective::identity();
-        for (p, s) in &terms {
-            reference_val += p * s;
-        }
-
-        let computed = G2Projective::muln_vartime(&terms);
 
         assert_eq!(computed, reference_val);
     }
@@ -1253,3 +759,317 @@ fn test_hash_to_g2_matches_draft() {
         "91fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d0156901a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534"
     );
 }
+
+/// A trait generating "biased" values
+///
+/// This trait is used to generate inputs which may trigger corner
+/// cases in multiplication routines, especially when combined in
+/// multi-input multiplications (mul2, muln)
+///
+/// The exact nature of the bias is unspecified
+trait BiasedValue {
+    type Output;
+    fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output;
+}
+
+impl BiasedValue for Scalar {
+    type Output = Scalar;
+    fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output {
+        let coin = rng.gen::<u8>();
+
+        // With ~4% probability each use -1, 0, or 1. Otherwise random
+        if coin < 10 {
+            Scalar::zero()
+        } else if coin < 20 {
+            Scalar::one()
+        } else if coin < 30 {
+            Scalar::one().neg()
+        } else {
+            Scalar::random(rng)
+        }
+    }
+}
+
+impl BiasedValue for G1Projective {
+    type Output = G1Projective;
+    fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output {
+        let coin = rng.gen::<u8>();
+
+        // With ~4% probability each use identity, g, or -g. Otherwise random
+        if coin < 10 {
+            Self::identity()
+        } else if coin < 20 {
+            Self::generator().clone()
+        } else if coin < 30 {
+            Self::generator().neg()
+        } else {
+            Self::hash(b"random-g1-val-for-testing", &rng.gen::<[u8; 32]>())
+        }
+    }
+}
+
+impl BiasedValue for G2Projective {
+    type Output = G2Projective;
+    fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output {
+        let coin = rng.gen::<u8>();
+
+        // With ~4% probability each use identity, g, or -g. Otherwise random
+        if coin < 10 {
+            Self::identity()
+        } else if coin < 20 {
+            Self::generator().clone()
+        } else if coin < 30 {
+            Self::generator().neg()
+        } else {
+            Self::hash(b"random-g2-val-for-testing", &rng.gen::<[u8; 32]>())
+        }
+    }
+}
+
+macro_rules! test_point_operation {
+
+    // Top level dispatch: iterate over the groups and reinvoke
+    // with the individual group identifier
+    ( $test_name:ident, [$( $group:ident ),+], $block:block ) => {
+        $(
+            test_point_operation!{$test_name, $group, $block}
+        )*
+    };
+
+    // Match on the specific group identifier provided by the top level
+    // dispatch arm, and then reinvoke again, specifying the related types.
+    ( $test_name:ident, g1, $block:block ) => {
+        test_point_operation!($test_name, $block, g1, G1Affine, G1Projective);
+    };
+    ( $test_name:ident, g2, $block:block ) => {
+        test_point_operation!($test_name, $block, g2, G2Affine, G2Projective);
+    };
+    ( $test_name:ident, gt, $block:block ) => {
+        test_point_operation!($test_name, $block, gt, Gt, Gt);
+    };
+
+    // With all parameters known at this point, finally generate the #[test]
+    ( $test_name:ident, $block:block, $group_id:ident, $affine:ty, $projective:ty ) => {
+        paste! { #[test] fn [<test_ $group_id _ $test_name>]() {
+            #[allow(dead_code)]
+            type Affine = $affine;
+            #[allow(dead_code)]
+            type Projective = $projective;
+
+            #[allow(unused_imports)]
+            use BiasedValue;
+
+            $block
+        }
+        }
+    };
+}
+
+test_point_operation!(serialization_round_trip, [g1, g2], {
+    let mut rng = seeded_rng();
+
+    for _ in 1..30 {
+        let orig = Projective::hash(b"serialization-round-trip-test", &rng.gen::<[u8; 32]>());
+        let bits = orig.serialize();
+
+        let d = Projective::deserialize(&bits).expect("Invalid serialization");
+        assert_eq!(orig, d);
+        assert_eq!(d.serialize(), bits);
+
+        let du = Projective::deserialize_unchecked(&bits).expect("Invalid serialization");
+        assert_eq!(orig, du);
+        assert_eq!(du.serialize(), bits);
+    }
+});
+
+test_point_operation!(is_torsion_free, [g1, g2], {
+    let mut rng = seeded_rng();
+
+    for _ in 0..30 {
+        let mut buf = [0u8; Affine::BYTES];
+        rng.fill_bytes(&mut buf);
+
+        let pt_c = Affine::deserialize(&buf);
+        let pt_u = Affine::deserialize_unchecked(&buf);
+
+        match (pt_c, pt_u) {
+            (Ok(pt_c), Ok(pt_u)) => {
+                assert_eq!(pt_c, pt_u);
+                assert!(pt_c.is_torsion_free());
+            }
+
+            (Err(_), Ok(pt_u)) => {
+                // we always use compressed format so as a consequence it's not
+                // actually possible to create a point that is not on the curve.
+                // so if deserialize rejected it is because we are not in the subgroup:
+                assert!(!pt_u.is_torsion_free());
+            }
+            (Ok(_), Err(_)) => {
+                // this should never happen
+                panic!("deserialize accepted but deserialize_unchecked did not");
+            }
+            (Err(_), Err(_)) => {
+                // was so invalid that even deserialize_unchecked didn't like it
+            }
+        }
+    }
+});
+
+test_point_operation!(negation, [g1, g2, gt], {
+    assert_eq!(Affine::identity(), Affine::identity().neg());
+    assert_eq!(Projective::identity(), Projective::identity().neg());
+
+    let mut rng = seeded_rng();
+
+    let s = Scalar::random(&mut rng);
+
+    let pt_pos = Affine::generator() * &s;
+    let pt_neg = Affine::generator() * s.neg();
+
+    assert_eq!(pt_pos.neg(), pt_neg);
+    assert_eq!(pt_neg.neg(), pt_pos);
+    assert!((pt_pos + pt_neg).is_identity());
+});
+
+test_point_operation!(addition, [g1, g2, gt], {
+    let mut rng = seeded_rng();
+
+    let g = Affine::generator();
+
+    for _ in 0..1000 {
+        let s0 = Scalar::random(&mut rng);
+        let s1 = Scalar::random(&mut rng);
+        let s2 = &s0 - &s1;
+
+        let gs0 = g * &s0;
+        let gs1 = g * &s1;
+        let gs2 = g * &s2;
+        assert_eq!(gs0, &gs1 + &gs2);
+        assert_eq!(gs1, &gs0 - &gs2);
+        assert_eq!(gs2, &gs0 - &gs1);
+    }
+});
+
+test_point_operation!(sum, [g1, g2], {
+    let mut rng = seeded_rng();
+
+    let pt = Projective::generator();
+
+    for t in 1..20 {
+        let mut inputs = Vec::with_capacity(t);
+        let mut elements = Vec::with_capacity(t);
+        for _ in 0..t {
+            let r = rng.gen::<u32>() as u64;
+            inputs.push(r);
+            elements.push(pt * Scalar::from_u64(r));
+        }
+
+        assert_eq!(
+            pt * Scalar::from_u64(inputs.iter().sum()),
+            Projective::sum(&elements)
+        )
+    }
+});
+
+test_point_operation!(multiply, [g1, g2, gt], {
+    let mut rng = seeded_rng();
+
+    let pt = Projective::generator();
+
+    for _ in 1..300 {
+        let lhs = rng.gen::<u32>() as u64;
+        let rhs = rng.gen::<u32>() as u64;
+        let integer_prod = lhs * rhs;
+        let product = (pt * Scalar::from_u64(lhs)) * Scalar::from_u64(rhs);
+
+        assert_eq!(pt * Scalar::from_u64(integer_prod), product);
+    }
+});
+
+test_point_operation!(mul_with_precompute, [g1, g2], {
+    let mut rng = seeded_rng();
+
+    let g = Affine::hash(b"random-point-for-mul-precompute", &rng.gen::<[u8; 32]>());
+
+    let mut g_with_precompute = g.clone();
+    g_with_precompute.precompute();
+
+    let assert_same_result = |s: Scalar| {
+        let no_precomp = &g * &s;
+        let with_precomp = &g_with_precompute * &s;
+        assert_eq!(no_precomp, with_precomp);
+    };
+
+    assert_same_result(Scalar::zero());
+    assert_same_result(Scalar::one());
+    assert_same_result(Scalar::one().neg());
+    for _ in 0..1000 {
+        assert_same_result(Scalar::random(&mut rng));
+    }
+});
+
+test_point_operation!(batch_mul, [g1, g2], {
+    let mut rng = seeded_rng();
+
+    let pt = Affine::hash(b"ic-crypto-batch-mul-test", &rng.gen::<[u8; 32]>());
+
+    for i in 0..20 {
+        let scalars = Scalar::batch_random(&mut rng, i);
+        assert_eq!(scalars.len(), i);
+
+        let batch = Affine::batch_mul(&pt, &scalars);
+        assert_eq!(batch.len(), scalars.len());
+
+        for j in 0..i {
+            assert_eq!(batch[j], Affine::from(&pt * &scalars[j]));
+        }
+    }
+});
+
+test_point_operation!(mul2, [g1, g2], {
+    let mut rng = seeded_rng();
+
+    let g = Projective::generator();
+    let zero = Scalar::zero();
+    let one = Scalar::one();
+
+    assert_eq!(Projective::mul2(g, &zero, g, &zero), Projective::identity());
+    assert_eq!(Projective::mul2(g, &one, g, &zero), *g);
+    assert_eq!(Projective::mul2(g, &zero, g, &one), *g);
+
+    for _ in 0..1000 {
+        let s1 = Scalar::biased(&mut rng);
+        let s2 = Scalar::biased(&mut rng);
+
+        let p1 = Projective::biased(&mut rng);
+        let p2 = Projective::biased(&mut rng);
+
+        let reference = &p1 * &s1 + &p2 * &s2;
+
+        assert_eq!(Projective::mul2(&p1, &s1, &p2, &s2), reference);
+        assert_eq!(Projective::mul2(&p2, &s2, &p1, &s1), reference);
+    }
+});
+
+test_point_operation!(muln, [g1, g2], {
+    let mut rng = seeded_rng();
+
+    assert_eq!(Projective::muln_vartime(&[]), Projective::identity());
+
+    for t in 1..100 {
+        let mut terms = Vec::with_capacity(t);
+
+        for _ in 0..t {
+            terms.push((Projective::biased(&mut rng), Scalar::biased(&mut rng)));
+        }
+
+        let mut reference_val = Projective::identity();
+        for (p, s) in &terms {
+            reference_val += p * s;
+        }
+
+        let computed = Projective::muln_vartime(&terms);
+
+        assert_eq!(computed, reference_val);
+    }
+});
