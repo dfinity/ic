@@ -6,7 +6,9 @@ use crate::types::{
     SecretKey,
 };
 
-use ic_crypto_internal_bls12_381_type::{verify_bls_signature, G1Projective, G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    verify_bls_signature, G1Projective, G2Affine, G2Projective, Scalar,
+};
 
 use ic_crypto_sha::{Context, DomainSeparationContext};
 use rand::{CryptoRng, Rng};
@@ -54,7 +56,7 @@ pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
 
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
     let secret_key = Scalar::random(rng);
-    let public_key = G2Projective::generator() * &secret_key;
+    let public_key = G2Affine::generator() * &secret_key;
     (secret_key, public_key)
 }
 

@@ -498,13 +498,13 @@ fn test_multipairing() {
         let b = Scalar::random(&mut rng);
         let c = Scalar::random(&mut rng);
 
-        let g1a = G1Affine::from(G1Projective::generator() * &a);
-        let g1b = G1Affine::from(G1Projective::generator() * &b);
-        let g1c = G1Affine::from(G1Projective::generator() * &c);
+        let g1a = G1Affine::from(G1Affine::generator() * &a);
+        let g1b = G1Affine::from(G1Affine::generator() * &b);
+        let g1c = G1Affine::from(G1Affine::generator() * &c);
 
-        let g2a = G2Prepared::from(G2Projective::generator() * &a);
-        let g2b = G2Prepared::from(G2Projective::generator() * &b);
-        let g2c = G2Prepared::from(G2Projective::generator() * &c);
+        let g2a = G2Prepared::from(G2Affine::generator() * &a);
+        let g2b = G2Prepared::from(G2Affine::generator() * &b);
+        let g2c = G2Prepared::from(G2Affine::generator() * &c);
 
         let g2 = G2Prepared::generator();
 
@@ -962,7 +962,7 @@ test_point_operation!(addition, [g1, g2, gt], {
 test_point_operation!(sum, [g1, g2], {
     let mut rng = seeded_rng();
 
-    let pt = Projective::generator();
+    let pt = Affine::generator();
 
     for t in 1..20 {
         let mut inputs = Vec::with_capacity(t);
@@ -983,7 +983,7 @@ test_point_operation!(sum, [g1, g2], {
 test_point_operation!(multiply, [g1, g2, gt], {
     let mut rng = seeded_rng();
 
-    let pt = Projective::generator();
+    let pt = Affine::generator();
 
     for _ in 1..300 {
         let lhs = rng.gen::<u32>() as u64;
