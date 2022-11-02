@@ -26,7 +26,7 @@ use crate::{
 };
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod};
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformContext};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
@@ -51,14 +51,31 @@ pub const CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK: usize = 500;
 pub type CanisterHttpRequestId = CallbackId;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Transform {
+    pub method_name: String,
+    #[serde(with = "serde_bytes")]
+    pub context: Vec<u8>,
+}
+
+impl From<TransformContext> for Transform {
+    fn from(item: TransformContext) -> Self {
+        Transform {
+            method_name: item.function.0.method,
+            context: item.context,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpRequestContext {
     pub request: Request,
     pub url: String,
     pub max_response_bytes: Option<NumBytes>,
     pub headers: Vec<CanisterHttpHeader>,
+    #[serde(with = "serde_bytes", skip_serializing_if = "Option::is_none", default)]
     pub body: Option<Vec<u8>>,
     pub http_method: CanisterHttpMethod,
-    pub transform_method_name: Option<String>,
+    pub transform: Option<Transform>,
     pub time: Time,
 }
 
@@ -81,9 +98,13 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
                 .collect(),
             body: context.body.clone(),
             transform_method_name: context
-                .transform_method_name
+                .transform
                 .as_ref()
-                .map(|method_name| method_name.into()),
+                .map(|transform| transform.method_name.clone()),
+            transform_context: context
+                .transform
+                .as_ref()
+                .map(|transform| transform.context.clone()),
             http_method: pb_metadata::HttpMethod::from(&context.http_method).into(),
             time: context.time.as_nanos_since_unix_epoch(),
         }
@@ -95,6 +116,30 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
     fn try_from(context: pb_metadata::CanisterHttpRequestContext) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
+
+        let transform_method_name = context.transform_method_name.map(From::from);
+        let transform_context = context.transform_context.map(From::from);
+        let transform = match (transform_method_name, transform_context) {
+            (Some(method_name), Some(context)) => Some(Transform {
+                method_name,
+                context,
+            }),
+            // Might happen for an already serialized transform context that
+            // contained only the method name, i.e. before the context field
+            // was added. Can be squashed to the case below after the change
+            // has been fully rolled out.
+            (Some(method_name), None) => Some(Transform {
+                method_name,
+                context: vec![],
+            }),
+            (None, Some(_)) => {
+                return Err(ProxyDecodeError::MissingField(
+                    "CanisterHttpRequestContext is missing the transform method.",
+                ))
+            }
+            (None, None) => None,
+        };
+
         Ok(CanisterHttpRequestContext {
             request,
             url: context.url,
@@ -117,7 +162,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                     ),
                 })?
                 .try_into()?,
-            transform_method_name: context.transform_method_name.map(From::from),
+            transform,
             time: Time::from_nanos_since_unix_epoch(context.time),
         })
     }
@@ -156,7 +201,6 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             None => Ok(None),
         }?;
 
-        let transform_method_name = args.transform_method();
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
             url: args.url,
@@ -176,7 +220,7 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
                 HttpMethod::POST => CanisterHttpMethod::POST,
                 HttpMethod::HEAD => CanisterHttpMethod::HEAD,
             },
-            transform_method_name,
+            transform: args.transform.map(From::from),
             time,
         })
     }
@@ -189,10 +233,12 @@ impl CanisterHttpRequestContext {
             + self
                 .headers
                 .iter()
-                .map(|h| h.name.len() + h.value.len())
+                .map(|header| header.name.len() + header.value.len())
                 .sum::<usize>()
-            + self.body.as_ref().map_or(0, |b| b.len())
-            + self.transform_method_name.as_ref().map_or(0, |b| b.len());
+            + self.body.as_ref().map_or(0, |body| body.len())
+            + self.transform.as_ref().map_or(0, |transform| {
+                transform.method_name.len() + transform.context.len()
+            });
         NumBytes::from(request_size as u64)
     }
 }
@@ -414,7 +460,10 @@ mod tests {
             body: Some(vec![0; 1024]),
             max_response_bytes: None,
             http_method: CanisterHttpMethod::GET,
-            transform_method_name: Some("willchange".to_string()),
+            transform: Some(Transform {
+                method_name: "willchange".to_string(),
+                context: vec![],
+            }),
             request: Request {
                 receiver: CanisterId::ic_00(),
                 sender: CanisterId::ic_00(),
@@ -433,10 +482,9 @@ mod tests {
                 .map(|h| h.name.len() + h.value.len())
                 .sum::<usize>()
             + context.body.as_ref().map_or(0, |b| b.len())
-            + context
-                .transform_method_name
-                .as_ref()
-                .map_or(0, |b| b.len());
+            + context.transform.as_ref().map_or(0, |transform| {
+                transform.method_name.len() + transform.context.len()
+            });
 
         assert_eq!(
             context.variable_parts_size(),
@@ -452,7 +500,10 @@ mod tests {
             body: None,
             max_response_bytes: None,
             http_method: CanisterHttpMethod::GET,
-            transform_method_name: Some("willchange".to_string()),
+            transform: Some(Transform {
+                method_name: "willchange".to_string(),
+                context: vec![],
+            }),
             request: Request {
                 receiver: CanisterId::ic_00(),
                 sender: CanisterId::ic_00(),
@@ -465,10 +516,9 @@ mod tests {
         };
 
         let expected_size = context.url.len()
-            + context
-                .transform_method_name
-                .as_ref()
-                .map_or(0, |b| b.len());
+            + context.transform.as_ref().map_or(0, |transform| {
+                transform.method_name.len() + transform.context.len()
+            });
         assert_eq!(
             context.variable_parts_size(),
             NumBytes::from(expected_size as u64)

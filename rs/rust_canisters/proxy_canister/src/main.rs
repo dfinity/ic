@@ -7,7 +7,7 @@
 //!
 use candid::{candid_method, Principal};
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpResponsePayload, HttpHeader, Payload};
+use ic_ic00_types::{CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -86,16 +86,18 @@ async fn check_response(
 
 #[ic_cdk_macros::query(name = "transform")]
 #[candid_method(query, rename = "transform")]
-fn transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
-    let mut transformed = raw;
+fn transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let (response, _) = (raw.response, raw.context);
+    let mut transformed = response;
     transformed.headers = vec![];
     transformed
 }
 
 #[ic_cdk_macros::query(name = "test_transform")]
 #[candid_method(query, rename = "test_transform")]
-fn test_transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
-    let mut transformed = raw;
+fn test_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let (response, _) = (raw.response, raw.context);
+    let mut transformed = response;
     transformed.headers = vec![HttpHeader {
         name: "hello".to_string(),
         value: "bonjour".to_string(),
@@ -105,8 +107,9 @@ fn test_transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePaylo
 
 #[ic_cdk_macros::query(name = "bloat_transform")]
 #[candid_method(query, rename = "bloat_transform")]
-fn bloat_transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
-    let mut transformed = raw;
+fn bloat_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let (response, _) = (raw.response, raw.context);
+    let mut transformed = response;
     transformed.headers = vec![];
     // Return response that is bigger than allowed limit.
     transformed.body = vec![0; 2 * 1024 * 1024 + 1024];
@@ -129,7 +132,10 @@ mod proxy_canister_test {
                 value: "Fri, 03 Jun 2022 16:23:43 GMT".to_string(),
             }],
         };
-        let sanitized = transform(raw_response);
+        let sanitized = transform(TransformArgs {
+            response: raw_response,
+            context: vec![0, 1, 2],
+        });
         let sanitized_body = std::str::from_utf8(&sanitized.body).unwrap();
         println!("Sanitized body is: {}", sanitized_body);
         assert!(sanitized.headers.is_empty());

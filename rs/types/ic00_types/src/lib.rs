@@ -17,8 +17,8 @@ use strum_macros::{Display, EnumIter, EnumString};
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
 pub use http::{
-    CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod, TransformFunc,
-    TransformType,
+    CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod, TransformArgs,
+    TransformContext, TransformFunc,
 };
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 

@@ -9,7 +9,8 @@ use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, CanisterHttpRequestArgs, CanisterIdRecord, EcdsaCurve, EcdsaKeyId,
-    EmptyBlob, HttpMethod, Method, Payload as _, SignWithECDSAArgs, TransformFunc, TransformType,
+    EmptyBlob, HttpMethod, Method, Payload as _, SignWithECDSAArgs, TransformContext,
+    TransformFunc,
 };
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
@@ -3047,10 +3048,13 @@ fn simulate_http_request_fee_cost(subnet_type: SubnetType, subnet_size: usize) -
         headers: Vec::new(),
         body: None,
         method: HttpMethod::GET,
-        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-            principal: canister_id.get().0,
-            method: "transform".to_string(),
-        }))),
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: canister_id.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![],
+        }),
     };
     test.inject_call_to_ic00(
         Method::HttpRequest,
