@@ -13,6 +13,7 @@ use std::time::Duration;
 
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(10_000_000_000);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 996_000;
+const TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS: u64 = 30;
 
 /// This is a canister that keeps a counter on the heap and exposes various test
 /// methods. Exposed methods:
@@ -243,16 +244,19 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
     Cycles::from(balance_before - balance_after)
 }
 
-fn simulate_ingress_induction_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
-    // This function simulates `execute_round` to get the cost of ingress induction.
-    // Filterred `CyclesAccountManagerConfig` is used to avoid irrelevant costs,
-    // eg. execution cost.
+fn simulate_execute_ingress(
+    subnet_type: SubnetType,
+    subnet_size: usize,
+    filter: KeepFeesFilter,
+) -> Cycles {
+    // This function simulates `execute_round` to get the cost during executing ingress.
+    // Filtered `CyclesAccountManagerConfig` is used to avoid irrelevant costs.
     let env = StateMachineBuilder::new()
         .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .with_config(Some(StateMachineConfig::new(
-            filtered_subnet_config(subnet_type, KeepFeesFilter::IngressInductionCost),
+            filtered_subnet_config(subnet_type, filter),
             HypervisorConfig::default(),
         )))
         .build();
@@ -270,6 +274,18 @@ fn simulate_ingress_induction_cost(subnet_type: SubnetType, subnet_size: usize) 
     let balance_after = env.cycle_balance(canister_id);
 
     Cycles::from(balance_before - balance_after)
+}
+
+fn simulate_ingress_induction_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    simulate_execute_ingress(
+        subnet_type,
+        subnet_size,
+        KeepFeesFilter::IngressInductionCost,
+    )
+}
+
+fn simulate_execute_message_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    simulate_execute_ingress(subnet_type, subnet_size, KeepFeesFilter::ExecutionCost)
 }
 
 fn trillion_cycles(value: f64) -> Cycles {
@@ -719,6 +735,56 @@ fn test_subnet_size_ingress_induction_cost() {
     let reference_cost = simulate_execute_install_code_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..50 {
         let simulated_cost = simulate_execute_install_code_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_execute_message() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = calculate_execution_cycles(
+        &config,
+        NumInstructions::from(TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS),
+        reference_subnet_size,
+    );
+
+    // Check default cost.
+    assert_eq!(
+        simulate_execute_message_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_execute_message_cost(subnet_type, 1)
+            < simulate_execute_message_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_execute_message_cost(subnet_type, 11)
+            < simulate_execute_message_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_execute_message_cost(subnet_type, 101)
+            < simulate_execute_message_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_execute_message_cost(subnet_type, 1_001)
+            < simulate_execute_message_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_execute_message_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
