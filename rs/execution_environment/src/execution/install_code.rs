@@ -368,11 +368,19 @@ impl InstallCodeHelper {
             .requested_memory_allocation
             .unwrap_or(old_memory_allocation);
         self.canister.system_state.memory_allocation = new_memory_allocation;
-        self.execution_parameters.canister_memory_limit = self
-            .canister
-            // TODO(RUN-286): This preserves the existing behavior, but we
-            // should use the `max_canister_memory_size` config parameter.
-            .memory_limit(self.execution_parameters.canister_memory_limit);
+
+        // It is impossible to transition from `MemoryAllocation::Reserved` to
+        // `MemoryAllocation::BestEffort` because `None` in `InstallCodeArgs` is
+        // interpreted as keeping the old memory allocation.
+        // This means that we can use the existing canister memory limit as the
+        // best effort memory limit.
+        debug_assert!(
+            old_memory_allocation == new_memory_allocation
+                || new_memory_allocation != MemoryAllocation::BestEffort
+        );
+        let best_effort_limit = self.execution_parameters.canister_memory_limit;
+        self.execution_parameters.canister_memory_limit =
+            self.canister.memory_limit(best_effort_limit);
 
         let new_memory_usage = self.canister.memory_usage(subnet_type);
         if new_memory_usage > self.execution_parameters.canister_memory_limit {
