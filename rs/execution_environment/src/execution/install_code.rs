@@ -207,9 +207,6 @@ impl InstallCodeHelper {
             let others = round_limits
                 .compute_allocation_used
                 .saturating_sub(old_compute_allocation.as_percent());
-            // TODO(RUN-286): `+1` here matches the existing check in
-            // `validate_compute_allocation()`. We could remove that by
-            // initializing `compute_capacity` to `compute_capacity - 1`.
             let available = original.config.compute_capacity.saturating_sub(others + 1);
             if new_compute_allocation.as_percent() > available {
                 return finish_err(
@@ -219,7 +216,7 @@ impl InstallCodeHelper {
                     round,
                     CanisterManagerError::SubnetComputeCapacityOverSubscribed {
                         requested: new_compute_allocation,
-                        available,
+                        available: available.max(old_compute_allocation.as_percent()),
                     },
                 );
             }
@@ -567,34 +564,23 @@ pub(crate) fn validate_controller(
 pub(crate) fn validate_compute_allocation(
     total_subnet_compute_allocation_used: u64,
     canister: &CanisterState,
-    compute_allocation: Option<ComputeAllocation>,
+    new_compute_allocation: Option<ComputeAllocation>,
     config: &CanisterMgrConfig,
 ) -> Result<(), CanisterManagerError> {
-    // TODO(RUN-286): Simplify this to match the checks in `finish()`.
-    if let Some(compute_allocation) = compute_allocation {
-        let canister_current_allocation = canister.scheduler_state.compute_allocation.as_percent();
-        // Check only the case when compute allocation increases. Other
-        // cases always succeed.
-        if compute_allocation.as_percent() > canister_current_allocation {
-            // current_compute_allocation of this canister will be subtracted from the
-            // total_compute_allocation() of the subnet if the canister's compute_allocation
-            // is changed to the requested_compute_allocation
-            if compute_allocation.as_percent() + total_subnet_compute_allocation_used
-                - canister_current_allocation
-                >= config.compute_capacity
-            {
-                let capped_usage = std::cmp::min(
-                    config.compute_capacity,
-                    total_subnet_compute_allocation_used + 1,
-                );
+    if let Some(new_compute_allocation) = new_compute_allocation {
+        let old_compute_allocation = canister.compute_allocation();
+        if new_compute_allocation.as_percent() > old_compute_allocation.as_percent() {
+            let others = total_subnet_compute_allocation_used
+                .saturating_sub(old_compute_allocation.as_percent());
+            let available = config.compute_capacity.saturating_sub(others + 1);
+            if new_compute_allocation.as_percent() > available {
                 return Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
-                    requested: compute_allocation,
-                    available: config.compute_capacity + canister_current_allocation - capped_usage,
+                    requested: new_compute_allocation,
+                    available: available.max(old_compute_allocation.as_percent()),
                 });
             }
         }
     }
-
     Ok(())
 }
 
