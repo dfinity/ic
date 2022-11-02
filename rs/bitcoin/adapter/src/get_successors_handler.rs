@@ -245,6 +245,7 @@ mod test {
     use std::sync::Arc;
 
     use bitcoin::Network;
+    use ic_metrics::MetricsRegistry;
     use tokio::sync::{mpsc::channel, Mutex};
 
     use crate::{
@@ -259,7 +260,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config);
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
@@ -366,7 +367,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_wait_header_sync_testnet() {
         let config = ConfigBuilder::new().with_network(Network::Testnet).build();
-        let blockchain_state = BlockchainState::new(&config);
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
@@ -408,7 +409,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_wait_header_sync_regtest() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config);
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
@@ -455,7 +456,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_multiple_blocks() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config);
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
@@ -526,7 +527,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_multiple_blocks_out_of_order() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config);
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
@@ -617,7 +618,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_large_block() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config);
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
@@ -678,7 +679,7 @@ mod test {
     #[tokio::test]
     async fn test_get_successors_many_blocks_until_size_cap_is_met() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config);
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);

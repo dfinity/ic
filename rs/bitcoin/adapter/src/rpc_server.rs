@@ -1,6 +1,7 @@
 use crate::{
     config::{Config, IncomingSource},
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
+    metrics::{AdapterServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
     AdapterState, GetSuccessorsHandler, TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
@@ -11,6 +12,7 @@ use ic_btc_service::{
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
 use ic_logger::{debug, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
 use tokio::sync::mpsc::Sender;
 use tonic::{transport::Server, Request, Response, Status};
@@ -20,6 +22,7 @@ struct BtcServiceImpl {
     get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: Sender<TransactionManagerRequest>,
     logger: ReplicaLogger,
+    metrics: AdapterServiceMetrics,
 }
 
 impl TryFrom<BtcServiceGetSuccessorsRequest> for GetSuccessorsRequest {
@@ -80,6 +83,11 @@ impl BtcService for BtcServiceImpl {
         debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
 
+        self.metrics
+            .requests
+            .with_label_values(&[LABEL_GET_SUCCESSOR])
+            .inc();
+
         match BtcServiceGetSuccessorsResponse::try_from(
             self.get_successors_handler.get_successors(request).await?,
         ) {
@@ -97,6 +105,10 @@ impl BtcService for BtcServiceImpl {
     ) -> Result<Response<BtcServiceSendTransactionResponse>, Status> {
         self.adapter_state.received_now();
         let transaction = request.into_inner().transaction;
+        self.metrics
+            .requests
+            .with_label_values(&[LABEL_SEND_TRANSACTION])
+            .inc();
         self.transaction_manager_tx
             .send(TransactionManagerRequest::SendTransaction(transaction))
             .await
@@ -114,12 +126,14 @@ pub fn spawn_grpc_server(
     adapter_state: AdapterState,
     get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: Sender<TransactionManagerRequest>,
+    metrics_registry: &MetricsRegistry,
 ) {
     let btc_adapter_impl = BtcServiceImpl {
         adapter_state,
         get_successors_handler,
         transaction_manager_tx,
         logger,
+        metrics: AdapterServiceMetrics::new(metrics_registry),
     };
     tokio::spawn(async move {
         match config.incoming_source {

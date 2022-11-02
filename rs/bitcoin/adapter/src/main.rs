@@ -43,7 +43,7 @@ pub async fn main() {
     // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
     if config.incoming_source == IncomingSource::Systemd {
         unsafe {
-            start_metrics_grpc(metrics_registry, logger.clone());
+            start_metrics_grpc(metrics_registry.clone(), logger.clone());
         }
     }
 
@@ -51,7 +51,7 @@ pub async fn main() {
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(10);
 
     let adapter_state = AdapterState::new(config.idle_seconds);
-    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config)));
+    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, &metrics_registry)));
     let get_successors_handler =
         GetSuccessorsHandler::new(&config, blockchain_state.clone(), blockchain_manager_tx);
 
@@ -64,6 +64,7 @@ pub async fn main() {
         adapter_state.clone(),
         get_successors_handler,
         transaction_manager_tx,
+        &metrics_registry,
     );
 
     start_router(
@@ -73,6 +74,7 @@ pub async fn main() {
         transaction_manager_rx,
         adapter_state,
         blockchain_manager_rx,
+        &metrics_registry,
     );
     shutdown_signal(logger.inner_logger.root.clone()).await;
 }

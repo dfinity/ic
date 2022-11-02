@@ -9,6 +9,7 @@ use crate::{
 };
 use bitcoin::network::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
+use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -32,13 +33,16 @@ pub fn start_router(
     mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
     adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
+    metrics_registry: &MetricsRegistry,
 ) {
     let (network_message_sender, mut network_message_receiver) =
         channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-    let mut blockchain_manager = BlockchainManager::new(blockchain_state, logger.clone());
+    let mut blockchain_manager =
+        BlockchainManager::new(blockchain_state, logger.clone(), metrics_registry);
     let mut transaction_manager = TransactionManager::new(logger.clone());
-    let mut connection_manager = ConnectionManager::new(config, logger, network_message_sender);
+    let mut connection_manager =
+        ConnectionManager::new(config, logger, network_message_sender, metrics_registry);
 
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
