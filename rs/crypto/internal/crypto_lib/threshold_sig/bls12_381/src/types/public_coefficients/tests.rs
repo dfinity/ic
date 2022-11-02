@@ -4,11 +4,11 @@
 use super::super::Polynomial;
 use super::PublicCoefficients;
 use crate::types::{PublicKey, ThresholdError};
-use ic_crypto_internal_bls12_381_type::{G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Affine, G2Projective, Scalar};
 use std::ops::MulAssign;
 
 fn uint_to_g2(num: u32) -> G2Projective {
-    G2Projective::generator() * Scalar::from_u32(num)
+    G2Affine::generator() * Scalar::from_u32(num)
 }
 
 /// Polynomial evaluation for small polynomials; this will overflow and panic if

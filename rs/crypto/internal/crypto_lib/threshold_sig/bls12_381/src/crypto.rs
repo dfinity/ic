@@ -7,9 +7,7 @@ use super::types::{
 use crate::api::dkg_errors::InvalidArgumentError;
 
 use crate::types::PublicKey;
-use ic_crypto_internal_bls12_381_type::{
-    verify_bls_signature, G1Projective, G2Affine, G2Projective, Scalar,
-};
+use ic_crypto_internal_bls12_381_type::{verify_bls_signature, G1Projective, G2Affine, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
@@ -336,7 +334,7 @@ pub fn secret_key_is_consistent(
     let mut y = public_coefficients.evaluate_at(&x);
     // According to the secret share:
     let neg_secret = secret.neg();
-    let neg_pub = G2Projective::generator() * neg_secret;
+    let neg_pub = G2Affine::generator() * neg_secret;
     // Compare:
     y.add_assign(&neg_pub);
     y.is_identity()
