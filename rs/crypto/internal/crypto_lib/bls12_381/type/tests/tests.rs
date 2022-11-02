@@ -381,6 +381,20 @@ fn test_gt_mul_u16_is_correct() {
 }
 
 #[test]
+#[ignore]
+fn test_gt_mul_u16_is_correct_exhaustive_test() {
+    // This takes several minutes to run in debug mode
+
+    let mut accum = Gt::identity();
+    for x in 0..=0xffff {
+        let fast = Gt::g_mul_u16(x);
+        assert_eq!(fast, accum);
+
+        accum += Gt::generator();
+    }
+}
+
+#[test]
 fn test_pairing_bilinearity() {
     let mut rng = seeded_rng();
 
