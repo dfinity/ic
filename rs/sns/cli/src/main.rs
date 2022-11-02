@@ -72,6 +72,13 @@ pub struct DeployArgs {
     #[clap(long)]
     pub override_sns_wasm_canister_id_for_tests: Option<String>,
 
+    /// The canister ID of the wallet to use on this subnet.
+    ///
+    /// This is needed in testnet scenarios or if you want to use a different wallet than the one
+    /// currently set for your dfx identity.
+    #[clap(long)]
+    pub wallet_canister_override: Option<PrincipalId>,
+
     /// The SNS-WASMS canister candid, used to parse canister IDs from the response.
     ///
     /// Corresponds to the dfx canister call --candid flag.
