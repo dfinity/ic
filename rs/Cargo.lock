@@ -5546,12 +5546,12 @@ dependencies = [
  "ic-config",
  "ic-cycles-account-manager",
  "ic-execution-environment",
+ "ic-http-endpoints-metrics",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-state-manager",
  "ic-messaging",
  "ic-metrics",
- "ic-metrics-exporter",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-keys",
@@ -5581,12 +5581,12 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-error-types",
  "ic-execution-environment",
+ "ic-http-endpoints-metrics",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-state-manager",
  "ic-messaging",
  "ic-metrics",
- "ic-metrics-exporter",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-keys",
@@ -5792,6 +5792,24 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "ic-http-endpoints-metrics"
+version = "0.8.0"
+dependencies = [
+ "hyper",
+ "ic-async-utils",
+ "ic-config",
+ "ic-crypto-tls-interfaces",
+ "ic-interfaces-registry",
+ "ic-metrics",
+ "ic-test-utilities-logger",
+ "ic-types",
+ "prometheus 0.12.0",
+ "serde",
+ "slog",
+ "tokio",
 ]
 
 [[package]]
@@ -6324,24 +6342,6 @@ name = "ic-metrics-encoder"
 version = "0.8.0"
 
 [[package]]
-name = "ic-metrics-exporter"
-version = "0.8.0"
-dependencies = [
- "hyper",
- "ic-async-utils",
- "ic-config",
- "ic-crypto-tls-interfaces",
- "ic-interfaces-registry",
- "ic-metrics",
- "ic-test-utilities-logger",
- "ic-types",
- "prometheus 0.12.0",
- "serde",
- "slog",
- "tokio",
-]
-
-[[package]]
 name = "ic-nervous-system-common"
 version = "0.8.0"
 dependencies = [
@@ -6844,10 +6844,10 @@ dependencies = [
  "ic-async-utils",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-http-endpoints-metrics",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-metrics",
- "ic-metrics-exporter",
  "ic-p8s-service-discovery-log",
  "ic-protobuf",
  "ic-registry-client",
@@ -7251,10 +7251,10 @@ dependencies = [
  "ic-config",
  "ic-crypto-for-verification-only",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-http-endpoints-metrics",
  "ic-interfaces-registry",
  "ic-logger",
  "ic-metrics",
- "ic-metrics-exporter",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-client-helpers",
@@ -7405,6 +7405,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-error-types",
  "ic-execution-environment",
+ "ic-http-endpoints-metrics",
  "ic-http-endpoints-public",
  "ic-ic00-types",
  "ic-interfaces",
@@ -7415,7 +7416,6 @@ dependencies = [
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
- "ic-metrics-exporter",
  "ic-nns-constants",
  "ic-p2p",
  "ic-protobuf",
@@ -8756,9 +8756,9 @@ dependencies = [
  "hyper-tls",
  "ic-canister-client",
  "ic-config",
+ "ic-http-endpoints-metrics",
  "ic-ic00-types",
  "ic-metrics",
- "ic-metrics-exporter",
  "ic-test-identity",
  "ic-types",
  "indicatif",
@@ -10704,13 +10704,13 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-threshold-sig",
  "ic-dashboard",
+ "ic-http-endpoints-metrics",
  "ic-http-utils",
  "ic-image-upgrader",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-logger",
  "ic-metrics",
- "ic-metrics-exporter",
  "ic-nns-constants",
  "ic-protobuf",
  "ic-registry-client-fake",

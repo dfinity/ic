@@ -23,7 +23,7 @@ DEPENDENCIES = [
     "//rs/messaging",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/monitoring/metrics_exporter",
+    "//rs/http_endpoints/metrics",
     "//rs/nns/constants",
     "//rs/p2p",
     "//rs/protobuf",

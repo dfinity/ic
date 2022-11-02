@@ -1,5 +1,5 @@
 [package]
-name = "ic-metrics-exporter"
+name = "ic-http-endpoints-metrics"
 version = "0.8.0"
 edition = "2021"
 
@@ -9,7 +9,7 @@ hyper = { version = "0.14.18", features = ["full"] }
 ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-metrics = { path = "../metrics" }
+ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }

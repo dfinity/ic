@@ -5,11 +5,11 @@ use ic_config::registry_client::DataProviderConfig;
 use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_crypto_sha::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces::crypto::IngressSigVerifier;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
-use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
@@ -255,7 +255,7 @@ fn main() -> io::Result<()> {
     setup::create_consensus_pool_dir(&config);
 
     let crypto = Arc::new(crypto);
-    let _metrics = MetricsRuntimeImpl::new(
+    let _metrics_endpoint = MetricsHttpEndpoint::new(
         rt_http.handle().clone(),
         config.metrics.clone(),
         metrics_registry.clone(),
