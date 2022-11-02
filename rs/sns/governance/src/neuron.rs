@@ -489,6 +489,14 @@ impl Neuron {
             manage_neuron::configure::Operation::StopDissolving(_) => {
                 self.stop_dissolving(now_seconds)
             }
+            manage_neuron::configure::Operation::ChangeAutoStakeMaturity(change) => {
+                if change.requested_setting_for_auto_stake_maturity {
+                    self.auto_stake_maturity = Some(true);
+                } else {
+                    self.auto_stake_maturity = None;
+                }
+                Ok(())
+            }
         }
     }
 

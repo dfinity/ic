@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use candid::types::number::Nat;
-use canister_test::Canister;
+use canister_test::{Canister, Runtime};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
@@ -12,6 +12,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
 use ic_sns_governance::pb::v1::governance::SnsMetadata;
+use ic_sns_governance::pb::v1::manage_neuron::StakeMaturity;
 use ic_sns_governance::{
     governance::Governance,
     ledger::Ledger,
@@ -840,6 +841,211 @@ fn test_disbursing_maturity_with_no_maturity_fails() {
         Ok(())
     });
 }
+
+async fn create_sns_canisters_with_staked_neuron_and_maturity<'a>(
+    runtime: &'a Runtime,
+    owner: &'a Sender,
+) -> (SnsCanisters<'a>, NeuronId, Subaccount) {
+    let account_identifier = Account {
+        owner: owner.get_principal_id(),
+        subaccount: None,
+    };
+    let alloc = Tokens::from_tokens(1000).unwrap();
+    let sys_params = NervousSystemParameters {
+        neuron_claimer_permissions: Some(NeuronPermissionList {
+            permissions: NeuronPermissionType::all(),
+        }),
+        voting_rewards_parameters: Some(VotingRewardsParameters {
+            round_duration_seconds: Some(10),
+            ..VOTING_REWARDS_PARAMETERS
+        }),
+        ..NervousSystemParameters::with_default_values()
+    };
+
+    let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+        .with_ledger_account(account_identifier, alloc)
+        .with_nervous_system_parameters(sys_params.clone())
+        .build();
+
+    let sns_canisters = SnsCanisters::set_up(runtime, sns_init_payload).await;
+
+    // Stake and claim a neuron capable of making a proposal
+    let neuron_id = sns_canisters
+        .stake_and_claim_neuron(owner, Some(ONE_YEAR_SECONDS as u32))
+        .await;
+
+    let subaccount = neuron_id
+        .subaccount()
+        .expect("Error creating the subaccount");
+
+    // Earn some maturity to test maturity-related functionality
+    sns_canisters
+        .earn_maturity(&neuron_id, owner)
+        .await
+        .expect("Error when earning maturity");
+
+    (sns_canisters, neuron_id, subaccount)
+}
+
+#[test]
+fn test_stake_maturity_succeeds() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Setup test environment.
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let (sns_canisters, neuron_id, subaccount) =
+            create_sns_canisters_with_staked_neuron_and_maturity(&runtime, &user).await;
+
+        // Record neuron's maturity.
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let earned_maturity_e8s = neuron.maturity_e8s_equivalent;
+        let initial_staked_maturity_e8s = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+        assert!(earned_maturity_e8s > 0);
+
+        // Stake all of the neuron's rewards aka maturity.
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::StakeMaturity(StakeMaturity {
+                        percentage_to_stake: Some(100),
+                    })),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling the manage_neuron API.");
+
+        let response = match manage_neuron_response.command.unwrap() {
+            CommandResponse::StakeMaturity(response) => response,
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+        assert_eq!(response.staked_maturity_e8s, earned_maturity_e8s);
+        assert_eq!(response.maturity_e8s, 0);
+
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(
+            neuron
+                .staked_maturity_e8s_equivalent
+                .expect("Missing staked maturity."),
+            initial_staked_maturity_e8s + earned_maturity_e8s
+        );
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_stake_maturity_succeeds_with_partial_percentage() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Setup test environment.
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let (sns_canisters, neuron_id, subaccount) =
+            create_sns_canisters_with_staked_neuron_and_maturity(&runtime, &user).await;
+        let percentage_to_stake: u32 = 42;
+
+        // Record neuron's maturity.
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let earned_maturity_e8s = neuron.maturity_e8s_equivalent;
+        let maturity_to_be_staked =
+            earned_maturity_e8s.saturating_mul(percentage_to_stake.into()) / 100;
+        let initial_staked_maturity_e8s = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+        assert!(earned_maturity_e8s > 0);
+
+        // Stake all of the neuron's rewards aka maturity.
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::StakeMaturity(StakeMaturity {
+                        percentage_to_stake: Some(percentage_to_stake),
+                    })),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling the manage_neuron API.");
+
+        let response = match manage_neuron_response.command.unwrap() {
+            CommandResponse::StakeMaturity(response) => response,
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+        let remaining_maturity = earned_maturity_e8s.saturating_sub(maturity_to_be_staked);
+        assert_eq!(response.staked_maturity_e8s, maturity_to_be_staked);
+        assert_eq!(response.maturity_e8s, remaining_maturity);
+
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(
+            neuron
+                .staked_maturity_e8s_equivalent
+                .expect("Missing staked maturity."),
+            initial_staked_maturity_e8s + maturity_to_be_staked
+        );
+        assert_eq!(neuron.maturity_e8s_equivalent, remaining_maturity);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_stake_maturity_fails_when_not_authorized() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Setup test environment.
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let (sns_canisters, neuron_id, subaccount) =
+            create_sns_canisters_with_staked_neuron_and_maturity(&runtime, &user).await;
+
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let earned_maturity_e8s = neuron.maturity_e8s_equivalent;
+        let initial_staked_maturity = neuron.staked_maturity_e8s_equivalent;
+
+        let unauthorized_sender = Sender::from_keypair(&TEST_USER2_KEYPAIR);
+
+        // Try to stake all of the neuron's rewards aka maturity.
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::StakeMaturity(StakeMaturity {
+                        percentage_to_stake: Some(100),
+                    })),
+                },
+                &unauthorized_sender,
+            )
+            .await
+            .expect("Error calling the manage_neuron API.");
+
+        let response = match manage_neuron_response.command.unwrap() {
+            CommandResponse::Error(error) => error,
+            CommandResponse::StakeMaturity(response) => panic!(
+                "Neuron should not have been able to stake maturity: {:?}",
+                response
+            ),
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+        assert_eq!(response.error_type, ErrorType::NotAuthorized as i32);
+
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(neuron.maturity_e8s_equivalent, earned_maturity_e8s);
+        assert_eq!(
+            neuron.staked_maturity_e8s_equivalent,
+            initial_staked_maturity
+        );
+
+        Ok(())
+    });
+}
+
+// TODO(NNS1-1667): add a test for auto_stake_maturity.
 
 #[test]
 fn test_voting_rewards_parameters_validate() {

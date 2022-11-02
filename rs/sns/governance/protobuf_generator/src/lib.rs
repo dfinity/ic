@@ -274,6 +274,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.Governance.NeuronInFlightCommand.SyncCommand",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.Governance.GovernanceCachedMetrics",
         [
             "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
@@ -305,6 +309,11 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "ic_sns_governance.pb.v1.ManageNeuron.SetDissolveTimestamp",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
+
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuron.ChangeAutoStakeMaturity",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.Configure",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
@@ -331,6 +340,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.MergeMaturity",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuron.StakeMaturity",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
@@ -395,6 +408,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.DisburseMaturityResponse",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuronResponse.StakeMaturityResponse",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(

@@ -36,6 +36,9 @@ type CanisterStatusResultV2 = record {
   module_hash : opt vec nat8;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
+type ChangeAutoStakeMaturity = record {
+  requested_setting_for_auto_stake_maturity : bool;
+};
 type ClaimOrRefresh = record { by : opt By };
 type ClaimOrRefreshResponse = record { refreshed_neuron_id : opt NeuronId };
 type ClaimSwapNeuronsRequest = record {
@@ -54,6 +57,7 @@ type Command = variant {
   Configure : Configure;
   RegisterVote : RegisterVote;
   MakeProposal : Proposal;
+  StakeMaturity : StakeMaturity;
   RemoveNeuronPermissions : RemoveNeuronPermissions;
   AddNeuronPermissions : AddNeuronPermissions;
   MergeMaturity : MergeMaturity;
@@ -69,6 +73,7 @@ type Command_1 = variant {
   RegisterVote : record {};
   MakeProposal : GetProposal;
   RemoveNeuronPermission : record {};
+  StakeMaturity : StakeMaturityResponse;
   MergeMaturity : MergeMaturityResponse;
   Disburse : DisburseResponse;
   AddNeuronPermission : record {};
@@ -79,6 +84,7 @@ type Command_2 = variant {
   DisburseMaturity : DisburseMaturity;
   Configure : Configure;
   RegisterVote : RegisterVote;
+  SyncCommand : record {};
   MakeProposal : Proposal;
   ClaimOrRefreshNeuron : ClaimOrRefresh;
   RemoveNeuronPermissions : RemoveNeuronPermissions;
@@ -243,11 +249,13 @@ type NervousSystemParameters = record {
 };
 type Neuron = record {
   id : opt NeuronId;
+  staked_maturity_e8s_equivalent : opt nat64;
   permissions : vec NeuronPermission;
   maturity_e8s_equivalent : nat64;
   cached_neuron_stake_e8s : nat64;
   created_timestamp_seconds : nat64;
   source_nns_neuron_id : opt nat64;
+  auto_stake_maturity : opt bool;
   aging_since_timestamp_seconds : nat64;
   dissolve_state : opt DissolveState;
   voting_power_percentage_multiplier : nat64;
@@ -273,6 +281,7 @@ type NeuronPermission = record {
 };
 type NeuronPermissionList = record { permissions : vec int32 };
 type Operation = variant {
+  ChangeAutoStakeMaturity : ChangeAutoStakeMaturity;
   StopDissolving : record {};
   StartDissolving : record {};
   IncreaseDissolveDelay : IncreaseDissolveDelay;
@@ -322,6 +331,11 @@ type SetDissolveTimestamp = record { dissolve_timestamp_seconds : nat64 };
 type SetMode = record { mode : int32 };
 type Split = record { memo : nat64; amount_e8s : nat64 };
 type SplitResponse = record { created_neuron_id : opt NeuronId };
+type StakeMaturity = record { percentage_to_stake : opt nat32 };
+type StakeMaturityResponse = record {
+  maturity_e8s : nat64;
+  staked_maturity_e8s : nat64;
+};
 type Subaccount = record { subaccount : vec nat8 };
 type Tally = record {
   no : nat64;

@@ -266,6 +266,8 @@ impl NeuronBuilder {
             followees: self.followees,
             voting_power_percentage_multiplier: self.voting_power_percentage_multiplier,
             source_nns_neuron_id: None,
+            staked_maturity_e8s_equivalent: None,
+            auto_stake_maturity: None,
         }
     }
 

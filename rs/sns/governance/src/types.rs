@@ -20,6 +20,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::NervousSystemError;
 
+use crate::pb::v1::governance::neuron_in_flight_command::SyncCommand;
+use crate::pb::v1::manage_neuron_response::StakeMaturityResponse;
 use crate::pb::v1::{
     NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent, Vote,
     VotingRewardsParameters,
@@ -252,6 +254,7 @@ impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
             S::DisburseMaturity       (x) => D::DisburseMaturity       (x),
             S::AddNeuronPermissions   (x) => D::AddNeuronPermissions   (x),
             S::RemoveNeuronPermissions(x) => D::RemoveNeuronPermissions(x),
+            S::StakeMaturity          (_) => D::SyncCommand(SyncCommand{}),
         }
     }
 }
@@ -939,6 +942,12 @@ impl ManageNeuronResponse {
     pub fn disburse_maturity_response(response: DisburseMaturityResponse) -> Self {
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::DisburseMaturity(response)),
+        }
+    }
+
+    pub fn stake_maturity_response(response: StakeMaturityResponse) -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::StakeMaturity(response)),
         }
     }
 
