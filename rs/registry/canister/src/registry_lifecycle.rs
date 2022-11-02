@@ -140,7 +140,6 @@ mod test {
     use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
-    use ic_protobuf::crypto::v1::NodePublicKeys;
     use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
     use ic_registry_transport::pb::v1::RegistryMutation;
@@ -255,7 +254,6 @@ mod test {
     fn new_node_mutations() -> (NodeId, Vec<RegistryMutation>) {
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
         let (keys, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let keys = NodePublicKeys::from(keys);
         let valid_pks = ValidNodePublicKeys::try_from(keys, node_id).unwrap();
 
         let node_record = NodeRecord {

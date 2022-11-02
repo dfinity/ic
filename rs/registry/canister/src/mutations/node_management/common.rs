@@ -134,23 +134,19 @@ pub fn make_add_node_registry_mutations(
         make_crypto_tls_cert_key(node_id).as_bytes(),
         encode_or_panic(valid_node_pks.tls_certificate()),
     );
+    let add_idkg_dealing_key = insert(
+        make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
+        encode_or_panic(valid_node_pks.idkg_dealing_encryption_key()),
+    );
 
-    let mut mutations = vec![
+    vec![
         add_node_entry,
         add_committee_signing_key,
         add_node_signing_key,
         add_dkg_dealing_key,
         add_tls_certificate,
-    ];
-    // TODO(NNS1-1197): Refactor this when nodes are provisioned for threshold ECDSA subnets
-    if let Some(idkg_dealing_encryption_key) = valid_node_pks.idkg_dealing_encryption_key() {
-        mutations.push(insert(
-            make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
-            encode_or_panic(idkg_dealing_encryption_key),
-        ));
-    }
-
-    mutations
+        add_idkg_dealing_key,
+    ]
 }
 
 /// Generate a list of mutations to remove a node and associated data
