@@ -21,16 +21,16 @@ DEV_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "metrics_exporter",
+    name = "metrics",
     srcs = glob(["src/**"]),
-    crate_name = "ic_metrics_exporter",
+    crate_name = "ic_http_endpoints_metrics",
     version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "metrics_exporter_test",
+    name = "metrics_test",
     size = "small",
-    crate = ":metrics_exporter",
+    crate = ":metrics",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

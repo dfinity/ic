@@ -14,8 +14,8 @@ use futures_util::FutureExt;
 use humantime::parse_duration;
 use ic_async_utils::shutdown_signal;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
+use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
-use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_p8s_service_discovery::titanium::{
     file_sd::FileSd,
     ic_discovery::{IcServiceDiscovery, IcServiceDiscoveryImpl, JOB_NAMES},
@@ -124,7 +124,7 @@ fn main() -> Result<()> {
     let exporter_config = MetricsConfig {
         exporter: Exporter::Http(cli_args.metrics_listen_addr),
     };
-    let metrics_runtime = MetricsRuntimeImpl::new_insecure(
+    let metrics_endpoint = MetricsHttpEndpoint::new_insecure(
         rt.handle().clone(),
         exporter_config,
         metrics_registry,
@@ -139,7 +139,7 @@ fn main() -> Result<()> {
         rt.block_on(log_scrape_handle)?;
     }
 
-    std::mem::drop(metrics_runtime);
+    std::mem::drop(metrics_endpoint);
 
     if let Some((stop_signal_handler, join_handle)) = scrape_handle {
         stop_signal_handler.send(())?;

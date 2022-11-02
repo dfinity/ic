@@ -4,10 +4,10 @@ use ic_config::{
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
+use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces::execution_environment::IngressHistoryReader;
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
-use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_protobuf::registry::{
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
     routing_table::v1::RoutingTable as PbRoutingTable,
@@ -140,7 +140,7 @@ pub(crate) fn setup() -> (
         Arc::clone(&cycles_account_manager),
         Arc::clone(&state_manager) as Arc<_>,
     );
-    let _metrics_runtime = MetricsRuntimeImpl::new_insecure(
+    let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
         tokio::runtime::Handle::current(),
         config.metrics.clone(),
         metrics_registry.clone(),

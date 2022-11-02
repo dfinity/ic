@@ -7,7 +7,7 @@ DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/config",
     "//rs/monitoring/metrics",
-    "//rs/monitoring/metrics_exporter",
+    "//rs/http_endpoints/metrics",
     "//rs/test_utilities/identity",
     "//rs/types/ic00_types",
     "//rs/types/types",

@@ -29,7 +29,7 @@ ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
+ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-p2p = { path = "../p2p" }
 ic-protobuf = { path = "../protobuf" }

@@ -6,11 +6,11 @@ use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
+use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_interfaces_state_manager::StateReader;
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
-use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_protobuf::registry::{
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
     routing_table::v1::RoutingTable as PbRoutingTable,
@@ -211,7 +211,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         )
         .into_parts();
 
-    let _metrics_runtime = MetricsRuntimeImpl::new_insecure(
+    let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
         tokio::runtime::Handle::current(),
         cfg.metrics,
         metrics_registry.clone(),

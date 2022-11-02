@@ -27,7 +27,7 @@ const PROMETHEUS_TIMEOUT_HEADER: &str = "X-Prometheus-Scrape-Timeout-Seconds";
 const MAX_OUTSTANDING_CONNECTIONS: usize = 20;
 
 /// The type of a metrics runtime implementation.
-pub struct MetricsRuntimeImpl {
+pub struct MetricsHttpEndpoint {
     rt_handle: tokio::runtime::Handle,
     config: Config,
     metrics_registry: MetricsRegistry,
@@ -53,7 +53,7 @@ impl MetricsEndpointMetrics {
 }
 
 /// An implementation of the metrics runtime type.
-impl MetricsRuntimeImpl {
+impl MetricsHttpEndpoint {
     pub fn new(
         rt_handle: tokio::runtime::Handle,
         config: Config,
@@ -82,7 +82,7 @@ impl MetricsRuntimeImpl {
         metrics
     }
 
-    /// Create a MetricsRuntimeImpl supporting only HTTP for insecure use cases
+    /// Create a MetricsHttpEndpoint supporting only HTTP for insecure use cases
     /// e.g. testing binaries where the node certificate may not be available.
     pub fn new_insecure(
         rt_handle: tokio::runtime::Handle,
@@ -243,7 +243,7 @@ impl MetricsRuntimeImpl {
     }
 }
 
-impl Drop for MetricsRuntimeImpl {
+impl Drop for MetricsHttpEndpoint {
     fn drop(&mut self) {
         if let Exporter::File(ref path) = self.config.exporter {
             match std::fs::OpenOptions::new()
@@ -321,7 +321,7 @@ mod tests {
                 exporter: Exporter::Http(addr),
             };
             let metrics_registry = MetricsRegistry::default();
-            let _exporter = MetricsRuntimeImpl::new_insecure(
+            let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
                 rt_handle,
                 config,
                 metrics_registry,

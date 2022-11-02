@@ -9,7 +9,7 @@ ic-canister-client = { path = "../canister_client" }
 ic-config = { path = "../config" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
+ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-types = { path = "../types/types" }
 byte-unit = "4.0.14"

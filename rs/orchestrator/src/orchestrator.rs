@@ -12,11 +12,11 @@ use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::{CryptoComponent, CryptoComponentForNonReplicaProcess};
 use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{ReplicaVersion, SubnetId};
@@ -33,7 +33,7 @@ const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 pub struct Orchestrator {
     pub logger: ReplicaLogger,
     _async_log_guard: AsyncGuard,
-    _metrics_runtime: MetricsRuntimeImpl,
+    _metrics_runtime: MetricsHttpEndpoint,
     upgrade: Option<Upgrade>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
@@ -350,8 +350,8 @@ impl Orchestrator {
         info!(self.logger, "Orchestrator shut down");
     }
 
-    // Construct a `OrchestratorMetrics` and its `MetricsRuntimeImpl`. If this
-    // `MetricsRuntimeImpl` is dropped, metrics will no longer be
+    // Construct a `OrchestratorMetrics` and its `MetricsHttpEndpoint`. If this
+    // `MetricsHttpEndpoint` is dropped, metrics will no longer be
     // collected.
     fn get_metrics(
         metrics_addr: SocketAddr,
@@ -359,12 +359,12 @@ impl Orchestrator {
         metrics_registry: &MetricsRegistry,
         registry_client: Arc<dyn RegistryClient>,
         crypto: Arc<dyn TlsHandshake + Send + Sync>,
-    ) -> (OrchestratorMetrics, MetricsRuntimeImpl) {
+    ) -> (OrchestratorMetrics, MetricsHttpEndpoint) {
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
         };
 
-        let metrics_runtime = MetricsRuntimeImpl::new(
+        let metrics_endpoint = MetricsHttpEndpoint::new(
             tokio::runtime::Handle::current(),
             metrics_config,
             metrics_registry.clone(),
@@ -375,6 +375,6 @@ impl Orchestrator {
 
         let metrics = OrchestratorMetrics::new(metrics_registry);
 
-        (metrics, metrics_runtime)
+        (metrics, metrics_endpoint)
     }
 }

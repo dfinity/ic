@@ -32,10 +32,10 @@ use crate::internal_state::InternalState;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_config::{registry_client::DataProviderConfig, Config};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -108,14 +108,14 @@ impl RegistryReplicator {
         node_id: Option<NodeId>,
         config: &Config,
         metrics_addr: SocketAddr,
-    ) -> (Self, MetricsRuntimeImpl) {
+    ) -> (Self, MetricsHttpEndpoint) {
         let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config);
         let crypto = ic_crypto_for_verification_only::new(replicator.get_registry_client());
 
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
         };
-        let _runtime = MetricsRuntimeImpl::new(
+        let metrics_endpoint = MetricsHttpEndpoint::new(
             tokio::runtime::Handle::current(),
             metrics_config,
             MetricsRegistry::global(),
@@ -124,7 +124,7 @@ impl RegistryReplicator {
             &logger.inner_logger.root,
         );
 
-        (replicator, _runtime)
+        (replicator, metrics_endpoint)
     }
 
     /// initialize a new registry client and start polling the given data
