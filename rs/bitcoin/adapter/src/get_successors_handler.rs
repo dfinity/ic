@@ -37,9 +37,6 @@ const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
 const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
 
-// Max height for sending multiple blocks when connecting the Bitcoin testnet.
-const TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 2_350_000;
-
 #[derive(Debug)]
 pub struct GetSuccessorsRequest {
     /// Hash of the most recent stable block in the Bitcoin canister.
@@ -237,8 +234,7 @@ fn get_next_headers(
 fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> bool {
     match network {
         Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
-        Network::Testnet => anchor_height <= TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
-        Network::Signet | Network::Regtest => true,
+        Network::Testnet | Network::Signet | Network::Regtest => true,
     }
 }
 
@@ -759,13 +755,9 @@ mod test {
             "Multiple blocks are allowed at 1_000_000"
         );
         assert!(
-            are_multiple_blocks_allowed(Network::Testnet, TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
+            are_multiple_blocks_allowed(Network::Testnet, u32::MAX),
             "Multiple blocks are allowed at {}",
-            TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
-        );
-        assert!(
-            !are_multiple_blocks_allowed(Network::Testnet, 3_000_000),
-            "Multiple blocks are not allowed at 3_000_000"
+            u32::MAX
         );
 
         // Regtest
