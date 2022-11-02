@@ -125,8 +125,12 @@ impl SnsWasmSnsDeployer {
             .map(|id_or_name| id_or_name.to_string())
             .unwrap_or_else(|| SNS_WASM_CANISTER_ID.get().to_string());
 
-        let wallet_canister = CanisterId::new(get_identity("get-wallet", &args.network))
-            .expect("Could not convert wallet identity to CanisterId format");
+        let wallet_canister = args
+            .wallet_canister_override
+            .as_ref()
+            .map(|id| CanisterId::new(*id))
+            .unwrap_or_else(|| CanisterId::new(get_identity("get-wallet", &args.network)))
+            .expect("Could not convert wallet principal to CanisterId");
 
         Self {
             args,
