@@ -303,14 +303,7 @@ impl Csp {
 
 impl NodePublicKeyData for Csp {
     fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
-        let public_keys = self.public_key_data.node_public_keys.clone();
-        CurrentNodePublicKeys {
-            node_signing_public_key: public_keys.node_signing_pk,
-            committee_signing_public_key: public_keys.committee_signing_pk,
-            tls_certificate: public_keys.tls_certificate,
-            dkg_dealing_encryption_public_key: public_keys.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_public_key: public_keys.idkg_dealing_encryption_pk,
-        }
+        CurrentNodePublicKeys::from(self.public_key_data.node_public_keys.clone())
     }
 
     fn dkg_dealing_encryption_key_id(&self) -> KeyId {

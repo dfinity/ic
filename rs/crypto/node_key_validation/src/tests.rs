@@ -519,7 +519,9 @@ fn valid_node_keys() -> NodePublicKeys {
 
 pub fn valid_node_keys_and_node_id() -> (NodePublicKeys, NodeId) {
     let (config, _tepm_dir) = CryptoConfig::new_in_temp_dir();
-    get_node_keys_or_generate_if_missing(&config, None)
+    let (current_public_keys, node_id) = get_node_keys_or_generate_if_missing(&config, None);
+    //TODO CRP-1733: deal with CurrentNodePublicKeys directly without the conversion to NodePublicKeys
+    (NodePublicKeys::from(current_public_keys), node_id)
 }
 
 pub fn node_id(n: u64) -> NodeId {

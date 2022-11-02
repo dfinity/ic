@@ -427,6 +427,7 @@ impl NodeSecretKeyStore {
         Self::set_permissions(&path)?;
         let config = CryptoConfig::new(path.clone());
         let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
+        let node_pks = NodePublicKeys::from(node_pks);
 
         use prost::Message;
         let node_pks = node_pks.encode_to_vec();

@@ -140,17 +140,8 @@ fn ensure_all_algorithm_ids_are_compared(tested_algorithm_ids: &[isize]) {
 
 mod current_node_public_keys {
     use super::*;
-
-    const SOME_PUBLIC_KEY: Option<PublicKey> = Some(PublicKey {
-        version: 0,
-        algorithm: 0,
-        key_value: vec![],
-        proof_data: None,
-        timestamp: None,
-    });
-    const SOME_X509_CERT: Option<X509PublicKeyCert> = Some(X509PublicKeyCert {
-        certificate_der: vec![],
-    });
+    use ic_crypto_internal_types::curves::bls12_381;
+    use ic_crypto_internal_types::sign::eddsa::ed25519::PublicKey as ed25519PublicKey;
 
     #[test]
     fn should_count_correctly_empty_node_public_keys() {
@@ -166,25 +157,148 @@ mod current_node_public_keys {
 
     #[test]
     fn should_count_correctly_full_node_public_keys() {
-        let node_public_keys = CurrentNodePublicKeys {
-            node_signing_public_key: SOME_PUBLIC_KEY,
-            committee_signing_public_key: SOME_PUBLIC_KEY,
-            tls_certificate: SOME_X509_CERT,
-            dkg_dealing_encryption_public_key: SOME_PUBLIC_KEY,
-            idkg_dealing_encryption_public_key: SOME_PUBLIC_KEY,
-        };
+        let node_public_keys = all_current_node_public_keys();
         assert_eq!(5, node_public_keys.get_pub_keys_and_cert_count());
     }
 
     #[test]
     fn should_count_correctly_partial_node_public_keys() {
         let node_public_keys = CurrentNodePublicKeys {
-            node_signing_public_key: SOME_PUBLIC_KEY,
             committee_signing_public_key: None,
-            tls_certificate: SOME_X509_CERT,
             dkg_dealing_encryption_public_key: None,
-            idkg_dealing_encryption_public_key: SOME_PUBLIC_KEY,
+            ..all_current_node_public_keys()
         };
         assert_eq!(3, node_public_keys.get_pub_keys_and_cert_count());
+    }
+
+    #[test]
+    fn should_map_node_public_keys_to_current_node_public_keys() {
+        let current_node_public_keys = CurrentNodePublicKeys::from(all_node_public_keys());
+
+        assert_eq!(current_node_public_keys, all_current_node_public_keys());
+    }
+
+    #[test]
+    fn should_map_current_node_public_keys_to_node_public_keys_with_version_1() {
+        let node_public_keys = NodePublicKeys::from(all_current_node_public_keys());
+
+        assert_eq!(node_public_keys.version, 1);
+    }
+
+    #[test]
+    fn should_map_partial_current_node_public_keys_to_node_public_keys() {
+        let current_node_public_keys = CurrentNodePublicKeys {
+            committee_signing_public_key: None,
+            tls_certificate: None,
+            idkg_dealing_encryption_public_key: None,
+            ..all_current_node_public_keys()
+        };
+
+        let node_public_keys = NodePublicKeys::from(current_node_public_keys);
+
+        assert_eq!(
+            node_public_keys,
+            NodePublicKeys {
+                committee_signing_pk: None,
+                tls_certificate: None,
+                idkg_dealing_encryption_pk: None,
+                ..all_node_public_keys()
+            }
+        )
+    }
+
+    #[test]
+    fn should_map_empty_node_public_keys() {
+        let empty_node_public_keys = NodePublicKeys {
+            version: 1,
+            node_signing_pk: None,
+            committee_signing_pk: None,
+            tls_certificate: None,
+            dkg_dealing_encryption_pk: None,
+            idkg_dealing_encryption_pk: None,
+        };
+        let empty_current_node_public_keys = CurrentNodePublicKeys {
+            node_signing_public_key: None,
+            committee_signing_public_key: None,
+            tls_certificate: None,
+            dkg_dealing_encryption_public_key: None,
+            idkg_dealing_encryption_public_key: None,
+        };
+
+        assert_eq!(
+            CurrentNodePublicKeys::from(empty_node_public_keys.clone()),
+            empty_current_node_public_keys
+        );
+        assert_eq!(
+            NodePublicKeys::from(empty_current_node_public_keys),
+            empty_node_public_keys
+        );
+    }
+
+    fn all_node_public_keys() -> NodePublicKeys {
+        NodePublicKeys {
+            version: 1,
+            node_signing_pk: Some(valid_node_signing_key()),
+            committee_signing_pk: Some(valid_committee_signing_public_key()),
+            tls_certificate: Some(valid_tls_certificate()),
+            dkg_dealing_encryption_pk: Some(valid_dkg_dealing_encryption_public_key()),
+            idkg_dealing_encryption_pk: Some(valid_idkg_dealing_encryption_public_key()),
+        }
+    }
+
+    fn all_current_node_public_keys() -> CurrentNodePublicKeys {
+        CurrentNodePublicKeys {
+            node_signing_public_key: Some(valid_node_signing_key()),
+            committee_signing_public_key: Some(valid_committee_signing_public_key()),
+            tls_certificate: Some(valid_tls_certificate()),
+            dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
+            idkg_dealing_encryption_public_key: Some(valid_idkg_dealing_encryption_public_key()),
+        }
+    }
+
+    fn valid_node_signing_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: [0; ed25519PublicKey::SIZE].to_vec(),
+            proof_data: None,
+            timestamp: None,
+        }
+    }
+
+    fn valid_committee_signing_public_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::MultiBls12_381 as i32,
+            key_value: [0u8; bls12_381::G2::SIZE].to_vec(),
+            proof_data: Some([0u8; bls12_381::G1::SIZE].to_vec()),
+            timestamp: None,
+        }
+    }
+
+    fn valid_tls_certificate() -> X509PublicKeyCert {
+        X509PublicKeyCert {
+            certificate_der: vec![],
+        }
+    }
+
+    fn valid_dkg_dealing_encryption_public_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
+            key_value: [0u8; bls12_381::G1::SIZE].to_vec(),
+            proof_data: None,
+            timestamp: None,
+        }
+    }
+
+    fn valid_idkg_dealing_encryption_public_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::MegaSecp256k1 as i32,
+            key_value: vec![],
+            proof_data: None,
+            timestamp: None,
+        }
     }
 }

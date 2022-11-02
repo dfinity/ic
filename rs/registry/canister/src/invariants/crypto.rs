@@ -309,36 +309,43 @@ mod tests {
     use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
     use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
+    use ic_types::crypto::CurrentNodePublicKeys;
 
     fn insert_node_crypto_keys(
         node_id: &NodeId,
-        node_pks: &NodePublicKeys,
+        node_pks: &CurrentNodePublicKeys,
         snapshot: &mut RegistrySnapshot,
     ) {
-        if node_pks.node_signing_pk.is_some() {
+        if node_pks.node_signing_public_key.is_some() {
             snapshot.insert(
                 make_crypto_node_key(node_id.to_owned(), KeyPurpose::NodeSigning).into_bytes(),
-                encode_or_panic::<PublicKey>(&node_pks.node_signing_pk.clone().unwrap()),
+                encode_or_panic::<PublicKey>(&node_pks.node_signing_public_key.clone().unwrap()),
             );
         };
-        if node_pks.committee_signing_pk.is_some() {
+        if node_pks.committee_signing_public_key.is_some() {
             snapshot.insert(
                 make_crypto_node_key(node_id.to_owned(), KeyPurpose::CommitteeSigning).into_bytes(),
-                encode_or_panic::<PublicKey>(&node_pks.committee_signing_pk.clone().unwrap()),
+                encode_or_panic::<PublicKey>(
+                    &node_pks.committee_signing_public_key.clone().unwrap(),
+                ),
             );
         };
-        if node_pks.dkg_dealing_encryption_pk.is_some() {
+        if node_pks.dkg_dealing_encryption_public_key.is_some() {
             snapshot.insert(
                 make_crypto_node_key(node_id.to_owned(), KeyPurpose::DkgDealingEncryption)
                     .into_bytes(),
-                encode_or_panic::<PublicKey>(&node_pks.dkg_dealing_encryption_pk.clone().unwrap()),
+                encode_or_panic::<PublicKey>(
+                    &node_pks.dkg_dealing_encryption_public_key.clone().unwrap(),
+                ),
             );
         };
-        if node_pks.idkg_dealing_encryption_pk.is_some() {
+        if node_pks.idkg_dealing_encryption_public_key.is_some() {
             snapshot.insert(
                 make_crypto_node_key(node_id.to_owned(), KeyPurpose::IDkgMEGaEncryption)
                     .into_bytes(),
-                encode_or_panic::<PublicKey>(&node_pks.idkg_dealing_encryption_pk.clone().unwrap()),
+                encode_or_panic::<PublicKey>(
+                    &node_pks.idkg_dealing_encryption_public_key.clone().unwrap(),
+                ),
             );
         };
         if node_pks.tls_certificate.is_some() {
@@ -349,7 +356,7 @@ mod tests {
         };
     }
 
-    fn valid_node_keys_and_node_id() -> (NodePublicKeys, NodeId) {
+    fn valid_node_keys_and_node_id() -> (CurrentNodePublicKeys, NodeId) {
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
         get_node_keys_or_generate_if_missing(&config, None)
     }
@@ -392,15 +399,11 @@ mod tests {
         insert_dummy_node(&node_id_2, &mut snapshot);
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
-        let incomplete_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: node_pks_2.node_signing_pk,
-            committee_signing_pk: None,
-            dkg_dealing_encryption_pk: node_pks_2.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk: node_pks_2.idkg_dealing_encryption_pk,
-            tls_certificate: node_pks_2.tls_certificate,
+        let incomplete_node_public_keys = CurrentNodePublicKeys {
+            committee_signing_public_key: None,
+            ..node_pks_2
         };
-        insert_node_crypto_keys(&node_id_2, &incomplete_node_pks, &mut snapshot);
+        insert_node_crypto_keys(&node_id_2, &incomplete_node_public_keys, &mut snapshot);
         let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -423,15 +426,11 @@ mod tests {
         insert_dummy_node(&node_id_2, &mut snapshot);
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
-        let incomplete_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: None,
-            committee_signing_pk: node_pks_2.committee_signing_pk,
-            dkg_dealing_encryption_pk: node_pks_2.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk: node_pks_2.idkg_dealing_encryption_pk,
-            tls_certificate: node_pks_2.tls_certificate,
+        let incomplete_node_public_keys = CurrentNodePublicKeys {
+            node_signing_public_key: None,
+            ..node_pks_2
         };
-        insert_node_crypto_keys(&node_id_2, &incomplete_node_pks, &mut snapshot);
+        insert_node_crypto_keys(&node_id_2, &incomplete_node_public_keys, &mut snapshot);
         let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -454,15 +453,11 @@ mod tests {
         insert_dummy_node(&node_id_2, &mut snapshot);
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
-        let incomplete_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: node_pks_2.node_signing_pk,
-            committee_signing_pk: node_pks_2.committee_signing_pk,
-            dkg_dealing_encryption_pk: node_pks_2.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk: None,
-            tls_certificate: node_pks_2.tls_certificate,
+        let incomplete_node_public_keys = CurrentNodePublicKeys {
+            idkg_dealing_encryption_public_key: None,
+            ..node_pks_2
         };
-        insert_node_crypto_keys(&node_id_2, &incomplete_node_pks, &mut snapshot);
+        insert_node_crypto_keys(&node_id_2, &incomplete_node_public_keys, &mut snapshot);
         let result = check_node_crypto_keys_invariants(&snapshot);
 
         // Currently a missing I-DKG dealing encryption key shall not lead to a
@@ -486,15 +481,11 @@ mod tests {
         insert_dummy_node(&node_id_2, &mut snapshot);
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
-        let incomplete_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: node_pks_2.node_signing_pk,
-            committee_signing_pk: node_pks_2.committee_signing_pk,
-            dkg_dealing_encryption_pk: node_pks_2.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk: node_pks_2.idkg_dealing_encryption_pk,
+        let incomplete_node_public_keys = CurrentNodePublicKeys {
             tls_certificate: None,
+            ..node_pks_2
         };
-        insert_node_crypto_keys(&node_id_2, &incomplete_node_pks, &mut snapshot);
+        insert_node_crypto_keys(&node_id_2, &incomplete_node_public_keys, &mut snapshot);
         let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -517,19 +508,15 @@ mod tests {
         insert_dummy_node(&node_id_2, &mut snapshot);
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
-        let invalid_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: node_pks_2.node_signing_pk,
-            committee_signing_pk: node_pks_2.committee_signing_pk,
-            dkg_dealing_encryption_pk: Some(PublicKey {
+        let invalid_node_pks = CurrentNodePublicKeys {
+            dkg_dealing_encryption_public_key: Some(PublicKey {
                 version: 0,
                 algorithm: 0,
                 key_value: vec![],
                 proof_data: None,
                 timestamp: None,
             }),
-            idkg_dealing_encryption_pk: node_pks_2.idkg_dealing_encryption_pk,
-            tls_certificate: node_pks_2.tls_certificate,
+            ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, &invalid_node_pks, &mut snapshot);
         let result = check_node_crypto_keys_invariants(&snapshot);
@@ -555,19 +542,15 @@ mod tests {
         insert_dummy_node(&node_id_2, &mut snapshot);
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
-        let invalid_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: node_pks_2.node_signing_pk,
-            committee_signing_pk: node_pks_2.committee_signing_pk,
-            dkg_dealing_encryption_pk: node_pks_2.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk: Some(PublicKey {
+        let invalid_node_pks = CurrentNodePublicKeys {
+            idkg_dealing_encryption_public_key: Some(PublicKey {
                 version: 0,
                 algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
                 key_value: vec![],
                 proof_data: None,
                 timestamp: None,
             }),
-            tls_certificate: node_pks_2.tls_certificate,
+            ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, &invalid_node_pks, &mut snapshot);
         let result = check_node_crypto_keys_invariants(&snapshot);
@@ -593,13 +576,9 @@ mod tests {
         insert_dummy_node(&node_id_2, &mut snapshot);
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
-        let duplicated_key_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: node_pks_2.node_signing_pk,
-            committee_signing_pk: node_pks_1.committee_signing_pk,
-            dkg_dealing_encryption_pk: node_pks_2.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk: node_pks_2.idkg_dealing_encryption_pk,
-            tls_certificate: node_pks_2.tls_certificate,
+        let duplicated_key_node_pks = CurrentNodePublicKeys {
+            committee_signing_public_key: node_pks_1.committee_signing_public_key,
+            ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, &duplicated_key_node_pks, &mut snapshot);
         let result = check_node_crypto_keys_invariants(&snapshot);
@@ -624,13 +603,9 @@ mod tests {
         insert_dummy_node(&node_id_2, &mut snapshot);
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
-        let duplicated_key_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: node_pks_2.node_signing_pk,
-            committee_signing_pk: node_pks_2.committee_signing_pk,
-            dkg_dealing_encryption_pk: node_pks_2.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk: node_pks_1.idkg_dealing_encryption_pk,
-            tls_certificate: node_pks_2.tls_certificate,
+        let duplicated_key_node_pks = CurrentNodePublicKeys {
+            idkg_dealing_encryption_public_key: node_pks_1.idkg_dealing_encryption_public_key,
+            ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, &duplicated_key_node_pks, &mut snapshot);
         let result = check_node_crypto_keys_invariants(&snapshot);
@@ -655,13 +630,9 @@ mod tests {
         insert_dummy_node(&node_id_2, &mut snapshot);
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
-        let duplicated_cert_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: node_pks_2.node_signing_pk,
-            committee_signing_pk: node_pks_2.committee_signing_pk,
-            dkg_dealing_encryption_pk: node_pks_2.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk: node_pks_2.idkg_dealing_encryption_pk,
+        let duplicated_cert_node_pks = CurrentNodePublicKeys {
             tls_certificate: node_pks_1.tls_certificate,
+            ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, &duplicated_cert_node_pks, &mut snapshot);
         let result = check_node_crypto_keys_invariants(&snapshot);
@@ -686,13 +657,9 @@ mod tests {
         insert_node_crypto_keys(&node_id_1, &node_pks_1, &mut snapshot);
 
         let (node_pks_3, _node_id_3) = valid_node_keys_and_node_id();
-        let inconsistent_signing_key_node_pks = NodePublicKeys {
-            version: node_pks_2.version,
-            node_signing_pk: node_pks_3.node_signing_pk,
-            committee_signing_pk: node_pks_2.committee_signing_pk,
-            dkg_dealing_encryption_pk: node_pks_2.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk: node_pks_2.idkg_dealing_encryption_pk,
-            tls_certificate: node_pks_2.tls_certificate,
+        let inconsistent_signing_key_node_pks = CurrentNodePublicKeys {
+            node_signing_public_key: node_pks_3.node_signing_public_key,
+            ..node_pks_2
         };
         insert_node_crypto_keys(
             &node_id_2,
@@ -710,53 +677,53 @@ mod tests {
     fn orphaned_crypto_node_signing_pk() {
         let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
         // This leaves only node_signing_pk as orphan.
-        orphaned_keys.committee_signing_pk = None;
+        orphaned_keys.committee_signing_public_key = None;
         orphaned_keys.tls_certificate = None;
-        orphaned_keys.dkg_dealing_encryption_pk = None;
-        orphaned_keys.idkg_dealing_encryption_pk = None;
+        orphaned_keys.dkg_dealing_encryption_public_key = None;
+        orphaned_keys.idkg_dealing_encryption_public_key = None;
         run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
     }
 
     #[test]
     fn orphaned_crypto_committee_signing_pk() {
         let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
-        orphaned_keys.node_signing_pk = None;
+        orphaned_keys.node_signing_public_key = None;
         // This leaves only committee_signing_pk as orphan.
         orphaned_keys.tls_certificate = None;
-        orphaned_keys.dkg_dealing_encryption_pk = None;
-        orphaned_keys.idkg_dealing_encryption_pk = None;
+        orphaned_keys.dkg_dealing_encryption_public_key = None;
+        orphaned_keys.idkg_dealing_encryption_public_key = None;
         run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
     }
 
     #[test]
     fn orphaned_crypto_tls_certificate() {
         let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
-        orphaned_keys.node_signing_pk = None;
-        orphaned_keys.committee_signing_pk = None;
+        orphaned_keys.node_signing_public_key = None;
+        orphaned_keys.committee_signing_public_key = None;
         // This leaves only tls_certificate as orphan.
-        orphaned_keys.dkg_dealing_encryption_pk = None;
-        orphaned_keys.idkg_dealing_encryption_pk = None;
+        orphaned_keys.dkg_dealing_encryption_public_key = None;
+        orphaned_keys.idkg_dealing_encryption_public_key = None;
         run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
     }
 
     #[test]
     fn orphaned_crypto_dkg_dealing_encryption_pk() {
         let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
-        orphaned_keys.node_signing_pk = None;
-        orphaned_keys.committee_signing_pk = None;
+        orphaned_keys.node_signing_public_key = None;
+        orphaned_keys.committee_signing_public_key = None;
         orphaned_keys.tls_certificate = None;
         // This leaves only dkg_dealing_encryption_pk as orphan.
-        orphaned_keys.idkg_dealing_encryption_pk = None;
+        orphaned_keys.idkg_dealing_encryption_public_key = None;
         run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
     }
 
     #[test]
     fn orphaned_crypto_idkg_dealing_encryption_pk() {
         let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
-        orphaned_keys.node_signing_pk = None;
-        orphaned_keys.committee_signing_pk = None;
+        orphaned_keys.node_signing_public_key = None;
+        orphaned_keys.committee_signing_public_key = None;
         orphaned_keys.tls_certificate = None;
-        orphaned_keys.dkg_dealing_encryption_pk = None;
+        orphaned_keys.dkg_dealing_encryption_public_key = None;
         // This leaves only idkg_dealing_encryption_pk as orphan.
         run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
     }
@@ -766,7 +733,7 @@ mod tests {
     /// This is useful so that we can run the same test on each individual missing key
     fn run_test_orphaned_crypto_keys(
         missing_node_id: NodeId,
-        node_pks_with_missing_entries: NodePublicKeys,
+        node_pks_with_missing_entries: CurrentNodePublicKeys,
     ) {
         // Crypto keys for the test.
         let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();

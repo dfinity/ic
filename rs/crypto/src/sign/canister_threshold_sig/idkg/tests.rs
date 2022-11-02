@@ -13,7 +13,7 @@ fn should_retrieve_mega_keys_from_the_registry() {
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
     let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
     let mega_proto = node_pks
-        .idkg_dealing_encryption_pk
+        .idkg_dealing_encryption_public_key
         .expect("Missing MEGa public key");
 
     let registry_version = RegistryVersion::from(1);

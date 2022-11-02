@@ -16,15 +16,12 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::registry::encode_or_panic;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
-use ic_protobuf::{
-    crypto::v1::NodePublicKeys,
-    registry::{
-        node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
-        node_operator::v1::NodeOperatorRecord,
-        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-        routing_table::v1::RoutingTable as RoutingTablePB,
-        subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
-    },
+use ic_protobuf::registry::{
+    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
+    node_operator::v1::NodeOperatorRecord,
+    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    routing_table::v1::RoutingTable as RoutingTablePB,
+    subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
     make_blessed_replica_version_key, make_catch_up_package_contents_key, make_crypto_node_key,
@@ -43,6 +40,7 @@ use ic_registry_transport::{
     serialize_get_value_request, Error,
 };
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id, user_test_id};
+use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::{crypto::KeyPurpose, NodeId, ReplicaVersion};
 use on_wire::bytes;
@@ -478,11 +476,11 @@ pub fn prepare_registry_with_two_node_sets(
             let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
             mutations.push(insert(
                 &make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(&node_pks.dkg_dealing_encryption_pk.clone().unwrap()),
+                encode_or_panic(&node_pks.dkg_dealing_encryption_public_key.clone().unwrap()),
             ));
             node_mutations.push(insert(
                 &make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(&node_pks.dkg_dealing_encryption_pk.unwrap()),
+                encode_or_panic(&node_pks.dkg_dealing_encryption_public_key.unwrap()),
             ));
 
             let node_key = make_node_record_key(node_id);
@@ -600,20 +598,21 @@ pub fn prepare_registry_with_two_node_sets(
 }
 
 /// Prepares all the payloads to add a new node, for tests.
-pub fn prepare_add_node_payload() -> (AddNodePayload, NodePublicKeys, NodeId) {
+pub fn prepare_add_node_payload() -> (AddNodePayload, CurrentNodePublicKeys, NodeId) {
     // As the node canister checks for validity of keys, we need to generate them
     // first
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
     let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
 
     // create payload message
-    let node_signing_pk = encode_or_panic(&node_pks.node_signing_pk.clone().unwrap());
-    let committee_signing_pk = encode_or_panic(&node_pks.committee_signing_pk.clone().unwrap());
+    let node_signing_pk = encode_or_panic(&node_pks.node_signing_public_key.clone().unwrap());
+    let committee_signing_pk =
+        encode_or_panic(&node_pks.committee_signing_public_key.clone().unwrap());
     let ni_dkg_dealing_encryption_pk =
-        encode_or_panic(&node_pks.dkg_dealing_encryption_pk.clone().unwrap());
+        encode_or_panic(&node_pks.dkg_dealing_encryption_public_key.clone().unwrap());
     let transport_tls_cert = encode_or_panic(&node_pks.tls_certificate.clone().unwrap());
     let idkg_dealing_encryption_pk =
-        encode_or_panic(&node_pks.idkg_dealing_encryption_pk.clone().unwrap());
+        encode_or_panic(&node_pks.idkg_dealing_encryption_public_key.clone().unwrap());
 
     let payload = AddNodePayload {
         node_signing_pk,

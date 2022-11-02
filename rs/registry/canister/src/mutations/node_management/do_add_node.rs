@@ -241,13 +241,13 @@ mod tests {
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
     use ic_nns_common::registry::encode_or_panic;
-    use ic_protobuf::crypto::v1::NodePublicKeys;
+    use ic_types::crypto::CurrentNodePublicKeys;
     use lazy_static::lazy_static;
 
     #[derive(Clone)]
     struct TestData {
         _node_id: NodeId,
-        node_pks: NodePublicKeys,
+        node_pks: CurrentNodePublicKeys,
     }
 
     impl TestData {
@@ -285,7 +285,7 @@ mod tests {
     fn empty_committee_signing_key_is_detected() {
         let mut payload = PAYLOAD.clone();
         let node_signing_pubkey =
-            encode_or_panic(&TEST_DATA.clone().node_pks.node_signing_pk.unwrap());
+            encode_or_panic(&TEST_DATA.clone().node_pks.node_signing_public_key.unwrap());
         payload.node_signing_pk = node_signing_pubkey;
         assert!(valid_keys_from_payload(&payload).is_err());
     }
@@ -294,8 +294,9 @@ mod tests {
     fn empty_dkg_dealing_key_is_detected() {
         let mut payload = PAYLOAD.clone();
         let node_pks = TEST_DATA.clone().node_pks;
-        let node_signing_pubkey = encode_or_panic(&node_pks.node_signing_pk.unwrap());
-        let committee_signing_pubkey = encode_or_panic(&node_pks.committee_signing_pk.unwrap());
+        let node_signing_pubkey = encode_or_panic(&node_pks.node_signing_public_key.unwrap());
+        let committee_signing_pubkey =
+            encode_or_panic(&node_pks.committee_signing_public_key.unwrap());
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         assert!(valid_keys_from_payload(&payload).is_err());
@@ -305,10 +306,11 @@ mod tests {
     fn empty_tls_cert_is_detected() {
         let mut payload = PAYLOAD.clone();
         let node_pks = TEST_DATA.clone().node_pks;
-        let node_signing_pubkey = encode_or_panic(&node_pks.node_signing_pk.unwrap());
-        let committee_signing_pubkey = encode_or_panic(&node_pks.committee_signing_pk.unwrap());
+        let node_signing_pubkey = encode_or_panic(&node_pks.node_signing_public_key.unwrap());
+        let committee_signing_pubkey =
+            encode_or_panic(&node_pks.committee_signing_public_key.unwrap());
         let ni_dkg_dealing_encryption_pubkey =
-            encode_or_panic(&node_pks.dkg_dealing_encryption_pk.unwrap());
+            encode_or_panic(&node_pks.dkg_dealing_encryption_public_key.unwrap());
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         payload.ni_dkg_dealing_encryption_pk = ni_dkg_dealing_encryption_pubkey;
@@ -319,10 +321,11 @@ mod tests {
     fn empty_idkg_key_is_detected() {
         let mut payload = PAYLOAD.clone();
         let node_pks = TEST_DATA.clone().node_pks;
-        let node_signing_pubkey = encode_or_panic(&node_pks.node_signing_pk.unwrap());
-        let committee_signing_pubkey = encode_or_panic(&node_pks.committee_signing_pk.unwrap());
+        let node_signing_pubkey = encode_or_panic(&node_pks.node_signing_public_key.unwrap());
+        let committee_signing_pubkey =
+            encode_or_panic(&node_pks.committee_signing_public_key.unwrap());
         let ni_dkg_dealing_encryption_pubkey =
-            encode_or_panic(&node_pks.dkg_dealing_encryption_pk.unwrap());
+            encode_or_panic(&node_pks.dkg_dealing_encryption_public_key.unwrap());
         let tls_certificate = encode_or_panic(&node_pks.tls_certificate.unwrap());
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;

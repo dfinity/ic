@@ -10,7 +10,7 @@ use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, X509PublicKeyCert};
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, CurrentNodePublicKeys};
 use ic_types::NodeId;
 use std::path::Path;
 use std::sync::Arc;
@@ -139,36 +139,39 @@ pub fn generate_tls_keys(csp: &mut dyn CryptoServiceProvider, node: NodeId) -> T
 pub fn get_node_keys_or_generate_if_missing(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,
-) -> (NodePublicKeys, NodeId) {
+) -> (CurrentNodePublicKeys, NodeId) {
     let crypto_root = config.crypto_root.as_path();
     match check_keys_locally(config, tokio_runtime_handle.clone()) {
         Ok(None) => {
             // Generate new keys.
             let mut csp = csp_for_config(config, tokio_runtime_handle.clone());
-            let committee_signing_pk = generate_committee_signing_keys(&csp);
-            let node_signing_pk = generate_node_signing_keys(&csp);
-            let node_id = derive_node_id(&node_signing_pk);
-            let dkg_dealing_encryption_pk = generate_dkg_dealing_encryption_keys(&mut csp, node_id);
-            let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(&mut csp);
+            let node_signing_public_key = generate_node_signing_keys(&csp);
+            let node_id = derive_node_id(&node_signing_public_key);
+            let committee_signing_public_key = generate_committee_signing_keys(&csp);
             let tls_certificate = generate_tls_keys(&mut csp, node_id).to_proto();
-            let node_pks = NodePublicKeys {
-                version: 1,
-                node_signing_pk: Some(node_signing_pk),
-                committee_signing_pk: Some(committee_signing_pk),
+            let dkg_dealing_encryption_public_key =
+                generate_dkg_dealing_encryption_keys(&mut csp, node_id);
+            let idkg_dealing_encryption_public_key =
+                generate_idkg_dealing_encryption_keys(&mut csp);
+            let current_node_public_keys = CurrentNodePublicKeys {
+                node_signing_public_key: Some(node_signing_public_key),
+                committee_signing_public_key: Some(committee_signing_public_key),
                 tls_certificate: Some(tls_certificate),
-                dkg_dealing_encryption_pk: Some(dkg_dealing_encryption_pk),
-                idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
+                dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_public_key),
+                idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_public_key),
             };
-            public_key_store::store_node_public_keys(crypto_root, &node_pks)
+            //TODO CRP-1723: delete the block below. CSP will write the public keys directly on disk.
+            let node_public_keys = NodePublicKeys::from(current_node_public_keys.clone());
+            public_key_store::store_node_public_keys(crypto_root, &node_public_keys)
                 .unwrap_or_else(|_| panic!("Failed to store public key material"));
             // Re-check the generated keys.
             let stored_keys = check_keys_locally(config, tokio_runtime_handle)
                 .expect("Could not read generated keys.")
                 .expect("Newly generated keys are inconsistent.");
-            if stored_keys != node_pks {
+            if stored_keys != node_public_keys {
                 panic!("Generated keys differ from the stored ones.");
             }
-            (node_pks, node_id)
+            (current_node_public_keys, node_id)
         }
         Ok(Some(mut node_pks)) => {
             // Generate I-DKG key if it is not present yet: we generate the key
@@ -196,7 +199,7 @@ pub fn get_node_keys_or_generate_if_missing(
                 .as_ref()
                 .expect("Missing node signing public key");
             let node_id = derive_node_id(node_signing_pk);
-            (node_pks, node_id)
+            (CurrentNodePublicKeys::from(node_pks), node_id)
         }
         Err(e) => panic!("Node contains inconsistent key material: {}", e),
     }
