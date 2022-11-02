@@ -80,6 +80,7 @@ rust_test(
     ],
     deps = [
         "//rs/crypto/internal/csp_test_utils",
+        "//rs/crypto/node_key_generation",
         "//rs/crypto/test_utils",
         "//rs/types/types_test_utils",
         "@crate_index//:lazy_static",

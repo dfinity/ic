@@ -307,6 +307,9 @@ impl TempCryptoBuilder {
                 node_signing_pk,
                 committee_signing_pk,
                 dkg_dealing_encryption_pk,
+                idkg_dealing_encryption_pks: idkg_dealing_encryption_pk
+                    .clone()
+                    .map_or(vec![], |public_key| vec![public_key]),
                 idkg_dealing_encryption_pk,
                 tls_certificate,
             };
