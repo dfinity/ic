@@ -1,4 +1,5 @@
-use wasm_encoder::Function;
+use std::ops::Range;
+
 use wasmparser::{
     BinaryReaderError, Data, Element, ElementItem, ElementKind, Export, Global, Import, MemoryType,
     Operator, Parser, Payload, TableType, Type, ValType,
@@ -10,9 +11,47 @@ pub enum InstOrBytes<'a> {
     Inst(Operator<'a>),
     Bytes(&'a [u8]),
 }
+
 pub struct Body<'a> {
     locals: Vec<(u32, ValType)>,
     instructions: Vec<Operator<'a>>,
+}
+
+pub enum ElementItems {
+    Functions(Vec<u32>),
+    ConstExprs(Vec<wasm_encoder::ConstExpr>),
+}
+
+#[derive(Debug, Clone)]
+pub enum Error {
+    BinaryReaderError(BinaryReaderError),
+    UnknownVersion(u32),
+    UnknownSection {
+        section_id: u8,
+    },
+    MissingFunctionEnd {
+        func_range: Range<usize>,
+    },
+    IncorrectDataCount {
+        declared_count: usize,
+        actual_count: usize,
+    },
+    IncorrectCodeCounts {
+        function_section_count: usize,
+        code_section_declared_count: usize,
+        code_section_actual_count: usize,
+    },
+    PassiveElementSectionTypeNotFuncRef {
+        ty: ValType,
+    },
+    MultipleStartSections,
+    UnexpectedElementType,
+}
+
+impl From<BinaryReaderError> for Error {
+    fn from(e: BinaryReaderError) -> Self {
+        Self::BinaryReaderError(e)
+    }
 }
 
 pub struct Module<'a> {
@@ -24,17 +63,17 @@ pub struct Module<'a> {
     pub memories: Vec<MemoryType>,
     pub globals: Vec<Global<'a>>,
     pub data: Vec<Data<'a>>,
+    pub data_count_section_exists: bool,
     pub exports: Vec<Export<'a>>,
     // Index of the start function.
     pub start: Option<u32>,
-    //Vector of function indices. For now ignore other element types.
-    pub elements: Vec<(Element<'a>, Vec<u32>)>,
+    pub elements: Vec<(Element<'a>, ElementItems)>,
     pub code_sections: Vec<Body<'a>>,
     pub custom_sections: Vec<(&'a str, &'a [u8])>,
 }
 
 impl<'a> Module<'a> {
-    pub fn parse(wasm: &'a [u8]) -> Result<Self, BinaryReaderError> {
+    pub fn parse(wasm: &'a [u8]) -> Result<Self, Error> {
         let parser = Parser::new(0);
         let mut imports = vec![];
         let mut types = vec![];
@@ -88,22 +127,54 @@ impl<'a> Module<'a> {
                         .collect::<Result<_, _>>()?;
                 }
                 Payload::StartSection { func, range: _ } => {
+                    if start.is_some() {
+                        return Err(Error::MultipleStartSections);
+                    }
                     start = Some(func);
                 }
                 Payload::ElementSection(element_section_reader) => {
                     for element in element_section_reader.into_iter() {
                         let element = element?;
                         if element.ty != ValType::FuncRef {
-                            break;
-                        }
-                        let item_reader = element.items.get_items_reader()?;
-                        let mut items = vec![];
-                        for item in item_reader {
-                            match item? {
-                                ElementItem::Func(inx) => items.push(inx),
-                                ElementItem::Expr(_) => break,
+                            if let ElementKind::Passive = element.kind {
+                                return Err(Error::PassiveElementSectionTypeNotFuncRef {
+                                    ty: element.ty,
+                                });
+                            } else {
+                                break;
                             }
                         }
+                        let item_reader = element.items.get_items_reader()?;
+                        let items = item_reader.into_iter().collect::<Result<Vec<_>, _>>()?;
+                        let items = match items.get(0) {
+                            Some(ElementItem::Func(_)) => {
+                                let mut func_items = vec![];
+                                for item in items {
+                                    match item {
+                                        ElementItem::Func(inx) => func_items.push(inx),
+                                        ElementItem::Expr(_) => {
+                                            return Err(Error::UnexpectedElementType)
+                                        }
+                                    }
+                                }
+                                ElementItems::Functions(func_items)
+                            }
+                            Some(ElementItem::Expr(_)) => {
+                                let mut const_items = vec![];
+                                for item in items {
+                                    match item {
+                                        ElementItem::Expr(expr) => {
+                                            const_items.push(convert::const_expr(expr)?);
+                                        }
+                                        ElementItem::Func(_) => {
+                                            return Err(Error::UnexpectedElementType)
+                                        }
+                                    }
+                                }
+                                ElementItems::ConstExprs(const_items)
+                            }
+                            None => ElementItems::Functions(vec![]),
+                        };
                         elements.push((element, items));
                     }
                 }
@@ -115,7 +186,7 @@ impl<'a> Module<'a> {
                     range: _,
                     size: _,
                 } => {
-                    code_section_count = count;
+                    code_section_count = count as usize;
                 }
                 Payload::CodeSectionEntry(body) => {
                     let locals_reader = body.get_locals_reader()?;
@@ -124,6 +195,14 @@ impl<'a> Module<'a> {
                         .get_operators_reader()?
                         .into_iter()
                         .collect::<Result<Vec<_>, _>>()?;
+                    if let Some(last) = instructions.last() {
+                        if let Operator::End = last {
+                        } else {
+                            return Err(Error::MissingFunctionEnd {
+                                func_range: body.range(),
+                            });
+                        }
+                    }
                     code_sections.push(Body {
                         locals,
                         instructions,
@@ -133,12 +212,31 @@ impl<'a> Module<'a> {
                     custom_sections
                         .push((custom_section_reader.name(), custom_section_reader.data()));
                 }
-                Payload::Version { .. }
-                | Payload::TagSection(_)
-                | Payload::ModuleSection { .. }
+                Payload::Version {
+                    num,
+                    encoding: _,
+                    range: _,
+                } => {
+                    if num != 1 {
+                        return Err(Error::UnknownVersion(num));
+                    }
+                }
+                Payload::UnknownSection {
+                    id,
+                    contents: _,
+                    range: _,
+                } => return Err(Error::UnknownSection { section_id: id }),
+                Payload::TagSection(_)
+                | Payload::ModuleSection {
+                    parser: _,
+                    range: _,
+                }
                 | Payload::InstanceSection(_)
                 | Payload::CoreTypeSection(_)
-                | Payload::ComponentSection { .. }
+                | Payload::ComponentSection {
+                    parser: _,
+                    range: _,
+                }
                 | Payload::ComponentInstanceSection(_)
                 | Payload::ComponentAliasSection(_)
                 | Payload::ComponentTypeSection(_)
@@ -146,13 +244,23 @@ impl<'a> Module<'a> {
                 | Payload::ComponentStartSection(_)
                 | Payload::ComponentImportSection(_)
                 | Payload::ComponentExportSection(_)
-                | Payload::UnknownSection { .. }
                 | Payload::End(_) => {}
             }
         }
-        assert_eq!(code_section_count as usize, code_sections.len());
+        if code_section_count != code_sections.len() || code_section_count != functions.len() {
+            return Err(Error::IncorrectCodeCounts {
+                function_section_count: functions.len(),
+                code_section_declared_count: code_section_count,
+                code_section_actual_count: code_sections.len(),
+            });
+        }
         if let Some(data_count) = data_section_count {
-            assert_eq!(data_count as usize, data.len());
+            if data_count as usize != data.len() {
+                return Err(Error::IncorrectDataCount {
+                    declared_count: data_count as usize,
+                    actual_count: data.len(),
+                });
+            }
         }
         Ok(Module {
             types,
@@ -164,6 +272,7 @@ impl<'a> Module<'a> {
             exports,
             start,
             elements,
+            data_count_section_exists: data_section_count.is_some(),
             code_sections,
             data,
             custom_sections,
@@ -248,35 +357,48 @@ impl<'a> Module<'a> {
 
         if !self.elements.is_empty() {
             let mut elements = wasm_encoder::ElementSection::new();
-
             for (element, items) in self.elements {
+                let element_items = convert::element_items(&items);
                 match element.kind {
                     ElementKind::Passive => {
-                        elements.passive(
-                            convert::val_type(&element.ty),
-                            wasm_encoder::Elements::Functions(&items),
-                        );
+                        elements.passive(convert::val_type(&element.ty), element_items);
                     }
                     ElementKind::Active {
                         table_index,
                         offset_expr,
                     } => {
+                        // Setting the table_index to `None` is semantically
+                        // equivalent to `Some(0)` with the type being FuncRef.
+                        // But `None` will use the `0x00` element section tag
+                        // and `Some(0) will use the `0x02` element tag. We
+                        // didn't track which tag was actually used in the
+                        // original file, but it's safer to assume `0x00` was
+                        // used if possible.
+                        let table_index = if table_index == 0 && element.ty == ValType::FuncRef {
+                            None
+                        } else {
+                            Some(table_index)
+                        };
                         elements.active(
-                            Some(table_index),
+                            table_index,
                             &convert::const_expr(offset_expr)?,
                             convert::val_type(&element.ty),
-                            wasm_encoder::Elements::Functions(&items),
+                            element_items,
                         );
                     }
                     ElementKind::Declared => {
-                        elements.declared(
-                            convert::val_type(&element.ty),
-                            wasm_encoder::Elements::Functions(&items),
-                        );
+                        elements.declared(convert::val_type(&element.ty), element_items);
                     }
                 }
             }
             module.section(&elements);
+        }
+
+        if self.data_count_section_exists {
+            let data_count = wasm_encoder::DataCountSection {
+                count: self.data.len() as u32,
+            };
+            module.section(&data_count);
         }
 
         if !self.code_sections.is_empty() {
@@ -286,8 +408,9 @@ impl<'a> Module<'a> {
                 instructions,
             } in self.code_sections
             {
-                let mut function =
-                    Function::new(locals.into_iter().map(|(c, t)| (c, convert::val_type(&t))));
+                let mut function = wasm_encoder::Function::new(
+                    locals.into_iter().map(|(c, t)| (c, convert::val_type(&t))),
+                );
                 for op in instructions {
                     function.instruction(&convert::op(&op)?);
                 }
