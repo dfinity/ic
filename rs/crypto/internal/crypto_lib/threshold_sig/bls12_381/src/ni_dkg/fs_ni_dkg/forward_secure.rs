@@ -223,10 +223,13 @@ pub fn kgen<R: RngCore + CryptoRng>(
     for f in sys.f.iter() {
         d_t.push_back(G2Affine::from(f * &rho));
     }
+
     let mut d_h = Vec::new();
     for h in sys.f_h.iter() {
-        d_h.push(G2Affine::from(h * &rho));
+        d_h.push(h * &rho);
     }
+    let d_h = G2Projective::batch_normalize(&d_h);
+
     let e = G2Affine::from(&sys.h * &rho);
     let bte_root = BTENode {
         tau: Vec::new(),
@@ -396,11 +399,14 @@ impl SecretKey {
                     d_t_blind.push_back(tmp.to_affine());
                     k += 1;
                 });
+
                 let mut d_h_blind = Vec::new();
                 node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
                     let tmp = (f * &delta) + d;
-                    d_h_blind.push(tmp.to_affine());
+                    d_h_blind.push(tmp);
                 });
+                let d_h_blind = G2Projective::batch_normalize(&d_h_blind);
+
                 self.bte_nodes.push_back(BTENode {
                     tau: tau_1,
                     a: a_blind.to_affine(),
@@ -599,10 +605,10 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
 
             for j in 0..chunks {
                 let s = Scalar::from_isize(sij[i][j]);
-                enc_chunks.push(G1Projective::mul2(&pk, &r[j], &g1, &s).to_affine());
+                enc_chunks.push(G1Projective::mul2(&pk, &r[j], &g1, &s));
             }
 
-            cc.push(enc_chunks);
+            cc.push(G1Projective::batch_normalize(&enc_chunks));
         }
 
         cc
@@ -612,9 +618,12 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
     let mut zz = Vec::with_capacity(chunks);
 
+    let h = G2Projective::from(&sys.h);
     for j in 0..chunks {
-        zz.push(G2Projective::mul2(&id, &r[j], &G2Projective::from(&sys.h), &s[j]).to_affine())
+        zz.push(G2Projective::mul2(&id, &r[j], &h, &s[j]))
     }
+
+    let zz = G2Projective::batch_normalize(&zz);
 
     Some((
         FsEncryptionCiphertext { cc, rr, ss, zz },
