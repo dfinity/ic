@@ -10,7 +10,7 @@ use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    TransformFunc, TransformType, IC_00,
+    TransformContext, TransformFunc, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -20,6 +20,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::{assert_utils::assert_balance_equals, mock_time};
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_types::canister_http::Transform;
 use ic_types::{
     canister_http::CanisterHttpMethod,
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -1423,16 +1424,20 @@ fn execute_canister_http_request() {
     let url = "https://".to_string();
     let response_size_limit = 1000u64;
     let transform_method_name = "transform".to_string();
+    let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
         url: url.clone(),
         max_response_bytes: Some(response_size_limit),
         headers: Vec::new(),
         body: None,
         method: HttpMethod::GET,
-        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-            principal: caller_canister.get().0,
-            method: transform_method_name.clone(),
-        }))),
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: transform_method_name.clone(),
+            }),
+            context: transform_context.clone(),
+        }),
     };
 
     // Create request to HTTP_REQUEST method.
@@ -1453,8 +1458,11 @@ fn execute_canister_http_request() {
         .unwrap();
     assert_eq!(http_request_context.url, url);
     assert_eq!(
-        http_request_context.transform_method_name,
-        Some(transform_method_name)
+        http_request_context.transform,
+        Some(Transform {
+            method_name: transform_method_name,
+            context: transform_context,
+        })
     );
     assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
     assert_eq!(http_request_context.request.sender, caller_canister);
@@ -1486,10 +1494,13 @@ fn execute_canister_http_request_disabled() {
         headers: Vec::new(),
         body: None,
         method: HttpMethod::GET,
-        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-            principal: caller_canister.get().0,
-            method: "transform".to_string(),
-        }))),
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
     };
 
     // Create request to HTTP_REQUEST method.

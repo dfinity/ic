@@ -7,6 +7,20 @@ use candid::{
 use ic_base_types::PrincipalId;
 use serde::Serialize;
 
+/// Enum used for encoding/decoding:
+/// `record {
+///     response : http_response;
+///     context : blob;
+/// }`
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TransformArgs {
+    pub response: CanisterHttpResponsePayload,
+    #[serde(with = "serde_bytes")]
+    pub context: Vec<u8>,
+}
+
+impl Payload<'_> for TransformArgs {}
+
 /// Encapsulating the corresponding candid `func` type.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TransformFunc(pub candid::Func);
@@ -15,7 +29,7 @@ impl CandidType for TransformFunc {
     fn _ty() -> Type {
         Type::Func(Function {
             modes: vec![FuncMode::Query],
-            args: vec![CanisterHttpResponsePayload::ty()],
+            args: vec![TransformArgs::ty()],
             rets: vec![CanisterHttpResponsePayload::ty()],
         })
     }
@@ -26,12 +40,16 @@ impl CandidType for TransformFunc {
 }
 
 /// Enum used for encoding/decoding:
-/// `variant { function: func (http_response) -> (http_response) query }`
+/// `record {
+//       function : func (record {response : http_response; context : blob}) -> (http_response) query;
+//       context : blob;
+//   }`
 #[derive(Clone, Debug, CandidType, Deserialize)]
-pub enum TransformType {
-    /// Reference function with signature: `func (http_response) -> (http_response) query`.
-    #[serde(rename = "function")]
-    Function(TransformFunc),
+pub struct TransformContext {
+    /// Reference function with signature: `func (record {response : http_response; context : blob}) -> (http_response) query;`.
+    pub function: TransformFunc,
+    #[serde(with = "serde_bytes")]
+    pub context: Vec<u8>,
 }
 
 /// Struct used for encoding/decoding
@@ -41,7 +59,10 @@ pub enum TransformType {
 //     headers : vec http_header;
 //     method : variant { get; head; post };
 //     body : opt blob;
-//     transform : opt variant { function: func (http_response) -> (http_response) query };
+//     transform : opt record {
+//       function : func (record {response : http_response; context : blob}) -> (http_response) query;
+//       context : blob;
+//     };
 //   })`
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct CanisterHttpRequestArgs {
@@ -50,7 +71,7 @@ pub struct CanisterHttpRequestArgs {
     pub headers: Vec<HttpHeader>,
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
-    pub transform: Option<TransformType>,
+    pub transform: Option<TransformContext>,
 }
 
 impl Payload<'_> for CanisterHttpRequestArgs {}
@@ -61,18 +82,7 @@ impl CanisterHttpRequestArgs {
     pub fn transform_principal(&self) -> Option<PrincipalId> {
         self.transform
             .as_ref()
-            .map(|transform_type| match transform_type {
-                TransformType::Function(func) => PrincipalId::from(func.0.principal),
-            })
-    }
-
-    /// Return the name of the transform function, or None if it was not specified.
-    pub fn transform_method(&self) -> Option<String> {
-        self.transform
-            .as_ref()
-            .map(|transform_type| match transform_type {
-                TransformType::Function(func) => func.0.method.clone(),
-            })
+            .map(|transform_context| PrincipalId::from(transform_context.function.0.principal))
     }
 }
 
@@ -102,9 +112,9 @@ pub enum HttpMethod {
 /// Represents the response for a canister http request.
 /// Struct used for encoding/decoding
 /// `(record {
-/// status: nat;
-/// headers: vec http_header;
-/// body: blob;
+///     status: nat;
+///     headers: vec http_header;
+///     body: blob;
 /// })`;
 #[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpResponsePayload {

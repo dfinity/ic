@@ -15,6 +15,7 @@ use ic_test_utilities::{
         xnet::{StreamHeaderBuilder, StreamSliceBuilder},
     },
 };
+use ic_types::canister_http::Transform;
 use ic_types::{
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
     ingress::WasmResult,
@@ -464,7 +465,10 @@ fn roundtrip_encoding() {
 #[test]
 fn subnet_call_contexts_deserialization() {
     let url = "https://".to_string();
-    let transform_method_name = Some("transform".to_string());
+    let transform = Transform {
+        method_name: "transform".to_string(),
+        context: vec![0, 1, 2],
+    };
     let mut system_call_context_manager = SubnetCallContextManager::default();
 
     let canister_http_request = CanisterHttpRequestContext {
@@ -477,7 +481,7 @@ fn subnet_call_contexts_deserialization() {
         headers: Vec::new(),
         body: None,
         http_method: CanisterHttpMethod::GET,
-        transform_method_name: transform_method_name.clone(),
+        transform: Some(transform.clone()),
         time: mock_time(),
     };
     system_call_context_manager.push_http_request(canister_http_request);
@@ -503,10 +507,7 @@ fn subnet_call_contexts_deserialization() {
         deserialized_http_request_context.http_method,
         CanisterHttpMethod::GET
     );
-    assert_eq!(
-        deserialized_http_request_context.transform_method_name,
-        transform_method_name
-    );
+    assert_eq!(deserialized_http_request_context.transform, Some(transform));
 }
 
 #[test]

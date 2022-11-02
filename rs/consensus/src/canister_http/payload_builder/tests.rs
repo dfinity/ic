@@ -64,7 +64,7 @@ fn timeout_priority() {
                     headers: vec![],
                     body: None,
                     http_method: CanisterHttpMethod::GET,
-                    transform_method_name: None,
+                    transform: None,
                     // this is the important one
                     time: mock_time(),
                 };

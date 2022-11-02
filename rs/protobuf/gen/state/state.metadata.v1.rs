@@ -140,6 +140,8 @@ pub struct CanisterHttpRequestContext {
     pub headers: ::prost::alloc::vec::Vec<HttpHeader>,
     #[prost(uint64, optional, tag = "9")]
     pub max_response_bytes: ::core::option::Option<u64>,
+    #[prost(message, optional, tag = "10")]
+    pub transform_context: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContextTree {

@@ -28,7 +28,7 @@ use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_cdk::api::call::RejectionCode;
 use ic_ic00_types::{
-    CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformFunc, TransformType,
+    CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext, TransformFunc,
 };
 use ic_test_utilities::{mock_time, types::messages::RequestBuilder};
 use ic_types::canister_http::CanisterHttpRequestContext;
@@ -79,10 +79,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -103,10 +106,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "test_transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "test_transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -130,10 +136,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 0,
@@ -149,10 +158,13 @@ pub fn test(env: TestEnv) {
             headers: vec![],
             method: HttpMethod::GET,
             body: Some("".as_bytes().to_vec()),
-            transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                principal: proxy_canister.canister_id().get().0,
-                method: "transform".to_string(),
-            }))),
+            transform: Some(TransformContext {
+                function: TransformFunc(candid::Func {
+                    principal: proxy_canister.canister_id().get().0,
+                    method: "transform".to_string(),
+                }),
+                context: vec![0, 1, 2],
+            }),
             max_response_bytes: None,
         };
         test_results.push(
@@ -188,10 +200,13 @@ pub fn test(env: TestEnv) {
             headers: vec![],
             method: HttpMethod::GET,
             body: Some("".as_bytes().to_vec()),
-            transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                principal: proxy_canister.canister_id().get().0,
-                method: "transform".to_string(),
-            }))),
+            transform: Some(TransformContext {
+                function: TransformFunc(candid::Func {
+                    principal: proxy_canister.canister_id().get().0,
+                    method: "transform".to_string(),
+                }),
+                context: vec![0, 1, 2],
+            }),
             max_response_bytes: Some(16384),
         };
         test_results.push(
@@ -232,10 +247,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: Some(4 * 1024 * 1024),
                     },
                     cycles: 0,
@@ -256,10 +274,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "bloat_transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "bloat_transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -280,10 +301,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "idontexist".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "idontexist".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -307,10 +331,13 @@ pub fn test(env: TestEnv) {
                         }],
                         method: HttpMethod::POST,
                         body: Some("satoshi=me".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -331,10 +358,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: Some(8 * 1024),
                     },
                     cycles: 500_000_000_000,
@@ -356,10 +386,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -380,10 +413,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -406,10 +442,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -430,10 +469,13 @@ pub fn test(env: TestEnv) {
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformType::Function(TransformFunc(candid::Func {
-                            principal: proxy_canister.canister_id().get().0,
-                            method: "transform".to_string(),
-                        }))),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,

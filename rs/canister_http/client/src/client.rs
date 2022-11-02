@@ -6,6 +6,7 @@ use ic_canister_http_service::{
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
 use ic_error_types::RejectCode;
+use ic_ic00_types::{CanisterHttpResponsePayload, TransformArgs};
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_metrics::MetricsRegistry;
@@ -13,7 +14,7 @@ use ic_types::{
     batch::MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     canister_http::{
         CanisterHttpMethod, CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext,
-        CanisterHttpResponse, CanisterHttpResponseContent,
+        CanisterHttpResponse, CanisterHttpResponseContent, Transform,
     },
     messages::{AnonymousQuery, AnonymousQueryResponse, Request},
     CanisterId, NumBytes,
@@ -114,7 +115,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let metrics = self.metrics.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
-        // After receving the response from the adapter an option transform is applied by doing an upcall to execution.
+        // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
         // Once final response is available send the response over to the channel making it available to the client.
         self.rt_handle.spawn(async move {
             // Destruct canister http request to avoid partial moves of the canister http request.
@@ -133,7 +134,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         body: request_body,
                         http_method: request_http_method,
                         max_response_bytes: request_max_response_bytes,
-                        transform_method_name: request_transform_method,
+                        transform: request_transform,
                         ..
                     },
             } = canister_http_request;
@@ -173,13 +174,13 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                     // Only apply the transform if a function name is specified
                     let transform_timer = metrics.transform_execution_duration.start_timer();
-                    let transform_response = match &request_transform_method {
-                        Some(transform_method) => {
+                    let transform_response = match &request_transform {
+                        Some(transform) => {
                             transform_adapter_response(
                                 anonymous_query_handler,
                                 adapter_response,
                                 request_sender,
-                                transform_method,
+                                transform,
                             )
                             .await?
                         }
@@ -207,7 +208,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                     transform_timer.observe_duration();
                     if transform_response.len() > CANISTER_HTTP_RESPONSE_LIMIT {
-                        let err_msg = match request_transform_method{
+                        let err_msg = match request_transform {
                             Some(_) => format!(
                                 "Transformed http response exceeds limit: {}", CANISTER_HTTP_RESPONSE_LIMIT
                             ),
@@ -266,20 +267,24 @@ async fn transform_adapter_response(
     anonymous_query_handler: AnonymousQueryService,
     adapter_response: CanisterHttpSendResponse,
     transform_canister: CanisterId,
-    transform_method: &str,
+    transform: &Transform,
 ) -> Result<Vec<u8>, (RejectCode, String)> {
     // TODO: Protobuf to conversion via from/into trait to avoid having ic00 as a dependency.
     // CanisterHttpResponsePayload type is part of the public API and need to encode the adapter response into the public API candid.
-    let method_payload = Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
+    let canister_http_response = CanisterHttpResponsePayload {
         status: adapter_response.status as u128,
         headers: adapter_response
             .headers
             .into_iter()
-            .map(|HttpHeader { name, value }| { ic_ic00_types::HttpHeader { name, value } })
+            .map(|HttpHeader { name, value }| ic_ic00_types::HttpHeader { name, value })
             .collect(),
         body: adapter_response.content,
-    })
-    .map_err(|encode_error| {
+    };
+    let transform_args = TransformArgs {
+        response: canister_http_response,
+        context: transform.context.clone(),
+    };
+    let method_payload = Encode!(&transform_args).map_err(|encode_error| {
         (
             RejectCode::SysFatal,
             format!(
@@ -292,7 +297,7 @@ async fn transform_adapter_response(
     // Query to execution.
     let anonymous_query = AnonymousQuery {
         receiver: transform_canister,
-        method_name: transform_method.to_string(),
+        method_name: transform.method_name.to_string(),
         method_payload,
     };
 
@@ -308,7 +313,7 @@ async fn transform_adapter_response(
             RejectCode::SysFatal,
             format!(
                 "Calling transform function '{}' failed: {}",
-                transform_method, err
+                transform.method_name, err
             ),
         )),
     }
@@ -331,6 +336,7 @@ mod tests {
         CanisterHttpSendRequest, CanisterHttpSendResponse,
     };
     use ic_test_utilities::{mock_time, types::messages::RequestBuilder};
+    use ic_types::canister_http::Transform;
     use ic_types::{
         canister_http::CanisterHttpMethod,
         messages::{Blob, CallbackId},
@@ -420,7 +426,10 @@ mod tests {
                 headers: Vec::new(),
                 body: None,
                 http_method: CanisterHttpMethod::GET,
-                transform_method_name: transform_method,
+                transform: transform_method.map(|method_name| Transform {
+                    method_name,
+                    context: vec![],
+                }),
                 time: mock_time(),
             },
         }

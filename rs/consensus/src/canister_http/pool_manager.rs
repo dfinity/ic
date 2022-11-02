@@ -480,7 +480,7 @@ pub mod test {
                     headers: vec![],
                     body: None,
                     http_method: CanisterHttpMethod::GET,
-                    transform_method_name: None,
+                    transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                 };
 
@@ -626,7 +626,7 @@ pub mod test {
                     headers: vec![],
                     body: None,
                     http_method: CanisterHttpMethod::GET,
-                    transform_method_name: None,
+                    transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                 };
 

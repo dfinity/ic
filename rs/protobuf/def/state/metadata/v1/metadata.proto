@@ -106,7 +106,7 @@ message CanisterHttpRequestContext {
     uint64 time = 6;
     repeated HttpHeader headers = 7;
     optional uint64 max_response_bytes = 9;
-
+    google.protobuf.BytesValue transform_context = 10;
     reserved 5;
 }
 
