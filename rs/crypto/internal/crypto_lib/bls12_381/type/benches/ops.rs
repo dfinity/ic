@@ -419,6 +419,14 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("multiexp_mul2", |b| {
+        b.iter_batched_ref(
+            || (random_g2(), random_scalar(), random_g2(), random_scalar()),
+            |(p1, s1, p2, s2)| G2Projective::mul2(p1, s1, p2, s2),
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("multiexp_muln_8", |b| {
         b.iter_batched_ref(
             || g2_muln_instance(8),

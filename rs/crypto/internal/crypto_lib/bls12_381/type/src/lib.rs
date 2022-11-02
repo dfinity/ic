@@ -6,6 +6,9 @@
 #![warn(future_incompatible)]
 #![allow(clippy::needless_range_loop)]
 
+#[cfg(test)]
+mod tests;
+
 use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use pairing::group::{ff::Field, Group};
 use paste::paste;
@@ -1213,7 +1216,7 @@ macro_rules! declare_mul2_impl_for {
             /// This function is intended to work in constant time, and not
             /// leak information about the inputs.
             pub fn mul2(x: &Self, a: &Scalar, y: &Self, b: &Scalar) -> Self {
-                // Configurable window size: can be 1, 2, or 4
+                // Configurable window size: can be in 1..=8
                 type Window = WindowInfo<$window>;
 
                 // Derived constants
@@ -1299,7 +1302,7 @@ macro_rules! declare_muln_vartime_impl_for {
             /// memory-based side channels. Do not use this function with secret
             /// scalars.
             pub fn muln_vartime(terms: &[(Self, Scalar)]) -> Self {
-                // Configurable window size: can be 1, 2, 4, or 8
+                // Configurable window size: can be in 1..=8
                 type Window = WindowInfo<$window>;
 
                 let mut windows = Vec::with_capacity(terms.len());
@@ -1378,7 +1381,7 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
     ( $typ:ty, $window:expr ) => {
         impl $typ {
             pub(crate) fn windowed_mul(&self, scalar: &Scalar) -> Self {
-                // Configurable window size: can be 1, 2, or 4
+                // Configurable window size: can be in 1..=8
                 type Window = WindowInfo<$window>;
 
                 // Derived constants
@@ -1461,7 +1464,7 @@ declare_addsub_ops_for!(G1Projective);
 declare_mixed_addition_ops_for!(G1Projective, G1Affine);
 declare_windowed_scalar_mul_ops_for!(G1Projective, 4);
 declare_mul2_impl_for!(G1Projective, 2);
-declare_muln_vartime_impl_for!(G1Projective, 4);
+declare_muln_vartime_impl_for!(G1Projective, 3);
 declare_muln_vartime_affine_impl_for!(G1Projective, G1Affine);
 impl_debug_using_serialize_for!(G1Affine);
 impl_debug_using_serialize_for!(G1Projective);
@@ -1471,7 +1474,7 @@ declare_addsub_ops_for!(G2Projective);
 declare_mixed_addition_ops_for!(G2Projective, G2Affine);
 declare_windowed_scalar_mul_ops_for!(G2Projective, 4);
 declare_mul2_impl_for!(G2Projective, 2);
-declare_muln_vartime_impl_for!(G2Projective, 4);
+declare_muln_vartime_impl_for!(G2Projective, 3);
 impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);
 
@@ -1708,15 +1711,16 @@ struct WindowInfo<const WINDOW_SIZE: usize> {}
 
 impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     const SIZE: usize = WINDOW_SIZE;
-    const WINDOWS: usize = (Scalar::BYTES * 8) / WINDOW_SIZE;
+    const WINDOWS: usize = (Scalar::BYTES * 8 + Self::SIZE - 1) / Self::SIZE;
 
-    const MASK: u8 = 0xFFu8 >> (8 - WINDOW_SIZE);
-    const ELEMENTS: usize = 1 << WINDOW_SIZE;
-    const WINDOWS_IN_BYTE: usize = 8 / WINDOW_SIZE;
+    const MASK: u8 = 0xFFu8 >> (8 - Self::SIZE);
+    const ELEMENTS: usize = 1 << Self::SIZE;
 
     #[inline(always)]
-    fn window_bit_offset(w: usize) -> usize {
-        8 - Self::SIZE - Self::SIZE * (w % Self::WINDOWS_IN_BYTE)
+    /// * `bit_len` denotes the total bit size
+    /// * `inverted_w` denotes the window index counting from the least significant part of the scalar
+    fn window_bit_offset(inverted_w: usize) -> usize {
+        (inverted_w * Self::SIZE) % 8
     }
 
     #[inline(always)]
@@ -1725,13 +1729,35 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     /// Treat the scalar as if it was a sequence of windows, each of WINDOW_SIZE bits,
     /// and return the `w`th one of them. For 8 bit windows, this is simply the byte
     /// value. For smaller windows this is some subset of a single byte.
+    /// Note that `w=0` is the window corresponding to the largest value, i.e., if
+    /// out scalar spans one byte and is equal to 10101111_2=207_10, then it first, say
+    /// 4-bit, window will be 1010_2=10_10.
     ///
-    /// Only window sizes which are a power of 2 are supported which simplifies the
-    /// implementation to not require creating windows that cross byte boundaries.
-    fn extract(scalar: &[u8; Scalar::BYTES], w: usize) -> u8 {
-        assert!(WINDOW_SIZE == 1 || WINDOW_SIZE == 2 || WINDOW_SIZE == 4 || WINDOW_SIZE == 8);
+    /// Only window sizes in 1..=8 are supported.
+    fn extract(scalar: &[u8], w: usize) -> u8 {
+        assert!((1..=8).contains(&Self::SIZE));
+        const BITS_IN_BYTE: usize = 8;
 
-        let window_byte = scalar[w / Self::WINDOWS_IN_BYTE];
-        (window_byte >> Self::window_bit_offset(w)) & Self::MASK
+        // to compute the correct bit offset for bit lengths that are not a power of 2,
+        // we need to start from the inverted value or otherwise we will have multiple options
+        // for the offset.
+        let inverted_w = Self::WINDOWS - w - 1;
+        let bit_offset = Self::window_bit_offset(inverted_w);
+        let byte_offset = Scalar::BYTES - 1 - (inverted_w * Self::SIZE) / 8;
+        let target_byte = scalar[byte_offset];
+
+        let no_overflow = bit_offset + Self::SIZE <= BITS_IN_BYTE;
+
+        let non_overflow_bits = target_byte >> bit_offset;
+
+        if no_overflow || byte_offset == 0 {
+            // If we can get the window out of single byte, do so
+            non_overflow_bits & Self::MASK
+        } else {
+            // Otherwise we must join two bytes and extract the result
+            let prev_byte = scalar[byte_offset - 1];
+            let overflow_bits = prev_byte << (BITS_IN_BYTE - bit_offset);
+            (non_overflow_bits | overflow_bits) & Self::MASK
+        }
     }
 }

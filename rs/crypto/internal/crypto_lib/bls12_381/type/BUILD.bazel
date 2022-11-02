@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
@@ -47,6 +47,13 @@ rust_binary(
         "@crate_index//:criterion",
         ":type",
     ],
+)
+
+rust_test(
+    name = "type_tests",
+    crate = ":type",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":type"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite(
