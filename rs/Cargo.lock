@@ -4086,8 +4086,6 @@ dependencies = [
  "maplit",
  "prometheus 0.12.0",
  "proptest",
- "prost",
- "prost-build",
  "serde",
  "serde_bytes",
  "slog",

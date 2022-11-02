@@ -1,16 +1,12 @@
-use crate::{proto, PageMapMemory};
-use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
+use crate::PageMapMemory;
+use bitcoin::{Block, Network, OutPoint, TxOut};
 use ic_btc_types::Height;
-use ic_protobuf::bitcoin::v1;
 use ic_replicated_state::bitcoin_state::{
     AdapterQueues, BitcoinState as ReplicatedBitcoinState, FeePercentilesCache, UnstableBlocks,
     UtxoSet as ReplicatedUtxoSet,
 };
-use ic_replicated_state::page_map::PersistenceError;
 use ic_stable_structures::StableBTreeMap;
-use ic_state_layout::{AccessPolicy, ProtoFileWith, RwPolicy};
 use std::collections::BTreeMap;
-use std::{convert::TryFrom, path::Path};
 
 /// A structure used to maintain the entire state.
 pub struct State {
@@ -44,60 +40,6 @@ impl State {
             adapter_queues: AdapterQueues::default(),
             fee_percentiles_cache: None,
         }
-    }
-
-    /// Serializes the state to disk at the given path.
-    // TODO(EXC-1093): Guard this function with a rust feature. It's only needed in local scripts.
-    pub fn serialize(&self, root: &Path) -> Result<(), PersistenceError> {
-        // Create the directory if it doesn't exist.
-        RwPolicy::check_dir(root).expect("Couldn't create directory.");
-
-        let proto_file: ProtoFileWith<proto::State, RwPolicy> = root.join("state.pbuf").into();
-        proto_file
-            .serialize(self.into())
-            .expect("Serializing state failed");
-
-        // Persist all the memories to disk.
-        self.utxos
-            .address_to_outpoints
-            .get_memory()
-            .persist_delta(&root.join("address_outpoints.bin"))?;
-
-        self.utxos
-            .utxos
-            .small_utxos
-            .get_memory()
-            .persist_delta(&root.join("small_utxos.bin"))?;
-
-        self.utxos
-            .utxos
-            .medium_utxos
-            .get_memory()
-            .persist_delta(&root.join("medium_utxos.bin"))
-    }
-
-    // TODO(EXC-1093): Guard this function with a rust feature. It's only needed in local scripts.
-    pub fn load(root: &Path) -> Result<Self, PersistenceError> {
-        let small_utxos_memory = PageMapMemory::open(&root.join("small_utxos.bin"))?;
-        let medium_utxos_memory = PageMapMemory::open(&root.join("medium_utxos.bin"))?;
-        let address_to_outpoints_memory = PageMapMemory::open(&root.join("address_outpoints.bin"))?;
-
-        let state_file: ProtoFileWith<proto::State, RwPolicy> = root.join("state.pbuf").into();
-        let proto_state = state_file.deserialize_opt().unwrap().unwrap();
-
-        Ok(Self {
-            adapter_queues: AdapterQueues::default(),
-            height: proto_state.height,
-            utxos: UtxoSet::from_proto(
-                proto_state.utxos.unwrap(),
-                small_utxos_memory,
-                medium_utxos_memory,
-                address_to_outpoints_memory,
-            ),
-            unstable_blocks: UnstableBlocks::try_from(proto_state.unstable_blocks.unwrap())
-                .unwrap(),
-            fee_percentiles_cache: None,
-        })
     }
 }
 
@@ -155,16 +97,6 @@ impl From<State> for ReplicatedBitcoinState {
                 network: state.utxos.network,
             },
             fee_percentiles_cache: state.fee_percentiles_cache,
-        }
-    }
-}
-
-impl From<&State> for proto::State {
-    fn from(state: &State) -> Self {
-        proto::State {
-            height: state.height,
-            utxos: Some(state.utxos.to_proto()),
-            unstable_blocks: Some(v1::UnstableBlocks::from(&state.unstable_blocks)),
         }
     }
 }
@@ -298,7 +230,7 @@ impl UtxoSet {
         }
     }
 
-    pub fn to_proto(&self) -> proto::UtxoSet {
+    /*pub fn to_proto(&self) -> proto::UtxoSet {
         proto::UtxoSet {
             large_utxos: self
                 .utxos
@@ -372,5 +304,5 @@ impl UtxoSet {
                 _ => panic!("Invalid network ID"),
             },
         }
-    }
+    }*/
 }
