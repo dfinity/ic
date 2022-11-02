@@ -4,20 +4,22 @@ package crypto.v1;
 
 import "registry/crypto/v1/crypto.proto";
 
-// Public keys corresponding to the given node.
+// Node's public keys and certificates.
 //
-// This struct is used for two purposes:
-// 1. As storage medium in the node's public key store. There, the `version`
-//    field indicates if the I-DKG key is included, no matter if it was
-//    generated together with all other keys (which is the case for new nodes)
-//    or if it was generated separately afterwards (which is the case for
-//    existing nodes): Version 0 means the key is *not* included. Version 1
-//    means the key is included.
-// 2. As input parameter for node key validation performed by the
-//    `ic-crypto-node-key-validation` crate. There, the version field indicates
-//    whether the key validation shall include the I-DKG key: Version 0 means
-//    the validation shall *not* include the I-DKG key. Version 1 means the
-//    key validation shall include the I-DKG key.
+// This struct is used as storage medium in the node's public key store.
+// Depending on the `version` field different public keys are expected:
+// 1. `version 0`
+//     * Node signing public key `node_signing_pk`
+//     * Committee signing public key `committee_signing_pk`
+//     * TLS certificate `tls_certificate`
+//     * DKG public key `dkg_dealing_encryption_pk`
+// 2. `version 1`
+//     * Contains additionally the I-DKG public key `idkg_dealing_encryption_pk`
+//
+// Note that version 0 was used to transition existing nodes to version 1 by
+// generating the corresponding I-DKG public key.
+// This transition is now done and so we *always* expect the I-DKG public key to be present
+// (and `version >= 1`).
 message NodePublicKeys {
     uint32 version = 1;
     registry.crypto.v1.PublicKey node_signing_pk = 2;

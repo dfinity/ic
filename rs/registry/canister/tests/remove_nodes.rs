@@ -21,7 +21,6 @@ use ic_nns_test_utils::{
     },
     registry::{get_value_or_panic, prepare_registry, TEST_ID},
 };
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::{
     node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
@@ -316,7 +315,6 @@ fn remove_nodes_removes_all_keys() {
         let mut nodes_to_remove = vec![];
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
         let (keys, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let keys = NodePublicKeys::from(keys);
         let valid_keys = ValidNodePublicKeys::try_from(keys, node_id).unwrap();
 
         // Add the node along with keys and certs

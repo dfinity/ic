@@ -13,16 +13,13 @@ use prost::Message;
 use ic_base_types::{subnet_id_try_from_protobuf, NodeId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_nns_common::registry::decode_or_panic;
-use ic_protobuf::{
-    crypto::v1::NodePublicKeys,
-    registry::crypto::v1::{PublicKey, X509PublicKeyCert},
-};
+use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_registry_keys::{
     get_ecdsa_key_id_from_signing_subnet_list_key, make_node_record_key, make_subnet_record_key,
     maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key, CRYPTO_RECORD_KEY_PREFIX,
     CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
 };
-use ic_types::crypto::KeyPurpose;
+use ic_types::crypto::{CurrentNodePublicKeys, KeyPurpose};
 
 // All crypto public keys found for the nodes or for the subnets in the
 // registry.
@@ -110,40 +107,35 @@ fn check_node_keys(
     pks: &mut AllPublicKeys,
     certs: &mut AllTlsCertificates,
 ) -> Result<ValidNodePublicKeys, InvariantCheckError> {
-    let idkg_dealing_encryption_pk = pks.remove(&(*node_id, KeyPurpose::IDkgMEGaEncryption));
-    let npk = NodePublicKeys {
-        version: match idkg_dealing_encryption_pk {
-            Some(_) => 1,
-            None => 0,
-        },
-        node_signing_pk: pks.remove(&(*node_id, KeyPurpose::NodeSigning)),
-        committee_signing_pk: pks.remove(&(*node_id, KeyPurpose::CommitteeSigning)),
-        dkg_dealing_encryption_pk: pks.remove(&(*node_id, KeyPurpose::DkgDealingEncryption)),
+    let node_public_keys = CurrentNodePublicKeys {
+        node_signing_public_key: pks.remove(&(*node_id, KeyPurpose::NodeSigning)),
+        committee_signing_public_key: pks.remove(&(*node_id, KeyPurpose::CommitteeSigning)),
+        dkg_dealing_encryption_public_key: pks
+            .remove(&(*node_id, KeyPurpose::DkgDealingEncryption)),
         tls_certificate: certs.remove(node_id),
-        idkg_dealing_encryption_pk,
+        idkg_dealing_encryption_public_key: pks.remove(&(*node_id, KeyPurpose::IDkgMEGaEncryption)),
     };
-    let vnpk = ValidNodePublicKeys::try_from(npk, *node_id).map_err(|e| InvariantCheckError {
-        msg: format!(
-            "crypto key validation for node {} failed with {}",
-            node_id, e
-        ),
-        source: None,
-    })?;
-    Ok(vnpk)
+    let valid_node_public_keys = ValidNodePublicKeys::try_from(node_public_keys, *node_id)
+        .map_err(|e| InvariantCheckError {
+            msg: format!(
+                "crypto key validation for node {} failed with {}",
+                node_id, e
+            ),
+            source: None,
+        })?;
+    Ok(valid_node_public_keys)
 }
 
 fn check_node_keys_are_unique(
     node_pks: &ValidNodePublicKeys,
     unique_pks: &mut BTreeMap<Vec<u8>, NodeId>,
 ) -> Result<(), InvariantCheckError> {
-    let mut pubkeys = vec![
+    let pubkeys = vec![
         node_pks.node_signing_key(),
         node_pks.committee_signing_key(),
         node_pks.dkg_dealing_encryption_key(),
+        node_pks.idkg_dealing_encryption_key(),
     ];
-    if let Some(idkg) = node_pks.idkg_dealing_encryption_key() {
-        pubkeys.push(idkg);
-    }
     for pk in pubkeys {
         let mut pk_bytes: Vec<u8> = vec![];
         pk.encode(&mut pk_bytes).expect("encode cannot fail.");

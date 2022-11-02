@@ -23,9 +23,7 @@
 //! * the public key's proof of possession (PoP) is valid
 //! * the public key is a point on the curve and in the right subgroup
 //!
-//! Validation of a *node's interactive DKG dealing encryption key* is done
-//! if (and only if) the key material version is >= 1 and includes verifying
-//! that
+//! Validation of a *node's interactive DKG dealing encryption key* includes verifying that
 //! * the key is present and well-formed
 //! * the public key is a valid point on the curve
 //!
@@ -43,10 +41,10 @@ use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381Po
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
 use ic_crypto_internal_threshold_sig_ecdsa::{verify_mega_public_key, EccCurveType};
 use ic_crypto_tls_cert_validation::TlsCertValidationError;
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
+use ic_types::crypto::CurrentNodePublicKeys;
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -65,11 +63,11 @@ mod proto_conversions;
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidNodePublicKeys {
     node_id: NodeId,
-    node_signing_pubkey: PublicKey,
-    committee_signing_pubkey: PublicKey,
-    dkg_dealing_encryption_pubkey: PublicKey,
-    idkg_dealing_encryption_pubkey: Option<PublicKey>,
+    node_signing_public_key: PublicKey,
+    committee_signing_public_key: PublicKey,
     tls_certificate: X509PublicKeyCert,
+    dkg_dealing_encryption_public_key: PublicKey,
+    idkg_dealing_encryption_public_key: PublicKey,
 }
 
 /// Validated iDKG dealing encryption public key of a node.
@@ -94,36 +92,28 @@ impl ValidNodePublicKeys {
     /// Returns `ValidNodePublicKeys` iff the `keys` are valid and iff they
     /// are valid for `node_id`. After successful validation, callers shall
     /// only work with `ValidNodePublicKeys` in their API and not with
-    /// the possibly invalid `NodePublicKeys` so as to avoid confusion about
+    /// the possibly invalid `CurrentNodePublicKeys` so as to avoid confusion about
     /// whether key material is validated or not.
-    pub fn try_from(keys: NodePublicKeys, node_id: NodeId) -> Result<Self, KeyValidationError> {
-        validate_node_signing_key(keys.node_signing_pk.as_ref(), node_id)?;
-        validate_committee_signing_key(keys.committee_signing_pk.as_ref())?;
-        validate_dkg_dealing_encryption_key(keys.dkg_dealing_encryption_pk.as_ref(), node_id)?;
-        validate_tls_certificate(keys.tls_certificate.as_ref(), node_id)?;
-        if keys.version >= 1 {
-            validate_idkg_dealing_encryption_key(keys.idkg_dealing_encryption_pk.as_ref())?;
-        }
-
-        let node_signing_pubkey = keys.node_signing_pk.expect("Value missing");
-        let committee_signing_pubkey = keys.committee_signing_pk.expect("Value missing");
-        let dkg_dealing_encryption_pubkey = keys.dkg_dealing_encryption_pk.expect("Value missing");
-        let idkg_dealing_encryption_pubkey = {
-            if keys.version >= 1 {
-                let idkg_pubkey = keys.idkg_dealing_encryption_pk.expect("Value missing");
-                Some(idkg_pubkey)
-            } else {
-                None
-            }
-        };
-        let tls_certificate = keys.tls_certificate.expect("Value missing");
+    pub fn try_from(
+        keys: CurrentNodePublicKeys,
+        node_id: NodeId,
+    ) -> Result<Self, KeyValidationError> {
+        let node_signing_public_key =
+            validate_node_signing_key(keys.node_signing_public_key, node_id)?;
+        let committee_signing_public_key =
+            validate_committee_signing_key(keys.committee_signing_public_key)?;
+        let tls_certificate = validate_tls_certificate(keys.tls_certificate, node_id)?;
+        let dkg_dealing_encryption_public_key =
+            validate_dkg_dealing_encryption_key(keys.dkg_dealing_encryption_public_key, node_id)?;
+        let idkg_dealing_encryption_public_key =
+            validate_idkg_dealing_encryption_key(keys.idkg_dealing_encryption_public_key)?;
 
         Ok(ValidNodePublicKeys {
             node_id,
-            node_signing_pubkey,
-            committee_signing_pubkey,
-            dkg_dealing_encryption_pubkey,
-            idkg_dealing_encryption_pubkey,
+            node_signing_public_key,
+            committee_signing_public_key,
+            dkg_dealing_encryption_public_key,
+            idkg_dealing_encryption_public_key,
             tls_certificate,
         })
     }
@@ -136,22 +126,22 @@ impl ValidNodePublicKeys {
 
     /// Returns the validated node signing key.
     pub fn node_signing_key(&self) -> &PublicKey {
-        &self.node_signing_pubkey
+        &self.node_signing_public_key
     }
 
     /// Returns the validated committee signing key.
     pub fn committee_signing_key(&self) -> &PublicKey {
-        &self.committee_signing_pubkey
+        &self.committee_signing_public_key
     }
 
     /// Returns the validated DKG dealing encryption key.
     pub fn dkg_dealing_encryption_key(&self) -> &PublicKey {
-        &self.dkg_dealing_encryption_pubkey
+        &self.dkg_dealing_encryption_public_key
     }
 
     /// Returns the validated DKG dealing encryption key.
-    pub fn idkg_dealing_encryption_key(&self) -> Option<&PublicKey> {
-        self.idkg_dealing_encryption_pubkey.as_ref()
+    pub fn idkg_dealing_encryption_key(&self) -> &PublicKey {
+        &self.idkg_dealing_encryption_public_key
     }
 
     /// Returns the validated TLS certificate.
@@ -168,9 +158,8 @@ impl ValidIDkgDealingEncryptionPublicKey {
     /// instance in their API so as to avoid confusion about whether the key
     /// is validated or not.
     pub fn try_from(key: PublicKey) -> Result<Self, KeyValidationError> {
-        validate_idkg_dealing_encryption_key(Some(&key))?;
         Ok(Self {
-            idkg_dealing_encryption_pubkey: key,
+            idkg_dealing_encryption_pubkey: validate_idkg_dealing_encryption_key(Some(key))?,
         })
     }
 
@@ -196,13 +185,13 @@ impl fmt::Display for KeyValidationError {
 ///
 /// See the crate documentation for the exact checks that are performed.
 fn validate_node_signing_key(
-    node_signing_key: Option<&PublicKey>,
+    node_signing_key: Option<PublicKey>,
     node_id: NodeId,
-) -> Result<(), KeyValidationError> {
+) -> Result<PublicKey, KeyValidationError> {
     let pubkey_proto =
         node_signing_key.ok_or_else(|| invalid_node_signing_key_error("key is missing"))?;
 
-    let pubkey_bytes = BasicSigEd25519PublicKeyBytes::try_from(pubkey_proto)
+    let pubkey_bytes = BasicSigEd25519PublicKeyBytes::try_from(&pubkey_proto)
         .map_err(|e| invalid_node_signing_key_error(format!("{}", e)))?;
 
     if node_id != derive_node_id(pubkey_bytes) {
@@ -214,55 +203,57 @@ fn validate_node_signing_key(
     if !ic_crypto_internal_basic_sig_ed25519::verify_public_key(&pubkey_bytes) {
         return Err(invalid_node_signing_key_error("verification failed"));
     }
-    Ok(())
+    Ok(pubkey_proto)
 }
 
 /// Validates a node's committee signing key.
 ///
 /// See the crate documentation for the exact checks that are performed.
 fn validate_committee_signing_key(
-    committee_signing_key: Option<&PublicKey>,
-) -> Result<(), KeyValidationError> {
+    committee_signing_key: Option<PublicKey>,
+) -> Result<PublicKey, KeyValidationError> {
     let pubkey_proto = committee_signing_key
         .ok_or_else(|| invalid_committee_signing_key_error("key is missing"))?;
 
-    let pubkey_bytes = MultiSigBls12381PublicKeyBytes::try_from(pubkey_proto)
+    let pubkey_bytes = MultiSigBls12381PublicKeyBytes::try_from(&pubkey_proto)
         .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
-    let pop_bytes = MultiSigBls12381PopBytes::try_from(pubkey_proto)
+    let pop_bytes = MultiSigBls12381PopBytes::try_from(&pubkey_proto)
         .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
 
     // Note that `verify_pop` also ensures that the public key is a point on the
     // curve and in the right subgroup.
     ic_crypto_internal_multi_sig_bls12381::verify_pop(pop_bytes, pubkey_bytes)
-        .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))
+        .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
+
+    Ok(pubkey_proto)
 }
 
 /// Validates a node's non-interactive DKG dealing encryption key.
 ///
 /// See the crate documentation for the exact checks that are performed.
 fn validate_dkg_dealing_encryption_key(
-    dkg_dealing_encryption_key: Option<&PublicKey>,
+    dkg_dealing_encryption_key: Option<PublicKey>,
     node_id: NodeId,
-) -> Result<(), KeyValidationError> {
+) -> Result<PublicKey, KeyValidationError> {
     let pubkey_proto = dkg_dealing_encryption_key
         .ok_or_else(|| invalid_dkg_dealing_enc_pubkey_error("key is missing"))?;
 
     // Note: `fs_ni_dkg_pubkey_from_proto` also ensures that the
     // public key is a point on the curve and in the right subgroup.
-    let fs_ni_dkg_pubkey = fs_ni_dkg_pubkey_from_proto(pubkey_proto)
+    let fs_ni_dkg_pubkey = fs_ni_dkg_pubkey_from_proto(&pubkey_proto)
         .map_err(|e| invalid_dkg_dealing_enc_pubkey_error(format!("{}", e)))?;
     if !fs_ni_dkg_pubkey.verify(node_id.get().as_slice()) {
         return Err(invalid_dkg_dealing_enc_pubkey_error("verification failed"));
     }
-    Ok(())
+    Ok(pubkey_proto)
 }
 
 /// Validates a node's interactive DKG dealing encryption key.
 ///
 /// See the crate documentation for the exact checks that are performed.
 fn validate_idkg_dealing_encryption_key(
-    idkg_dealing_encryption_key: Option<&PublicKey>,
-) -> Result<(), KeyValidationError> {
+    idkg_dealing_encryption_key: Option<PublicKey>,
+) -> Result<PublicKey, KeyValidationError> {
     let pubkey_proto = idkg_dealing_encryption_key
         .ok_or_else(|| invalid_idkg_dealing_enc_pubkey_error("key is missing"))?;
 
@@ -277,18 +268,18 @@ fn validate_idkg_dealing_encryption_key(
     verify_mega_public_key(curve_type, &pubkey_proto.key_value).map_err(|e| {
         invalid_idkg_dealing_enc_pubkey_error(format!("verification failed: {:?}", e))
     })?;
-    Ok(())
+    Ok(pubkey_proto)
 }
 
 pub fn validate_tls_certificate(
-    tls_certificate: Option<&X509PublicKeyCert>,
+    tls_certificate: Option<X509PublicKeyCert>,
     node_id: NodeId,
-) -> Result<(), TlsCertValidationError> {
+) -> Result<X509PublicKeyCert, TlsCertValidationError> {
     let cert = tls_certificate.ok_or_else(|| TlsCertValidationError {
         error: "invalid TLS certificate: certificate is missing".to_string(),
     })?;
-
-    ic_crypto_tls_cert_validation::validate_tls_certificate(cert, node_id)
+    ic_crypto_tls_cert_validation::validate_tls_certificate(&cert, node_id)?;
+    Ok(cert)
 }
 
 fn derive_node_id(pk_bytes: BasicSigEd25519PublicKeyBytes) -> NodeId {

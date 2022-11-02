@@ -9,17 +9,15 @@ use dfn_core::println;
 use ic_base_types::NodeId;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
-use ic_protobuf::{
-    crypto::v1::NodePublicKeys,
-    registry::{
-        crypto::v1::{PublicKey, X509PublicKeyCert},
-        node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord},
-    },
+use ic_protobuf::registry::{
+    crypto::v1::{PublicKey, X509PublicKeyCert},
+    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord},
 };
 
 use crate::mutations::node_management::common::{
     get_node_operator_record, make_add_node_registry_mutations, make_update_node_operator_mutation,
 };
+use ic_types::crypto::CurrentNodePublicKeys;
 use prost::Message;
 
 impl Registry {
@@ -214,17 +212,12 @@ fn valid_keys_from_payload(
     })?;
 
     // 4. get the keys for verification -- for that, we need to create
-    let node_pks = NodePublicKeys {
-        // TODO(NNS1-1197): Remove this match statement when nodes are provisioned for threshold ECDSA subnets
-        version: match idkg_dealing_encryption_pk {
-            Some(_) => 1,
-            None => 0,
-        },
-        node_signing_pk: Some(node_signing_pk),
-        committee_signing_pk: Some(committee_signing_pk),
+    let node_pks = CurrentNodePublicKeys {
+        node_signing_public_key: Some(node_signing_pk),
+        committee_signing_public_key: Some(committee_signing_pk),
         tls_certificate: Some(tls_certificate),
-        dkg_dealing_encryption_pk: Some(dkg_dealing_encryption_pk),
-        idkg_dealing_encryption_pk,
+        dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_pk),
+        idkg_dealing_encryption_public_key: idkg_dealing_encryption_pk,
     };
 
     // 5. validate the keys and the node_id
