@@ -7,15 +7,14 @@ use ic_crypto_node_key_generation::{
     derive_node_id, get_node_keys_or_generate_if_missing, mega_public_key_from_proto,
     MEGaPublicKeyFromProtoError,
 };
-use ic_crypto_test_utils::assert_public_keys_eq;
 use ic_crypto_test_utils::files::temp_dir;
 use ic_interfaces::crypto::KeyManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_types::crypto::CurrentNodePublicKeys;
 use std::sync::Arc;
 
 #[test]
@@ -25,7 +24,7 @@ fn should_generate_all_keys_for_new_node() {
         ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
 
         let crypto = local_crypto_component(&config);
-        assert_public_keys_eq(&node_pks, &crypto.current_node_public_keys());
+        assert_eq!(node_pks, crypto.current_node_public_keys());
     })
 }
 
@@ -42,7 +41,8 @@ fn should_generate_all_keys_for_new_node_with_remote_csp_vault() {
     ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
 
     let crypto = remote_crypto_component(&config, tokio_rt.handle().clone());
-    assert_public_keys_eq(&node_pks, &crypto.current_node_public_keys());
+
+    assert_eq!(node_pks, crypto.current_node_public_keys());
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn should_not_generate_new_keys_if_all_keys_are_present() {
 fn should_correctly_generate_node_signing_key() {
     CryptoConfig::run_with_temp_config(|config| {
         let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let nspk = node_pks.node_signing_pk.expect("missing key");
+        let nspk = node_pks.node_signing_public_key.expect("missing key");
         assert_eq!(nspk.version, 0);
         assert_eq!(nspk.algorithm, AlgorithmIdProto::Ed25519 as i32);
         assert!(!nspk.key_value.is_empty());
@@ -73,7 +73,7 @@ fn should_correctly_generate_node_signing_key() {
 fn should_correctly_generate_committee_signing_key() {
     CryptoConfig::run_with_temp_config(|config| {
         let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let cspk = node_pks.committee_signing_pk.expect("missing key");
+        let cspk = node_pks.committee_signing_public_key.expect("missing key");
         assert_eq!(cspk.version, 0);
         assert_eq!(cspk.algorithm, AlgorithmIdProto::MultiBls12381 as i32);
         assert!(!cspk.key_value.is_empty());
@@ -86,7 +86,9 @@ fn should_correctly_generate_committee_signing_key() {
 fn should_correctly_generate_dkg_dealing_encryption_key() {
     CryptoConfig::run_with_temp_config(|config| {
         let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let ni_dkg_de_pk = node_pks.dkg_dealing_encryption_pk.expect("missing key");
+        let ni_dkg_de_pk = node_pks
+            .dkg_dealing_encryption_public_key
+            .expect("missing key");
         assert_eq!(ni_dkg_de_pk.version, 0);
         assert_eq!(
             ni_dkg_de_pk.algorithm,
@@ -107,20 +109,19 @@ fn should_correctly_generate_tls_certificate() {
     })
 }
 
-fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
-    node_pks.node_signing_pk.is_some()
-        && node_pks.committee_signing_pk.is_some()
+fn all_node_keys_are_present(node_pks: &CurrentNodePublicKeys) -> bool {
+    node_pks.node_signing_public_key.is_some()
+        && node_pks.committee_signing_public_key.is_some()
         && node_pks.tls_certificate.is_some()
-        && node_pks.dkg_dealing_encryption_pk.is_some()
-        && node_pks.idkg_dealing_encryption_pk.is_some()
+        && node_pks.dkg_dealing_encryption_public_key.is_some()
+        && node_pks.idkg_dealing_encryption_public_key.is_some()
 }
 
-fn ensure_node_keys_are_generated_correctly(node_pks: &NodePublicKeys, node_id: &NodeId) {
+fn ensure_node_keys_are_generated_correctly(node_pks: &CurrentNodePublicKeys, node_id: &NodeId) {
     assert!(all_node_keys_are_present(node_pks));
-    assert_eq!(node_pks.version, 1);
 
     let node_signing_pk = node_pks
-        .node_signing_pk
+        .node_signing_public_key
         .as_ref()
         .expect("Missing node signing public key");
     let derived_node_id = derive_node_id(node_signing_pk);
@@ -161,7 +162,7 @@ fn should_convert_mega_proto() {
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
     let mega_proto = get_node_keys_or_generate_if_missing(&config, None)
         .0
-        .idkg_dealing_encryption_pk
+        .idkg_dealing_encryption_public_key
         .expect("Missing MEGa public key");
 
     assert!(mega_public_key_from_proto(&mega_proto).is_ok());
@@ -172,7 +173,7 @@ fn should_fail_to_convert_mega_pubkey_from_proto_if_algorithm_unsupported() {
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
     let mut mega_proto = get_node_keys_or_generate_if_missing(&config, None)
         .0
-        .idkg_dealing_encryption_pk
+        .idkg_dealing_encryption_public_key
         .expect("Missing MEGa public key");
     mega_proto.algorithm = AlgorithmIdProto::Ed25519 as i32;
 
@@ -189,7 +190,7 @@ fn should_fail_to_convert_mega_pubkey_from_proto_if_pubkey_malformed() {
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
     let mut mega_proto = get_node_keys_or_generate_if_missing(&config, None)
         .0
-        .idkg_dealing_encryption_pk
+        .idkg_dealing_encryption_public_key
         .expect("Missing MEGa public key");
     mega_proto.key_value = b"malformed public key".to_vec();
 

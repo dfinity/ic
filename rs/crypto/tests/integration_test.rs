@@ -10,7 +10,6 @@ use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_test_utils::assert_public_keys_eq;
 use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
@@ -130,9 +129,11 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
             Arc::new(registry_client),
             no_op_logger(),
         );
+
         let retrieved_node_pks = crypto.current_node_public_keys();
+
         assert!(all_node_keys_are_present(&retrieved_node_pks));
-        assert_public_keys_eq(&created_node_pks, &retrieved_node_pks);
+        assert_eq!(created_node_pks, retrieved_node_pks);
     })
 }
 

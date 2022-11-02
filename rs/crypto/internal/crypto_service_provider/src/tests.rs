@@ -116,34 +116,6 @@ mod csp_tests {
         }
 
         #[test]
-        fn should_retrieve_current_node_public_keys() {
-            let csp = csp_with_public_keys(NodePublicKeys {
-                version: 0,
-                node_signing_pk: Some(valid_node_signing_key()),
-                committee_signing_pk: None,
-                tls_certificate: None,
-                dkg_dealing_encryption_pk: Some(valid_dkg_dealing_encryption_pk()),
-                idkg_dealing_encryption_pk: None,
-            });
-
-            let current_public_keys = csp.current_node_public_keys();
-
-            assert_eq!(
-                current_public_keys.node_signing_public_key,
-                Some(valid_node_signing_key())
-            );
-            assert!(current_public_keys.committee_signing_public_key.is_none());
-            assert!(current_public_keys.tls_certificate.is_none());
-            assert_eq!(
-                current_public_keys.dkg_dealing_encryption_public_key,
-                Some(valid_dkg_dealing_encryption_pk())
-            );
-            assert!(current_public_keys
-                .idkg_dealing_encryption_public_key
-                .is_none());
-        }
-
-        #[test]
         fn should_not_panic_when_no_public_keys() {
             let csp = csp_with_public_keys(NodePublicKeys {
                 version: 0,
@@ -154,17 +126,7 @@ mod csp_tests {
                 idkg_dealing_encryption_pk: None,
             });
 
-            let current_public_keys = csp.current_node_public_keys();
-
-            assert!(current_public_keys.node_signing_public_key.is_none());
-            assert!(current_public_keys.committee_signing_public_key.is_none());
-            assert!(current_public_keys.tls_certificate.is_none());
-            assert!(current_public_keys
-                .dkg_dealing_encryption_public_key
-                .is_none());
-            assert!(current_public_keys
-                .idkg_dealing_encryption_public_key
-                .is_none());
+            let _current_public_keys = csp.current_node_public_keys();
         }
 
         fn csp_with_public_keys(public_keys: NodePublicKeys) -> Csp {

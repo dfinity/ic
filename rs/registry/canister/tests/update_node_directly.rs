@@ -54,7 +54,7 @@ fn node_is_updated_on_receiving_the_request() {
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
         let (pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
         let good_idkg_dealing_encryption_pk = pks
-            .idkg_dealing_encryption_pk
+            .idkg_dealing_encryption_public_key
             .expect("Missing idkg_dealing_encryption_pk");
         let mut bad_idkg_dealing_encryption_pk = good_idkg_dealing_encryption_pk.clone();
         bad_idkg_dealing_encryption_pk.key_value = b"invalid key".to_vec();

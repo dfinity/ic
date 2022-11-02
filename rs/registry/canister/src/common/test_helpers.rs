@@ -92,7 +92,7 @@ pub fn prepare_registry_with_nodes(nodes: u64) -> (RegistryAtomicMutateRequest, 
             let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
             mutations.push(insert(
                 &make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(&node_pks.dkg_dealing_encryption_pk.unwrap()),
+                encode_or_panic(&node_pks.dkg_dealing_encryption_public_key.unwrap()),
             ));
 
             let node_key = make_node_record_key(node_id);

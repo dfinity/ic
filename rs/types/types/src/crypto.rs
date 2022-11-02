@@ -23,6 +23,7 @@ use core::fmt::Formatter;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use phantom_newtype::Id;
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -744,5 +745,30 @@ impl CurrentNodePublicKeys {
             count += 1;
         }
         count
+    }
+}
+
+impl From<NodePublicKeys> for CurrentNodePublicKeys {
+    fn from(node_public_keys: NodePublicKeys) -> Self {
+        CurrentNodePublicKeys {
+            node_signing_public_key: node_public_keys.node_signing_pk,
+            committee_signing_public_key: node_public_keys.committee_signing_pk,
+            tls_certificate: node_public_keys.tls_certificate,
+            dkg_dealing_encryption_public_key: node_public_keys.dkg_dealing_encryption_pk,
+            idkg_dealing_encryption_public_key: node_public_keys.idkg_dealing_encryption_pk,
+        }
+    }
+}
+
+impl From<CurrentNodePublicKeys> for NodePublicKeys {
+    fn from(current_node_public_keys: CurrentNodePublicKeys) -> Self {
+        NodePublicKeys {
+            version: 1,
+            node_signing_pk: current_node_public_keys.node_signing_public_key,
+            committee_signing_pk: current_node_public_keys.committee_signing_public_key,
+            tls_certificate: current_node_public_keys.tls_certificate,
+            dkg_dealing_encryption_pk: current_node_public_keys.dkg_dealing_encryption_public_key,
+            idkg_dealing_encryption_pk: current_node_public_keys.idkg_dealing_encryption_public_key,
+        }
     }
 }

@@ -49,7 +49,7 @@ fn should_fail_if_internal_conversion_fails() {
 fn valid_dkg_dealing_encryption_key() -> PublicKeyProto {
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
     let (pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-    pks.dkg_dealing_encryption_pk
+    pks.dkg_dealing_encryption_public_key
         .expect("missing dkg dealing encryption public key")
 }
 

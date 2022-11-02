@@ -62,21 +62,21 @@ fn node_is_created_on_receiving_the_request() {
         let node_signing_pubkey_record = get_node_signing_key(&registry, node_id).await.unwrap();
         assert_eq!(
             node_signing_pubkey_record,
-            node_pks.node_signing_pk.unwrap()
+            node_pks.node_signing_public_key.unwrap()
         );
 
         let committee_signing_pubkey_record =
             get_committee_signing_key(&registry, node_id).await.unwrap();
         assert_eq!(
             committee_signing_pubkey_record,
-            node_pks.committee_signing_pk.unwrap()
+            node_pks.committee_signing_public_key.unwrap()
         );
 
         let ni_dkg_dealing_encryption_pubkey_record =
             get_dkg_dealing_key(&registry, node_id).await.unwrap();
         assert_eq!(
             ni_dkg_dealing_encryption_pubkey_record,
-            node_pks.dkg_dealing_encryption_pk.unwrap()
+            node_pks.dkg_dealing_encryption_public_key.unwrap()
         );
 
         let transport_tls_certificate_record = get_transport_tls_certificate(&registry, node_id)
