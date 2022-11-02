@@ -7,9 +7,25 @@ fn random_g1() -> G1Projective {
     G1Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>())
 }
 
+fn n_random_g1(n: usize) -> Vec<G1Projective> {
+    let mut output = Vec::with_capacity(n);
+    for _ in 0..n {
+        output.push(random_g1());
+    }
+    output
+}
+
 fn random_g2() -> G2Projective {
     let mut rng = rand::thread_rng();
     G2Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>())
+}
+
+fn n_random_g2(n: usize) -> Vec<G2Projective> {
+    let mut output = Vec::with_capacity(n);
+    for _ in 0..n {
+        output.push(random_g2());
+    }
+    output
 }
 
 fn random_g2_prepared() -> G2Prepared {
@@ -25,7 +41,7 @@ fn random_scalar() -> Scalar {
     Scalar::random(&mut rng)
 }
 
-fn list_of_random_scalars(size: usize) -> Vec<Scalar> {
+fn n_random_scalar(size: usize) -> Vec<Scalar> {
     let mut r = Vec::with_capacity(size);
     for _ in 0..size {
         r.push(random_scalar())
@@ -34,7 +50,7 @@ fn list_of_random_scalars(size: usize) -> Vec<Scalar> {
 }
 
 fn scalar_muln_instance(terms: usize) -> (Vec<Scalar>, Vec<Scalar>) {
-    (list_of_random_scalars(terms), list_of_random_scalars(terms))
+    (n_random_scalar(terms), n_random_scalar(terms))
 }
 
 fn g1_muln_instance(terms: usize) -> Vec<(G1Projective, Scalar)> {
@@ -179,6 +195,14 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("batch_mul(32)", |b| {
+        b.iter_batched_ref(
+            || (random_g1().to_affine(), n_random_scalar(32)),
+            |(pt, scalars)| G1Affine::batch_mul(pt, scalars),
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("precompute", |b| {
         b.iter_batched_ref(
             || random_g1().to_affine(),
@@ -205,9 +229,21 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     });
 
     group.bench_function("to_affine", |b| {
+        b.iter_batched_ref(random_g1, |pt| pt.to_affine(), BatchSize::SmallInput)
+    });
+
+    group.bench_function("batch_normalize(32)", |b| {
         b.iter_batched_ref(
-            random_g1,
-            |pt| G1Affine::from(pt.clone()),
+            || n_random_g1(32),
+            |pts| G1Projective::batch_normalize(pts),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("batch_normalize(128)", |b| {
+        b.iter_batched_ref(
+            || n_random_g1(128),
+            |pts| G1Projective::batch_normalize(pts),
             BatchSize::SmallInput,
         )
     });
@@ -243,6 +279,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
+
     group.bench_function("multiexp_muln_8", |b| {
         b.iter_batched_ref(
             || g1_muln_instance(8),
@@ -321,6 +358,14 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("batch_mul(32)", |b| {
+        b.iter_batched_ref(
+            || (random_g2().to_affine(), n_random_scalar(32)),
+            |(pt, scalars)| G2Affine::batch_mul(pt, scalars),
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("precompute", |b| {
         b.iter_batched_ref(
             || random_g2().to_affine(),
@@ -347,9 +392,21 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     });
 
     group.bench_function("to_affine", |b| {
+        b.iter_batched_ref(random_g2, |pt| pt.to_affine(), BatchSize::SmallInput)
+    });
+
+    group.bench_function("batch_normalize(32)", |b| {
         b.iter_batched_ref(
-            random_g2,
-            |pt| G2Affine::from(pt.clone()),
+            || n_random_g2(32),
+            |pts| G2Projective::batch_normalize(pts),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("batch_normalize(128)", |b| {
+        b.iter_batched_ref(
+            || n_random_g2(128),
+            |pts| G2Projective::batch_normalize(pts),
             BatchSize::SmallInput,
         )
     });

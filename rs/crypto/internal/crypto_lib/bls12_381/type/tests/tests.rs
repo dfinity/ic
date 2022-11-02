@@ -1082,3 +1082,23 @@ test_point_operation!(muln, [g1, g2], {
         assert_eq!(computed, reference_val);
     }
 });
+
+test_point_operation!(batch_normalize, [g1, g2], {
+    let mut rng = seeded_rng();
+
+    let g = Affine::generator();
+
+    for i in 0..100 {
+        let inputs = (0..i)
+            .map(|_| g * Scalar::random(&mut rng))
+            .collect::<Vec<_>>();
+
+        let batch_converted = Projective::batch_normalize(&inputs);
+
+        assert_eq!(inputs.len(), batch_converted.len());
+
+        for j in 0..i {
+            assert_eq!(inputs[j].to_affine(), batch_converted[j]);
+        }
+    }
+});

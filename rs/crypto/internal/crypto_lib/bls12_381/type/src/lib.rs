@@ -971,17 +971,15 @@ macro_rules! define_affine_and_projective_types {
             /// Batch multiplication
             pub fn batch_mul(&self, scalars: &[Scalar]) -> Vec<Self> {
 
-                // Possible optimizations for this function:
-                // 1) Take advantage of the fact that we are using the same point
-                //    for several multiplications, for example by using larger
-                //    precomputed tables
-                // 2) Use a batch projective->affine conversion
+                // It might be possible to optimize this function by taking advantage of
+                // the fact that we are using the same point for several multiplications,
+                // for example by using larger precomputed tables
 
                 let mut result = Vec::with_capacity(scalars.len());
                 for scalar in scalars {
-                    result.push(Self::from(self * scalar));
+                    result.push(self * scalar);
                 }
-                result
+                $projective::batch_normalize(&result)
             }
         }
 
@@ -1123,6 +1121,23 @@ macro_rules! define_affine_and_projective_types {
             /// Convert this point to affine format
             pub fn to_affine(&self) -> $affine {
                 $affine::new(self.value.into())
+            }
+
+            /// Convert a group of points into affine format
+            pub fn batch_normalize(points: &[Self]) -> Vec<$affine> {
+                let mut inner_points = Vec::with_capacity(points.len());
+                for point in points {
+                    inner_points.push(*point.inner());
+                }
+
+                let mut inner_affine = vec![ic_bls12_381::$affine::identity(); points.len()];
+                ic_bls12_381::$projective::batch_normalize(&inner_points, &mut inner_affine);
+
+                let mut output = Vec::with_capacity(points.len());
+                for point in inner_affine {
+                    output.push($affine::new(point));
+                }
+                output
             }
         }
 
