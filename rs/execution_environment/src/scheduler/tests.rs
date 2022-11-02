@@ -3428,6 +3428,7 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
     }
 }
 
+// TODO(EXC-1168): remove after full migration is done.
 #[test]
 fn test_subnet_size_execute_message() {
     let subnet_type = SubnetType::Application;
