@@ -3,7 +3,6 @@ use std::{
     convert::{TryFrom, TryInto},
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -500,14 +499,13 @@ impl SchedulerTest {
         canister_id
     }
 
-    pub(crate) fn set_canister_global_timer(&mut self, canister: CanisterId, time: u64) {
+    pub(crate) fn set_canister_global_timer(&mut self, canister: CanisterId, time: Time) {
         let canister_state = self.canister_state_mut(canister);
-        canister_state.system_state.global_timer =
-            CanisterTimer::Active(Duration::from_secs(time).try_into().unwrap());
+        canister_state.system_state.global_timer = CanisterTimer::Active(time);
     }
 
-    pub(crate) fn set_time(&mut self, time: u64) {
-        self.state_mut().metadata.batch_time = Duration::from_secs(time).try_into().unwrap();
+    pub(crate) fn set_time(&mut self, time: Time) {
+        self.state_mut().metadata.batch_time = time;
     }
 }
 

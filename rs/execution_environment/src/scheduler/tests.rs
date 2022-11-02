@@ -656,7 +656,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     // Charging handles time=0 as a special case, so it should be set to some
     // non-zero time.
     let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
-    test.state_mut().metadata.batch_time = initial_time;
+    test.set_time(initial_time);
 
     let time_between_batches = test
         .scheduler()
@@ -685,7 +685,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     );
 
     // Don't charge because the time since the last charge is too small.
-    test.state_mut().metadata.batch_time += time_between_batches;
+    test.set_time(initial_time + time_between_batches);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     assert_eq!(
@@ -695,7 +695,7 @@ fn only_charge_for_allocation_after_specified_duration() {
 
     // The time of the current batch is now long enough that allocation charging
     // should be triggered.
-    test.state_mut().metadata.batch_time += time_between_batches;
+    test.set_time(initial_time + 2 * time_between_batches);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
@@ -759,11 +759,13 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             Some(initial_time),
         );
     }
-    test.state_mut().metadata.batch_time = initial_time
-        + test
-            .scheduler()
-            .cycles_account_manager
-            .duration_between_allocation_charges();
+    test.set_time(
+        initial_time
+            + test
+                .scheduler()
+                .cycles_account_manager
+                .duration_between_allocation_charges(),
+    );
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
@@ -823,7 +825,7 @@ fn dont_charge_allocations_for_long_running_canisters() {
         .scheduler()
         .cycles_account_manager
         .duration_between_allocation_charges();
-    test.state_mut().metadata.batch_time = initial_time + duration_between_allocation_charges;
+    test.set_time(initial_time + duration_between_allocation_charges);
 
     test.charge_for_resource_allocations();
     // Balance has not changed for canister that has long running execution.
@@ -1230,8 +1232,8 @@ fn execute_global_timer_once_per_round_in_system_subnet() {
         Some(SystemMethod::CanisterGlobalTimer),
         None,
     );
-    test.set_canister_global_timer(canister, 1);
-    test.set_time(1);
+    test.set_canister_global_timer(canister, Time::from_nanos_since_unix_epoch(1));
+    test.set_time(Time::from_nanos_since_unix_epoch(1));
 
     test.send_ingress(canister, ingress(1));
     test.expect_global_timer(canister, instructions(1));
@@ -1250,8 +1252,8 @@ fn global_timer_is_not_scheduled_if_not_expired() {
         Some(SystemMethod::CanisterGlobalTimer),
         None,
     );
-    test.set_canister_global_timer(canister, 2);
-    test.set_time(1);
+    test.set_canister_global_timer(canister, Time::from_nanos_since_unix_epoch(2));
+    test.set_time(Time::from_nanos_since_unix_epoch(1));
 
     test.send_ingress(canister, ingress(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -1269,8 +1271,8 @@ fn global_timer_is_not_scheduled_if_global_timer_method_is_not_exported() {
         None,
         None,
     );
-    test.set_canister_global_timer(canister, 1);
-    test.set_time(1);
+    test.set_canister_global_timer(canister, Time::from_nanos_since_unix_epoch(1));
+    test.set_time(Time::from_nanos_since_unix_epoch(1));
 
     test.send_ingress(canister, ingress(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -1331,8 +1333,8 @@ fn execute_global_timer_before_messages() {
         Some(SystemMethod::CanisterGlobalTimer),
         None,
     );
-    test.set_canister_global_timer(canister, 1);
-    test.set_time(1);
+    test.set_canister_global_timer(canister, Time::from_nanos_since_unix_epoch(1));
+    test.set_time(Time::from_nanos_since_unix_epoch(1));
 
     test.send_ingress(canister, ingress(1));
     test.send_ingress(canister, ingress(1));
@@ -1657,12 +1659,14 @@ fn can_record_metrics_for_a_round() {
     test.advance_to_round(ExecutionRound::from(12));
 
     test.state_mut().metadata.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
-    test.state_mut().metadata.batch_time = UNIX_EPOCH
-        + Duration::from_secs(1)
-        + test
-            .scheduler()
-            .cycles_account_manager
-            .duration_between_allocation_charges();
+    test.set_time(
+        UNIX_EPOCH
+            + Duration::from_secs(1)
+            + test
+                .scheduler()
+                .cycles_account_manager
+                .duration_between_allocation_charges(),
+    );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let metrics = &test.scheduler().metrics;
@@ -2268,12 +2272,12 @@ fn long_open_call_context_is_recorded() {
         }
     }
     let initial_time = Time::from_nanos_since_unix_epoch(10);
-    test.state_mut().metadata.batch_time = initial_time;
+    test.set_time(initial_time);
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let current_time = initial_time + Duration::from_secs(60 * 60 * 24);
-    test.state_mut().metadata.batch_time = current_time;
+    test.set_time(current_time);
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
@@ -2885,7 +2889,7 @@ fn simulate_one_gib_per_second_cost(
         .build();
     // Charging handles time=0 as a special case, so it should be set to some non-zero time.
     let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
-    test.state_mut().metadata.batch_time = initial_time;
+    test.set_time(initial_time);
     test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
 
     let duration_between_allocation_charges = test
@@ -2903,7 +2907,7 @@ fn simulate_one_gib_per_second_cost(
 
     let balance_before = test.canister_state(canister_id).system_state.balance();
     // The time delta is long enough that allocation charging should be triggered.
-    test.state_mut().metadata.batch_time += duration_between_allocation_charges;
+    test.set_time(initial_time + duration_between_allocation_charges);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let balance_after = test.canister_state(canister_id).system_state.balance();
 
@@ -2963,7 +2967,7 @@ fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size
         .with_subnet_size(subnet_size)
         .build();
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    test.state_mut().metadata.batch_time = initial_time;
+    test.set_time(initial_time);
     test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
     let canister_id = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
