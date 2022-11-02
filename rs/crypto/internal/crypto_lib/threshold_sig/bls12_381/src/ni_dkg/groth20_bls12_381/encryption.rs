@@ -26,8 +26,7 @@ use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_38
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
-use rand_chacha::ChaCha20Rng;
+use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -61,7 +60,7 @@ pub fn create_forward_secure_key_pair(
     seed: Seed,
     associated_data: &[u8],
 ) -> FsEncryptionKeySetWithPop {
-    let mut rng = ChaCha20Rng::from_seed(seed.into_rng().gen::<[u8; 32]>());
+    let mut rng = seed.into_rng();
     let (lib_public_key_with_pop, lib_secret_key) =
         crypto::kgen(associated_data, crypto::SysParam::global(), &mut rng);
     let (public_key, pop) = public_key_from_miracl(&lib_public_key_with_pop);
@@ -86,7 +85,7 @@ pub fn create_forward_secure_key_pair(
 /// * `epoch` - The earliest epoch at which to retain keys.
 /// * `seed` - Randomness used in updating the secret key to the given `epoch`.
 pub fn update_key_inplace_to_epoch(secret_key: &mut crypto::SecretKey, epoch: Epoch, seed: Seed) {
-    let mut rng = ChaCha20Rng::from_seed(seed.into_rng().gen::<[u8; 32]>());
+    let mut rng = seed.into_rng();
     let tau = Tau::from(epoch);
     if epoch_from_miracl_secret_key(secret_key) < epoch {
         secret_key.update_to(&tau.0, crypto::SysParam::global(), &mut rng);
@@ -135,7 +134,7 @@ pub fn encrypt_and_prove(
         .collect();
 
     let tau = Tau::from(epoch);
-    let mut rng = ChaCha20Rng::from_seed(seed.into_rng().gen::<[u8; 32]>());
+    let mut rng = seed.into_rng();
     let (ciphertext, encryption_witness) = crypto::enc_chunks(
         &plaintext_chunks,
         &public_keys,

@@ -38,15 +38,15 @@ fn test_generating_fs_key_pair_is_stable() {
 
     assert_sha256_cbor_is(
         &key_and_pop.pop,
-        "6f05e05b030242083119968af870548287330c5033aab104c4806ac4044fd6d6",
+        "4d606b3e6a3b790c0e4b1fc4687fb3892fc5e8c4377684a25a7183f0c2a74d91",
     );
     assert_sha256_cbor_is(
         &key_and_pop.public_key,
-        "ab72b5e55db7957f5f2c3d8091dd17553cadc673eebbb44198abfad795ff4af0",
+        "707ca0f3e366812cb3f8efc734a9eff1e7aff21427082467d034f54d525327d2",
     );
     assert_sha256_cbor_is(
         &key_and_pop.secret_key,
-        "12c08d082d9e59db9ce46c39210046e77aae4c69f0ea0b46464ebc5db762af9b",
+        "25cfe9b7b5c95d6d8cab1f8f5b205470909ce1dc27612b17e987e57ea0443864",
     );
 }
 
@@ -62,7 +62,7 @@ fn test_updating_fs_secret_key_is_stable() {
 
     assert_sha256_cbor_is(
         &secret_key_from_miracl(&sk),
-        "7e8e048bd7e903c271a66903223d80fe5c5c8e6c8876c5b1bc8abab373a893c5",
+        "f70143bdd1fad70ac7d24cda1f5141b6e730841361fc4c8e5059ddc0a1514e15",
     );
 }
 
@@ -126,10 +126,10 @@ fn test_create_dealings_and_transcript_without_resharing_secret_is_stable() {
     let epoch = Epoch::from(2);
 
     let expected_dealing_hashes = [
-        "06783b96a9f5a04666762ac5d487491265d67e43ff1ad1d5b56d17d1379fecfe",
-        "d5dc62607df766f41e65ba56baca52c0d73d16c6588c8731bd44e1b5c1578938",
-        "8da68bebb1cd78f41090159d4bc6fd0be059bf2705b682e9c19f9b1f6e8efcac",
-        "5fa524219379c790734115d42a4075faf29893e2d94f4de184bb2745f8a7e925",
+        "800d77d0b316a24c89f874813a104071a9a5e2f462df1b7615cb5697d0410424",
+        "c31e537350f2faf43b3d684dee343a16077fd317f7bf9046f036c26b796d9329",
+        "8e7dba35d9e74c595135bee8cd842b407b18ff80d5e725da750cef3b960efba1",
+        "e37e1de43df69200e6959f44564023b32593213ffa7854ffcf71a70229926ba2",
     ];
 
     let mut dealings = BTreeMap::new();
@@ -149,7 +149,7 @@ fn test_create_dealings_and_transcript_without_resharing_secret_is_stable() {
 
     assert_sha256_cbor_is(
         &transcript,
-        "4acbfe16fdfdb85ff0ea6868a9342b1bf4e9b0f211c36a7e2629c75b797f17ae",
+        "fa6e9825d6e4bed18061832d4b302267d1827e86f885ce5f0be2ff6137f076af",
     );
 
     let expected_threshold_key_hashes = [
@@ -179,10 +179,10 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
     let resharing_secret = SecretKeyBytes([42; SecretKeyBytes::SIZE]);
 
     let expected_dealing_hashes = [
-        "cd96d170a464fc81d778966b432ae7176483aa7100d2d05347371fbfc846156f",
-        "c5462ec22068bab3874e17f74f519bbf3723b210c7dd46c749b08dc766386caf",
-        "4d60725ce5e9a4c973a47e2c7d7e2a5d69eccd236d4b9b65a7417f117ff81212",
-        "bb0ed35288e29203b8f5b9b2f0857be304eb34ecfa9f715530f268fc9a2869f5",
+        "c20776601f7900367194bb8f37aa530fa9798a24aa4086804abfd9e65e1d45e2",
+        "57ad68aba3ec1cb8d2522de43d0bbb3678e3d7426cece31c5f491aabe7cca944",
+        "32c27739d296c456654f69eae77739217e1e965b39d969dd9e4c3150bef227e5",
+        "901a893df6228332f08e25548729030b623ec03fc8f0b9f6627cdb45d31a607a",
     ];
 
     let mut dealings = BTreeMap::new();
@@ -223,7 +223,7 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
 
     assert_sha256_cbor_is(
         &transcript,
-        "be0280d6ca6148b82c6a9d802baf8a6e9ea4719648d90b73780c41cd950f71fa",
+        "0443eec56f5993494689958102470bb72a8e3f0210f6318885237cc8dbacbf22",
     );
 
     let expected_threshold_key_hashes = [
