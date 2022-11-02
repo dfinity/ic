@@ -4977,3 +4977,75 @@ fn cycles_correct_if_install_fails_at_init() {
         )
     );
 }
+
+#[test]
+fn install_code_can_increase_and_use_memory_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 0)
+        )"#;
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test
+        .create_canister_with_allocation(initial_cycles, None, Some(1_000))
+        .unwrap();
+
+    test.install_canister_with_allocation(id, wasm, None, Some(1_000_000))
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state(id).system_state.memory_allocation,
+        MemoryAllocation::Reserved(NumBytes::from(1_000_000))
+    );
+    assert_eq!(
+        test.canister_state(id)
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_memory
+            .size,
+        NumWasmPages::from(10)
+    )
+}
+
+#[test]
+fn install_code_cannot_switch_from_reserved_to_best_effort_memory_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 0)
+        )"#;
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test
+        .create_canister_with_allocation(initial_cycles, None, Some(1_000_000))
+        .unwrap();
+
+    test.install_canister_with_allocation(id, wasm, None, None)
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state(id).system_state.memory_allocation,
+        MemoryAllocation::Reserved(NumBytes::from(1_000_000))
+    );
+    assert_eq!(
+        test.canister_state(id)
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_memory
+            .size,
+        NumWasmPages::from(10)
+    )
+}
