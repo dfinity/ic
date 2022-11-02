@@ -181,13 +181,12 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
         // from the tarball saving significant space.
         let create_tarball_script = &format!(
             r#"
-    sudo systemctl stop prometheus.service &&
-    sudo rm -rf /var/lib/prometheus/wal/* &&
-    sudo touch /var/lib/prometheus/wal/00000000 &&
-    sudo tar -cf "{tarball_full_path:?}" \
-        --sparse \
-        --use-compress-program="zstd --threads=0 -10" \
-        -C /var/lib/prometheus .
+set -e
+sudo systemctl stop prometheus.service
+sudo tar -cf "{tarball_full_path:?}" \
+    --sparse \
+    --use-compress-program="zstd --threads=0 -10" \
+    -C /var/lib/prometheus .
     "#,
         );
         let session = deployed_prometheus_vm
@@ -243,7 +242,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf) -> Result<()> {
     let node_exporter_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join("node_exporter.json");
     let prometheus_config = json!({
-        "global": {"scrape_interval": "10s"},
+        "global": {"scrape_interval": "60s"},
         "scrape_configs": [
             {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
             {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},
