@@ -1264,7 +1264,7 @@ impl StateManagerImpl {
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
-        let mut states_metadata =
+        let mut loaded_states_metadata =
             Self::load_metadata(&log, state_layout.states_metadata().as_path());
         info!(log, "Loading metadata took {:?}", starting_time.elapsed());
 
@@ -1313,10 +1313,22 @@ impl StateManagerImpl {
 
         let last_checkpoint = checkpoint_heights.last().map(|h| h.to_owned());
 
-        // Remove checkpoints older than the starting height
+        // The latest checkpoint with a manifest is needed to copy files/chunks during state sync.
+        // It can be different from `last_checkpoint` if the replica is killed after making a checkpoint but before finishing computing the manifest.
+        let latest_checkpoint_with_manifest = checkpoint_heights.iter().rev().find_map(|h| {
+            let state_metadata = loaded_states_metadata.get(h)?;
+            let _manifest = state_metadata.manifest.as_ref()?;
+            Some(*h)
+        });
+
+        // Remove checkpoints older than the starting height with the exception that
+        // the latest checkpoint with an available manifest is kept.
         if let Some(start) = last_checkpoint {
             for h in checkpoint_heights.into_iter() {
                 debug_assert!(h <= start);
+                if Some(h) == latest_checkpoint_with_manifest {
+                    continue;
+                }
                 if h != start {
                     info!(
                         log,
@@ -1344,54 +1356,68 @@ impl StateManagerImpl {
             starting_time.elapsed()
         );
 
+        let mut load_checkpoint_and_populate_metadata = |height: Height| -> PopulatedMetadata {
+            let starting_time = Instant::now();
+
+            let cp_layout = state_layout.checkpoint(height).unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to create checkpoint layout @{}: {}",
+                    height,
+                    err
+                )
+            });
+
+            let state = checkpoint::load_checkpoint_parallel(
+                &cp_layout,
+                own_subnet_type,
+                &metrics.checkpoint_metrics,
+            )
+            .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint @{}: {}", height, err));
+            info!(log, "Loading checkpoint took {:?}", starting_time.elapsed());
+
+            let checkpoint_metadata = loaded_states_metadata.remove(&height);
+
+            let starting_time = Instant::now();
+            let result = Self::populate_metadata(
+                &log,
+                &metrics,
+                &state_layout,
+                height,
+                checkpoint_metadata,
+                state,
+            );
+
+            info!(
+                log,
+                "Populating metadata took {:?}",
+                starting_time.elapsed()
+            );
+
+            result
+        };
+
         let PopulatedMetadata {
-            certifications_metadata,
-            states_metadata,
+            mut certifications_metadata,
+            mut states_metadata,
             compute_manifest_requests,
             maybe_last_snapshot,
         } = match last_checkpoint {
-            Some(height) => {
-                let starting_time = Instant::now();
-
-                let cp_layout = state_layout.checkpoint(height).unwrap_or_else(|err| {
-                    fatal!(
-                        log,
-                        "Failed to create checkpoint layout @{}: {}",
-                        height,
-                        err
-                    )
-                });
-
-                let state = checkpoint::load_checkpoint_parallel(
-                    &cp_layout,
-                    own_subnet_type,
-                    &metrics.checkpoint_metrics,
-                )
-                .unwrap_or_else(|err| {
-                    fatal!(log, "Failed to load checkpoint @{}: {}", height, err)
-                });
-                info!(log, "Loading checkpoint took {:?}", starting_time.elapsed());
-
-                let checkpoint_metadata = states_metadata.remove(&height);
-
-                let starting_time = Instant::now();
-                let result = Self::populate_metadata(
-                    &log,
-                    &metrics,
-                    &state_layout,
-                    height,
-                    checkpoint_metadata,
-                    state,
-                );
-                info!(
-                    log,
-                    "Populating metadata took {:?}",
-                    starting_time.elapsed()
-                );
-
-                result
-            }
+            Some(height) => load_checkpoint_and_populate_metadata(height),
             None => PopulatedMetadata::default(),
+        };
+
+        // If the latest checkpoint with an available manifest is not the same as the `last_checkpoint`,
+        // we also load it and populate metadata for it.
+        let snapshot_at_manifest_height = match latest_checkpoint_with_manifest {
+            Some(latest_manifest_height) if latest_checkpoint_with_manifest < last_checkpoint => {
+                let populated_metadata =
+                    load_checkpoint_and_populate_metadata(latest_manifest_height);
+                certifications_metadata.extend(populated_metadata.certifications_metadata);
+                states_metadata.extend(populated_metadata.states_metadata);
+                populated_metadata.maybe_last_snapshot.map(|(s, _)| s)
+            }
+            _ => None,
         };
 
         let latest_state_height = AtomicU64::new(0);
@@ -1430,8 +1456,15 @@ impl StateManagerImpl {
         };
 
         let snapshots: VecDeque<_> = std::iter::once(initial_snapshot)
+            .chain(snapshot_at_manifest_height.into_iter())
             .chain(maybe_last_snapshot.into_iter().map(|(s, _)| s))
             .collect();
+
+        // Make sure the snapshots' order is maintained in initialization.
+        debug_assert!(snapshots
+            .iter()
+            .zip(snapshots.iter().skip(1))
+            .all(|(s0, s1)| s0.height < s1.height));
 
         let last_snapshot_height = snapshots.back().map(|s| s.height.get() as i64).unwrap_or(0);
 
