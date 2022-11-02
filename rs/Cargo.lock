@@ -9907,6 +9907,7 @@ version = "0.1.0"
 dependencies = [
  "canister-test",
  "dfn_core",
+ "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types",
  "rand 0.8.5",

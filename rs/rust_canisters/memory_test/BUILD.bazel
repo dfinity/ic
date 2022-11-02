@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -13,8 +13,10 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
+    "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/types/types",
+    "//rs/types/ic00_types",
 ]
 
 rust_library(
@@ -26,9 +28,14 @@ rust_library(
 )
 
 rust_canister(
-    name = "memory_test_canister",
+    name = "memory_test_canister_raw",
     srcs = ["src/main.rs"],
     deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "memory_test_canister",
+    wasm = "memory_test_canister_raw",
 )
 
 rust_test(
@@ -47,11 +54,10 @@ rust_test(
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/memory_test",
-        "MEMORY_TEST_CANISTER_WASM_PATH": "$(rootpath :memory_test_canister)",
+        "MEMORY_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/memory_test:memory_test_canister)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
-    flaky = True,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
