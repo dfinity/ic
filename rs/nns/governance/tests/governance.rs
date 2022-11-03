@@ -77,7 +77,9 @@ use ic_sns_swap::pb::v1::{
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
+use lazy_static::lazy_static;
 use maplit::hashmap;
+use pretty_assertions::{assert_eq, assert_ne};
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use std::cmp::Ordering;
@@ -10694,89 +10696,86 @@ async fn test_known_neurons() {
     assert_eq!(expected_known_neuron_name_set, gov.known_neuron_name_set);
 }
 
-#[tokio::test]
-async fn test_open_sns_token_swap_proposal() {
-    // Step 0: Define helper(s)
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct ExpectedCallCanisterMethodCallArguments<'a> {
+    target: CanisterId,
+    method_name: &'a str,
+    request: Vec<u8>,
+}
 
-    #[derive(Debug, PartialEq, Eq, Clone)]
-    struct ExpectedCallCanisterMethodCallArguments<'a> {
-        target: CanisterId,
-        method_name: &'a str,
-        request: Vec<u8>,
-    }
-
-    #[allow(clippy::type_complexity)]
-    struct MockEnvironment<'a> {
-        expected_call_canister_method_calls: Arc<
-            Mutex<
-                VecDeque<(
-                    ExpectedCallCanisterMethodCallArguments<'a>,
-                    Result<Vec<u8>, (Option<i32>, String)>,
-                )>,
-            >,
+#[allow(clippy::type_complexity)]
+struct MockEnvironment<'a> {
+    expected_call_canister_method_calls: Arc<
+        Mutex<
+            VecDeque<(
+                ExpectedCallCanisterMethodCallArguments<'a>,
+                Result<Vec<u8>, (Option<i32>, String)>,
+            )>,
         >,
+    >,
+}
+
+#[async_trait]
+impl Environment for MockEnvironment<'_> {
+    async fn call_canister_method(
+        &mut self,
+        target: CanisterId,
+        method_name: &str,
+        request: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        let (expected_arguments, result) = self
+            .expected_call_canister_method_calls
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap();
+
+        assert_eq!(
+            ExpectedCallCanisterMethodCallArguments {
+                target,
+                method_name,
+                request
+            },
+            expected_arguments,
+        );
+
+        result
     }
 
-    #[async_trait]
-    impl Environment for MockEnvironment<'_> {
-        async fn call_canister_method(
-            &mut self,
-            target: CanisterId,
-            method_name: &str,
-            request: Vec<u8>,
-        ) -> Result<Vec<u8>, (Option<i32>, String)> {
-            let (expected_arguments, result) = self
-                .expected_call_canister_method_calls
-                .lock()
-                .unwrap()
-                .pop_front()
-                .unwrap();
+    // Other methods don't do anything interesting. We implement them mostly
+    // to fulfill the trait requirements.
 
-            assert_eq!(
-                ExpectedCallCanisterMethodCallArguments {
-                    target,
-                    method_name,
-                    request
-                },
-                expected_arguments,
-            );
-
-            result
-        }
-
-        // Other methods don't do anything interesting. We implement them mostly
-        // to fulfill the trait requirements.
-
-        fn now(&self) -> u64 {
-            DEFAULT_TEST_START_TIMESTAMP_SECONDS
-        }
-
-        fn random_u64(&mut self) -> u64 {
-            panic!("Unexpected call to Environment::random_u64");
-        }
-
-        fn random_byte_array(&mut self) -> [u8; 32] {
-            panic!("Unexpected call to Environment::random_byte_array");
-        }
-
-        fn execute_nns_function(
-            &self,
-            _proposal_id: u64,
-            _update: &ExecuteNnsFunction,
-        ) -> Result<(), GovernanceError> {
-            panic!("Unexpected call to Environment::execute_nns_function");
-        }
-
-        fn heap_growth_potential(&self) -> HeapGrowthPotential {
-            HeapGrowthPotential::NoIssue
-        }
+    fn now(&self) -> u64 {
+        DEFAULT_TEST_START_TIMESTAMP_SECONDS
     }
 
-    // Step 1: Prepare the world.
+    fn random_u64(&mut self) -> u64 {
+        panic!("Unexpected call to Environment::random_u64");
+    }
 
-    // Parameters which will later be used to construct the swap proposal.
-    let target_swap_canister_id = PrincipalId::new_user_test_id(1);
-    let params = sns_swap_pb::Params {
+    fn random_byte_array(&mut self) -> [u8; 32] {
+        panic!("Unexpected call to Environment::random_byte_array");
+    }
+
+    fn execute_nns_function(
+        &self,
+        _proposal_id: u64,
+        _update: &ExecuteNnsFunction,
+    ) -> Result<(), GovernanceError> {
+        panic!("Unexpected call to Environment::execute_nns_function");
+    }
+
+    fn heap_growth_potential(&self) -> HeapGrowthPotential {
+        HeapGrowthPotential::NoIssue
+    }
+}
+
+type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
+
+lazy_static! {
+    static ref TARGET_SWAP_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(129844);
+
+    static ref SWAP_PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
         sns_token_e8s: 1_000_000,
         min_icp_e8s: 1,
         max_icp_e8s: 42_000,
@@ -10792,107 +10791,134 @@ async fn test_open_sns_token_swap_proposal() {
         ),
     };
 
-    let neuron_base = Neuron {
-        cached_neuron_stake_e8s: 100_000_000,
-        dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-            MAX_DISSOLVE_DELAY_SECONDS,
-        )),
-        ..Default::default()
-    };
-
     // Collectively, the Community Fund neurons have 100e-8 ICP in maturity.
     // Neurons 1 and 2 belong to principal(1); neuron 3 belongs to principal(2).
     // Neuron 4 also belongs to principal(1), but is NOT a CF neuron.
-    let neurons = hashmap! {
-        1 => Neuron {
-            id: Some(NeuronId { id: 1 }),
-            controller: Some(principal(1)),
-            maturity_e8s_equivalent: 60,
-            joined_community_fund_timestamp_seconds: Some(1),
-            ..neuron_base.clone()
-        },
-        2 => Neuron {
-            id: Some(NeuronId { id: 2 }),
-            controller: Some(principal(1)),
-            maturity_e8s_equivalent: 10,
-            joined_community_fund_timestamp_seconds: Some(1),
-            ..neuron_base.clone()
-        },
-        3 => Neuron {
-            id: Some(NeuronId { id: 3 }),
-            controller: Some(principal(2)),
-            maturity_e8s_equivalent: 30,
-            joined_community_fund_timestamp_seconds: Some(1),
-            ..neuron_base.clone()
-        },
+    static ref SWAP_ID_TO_NEURON: HashMap<u64, Neuron> = {
+        let neuron_base = Neuron {
+            cached_neuron_stake_e8s: 100_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                MAX_DISSOLVE_DELAY_SECONDS,
+            )),
+            ..Default::default()
+        };
 
-        // Unlike the foregoing neurons, this one is NOT a CF neuron.
-        4 => Neuron {
-            id: Some(NeuronId { id: 4 }),
-            controller: Some(principal(1)),
-            maturity_e8s_equivalent: 1_000_000,
-            ..neuron_base
-        },
+        hashmap! {
+            1 => Neuron {
+                id: Some(NeuronId { id: 1 }),
+                controller: Some(principal(1)),
+                maturity_e8s_equivalent: 60,
+                joined_community_fund_timestamp_seconds: Some(1),
+                ..neuron_base.clone()
+            },
+            2 => Neuron {
+                id: Some(NeuronId { id: 2 }),
+                controller: Some(principal(1)),
+                maturity_e8s_equivalent: 10,
+                joined_community_fund_timestamp_seconds: Some(1),
+                ..neuron_base.clone()
+            },
+            3 => Neuron {
+                id: Some(NeuronId { id: 3 }),
+                controller: Some(principal(2)),
+                maturity_e8s_equivalent: 30,
+                joined_community_fund_timestamp_seconds: Some(1),
+                ..neuron_base.clone()
+            },
+
+            // Unlike the foregoing neurons, this one is NOT a CF neuron.
+            4 => Neuron {
+                id: Some(NeuronId { id: 4 }),
+                controller: Some(principal(1)),
+                maturity_e8s_equivalent: 1_000_000,
+                ..neuron_base
+            },
+        }
     };
 
+    static ref CF_PARTICIPANTS: Vec<sns_swap_pb::CfParticipant> = {
+        let mut result = vec![
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: principal(1).to_string(),
+                cf_neurons: vec![
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 1,
+                        amount_icp_e8s: COMMUNITY_FUND_INVESTMENT_E8S * 60 / 100,
+                    },
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 2,
+                        amount_icp_e8s: COMMUNITY_FUND_INVESTMENT_E8S * 10 / 100,
+                    },
+                ],
+            },
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: principal(2).to_string(),
+                cf_neurons: vec![sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 3,
+                    amount_icp_e8s: COMMUNITY_FUND_INVESTMENT_E8S * 30 / 100,
+                }],
+            },
+        ];
+
+        result.sort_by(|p1, p2| p1.hotkey_principal.cmp(&p2.hotkey_principal));
+        result
+    };
+
+    static ref EXPECTED_LIST_DEPLOYED_SNSES_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
+        ExpectedCallCanisterMethodCallArguments {
+            target: SNS_WASM_CANISTER_ID,
+            method_name: "list_deployed_snses",
+            request: Encode!(&ListDeployedSnsesRequest {}).unwrap(),
+        },
+        Ok(Encode!(&ListDeployedSnsesResponse {
+            instances: vec![DeployedSns {
+                swap_canister_id: Some(*TARGET_SWAP_CANISTER_ID),
+                ..Default::default() // Not realistic, but other fields are not actually used.
+            },],
+        })
+        .unwrap()),
+    );
+
+    static ref EXPECTED_SWAP_OPEN_CALL: ExpectedCallCanisterMethodCallArguments<'static> = ExpectedCallCanisterMethodCallArguments {
+        target: CanisterId::try_from(*TARGET_SWAP_CANISTER_ID).unwrap(),
+        method_name: "open",
+        request: Encode!(&sns_swap_pb::OpenRequest {
+            params: Some(SWAP_PARAMS.clone()),
+            cf_participants: CF_PARTICIPANTS.clone(),
+            open_sns_token_swap_proposal_id: Some(1),
+        })
+        .unwrap(),
+    };
+
+    static ref OPEN_SNS_TOKEN_SWAP_PROPOSAL: Proposal = Proposal {
+        title: Some("Open SNS Token Swap".to_string()),
+        summary: "".to_string(),
+        action: Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
+            target_swap_canister_id: Some(*TARGET_SWAP_CANISTER_ID),
+            params: Some(SWAP_PARAMS.clone()),
+            community_fund_investment_e8s: Some(COMMUNITY_FUND_INVESTMENT_E8S),
+        })),
+        ..Default::default()
+    };
+}
+
+const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 61;
+
+#[tokio::test]
+async fn test_open_sns_token_swap_proposal() {
+    // Step 1: Prepare the world.
     let governance_proto = GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons,
+        neurons: SWAP_ID_TO_NEURON.clone(),
         ..Default::default()
     };
 
-    let community_fund_investment_e8s = 61;
-    let mut cf_participants = vec![
-        sns_swap_pb::CfParticipant {
-            hotkey_principal: principal(1).to_string(),
-            cf_neurons: vec![
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 1,
-                    amount_icp_e8s: community_fund_investment_e8s * 60 / 100,
-                },
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 2,
-                    amount_icp_e8s: community_fund_investment_e8s * 10 / 100,
-                },
-            ],
-        },
-        sns_swap_pb::CfParticipant {
-            hotkey_principal: principal(2).to_string(),
-            cf_neurons: vec![sns_swap_pb::CfNeuron {
-                nns_neuron_id: 3,
-                amount_icp_e8s: community_fund_investment_e8s * 30 / 100,
-            }],
-        },
-    ];
-    cf_participants.sort_by(|p1, p2| p1.hotkey_principal.cmp(&p2.hotkey_principal));
     let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
         [
+            EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
             (
-                ExpectedCallCanisterMethodCallArguments {
-                    target: SNS_WASM_CANISTER_ID,
-                    method_name: "list_deployed_snses",
-                    request: Encode!(&ListDeployedSnsesRequest {}).unwrap(),
-                },
-                Ok(Encode!(&ListDeployedSnsesResponse {
-                    instances: vec![DeployedSns {
-                        swap_canister_id: Some(target_swap_canister_id),
-                        ..Default::default() // Not realistic, but other fields are not actually used.
-                    },],
-                })
-                .unwrap()),
-            ),
-            (
-                ExpectedCallCanisterMethodCallArguments {
-                    target: CanisterId::try_from(target_swap_canister_id).unwrap(),
-                    method_name: "open",
-                    request: Encode!(&sns_swap_pb::OpenRequest {
-                        params: Some(params.clone()),
-                        cf_participants: cf_participants.clone(),
-                        open_sns_token_swap_proposal_id: Some(1),
-                    })
-                    .unwrap(),
-                },
-                Ok(Encode!(&sns_swap_pb::SetOpenTimeWindowResponse {}).unwrap()),
+                EXPECTED_SWAP_OPEN_CALL.clone(),
+                Ok(Encode!(&sns_swap_pb::OpenResponse {}).unwrap()),
             ),
         ]
         .into(),
@@ -10911,20 +10937,13 @@ async fn test_open_sns_token_swap_proposal() {
         driver.get_fake_cmc(),
     );
 
-    // Step 2: Run code under test. This is done indirectly via proposal.
+    // Step 2: Run code under test. This is done indirectly via proposal. The
+    // proposal is executed right away, because of the "passage of time", as
+    // experienced via the MockEnvironment in gov.
     gov.make_proposal(
         &NeuronId { id: 1 },
         &principal(1),
-        &Proposal {
-            title: Some("Open SNS Token Swap".to_string()),
-            summary: "".to_string(),
-            action: Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
-                target_swap_canister_id: Some(target_swap_canister_id),
-                params: Some(params),
-                community_fund_investment_e8s: Some(community_fund_investment_e8s),
-            })),
-            ..Default::default()
-        },
+        &*OPEN_SNS_TOKEN_SWAP_PROPOSAL,
     )
     .await
     .unwrap();
@@ -10956,13 +10975,115 @@ async fn test_open_sns_token_swap_proposal() {
         "{:#?}",
         proposal
     );
-    assert_eq!(proposal.cf_participants, cf_participants);
+    assert_eq!(proposal.cf_participants, *CF_PARTICIPANTS);
     assert_eq!(
         proposal.sns_token_swap_lifecycle,
         Some(sns_swap_pb::Lifecycle::Open as i32)
     );
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
+}
+
+#[tokio::test]
+async fn test_open_sns_token_swap_proposal_execution_fails() {
+    // Step 1: Prepare the world.
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: SWAP_ID_TO_NEURON.clone(),
+        ..Default::default()
+    };
+
+    let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
+        [
+            EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
+            (
+                EXPECTED_SWAP_OPEN_CALL.clone(),
+                Err((
+                    Some(999),
+                    "Something went wrong. E.g. invalid request.".to_string(),
+                )),
+            ),
+        ]
+        .into(),
+    ));
+
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        governance_proto,
+        // This is where the main expectation is set. To wit, we expect that
+        // execution of the proposal will cause governance to call out to the
+        // swap canister.
+        Box::new(MockEnvironment {
+            expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+        }),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Run code under test. This is done indirectly via proposal. The
+    // proposal is executed right away, because of the "passage of time", as
+    // experienced via the MockEnvironment in gov.
+    gov.make_proposal(
+        &NeuronId { id: 1 },
+        &principal(1),
+        &*OPEN_SNS_TOKEN_SWAP_PROPOSAL,
+    )
+    .await
+    .unwrap();
+
+    // Step 3: Inspect results.
+
+    // Step 3.1: Make sure expected canister call(s) take place.
+    assert!(
+        expected_call_canister_method_calls
+            .lock()
+            .unwrap()
+            .is_empty(),
+        "Calls that should have been made, but were not: {:#?}",
+        expected_call_canister_method_calls,
+    );
+
+    // Step 3.2: Inspect the proposal. In particular, look at its execution status.
+    assert_eq!(gov.proto.proposals.len(), 1, "{:#?}", gov.proto.proposals);
+    let mut proposals: Vec<(_, _)> = gov.proto.proposals.iter().collect();
+    let (_id, proposal) = proposals.pop().unwrap();
+    assert_eq!(
+        proposal.proposal.as_ref().unwrap().title.as_ref().unwrap(),
+        "Open SNS Token Swap",
+        "{:#?}",
+        proposal.proposal.as_ref().unwrap()
+    );
+    assert_eq!(proposal.executed_timestamp_seconds, 0, "{:#?}", proposal);
+    assert_eq!(proposal.cf_participants, *CF_PARTICIPANTS);
+    assert_eq!(proposal.sns_token_swap_lifecycle, None);
+    assert_ne!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
+    let failure_reason = proposal.failure_reason.clone().unwrap();
+    assert_eq!(
+        failure_reason.error_type,
+        ErrorType::External as i32,
+        "{:#?}",
+        proposal,
+    );
+    for snippet in ["Something went wrong", "999"] {
+        assert!(
+            failure_reason.error_message.contains(snippet),
+            "snippet = {}. proposal = {:#?}.",
+            snippet,
+            proposal,
+        );
+    }
+
+    // Step 3.3: Assert that neurons were restored. In particular, their
+    // maturity is back to what it was originally.
+    let mut observed_neurons = gov.proto.neurons.clone();
+    // Clear recent ballots. This is an expected difference when compared with
+    // the original ID -> neuron map.
+    observed_neurons
+        .get_mut(/* voter_neuron_id = */ &1)
+        .unwrap()
+        .recent_ballots
+        .clear();
+    assert_eq!(observed_neurons, *SWAP_ID_TO_NEURON);
 }
 
 #[tokio::test]

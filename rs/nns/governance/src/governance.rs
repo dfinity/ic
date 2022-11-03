@@ -5021,54 +5021,49 @@ impl Governance {
             )
             .await;
 
-        // Convert result into Result<(), GovernanceError>.
-        let result = result.map(|_resposne_bytes| ()).map_err(|err| {
-            GovernanceError::new_with_message(
+        if let Err(err) = result {
+            let failed_refunds =
+                refund_community_fund_maturity(&mut self.proto.neurons, &cf_participants);
+
+            self.set_proposal_execution_status(proposal_id, Err(GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Call to the open method of swap canister {} failed: {:?}. Request was {:#?}",
-                    target_swap_canister_id, err, request,
+                    "Call to the open method of swap canister {} failed: {:?}. Request was {:#?} \
+                    proposal_id = {:?}. open_sns_token_swap = {:#?}. cf_participants = {:#?}. \
+                    failed_refunds = {:#?}.",
+                    target_swap_canister_id, err, request, proposal_id, open_sns_token_swap, cf_participants, failed_refunds,
                 ),
-            )
-        });
-
-        if result.is_ok() {
-            if let Err(mut err) = Self::set_sns_token_swap_lifecycle_to_open(
-                self.proto.proposals.get_mut(&proposal_id),
-            ) {
-                let failed_refunds =
-                    refund_community_fund_maturity(&mut self.proto.neurons, &cf_participants);
-                err.error_message += &format!(
-                    "proposal_id = {:?}. open_sns_token_swap = {:#?}. failed_refunds = {:#?}",
-                    proposal_id, open_sns_token_swap, failed_refunds,
-                );
-                self.set_proposal_execution_status(proposal_id, Err(err));
-                return;
-            }
+            )));
+            return;
         }
 
-        // TODO(NNS1-1669): We should probably restore maturity if the open call
-        // failed. Not sure though, because that could result in
-        // non-conservation of maturity, depending on what kind of failure we
-        // are dealing with...
+        // Call to the swap canister was a success. Record this fact, and return.
+        if let Some(proposal_data) = self.proto.proposals.get_mut(&proposal_id) {
+            Self::set_sns_token_swap_lifecycle_to_open(proposal_data);
+            self.set_proposal_execution_status(proposal_id, Ok(()));
+            return;
+        }
 
+        // ProposalData not found?!
+        println!(
+            "{}Unable to find ProposalData {} while executing it.",
+            LOG_PREFIX, proposal_id,
+        );
+        let failed_refunds =
+            refund_community_fund_maturity(&mut self.proto.neurons, &cf_participants);
+        let result = Err(GovernanceError::new_with_message(
+            ErrorType::NotFound,
+            format!(
+                "OpenSnsTokenSwap proposal not found while trying to execute it. \
+                proposal_id = {:?}. open_sns_token_swap = {:#?}. cf_participants = {:#?}. \
+                failed_refunds = {:#?}.",
+                proposal_id, open_sns_token_swap, cf_participants, failed_refunds,
+            ),
+        ));
         self.set_proposal_execution_status(proposal_id, result);
     }
 
-    fn set_sns_token_swap_lifecycle_to_open(
-        proposal_data: Option<&mut ProposalData>,
-    ) -> Result<(), GovernanceError> {
-        let proposal_data = match proposal_data {
-            Some(proposal_data) => proposal_data,
-
-            None => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::NotFound,
-                    "OpenSnsTokenSwap proposal not found while trying to execute it.".to_string(),
-                ));
-            }
-        };
-
+    fn set_sns_token_swap_lifecycle_to_open(proposal_data: &mut ProposalData) {
         let lifecycle = &mut proposal_data.sns_token_swap_lifecycle;
         match lifecycle {
             None => {
@@ -5088,8 +5083,6 @@ impl Governance {
                 );
             }
         }
-
-        Ok(())
     }
 
     /// Mark all Neurons controlled by the given principals as having passed
