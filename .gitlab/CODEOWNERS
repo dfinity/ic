@@ -65,6 +65,7 @@
 /testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/networking-team
 
 /testnet/tools/nns_state_deployment.sh                     @dfinity-lab/teams/orchestrator-owners
+/testnet/tools/nns-tools/                                  @dfinity-lab/teams/nns-team
 /testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification
 
 # [Rust]
