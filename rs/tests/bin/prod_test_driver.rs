@@ -383,14 +383,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         ckbtc::minter::test_update_balance
                     ),),
                 ),
-                pot_with_setup(
-                    "minter_pot_update_balance_ledger_failure",
-                    ckbtc::lib::config,
-                    seq!(sys_t(
-                        "minter_update_balance_ledger_failure",
-                        ckbtc::minter::test_update_balance_ledger_failure
-                    ),),
-                ),
             ],
         )
         .with_alert(ENG_FINANCIAL_INTEGRATION),
