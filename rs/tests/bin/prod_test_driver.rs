@@ -354,30 +354,47 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(ENG_CONSENSUS_CHANNEL),
     );
 
-    m.add_suite(suite(
-        "ckbtc_pre_master",
-        vec![pot_with_setup(
-            "minter_pot",
-            ckbtc::lib::config,
-            seq!(
-                par(vec![
-                    sys_t(
-                        "minter_get_btc_address_test",
-                        ckbtc::minter::get_btc_address_test,
+    m.add_suite(
+        suite(
+            "ckbtc_pre_master",
+            vec![
+                pot_with_setup(
+                    "minter_pot_basics",
+                    ckbtc::lib::config,
+                    seq!(
+                        par(vec![
+                            sys_t(
+                                "minter_get_btc_address",
+                                ckbtc::minter::test_get_btc_address
+                            ),
+                            sys_t(
+                                "minter_get_withdrawal_account",
+                                ckbtc::minter::test_get_withdrawal_account
+                            ),
+                        ]),
+                        sys_t("ckbtc_minter_agent", ckbtc::agent::test_ckbtc_minter_agent),
                     ),
-                    sys_t(
-                        "minter_get_withdrawal_account_test",
-                        ckbtc::minter::get_withdrawal_account_test,
-                    ),
-                    sys_t("minter_update_balance", ckbtc::minter::update_balance,),
-                ]),
-                par(vec![sys_t(
-                    "ckbtc_minter_agent_test",
-                    ckbtc::agent::ckbtc_minter_agent_test,
-                ),]),
-            ),
-        )],
-    ));
+                ),
+                pot_with_setup(
+                    "minter_pot_update_balance",
+                    ckbtc::lib::config,
+                    seq!(sys_t(
+                        "minter_update_balance",
+                        ckbtc::minter::test_update_balance
+                    ),),
+                ),
+                pot_with_setup(
+                    "minter_pot_update_balance_ledger_failure",
+                    ckbtc::lib::config,
+                    seq!(sys_t(
+                        "minter_update_balance_ledger_failure",
+                        ckbtc::minter::test_update_balance_ledger_failure
+                    ),),
+                ),
+            ],
+        )
+        .with_alert(ENG_FINANCIAL_INTEGRATION),
+    );
 
     m.add_suite(suite(
         "pre_master",
