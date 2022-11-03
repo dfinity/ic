@@ -1,4 +1,3 @@
-use crate::cmd::BackupArgs;
 use crate::util::{block_on, sleep_secs};
 use ic_recovery::command_helper::exec_cmd; // TODO: refactor this and next, out of ic_recovery
 use ic_recovery::file_sync_helper::download_binary;
@@ -6,7 +5,6 @@ use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};
 use serde_json::Value;
 use slog::{error, info, warn, Logger};
-use std::convert::TryFrom;
 use std::ffi::OsStr;
 use std::net::{IpAddr, Ipv6Addr};
 use std::path::PathBuf;
@@ -25,24 +23,6 @@ pub struct BackupHelper {
 }
 
 impl BackupHelper {
-    pub fn new(log: Logger, args: BackupArgs) -> Result<Self, String> {
-        info!(log, "NNS Url: {:?}", args.nns_url);
-        info!(log, "Subnet ID: {:?}", args.subnet_id);
-        info!(log, "Data root: {:?}", args.data_root);
-        info!(log, "Replica version: {:?}", args.replica_version);
-        info!(log, "testnet: {}", args.testnet);
-
-        Ok(Self {
-            replica_version: ReplicaVersion::try_from(args.replica_version)
-                .expect("Wrong format of the replica version"),
-            nns_url: args.nns_url,
-            subnet_id: args.subnet_id,
-            root_dir: args.data_root,
-            testnet: args.testnet,
-            log,
-        })
-    }
-
     fn binary_dir(&self) -> PathBuf {
         self.root_dir
             .join(format!("binaries/{}", self.replica_version))
