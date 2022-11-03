@@ -1,14 +1,17 @@
 use crate::util::{block_on, sleep_secs};
 use ic_recovery::command_helper::exec_cmd; // TODO: refactor this and next, out of ic_recovery
 use ic_recovery::file_sync_helper::download_binary;
+use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_client_helpers::node::NodeRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};
-use serde_json::Value;
 use slog::{error, info, warn, Logger};
 use std::ffi::OsStr;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 
 const RETRIES_RSYNC_HOST: u64 = 5;
 const RETRIES_BINARY_DOWNLOAD: u64 = 3;
@@ -18,7 +21,8 @@ pub struct BackupHelper {
     pub subnet_id: SubnetId,
     pub nns_url: String,
     pub root_dir: PathBuf,
-    pub testnet: bool,
+    pub ssh_credentials: String,
+    pub registry_client: Arc<RegistryClientImpl>,
     pub log: Logger,
 }
 
@@ -61,14 +65,13 @@ impl BackupHelper {
     }
 
     fn username(&self) -> String {
-        if self.testnet { "admin" } else { "backup" }.to_string()
+        "backup".to_string()
     }
 
     pub fn download_binaries(&self) {
         if !self.binary_dir().exists() {
             std::fs::create_dir_all(self.binary_dir()).expect("Failure creating a directory");
         }
-        self.download_binary("ic-admin".to_string());
         self.download_binary("ic-replay".to_string());
         self.download_binary("sandbox_launcher".to_string());
         self.download_binary("canister_sandbox".to_string());
@@ -157,11 +160,12 @@ impl BackupHelper {
         arguments: &[&str],
     ) -> Result<(), String> {
         let mut cmd = Command::new("rsync");
-        cmd.arg("-e")
-            .arg("ssh -o StrictHostKeyChecking=no")
-            // TODO: add login credentials for the user "backup", also 600 access right to the private key file
-            //.arg(format!("ssh -o StrictHostKeyChecking=no -i {}", private_key_file))
-            .arg("--timeout=600");
+        cmd.arg("-e");
+        cmd.arg(format!(
+            "ssh -o StrictHostKeyChecking=no -i {}",
+            self.ssh_credentials
+        ));
+        cmd.arg("--timeout=600");
         cmd.args(arguments);
         cmd.arg("--min-size=1").arg(remote_dir).arg(local_dir);
         info!(self.log, "Will execute: {:?}", cmd);
@@ -191,47 +195,41 @@ impl BackupHelper {
         }
     }
 
-    // TODO: better implementation once we get registry with the replicator
-    pub fn collect_subnet_nodes(&self) -> Vec<IpAddr> {
-        let ic_admin = self.binary_file("ic-admin");
-        let mut cmd = Command::new(ic_admin);
-        cmd.arg("--nns-url")
-            .arg(&self.nns_url)
-            .arg("get-subnet")
-            .arg(&self.subnet_id.to_string())
-            .stdout(Stdio::piped());
-        if let Ok(Some(stdout)) = exec_cmd(&mut cmd) {
-            if let Ok(v) = serde_json::from_str::<Value>(&stdout) {
-                let arr = &v["records"][0]["value"]["membership"];
-                if let Some(nodes) = arr.as_array() {
-                    let mut node_ips = Vec::new();
-                    for n in nodes {
-                        if let Some(node_id) = n.as_str() {
-                            let ic_admin = self.binary_file("ic-admin");
-                            let mut cmd2 = Command::new(ic_admin);
-                            cmd2.arg("--nns-url")
-                                .arg(&self.nns_url)
-                                .arg("get-node")
-                                .arg(node_id)
-                                .stdout(Stdio::piped());
-                            if let Ok(Some(stdout)) = exec_cmd(&mut cmd2) {
-                                if let Some(pos) = stdout.find("ip_addr: \"") {
-                                    let str2 = stdout[(pos + 10)..].to_string();
-                                    if let Some(pos2) = str2.find('"') {
-                                        let ip_addr = str2[..pos2].to_string();
-                                        if let Ok(ip_v6) = ip_addr.parse::<Ipv6Addr>() {
-                                            node_ips.push(IpAddr::V6(ip_v6));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    return node_ips;
-                }
+    pub fn collect_subnet_nodes(&self) -> Result<Vec<IpAddr>, String> {
+        let subnet_id = self.subnet_id;
+        let result = block_on(async {
+            if let Err(err) = self.registry_client.try_polling_latest_version(200) {
+                return Err(format!("couldn't poll the registry: {:?}", err));
+            };
+            let version = self.registry_client.get_latest_version();
+            match self
+                .registry_client
+                .get_node_ids_on_subnet(subnet_id, version)
+            {
+                Ok(Some(node_ids)) => Ok(node_ids
+                    .into_iter()
+                    .filter_map(|node_id| {
+                        self.registry_client
+                            .get_transport_info(node_id, version)
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>()),
+                other => Err(format!(
+                    "no node ids found in the registry for subnet_id={}: {:?}",
+                    subnet_id, other
+                )),
             }
-        }
-        Vec::new()
+        })?;
+        result
+            .into_iter()
+            .filter_map(|node_record| {
+                node_record.http.map(|http| {
+                    http.ip_addr.parse().map_err(|err| {
+                        format!("couldn't parse ip address from the registry: {:?}", err)
+                    })
+                })
+            })
+            .collect()
     }
 
     fn last_checkpoint(&self) -> u64 {

@@ -8,6 +8,9 @@ clap = { version = "3.1.6", features = ["derive"] }
 ic-config = { path = "../config" }
 ic-types = { path = "../types/types" }
 ic-recovery = { path = "../recovery" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
+ic-registry-local-store = { path = "../registry/local_store" }
 json5 = "0.4.1"
 rand = "0.8"
 serde = { version = "1.0.99", features = ["derive"] }
