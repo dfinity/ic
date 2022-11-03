@@ -60,8 +60,7 @@ use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
 use dfn_core::api::spawn;
 use ic_crypto_sha::Sha256;
-use ic_nervous_system_common::ledger;
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_nervous_system_common::{ledger, ledger::Ledger, validate_proposal_url, NervousSystemError};
 use ic_sns_swap::pb::v1::RestoreDappControllersRequest;
 use icp_ledger::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
@@ -79,6 +78,8 @@ const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
 const PROPOSAL_SUMMARY_BYTES_MAX: usize = 15000;
 // 2048 characters
 const PROPOSAL_URL_CHAR_MAX: usize = 2048;
+// 10 characters
+const PROPOSAL_URL_CHAR_MIN: usize = 10;
 // 70 KB (for executing NNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 
@@ -5349,12 +5350,18 @@ impl Governance {
                 PROPOSAL_SUMMARY_BYTES_MAX,
                 proposal.summary.len(),
             ));
-        } else if proposal.url.chars().count() > PROPOSAL_URL_CHAR_MAX {
-            return invalid_proposal(format!(
-                "The maximum proposal url size is {} characters, this proposal has: {} characters",
+        }
+
+        // An empty string will fail validation as it is not a valid url,
+        // but it's fine for us.
+        if !proposal.url.is_empty() {
+            validate_proposal_url(
+                &proposal.url,
+                PROPOSAL_URL_CHAR_MIN,
                 PROPOSAL_URL_CHAR_MAX,
-                proposal.url.chars().count()
-            ));
+                "Proposal url",
+            )
+            .map_err(|err| invalid_proposal(err).unwrap_err())?;
         }
 
         // Require that oneof action is populated.

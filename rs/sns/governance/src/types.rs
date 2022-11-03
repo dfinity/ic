@@ -18,7 +18,7 @@ use async_trait::async_trait;
 
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
-use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
 
 use crate::pb::v1::governance::neuron_in_flight_command::SyncCommand;
 use crate::pb::v1::manage_neuron_response::StakeMaturityResponse;
@@ -1057,18 +1057,12 @@ impl SnsMetadata {
     }
 
     pub fn validate_url(url: &str) -> Result<(), String> {
-        if url.len() > Self::MAX_URL_LENGTH {
-            return Err(format!(
-                "SnsMetadata.url must be less than {} characters",
-                Self::MAX_URL_LENGTH
-            ));
-        } else if url.len() < Self::MIN_URL_LENGTH {
-            return Err(format!(
-                "SnsMetadata.url must be greater than {} characters",
-                Self::MIN_URL_LENGTH
-            ));
-        }
-        Ok(())
+        validate_proposal_url(
+            url,
+            Self::MIN_URL_LENGTH,
+            Self::MAX_URL_LENGTH,
+            "SnsMetadata.url",
+        )
     }
 
     pub fn validate_logo(logo: &str) -> Result<(), String> {
@@ -2236,7 +2230,10 @@ pub(crate) mod tests {
     fn test_sns_metadata_validate() {
         let default = SnsMetadata {
             logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
-            url: Some("X".repeat(SnsMetadata::MIN_URL_LENGTH)),
+            url: Some(format!(
+                "https://{}.org",
+                "x".repeat(1.max(SnsMetadata::MIN_URL_LENGTH.saturating_sub("http://.org".len())))
+            )),
             name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH)),
             description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH)),
         };
@@ -2279,6 +2276,18 @@ pub(crate) mod tests {
                 ..default.clone()
             },
             SnsMetadata {
+                url: Some("file://internetcomputer.org".to_string()),
+                ..default.clone()
+            },
+            SnsMetadata {
+                url: Some("mailto:example@internetcomputer.org".to_string()),
+                ..default.clone()
+            },
+            SnsMetadata {
+                url: Some("internetcomputer".to_string()),
+                ..default.clone()
+            },
+            SnsMetadata {
                 description: Some("X".repeat(SnsMetadata::MAX_DESCRIPTION_LENGTH + 1)),
                 ..default.clone()
             },
@@ -2289,7 +2298,7 @@ pub(crate) mod tests {
         ];
 
         for sns_metadata in invalid_sns_metadata {
-            assert!(sns_metadata.validate().is_err());
+            sns_metadata.validate().unwrap_err();
         }
 
         assert!(default.validate().is_ok());

@@ -1371,7 +1371,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
         }),
 
         sns_metadata: Some(SnsMetadata {
-            url: Some("foo bar baz".to_string()),
+            url: Some("https://internetcomputer.org/".to_string()),
             logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
             name: Some("foo bar baz".to_string()),
             description: Some("foo bar baz".to_string()),
