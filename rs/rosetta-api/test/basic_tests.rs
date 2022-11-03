@@ -434,7 +434,6 @@ fn verify_balances(scribe: &Scribe, blocks: &Blocks, start_idx: usize) {
         assert_eq!(
             *hb,
             blocks
-                .block_store
                 .get_hashed_block(&hb.index)
                 .ok()
                 .ok_or(false)
@@ -606,10 +605,7 @@ async fn load_from_store_test() {
     for hb in &scribe.blockchain {
         blocks.push(hb.clone()).unwrap();
         if hb.index < 20 {
-            blocks
-                .block_store
-                .set_hashed_block_to_verified(hb.index)
-                .unwrap();
+            blocks.set_hashed_block_to_verified(hb.index).unwrap();
             last_verified = hb.index;
         }
     }
@@ -635,10 +631,7 @@ async fn load_from_store_test() {
     assert!(!blocks.is_verified_by_idx(&20).unwrap());
     assert!(blocks.get_account_balance(&some_acc, &20).is_err());
     last_verified = (scribe.blockchain.len() - 1) as u64;
-    blocks
-        .block_store
-        .set_hashed_block_to_verified(last_verified)
-        .unwrap();
+    blocks.set_hashed_block_to_verified(last_verified).unwrap();
 
     assert!(blocks.get_account_balance(&some_acc, &20).is_ok());
 
@@ -705,10 +698,7 @@ async fn load_unverified_test() {
     for hb in &scribe.blockchain {
         blocks.push(hb.clone()).unwrap();
         if hb.index < 20 {
-            blocks
-                .block_store
-                .set_hashed_block_to_verified(hb.index)
-                .unwrap();
+            blocks.set_hashed_block_to_verified(hb.index).unwrap();
         }
     }
 
@@ -724,10 +714,7 @@ async fn load_unverified_test() {
     let mut blocks = Blocks::new_persistent(location);
     blocks.load_from_store().unwrap();
     let last_verified = (scribe.blockchain.len() - 1) as u64;
-    blocks
-        .block_store
-        .set_hashed_block_to_verified(last_verified)
-        .unwrap();
+    blocks.set_hashed_block_to_verified(last_verified).unwrap();
 
     assert!(blocks.is_verified_by_idx(&49).is_err());
     assert!(blocks.is_verified_by_idx(&50).unwrap());
@@ -754,10 +741,10 @@ async fn store_batch_test() {
     }
 
     assert_eq!(
-        blocks.block_store.get_hashed_block(&20).unwrap(),
+        blocks.get_hashed_block(&20).unwrap(),
         *scribe.blockchain.get(20).unwrap()
     );
-    assert!(blocks.block_store.get_hashed_block(&21).ok().is_none());
+    assert!(blocks.get_hashed_block(&21).ok().is_none());
 
     let mut part2: Vec<HashedBlock> = scribe.blockchain.iter().skip(21).cloned().collect();
 
@@ -767,35 +754,28 @@ async fn store_batch_test() {
     blocks.push_batch(part2.clone()).unwrap();
 
     assert_eq!(
-        blocks.block_store.get_hashed_block(&30).unwrap(),
+        blocks.get_hashed_block(&30).unwrap(),
         *scribe.blockchain.get(30).unwrap()
     );
-    assert!(blocks.block_store.get_hashed_block(&31).ok().is_none());
+    assert!(blocks.get_hashed_block(&31).ok().is_none());
 
     assert!(blocks.push_batch(part3.clone()).is_err());
     assert_eq!(
-        blocks.block_store.get_hashed_block(&30).unwrap(),
+        blocks.get_hashed_block(&30).unwrap(),
         *scribe.blockchain.get(30).unwrap()
     );
-    assert!(blocks.block_store.get_hashed_block(&31).ok().is_none());
+    assert!(blocks.get_hashed_block(&31).ok().is_none());
 
     part3.pop();
 
     blocks.push_batch(part3).unwrap();
     let last_idx = scribe.blockchain.back().unwrap().index;
     assert_eq!(
-        blocks.block_store.get_hashed_block(&last_idx).unwrap(),
+        blocks.get_hashed_block(&last_idx).unwrap(),
         *scribe.blockchain.back().unwrap()
     );
-    assert!(blocks
-        .block_store
-        .get_hashed_block(&(last_idx + 1))
-        .ok()
-        .is_none());
+    assert!(blocks.get_hashed_block(&(last_idx + 1)).ok().is_none());
 
-    blocks
-        .block_store
-        .set_hashed_block_to_verified(last_idx)
-        .unwrap();
+    blocks.set_hashed_block_to_verified(last_idx).unwrap();
     verify_balances(&scribe, &blocks, 0);
 }

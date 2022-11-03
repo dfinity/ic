@@ -296,7 +296,7 @@ impl RosettaRequestHandler {
             Block::decode(tip.block).unwrap().timestamp.into(),
         )?;
 
-        let genesis_block = blocks.block_store.get_hashed_block(&0)?;
+        let genesis_block = blocks.get_hashed_block(&0)?;
         let genesis_block_id = convert::block_id(&genesis_block)?;
         let peers = vec![];
         let oldest_block_id = if first.index != 0 {
@@ -353,12 +353,10 @@ impl RosettaRequestHandler {
         // correctly to produce the requested transaction range.
 
         let last_idx = blocks
-            .block_store
             .get_latest_verified_hashed_block()
             .map_err(ApiError::from)?
             .index;
         let mut first_idx = blocks
-            .block_store
             .get_first_verified_hashed_block()
             .map_err(ApiError::from)?
             .index;
@@ -371,7 +369,6 @@ impl RosettaRequestHandler {
         let start = end.saturating_sub(limit as u64).max(first_idx);
 
         let block_range = blocks
-            .block_store
             .get_hashed_block_range(start..end)
             .map_err(ApiError::from)?;
         let mut txs: Vec<BlockTransaction> = Vec::new();
@@ -473,7 +470,7 @@ impl RosettaRequestHandler {
             let tid = ic_ledger_core::block::HashOf::try_from(tid)
                 .map_err(|e| ApiError::InvalidTransactionId(false, e.into()))?;
 
-            if let Ok(i) = blocks.block_store.get_block_idx_by_transaction_hash(&tid) {
+            if let Ok(i) = blocks.get_block_idx_by_transaction_hash(&tid) {
                 heights.push(i);
                 total_count += 1;
             }
@@ -513,10 +510,9 @@ impl RosettaRequestHandler {
         }
 
         let mut txs: Vec<BlockTransaction> = Vec::new();
-
         for i in heights {
-            if blocks.is_verified_by_idx(&i)? {
-                let hb = blocks.block_store.get_hashed_block(&i)?;
+            if i <= last_idx {
+                let hb = blocks.get_hashed_block(&i)?;
                 txs.push(BlockTransaction::new(
                     convert::block_id(&hb)?,
                     convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
@@ -572,8 +568,8 @@ fn create_parent_block_id(
 ) -> Result<BlockIdentifier, ApiError> {
     // For the first block, we return the block itself as its parent
     let idx = std::cmp::max(0, block_height_to_index(block.index)? - 1);
-    if blocks.block_store.is_verified_by_idx(&(idx as u64))? {
-        let parent = blocks.block_store.get_hashed_block(&(idx as u64))?;
+    if blocks.is_verified_by_idx(&(idx as u64))? {
+        let parent = blocks.get_hashed_block(&(idx as u64))?;
         convert::block_id(&parent)
     } else {
         Err(ApiError::InvalidBlockId(true, Default::default()))
@@ -600,8 +596,10 @@ fn get_block(
             }
 
             let idx = block_height as usize;
-            assert!(blocks.block_store.is_verified_by_idx(&(idx as u64))?);
-            let block = blocks.block_store.get_hashed_block(&(idx as u64))?;
+            if !blocks.is_verified_by_idx(&(idx as u64))? {
+                return Err(ApiError::InvalidBlockId(false, Default::default()));
+            }
+            let block = blocks.get_hashed_block(&(idx as u64))?;
             if block.hash != hash {
                 return Err(ApiError::InvalidBlockId(false, Default::default()));
             }
@@ -616,8 +614,8 @@ fn get_block(
                 return Err(ApiError::InvalidBlockId(false, Default::default()));
             }
             let idx = block_height as usize;
-            if blocks.block_store.is_verified_by_idx(&(idx as u64))? {
-                Ok(blocks.block_store.get_hashed_block(&(idx as u64))?)
+            if blocks.is_verified_by_idx(&(idx as u64))? {
+                Ok(blocks.get_hashed_block(&(idx as u64))?)
             } else {
                 Err(ApiError::InvalidBlockId(true, Default::default()))
             }
@@ -628,9 +626,9 @@ fn get_block(
         }) => {
             let hash: ic_ledger_core::block::HashOf<ic_ledger_core::block::EncodedBlock> =
                 convert::to_hash(&block_hash)?;
-            if blocks.block_store.is_verified_by_hash(&hash)? {
-                let idx = blocks.block_store.get_block_idx_by_block_hash(&hash)?;
-                Ok(blocks.block_store.get_hashed_block(&(idx as u64))?)
+            if blocks.is_verified_by_hash(&hash)? {
+                let idx = blocks.get_block_idx_by_block_hash(&hash)?;
+                Ok(blocks.get_hashed_block(&(idx as u64))?)
             } else {
                 Err(ApiError::InvalidBlockId(true, Default::default()))
             }
@@ -640,7 +638,6 @@ fn get_block(
             hash: None,
         })
         | None => blocks
-            .block_store
             .get_latest_verified_hashed_block()
             .map_err(ApiError::from),
     }
