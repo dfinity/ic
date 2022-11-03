@@ -1137,12 +1137,10 @@ pub struct CanisterCallError {
     ::prost::Message,
 )]
 pub struct ErrorRefundIcpRequest {
-    /// The amount of ICP to transfer.
-    #[prost(uint64, tag = "1")]
-    pub icp_e8s: u64,
-    /// If specified, use this as 'fee' instead of the default.
-    #[prost(uint64, tag = "2")]
-    pub fee_override_e8s: u64,
+    /// Principal who originally sent the funds to us, and is now asking for any
+    /// unaccepted balance to be returned.
+    #[prost(message, optional, tag = "1")]
+    pub source_principal_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 #[derive(
     candid::CandidType,
@@ -1152,7 +1150,104 @@ pub struct ErrorRefundIcpRequest {
     PartialEq,
     ::prost::Message,
 )]
-pub struct ErrorRefundIcpResponse {}
+pub struct ErrorRefundIcpResponse {
+    #[prost(oneof = "error_refund_icp_response::Result", tags = "1, 2")]
+    pub result: ::core::option::Option<error_refund_icp_response::Result>,
+}
+/// Nested message and enum types in `ErrorRefundIcpResponse`.
+pub mod error_refund_icp_response {
+    /// Request was completed successfully.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Ok {
+        /// The ledger transfer went through at this block height.
+        #[prost(uint64, optional, tag = "1")]
+        pub block_height: ::core::option::Option<u64>,
+    }
+    /// Request was not successful, and no funds were transferred.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Err {
+        #[prost(enumeration = "err::Type", optional, tag = "1")]
+        pub error_type: ::core::option::Option<i32>,
+        #[prost(string, optional, tag = "2")]
+        pub description: ::core::option::Option<::prost::alloc::string::String>,
+    }
+    /// Nested message and enum types in `Err`.
+    pub mod err {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            comparable::Comparable,
+            Clone,
+            Copy,
+            Debug,
+            PartialEq,
+            Eq,
+            Hash,
+            PartialOrd,
+            Ord,
+            ::prost::Enumeration,
+        )]
+        #[repr(i32)]
+        pub enum Type {
+            Unspecified = 0,
+            /// There is something wrong with the request. If repeated, the request
+            /// will always be rejected.
+            InvalidRequest = 1,
+            /// Most likely, the canister is in the wrong Lifecycle. More generally,
+            /// the system is not yet in a state where the request can be fulfilled,
+            /// but it might enter a suitable state later. In this case, the same
+            /// request might be accepted later.
+            Precondition = 2,
+            /// Most likely, a request to the ledger failed, in which case, it can be
+            /// assumed that no funds were transferred. In general, this is caused by
+            /// something outside this canister, which usually means some other
+            /// canister (such as ledger).
+            External = 3,
+        }
+        impl Type {
+            /// String value of the enum field names used in the ProtoBuf definition.
+            ///
+            /// The values are not transformed in any way and thus are considered stable
+            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+            pub fn as_str_name(&self) -> &'static str {
+                match self {
+                    Type::Unspecified => "TYPE_UNSPECIFIED",
+                    Type::InvalidRequest => "TYPE_INVALID_REQUEST",
+                    Type::Precondition => "TYPE_PRECONDITION",
+                    Type::External => "TYPE_EXTERNAL",
+                }
+            }
+        }
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Ok(Ok),
+        #[prost(message, tag = "2")]
+        Err(Err),
+    }
+}
 /// Lifecycle states of the swap canister. The details of their meanings
 /// are provided in the documentation of the `Swap` message.
 #[derive(

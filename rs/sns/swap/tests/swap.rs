@@ -31,10 +31,7 @@ use ic_sns_swap::{
         Lifecycle::{Committed, Open},
         *,
     },
-    swap::{
-        principal_to_subaccount, NnsGovernanceClient, SnsGovernanceClient, TransferResult,
-        SECONDS_PER_DAY,
-    },
+    swap::{principal_to_subaccount, NnsGovernanceClient, SnsGovernanceClient, SECONDS_PER_DAY},
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use maplit::{btreemap, hashset};
@@ -1679,17 +1676,32 @@ fn test_error_refund() {
     );
     // Refund must fail as the swap is not committed or aborted.
     {
+        use error_refund_icp_response::err::Type::Precondition;
         match swap
             .error_refund_icp(
-                *TEST_USER2_PRINCIPAL,
-                Tokens::from_e8s(10 * E8),
-                DEFAULT_TRANSFER_FEE,
+                SWAP_CANISTER_ID,
+                &ErrorRefundIcpRequest {
+                    source_principal_id: Some(*TEST_USER2_PRINCIPAL),
+                },
                 &mock_stub(vec![]),
             )
             .now_or_never()
             .unwrap()
         {
-            TransferResult::Failure(_) => (),
+            ErrorRefundIcpResponse {
+                result:
+                    Some(error_refund_icp_response::Result::Err(error_refund_icp_response::Err {
+                        error_type: Some(error_type),
+                        description: Some(description),
+                    })),
+            } => {
+                assert_eq!(error_type, Precondition as i32);
+                assert!(
+                    description.contains("ABORTED or COMMITTED"),
+                    "{}",
+                    description,
+                );
+            }
             _ => panic!("Expected error refund to fail!"),
         }
     }
@@ -1707,50 +1719,87 @@ fn test_error_refund() {
     // Perhaps USER2 (who never participated in the swap) sent 10 ICP in error?
     match swap
         .error_refund_icp(
-            *TEST_USER2_PRINCIPAL,
-            Tokens::from_e8s(10 * E8),
-            DEFAULT_TRANSFER_FEE,
-            &mock_stub(vec![LedgerExpect::TransferFunds(
-                10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
-                DEFAULT_TRANSFER_FEE.get_e8s(),
-                Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone())),
-                Account {
-                    owner: *TEST_USER2_PRINCIPAL,
-                    subaccount: None,
-                },
-                0,
-                Ok(1066),
-            )]),
+            SWAP_CANISTER_ID,
+            &ErrorRefundIcpRequest {
+                source_principal_id: Some(*TEST_USER2_PRINCIPAL),
+            },
+            &mock_stub(vec![
+                LedgerExpect::AccountBalance(
+                    Account {
+                        owner: SWAP_CANISTER_ID.into(),
+                        subaccount: Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
+                    },
+                    Ok(Tokens::from_e8s(10 * E8)),
+                ),
+                LedgerExpect::TransferFunds(
+                    10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                    DEFAULT_TRANSFER_FEE.get_e8s(),
+                    Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone())),
+                    Account {
+                        owner: *TEST_USER2_PRINCIPAL,
+                        subaccount: None,
+                    },
+                    0,
+                    Ok(1066),
+                ),
+            ]),
         )
         .now_or_never()
         .unwrap()
     {
         // Refund should succeed.
-        TransferResult::Success(x) => assert_eq!(x, 1066),
+        ErrorRefundIcpResponse {
+            result:
+                Some(error_refund_icp_response::Result::Ok(error_refund_icp_response::Ok {
+                    block_height: Some(block_height),
+                })),
+        } => assert_eq!(block_height, 1066),
         _ => panic!("Expected error refund to succeed"),
     }
     // Perhaps USER3 didn't actually send 10 ICP in error, but tries to get a refund anyway?
     match swap
         .error_refund_icp(
-            *TEST_USER3_PRINCIPAL,
-            Tokens::from_e8s(10 * E8),
-            DEFAULT_TRANSFER_FEE,
-            &mock_stub(vec![LedgerExpect::TransferFunds(
-                10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
-                DEFAULT_TRANSFER_FEE.get_e8s(),
-                Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL.clone())),
-                Account {
-                    owner: *TEST_USER3_PRINCIPAL,
-                    subaccount: None,
-                },
-                0,
-                Err(100),
-            )]),
+            SWAP_CANISTER_ID,
+            &ErrorRefundIcpRequest {
+                source_principal_id: Some(*TEST_USER3_PRINCIPAL),
+            },
+            &mock_stub(vec![
+                LedgerExpect::AccountBalance(
+                    Account {
+                        owner: SWAP_CANISTER_ID.get(),
+                        subaccount: Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL.clone())),
+                    },
+                    Ok(Tokens::from_e8s(10 * E8)),
+                ),
+                LedgerExpect::TransferFunds(
+                    10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                    DEFAULT_TRANSFER_FEE.get_e8s(),
+                    Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL.clone())),
+                    Account {
+                        owner: *TEST_USER3_PRINCIPAL,
+                        subaccount: None,
+                    },
+                    0, // memo
+                    Err(100),
+                ),
+            ]),
         )
         .now_or_never()
         .unwrap()
     {
-        TransferResult::Failure(_) => (),
+        ErrorRefundIcpResponse {
+            result:
+                Some(error_refund_icp_response::Result::Err(error_refund_icp_response::Err {
+                    error_type: Some(error_type),
+                    description: Some(description),
+                })),
+        } => {
+            assert_eq!(
+                error_type,
+                error_refund_icp_response::err::Type::External as i32,
+            );
+            assert!(description.contains("ransfer"), "{}", description);
+        }
         _ => panic!("Expected error refund to fail"),
     }
     // Perhaps USER1 (who has a buyer record) sent 10 extra ICP in
@@ -1758,15 +1807,28 @@ fn test_error_refund() {
     // "collected" (sweep).
     match swap
         .error_refund_icp(
-            *TEST_USER1_PRINCIPAL,
-            Tokens::from_e8s(10 * E8),
-            DEFAULT_TRANSFER_FEE,
+            SWAP_CANISTER_ID,
+            &ErrorRefundIcpRequest {
+                source_principal_id: Some(*TEST_USER1_PRINCIPAL),
+            },
             &mock_stub(vec![]),
         )
         .now_or_never()
         .unwrap()
     {
-        TransferResult::Failure(_) => (),
+        ErrorRefundIcpResponse {
+            result:
+                Some(error_refund_icp_response::Result::Err(error_refund_icp_response::Err {
+                    error_type: Some(error_type),
+                    description: Some(description),
+                })),
+        } => {
+            assert_eq!(
+                error_type,
+                error_refund_icp_response::err::Type::Precondition as i32,
+            );
+            assert!(description.contains("escrow"), "{}", description);
+        }
         _ => panic!("Expected error refund to fail"),
     }
     // "Sweep" all ICP, going to the governance canister.
@@ -1803,25 +1865,40 @@ fn test_error_refund() {
     // participated in the swap have been disbursed.
     match swap
         .error_refund_icp(
-            *TEST_USER1_PRINCIPAL,
-            Tokens::from_e8s(10 * E8),
-            DEFAULT_TRANSFER_FEE,
-            &mock_stub(vec![LedgerExpect::TransferFunds(
-                10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
-                DEFAULT_TRANSFER_FEE.get_e8s(),
-                Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
-                Account {
-                    owner: *TEST_USER1_PRINCIPAL,
-                    subaccount: None,
-                },
-                0,
-                Ok(1066),
-            )]),
+            SWAP_CANISTER_ID,
+            &ErrorRefundIcpRequest {
+                source_principal_id: Some(*TEST_USER1_PRINCIPAL),
+            },
+            &mock_stub(vec![
+                LedgerExpect::AccountBalance(
+                    Account {
+                        owner: SWAP_CANISTER_ID.get(),
+                        subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
+                    },
+                    Ok(Tokens::from_e8s(10 * E8)),
+                ),
+                LedgerExpect::TransferFunds(
+                    10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                    DEFAULT_TRANSFER_FEE.get_e8s(),
+                    Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
+                    Account {
+                        owner: *TEST_USER1_PRINCIPAL,
+                        subaccount: None,
+                    },
+                    0, // memo
+                    Ok(1066),
+                ),
+            ]),
         )
         .now_or_never()
         .unwrap()
     {
-        TransferResult::Success(_) => (),
+        ErrorRefundIcpResponse {
+            result:
+                Some(error_refund_icp_response::Result::Ok(error_refund_icp_response::Ok {
+                    block_height: Some(block_height),
+                })),
+        } => assert_eq!(block_height, 1066),
         _ => panic!("Expected error refund to succeed"),
     }
 }
