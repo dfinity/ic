@@ -9,7 +9,7 @@ load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
 img_bases = {
-    "dev": "dfinity/guestos-base-dev@sha256:48f83b96fe53d82d028750593f21321984c19a40efeaada463d57609c592aef8",
+    "dev": "dfinity/guestos-base-dev@sha256:df0c0eba7f1ffdc74c592a83b7d7044c27a0d71327c823cb0273219d2bc9d734",
     "prod": "dfinity/guestos-base@sha256:104fad74a45cd19419aa8abf15fc509d0bebfb971230a9810ddcd6e84b3bd856",
 }
 
