@@ -136,7 +136,6 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
-    crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":build_script",
@@ -147,6 +146,21 @@ rust_canister(
 optimized_canister(
     name = "sns-governance-canister",
     wasm = ":sns-governance-canister-raw",
+)
+
+rust_canister(
+    name = "sns-governance-canister-test-raw",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    compile_data = ["canister/governance.did"],
+    crate_features = ["test"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":governance"] + [":build_script"],
+)
+
+optimized_canister(
+    name = "sns-governance-canister-test",
+    wasm = ":sns-governance-canister-test-raw",
 )
 
 rust_test(
