@@ -203,9 +203,9 @@ EOF
         ${CONFIG_TMP}/ssh_authorized_keys \
         ${CONFIG_TMP}/ssh_authorized_keys/{admin,backup,readonly}
 
-    #tar -cvf "${TMP_DIR}/config.tar" -C "${TMP_DIR}/" config/
     cd ${TMP_DIR}
-    tar -cvf "${TMP_DIR}/config.tar" -C "${TMP_DIR}/" config/
+    # tar flags set for build determinism
+    tar -cvf "${TMP_DIR}/config.tar" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMP_DIR}/" config/
     cd -
 }
 

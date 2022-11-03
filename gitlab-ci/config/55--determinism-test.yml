@@ -78,3 +78,27 @@ build-determinism-host-update-img:
     - |
       set -eExuo pipefail
       ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
+
+build-determinism-setup-os:
+  extends:
+    - .ubuntu-nix-docker-k8s-pinned-dc
+    - .rules-parent-pipeline
+    - .rules-hostos
+  stage: build-determinism-test
+  needs:
+    - job: setup-os-diskimg
+      artifacts: false
+    - job: setup-os-diskimg-determinism
+      artifacts: false
+    - job: build-determinism-binaries
+      artifacts: false
+  artifacts:
+    paths:
+      - artifacts
+  variables:
+    PATH0: "setup-os/disk-img"
+    PATH1: "setup-os/disk-img-determinism"
+  script:
+    - |
+      set -eExuo pipefail
+      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
