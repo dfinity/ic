@@ -34,7 +34,8 @@ use ic_sns_root::{
     CanisterIdRecord, CanisterStatusResultV2,
 };
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, params::NeuronBasketConstructionParameters, set_dapp_controllers_call_result,
+    self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
+    set_dapp_controllers_call_result, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
     SetDappControllersCallResult, SetDappControllersResponse,
 };
 use ic_sns_wasm::pb::v1::SnsCanisterIds;
@@ -847,6 +848,19 @@ fn swap_lifecycle_sad() {
         );
     }
 
+    // TEST_USER2_PRINCIPAL sends this to the swap, but does not tell the swap
+    // canister about it. After calling the swap canister's finalize_swap Candid
+    // method, this user is then eligible to request a refund for this
+    // "half-baked" participation.
+    const HALF_BAKED_PARTICIPATION_AMOUNT_E8S: u64 = E8;
+    send_participation_funds(
+        &mut state_machine,
+        sns_canister_ids.swap.unwrap().try_into().unwrap(),
+        *TEST_USER2_PRINCIPAL,
+        Tokens::from_e8s(HALF_BAKED_PARTICIPATION_AMOUNT_E8S),
+    );
+    // refresh_buyer_tokens is intentionally NOT called here.
+
     // Advance time well into the future so that the swap fails due to no participants.
     state_machine.set_time(
         std::time::UNIX_EPOCH + std::time::Duration::from_secs(*SWAP_DUE_TIMESTAMP_SECONDS + 1),
@@ -933,10 +947,54 @@ fn swap_lifecycle_sad() {
                 account: AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None).to_address(),
             },
         );
-        let expected_balance = ((*TEST_USER2_ORIGINAL_BALANCE_ICP - DEFAULT_TRANSFER_FEE).unwrap()
-            - DEFAULT_TRANSFER_FEE)
+        let expected_balance = TEST_USER2_ORIGINAL_BALANCE_ICP.get_e8s()
+            - HALF_BAKED_PARTICIPATION_AMOUNT_E8S
+            // Two fees are from transfers from TEST_USER2 to swap, and the
+            // third is for the transfer from swap back to TEST_USER2.
+            - 3 * DEFAULT_TRANSFER_FEE.get_e8s();
+        assert_eq!(observed_balance.get_e8s(), expected_balance);
+    }
+
+    // Anonymously, request a refund on behalf of TEST_USER2.
+    {
+        let response = state_machine
+            .execute_ingress(
+                sns_canister_ids.swap.unwrap().try_into().unwrap(),
+                "error_refund_icp",
+                Encode!(&ErrorRefundIcpRequest {
+                    source_principal_id: Some(*TEST_USER2_PRINCIPAL),
+                })
+                .unwrap(),
+            )
             .unwrap();
-        assert_eq!(observed_balance, expected_balance);
+        // Assert refund was ok.
+        match response {
+            WasmResult::Reject(reject) => panic!("Refund request rejected: {:?}", reject),
+            WasmResult::Reply(reply) => {
+                use error_refund_icp_response::Result;
+                match Decode!(&reply, ErrorRefundIcpResponse).unwrap().result {
+                    Some(Result::Ok(_)) => (),
+                    fail => panic!("Unable to get refund: {:?}", fail),
+                }
+            }
+        }
+
+        // After refund, TEST_USER2's balance is what it was at the beginning, minute a few fees.
+        let observed_balance = ledger_account_balance(
+            &mut state_machine,
+            ICP_LEDGER_CANISTER_ID,
+            &AccountBalanceArgs {
+                account: AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None).to_address(),
+            },
+        );
+        let expected_balance = TEST_USER2_ORIGINAL_BALANCE_ICP.get_e8s()
+            // Fees paid:
+            //   1. Participation.
+            //   2. Half-baked pariticipation.
+            //   3. Finalize Aborted swap.
+            //   4. error_refund_icp.
+            - 4 * DEFAULT_TRANSFER_FEE.get_e8s();
+        assert_eq!(observed_balance.get_e8s(), expected_balance);
     }
 
     // Step 3.2.2: Inspect SNS token balance(s).
@@ -1013,6 +1071,32 @@ fn participate_in_swap(
     amount: Tokens,
 ) {
     // First, transfer ICP to swap. Needs to go into a special subaccount...
+    send_participation_funds(
+        state_machine,
+        swap_canister_id,
+        participant_principal_id,
+        amount,
+    );
+
+    // ... then, swap must be notified about that transfer.
+    state_machine
+        .execute_ingress(
+            swap_canister_id,
+            "refresh_buyer_tokens",
+            Encode!(&swap_pb::RefreshBuyerTokensRequest {
+                buyer: participant_principal_id.to_string(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+}
+
+fn send_participation_funds(
+    state_machine: &mut StateMachine,
+    swap_canister_id: CanisterId,
+    participant_principal_id: PrincipalId,
+    amount: Tokens,
+) {
     let subaccount = icp_ledger::Subaccount(ic_sns_swap::swap::principal_to_subaccount(
         &participant_principal_id,
     ));
@@ -1031,17 +1115,6 @@ fn participate_in_swap(
             ICP_LEDGER_CANISTER_ID,
             "transfer",
             request,
-        )
-        .unwrap();
-    // ... then, swap must be notified about that transfer.
-    state_machine
-        .execute_ingress(
-            swap_canister_id,
-            "refresh_buyer_tokens",
-            Encode!(&swap_pb::RefreshBuyerTokensRequest {
-                buyer: participant_principal_id.to_string(),
-            })
-            .unwrap(),
         )
         .unwrap();
 }

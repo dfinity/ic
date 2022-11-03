@@ -30,10 +30,9 @@ type DerivedState = record {
   buyer_total_icp_e8s : nat64;
 };
 type DirectInvestment = record { buyer_principal : text };
-type ErrorRefundIcpRequest = record {
-  icp_e8s : nat64;
-  fee_override_e8s : nat64;
-};
+type Err = record { description : opt text; error_type : opt int32 };
+type ErrorRefundIcpRequest = record { source_principal_id : opt principal };
+type ErrorRefundIcpResponse = record { result : opt Result };
 type FailedUpdate = record {
   err : opt CanisterCallError;
   dapp_canister_id : opt principal;
@@ -70,6 +69,7 @@ type NeuronBasketConstructionParameters = record {
   dissolve_delay_interval_seconds : nat64;
   count : nat64;
 };
+type Ok = record { block_height : opt nat64 };
 type OpenRequest = record {
   cf_participants : vec CfParticipant;
   params : opt Params;
@@ -97,6 +97,7 @@ type RefreshBuyerTokensResponse = record {
   icp_ledger_account_balance_e8s : nat64;
 };
 type Response = record { governance_error : opt GovernanceError };
+type Result = variant { Ok : Ok; Err : Err };
 type SetDappControllersCallResult = record { possibility : opt Possibility_1 };
 type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
 type SetModeCallResult = record { possibility : opt Possibility_2 };
@@ -124,7 +125,7 @@ type TransferableAmount = record {
   transfer_success_timestamp_seconds : nat64;
 };
 service : (Init) -> {
-  error_refund_icp : (ErrorRefundIcpRequest) -> (record {});
+  error_refund_icp : (ErrorRefundIcpRequest) -> (ErrorRefundIcpResponse);
   finalize_swap : (record {}) -> (FinalizeSwapResponse);
   get_buyer_state : (GetBuyerStateRequest) -> (GetBuyerStateResponse) query;
   get_buyers_total : (record {}) -> (GetBuyersTotalResponse);

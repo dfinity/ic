@@ -658,11 +658,46 @@ message CanisterCallError {
 // error. The refund is always on the ICP ledger, from this canister's
 // subaccount of the caller to the account of the caller.
 message ErrorRefundIcpRequest {
-  // The amount of ICP to transfer.
-  uint64 icp_e8s = 1;
-  // If specified, use this as 'fee' instead of the default.
-  uint64 fee_override_e8s = 2;
+  // Principal who originally sent the funds to us, and is now asking for any
+  // unaccepted balance to be returned.
+  ic_base_types.pb.v1.PrincipalId source_principal_id = 1;
 }
 
 message ErrorRefundIcpResponse {
+  // Request was completed successfully.
+  message Ok {
+    // The ledger transfer went through at this block height.
+    optional uint64 block_height = 1;
+  }
+
+  // Request was not successful, and no funds were transferred.
+  message Err {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+
+      // There is something wrong with the request. If repeated, the request
+      // will always be rejected.
+      TYPE_INVALID_REQUEST = 1;
+
+      // Most likely, the canister is in the wrong Lifecycle. More generally,
+      // the system is not yet in a state where the request can be fulfilled,
+      // but it might enter a suitable state later. In this case, the same
+      // request might be accepted later.
+      TYPE_PRECONDITION = 2;
+
+      // Most likely, a request to the ledger failed, in which case, it can be
+      // assumed that no funds were transferred. In general, this is caused by
+      // something outside this canister, which usually means some other
+      // canister (such as ledger).
+      TYPE_EXTERNAL = 3;
+    }
+
+    optional Type error_type = 1;
+    optional string description = 2;
+  }
+
+  oneof result {
+    Ok ok = 1;
+    Err err = 2;
+  }
 }

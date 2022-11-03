@@ -1,11 +1,12 @@
 use crate::pb::v1::{
-    restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
-    settle_community_fund_participation_result, sns_neuron_recipe::Investor, BuyerState,
-    CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState, DirectInvestment,
-    FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse,
-    Init, Lifecycle, OpenRequest, OpenResponse, Params, RefreshBuyerTokensResponse,
-    RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
-    SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
+    error_refund_icp_response, restore_dapp_controllers_response, set_dapp_controllers_call_result,
+    set_mode_call_result, settle_community_fund_participation_result, sns_neuron_recipe::Investor,
+    BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
+    DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
+    GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse, Init, Lifecycle,
+    OpenRequest, OpenResponse, Params, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
+    SetDappControllersCallResult, SetModeCallResult, SettleCommunityFundParticipationResult,
+    SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
 };
 // TODO(NNS1-1589): Get these from authoritative source.
 use crate::pb::v1::GovernanceError;
@@ -853,48 +854,57 @@ impl Swap {
     }
 
     /// Requests a refund of ICP tokens transferred to the Swap
-    /// canister in error. This method only works if this
-    /// canister is in the COMMITTED or ABORTED state.
+    /// canister that was either never notified (via the
+    /// refresh_buyer_tokens Candid method), or not fully accepted (by
+    /// refresh_buyer_tokens).
     ///
-    /// The request is to refund `amount` tokens for `principal`
-    /// (using `fee` as fee) on the ICP ledger. The specified amount
-    /// of tokens is transferred from `subaccount(swap_canister, P)`
-    /// to `P`, where `P` is the specified principal.
+    /// This method makes no changes (and instead panics) unless
+    /// finalization has completed successfully (see the finalize
+    /// method), which can only happen after self has entered the
+    /// Aborted or Committed state.
     ///
-    /// Note that this function cannot mutate `self` - it only
-    /// initiates a ledger transfer, which may fail. It is up to the
-    /// caller to ensure the correctness of the parameters.
+    /// The entire balance in `subaccount(swap_canister, P)` is
+    /// transferred to request.principal_id (minus the transfer fee,
+    /// of course).
     ///
     /// This method is secure because it only transfers tokens from a
     /// principal's subaccount (of the Swap canister) to the
     /// principal's own account, i.e., the tokens were held in escrow
     /// for the principal (buyer) before the call and are returned to
-    /// the same principal. Moreover, this method can only be called
-    /// by the principal; this serves two purposes: first, that third
-    /// parties cannot make many small transfers to drain the
-    /// principal's tokens by multiple fees, and, second, so a third
-    /// party cannot return the buyer's token that they intended to
-    /// use to join the swap.
+    /// the same principal.
     pub async fn error_refund_icp(
         &self,
-        principal: PrincipalId,
-        amount: Tokens,
-        fee: Tokens,
+        self_canister_id: CanisterId,
+        request: &ErrorRefundIcpRequest,
         icp_ledger: &dyn Ledger,
-    ) -> TransferResult {
+    ) -> ErrorRefundIcpResponse {
+        // Fail if the request is premature.
         if !(self.lifecycle() == Lifecycle::Aborted || self.lifecycle() == Lifecycle::Committed) {
-            return TransferResult::Failure(
-                "Error refunds can only be performed when the swap is ABORTED or COMMITTED"
-                    .to_string(),
+            return ErrorRefundIcpResponse::new_precondition_error(
+                "Error refunds can only be performed when the swap is ABORTED or COMMITTED",
             );
         }
-        if let Some(buyer_state) = self.buyers.get(&principal.to_string()) {
+
+        // Unpack request.
+        let source_principal_id = match request {
+            ErrorRefundIcpRequest {
+                source_principal_id: Some(source_principal_id),
+            } => source_principal_id,
+            _ => {
+                return ErrorRefundIcpResponse::new_invalid_request_error(format!(
+                    "Invalid request. Must have source_principal_id. Request:\n{:#?}",
+                    request,
+                ));
+            }
+        };
+
+        if let Some(buyer_state) = self.buyers.get(&source_principal_id.to_string()) {
             if let Some(transfer) = &buyer_state.icp {
                 if transfer.transfer_success_timestamp_seconds == 0 {
                     // This buyer has ICP not yet disbursed using the normal mechanism.
-                    return TransferResult::Failure(format!(
+                    return ErrorRefundIcpResponse::new_precondition_error(format!(
                         "ICP cannot be refunded as principal {} has {} ICP (e8s) in escrow",
-                        principal,
+                        source_principal_id,
                         buyer_state.amount_icp_e8s()
                     ));
                 }
@@ -908,34 +918,61 @@ impl Swap {
             // This buyer is not known to the swap canister. Any
             // balance in a subaccount belongs to the buyer.
         }
-        let subaccount = principal_to_subaccount(&principal);
+
+        let source_subaccount = principal_to_subaccount(source_principal_id);
+
+        // Figure out how much to send back to source_principal_id based on
+        // what's left in the subaccount.
+        let account_balance_result = icp_ledger
+            .account_balance(Account {
+                owner: self_canister_id.into(),
+                subaccount: Some(source_subaccount),
+            })
+            .await;
+        let balance_e8s = match account_balance_result {
+            Ok(balance) => balance.get_e8s(),
+            Err(err) => {
+                return ErrorRefundIcpResponse::new_external_error(format!(
+                    "Unable to get the balance for the subaccount of {}: {:?}",
+                    source_principal_id, err,
+                ));
+            }
+        };
+
+        // Make transfer.
+        let amount_e8s = balance_e8s.saturating_sub(DEFAULT_TRANSFER_FEE.get_e8s());
         let dst = Account {
-            owner: principal,
+            owner: *source_principal_id,
             subaccount: None,
         };
-        let result = icp_ledger
+        let transfer_result = icp_ledger
             .transfer_funds(
-                amount.get_e8s().saturating_sub(fee.get_e8s()),
-                fee.get_e8s(),
-                Some(subaccount),
+                amount_e8s,
+                DEFAULT_TRANSFER_FEE.get_e8s(),
+                Some(source_subaccount),
                 dst.clone(),
-                0,
+                0, // memo
             )
             .await;
-        match result {
-            Ok(h) => {
+
+        // Translate transfer result into return value.
+        match transfer_result {
+            Ok(block_height) => {
                 println!(
                     "{}INFO: error refund - transferred {} ICP from subaccount {:#?} to {} at height {}",
-                    LOG_PREFIX, amount, subaccount, dst, h
+                    LOG_PREFIX, amount_e8s, source_subaccount, dst, block_height,
                 );
-                TransferResult::Success(h)
+                ErrorRefundIcpResponse::new_ok(block_height)
             }
-            Err(e) => {
+            Err(err) => {
                 println!(
                     "{}ERROR: error refund - failed to transfer {} from subaccount {:#?}: {}",
-                    LOG_PREFIX, amount, subaccount, e
+                    LOG_PREFIX, amount_e8s, source_subaccount, err,
                 );
-                TransferResult::Failure(e.to_string())
+                ErrorRefundIcpResponse::new_external_error(format!(
+                    "Transfer request failed: {}",
+                    err,
+                ))
             }
         }
     }
@@ -1294,6 +1331,50 @@ pub fn validate_canister_id(p: &str) -> Result<(), String> {
         )
     })?;
     Ok(())
+}
+
+impl ErrorRefundIcpResponse {
+    fn new_ok(block_height: u64) -> Self {
+        use error_refund_icp_response::{Ok, Result};
+
+        Self {
+            result: Some(Result::Ok(Ok {
+                block_height: Some(block_height),
+            })),
+        }
+    }
+
+    fn new_precondition_error(description: impl ToString) -> Self {
+        Self::new_error(
+            error_refund_icp_response::err::Type::Precondition,
+            description,
+        )
+    }
+
+    fn new_invalid_request_error(description: impl ToString) -> Self {
+        Self::new_error(
+            error_refund_icp_response::err::Type::InvalidRequest,
+            description,
+        )
+    }
+
+    fn new_external_error(description: impl ToString) -> Self {
+        Self::new_error(error_refund_icp_response::err::Type::External, description)
+    }
+
+    fn new_error(
+        error_type: error_refund_icp_response::err::Type,
+        description: impl ToString,
+    ) -> Self {
+        use error_refund_icp_response::{Err, Result};
+
+        Self {
+            result: Some(Result::Err(Err {
+                error_type: Some(error_type as i32),
+                description: Some(description.to_string()),
+            })),
+        }
+    }
 }
 
 impl Init {

@@ -8,7 +8,6 @@ use dfn_core::{
 };
 use ic_base_types::PrincipalId;
 use ic_ic00_types::CanisterStatusResultV2;
-use ic_ledger_core::Tokens;
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
@@ -17,7 +16,6 @@ use ic_sns_governance::pb::v1::{
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
     SetModeResponse,
 };
-use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 
 // TODO(NNS1-1589): Unhack.
 // use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
@@ -297,21 +295,9 @@ fn error_refund_icp() {
 }
 
 #[candid_method(update, rename = "error_refund_icp")]
-async fn error_refund_icp_(arg: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
+async fn error_refund_icp_(request: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
     let icp_ledger = create_real_icp_ledger(swap().init().icp_ledger());
-    swap()
-        .error_refund_icp(
-            caller(),
-            Tokens::from_e8s(arg.icp_e8s),
-            if arg.fee_override_e8s > 0 {
-                Tokens::from_e8s(arg.fee_override_e8s)
-            } else {
-                DEFAULT_TRANSFER_FEE
-            },
-            &icp_ledger,
-        )
-        .await;
-    ErrorRefundIcpResponse {}
+    swap().error_refund_icp(id(), &request, &icp_ledger).await
 }
 
 /// A trait that wraps calls to the IC's Management Canister. More details on the management
