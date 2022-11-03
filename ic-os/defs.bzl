@@ -4,6 +4,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts", "urls_test")
+load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
@@ -253,11 +254,9 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         srcs = [":disk-img.tar.zst"],
     )
 
-    native.genrule(
-        name = "disk-img.tar_gz",
+    gzip_compress(
+        name = "disk-img.tar.gz",
         srcs = ["disk-img.tar"],
-        outs = ["disk-img.tar.gz"],
-        cmd = "gzip --no-name -9 < $< > $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
@@ -287,8 +286,8 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     upload_artifacts(
         name = "upload_disk-img",
         inputs = [
-            ":disk-img.tar_zst",
-            ":disk-img.tar_gz",
+            ":disk-img.tar.zst",
+            ":disk-img.tar.gz",
         ],
         remote_subdir = "guest-os/disk-img" + upload_suffix,
     )

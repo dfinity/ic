@@ -4,12 +4,13 @@ Utilities for building IC replica and canisters.
 
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-def gzip_compress(name, srcs):
+def gzip_compress(name, srcs, **kwargs):
     """GZip-compresses source files.
 
     Args:
       name: name of the compressed file.
       srcs: list of input labels.
+      **kwargs: any additional arguments to pass to genrule.
     """
     native.genrule(
         name = "_compress_" + name,
@@ -18,6 +19,7 @@ def gzip_compress(name, srcs):
         outs = [name],
         message = "Compressing into %s" % name,
         cmd_bash = "$(location @pigz) --no-name $(SRCS) --stdout > $@",
+        **kwargs
     )
 
 def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):
