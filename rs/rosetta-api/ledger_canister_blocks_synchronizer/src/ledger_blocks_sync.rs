@@ -112,7 +112,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
     async fn verify_store(blocks: &Blocks, canister_access: &B) -> Result<(), Error> {
         debug!("Verifying store...");
         let first_block = blocks.get_first_hashed_block().ok();
-        match blocks.block_store.get_hashed_block(&0) {
+        match blocks.get_hashed_block(&0) {
             Ok(store_genesis) => {
                 let genesis = canister_access
                     .query_raw_block(0)
@@ -377,9 +377,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
         }
 
-        blockchain
-            .block_store
-            .set_hashed_block_to_verified(range.end - 1)?;
+        blockchain.set_hashed_block_to_verified(range.end - 1)?;
         self.metrics.set_verified_height(range.end - 1);
         Ok(())
     }
@@ -519,10 +517,7 @@ mod test {
         let actual_blocks = blocks_sync.read_blocks().await;
         // there isn't a blocks.len() to use, so we check that the last index + 1 gives error and then we check the blocks
         for (idx, eb) in blocks.iter().enumerate() {
-            let hb = actual_blocks
-                .block_store
-                .get_hashed_block(&(idx as u64))
-                .unwrap();
+            let hb = actual_blocks.get_hashed_block(&(idx as u64)).unwrap();
             assert!(actual_blocks.is_verified_by_idx(&(idx as u64)).unwrap());
             assert_eq!(Block::block_hash(eb), Block::block_hash(&hb.block));
         }
@@ -540,7 +535,7 @@ mod test {
             .unwrap();
         {
             let actual_blocks = blocks_sync.read_blocks().await;
-            let hashed_blocks = actual_blocks.block_store.get_hashed_block(&0).unwrap();
+            let hashed_blocks = actual_blocks.get_hashed_block(&0).unwrap();
             assert!(actual_blocks.is_verified_by_idx(&0).unwrap());
             assert_eq!(
                 Block::block_hash(&blocks[0]),
@@ -555,7 +550,7 @@ mod test {
             .unwrap();
         {
             let actual_blocks = blocks_sync.read_blocks().await;
-            let hashed_blocks = actual_blocks.block_store.get_hashed_block(&1).unwrap();
+            let hashed_blocks = actual_blocks.get_hashed_block(&1).unwrap();
             assert!(actual_blocks.is_verified_by_idx(&1).unwrap());
             assert_eq!(
                 Block::block_hash(&blocks[1]),

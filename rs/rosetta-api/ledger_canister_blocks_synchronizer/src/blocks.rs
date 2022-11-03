@@ -7,7 +7,7 @@ use log::{error, info};
 
 pub struct Blocks {
     pub balance_book: BalanceBook,
-    pub block_store: SQLiteStore,
+    block_store: SQLiteStore,
 }
 
 impl Blocks {
@@ -99,7 +99,6 @@ impl Blocks {
         self.process_block(hb)?;
         Ok(())
     }
-
     pub fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
         self.block_store.push_batch(batch.clone())?;
         for hb in batch {
@@ -107,8 +106,13 @@ impl Blocks {
         }
         Ok(())
     }
-
-    pub fn process_block(&mut self, hb: HashedBlock) -> Result<(), BlockStoreError> {
+    pub fn set_hashed_block_to_verified(
+        &self,
+        block_height: BlockIndex,
+    ) -> Result<(), BlockStoreError> {
+        self.block_store.set_hashed_block_to_verified(block_height)
+    }
+    fn process_block(&mut self, hb: HashedBlock) -> Result<(), BlockStoreError> {
         let HashedBlock {
             block,
             hash: _,
@@ -123,17 +127,36 @@ impl Blocks {
         bb.store.transaction_context = None;
         Ok(())
     }
-
-    pub(crate) fn get_first_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+    pub fn get_block_idx_by_transaction_hash(
+        &self,
+        hash: &HashOf<icp_ledger::Transaction>,
+    ) -> Result<u64, BlockStoreError> {
+        self.block_store.get_block_idx_by_transaction_hash(hash)
+    }
+    pub fn get_hashed_block(&self, block_idx: &u64) -> Result<HashedBlock, BlockStoreError> {
+        self.block_store.get_hashed_block(block_idx)
+    }
+    pub fn get_first_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         self.block_store.get_first_hashed_block()
     }
-
+    pub fn get_hashed_block_range(
+        &self,
+        range: std::ops::Range<BlockIndex>,
+    ) -> Result<Vec<HashedBlock>, BlockStoreError> {
+        self.block_store.get_hashed_block_range(range)
+    }
     pub fn get_first_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         self.block_store.get_first_verified_hashed_block()
     }
 
-    pub(crate) fn get_latest_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
+    pub fn get_latest_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         self.block_store.get_latest_hashed_block()
+    }
+    pub fn get_block_idx_by_block_hash(
+        &self,
+        hash: &HashOf<EncodedBlock>,
+    ) -> Result<u64, BlockStoreError> {
+        self.block_store.get_block_idx_by_block_hash(hash)
     }
 
     pub fn get_latest_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {

@@ -92,7 +92,6 @@ impl TestLedger {
         let mut blockchain = self.blockchain.write().await;
         blockchain.push(hb.clone()).map_err(ApiError::from)?;
         blockchain
-            .block_store
             .set_hashed_block_to_verified(hb.index)
             .map_err(ApiError::from)
     }
@@ -135,9 +134,7 @@ impl LedgerAccess for TestLedger {
             let mut blockchain = self.blockchain.write().await;
             for hb in queue.iter() {
                 blockchain.push(hb.clone())?;
-                blockchain
-                    .block_store
-                    .set_hashed_block_to_verified(hb.index)?;
+                blockchain.set_hashed_block_to_verified(hb.index)?;
             }
         }
 
