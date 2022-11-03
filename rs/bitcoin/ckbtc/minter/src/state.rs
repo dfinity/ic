@@ -8,10 +8,12 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
 };
 
+use crate::lifecycle::init::InitArgs;
 use crate::ECDSAPublicKey;
 use candid::{Deserialize, Principal};
 use ic_base_types::CanisterId;
-use ic_btc_types::{Address, Network, Utxo};
+use ic_btc_types::{Network, OutPoint, Utxo};
+use ic_icrc1::Account;
 use serde::Serialize;
 
 thread_local! {
@@ -63,11 +65,86 @@ pub struct CkBtcMinterState {
     /// The CanisterId of the ckBTC Ledger
     pub ledger_id: CanisterId,
 
+    /// The set of UTXOs unused in pending transactions.
+    pub available_utxos: BTreeSet<Utxo>,
+
+    /// The mapping from output points to the ledger accounts to which they
+    /// belong.
+    pub outpoint_account: BTreeMap<OutPoint, Account>,
+
     /// The map of known addresses to their utxos.
-    pub utxos_state_addresses: BTreeMap<Address, BTreeSet<Utxo>>,
+    pub utxos_state_addresses: BTreeMap<Account, BTreeSet<Utxo>>,
 
     /// Process one heartbeat at a time
     pub is_heartbeat_running: bool,
+}
+
+impl CkBtcMinterState {
+    pub fn check_invariants(&self) {
+        for utxo in self.available_utxos.iter() {
+            assert!(
+                self.outpoint_account.contains_key(&utxo.outpoint),
+                "the output_account map is missing an entry for {:?}",
+                utxo.outpoint
+            );
+
+            assert!(
+                self.utxos_state_addresses
+                    .iter()
+                    .any(|(_, utxos)| utxos.contains(utxo)),
+                "available utxo {:?} does not belong to any account",
+                utxo
+            );
+        }
+
+        for (addr, utxos) in self.utxos_state_addresses.iter() {
+            for utxo in utxos.iter() {
+                assert_eq!(self.outpoint_account.get(&utxo.outpoint), Some(addr));
+            }
+        }
+    }
+
+    pub fn add_utxos(&mut self, account: Account, utxos: Vec<Utxo>) {
+        if utxos.is_empty() {
+            return;
+        }
+
+        let account_bucket = self
+            .utxos_state_addresses
+            .entry(account.clone())
+            .or_default();
+
+        for utxo in utxos {
+            self.outpoint_account
+                .insert(utxo.outpoint.clone(), account.clone());
+            self.available_utxos.insert(utxo.clone());
+            account_bucket.insert(utxo);
+        }
+
+        #[cfg(debug_assertions)]
+        self.check_invariants();
+    }
+}
+
+impl From<InitArgs> for CkBtcMinterState {
+    fn from(args: InitArgs) -> Self {
+        Self {
+            btc_network: args.btc_network,
+            ecdsa_key_name: args.ecdsa_key_name,
+            ecdsa_public_key: None,
+            min_confirmations: crate::lifecycle::init::DEFAULT_MIN_CONFIRMATIONS,
+            update_balance_principals: Default::default(),
+            retrieve_btc_principals: Default::default(),
+            retrieve_btc_min_fee: args.retrieve_btc_min_fee,
+            retrieve_btc_min_amount: args.retrieve_btc_min_amount,
+            pending_retrieve_btc_requests: Default::default(),
+            ledger_id: args.ledger_id,
+            available_utxos: Default::default(),
+            outpoint_account: Default::default(),
+            utxos_state_addresses: Default::default(),
+            is_heartbeat_running: false,
+        }
+    }
 }
 
 /// Take the current state.

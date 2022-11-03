@@ -1,9 +1,13 @@
 use crate::{build_unsigned_transaction, greedy, signed_transaction_length, tx, BuildTxError};
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
-use ic_btc_types::{OutPoint, Satoshi, Utxo};
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_btc_types::{Network, OutPoint, Satoshi, Utxo};
+use ic_icrc1::Account;
 use proptest::proptest;
 use proptest::{
+    array::uniform32,
     collection::{btree_set, vec as pvec},
+    option,
     prelude::{any, Strategy},
 };
 use proptest::{prop_assert, prop_assert_eq};
@@ -140,6 +144,15 @@ fn arb_utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utx
         outpoint: OutPoint { txid, vout },
         value,
         height: 0,
+    })
+}
+
+fn arb_account() -> impl Strategy<Value = Account> {
+    (pvec(any::<u8>(), 32), option::of(uniform32(any::<u8>()))).prop_map(|(pk, subaccount)| {
+        Account {
+            owner: PrincipalId::new_self_authenticating(&pk),
+            subaccount,
+        }
     })
 }
 
@@ -341,5 +354,25 @@ proptest! {
             BuildTxError::AmountTooLow
         );
         prop_assert_eq!(&utxos_copy, &utxos);
+    }
+
+    #[test]
+    fn add_utxos_maintains_invariants(
+        utxos_acc_idx in pvec((arb_utxo(5_000u64..1_000_000_000), 0..5usize), 10..20),
+        accounts in pvec(arb_account(), 5),
+    ) {
+        use crate::{lifecycle::init::InitArgs, state::CkBtcMinterState};
+
+        let mut state = CkBtcMinterState::from(InitArgs {
+            btc_network: Network::Regtest,
+            ecdsa_key_name: "".to_string(),
+            retrieve_btc_min_fee: 0,
+            retrieve_btc_min_amount: 0,
+            ledger_id: CanisterId::from_u64(42),
+        });
+        for (utxo, acc_idx) in utxos_acc_idx {
+            state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
+            state.check_invariants();
+        }
     }
 }
