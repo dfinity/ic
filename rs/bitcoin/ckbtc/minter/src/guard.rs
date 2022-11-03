@@ -78,8 +78,7 @@ pub fn retrieve_btc_guard(p: Principal) -> Result<Guard<RetrieveBtcUpdates>, Gua
 mod tests {
     use crate::{
         guard::{GuardError, MAX_CONCURRENT},
-        lifecycle::init::DEFAULT_MIN_CONFIRMATIONS,
-        state::{replace_state, CkBtcMinterState},
+        lifecycle::init::{init, InitArgs},
     };
     use ic_base_types::CanisterId;
     use ic_btc_types::Network;
@@ -91,20 +90,13 @@ mod tests {
         Principal::try_from_slice(&id.to_le_bytes()).unwrap()
     }
 
-    fn test_state() -> CkBtcMinterState {
-        CkBtcMinterState {
+    fn test_state_args() -> InitArgs {
+        InitArgs {
             btc_network: Network::Regtest,
             ecdsa_key_name: "".to_string(),
-            ecdsa_public_key: None,
-            min_confirmations: DEFAULT_MIN_CONFIRMATIONS,
-            retrieve_btc_principals: Default::default(),
             retrieve_btc_min_fee: 0,
             retrieve_btc_min_amount: 0,
-            pending_retrieve_btc_requests: Default::default(),
-            update_balance_principals: Default::default(),
             ledger_id: CanisterId::from_u64(42),
-            utxos_state_addresses: Default::default(),
-            is_heartbeat_running: false,
         }
     }
 
@@ -113,7 +105,7 @@ mod tests {
         // test that two guards for the same principal cannot exist in the same block
         // and that a guard is properly dropped at end of the block
 
-        replace_state(test_state());
+        init(test_state_args());
         let p = test_principal(0);
         {
             let _guard = balance_update_guard(p).unwrap();
@@ -129,7 +121,7 @@ mod tests {
         // test that at most MAX_CONCURRENT guards can be created if each one
         // is for a different principal
 
-        replace_state(test_state());
+        init(test_state_args());
         let guards: Vec<_> = (0..MAX_CONCURRENT)
             .map(|id| {
                 balance_update_guard(test_principal(id as u64)).unwrap_or_else(|e| {

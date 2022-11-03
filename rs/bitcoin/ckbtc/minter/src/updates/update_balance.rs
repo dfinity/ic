@@ -17,7 +17,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 use crate::{
     guard::{balance_update_guard, GuardError},
     state,
-    updates::get_btc_address::{self, GetBtcAddressArgs},
+    updates::get_btc_address,
 };
 
 const GET_UTXOS_COST_CYCLES: u64 = 100_000_000;
@@ -82,37 +82,36 @@ pub async fn update_balance(
     let caller = ic_cdk::caller();
     init_ecdsa_public_key().await;
     let _guard = balance_update_guard(caller)?;
-    let address = get_btc_address::get_btc_address(GetBtcAddressArgs {
+
+    let account = Account {
+        owner: PrincipalId::from(caller),
         subaccount: Some(args.subaccount),
-    })
-    .await;
+    };
+
+    let address =
+        state::read_state(|s| get_btc_address::account_to_p2wpkh_address_from_state(s, &account));
 
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
 
-    println!("Fetching utxos");
+    ic_cdk::print(format!("Fetching utxos for address {}", address));
+
     let utxos = get_utxos(btc_network, &address, min_confirmations).await?;
 
-    if utxos.is_empty() {
+    let new_utxos = state::read_state(|s| match s.utxos_state_addresses.get(&account) {
+        Some(known_utxos) => utxos
+            .into_iter()
+            .filter(|u| !known_utxos.contains(u))
+            .collect(),
+        None => utxos,
+    });
+
+    let satoshis_to_mint = new_utxos.iter().map(|u| u.value).sum::<u64>();
+
+    if satoshis_to_mint == 0 {
         // We bail out early if there are no UTXOs to avoid creating a new entry
         // in the UTXOs map.  If we allowed empty entries, malicious callers
         // could exhaust the canister memory.
-        return Err(UpdateBalanceError::NoNewUtxos);
-    }
-
-    let satoshis_to_mint = state::mutate_state(|s| {
-        let known_utxos = s.utxos_state_addresses.entry(address).or_default();
-        let mut satoshis_to_mint = 0;
-        for utxo in utxos {
-            if !known_utxos.contains(&utxo) {
-                satoshis_to_mint += utxo.value;
-                known_utxos.insert(utxo);
-            }
-        }
-        satoshis_to_mint
-    });
-
-    if satoshis_to_mint == 0 {
         return Err(UpdateBalanceError::NoNewUtxos);
     }
 
@@ -122,7 +121,15 @@ pub async fn update_balance(
         subaccount: Some(args.subaccount),
     };
 
+    ic_cdk::print(format!(
+        "minting {} wrapped BTC for {} new UTXOs",
+        satoshis_to_mint,
+        new_utxos.len()
+    ));
+
     let block_index: u64 = mint(satoshis_to_mint, to_caller).await?;
+
+    state::mutate_state(|s| s.add_utxos(account, new_utxos));
 
     Ok(UpdateBalanceResult {
         amount: satoshis_to_mint,

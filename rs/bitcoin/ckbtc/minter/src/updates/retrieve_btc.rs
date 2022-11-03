@@ -145,27 +145,19 @@ async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcErr
 #[cfg(test)]
 mod tests {
     use crate::{
-        lifecycle::init::DEFAULT_MIN_CONFIRMATIONS,
-        state::{replace_state, CkBtcMinterState},
+        lifecycle::init::{init, InitArgs},
         updates::retrieve_btc::check_address,
     };
     use ic_ic00_types::BitcoinNetwork::Mainnet;
 
     #[test]
     fn test_check_address() {
-        replace_state(CkBtcMinterState {
+        init(InitArgs {
             btc_network: Mainnet,
             ecdsa_key_name: "".to_string(),
-            ecdsa_public_key: None,
-            min_confirmations: DEFAULT_MIN_CONFIRMATIONS,
-            update_balance_principals: Default::default(),
-            retrieve_btc_principals: Default::default(),
             retrieve_btc_min_fee: 0,
             retrieve_btc_min_amount: 0,
-            pending_retrieve_btc_requests: Default::default(),
             ledger_id: ic_base_types::CanisterId::from_u64(42),
-            utxos_state_addresses: Default::default(),
-            is_heartbeat_running: false,
         });
         assert_eq!(
             Ok(()),

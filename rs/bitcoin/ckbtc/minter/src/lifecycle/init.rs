@@ -26,18 +26,5 @@ pub struct InitArgs {
 }
 
 pub fn init(args: InitArgs) {
-    replace_state(CkBtcMinterState {
-        btc_network: args.btc_network,
-        ecdsa_key_name: args.ecdsa_key_name,
-        ecdsa_public_key: None,
-        min_confirmations: DEFAULT_MIN_CONFIRMATIONS,
-        update_balance_principals: Default::default(),
-        retrieve_btc_principals: Default::default(),
-        retrieve_btc_min_fee: args.retrieve_btc_min_fee,
-        retrieve_btc_min_amount: args.retrieve_btc_min_amount,
-        pending_retrieve_btc_requests: Default::default(),
-        ledger_id: args.ledger_id,
-        utxos_state_addresses: Default::default(),
-        is_heartbeat_running: false,
-    });
+    replace_state(CkBtcMinterState::from(args));
 }
