@@ -3,7 +3,7 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
         validate_and_instrument_for_testing,
-        validation::{extract_custom_section_name, validate_custom_section, RESERVED_SYMBOLS},
+        validation::{extract_custom_section_name, RESERVED_SYMBOLS},
         WasmImportsDetails, WasmValidationDetails,
     },
     WasmtimeEmbedder,
@@ -17,23 +17,41 @@ fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
     features.enable_multi_value();
     wabt::wat2wasm_with_features(wat, features).map(BinaryEncodedWasm::new)
 }
+use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
-use parity_wasm::elements::{CustomSection as WasmCustomSection, Module, Section};
 
 fn validate_wasm_binary(
     wasm: &BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> Result<WasmValidationDetails, WasmValidationError> {
-    let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
-    match validate_and_instrument_for_testing(&embedder, wasm) {
+    let mut old_validation_config = config.clone();
+    let mut new_validation_config = config.clone();
+    old_validation_config.feature_flags.new_wasm_transform_lib = FlagStatus::Disabled;
+    new_validation_config.feature_flags.new_wasm_transform_lib = FlagStatus::Enabled;
+
+    let embedder = WasmtimeEmbedder::new(old_validation_config, no_op_logger());
+    let res_old = match validate_and_instrument_for_testing(&embedder, wasm) {
         Ok((validation_details, _)) => Ok(validation_details),
         Err(HypervisorError::InvalidWasm(err)) => Err(err),
         Err(other_error) => panic!("unexpected error {}", other_error),
-    }
+    };
+
+    let embedder = WasmtimeEmbedder::new(new_validation_config, no_op_logger());
+    let res_new = match validate_and_instrument_for_testing(&embedder, wasm) {
+        Ok((validation_details, _)) => Ok(validation_details),
+        Err(HypervisorError::InvalidWasm(err)) => Err(err),
+        Err(other_error) => panic!("unexpected error {}", other_error),
+    };
+
+    assert_eq!(
+        res_new, res_old,
+        "Old and new validation produced different results"
+    );
+    res_new
 }
 
 #[test]
@@ -520,45 +538,59 @@ fn can_reject_module_with_too_many_functions() {
 
 #[test]
 fn can_validate_module_with_custom_sections() {
-    let custom_section =
-        |name: String, content: Vec<u8>| Section::Custom(WasmCustomSection::new(name, content));
-    let custom_sections: Vec<Section> = vec![
-        custom_section("icp:private name1".to_string(), vec![0, 1]),
-        custom_section("icp:public name2".to_string(), vec![0, 2]),
-        custom_section("name3".to_string(), vec![0, 2]),
-    ];
-    let module = Module::new(custom_sections);
+    let mut module = wasm_encoder::Module::new();
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:private name1",
+        data: &[0, 1],
+    });
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:public name2",
+        data: &[0, 2],
+    });
+    module.section(&wasm_encoder::CustomSection {
+        name: "name3",
+        data: &[0, 2],
+    });
+    let wasm = BinaryEncodedWasm::new(module.finish());
 
     // Extracts the custom sections that provide the visibility `public/private`.
+    let validation_details = validate_wasm_binary(
+        &wasm,
+        &EmbeddersConfig {
+            max_custom_sections: 4,
+            ..Default::default()
+        },
+    )
+    .unwrap();
     assert_eq!(
-        validate_custom_section(
-            &module,
-            &EmbeddersConfig {
-                max_custom_sections: 4,
-                ..Default::default()
-            }
-        ),
-        Ok(WasmMetadata::new(btreemap! {
+        validation_details.wasm_metadata,
+        WasmMetadata::new(btreemap! {
             "name1".to_string() => CustomSection {content: vec![0, 1] , visibility: CustomSectionType::Private},
             "name2".to_string() => CustomSection {content: vec![0, 2] , visibility: CustomSectionType::Public}
-        }))
+        })
     );
 }
 
 #[test]
 fn can_reject_module_with_too_many_custom_sections() {
-    let custom_section =
-        |name: String, content: Vec<u8>| Section::Custom(WasmCustomSection::new(name, content));
-    let custom_sections: Vec<Section> = vec![
-        custom_section("icp:private name1".to_string(), vec![0, 1]),
-        custom_section("icp:public name2".to_string(), vec![0, 2]),
-        custom_section("name3".to_string(), vec![0, 2]),
-    ];
-    let module = Module::new(custom_sections);
+    let mut module = wasm_encoder::Module::new();
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:private name1",
+        data: &[0, 1],
+    });
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:public name2",
+        data: &[0, 2],
+    });
+    module.section(&wasm_encoder::CustomSection {
+        name: "name3",
+        data: &[0, 2],
+    });
+    let wasm = BinaryEncodedWasm::new(module.finish());
 
     assert_matches!(
-        validate_custom_section(
-            &module,
+        validate_wasm_binary(
+            &wasm,
             &EmbeddersConfig {
                 max_custom_sections: 1,
                 ..Default::default()
@@ -575,51 +607,57 @@ fn can_reject_module_with_too_many_custom_sections() {
 fn can_reject_module_with_custom_sections_too_big() {
     let content = vec![0, 1, 6, 5, 6, 7, 4, 6];
     let size = 2 * content.len() + "name".len() + "custom_section".len();
-    let module = Module::new(vec![
-        // Size of this custom section is 12 bytes.
-        Section::Custom(WasmCustomSection::new(
-            "icp:public name".to_string(),
-            content.clone(),
-        )),
-        // Adding the size of this custom section will exceed the `max_custom_sections_size`.
-        Section::Custom(WasmCustomSection::new(
-            "icp:private custom_section".to_string(),
-            content,
-        )),
-    ]);
+    let mut module = wasm_encoder::Module::new();
+    // Size of this custom section is 12 bytes.
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:public name",
+        data: &content,
+    });
+    // Adding the size of this custom section will exceed the `max_custom_sections_size`.
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:private custom_section",
+        data: &content,
+    });
+    let wasm = BinaryEncodedWasm::new(module.finish());
 
     let max_custom_sections_size = NumBytes::new(14);
     assert_eq!(
-        validate_custom_section(
-            &module, &EmbeddersConfig {
+        validate_wasm_binary(
+            &wasm, &EmbeddersConfig {
                 max_custom_sections: 3,
                 max_custom_sections_size,
                 ..Default::default()
             }
         ),
-       Err(WasmValidationError::InvalidCustomSection(format!(
-                        "Invalid custom sections: total size of the custom sections exceeds the maximum allowed: size {} bytes, allowed {} bytes",
-                         size, max_custom_sections_size
-                    )
-       ))
+        Err(WasmValidationError::InvalidCustomSection(format!(
+            "Invalid custom sections: total size of the custom sections exceeds the maximum allowed: size {} bytes, allowed {} bytes",
+            size, max_custom_sections_size
+        )
+        ))
     );
 }
 
 #[test]
 fn can_reject_module_with_duplicate_custom_sections() {
-    let custom_section =
-        |name: String, content: Vec<u8>| Section::Custom(WasmCustomSection::new(name, content));
-    let custom_sections: Vec<Section> = vec![
-        custom_section("icp:private custom1".to_string(), vec![0, 1]),
-        custom_section("icp:public custom2".to_string(), vec![0, 2]),
-        custom_section("icp:public custom1".to_string(), vec![0, 3]),
-    ];
-    let module = Module::new(custom_sections);
+    let mut module = wasm_encoder::Module::new();
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:private custom1",
+        data: &[0, 1],
+    });
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:public custom2",
+        data: &[0, 2],
+    });
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:public custom1",
+        data: &[0, 3],
+    });
+    let wasm = BinaryEncodedWasm::new(module.finish());
 
     // Rejects the module because of duplicate custom section names.
     assert_eq!(
-        validate_custom_section(
-            &module,
+        validate_wasm_binary(
+            &wasm,
             &EmbeddersConfig {
                 max_custom_sections: 5,
                 ..Default::default()
@@ -633,19 +671,25 @@ fn can_reject_module_with_duplicate_custom_sections() {
 
 #[test]
 fn can_reject_module_with_invalid_custom_sections() {
-    let custom_section =
-        |name: String, content: Vec<u8>| Section::Custom(WasmCustomSection::new(name, content));
-    let custom_sections: Vec<Section> = vec![
-        custom_section("icp:private custom1".to_string(), vec![0, 1]),
-        custom_section("icp:public custom2".to_string(), vec![0, 2]),
-        custom_section("icp:dummy custom3".to_string(), vec![0, 3]),
-    ];
-    let module = Module::new(custom_sections);
+    let mut module = wasm_encoder::Module::new();
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:private custom1",
+        data: &[0, 1],
+    });
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:public custom2",
+        data: &[0, 2],
+    });
+    module.section(&wasm_encoder::CustomSection {
+        name: "icp:dummy custom3",
+        data: &[0, 3],
+    });
+    let wasm = BinaryEncodedWasm::new(module.finish());
 
     // Only `private` or `public` is allowed if `icp:` prefix is defined.
     assert_eq!(
-        validate_custom_section(
-            &module,
+        validate_wasm_binary(
+            &wasm,
             &EmbeddersConfig {
                 max_custom_sections: 5,
                 ..Default::default()

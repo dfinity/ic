@@ -14,7 +14,7 @@ pub enum InstOrBytes<'a> {
 
 pub struct Body<'a> {
     locals: Vec<(u32, ValType)>,
-    instructions: Vec<Operator<'a>>,
+    pub instructions: Vec<Operator<'a>>,
 }
 
 pub enum ElementItems {
@@ -51,6 +51,63 @@ pub enum Error {
 impl From<BinaryReaderError> for Error {
     fn from(e: BinaryReaderError) -> Self {
         Self::BinaryReaderError(e)
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::BinaryReaderError(err) => {
+                write!(f, "Error from wasmparser: {}", err)
+            }
+            Error::UnknownVersion(ver) => {
+                write!(f, "Unknown version: {}", ver)
+            }
+            Error::UnknownSection { section_id } => {
+                write!(f, "Unknown section: {}", section_id)
+            }
+            Error::MissingFunctionEnd { func_range } => {
+                write!(
+                    f,
+                    "Missing function End for function in range {} - {}",
+                    func_range.start, func_range.end
+                )
+            }
+            Error::IncorrectDataCount {
+                declared_count,
+                actual_count,
+            } => {
+                write!(
+                    f,
+                    "Incorrect data count. Declared: {}, actual: {}",
+                    declared_count, actual_count
+                )
+            }
+            Error::IncorrectCodeCounts {
+                function_section_count,
+                code_section_declared_count,
+                code_section_actual_count,
+            } => {
+                write!(
+                    f,
+                    "Incorrect code counts. Function section count: {}, code section declared count: {}, code section actual count: {}",
+                    function_section_count, code_section_declared_count, code_section_actual_count
+                )
+            }
+            Error::PassiveElementSectionTypeNotFuncRef { ty } => {
+                write!(
+                    f,
+                    "Passive elements in element section expected to be of type Func, found: {:?}",
+                    ty
+                )
+            }
+            Error::MultipleStartSections => {
+                write!(f, "Multiple start sections")
+            }
+            Error::UnexpectedElementType => {
+                write!(f, "Unexpected element type")
+            }
+        }
     }
 }
 
