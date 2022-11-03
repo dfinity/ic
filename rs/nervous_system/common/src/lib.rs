@@ -12,6 +12,8 @@ use std::fmt::Formatter;
 use ic_base_types::PrincipalId;
 use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
 
+use url::{Host, Url};
+
 pub mod ledger;
 pub mod stable_mem_utils;
 
@@ -274,4 +276,71 @@ mod test {
         assert_eq!(random_dissolve_delay_intervals[1], u64::MAX);
         assert_eq!(random_dissolve_delay_intervals[2], u64::MAX);
     }
+}
+
+/// Verifies that the url is within the allowed length, and begins with
+/// `http://` or `https://`. In addition, it will return an error in case of a
+/// possibly "dangerous" condition, such as the url containing a username or
+/// password, or having a port, or not having a domain name.
+pub fn validate_proposal_url(
+    url: &str,
+    min_length: usize,
+    max_length: usize,
+    field_name: &str,
+) -> Result<(), String> {
+    // Check that the URL is a sensible length
+    if url.len() > max_length {
+        return Err(format!(
+            "{field_name} must be less than {max_length} characters long, but it is {} characters long. (Field was set to `{url}`.)",
+            url.len(),
+        ));
+    }
+    if url.len() < min_length {
+        return Err(format!(
+            "{field_name} must be greater or equal to than {min_length} characters long, but it is {} characters long. (Field was set to `{url}`.)",
+            url.len(),
+        ));
+    }
+
+    let url = Url::parse(url).map_err(|_| format!("{field_name} must be a valid URL."))?;
+
+    if url.cannot_be_a_base() {
+        return Err(format!("{field_name} must be a valid link",));
+    }
+
+    let scheme_is_http_or_https = url.scheme() == "http" || url.scheme() == "https";
+    if !scheme_is_http_or_https {
+        return Err(format!(
+            "{field_name} must begin with http:// or https://. (Field was set to `{url}`.)",
+        ));
+    }
+
+    let has_login = url.username() != "" || url.password().is_some();
+    if has_login {
+        return Err(format!(
+            "{field_name} should not contain a username or password.  (Field was set to `{url}`.)",
+        ));
+    }
+
+    match url.host() {
+        Some(Host::Domain(_)) => {}
+        Some(_) => {
+            return Err(format!(
+                "{field_name} should have a domain name. (It was `{url}`.)",
+            ))
+        }
+        None => {
+            return Err(format!(
+                "{field_name} should have a host. (It was `{url}`.)",
+            ))
+        }
+    }
+
+    if url.port().is_some() {
+        return Err(format!(
+            "{field_name} should not contain a port.  (It was `{url}`.)",
+        ));
+    }
+
+    Ok(())
 }

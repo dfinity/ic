@@ -5,8 +5,9 @@ edition = "2021"
 
 [dependencies]
 ic-canister-client-sender = { path = "../../../canister_client/sender" }
-ic-base-types = { path = "../../../types/base_types"}
+ic-base-types = { path = "../../../types/base_types" }
 ic-types = { path = "../../../types/types" }
 lazy_static = "1.4.0"
 rand = "0.8"
 rand_chacha = "0.3"
+url = "2.3.1"
