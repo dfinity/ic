@@ -3937,14 +3937,18 @@ name = "ic-backup"
 version = "0.8.0"
 dependencies = [
  "clap 3.2.14",
+ "ic-config",
  "ic-recovery",
  "ic-types",
+ "json5",
  "rand 0.8.5",
+ "serde",
  "serde_json",
  "slog",
  "slog-async",
  "slog-term",
  "tokio",
+ "url",
 ]
 
 [[package]]

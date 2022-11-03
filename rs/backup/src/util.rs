@@ -1,5 +1,4 @@
-use ic_types::{PrincipalId, SubnetId};
-use std::{future::Future, str::FromStr};
+use std::future::Future;
 use tokio::runtime::Runtime;
 
 pub fn block_on<F: Future>(f: F) -> F::Output {
@@ -10,10 +9,4 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 pub fn sleep_secs(secs: u64) {
     let sleep_duration = std::time::Duration::from_secs(secs);
     std::thread::sleep(sleep_duration);
-}
-
-pub fn subnet_id_from_str(s: &str) -> Result<SubnetId, String> {
-    PrincipalId::from_str(s)
-        .map_err(|e| format!("Unable to parse subnet_id {:?}", e))
-        .map(SubnetId::from)
 }

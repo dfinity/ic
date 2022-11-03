@@ -5,14 +5,18 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "3.1.6", features = ["derive"] }
+ic-config = { path = "../config" }
 ic-types = { path = "../types/types" }
 ic-recovery = { path = "../recovery" }
+json5 = "0.4.1"
 rand = "0.8"
+serde = { version = "1.0.99", features = ["derive"] }
 serde_json = "1.0.54"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 tokio = { version = "1.15.0", features = ["full"] }
+url = "2.1.1"
 
 [[bin]]
 name = "ic-backup"
