@@ -4935,6 +4935,7 @@ dependencies = [
  "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-internal-tls",
  "ic-crypto-internal-types",
+ "ic-crypto-node-key-generation",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha",
  "ic-crypto-test-utils",

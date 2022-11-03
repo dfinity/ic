@@ -116,6 +116,7 @@ fn should_correctly_generate_idkg_keys_if_other_keys_already_present_with_versio
             let npks_version_0_without_idkg_dealing_encryption_key = NodePublicKeys {
                 version: 0,
                 idkg_dealing_encryption_pk: None,
+                idkg_dealing_encryption_pks: vec![],
                 ..npks
             };
             store_public_keys(
@@ -171,6 +172,7 @@ fn should_correctly_generate_idkg_keys_if_other_keys_already_present_with_versio
             assert_eq!(npks.version, 1);
             let npks_version_1_without_idkg_dealing_encryption_key = NodePublicKeys {
                 idkg_dealing_encryption_pk: None,
+                idkg_dealing_encryption_pks: vec![],
                 ..npks
             };
             store_public_keys(
@@ -497,14 +499,7 @@ fn crypto_with_node_keys_generation(
         .with_keys(selector)
         .build();
     let current_node_public_keys = temp_crypto.current_node_public_keys();
-    let node_public_keys = NodePublicKeys {
-        version: 1,
-        node_signing_pk: current_node_public_keys.node_signing_public_key,
-        committee_signing_pk: current_node_public_keys.committee_signing_public_key,
-        tls_certificate: current_node_public_keys.tls_certificate,
-        dkg_dealing_encryption_pk: current_node_public_keys.dkg_dealing_encryption_public_key,
-        idkg_dealing_encryption_pk: current_node_public_keys.idkg_dealing_encryption_public_key,
-    };
+    let node_public_keys = NodePublicKeys::from(current_node_public_keys);
     (temp_crypto, node_public_keys)
 }
 
