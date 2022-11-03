@@ -7,20 +7,9 @@ use std::{
 };
 mod page_bytes;
 
-// Exported publicly for benchmarking.
-pub use heap::{HeapBasedPage, HeapBasedPageAllocator};
+pub mod mmap;
 
-mod heap;
-mod mmap;
-
-mod default_implementation {
-    pub use super::mmap::{MmapBasedPage, MmapBasedPageAllocator};
-    // Exported publicly for benchmarking.
-    // TODO(EXC-883): Re-enable with sandboxing after fixing crashes.
-    pub type DefaultPageImpl = MmapBasedPage;
-    pub type DefaultPageAllocatorImpl = MmapBasedPageAllocator;
-}
-pub use default_implementation::*;
+use mmap::{PageAllocatorInner, PageInner};
 
 use super::{FileDescriptor, FileOffset};
 
@@ -30,12 +19,10 @@ static ALLOCATED_PAGES: PageCounter = PageCounter::new();
 /// It is mostly immutable after creation with the only exception of `Buffer`
 /// modifying privately owned pages. The only way to create a page is via a
 /// `PageAllocator`.
-/// It is parameterized by the implementation type with the default value to
-/// enable easy switching between heap-based and mmap-based implementations.
 ///
 /// Exported publicly for benchmarking.
 #[derive(Debug)]
-pub struct Page<P: PageInner = DefaultPageImpl>(Arc<P>);
+pub struct Page(Arc<PageInner>);
 
 impl Page {
     /// Returns the contents of the page. The length of the slice is
@@ -68,10 +55,7 @@ impl Clone for Page {
 /// 2) PageMaps corresponding to checkpoints must have an empty page allocator
 ///    to prevent memory leaks. That's because such PageMaps may be kept in
 ///    memory for thousands of rounds by the state manager.
-///
-/// It is parameterized by the implementation type with the default value to
-/// enable easy switching between heap-based and mmap-based implementations.
-pub(super) struct PageAllocator<A: PageAllocatorInner = DefaultPageAllocatorImpl>(Arc<A>);
+pub struct PageAllocator(Arc<PageAllocatorInner>);
 
 /// We have to implement `Clone` manually because `#[derive(Clone)]` is confused
 /// by the generic parameter even though it is wrapped in `Arc`.
@@ -81,90 +65,50 @@ impl Clone for PageAllocator {
     }
 }
 
-impl<A: PageAllocatorInner> Default for PageAllocator<A> {
-    fn default() -> PageAllocator<A> {
-        PageAllocator(Arc::new(A::default()))
+impl Default for PageAllocator {
+    fn default() -> PageAllocator {
+        PageAllocator(Arc::new(PageAllocatorInner::default()))
     }
 }
 
-impl<A: PageAllocatorInner> PageAllocator<A> {
+impl PageAllocator {
     /// Allocates multiple pages with the given contents.
     ///
     /// The provided page count must match exactly the number of items in the
     /// iterator. Knowing the page count beforehand allows the page allocator
     /// to optimize allocation.
-    pub(super) fn allocate(
-        &self,
-        pages: &[(PageIndex, &PageBytes)],
-    ) -> Vec<(PageIndex, Page<A::PageInner>)> {
-        A::allocate(&self.0, pages)
+    pub fn allocate(&self, pages: &[(PageIndex, &PageBytes)]) -> Vec<(PageIndex, Page)> {
+        PageAllocatorInner::allocate(&self.0, pages)
     }
 
     /// Returns a serialization-friendly representation of the page allocator.
-    pub(super) fn serialize(&self) -> PageAllocatorSerialization {
+    pub fn serialize(&self) -> PageAllocatorSerialization {
         self.0.serialize()
     }
 
     /// Creates a page allocator from the given serialization-friendly
     /// representation.
-    pub(super) fn deserialize(page_allocator: PageAllocatorSerialization) -> Self {
-        Self(Arc::new(A::deserialize(page_allocator)))
+    pub fn deserialize(page_allocator: PageAllocatorSerialization) -> Self {
+        Self(Arc::new(PageAllocatorInner::deserialize(page_allocator)))
     }
 
     /// Returns a serialization-friendly representation of the given page-delta.
     /// The generic parameters simplify the usage with `PageDelta::iter()`.
-    pub(super) fn serialize_page_delta<'a, I>(&'a self, page_delta: I) -> PageDeltaSerialization
+    pub fn serialize_page_delta<'a, I>(&'a self, page_delta: I) -> PageDeltaSerialization
     where
-        I: IntoIterator<Item = (PageIndex, &'a Page<A::PageInner>)>,
+        I: IntoIterator<Item = (PageIndex, &'a Page)>,
     {
         self.0.serialize_page_delta(page_delta)
     }
 
     /// Creates a page-delta from the given serialization-friendly
     /// representation.
-    pub(super) fn deserialize_page_delta(
+    pub fn deserialize_page_delta(
         &self,
         page_delta: PageDeltaSerialization,
-    ) -> Vec<(PageIndex, Page<A::PageInner>)> {
-        A::deserialize_page_delta(&self.0, page_delta)
+    ) -> Vec<(PageIndex, Page)> {
+        PageAllocatorInner::deserialize_page_delta(&self.0, page_delta)
     }
-}
-
-/// Exported publicly for benchmarking.
-pub trait PageInner: Debug {
-    type PageAllocatorInner;
-
-    fn contents(&self) -> &PageBytes;
-
-    fn copy_from_slice(&mut self, offset: usize, slice: &[u8]);
-}
-
-/// Exported publicly for benchmarking.
-pub trait PageAllocatorInner: Debug + Default {
-    type PageInner: PageInner;
-
-    /// See the comments of the corresponding method in `PageAllocator`.
-    fn allocate(
-        page_allocator: &Arc<Self>,
-        pages: &[(PageIndex, &PageBytes)],
-    ) -> Vec<(PageIndex, Page<Self::PageInner>)>;
-
-    /// See the comments of the corresponding method in `PageAllocator`.
-    fn deserialize(serialized_page_allocator: PageAllocatorSerialization) -> Self;
-
-    /// See the comments of the corresponding method in `PageAllocator`.
-    fn serialize(&self) -> PageAllocatorSerialization;
-
-    /// See the comments of the corresponding method in `PageAllocator`.
-    fn serialize_page_delta<'a, I>(&'a self, page_delta: I) -> PageDeltaSerialization
-    where
-        I: IntoIterator<Item = (PageIndex, &'a Page<Self::PageInner>)>;
-
-    /// See the comments of the corresponding method in `PageAllocator`.
-    fn deserialize_page_delta(
-        page_allocator: &Arc<Self>,
-        page_delta: PageDeltaSerialization,
-    ) -> Vec<(PageIndex, Page<Self::PageInner>)>;
 }
 
 struct PageCounter(AtomicUsize);
@@ -174,16 +118,8 @@ impl PageCounter {
         Self(AtomicUsize::new(0))
     }
 
-    fn inc(&self) {
-        self.inc_by(1);
-    }
-
     fn inc_by(&self, count: usize) {
         self.0.fetch_add(count, Ordering::Relaxed);
-    }
-
-    fn dec(&self) {
-        self.dec_by(1);
     }
 
     fn dec_by(&self, count: usize) {
@@ -203,16 +139,11 @@ pub fn allocated_pages_count() -> usize {
 /// Serialization-friendly representation of `PageAllocator`.
 ///
 /// It contains sufficient information to reconstruct the page allocator
-/// in another process. There are three possible cases:
-/// - `Empty`: the page allocator doesn't exist and no pages were allocated.
-/// - `Heap`: the page allocator is `HeapBasedPageAllocator`.
+/// in another process. There is only one possible case:
 /// - `Mmap`: the page allocator is `MmapBasedPageAllocator` backed by a file
 ///   with the given file descriptor.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum PageAllocatorSerialization {
-    Heap,
-    Mmap(FileDescriptor),
-}
+pub struct PageAllocatorSerialization(pub FileDescriptor);
 
 /// Serialization-friendly representation of an indexed page.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -258,29 +189,20 @@ pub struct MmapPageSerialization {
 /// Serialization-friendly representation of `PageDelta`.
 ///
 /// It contains sufficient information to reconstruct the page-delta
-/// in another process. Note that pages are created using a page allocator,
-/// so the three cases here correspond to the three cases in `PageAllocator`:
-/// - `Heap`: the pages are allocated on the Rust heap and can be sent to
-///   another process only by copying the bytes.
-/// - `Mmap`: the pages are backed by the file owned by the page allocator. Each
-///   page is represented by its offset in the file. The length of the file is
-///   sent along to simplify deserialization. It is guaranteed that the file
-///   offsets of all pages are smaller than the length of the file.
+/// in another process. Note that he pages are backed by the file owned by the page allocator.
+/// Each page is represented by its offset in the file. The length of the file is
+/// sent along to simplify deserialization. It is guaranteed that the file
+/// offsets of all pages are smaller than the length of the file.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum PageDeltaSerialization {
-    Heap(Vec<PageSerialization>),
-    Mmap {
-        file_len: FileOffset,
-        pages: Vec<MmapPageSerialization>,
-    },
+pub struct PageDeltaSerialization {
+    file_len: FileOffset,
+    pages: Vec<MmapPageSerialization>,
 }
 
 impl PageDeltaSerialization {
     pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Heap(pages) => pages.is_empty(),
-            Self::Mmap { file_len, pages } => *file_len == 0 && pages.is_empty(),
-        }
+        let Self { file_len, pages } = self;
+        *file_len == 0 && pages.is_empty()
     }
 }
 

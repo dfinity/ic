@@ -4,10 +4,8 @@ use std::time::Duration;
 
 use criterion::{black_box, BenchmarkId, Criterion};
 use criterion_time::ProcessTime;
-use ic_replicated_state::{
-    page_map::{DefaultPageAllocatorImpl, HeapBasedPageAllocator, PageAllocatorInner},
-    PageIndex,
-};
+use ic_replicated_state::page_map::PageAllocator;
+use ic_replicated_state::PageIndex;
 use ic_sys::{PageBytes, PAGE_SIZE};
 
 // The number of threads doing allocation in parallel
@@ -27,36 +25,15 @@ fn bench_allocator(c: &mut Criterion<ProcessTime>) {
             .map(|i| (PageIndex::new(i as u64), page))
             .collect();
         let mut thread_pool = Cell::new(scoped_threadpool::Pool::new(NUM_THREADS));
-        group.bench_function(BenchmarkId::new("HeapBasedPageAllocator", n), |b| {
+        group.bench_function(BenchmarkId::new("MmapBasedPageAllocator", n), |b| {
             b.iter(|| {
                 thread_pool.get_mut().scoped(|scope| {
                     for _ in 0..NUM_THREADS {
                         scope.execute(|| {
-                            let allocator = Arc::new(HeapBasedPageAllocator::default());
-                            for _ in 0..NUM_ALLOCATIONS {
-                                let pages =
-                                    HeapBasedPageAllocator::allocate(&allocator, &pages[..]);
-                                black_box(pages);
-                            }
-                        });
-                    }
-                });
-            })
-        });
-        // We don't use mmap-based allocator directly because it is only available on
-        // Linux for now. To avoid platform specific code here, we compare the
-        // heap-based allocator with the default allocator, which can be either
-        // the mmap-based allocator or the heap-based allocator.
-        group.bench_function(BenchmarkId::new("DefaultPageAllocatorImpl", n), |b| {
-            b.iter(|| {
-                thread_pool.get_mut().scoped(|scope| {
-                    for _ in 0..NUM_THREADS {
-                        scope.execute(|| {
-                            let allocator = Arc::new(DefaultPageAllocatorImpl::default());
+                            let allocator = Arc::new(PageAllocator::default());
                             // Allocate multiple times to simulate multiple rounds per checkpoint.
                             for _ in 0..NUM_ALLOCATIONS {
-                                let pages =
-                                    DefaultPageAllocatorImpl::allocate(&allocator, &pages[..]);
+                                let pages = PageAllocator::allocate(&allocator, &pages[..]);
                                 black_box(pages);
                             }
                         });

@@ -8,17 +8,17 @@ use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_utils::{deterministic_operations::deterministic_copy_from_slice, fs::write_all_vectored};
 pub use page_allocator::{
-    allocated_pages_count, PageAllocatorSerialization, PageDeltaSerialization, PageSerialization,
+    allocated_pages_count, PageAllocator, PageAllocatorSerialization, PageDeltaSerialization,
+    PageSerialization,
 };
-// Exported publicly for benchmarking.
-pub use page_allocator::{DefaultPageAllocatorImpl, HeapBasedPageAllocator, PageAllocatorInner};
+
 // NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
 // operation. This allows us to simplify canister state management: we can
 // simply have a copy of the whole PageMap in every canister snapshot.
 use ic_types::{Height, NumPages, MAX_STABLE_MEMORY_IN_BYTES};
 use int_map::IntMap;
 use libc::off_t;
-use page_allocator::{Page, PageAllocator};
+use page_allocator::Page;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::HashMap;

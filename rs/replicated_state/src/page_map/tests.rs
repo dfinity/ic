@@ -34,12 +34,9 @@ fn duplicate_file_descriptors(
                 ..mapping
             });
     serialized_page_map.page_allocator = match serialized_page_map.page_allocator {
-        PageAllocatorSerialization::Mmap(file_descriptor) => {
-            PageAllocatorSerialization::Mmap(FileDescriptor {
-                fd: dup(file_descriptor.fd).unwrap(),
-            })
-        }
-        _ => serialized_page_map.page_allocator,
+        PageAllocatorSerialization(file_descriptor) => PageAllocatorSerialization(FileDescriptor {
+            fd: dup(file_descriptor.fd).unwrap(),
+        }),
     };
     serialized_page_map
 }
