@@ -17,6 +17,7 @@ pub struct SubnetConfig {
 pub struct Config {
     pub root_dir: PathBuf,
     pub nns_url: String,
+    pub ssh_credentials: PathBuf,
     pub subnets: Vec<SubnetConfig>,
 }
 
@@ -32,6 +33,12 @@ where
 impl ConfigValidate for Config {
     fn validate(self) -> Result<Self, String> {
         Url::parse(&self.nns_url).map_err(|e| format!("Unable to parse NNS Url {:?}", e))?;
+        if !self.ssh_credentials.exists() {
+            return Err(format!(
+                "Missing ssh credentials file: {:?}",
+                self.ssh_credentials
+            ));
+        }
         if self.subnets.is_empty() {
             return Err("No subnet configured for backup!".to_string());
         }
