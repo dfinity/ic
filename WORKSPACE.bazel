@@ -297,3 +297,17 @@ http_archive(
 load("@aspect_bazel_lib//lib:repositories.bzl", "aspect_bazel_lib_dependencies")
 
 aspect_bazel_lib_dependencies()
+
+# Official WebAssembly test suite.
+# To be used for testing libraries that handle canister Wasm code.
+
+new_git_repository(
+    name = "wasm_spec_testsuite",
+    build_file_content = """filegroup(
+        name = "wast_files",
+        srcs = glob(["**/*.wast"]),
+        visibility = ["//visibility:public"]
+    )""",
+    commit = "4f77306bb63151631d84f58dedf67958eb9911b9",
+    remote = "git@github.com:WebAssembly/testsuite.git",
+)
