@@ -20,6 +20,8 @@
 .bazelrc                  @dfinity-lab/teams/idx
 .bazelversion             @dfinity-lab/teams/idx
 
+# [Publishing-Artifacts]
+/publish/ @dfinity-lab/teams/idx
 
 # [Documentation]
 /docs/                                                     @dfinity-lab/teams/docs-owners

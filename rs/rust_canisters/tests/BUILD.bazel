@@ -129,11 +129,16 @@ optimized_canister(
 )
 
 rust_canister(
-    name = "panics",
+    name = "panics_raw",
     srcs = ["src/panics.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "panics",
+    wasm = "panics_raw",
 )
 
 rust_test_suite(

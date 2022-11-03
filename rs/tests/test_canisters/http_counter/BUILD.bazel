@@ -1,27 +1,33 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-rust_library(
-    name = "http_counter",
-    srcs = glob(["src/**/*.rs"]),
+DEPENDENCIES = [
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-certified-map",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:ic-cdk-macros",
+]
+
+ALIASES = {}
+
+rust_canister(
+    name = "http_counter-raw",
+    srcs = [
+        "src/canister.rs",
+    ],
+    aliases = ALIASES,
     crate_name = "http_counter",
-    proc_macro_deps = select({
-        "@rules_rust//rust/platform:wasm32-unknown-unknown": [
-            "@crate_index//:ic-cdk-macros",
-        ],
-        "//conditions:default": [],
-    }),
-    rustc_flags = ["--crate-type=cdylib"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    deps = select({
-        "@rules_rust//rust/platform:wasm32-unknown-unknown": [
-            "@crate_index//:candid",
-            "@crate_index//:ic-cdk",
-            "@crate_index//:ic-cdk-macros",
-            "@crate_index//:ic-certified-map",
-            "@crate_index//:serde",
-        ],
-        "//conditions:default": [],
-    }),
+    deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "http_counter",
+    wasm = ":http_counter-raw",
 )

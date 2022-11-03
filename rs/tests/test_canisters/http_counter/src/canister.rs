@@ -255,3 +255,5 @@ fn http_streaming(token: Token) -> StreamingCallbackHttpResponse {
         },
     }
 }
+
+fn main() {}

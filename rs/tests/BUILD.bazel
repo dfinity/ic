@@ -4,6 +4,8 @@ load(":system_tests.bzl", "system_test")
 
 package(default_visibility = ["//visibility:public"])
 
+exports_files(["src/cow_safety.wasm"])
+
 DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/bitcoin/ckbtc/agent",

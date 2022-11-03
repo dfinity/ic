@@ -1,5 +1,3 @@
-load("//bazel:defs.bzl", "gzip_compress")
-load("//bazel:canisters.bzl", "optimized_canister")
 load("//bazel:transitions.bzl", "malicious_binary", "opt_debug_binary")
 load("//gitlab-ci/src/artifacts:collect.bzl", "collect_artifacts")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
@@ -81,37 +79,6 @@ filegroup(
     name = "binaries",
     srcs = [name for name in BINARIES],
 )
-
-optimized_canister(
-    name = "ledger_archive_canister",
-    wasm = "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
-)
-
-CANISTERS = {
-    "cycles-minting-canister": "//rs/nns/cmc:cycles-minting-canister",
-    "genesis-token-canister": "//rs/nns/gtc:genesis-token-canister",
-    "governance-canister": "//rs/nns/governance:governance-canister",
-    "icrc1-archive-canister": "//rs/rosetta-api/icrc1/archive:archive_canister",
-    "icrc1-index-canister": "//rs/rosetta-api/icrc1/index:index_canister",
-    "icrc1-ledger-canister": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "ledger-canister": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
-    "ledger-canister__notify-method": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
-    "nns-ui-canister": "//rs/nns/nns-ui:nns-ui-canister",
-    "registry-canister": "//rs/registry/canister:registry-canister",
-    "root-canister": "//rs/nns/handlers/root:root-canister",
-    "sns-governance-canister": "//rs/sns/governance:sns-governance-canister",
-    "sns-root-canister": "//rs/sns/root:sns-root-canister",
-    "sns-swap-canister": "//rs/sns/swap:sns-swap-canister",
-    "xnet-test-canister": "//rs/rust_canisters/xnet_test:xnet-test-canister",
-}
-
-[
-    gzip_compress(
-        name = name + ".wasm.gz",
-        srcs = [target],
-    )
-    for (name, target) in CANISTERS.items()
-]
 
 filegroup(
     name = "sdk",
