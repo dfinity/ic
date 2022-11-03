@@ -124,15 +124,24 @@ const TEST_CANISTER: &str = r#"
     (export "canister_update grow_mem" (func $grow_mem))
 )"#;
 
+const TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS: u64 = 0;
+
+/// This is an empty canister that only exposes canister_heartbeat method.
+const TEST_HEARTBEAT_CANISTER: &str = r#"
+(module
+    (func $x)
+    (export "canister_heartbeat" (func $x))
+)"#;
+
+/// Simulates `execute_round` to get the storage cost of 1 GiB for 1 second
+/// with a given compute allocation.
+/// Since the duration between allocation charges may not be equal to 1 second
+/// the final cost is scaled proportionally.
 fn simulate_one_gib_per_second_cost(
     subnet_type: SubnetType,
     subnet_size: usize,
     compute_allocation: ComputeAllocation,
 ) -> Cycles {
-    // This function simulates `execute_round` to get the storage cost of 1 GiB for 1 second
-    // with a given compute allocation.
-    // Since the duration between allocation charges may not be equal to 1 second
-    // the final cost is scaled proportionally.
     let one_gib: u64 = 1 << 30;
     let one_second = Duration::from_secs(1);
 
@@ -215,11 +224,11 @@ fn filtered_subnet_config(subnet_type: SubnetType, filter: KeepFeesFilter) -> Su
     subnet_config
 }
 
+/// Simulates `execute_round` to get the cost of installing code,
+/// including charging and refunding execution cycles.
+/// Filtered `CyclesAccountManagerConfig` is used to avoid irrelevant costs,
+/// eg. ingress induction cost.
 fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
-    // This function simulates `execute_round` to get the cost of installing code,
-    // including charging and refunding execution cycles.
-    // Filtered `CyclesAccountManagerConfig` is used to avoid irrelevant costs,
-    // eg. ingress induction cost.
     let env = StateMachineBuilder::new()
         .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
@@ -244,13 +253,13 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
     Cycles::from(balance_before - balance_after)
 }
 
+/// Simulates `execute_round` to get the cost during executing ingress.
+/// Filtered `CyclesAccountManagerConfig` is used to avoid irrelevant costs.
 fn simulate_execute_ingress(
     subnet_type: SubnetType,
     subnet_size: usize,
     filter: KeepFeesFilter,
 ) -> Cycles {
-    // This function simulates `execute_round` to get the cost during executing ingress.
-    // Filtered `CyclesAccountManagerConfig` is used to avoid irrelevant costs.
     let env = StateMachineBuilder::new()
         .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
@@ -286,6 +295,30 @@ fn simulate_ingress_induction_cost(subnet_type: SubnetType, subnet_size: usize) 
 
 fn simulate_execute_message_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
     simulate_execute_ingress(subnet_type, subnet_size, KeepFeesFilter::ExecutionCost)
+}
+
+/// Simulates `execute_round` to get the cost of executing a heartbeat,
+/// including charging and refunding execution cycles.
+fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    let env = StateMachineBuilder::new()
+        .with_use_cost_scaling_flag(true)
+        .with_subnet_type(subnet_type)
+        .with_subnet_size(subnet_size)
+        .build();
+    let canister_id = env.create_canister_with_cycles(DEFAULT_CYCLES_PER_NODE * subnet_size, None);
+    env.install_wasm_in_mode(
+        canister_id,
+        CanisterInstallMode::Install,
+        wabt::wat2wasm(TEST_HEARTBEAT_CANISTER).expect("invalid WAT"),
+        vec![],
+    )
+    .unwrap();
+
+    let balance_before = env.cycle_balance(canister_id);
+    env.tick();
+    let balance_after = env.cycle_balance(canister_id);
+
+    Cycles::from(balance_before - balance_after)
 }
 
 fn trillion_cycles(value: f64) -> Cycles {
@@ -793,4 +826,78 @@ fn test_subnet_size_execute_message() {
             subnet_size
         );
     }
+}
+
+#[test]
+fn test_subnet_size_execute_heartbeat() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = calculate_execution_cycles(
+        &config,
+        NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS),
+        reference_subnet_size,
+    );
+
+    // Check default cost.
+    assert_eq!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, 1)
+            < simulate_execute_canister_heartbeat_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, 11)
+            < simulate_execute_canister_heartbeat_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, 101)
+            < simulate_execute_canister_heartbeat_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, 1_001)
+            < simulate_execute_canister_heartbeat_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        simulate_execute_canister_heartbeat_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_execute_heartbeat_default_cost() {
+    let subnet_size_lo = 13;
+    let subnet_size_hi = 34;
+    let subnet_type = SubnetType::Application;
+    let per_year: u64 = 60 * 60 * 24 * 365; // Assuming 1 heartbeat per second.
+
+    // Assert small subnet size costs per single heartbeat and per year.
+    let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_lo);
+    assert_eq!(cost, Cycles::new(590_000));
+    assert_eq!(cost * per_year, trillion_cycles(18.606_240));
+
+    // Assert big subnet size cost per single heartbeat and per year.
+    let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_hi);
+    assert_eq!(cost, Cycles::new(1_543_077));
+    assert_eq!(cost * per_year, trillion_cycles(48.662_476_272));
+
+    // Assert big subnet size cost scaled to a small size.
+    let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
+    assert_eq!(adjusted_cost, Cycles::new(590_000));
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(18.606_240));
 }
