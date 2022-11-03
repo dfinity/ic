@@ -1,5 +1,5 @@
 {
-  "checksum": "b64318b4631b526ff0e33499e53e234b08c7ac483278359758dadd180901413b",
+  "checksum": "6ab6f78d9ae93ac1d71d71b24f2682a6dc0c9935e896c751d7dcc38e19894d4a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -866,7 +866,7 @@
               "target": "mime"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -1207,7 +1207,7 @@
             ],
             "cfg(not(all(target_arch = \"arm\", target_os = \"none\")))": [
               {
-                "id": "once_cell 1.15.0",
+                "id": "once_cell 1.16.0",
                 "target": "once_cell"
               }
             ]
@@ -2756,7 +2756,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -3051,7 +3051,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -3759,7 +3759,7 @@
               "target": "k256"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -4297,7 +4297,7 @@
               "target": "digest"
             },
             {
-              "id": "ff 0.12.0",
+              "id": "ff 0.12.1",
               "target": "ff"
             },
             {
@@ -5035,13 +5035,13 @@
       },
       "license": "MIT"
     },
-    "bytemuck 1.12.1": {
+    "bytemuck 1.12.2": {
       "name": "bytemuck",
-      "version": "1.12.1",
+      "version": "1.12.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bytemuck/1.12.1/download",
-          "sha256": "2f5715e491b5a1598fc2bef5a606847b5dc1d48ea625bd3c02c00de8285591da"
+          "url": "https://crates.io/api/v1/crates/bytemuck/1.12.2/download",
+          "sha256": "5aec14f5d4e6e3f927cd0c81f72e5710d95ee9019fbeb4b3021193867491bfd8"
         }
       },
       "targets": [
@@ -5064,7 +5064,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "1.12.1"
+        "version": "1.12.2"
       },
       "license": "Zlib OR Apache-2.0 OR MIT"
     },
@@ -5794,13 +5794,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "cc 1.0.73": {
+    "cc 1.0.74": {
       "name": "cc",
-      "version": "1.0.73",
+      "version": "1.0.74",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cc/1.0.73/download",
-          "sha256": "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
+          "url": "https://crates.io/api/v1/crates/cc/1.0.74/download",
+          "sha256": "581f5dba903aac52ea3feb5ec4810848460ee833876f1f9b0fdeab1f19091574"
         }
       },
       "targets": [
@@ -5848,9 +5848,9 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.73"
+        "version": "1.0.74"
       },
-      "license": "MIT/Apache-2.0"
+      "license": "MIT OR Apache-2.0"
     },
     "cddl 0.9.1": {
       "name": "cddl",
@@ -6784,7 +6784,7 @@
               "target": "indexmap"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -10115,7 +10115,7 @@
               "target": "lock_api"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -11125,7 +11125,7 @@
               "target": "cargo_metadata"
             },
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             },
             {
@@ -11233,7 +11233,7 @@
               "target": "features"
             },
             {
-              "id": "ff 0.12.0",
+              "id": "ff 0.12.1",
               "target": "ff"
             },
             {
@@ -11321,7 +11321,7 @@
               "target": "humantime_serde"
             },
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -11345,7 +11345,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-cdk 0.6.3",
+              "id": "ic-cdk 0.6.4",
               "target": "ic_cdk"
             },
             {
@@ -11531,7 +11531,7 @@
               "target": "num_cpus"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -11996,6 +11996,10 @@
               "target": "wasmtime_runtime"
             },
             {
+              "id": "wast 48.0.0",
+              "target": "wast"
+            },
+            {
               "id": "webpki 0.21.4",
               "target": "webpki"
             },
@@ -12062,7 +12066,7 @@
               "target": "gflags_derive"
             },
             {
-              "id": "ic-cdk-macros 0.6.3",
+              "id": "ic-cdk-macros 0.6.4",
               "target": "ic_cdk_macros"
             },
             {
@@ -12884,7 +12888,7 @@
               "target": "digest"
             },
             {
-              "id": "ff 0.12.0",
+              "id": "ff 0.12.1",
               "target": "ff"
             },
             {
@@ -13382,7 +13386,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -13457,7 +13461,7 @@
               "target": "log"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -13583,7 +13587,7 @@
               "target": "indenter"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             }
           ],
@@ -13801,13 +13805,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "ff 0.12.0": {
+    "ff 0.12.1": {
       "name": "ff",
-      "version": "0.12.0",
+      "version": "0.12.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ff/0.12.0/download",
-          "sha256": "df689201f395c6b90dfe87127685f8dbfc083a5e779e613575d8bd7314300c3e"
+          "url": "https://crates.io/api/v1/crates/ff/0.12.1/download",
+          "sha256": "d013fc25338cc558c5c2cfbad646908fb23591e2404481826742b651c9af7160"
         }
       },
       "targets": [
@@ -13847,7 +13851,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.12.0"
+        "version": "0.12.1"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -13988,7 +13992,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -16050,7 +16054,7 @@
         "deps": {
           "common": [
             {
-              "id": "ff 0.12.0",
+              "id": "ff 0.12.1",
               "target": "ff"
             },
             {
@@ -17103,7 +17107,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -17111,7 +17115,7 @@
               "target": "log"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -17254,13 +17258,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "hyper 0.14.20": {
+    "hyper 0.14.22": {
       "name": "hyper",
-      "version": "0.14.20",
+      "version": "0.14.22",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/hyper/0.14.20/download",
-          "sha256": "02c929dc5c39e335a03c405292728118860721b10190d98c2a0f0efd5baafbac"
+          "url": "https://crates.io/api/v1/crates/hyper/0.14.22/download",
+          "sha256": "abfba89e19b959ca163c7752ba59d737c1ceea53a5d31a149c805446fc958064"
         }
       },
       "targets": [
@@ -17365,7 +17369,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.14.20"
+        "version": "0.14.22"
       },
       "license": "MIT"
     },
@@ -17416,7 +17420,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -17499,7 +17503,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -17553,7 +17557,7 @@
         "deps": {
           "common": [
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -17611,7 +17615,7 @@
               "target": "bytes"
             },
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -17743,7 +17747,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -17889,13 +17893,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-cdk 0.6.3": {
+    "ic-cdk 0.6.4": {
       "name": "ic-cdk",
-      "version": "0.6.3",
+      "version": "0.6.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-cdk/0.6.3/download",
-          "sha256": "985ddda647dc2f77229220b2ca90b08d74a2654d7725a1c9fa1b452cc59f1940"
+          "url": "https://crates.io/api/v1/crates/ic-cdk/0.6.4/download",
+          "sha256": "d12a3ef5de121c699a4db746067d7810c68446804545dd9ecc39f05b6e4c5d74"
         }
       },
       "targets": [
@@ -17939,17 +17943,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.3"
+        "version": "0.6.4"
       },
       "license": "Apache-2.0"
     },
-    "ic-cdk-macros 0.6.3": {
+    "ic-cdk-macros 0.6.4": {
       "name": "ic-cdk-macros",
-      "version": "0.6.3",
+      "version": "0.6.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-cdk-macros/0.6.3/download",
-          "sha256": "f6faf61670aa29b857098e751d49cd7ad6bc379ee834dc7ae7e639e59a0addbc"
+          "url": "https://crates.io/api/v1/crates/ic-cdk-macros/0.6.4/download",
+          "sha256": "aa71f3eb89b4023b22b99304094bd569cf445b6fddcbe88a2bfc0c59bd1f0be9"
         }
       },
       "targets": [
@@ -17978,7 +17982,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.6.3",
+              "id": "ic-cdk 0.6.4",
               "target": "ic_cdk"
             },
             {
@@ -18005,7 +18009,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.3"
+        "version": "0.6.4"
       },
       "license": "Apache-2.0"
     },
@@ -18423,7 +18427,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -18679,7 +18683,7 @@
               "target": "digest"
             },
             {
-              "id": "ff 0.12.0",
+              "id": "ff 0.12.1",
               "target": "ff"
             },
             {
@@ -19203,7 +19207,7 @@
               "target": "num_format"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -19940,7 +19944,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             },
             {
@@ -20667,7 +20671,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -21458,7 +21462,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             }
           ],
@@ -21474,7 +21478,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -21549,7 +21553,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -21741,7 +21745,7 @@
               "target": "bindgen"
             },
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             },
             {
@@ -22084,7 +22088,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             },
             {
@@ -22179,7 +22183,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             },
             {
@@ -22266,7 +22270,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             },
             {
@@ -22916,13 +22920,13 @@
       },
       "license": "MIT"
     },
-    "lzma-sys 0.1.19": {
+    "lzma-sys 0.1.20": {
       "name": "lzma-sys",
-      "version": "0.1.19",
+      "version": "0.1.20",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/lzma-sys/0.1.19/download",
-          "sha256": "e06754c4acf47d49c727d5665ca9fb828851cda315ed3bd51edd148ef78a8772"
+          "url": "https://crates.io/api/v1/crates/lzma-sys/0.1.20/download",
+          "sha256": "5fda04ab3764e6cde78b9974eec4f779acaba7c4e84b36eca3cf77c581b85d27"
         }
       },
       "targets": [
@@ -22963,14 +22967,14 @@
               "target": "libc"
             },
             {
-              "id": "lzma-sys 0.1.19",
+              "id": "lzma-sys 0.1.20",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.19"
+        "version": "0.1.20"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -22979,7 +22983,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             },
             {
@@ -26619,13 +26623,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "once_cell 1.15.0": {
+    "once_cell 1.16.0": {
       "name": "once_cell",
-      "version": "1.15.0",
+      "version": "1.16.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/once_cell/1.15.0/download",
-          "sha256": "e82dad04139b71a90c080c8463fe0dc7902db5192d939bd0950f074d014339e1"
+          "url": "https://crates.io/api/v1/crates/once_cell/1.16.0/download",
+          "sha256": "86f0b0d4bf799edbc74508c1e8bf170ff5f41238e5f8225603ca7caaae2b7860"
         }
       },
       "targets": [
@@ -26654,7 +26658,7 @@
           "std"
         ],
         "edition": "2021",
-        "version": "1.15.0"
+        "version": "1.16.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -26844,7 +26848,7 @@
               "target": "libc"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -27038,7 +27042,7 @@
               "target": "autocfg"
             },
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             },
             {
@@ -28183,7 +28187,7 @@
               "target": "base64"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -28560,7 +28564,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -29462,7 +29466,7 @@
               "target": "nix"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -30213,7 +30217,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -31357,7 +31361,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -33487,7 +33491,7 @@
                 "target": "http_body"
               },
               {
-                "id": "hyper 0.14.20",
+                "id": "hyper 0.14.22",
                 "target": "hyper"
               },
               {
@@ -33516,7 +33520,7 @@
                 "alias": "native_tls_crate"
               },
               {
-                "id": "once_cell 1.15.0",
+                "id": "once_cell 1.16.0",
                 "target": "once_cell"
               },
               {
@@ -33710,7 +33714,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytemuck 1.12.1",
+              "id": "bytemuck 1.12.2",
               "target": "bytemuck"
             }
           ],
@@ -33798,13 +33802,13 @@
                 "target": "libc"
               },
               {
-                "id": "once_cell 1.15.0",
+                "id": "once_cell 1.16.0",
                 "target": "once_cell"
               }
             ],
             "cfg(any(target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"illumos\", target_os = \"netbsd\", target_os = \"openbsd\", target_os = \"solaris\"))": [
               {
-                "id": "once_cell 1.15.0",
+                "id": "once_cell 1.16.0",
                 "target": "once_cell"
               }
             ],
@@ -33826,7 +33830,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -35180,13 +35184,13 @@
       },
       "license": "MIT"
     },
-    "scoped-tls 1.0.0": {
+    "scoped-tls 1.0.1": {
       "name": "scoped-tls",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/scoped-tls/1.0.0/download",
-          "sha256": "ea6a9290e3c9cf0f18145ef7ffa62d68ee0bf5fcd651017e586dc7fd5da448c2"
+          "url": "https://crates.io/api/v1/crates/scoped-tls/1.0.1/download",
+          "sha256": "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
         }
       },
       "targets": [
@@ -35209,7 +35213,7 @@
           "**"
         ],
         "edition": "2015",
-        "version": "1.0.0"
+        "version": "1.0.1"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -35623,7 +35627,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -38844,7 +38848,7 @@
               "target": "debug_unreachable"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -40905,7 +40909,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             }
           ],
@@ -42528,7 +42532,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -43206,7 +43210,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             }
           ],
@@ -45232,7 +45236,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 0.14.20",
+              "id": "hyper 0.14.22",
               "target": "hyper"
             },
             {
@@ -45264,7 +45268,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "scoped-tls 1.0.0",
+              "id": "scoped-tls 1.0.1",
               "target": "scoped_tls"
             },
             {
@@ -45545,7 +45549,7 @@
               "target": "log"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -45841,6 +45845,48 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
+    "wasm-encoder 0.19.0": {
+      "name": "wasm-encoder",
+      "version": "0.19.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.19.0/download",
+          "sha256": "c5816e88e8ea7335016aa62eb0485747f786136d505a9b3890f8c400211d9b5f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_encoder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.19.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception"
+    },
     "wasmparser 0.77.0": {
       "name": "wasmparser",
       "version": "0.77.0",
@@ -46034,7 +46080,7 @@
               "target": "object"
             },
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             },
             {
@@ -46462,7 +46508,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.15.0",
+              "id": "once_cell 1.16.0",
               "target": "once_cell"
             }
           ],
@@ -46607,7 +46653,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -46667,6 +46713,64 @@
         },
         "edition": "2021",
         "version": "1.0.1"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception"
+    },
+    "wast 48.0.0": {
+      "name": "wast",
+      "version": "48.0.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/wast/48.0.0/download",
+          "sha256": "84825b5ac7164df8260c9e2b2e814075334edbe7ac426f2469b93a5eeac23cce"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wast",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "wast",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "wasm-module"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            },
+            {
+              "id": "memchr 2.5.0",
+              "target": "memchr"
+            },
+            {
+              "id": "unicode-width 0.1.10",
+              "target": "unicode_width"
+            },
+            {
+              "id": "wasm-encoder 0.19.0",
+              "target": "wasm_encoder"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "48.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -47027,7 +47131,7 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "once_cell 1.15.0",
+                "id": "once_cell 1.16.0",
                 "target": "once_cell"
               }
             ]
@@ -48719,7 +48823,7 @@
         "deps": {
           "common": [
             {
-              "id": "lzma-sys 0.1.19",
+              "id": "lzma-sys 0.1.20",
               "target": "lzma_sys"
             }
           ],
@@ -49095,7 +49199,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.73",
+              "id": "cc 1.0.74",
               "target": "cc"
             }
           ],
@@ -49113,7 +49217,7 @@
     "bindgen 0.59.2",
     "brotli 3.3.4",
     "brotli-decompressor 2.3.2",
-    "cc 1.0.73",
+    "cc 1.0.74",
     "cddl 0.9.1",
     "clap 3.2.23",
     "cpp_demangle 0.3.5",
