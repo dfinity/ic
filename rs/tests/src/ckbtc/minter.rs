@@ -12,42 +12,50 @@ Runbook::
 4. Perform calls and verify results for following endpoints:
     - get_btc_address
     - get_withdrawal_account
-    - check_update_balance
+    - update_balance (with canister upgrades to verify proper state preservation).
 
 end::catalog[] */
 
-use crate::ckbtc::lib::{
-    activate_ecdsa_signature, install_ledger, install_minter, print_subnets, subnet_app,
-    subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
-};
 use crate::{
+    ckbtc::lib::{
+        activate_ecdsa_signature, create_canister, install_ledger, install_minter, print_subnets,
+        subnet_app, subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
+    },
     driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
         universal_vm::UniversalVms,
     },
-    util::{assert_create_agent, block_on, delay, UniversalCanister},
+    util::{assert_create_agent, block_on, delay, runtime_from_url, UniversalCanister},
 };
-use bitcoincore_rpc::bitcoin::Address;
-use bitcoincore_rpc::{Auth, Client, RpcApi};
+use bitcoincore_rpc::{bitcoin::Address, Auth, Client, RpcApi};
 use candid::{Decode, Encode, Nat, Principal};
+use canister_test::Canister;
 use ic_base_types::PrincipalId;
+use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     get_withdrawal_account::{compute_subaccount, GetWithdrawalAccountResult},
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
-use ic_icrc1::Account;
-use ic_icrc1_agent::{CallMode, Icrc1Agent, TransferArg};
+use ic_icrc1::endpoints::{BlockIndex, GetTransactionsRequest, GetTransactionsResponse};
+use ic_icrc1::{Account, Subaccount};
+use ic_icrc1_agent::{Icrc1Agent, Icrc1AgentError};
 use ic_universal_canister::{management, wasm};
-use slog::info;
+use slog::{debug, info, Logger};
 use std::time::{Duration, Instant};
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
 const UPDATE_BALANCE_TIMEOUT: Duration = Duration::from_secs(300);
 
-pub fn get_btc_address_test(env: TestEnv) {
+/// The default value of minimum confirmations on the Bitcoin server.
+const BTC_MIN_CONFIRMATIONS: u64 = 6;
+
+/// The initial amount of Satoshi per blocks (before halving).
+const BTC_BLOCK_SIZE: u64 = 50_0000_0000;
+
+pub fn test_get_btc_address(env: TestEnv) {
     let logger = env.logger();
     let subnet_app = subnet_app(&env);
     let subnet_sys = subnet_sys(&env);
@@ -57,8 +65,12 @@ pub fn get_btc_address_test(env: TestEnv) {
     print_subnets(&env);
 
     block_on(async {
-        let ledger_id = install_ledger(&node, &logger).await;
-        let minter_id = install_minter(&node, ledger_id, &logger).await;
+        let runtime = runtime_from_url(node.get_public_url());
+        let mut ledger_canister = create_canister(&runtime).await;
+        let mut minter_canister = create_canister(&runtime).await;
+        let minting_user = minter_canister.canister_id().get();
+        let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger).await;
         let minter = Principal::try_from_slice(minter_id.as_ref()).unwrap();
         let agent = assert_create_agent(node.get_public_url().as_str()).await;
         activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
@@ -84,7 +96,7 @@ pub fn get_btc_address_test(env: TestEnv) {
     });
 }
 
-pub fn get_withdrawal_account_test(env: TestEnv) {
+pub fn test_get_withdrawal_account(env: TestEnv) {
     let logger = env.logger();
     let subnet_app = subnet_app(&env);
     let subnet_sys = subnet_sys(&env);
@@ -94,8 +106,12 @@ pub fn get_withdrawal_account_test(env: TestEnv) {
     print_subnets(&env);
 
     block_on(async {
-        let ledger_id = install_ledger(&node, &logger).await;
-        let minter_id = install_minter(&node, ledger_id, &logger).await;
+        let runtime = runtime_from_url(node.get_public_url());
+        let mut ledger_canister = create_canister(&runtime).await;
+        let mut minter_canister = create_canister(&runtime).await;
+        let minting_user = minter_canister.canister_id().get();
+        let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger).await;
         let minter = Principal::try_from_slice(minter_id.as_ref()).unwrap();
         let agent = assert_create_agent(node.get_public_url().as_str()).await;
         activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
@@ -127,7 +143,7 @@ pub fn get_withdrawal_account_test(env: TestEnv) {
     });
 }
 
-pub fn update_balance(env: TestEnv) {
+pub fn test_update_balance(env: TestEnv) {
     let logger = env.logger();
     let subnet_app = subnet_app(&env);
     let subnet_sys = subnet_sys(&env);
@@ -135,9 +151,362 @@ pub fn update_balance(env: TestEnv) {
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_subnet_id = subnet_app.subnet_id;
 
-    // Get access to btc replica
+    // Get access to btc replica.
+    let btc_rpc = get_btc_client(&env);
+
+    // Create wallet if required.
+    ensure_wallet(&btc_rpc, &logger);
+
+    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    // Creating the 10 first block to reach the min confirmations of the minter canister.
+    debug!(
+        &logger,
+        "Generating 10 blocks to default address: {}", &default_btc_address
+    );
+    btc_rpc
+        .generate_to_address(10, &default_btc_address)
+        .unwrap();
+
+    block_on(async {
+        let runtime = runtime_from_url(node.get_public_url());
+        let mut ledger_canister = create_canister(&runtime).await;
+        let mut minter_canister = create_canister(&runtime).await;
+        let minting_user = minter_canister.canister_id().get();
+        let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger).await;
+        let minter = Principal::from(minter_id.get());
+        let ledger = Principal::from(ledger_id.get());
+        let agent = assert_create_agent(node.get_public_url().as_str()).await;
+        let universal_canister = UniversalCanister::new(&agent, node.effective_canister_id()).await;
+        activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
+
+        let ledger_agent = Icrc1Agent {
+            agent: agent.clone(),
+            ledger_canister_id: ledger,
+        };
+        let minter_agent = CkBtcMinterAgent {
+            agent: agent.clone(),
+            minter_canister_id: minter,
+        };
+
+        let caller = agent
+            .get_principal()
+            .expect("Error while getting principal.");
+        let subaccount0 = compute_subaccount(PrincipalId::from(caller), 0);
+        let subaccount1 = compute_subaccount(PrincipalId::from(caller), 567);
+        let subaccount2 = compute_subaccount(PrincipalId::from(caller), 890);
+
+        let account1 = Account {
+            owner: PrincipalId::from(caller),
+            subaccount: Some(subaccount1),
+        };
+        let account2 = Account {
+            owner: PrincipalId::from(caller),
+            subaccount: Some(subaccount2),
+        };
+
+        // Get the BTC address of the caller's subaccount.
+        let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;
+        let btc_address1 = get_btc_address(&minter_agent, &logger, subaccount1).await;
+        let btc_address2 = get_btc_address(&minter_agent, &logger, subaccount2).await;
+
+        // -- beginning of test logic --
+
+        // We shouldn't have any new utxo for now.
+        assert_no_new_utxo(&minter_agent, &subaccount0).await;
+        assert_no_new_utxo(&minter_agent, &subaccount1).await;
+        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+
+        // Mint block to the first sub-account (with single utxo).
+        generate_blocks(&btc_rpc, &logger, 3, &btc_address1);
+        generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
+        wait_for_bitcoin_balance(
+            &universal_canister,
+            &logger,
+            BTC_MIN_CONFIRMATIONS * BTC_BLOCK_SIZE,
+            &btc_address0,
+        )
+        .await;
+
+        // Without calling update_balance, ledger balance shouldn't change even with new utxo.
+        // Verify that no transaction appears on the ledger.
+        assert_no_transaction(&ledger_agent, &logger).await;
+
+        // Verify that calling update_balance on one account doesn't impact the others.
+        debug!(&logger, "Calling update balance on first subaccount.");
+        let update_result = update_balance(&minter_agent, &logger, &subaccount1).await;
+        // The other subaccount should not be impacted.
+        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+        assert_mint_transaction(
+            &ledger_agent,
+            &logger,
+            update_result.block_index,
+            &account1,
+            3 * BTC_BLOCK_SIZE,
+        )
+        .await;
+        // Calling update_balance again will always trigger a NoNewUtxo error.
+        upgrade_canister(&mut minter_canister).await;
+        assert_no_new_utxo(&minter_agent, &subaccount1).await;
+
+        // Mint blocks to the second sub-account (with multiple utxos).
+        generate_blocks(&btc_rpc, &logger, 5, &btc_address2);
+        generate_blocks(&btc_rpc, &logger, 1, &btc_address2);
+        generate_blocks(&btc_rpc, &logger, 1, &btc_address2);
+        generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
+        wait_for_bitcoin_balance(
+            &universal_canister,
+            &logger,
+            2 * BTC_MIN_CONFIRMATIONS * BTC_BLOCK_SIZE,
+            &btc_address0,
+        )
+        .await;
+
+        debug!(&logger, "Calling update balance on second subaccount.");
+        let update_result = update_balance(&minter_agent, &logger, &subaccount2).await;
+        // The other subaccount should not be impacted.
+        assert_no_new_utxo(&minter_agent, &subaccount1).await;
+        assert_mint_transaction(
+            &ledger_agent,
+            &logger,
+            update_result.block_index,
+            &account2,
+            7 * BTC_BLOCK_SIZE,
+        )
+        .await;
+        // Calling update_balance again will always trigger a NoNewUtxo error.
+        upgrade_canister(&mut minter_canister).await;
+        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+    });
+}
+
+/// Ensure update_balance behave properly in case of a ledger failure.
+pub fn test_update_balance_ledger_failure(env: TestEnv) {
+    let logger = env.logger();
+    let subnet_app = subnet_app(&env);
+    let subnet_sys = subnet_sys(&env);
+    let node = subnet_app.nodes().next().expect("No node in app subnet.");
+    let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
+    let app_subnet_id = subnet_app.subnet_id;
+
+    // Get access to btc replica.
+    let btc_rpc = get_btc_client(&env);
+
+    // Create wallet if required.
+    ensure_wallet(&btc_rpc, &logger);
+
+    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    // Creating the 10 first block to reach the min confirmations of the minter canister.
+    debug!(
+        &logger,
+        "Generating 10 blocks to default address: {}", &default_btc_address
+    );
+    btc_rpc
+        .generate_to_address(10, &default_btc_address)
+        .unwrap();
+
+    block_on(async {
+        let runtime = runtime_from_url(node.get_public_url());
+        let mut ledger_canister = create_canister(&runtime).await;
+        let mut minter_canister = create_canister(&runtime).await;
+        let minting_user = minter_canister.canister_id().get();
+        let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger).await;
+        let minter = Principal::from(minter_id.get());
+        let ledger = Principal::from(ledger_id.get());
+        let agent = assert_create_agent(node.get_public_url().as_str()).await;
+        let universal_canister = UniversalCanister::new(&agent, node.effective_canister_id()).await;
+        activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
+
+        let ledger_agent = Icrc1Agent {
+            agent: agent.clone(),
+            ledger_canister_id: ledger,
+        };
+        let minter_agent = CkBtcMinterAgent {
+            agent: agent.clone(),
+            minter_canister_id: minter,
+        };
+
+        let caller = agent
+            .get_principal()
+            .expect("Error while getting principal.");
+        let subaccount0 = compute_subaccount(PrincipalId::from(caller), 0);
+        let subaccount1 = compute_subaccount(PrincipalId::from(caller), 567);
+        let subaccount2 = compute_subaccount(PrincipalId::from(caller), 890);
+
+        let account1 = Account {
+            owner: PrincipalId::from(caller),
+            subaccount: Some(subaccount1),
+        };
+
+        // Get the BTC address of the caller's subaccount.
+        let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;
+        let btc_address1 = get_btc_address(&minter_agent, &logger, subaccount1).await;
+        let btc_address2 = get_btc_address(&minter_agent, &logger, subaccount2).await;
+
+        // -- beginning of test logic --
+
+        // We shouldn't have any new utxo for now.
+        assert_no_new_utxo(&minter_agent, &subaccount0).await;
+        assert_no_new_utxo(&minter_agent, &subaccount1).await;
+        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+
+        // Mint block to the first sub-account (with single utxo).
+        generate_blocks(&btc_rpc, &logger, 3, &btc_address1);
+        generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
+        wait_for_bitcoin_balance(
+            &universal_canister,
+            &logger,
+            BTC_MIN_CONFIRMATIONS * BTC_BLOCK_SIZE,
+            &btc_address0,
+        )
+        .await;
+
+        // Without calling update_balance, ledger balance shouldn't change even with new utxo.
+        // Verify that no transaction appears on the ledger.
+        assert_no_transaction(&ledger_agent, &logger).await;
+
+        // Verify that calling update_balance on one account doesn't impact the others.
+        debug!(&logger, "Calling update balance on first subaccount.");
+        let update_result = update_balance(&minter_agent, &logger, &subaccount1).await;
+        // The other subaccount should not be impacted.
+        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+        assert_mint_transaction(
+            &ledger_agent,
+            &logger,
+            update_result.block_index,
+            &account1,
+            3 * BTC_BLOCK_SIZE,
+        )
+        .await;
+        // Calling update_balance again will always trigger a NoNewUtxo error.
+        upgrade_canister(&mut minter_canister).await;
+        assert_no_new_utxo(&minter_agent, &subaccount1).await;
+
+        // Now triggering a failure on the ledger canister.
+        info!(&logger, "Simulating failure on the ledger canister");
+        let stop_result = ledger_canister.stop().await;
+        assert!(
+            stop_result.is_ok(),
+            "Error while stopping the ledger canister"
+        );
+        let delete_result = ledger_canister.delete().await;
+        assert!(
+            delete_result.is_ok(),
+            "Error while deleting the ledger canister"
+        );
+
+        // Mint blocks to the second sub-account (with multiple utxos).
+        generate_blocks(&btc_rpc, &logger, 5, &btc_address2);
+        generate_blocks(&btc_rpc, &logger, 1, &btc_address2);
+        generate_blocks(&btc_rpc, &logger, 1, &btc_address2);
+        generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
+        wait_for_bitcoin_balance(
+            &universal_canister,
+            &logger,
+            2 * BTC_MIN_CONFIRMATIONS * BTC_BLOCK_SIZE,
+            &btc_address0,
+        )
+        .await;
+
+        debug!(
+            &logger,
+            "Calling update balance on second subaccount with missing ledger."
+        );
+        assert_update_balance_error(&minter_agent, &subaccount2).await;
+        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+    });
+}
+
+/// Mint some blocks to the given address.
+fn generate_blocks(btc_client: &Client, logger: &Logger, nb_blocks: u64, address: &Address) {
+    let generated_blocks = btc_client.generate_to_address(nb_blocks, address).unwrap();
+    info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
+    assert_eq!(
+        generated_blocks.len() as u64,
+        nb_blocks,
+        "Expected {} blocks.",
+        nb_blocks
+    );
+}
+
+/// Wait for the expected balance to be available at the given btc address.
+/// Timeout after UPDATE_BALANCE_TIMEOUT if the expected balance is not reached.
+async fn wait_for_bitcoin_balance<'a>(
+    canister: &UniversalCanister<'a>,
+    logger: &Logger,
+    expected_balance_in_satoshis: u64,
+    btc_address: &Address,
+) {
+    let mut balance = 0;
+    let start = Instant::now();
+    while balance != expected_balance_in_satoshis {
+        if start.elapsed() >= UPDATE_BALANCE_TIMEOUT {
+            panic!("update_balance timeout");
+        };
+        balance = get_bitcoin_balance(canister, btc_address).await;
+        debug!(
+            &logger,
+            "current balance: {}, expecting {}", balance, expected_balance_in_satoshis
+        );
+    }
+}
+
+async fn update_balance(
+    ckbtc_minter_agent: &CkBtcMinterAgent,
+    logger: &Logger,
+    subaccount: &Subaccount,
+) -> UpdateBalanceResult {
+    let result = ckbtc_minter_agent
+        .update_balance(UpdateBalanceArgs {
+            subaccount: *subaccount,
+        })
+        .await
+        .expect("Error while calling update_balance")
+        .expect("Error while updating balance");
+    info!(
+        &logger,
+        "New Balance added: {} at block index {}", result.amount, result.block_index
+    );
+    result
+}
+
+async fn assert_update_balance_error(
+    ckbtc_minter_agent: &CkBtcMinterAgent,
+    subaccount: &Subaccount,
+) {
+    let result = ckbtc_minter_agent
+        .update_balance(UpdateBalanceArgs {
+            subaccount: *subaccount,
+        })
+        .await
+        .expect("Error while calling update_balance");
+    assert!(
+        result.is_err(),
+        "Expecting error result from update_balance"
+    )
+}
+
+/// Get the Bitcoin address for the given subaccount.
+async fn get_btc_address(
+    agent: &CkBtcMinterAgent,
+    logger: &Logger,
+    subaccount: Subaccount,
+) -> Address {
+    let address = agent
+        .get_btc_address(Some(subaccount))
+        .await
+        .expect("Error while calling get_btc_address");
+    debug!(logger, "Btc address for subaccount is: {}", address);
+    // Checking only proper format of address since ECDSA signature is non-deterministic.
+    assert_eq!(ADDRESS_LENGTH, address.len());
+    address.parse().unwrap()
+}
+
+/// Create a client for bitcoind.
+fn get_btc_client(env: &TestEnv) -> Client {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let btc_rpc = Client::new(
+    Client::new(
         &format!(
             "http://[{}]:8332",
             deployed_universal_vm.get_vm().unwrap().ipv6
@@ -147,227 +516,124 @@ pub fn update_balance(env: TestEnv) {
             "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=".to_string(),
         ),
     )
-    .unwrap();
-    // Let's create a wallet
-    let _ = btc_rpc
-        .create_wallet("mywallet", None, None, None, None)
-        .unwrap();
-    // Default btc address to mint block to
-    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
-    // Creating the 10 first block to reach the min confirmations of the minter canister
-    btc_rpc
-        .generate_to_address(10, &default_btc_address)
-        .unwrap();
+    .unwrap()
+}
 
-    block_on(async {
-        let agent = assert_create_agent(node.get_public_url().as_str()).await;
-        activate_ecdsa_signature(sys_node.clone(), app_subnet_id, TEST_KEY_LOCAL, &logger).await;
-        let caller = agent
-            .get_principal()
-            .expect("Error while getting principal.");
-        let subaccount = compute_subaccount(PrincipalId::from(caller), 0);
-        let ledger_id = install_ledger(&node, &logger).await;
-        let minter_id = install_minter(&node, ledger_id, &logger).await;
-        let minter = Principal::from(minter_id.get());
-        let ledger = Principal::from(ledger_id.get());
-        let icrc1_agent = Icrc1Agent {
-            agent: agent.clone(),
-            ledger_canister_id: ledger,
-        };
+async fn get_bitcoin_balance<'a>(canister: &UniversalCanister<'a>, btc_address: &Address) -> u64 {
+    canister
+        .update(wasm().call(management::bitcoin_get_balance(
+            btc_address.to_string(),
+            None,
+        )))
+        .await
+        .map(|res| Decode!(res.as_slice(), u64))
+        .unwrap()
+        .unwrap()
+}
 
-        // Transferring some tokens to the minter canister.
-        let to_minter_account = Account {
-            owner: PrincipalId::from(minter),
-            subaccount: None,
-        };
-        let transfer_to_minter = TransferArg {
-            from_subaccount: None,
-            to: to_minter_account,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(4_000_000_000_000_u64),
-        };
+async fn upgrade_canister(canister: &mut Canister<'_>) {
+    let upgrade_result = canister.upgrade_to_self_binary(Vec::new()).await;
+    assert!(upgrade_result.is_ok(), "Error while upgrading canister");
+}
 
-        let transfer_result = icrc1_agent
-            .transfer(transfer_to_minter)
-            .await
-            .expect("Error while calling endpoint icrc1_transfer.")
-            .unwrap();
-        info!(
-            &logger,
-            "Block index of transfer to minter: {:#?}", transfer_result
-        );
-        assert_eq!(transfer_result, Nat::from(1_u64));
+/// Verify that a mint transaction exists on the ledger at given block.
+async fn assert_mint_transaction(
+    agent: &Icrc1Agent,
+    logger: &Logger,
+    block_index: u64,
+    to: &Account,
+    amount: u64,
+) {
+    debug!(
+        &logger,
+        "Looking for a mint transaction at block {}", block_index
+    );
+    let res = get_ledger_transactions(
+        agent,
+        GetTransactionsRequest {
+            start: BlockIndex::from(block_index),
+            length: Nat::from(1u32),
+        },
+    )
+    .await
+    .expect("Error while getting ledger transaction");
+    assert_eq!(1, res.transactions.len(), "Expecting one transaction");
+    let transaction = res.transactions.get(0).unwrap();
+    assert_eq!("mint", transaction.kind);
+    let mint = transaction
+        .mint
+        .as_ref()
+        .expect("Expecting mint transaction");
+    assert_eq!(to, &mint.to, "Expecting mint to account {}", to);
+    assert_eq!(
+        Nat::from(amount),
+        mint.amount,
+        "Expecting {} satoshis",
+        amount
+    );
+}
 
-        // Let's see how much the minter canister has
-        let minter_canister_account = Account {
-            owner: PrincipalId::from(minter),
-            subaccount: None,
-        };
-        let res_verif_balance = icrc1_agent
-            .balance_of(minter_canister_account, CallMode::Query)
-            .await
-            .expect("Error while calling endpoint icrc1_balance_of.");
-        info!(&logger, "Balance of minter : {}", res_verif_balance);
-        assert_eq!(res_verif_balance, Nat::from(4_000_000_000_000_u64));
-        // Let's see how much the caller has tokens
-        let caller_account = Account {
-            owner: PrincipalId::from(caller),
-            subaccount: Some(subaccount),
-        };
+async fn assert_no_transaction(agent: &Icrc1Agent, logger: &Logger) {
+    debug!(&logger, "Verifying that no transaction exist.");
+    let res = get_ledger_transactions(
+        agent,
+        GetTransactionsRequest {
+            start: BlockIndex::from(0),
+            length: Nat::from(1_000u32),
+        },
+    )
+    .await
+    .expect("Error while getting ledger transaction");
+    assert_eq!(
+        Nat::from(0),
+        res.log_length,
+        "Ledger expected to not have transactions, got {:?}",
+        res
+    )
+}
 
-        let res_verif_balance_caller = icrc1_agent
-            .balance_of(caller_account, CallMode::Query)
-            .await
-            .expect("Error while calling endpoint icrc1_balance_of.");
-        info!(&logger, "Balance of caller: {}", res_verif_balance_caller);
-        assert_eq!(res_verif_balance_caller, Nat::from(0_u64));
-        // Let's get the BTC address of the first subaccount of the caller
-        // The other_subaccount is the fifth subaccount of our caller Principal
-        let other_subaccount = compute_subaccount(PrincipalId::from(caller), 5);
-        let get_btc_address = GetBtcAddressArgs {
-            subaccount: Some(other_subaccount),
-        };
-        let get_btc_address_encoded =
-            &Encode!(&get_btc_address).expect("Error while encoding arg.");
-        let res_address = agent
-            .update(&minter, "get_btc_address")
-            .with_arg(get_btc_address_encoded)
-            .call_and_wait(delay())
-            .await
-            .expect("Error while calling endpoint.");
-        let res_address =
-            Decode!(res_address.as_slice(), String).expect("Error while decoding response.");
+/// Assert that calling update_balance will throw an error.
+async fn assert_no_new_utxo(agent: &CkBtcMinterAgent, subaccount: &Subaccount) {
+    let result = agent
+        .update_balance(UpdateBalanceArgs {
+            subaccount: *subaccount,
+        })
+        .await
+        .expect("Error while calling update_balance");
+    assert_eq!(result, Err(UpdateBalanceError::NoNewUtxos));
+}
 
-        // Try to update_balance with no new utxos
-        let update_balance_args = UpdateBalanceArgs {
-            subaccount: other_subaccount,
-        };
-        let update_balance_args_encoded =
-            &Encode!((&update_balance_args)).expect("Error while encoding arg for update_balance.");
-        let update_balance_result = agent
-            .update(&minter, "update_balance")
-            .with_arg(update_balance_args_encoded)
-            .call_and_wait(delay())
-            .await
-            .expect("fail to update");
-        let result = Decode!(
-            update_balance_result.as_slice(),
-            Result<UpdateBalanceResult, UpdateBalanceError>
-        )
-        .expect("Error while decoding response.");
-        match result {
-            Ok(_) => {
-                panic!("New utxos found, expected no new utxos.");
-            }
-            Err(update_balance_error) => {
-                info!(&logger, "Error {:#?}", update_balance_error);
-            }
+/// Ensure wallet existence by creating one if required.
+fn ensure_wallet(btc_rpc: &Client, logger: &Logger) {
+    let wallets = btc_rpc
+        .list_wallets()
+        .expect("Error while retrieving wallets.");
+    if wallets.is_empty() {
+        // Create wallet if not existing yet.
+        let res = btc_rpc
+            .create_wallet("mywallet", None, None, None, None)
+            .expect("Error while creating wallet.");
+        info!(&logger, "Created wallet: {}", res.name);
+    } else {
+        info!(&logger, "Existing wallets:");
+        for w in wallets {
+            info!(&logger, "- wallet: {}", w);
         }
-        // Checking only proper format of address since ECDSA signature is non-deterministic.
-        assert_eq!(ADDRESS_LENGTH, res_address.len());
-        info!(&logger, "Address {}", res_address);
-        let btc_address: Address = res_address.parse().unwrap();
-        // Mint some blocks for the address we generated.
-        let block = btc_rpc.generate_to_address(101, &btc_address).unwrap();
-        info!(&logger, "Generated {} btc blocks.", block.len());
-        assert_eq!(block.len(), 101_usize);
-        // We have minted 101 blocks and each one gives 50 bitcoin to the target address,
-        // so in total the balance of the address without setting `any min_confirmations`
-        // should be 50 * 101 = 5050 bitcoin or 505000000000 satoshis.
-        let expected_balance_in_satoshis = 5050_0000_0000_u64;
-        // Call endpoint.
-        let canister = UniversalCanister::new(&agent, node.effective_canister_id()).await;
-        let mut res_mint = 0;
-        // Let's wait until the balance has been updated on the bitcoin replica
-        let start = Instant::now();
-        while res_mint != expected_balance_in_satoshis {
-            if start.elapsed() >= UPDATE_BALANCE_TIMEOUT {
-                panic!("update_balance timeout");
-            };
-            res_mint = canister
-                .update(wasm().call(management::bitcoin_get_balance(
-                    btc_address.to_string(),
-                    None,
-                )))
-                .await
-                .map(|res| Decode!(res.as_slice(), u64))
-                .unwrap()
-                .unwrap();
-        }
+    }
+}
 
-        // Check if we received the right amount of minted bitcoins
-        assert_eq!(res_mint, expected_balance_in_satoshis);
-
-        // Update the balance on ckBTC
-        let account_to_query_balance_from = Account {
-            owner: PrincipalId::from(caller),
-            subaccount: Some(other_subaccount),
-        };
-        let update_balance_args = UpdateBalanceArgs {
-            subaccount: other_subaccount,
-        };
-        let update_balance_args_encoded =
-            &Encode!((&update_balance_args)).expect("Error while encoding arg for update_balance.");
-        let get_btc_address_account0 = GetBtcAddressArgs {
-            subaccount: Some(subaccount),
-        };
-        let get_btc_address_encoded_account0 =
-            &Encode!(&get_btc_address_account0).expect("Error while encoding arg.");
-        let res_address_account0 = agent
-            .update(&minter, "get_btc_address")
-            .with_arg(get_btc_address_encoded_account0)
-            .call_and_wait(delay())
-            .await
-            .expect("Error while calling endpoint.");
-        let res_address_account0 = Decode!(res_address_account0.as_slice(), String)
-            .expect("Error while decoding response.");
-        let btc_address_account0: Address = res_address_account0.parse().unwrap();
-
-        for i in 2..8_u64 {
-            // We mint one new block on each iteration
-            btc_rpc
-                .generate_to_address(1, &btc_address_account0)
-                .unwrap();
-            let update_balance_result = agent
-                .update(&minter, "update_balance")
-                .with_arg(update_balance_args_encoded)
-                .call_and_wait(delay())
-                .await
-                .expect("Failed to update balance");
-            let result = Decode!(
-                update_balance_result.as_slice(),
-                Result<UpdateBalanceResult, UpdateBalanceError>
-            )
-            .expect("Error while decoding response.")
-            .expect("Error update Balance");
-            info!(
-                &logger,
-                "New Balance added : {} at block index {}", result.amount, result.block_index
-            );
-            assert_eq!(result.block_index, i);
-            if i == 2 {
-                // If it's the first time we call update_balance we minted 102 new blocks - 6 blocks because of the min_confirmations to accept new blocks.
-                assert_eq!(result.amount, 4800_0000_0000_u64);
-            } else {
-                // On each iteration we add one block, so we should see 50 new BTC confirmed to our address
-                assert_eq!(result.amount, 50_0000_0000_u64);
-            }
-            // Getting the balance_of the first subaccount of the caller
-            let decoded_balance_of_result = icrc1_agent
-                .balance_of(account_to_query_balance_from.clone(), CallMode::Query)
-                .await
-                .expect("Error while calling endpoint icrc1_balance_of.");
-            info!(
-                &logger,
-                "Balance of caller (subaccount 1): {}", decoded_balance_of_result
-            );
-            // We make sure that the right amount of tokens has been minted
-            assert_eq!(
-                decoded_balance_of_result,
-                480000000000_u64 + (i - 2) * 5000000000_u64
-            );
-        }
-    });
+/// Get transactions log from the ledger canister.
+/// Required since this method is not provided by the icrc1 ledger agent.
+async fn get_ledger_transactions(
+    ic_icrc1_agent: &Icrc1Agent,
+    args: GetTransactionsRequest,
+) -> Result<GetTransactionsResponse, Icrc1AgentError> {
+    let encoded_args = candid::Encode!(&args)?;
+    let res = ic_icrc1_agent
+        .agent
+        .query(&ic_icrc1_agent.ledger_canister_id, "get_transactions")
+        .with_arg(encoded_args)
+        .call()
+        .await?;
+    Ok(Decode!(&res, GetTransactionsResponse)?)
 }

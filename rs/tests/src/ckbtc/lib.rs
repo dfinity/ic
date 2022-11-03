@@ -15,8 +15,7 @@ use crate::{
     util::{assert_create_agent, runtime_from_url, UniversalCanister},
 };
 use candid::Encode;
-use canister_test::{ic00::EcdsaKeyId, Canister};
-use ic_agent::Agent;
+use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_types::Network;
 use ic_canister_client::Sender;
@@ -39,7 +38,6 @@ use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info};
-use std::convert::TryFrom;
 
 pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
@@ -205,27 +203,27 @@ pub(crate) fn print_subnets(env: &TestEnv) {
         .for_each(|s| debug!(logger, "Subnet {:?}", s.subnet_id));
 }
 
-pub(crate) async fn install_ledger(node: &IcNodeSnapshot, logger: &Logger) -> CanisterId {
+/// Create an empty canister.
+pub(crate) async fn create_canister(runtime: &Runtime) -> Canister<'_> {
+    runtime
+        .create_canister_max_cycles_with_retries()
+        .await
+        .expect("Unable to create canister")
+}
+
+pub(crate) async fn install_ledger(
+    canister: &mut Canister<'_>,
+    minting_user: PrincipalId,
+    logger: &Logger,
+) -> CanisterId {
     info!(&logger, "Installing ledger ...");
-    let runtime = runtime_from_url(node.get_public_url());
-    let agent: Agent = assert_create_agent(node.get_public_url().as_str()).await;
-    let minting_user = PrincipalId::new_user_test_id(100);
-    let user1 = PrincipalId::try_from(agent.get_principal().unwrap().as_ref()).unwrap();
-    let account1 = Account {
-        owner: user1,
-        subaccount: None,
-    };
     let minting_account = Account {
         owner: minting_user,
         subaccount: None,
     };
-    let mut ledger = runtime
-        .create_canister_max_cycles_with_retries()
-        .await
-        .expect("Unable to create canister");
     let init_args = InitArgs {
         minting_account,
-        initial_balances: vec![(account1.clone(), 5_000_000_000_000_u64)],
+        initial_balances: vec![],
         transfer_fee: 1_000,
         token_name: "Wrapped Bitcoin".to_string(),
         token_symbol: "ckBTC".to_string(),
@@ -240,21 +238,16 @@ pub(crate) async fn install_ledger(node: &IcNodeSnapshot, logger: &Logger) -> Ca
             max_transactions_per_response: None,
         },
     };
-    install_icrc1_ledger(&mut ledger, &init_args).await;
-    ledger.canister_id()
+    install_icrc1_ledger(canister, &init_args).await;
+    canister.canister_id()
 }
 
 pub(crate) async fn install_minter(
-    node: &IcNodeSnapshot,
+    canister: &mut Canister<'_>,
     ledger_id: CanisterId,
     logger: &Logger,
 ) -> CanisterId {
     info!(&logger, "Installing minter ...");
-    let runtime = runtime_from_url(node.get_public_url());
-    let mut canister = runtime
-        .create_canister_max_cycles_with_retries()
-        .await
-        .expect("Unable to create canister");
     let args = CkbtcMinterInitArgs {
         btc_network: Network::Regtest,
         /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
@@ -265,9 +258,8 @@ pub(crate) async fn install_minter(
         retrieve_btc_min_amount: 0,
         ledger_id,
     };
-
     install_rust_canister(
-        &mut canister,
+        canister,
         "ic-ckbtc-minter",
         &[],
         Some(Encode!(&args).unwrap()),

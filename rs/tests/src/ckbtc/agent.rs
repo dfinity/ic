@@ -10,16 +10,17 @@ Runbook::
 2. Build and install ledger canister and ckBTC minter canister on application subnet.
 3. Activate ECDSA signature on subnet.
 4. Create a ckBTC agent for the ckBTC minter.
-4. Perform calls and verify results for following endpoints:
+5. Perform calls and verify results for following endpoints:
     - get_btc_address
     - get_withdrawal_account
 
 end::catalog[] */
 
+use crate::util::runtime_from_url;
 use crate::{
     ckbtc::lib::{
-        activate_ecdsa_signature, install_ledger, install_minter, subnet_app, subnet_sys,
-        ADDRESS_LENGTH, TEST_KEY_LOCAL,
+        activate_ecdsa_signature, create_canister, install_ledger, install_minter, subnet_app,
+        subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
     },
     driver::{
         test_env::TestEnv,
@@ -38,7 +39,7 @@ use ic_ckbtc_minter::updates::{
 use ic_icrc1::Account;
 use slog::info;
 
-pub fn ckbtc_minter_agent_test(env: TestEnv) {
+pub fn test_ckbtc_minter_agent(env: TestEnv) {
     let logger = env.logger();
     let subnet_app = subnet_app(&env);
     let subnet_sys = subnet_sys(&env);
@@ -48,8 +49,12 @@ pub fn ckbtc_minter_agent_test(env: TestEnv) {
 
     info!(&logger, "Testing ckBTC minter agent");
     block_on(async {
-        let ledger_id = install_ledger(&node, &logger).await;
-        let minter_id = install_minter(&node, ledger_id, &logger).await;
+        let runtime = runtime_from_url(node.get_public_url());
+        let mut ledger_canister = create_canister(&runtime).await;
+        let mut minter_canister = create_canister(&runtime).await;
+        let minting_user = minter_canister.canister_id().get();
+        let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger).await;
         let minter = Principal::try_from_slice(minter_id.as_ref()).unwrap();
         let agent = assert_create_agent(node.get_public_url().as_str()).await;
         activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
