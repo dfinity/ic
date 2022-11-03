@@ -133,7 +133,7 @@ def main():
     os.truncate(image_file, image_size)
     subprocess.run(["/usr/sbin/mkfs.fat", "-F", "32", "-i", "0", image_file], check=True)
     if image_label:
-        subprocess.run(["/usr/sbin/fatlabel", image_file, image_label], check=True)
+        subprocess.run(["faketime", "1970-1-1 0", "/usr/sbin/fatlabel", image_file, image_label], check=True)
 
     if in_file:
         with tarfile.open(in_file, mode="r|*") as tf:
