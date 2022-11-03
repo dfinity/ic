@@ -9,7 +9,7 @@ use ic_nns_constants::{
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils::itest_helpers::{
-    local_test_on_nns_subnet, set_up_universal_canister,
+    local_test_on_nns_subnet, set_up_universal_canister_with_cycles,
     try_call_with_cycles_via_universal_canister, NnsCanisters,
 };
 use ic_nns_test_utils::sns_wasm;
@@ -31,6 +31,7 @@ use ic_types::Cycles;
 use registry_canister::mutations::common::decode_registry_value;
 use std::convert::TryFrom;
 pub mod common;
+use crate::common::{EXPECTED_SNS_CREATION_FEE, ONE_TRILLION};
 use common::set_up_state_machine_with_nns;
 use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 
@@ -141,17 +142,18 @@ fn test_canisters_are_created_and_installed() {
 
         // This canister will have id = universal_canister_id.
         // It has to be set up after the other canisters.
-        let wallet_with_unlimited_cycles = set_up_universal_canister(&runtime).await;
+        let wallet_canister =
+            set_up_universal_canister_with_cycles(&runtime, EXPECTED_SNS_CREATION_FEE).await;
 
         let result = try_call_with_cycles_via_universal_canister(
-            &wallet_with_unlimited_cycles,
+            &wallet_canister,
             sns_wasm,
             "deploy_new_sns",
             Encode!(&DeployNewSnsRequest {
                 sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing())
             })
             .unwrap(),
-            50_000_000_000_000,
+            EXPECTED_SNS_CREATION_FEE,
         )
         .await
         .unwrap();
@@ -293,12 +295,13 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     // The canister id the wallet canister will have.
     let wallet_canister_id = CanisterId::from_u64(11);
 
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = set_up_state_machine_with_nns(vec![wallet_canister_id.into()]);
 
     // Enough cycles one SNS deploy
     let wallet_canister = state_test_helpers::set_up_universal_canister(
         &machine,
-        Some(Cycles::new(50_000_000_000_000)),
+        Some(Cycles::new(EXPECTED_SNS_CREATION_FEE)),
     );
 
     sns_wasm::add_real_wasms_to_sns_wasms(&machine);
@@ -315,7 +318,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         wallet_canister,
         SNS_WASM_CANISTER_ID,
         SnsInitPayload::with_valid_values_for_testing(),
-        50_000_000_000_000,
+        EXPECTED_SNS_CREATION_FEE,
     );
 
     assert_eq!(
@@ -334,8 +337,11 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         }
     );
 
-    // 2_500_000_000 cycles are burned creating the canisters before the failure
-    assert_eq!(machine.cycle_balance(wallet_canister), 47_500_000_000_000);
+    // 5_000_000_000_000 cycles are burned creating the canisters before the failure
+    assert_eq!(
+        machine.cycle_balance(wallet_canister),
+        EXPECTED_SNS_CREATION_FEE - 5 * ONE_TRILLION
+    );
 
     // No canisters should exist above SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 (+1 for the wallet
     // canister) because we deleted those canisters
@@ -351,12 +357,13 @@ fn test_deploy_adds_cycles_to_target_canisters() {
     // The canister id the wallet canister will have.
     let wallet_canister_id = CanisterId::from_u64(11);
 
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = set_up_state_machine_with_nns(vec![wallet_canister_id.into()]);
 
     // Enough cycles one SNS deploy
     let wallet_canister = state_test_helpers::set_up_universal_canister(
         &machine,
-        Some(Cycles::new(50_000_000_000_000)),
+        Some(Cycles::new(EXPECTED_SNS_CREATION_FEE)),
     );
 
     sns_wasm::add_dummy_wasms_to_sns_wasms(&machine);
@@ -367,7 +374,7 @@ fn test_deploy_adds_cycles_to_target_canisters() {
         wallet_canister,
         SNS_WASM_CANISTER_ID,
         SnsInitPayload::with_valid_values_for_testing(),
-        50_000_000_000_000,
+        EXPECTED_SNS_CREATION_FEE,
     );
 
     // SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 is the ID of the wallet canister
@@ -395,8 +402,13 @@ fn test_deploy_adds_cycles_to_target_canisters() {
     // All cycles should have been used and none refunded.
     assert_eq!(machine.cycle_balance(wallet_canister), 0);
 
-    for canister_id in &[root, governance, ledger, swap, index] {
+    let sixth_cycles = EXPECTED_SNS_CREATION_FEE / 6;
+
+    for canister_id in &[root, governance, swap, index] {
         assert!(machine.canister_exists(*canister_id));
-        assert_eq!(machine.cycle_balance(*canister_id), 10_000_000_000_000)
+        assert_eq!(machine.cycle_balance(*canister_id), sixth_cycles)
     }
+
+    assert!(machine.canister_exists(ledger));
+    assert_eq!(machine.cycle_balance(ledger), sixth_cycles * 2);
 }

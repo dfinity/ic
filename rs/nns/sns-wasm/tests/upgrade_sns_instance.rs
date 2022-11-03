@@ -17,7 +17,8 @@ use ic_sns_governance::pb::v1::manage_neuron::{
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::time::Duration;
-
+pub mod common;
+use crate::common::EXPECTED_SNS_CREATION_FEE;
 use ic_ic00_types::CanisterInstallMode;
 use ic_icrc1::endpoints::{NumTokens, TransferArg, TransferError};
 use ic_icrc1::Account;
@@ -78,10 +79,10 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 
     setup_nns_canisters(&machine, nns_init_payload);
 
-    // Enough cycles for one SNS deploy. 50T
+    // Enough cycles for one SNS deploy.
     let wallet_canister = state_test_helpers::set_up_universal_canister(
         &machine,
-        Some(Cycles::new(50_000_000_000_000)),
+        Some(Cycles::new(EXPECTED_SNS_CREATION_FEE)),
     );
 
     let wasm_map = sns_wasm::add_real_wasms_to_sns_wasms(&machine);
@@ -126,7 +127,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         wallet_canister,
         SNS_WASM_CANISTER_ID,
         payload,
-        50_000_000_000_000,
+        EXPECTED_SNS_CREATION_FEE,
     );
 
     let SnsCanisterIds {

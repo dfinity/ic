@@ -29,6 +29,9 @@ lazy_static! {
     static ref SNS_SUBNET_ID: SubnetId = PrincipalId::new_user_test_id(916030).into();
 }
 
+const ONE_TRILLION: u128 = 1_000_000_000_000;
+const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION;
+
 /// Submit three SetSnsTokenSwapOpenTimeWindow proposals. The first should succeed, the
 /// second should fail because only one SetSnsTokenSwapOpenTimeWindow proposal can be open
 /// at a time. After executing the first proposal, a third is submitted and should not be
@@ -54,7 +57,7 @@ fn test_only_one_sns_token_swap_proposal_can_be_open() {
     add_dummy_wasms_to_sns_wasms(&state_machine);
 
     // Step 1.2: Tell sns-wasm to create an SNS.
-    let cycle_count = 50_000_000_000_000;
+    let cycle_count = EXPECTED_SNS_CREATION_FEE;
     let wallet_canister = set_up_universal_canister(&state_machine, Some(Cycles::new(cycle_count)));
     let deploy_new_sns_response = deploy_new_sns(
         &state_machine,

@@ -66,10 +66,9 @@ where
     pub allowed_principals: Vec<PrincipalId>,
 }
 const ONE_TRILLION: u64 = 1_000_000_000_000;
-const ONE_BILLION: u64 = 1_000_000_000;
 
-const SNS_CREATION_FEE: u64 = 50 * ONE_TRILLION;
-const INITIAL_CANISTER_CREATION_CYCLES: u64 = 500 * ONE_BILLION;
+const SNS_CREATION_FEE: u64 = 180 * ONE_TRILLION;
+const INITIAL_CANISTER_CREATION_CYCLES: u64 = ONE_TRILLION;
 
 /// Internal implementation to give the wasms we explicitly handle a name (instead of Vec<u8>) for
 /// safer handling in our internal logic.  This is not intended to be persisted outside of method logic
@@ -459,12 +458,25 @@ where
     ) -> Result<(), String> {
         // Accept the remaining cycles in the request we need to fund the canisters
         let remaining_unaccepted_cycles = canister_api.accept_message_cycles(None).unwrap();
-        let cycles_per_canister = remaining_unaccepted_cycles / 5;
+        // We only collect the INITIAL_CANISTER_CREATION_CYCLES for the other 5 canisters because
+        // archive will be created by the ledger post deploy.  In order to split whole allocation
+        // evenly between all 6 canisters, we want to account for this.
+        let uncollected_allocation_for_archive = INITIAL_CANISTER_CREATION_CYCLES;
+        let cycles_per_canister =
+            (remaining_unaccepted_cycles - uncollected_allocation_for_archive) / 6;
 
         let results = futures::future::join_all(canisters.into_named_tuples().into_iter().map(
             |(label, canister_id)| async move {
+                // Ledger needs 2x as many because it will spawn an archive
+                let cycles_to_provide = if label == "Ledger" {
+                    // Give ledger the cycles archive would have gotten were it created the same
+                    // as all of the other canisters.
+                    cycles_per_canister * 2 + uncollected_allocation_for_archive
+                } else {
+                    cycles_per_canister
+                };
                 canister_api
-                    .send_cycles_to_canister(canister_id, cycles_per_canister)
+                    .send_cycles_to_canister(canister_id, cycles_to_provide)
                     .await
                     .map_err(|e| format!("Could not fund {} canister: {}", label, e))
             },
@@ -1978,7 +1990,12 @@ mod test {
         let swap_id = canister_test_id(4);
         let index_id = canister_test_id(5);
 
-        let sent_cycles = (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES) / 5;
+        // The cycles sent to each canister after its creation is the whole fee minus what was
+        // used to create them, minus the INITIAL_CANISTER_CREATION_CYCLES that is allocated for
+        // archive.  Also see below, ledger is given a double share, plus INITIAL_CANISTER_CREATION_CYCLES
+        // to account for archive
+        let sent_cycles =
+            (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
         test_deploy_new_sns_request(
             Some(SnsInitPayload::with_valid_values_for_testing()),
@@ -1992,7 +2009,10 @@ mod test {
             vec![
                 (root_id, sent_cycles),
                 (governance_id, sent_cycles),
-                (ledger_id, sent_cycles),
+                (
+                    ledger_id,
+                    sent_cycles * 2 + INITIAL_CANISTER_CREATION_CYCLES,
+                ),
                 (swap_id, sent_cycles),
                 (index_id, sent_cycles),
             ],
@@ -2241,15 +2261,20 @@ mod test {
         );
 
         // We subtract our initial creation fee sent, then send the remainder here
-        let fifth_remaining = (SNS_CREATION_FEE + 100 - CANISTER_CREATION_CYCLES) / 5;
+        let sixth_remaining =
+            (SNS_CREATION_FEE + 100 - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES)
+                / 6;
         let cycles_sent = &*canister_api.cycles_sent.lock().unwrap();
         assert_eq!(
             &vec![
-                (root_id, fifth_remaining),
-                (governance_id, fifth_remaining),
-                (ledger_id, fifth_remaining),
-                (swap_id, fifth_remaining),
-                (index_id, fifth_remaining),
+                (root_id, sixth_remaining),
+                (governance_id, sixth_remaining),
+                (
+                    ledger_id,
+                    sixth_remaining * 2 + INITIAL_CANISTER_CREATION_CYCLES
+                ),
+                (swap_id, sixth_remaining),
+                (index_id, sixth_remaining),
             ],
             cycles_sent
         );

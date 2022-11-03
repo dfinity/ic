@@ -56,6 +56,9 @@ use rand_chacha::ChaChaRng;
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
 
+const ONE_TRILLION: u128 = 1_000_000_000_000;
+const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION;
+
 const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
 const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 30 * E8;
@@ -248,7 +251,7 @@ fn begin_swap(
         Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
             fractional_developer_voting_power.clone(),
         ));
-    let cycle_count = 50_000_000_000_000;
+    let cycle_count = EXPECTED_SNS_CREATION_FEE;
     let wallet_canister = set_up_universal_canister(state_machine, Some(Cycles::new(cycle_count)));
     let deploy_new_sns_response = deploy_new_sns(
         state_machine,
