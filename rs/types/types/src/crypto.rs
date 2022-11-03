@@ -768,6 +768,10 @@ impl From<CurrentNodePublicKeys> for NodePublicKeys {
             committee_signing_pk: current_node_public_keys.committee_signing_public_key,
             tls_certificate: current_node_public_keys.tls_certificate,
             dkg_dealing_encryption_pk: current_node_public_keys.dkg_dealing_encryption_public_key,
+            idkg_dealing_encryption_pks: current_node_public_keys
+                .idkg_dealing_encryption_public_key
+                .clone()
+                .map_or(vec![], |public_key| vec![public_key]),
             idkg_dealing_encryption_pk: current_node_public_keys.idkg_dealing_encryption_public_key,
         }
     }
