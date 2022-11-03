@@ -1,3 +1,4 @@
+use crate::common::EXPECTED_SNS_CREATION_FEE;
 use canister_test::Project;
 use common::set_up_state_machine_with_nns;
 use ic_base_types::CanisterId;
@@ -24,7 +25,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
 
     // Enough cycles for 2 SNS deploys
     let wallet_canister =
-        set_up_universal_canister(&machine, Some(Cycles::new(50_000_000_000_000 * 2)));
+        set_up_universal_canister(&machine, Some(Cycles::new(EXPECTED_SNS_CREATION_FEE * 2)));
 
     sns_wasm::add_dummy_wasms_to_sns_wasms(&machine);
 
@@ -33,7 +34,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
         wallet_canister,
         SNS_WASM_CANISTER_ID,
         SnsInitPayload::with_valid_values_for_testing(),
-        50_000_000_000_000,
+        EXPECTED_SNS_CREATION_FEE,
     )
     .canisters
     .unwrap();
@@ -43,7 +44,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
         wallet_canister,
         SNS_WASM_CANISTER_ID,
         SnsInitPayload::with_valid_values_for_testing(),
-        50_000_000_000_000,
+        EXPECTED_SNS_CREATION_FEE,
     )
     .canisters
     .unwrap();

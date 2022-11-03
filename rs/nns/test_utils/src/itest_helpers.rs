@@ -429,15 +429,29 @@ pub async fn set_up_universal_canister(runtime: &'_ Runtime) -> Canister<'_> {
         .create_canister_max_cycles_with_retries()
         .await
         .unwrap();
+    install_universal_canister(&mut canister).await;
+    canister
+}
+
+/// Installs universal canister with specified cycle count
+pub async fn set_up_universal_canister_with_cycles(
+    runtime: &'_ Runtime,
+    cycles: u128,
+) -> Canister<'_> {
+    let mut canister = runtime.create_canister(Some(cycles)).await.unwrap();
+    install_universal_canister(&mut canister).await;
+    canister
+}
+
+async fn install_universal_canister(canister: &mut Canister<'_>) {
     Wasm::from_bytes(UNIVERSAL_CANISTER_WASM)
-        .install_with_retries_onto_canister(&mut canister, None, None)
+        .install_with_retries_onto_canister(canister, None, None)
         .await
         .unwrap();
     println!(
         "Installed {} with the universal canister",
         canister.canister_id(),
     );
-    canister
 }
 
 /// Compiles the sns_wasm canister, builds it's initial payload and installs it

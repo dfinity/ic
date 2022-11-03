@@ -5,6 +5,9 @@ use ic_nns_test_utils::common::{NnsInitPayloads, NnsInitPayloadsBuilder};
 use ic_nns_test_utils::state_test_helpers::{self, create_canister, setup_nns_canisters};
 use ic_state_machine_tests::StateMachine;
 
+pub const ONE_TRILLION: u128 = 1_000_000_000_000;
+pub const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION;
+
 /// Create a `StateMachine` with NNS installed
 pub fn set_up_state_machine_with_nns(allowed_principals: Vec<PrincipalId>) -> StateMachine {
     // We don't want the underlying warnings of the StateMachine
