@@ -922,7 +922,7 @@ fn test_canister_heartbeat_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
     let mut api = get_system_api(
-        ApiTypeBuilder::build_heartbeat_api(),
+        ApiTypeBuilder::build_system_task_api(),
         &get_system_state(),
         cycles_account_manager,
     );
@@ -988,7 +988,7 @@ fn test_canister_heartbeat_support_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::build_heartbeat_api();
+    let api_type = ApiTypeBuilder::build_system_task_api();
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());

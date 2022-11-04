@@ -16,14 +16,15 @@ message CallContext {
     types.v1.CanisterId canister_id = 1;
     uint64 callback_id = 2;
   }
-  message Heartbeat {}
+  // System task is either a Heartbeat or a GlobalTimer.
+  message SystemTask {}
 
   oneof call_origin {
     Ingress ingress = 1;
     CanisterUpdateOrQuery canister_update = 2;
     types.v1.UserId query = 3;
     CanisterUpdateOrQuery canister_query = 4;
-    Heartbeat heartbeat = 7;
+    SystemTask system_task = 7;
   }
   bool responded = 5;
   state.queues.v1.Funds available_funds = 6;

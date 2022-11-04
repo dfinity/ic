@@ -1,4 +1,4 @@
-use crate::execution::heartbeat::CanisterHeartbeatError;
+use crate::execution::system_task::CanisterSystemTaskError;
 use crate::execution::test_utilities::{wat_compilation_cost, ExecutionTestBuilder};
 use assert_matches::assert_matches;
 use ic_ic00_types::CanisterStatusType;
@@ -16,11 +16,11 @@ fn heartbeat_is_executed() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test
-        .heartbeat_or_timer(canister_id, SystemMethod::CanisterHeartbeat)
+        .system_task(canister_id, SystemMethod::CanisterHeartbeat)
         .unwrap_err();
     assert_eq!(
         err,
-        CanisterHeartbeatError::CanisterExecutionFailed(HypervisorError::Trapped(
+        CanisterSystemTaskError::CanisterExecutionFailed(HypervisorError::Trapped(
             TrapCode::Unreachable
         ))
     );
@@ -35,11 +35,11 @@ fn global_timer_is_executed() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test
-        .heartbeat_or_timer(canister_id, SystemMethod::CanisterGlobalTimer)
+        .system_task(canister_id, SystemMethod::CanisterGlobalTimer)
         .unwrap_err();
     assert_eq!(
         err,
-        CanisterHeartbeatError::CanisterExecutionFailed(HypervisorError::Trapped(
+        CanisterSystemTaskError::CanisterExecutionFailed(HypervisorError::Trapped(
             TrapCode::Unreachable
         ))
     );
@@ -57,7 +57,7 @@ fn heartbeat_produces_heap_delta() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    test.heartbeat_or_timer(canister_id, SystemMethod::CanisterHeartbeat)
+    test.system_task(canister_id, SystemMethod::CanisterHeartbeat)
         .unwrap();
     assert_eq!(
         NumBytes::from((PAGE_SIZE) as u64),
@@ -77,7 +77,7 @@ fn global_timer_produces_heap_delta() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    test.heartbeat_or_timer(canister_id, SystemMethod::CanisterGlobalTimer)
+    test.system_task(canister_id, SystemMethod::CanisterGlobalTimer)
         .unwrap();
     assert_eq!(
         NumBytes::from((PAGE_SIZE) as u64),
@@ -90,7 +90,7 @@ fn heartbeat_fails_gracefully_if_not_exported() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
-    test.heartbeat_or_timer(canister_id, SystemMethod::CanisterHeartbeat)
+    test.system_task(canister_id, SystemMethod::CanisterHeartbeat)
         .unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
@@ -101,7 +101,7 @@ fn global_timer_fails_gracefully_if_not_exported() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
-    test.heartbeat_or_timer(canister_id, SystemMethod::CanisterGlobalTimer)
+    test.system_task(canister_id, SystemMethod::CanisterGlobalTimer)
         .unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
@@ -123,11 +123,11 @@ fn heartbeat_doesnt_run_if_canister_is_stopped() {
         test.canister_state(canister_id).system_state.status
     );
     let err = test
-        .heartbeat_or_timer(canister_id, SystemMethod::CanisterHeartbeat)
+        .system_task(canister_id, SystemMethod::CanisterHeartbeat)
         .unwrap_err();
     assert_eq!(
         err,
-        CanisterHeartbeatError::CanisterNotRunning {
+        CanisterSystemTaskError::CanisterNotRunning {
             status: CanisterStatusType::Stopped,
         }
     );
@@ -149,11 +149,11 @@ fn global_timer_doesnt_run_if_canister_is_stopped() {
         test.canister_state(canister_id).system_state.status
     );
     let err = test
-        .heartbeat_or_timer(canister_id, SystemMethod::CanisterGlobalTimer)
+        .system_task(canister_id, SystemMethod::CanisterGlobalTimer)
         .unwrap_err();
     assert_eq!(
         err,
-        CanisterHeartbeatError::CanisterNotRunning {
+        CanisterSystemTaskError::CanisterNotRunning {
             status: CanisterStatusType::Stopped,
         }
     );
@@ -177,11 +177,11 @@ fn heartbeat_doesnt_run_if_canister_is_stopping() {
         }
     );
     let err = test
-        .heartbeat_or_timer(canister_id, SystemMethod::CanisterHeartbeat)
+        .system_task(canister_id, SystemMethod::CanisterHeartbeat)
         .unwrap_err();
     assert_eq!(
         err,
-        CanisterHeartbeatError::CanisterNotRunning {
+        CanisterSystemTaskError::CanisterNotRunning {
             status: CanisterStatusType::Stopping,
         }
     );
@@ -205,11 +205,11 @@ fn global_timer_doesnt_run_if_canister_is_stopping() {
         }
     );
     let err = test
-        .heartbeat_or_timer(canister_id, SystemMethod::CanisterGlobalTimer)
+        .system_task(canister_id, SystemMethod::CanisterGlobalTimer)
         .unwrap_err();
     assert_eq!(
         err,
-        CanisterHeartbeatError::CanisterNotRunning {
+        CanisterSystemTaskError::CanisterNotRunning {
             status: CanisterStatusType::Stopping,
         }
     );

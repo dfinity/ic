@@ -1722,7 +1722,7 @@ fn subnet_available_memory_is_updated_in_heartbeat() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
-    let result = test.heartbeat_or_timer(canister_id, SystemMethod::CanisterHeartbeat);
+    let result = test.system_task(canister_id, SystemMethod::CanisterHeartbeat);
     assert_eq!(result, Ok(()));
     assert_eq!(
         initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
@@ -1746,7 +1746,7 @@ fn subnet_available_memory_is_updated_in_global_timer() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
-    let result = test.heartbeat_or_timer(canister_id, SystemMethod::CanisterGlobalTimer);
+    let result = test.system_task(canister_id, SystemMethod::CanisterGlobalTimer);
     assert_eq!(result, Ok(()));
     assert_eq!(
         initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,

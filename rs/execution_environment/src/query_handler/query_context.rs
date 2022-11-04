@@ -419,7 +419,7 @@ impl<'a> QueryContext<'a> {
                         // module so must have existed on the canister's output
                         // queue from before.
                         CallOrigin::CanisterUpdate(_, _)
-                        | CallOrigin::Heartbeat
+                        | CallOrigin::SystemTask
                         | CallOrigin::Ingress(_, _) => continue,
 
                         // We never serialize messages of such types in the
@@ -554,7 +554,7 @@ impl<'a> QueryContext<'a> {
         let func_ref = match call_origin {
             CallOrigin::Ingress(_, _)
             | CallOrigin::CanisterUpdate(_, _)
-            | CallOrigin::Heartbeat => unreachable!("Unreachable in the QueryContext."),
+            | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
             CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
                 FuncRef::QueryClosure(closure)
             }
@@ -674,7 +674,7 @@ impl<'a> QueryContext<'a> {
         let func_ref = match call_origin {
             CallOrigin::Ingress(_, _)
             | CallOrigin::CanisterUpdate(_, _)
-            | CallOrigin::Heartbeat => unreachable!("Unreachable in the QueryContext."),
+            | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
             CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
                 FuncRef::QueryClosure(cleanup_closure)
             }
@@ -1049,7 +1049,7 @@ impl<'a> QueryContext<'a> {
 
             CallOrigin::CanisterUpdate(_, _)
             | CallOrigin::Ingress(_, _)
-            | CallOrigin::Heartbeat => fatal!(
+            | CallOrigin::SystemTask => fatal!(
                 self.log,
                 "Canister {}: query path should not have created a callback with an update origin",
                 canister_id

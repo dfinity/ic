@@ -218,8 +218,8 @@ pub enum CallOrigin {
     CanisterUpdate(CanisterId, CallbackId),
     Query(UserId),
     CanisterQuery(CanisterId, CallbackId),
-    // TODO: RUN-415: Rename to `SystemMethod`
-    Heartbeat,
+    /// System task is either a Heartbeat or a GlobalTimer.
+    SystemTask,
 }
 
 impl From<&CallOrigin> for pb::call_context::CallOrigin {
@@ -242,7 +242,7 @@ impl From<&CallOrigin> for pb::call_context::CallOrigin {
                     callback_id: callback_id.get(),
                 })
             }
-            CallOrigin::Heartbeat => Self::Heartbeat(pb::call_context::Heartbeat {}),
+            CallOrigin::SystemTask => Self::SystemTask(pb::call_context::SystemTask {}),
         }
     }
 }
@@ -282,7 +282,7 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
                 try_from_option_field(canister_id, "CallOrigin::CanisterQuery::canister_id")?,
                 callback_id.into(),
             ),
-            pb::call_context::CallOrigin::Heartbeat { .. } => Self::Heartbeat,
+            pb::call_context::CallOrigin::SystemTask { .. } => Self::SystemTask,
         };
         Ok(call_origin)
     }

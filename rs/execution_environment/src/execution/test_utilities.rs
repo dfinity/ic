@@ -1,8 +1,10 @@
-use std::collections::{BTreeMap, HashMap};
-use std::convert::TryFrom;
-use std::str::FromStr;
-use std::sync::Arc;
-
+use crate::execution::system_task::CanisterSystemTaskError;
+use crate::util::process_stopping_canisters;
+use crate::{
+    execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
+    ExecutionResponse, Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler,
+    RoundInstructions, RoundLimits,
+};
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_config::{
@@ -39,6 +41,12 @@ use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, InputQueueType, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
+use ic_test_utilities::{
+    crypto::mock_random_number_generator,
+    execution_environment::{generate_subnets, test_registry_settings},
+    mock_time,
+    types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
+};
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::methods::SystemMethod;
 use ic_types::{
@@ -51,22 +59,10 @@ use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::btreemap;
-
-use crate::util::process_stopping_canisters;
-use crate::{
-    execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
-    ExecutionResponse, Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits,
-};
-
-use crate::execution::heartbeat::CanisterHeartbeatError;
-
-use ic_test_utilities::{
-    crypto::mock_random_number_generator,
-    execution_environment::{generate_subnets, test_registry_settings},
-    mock_time,
-    types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
-};
+use std::collections::{BTreeMap, HashMap};
+use std::convert::TryFrom;
+use std::str::FromStr;
+use std::sync::Arc;
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
@@ -742,12 +738,12 @@ impl ExecutionTest {
         (ingress_id.clone(), self.ingress_status(&ingress_id))
     }
 
-    /// Executes a heartbeat or timer method of the given canister.
-    pub fn heartbeat_or_timer(
+    /// Executes a system task method of the given canister.
+    pub fn system_task(
         &mut self,
         canister_id: CanisterId,
-        heartbeat_or_timer: SystemMethod,
-    ) -> Result<(), CanisterHeartbeatError> {
+        system_task: SystemMethod,
+    ) -> Result<(), CanisterSystemTaskError> {
         let mut state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
@@ -762,17 +758,16 @@ impl ExecutionTest {
             self.instruction_limit_without_dts,
             self.instruction_limit_without_dts,
         );
-        let (canister, instructions_used, result) =
-            self.exec_env.execute_canister_heartbeat_or_timer(
-                canister,
-                heartbeat_or_timer,
-                instruction_limits,
-                network_topology,
-                self.time,
-                &mut round_limits,
-                self.subnet_size(),
-                &self.log,
-            );
+        let (canister, instructions_used, result) = self.exec_env.execute_canister_system_task(
+            canister,
+            system_task,
+            instruction_limits,
+            network_topology,
+            self.time,
+            &mut round_limits,
+            self.subnet_size(),
+            &self.log,
+        );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         state.put_canister_state(canister);
         if let Ok(heap_delta) = result {

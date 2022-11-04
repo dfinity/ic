@@ -78,8 +78,8 @@ impl ApiTypeBuilder {
         )
     }
 
-    pub fn build_heartbeat_api() -> ApiType {
-        ApiType::heartbeat(mock_time(), CallContextId::from(1))
+    pub fn build_system_task_api() -> ApiType {
+        ApiType::system_task(mock_time(), CallContextId::from(1))
     }
 
     pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {

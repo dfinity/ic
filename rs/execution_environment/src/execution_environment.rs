@@ -5,11 +5,11 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::{
-        heartbeat::{execute_heartbeat_or_timer, CanisterHeartbeatError},
         inspect_message,
         nonreplicated_query::execute_non_replicated_query,
         replicated_query::execute_replicated_query,
         response::execute_response,
+        system_task::{execute_system_task, CanisterSystemTaskError},
         update::execute_update,
     },
     execution_environment_metrics::{
@@ -82,15 +82,15 @@ use strum::ParseError;
 mod tests;
 
 lazy_static! {
-    /// Track how many heartbeat errors have been encountered so that we can
-    /// restrict logging to a sample of them.
-    static ref HEARTBEAT_ERROR_COUNT: AtomicU64 = AtomicU64::new(0);
+    /// Track how many system task errors have been encountered
+    /// so that we can restrict logging to a sample of them.
+    static ref SYSTEM_TASK_ERROR_COUNT: AtomicU64 = AtomicU64::new(0);
 }
 
-/// How often heartbeat errors should be logged to avoid overloading the logs.
-const LOG_ONE_HEARTBEAT_OUT_OF: u64 = 100;
-/// How many first heartbeat messages to log unconditionally.
-const LOG_FIRST_N_HEARTBEAT: u64 = 50;
+/// How often system task errors should be logged to avoid overloading the logs.
+const LOG_ONE_SYSTEM_TASK_OUT_OF: u64 = 100;
+/// How many first system task messages to log unconditionally.
+const LOG_FIRST_N_SYSTEM_TASKS: u64 = 50;
 
 /// The response of the executed message created by the `ic0.msg_reply()`
 /// or `ic0.msg_reject()` System API functions.
@@ -1063,11 +1063,11 @@ impl ExecutionEnvironment {
         }
     }
 
-    /// Executes a heartbeat or a global timer of a given canister.
-    pub fn execute_canister_heartbeat_or_timer(
+    /// Executes a system task of a given canister.
+    pub fn execute_canister_system_task(
         &self,
         canister: CanisterState,
-        heartbeat_or_timer: SystemMethod,
+        system_task: SystemMethod,
         instruction_limits: InstructionLimits,
         network_topology: Arc<NetworkTopology>,
         time: Time,
@@ -1077,13 +1077,13 @@ impl ExecutionEnvironment {
     ) -> (
         CanisterState,
         NumInstructions,
-        Result<NumBytes, CanisterHeartbeatError>,
+        Result<NumBytes, CanisterSystemTaskError>,
     ) {
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
-        let (canister, instructions_used, result) = execute_heartbeat_or_timer(
+        let (canister, instructions_used, result) = execute_system_task(
             canister,
-            heartbeat_or_timer,
+            system_task.clone(),
             network_topology,
             execution_parameters,
             self.own_subnet_type,
@@ -1101,11 +1101,14 @@ impl ExecutionEnvironment {
             // system errors on other subnets.
             if self.hypervisor.subnet_type() == SubnetType::System || err.is_system_error() {
                 // We could improve the rate limiting using some kind of exponential backoff.
-                let log_count = HEARTBEAT_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
-                if log_count < LOG_FIRST_N_HEARTBEAT || log_count % LOG_ONE_HEARTBEAT_OUT_OF == 0 {
+                let log_count = SYSTEM_TASK_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
+                if log_count < LOG_FIRST_N_SYSTEM_TASKS
+                    || log_count % LOG_ONE_SYSTEM_TASK_OUT_OF == 0
+                {
                     warn!(
                         self.log,
-                        "Error executing heartbeat on canister {} with failure `{}`",
+                        "Error executing system task {} on canister {} with failure `{}`",
+                        system_task,
                         canister.canister_id(),
                         err;
                         messaging.canister_id => canister.canister_id().to_string(),
@@ -2306,17 +2309,16 @@ pub fn execute_canister(
                     max_instructions_per_message_without_dts,
                     max_instructions_per_message_without_dts,
                 );
-                let (canister, instructions_used, result) = exec_env
-                    .execute_canister_heartbeat_or_timer(
-                        canister,
-                        SystemMethod::CanisterHeartbeat,
-                        instruction_limits,
-                        network_topology,
-                        time,
-                        round_limits,
-                        subnet_size,
-                        &exec_env.log,
-                    );
+                let (canister, instructions_used, result) = exec_env.execute_canister_system_task(
+                    canister,
+                    SystemMethod::CanisterHeartbeat,
+                    instruction_limits,
+                    network_topology,
+                    time,
+                    round_limits,
+                    subnet_size,
+                    &exec_env.log,
+                );
                 let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
                 ExecuteCanisterResult {
                     canister,
@@ -2333,17 +2335,16 @@ pub fn execute_canister(
                     max_instructions_per_message_without_dts,
                     max_instructions_per_message_without_dts,
                 );
-                let (canister, instructions_used, result) = exec_env
-                    .execute_canister_heartbeat_or_timer(
-                        canister,
-                        SystemMethod::CanisterGlobalTimer,
-                        instruction_limits,
-                        network_topology,
-                        time,
-                        round_limits,
-                        subnet_size,
-                        &exec_env.log,
-                    );
+                let (canister, instructions_used, result) = exec_env.execute_canister_system_task(
+                    canister,
+                    SystemMethod::CanisterGlobalTimer,
+                    instruction_limits,
+                    network_topology,
+                    time,
+                    round_limits,
+                    subnet_size,
+                    &exec_env.log,
+                );
                 let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
                 ExecuteCanisterResult {
                     canister,

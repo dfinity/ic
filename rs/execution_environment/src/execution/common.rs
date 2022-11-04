@@ -60,8 +60,9 @@ pub(crate) fn action_to_response(
             log,
             "The update path should not have created a callback with a query origin",
         ),
-        CallOrigin::Heartbeat => {
-            // Since heartbeat messages are invoked by the system as opposed
+        CallOrigin::SystemTask => {
+            // System task is either a Heartbeat or a GlobalTimer.
+            // Since system tasks are invoked by the system as opposed
             // to a principal, they cannot respond since there's no one to
             // respond to. Do nothing.
             ExecutionResponse::Empty
@@ -236,8 +237,9 @@ pub(crate) fn wasm_result_to_query_response(
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
             fatal!(log, "The update path should not have a query origin",)
         }
-        CallOrigin::Heartbeat => {
-            // Since heartbeat messages are invoked by the system as opposed
+        CallOrigin::SystemTask => {
+            // System task is either a Heartbeat or a GlobalTimer.
+            // Since system tasks are invoked by the system as opposed
             // to a principal, they cannot respond since there's no one to
             // respond to. Do nothing.
             ExecutionResponse::Empty

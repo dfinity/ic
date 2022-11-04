@@ -27,8 +27,9 @@ pub mod call_context {
         #[prost(uint64, tag = "2")]
         pub callback_id: u64,
     }
+    /// System task is either a Heartbeat or a GlobalTimer.
     #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Heartbeat {}
+    pub struct SystemTask {}
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum CallOrigin {
         #[prost(message, tag = "1")]
@@ -40,7 +41,7 @@ pub mod call_context {
         #[prost(message, tag = "4")]
         CanisterQuery(CanisterUpdateOrQuery),
         #[prost(message, tag = "7")]
-        Heartbeat(Heartbeat),
+        SystemTask(SystemTask),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

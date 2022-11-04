@@ -183,7 +183,7 @@ impl SchedulerTest {
     }
 
     /// Creates a canister with the given balance and allocations.
-    /// The `heartbeat_or_timer` parameter can be used to optionally enable the
+    /// The `system_task` parameter can be used to optionally enable the
     /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
     /// In that case the heartbeat execution must be specified before each
     /// round using `expect_heartbeat()`.
@@ -192,11 +192,11 @@ impl SchedulerTest {
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
-        heartbeat_or_timer: Option<SystemMethod>,
+        system_task: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
     ) -> CanisterId {
         let canister_id = self.next_canister_id();
-        let wasm_source = heartbeat_or_timer
+        let wasm_source = system_task
             .map(|x| x.to_string().as_bytes().to_vec())
             .unwrap_or_default();
         let time_of_last_allocation_charge =
@@ -387,7 +387,7 @@ impl SchedulerTest {
     }
 
     /// Specifies heartbeat execution for the next round.
-    pub fn expect_heartbeat(&mut self, canister_id: CanisterId, heartbeat: TestMessage) {
+    pub fn expect_heartbeat(&mut self, canister_id: CanisterId, system_task: TestMessage) {
         assert!(
             self.canister_state(canister_id)
                 .execution_state
@@ -398,10 +398,10 @@ impl SchedulerTest {
              `create_canister_with(.., Some(SystemMethod::CanisterHeartbeat))`"
         );
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
-        wasm_executor.push_heartbeat(canister_id, heartbeat);
+        wasm_executor.push_system_task(canister_id, system_task);
     }
 
-    pub fn expect_global_timer(&mut self, canister_id: CanisterId, heartbeat: TestMessage) {
+    pub fn expect_global_timer(&mut self, canister_id: CanisterId, system_task: TestMessage) {
         assert!(
             self.canister_state(canister_id)
                 .execution_state
@@ -412,7 +412,7 @@ impl SchedulerTest {
              `create_canister_with(.., Some(SystemMethod::CanisterGlobalTimer))`"
         );
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
-        wasm_executor.push_heartbeat(canister_id, heartbeat);
+        wasm_executor.push_system_task(canister_id, system_task);
     }
 
     pub fn execute_round(&mut self, round_type: ExecutionRoundType) {
@@ -950,7 +950,7 @@ impl WasmExecutor for TestWasmExecutor {
 //   test message and interprets its description.
 struct TestWasmExecutorCore {
     messages: HashMap<u32, TestMessage>,
-    heartbeat: HashMap<CanisterId, VecDeque<TestMessage>>,
+    system_tasks: HashMap<CanisterId, VecDeque<TestMessage>>,
     schedule: Vec<(ExecutionRound, CanisterId, NumInstructions)>,
     next_message_id: u32,
     round: ExecutionRound,
@@ -962,7 +962,7 @@ impl TestWasmExecutorCore {
     fn new(cycles_account_manager: Arc<CyclesAccountManager>, subnet_size: usize) -> Self {
         Self {
             messages: HashMap::new(),
-            heartbeat: HashMap::new(),
+            system_tasks: HashMap::new(),
             schedule: vec![],
             next_message_id: 0,
             round: ExecutionRound::new(0),
@@ -1065,8 +1065,8 @@ impl TestWasmExecutorCore {
         ];
         if !canister_module.as_slice().is_empty() {
             if let Ok(text) = std::str::from_utf8(canister_module.as_slice()) {
-                if let Ok(heartbeat_or_timer) = SystemMethod::try_from(text) {
-                    exported_functions.push(WasmMethod::System(heartbeat_or_timer));
+                if let Ok(system_task) = SystemMethod::try_from(text) {
+                    exported_functions.push(WasmMethod::System(system_task));
                 }
             }
         }
@@ -1197,12 +1197,12 @@ impl TestWasmExecutorCore {
                 let message = self.messages.remove(&message_id).unwrap();
                 (message_id, message, Some(*call_context_id))
             }
-            ApiType::Heartbeat {
+            ApiType::SystemTask {
                 call_context_id, ..
             } => {
                 let message_id = self.next_message_id();
                 let message = self
-                    .heartbeat
+                    .system_tasks
                     .get_mut(&canister_id)
                     .unwrap()
                     .pop_front()
@@ -1257,11 +1257,11 @@ impl TestWasmExecutorCore {
         message_id
     }
 
-    fn push_heartbeat(&mut self, canister_id: CanisterId, heartbeat: TestMessage) {
-        self.heartbeat
+    fn push_system_task(&mut self, canister_id: CanisterId, system_task: TestMessage) {
+        self.system_tasks
             .entry(canister_id)
             .or_default()
-            .push_back(heartbeat);
+            .push_back(system_task);
     }
 
     fn next_message_id(&mut self) -> u32 {
