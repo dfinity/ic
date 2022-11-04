@@ -1,7 +1,7 @@
 // Replicated messages.
-pub mod heartbeat;
 pub(crate) mod replicated_query;
 pub mod response;
+pub mod system_task;
 pub(crate) mod update;
 
 // Non-replicated messages.

@@ -302,9 +302,8 @@ pub enum ApiType {
         message_accepted: bool,
     },
 
-    // TODO: RUN-415: Rename to `HeartbeatOrTimer`
-    // For executing the `canister_heartbeat` method
-    Heartbeat {
+    // For executing the `canister_heartbeat` or `canister_global_timer` methods
+    SystemTask {
         time: Time,
         call_context_id: CallContextId,
         /// Optional outgoing request under construction. If `None` no outgoing
@@ -336,9 +335,8 @@ impl ApiType {
         }
     }
 
-    // TODO: RUN-415: Rename to `heartbeat_or_timer`
-    pub fn heartbeat(time: Time, call_context_id: CallContextId) -> Self {
-        Self::Heartbeat {
+    pub fn system_task(time: Time, call_context_id: CallContextId) -> Self {
+        Self::SystemTask {
             time,
             call_context_id,
             outgoing_request: None,
@@ -496,7 +494,7 @@ impl ApiType {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. } => ModificationTracking::Track,
         }
     }
@@ -507,7 +505,7 @@ impl ApiType {
         match self {
             ApiType::Start { .. } => "start",
             ApiType::Init { .. } => "init",
-            ApiType::Heartbeat { .. } => "heartbeat",
+            ApiType::SystemTask { .. } => "system task",
             ApiType::Update { .. } => "update",
             ApiType::ReplicatedQuery { .. } => "replicated query",
             ApiType::NonReplicatedQuery { .. } => "non replicated query",
@@ -768,7 +766,7 @@ impl SystemApiImpl {
         match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
@@ -805,7 +803,7 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::Heartbeat { .. } => Ok(None),
+            | ApiType::SystemTask { .. } => Ok(None),
             ApiType::InspectMessage {
                 message_accepted, ..
             } => {
@@ -862,7 +860,7 @@ impl SystemApiImpl {
     fn get_msg_caller_id(&self, method_name: &str) -> Result<PrincipalId, HypervisorError> {
         match &self.api_type {
             ApiType::Start { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => Err(self.error_for(method_name)),
@@ -880,7 +878,7 @@ impl SystemApiImpl {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::InspectMessage { .. } => None,
             ApiType::Update {
@@ -920,7 +918,7 @@ impl SystemApiImpl {
         match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
@@ -936,7 +934,7 @@ impl SystemApiImpl {
         match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
@@ -964,7 +962,7 @@ impl SystemApiImpl {
             ApiType::Update {
                 outgoing_request, ..
             }
-            | ApiType::Heartbeat {
+            | ApiType::SystemTask {
                 outgoing_request, ..
             }
             | ApiType::ReplyCallback {
@@ -995,7 +993,7 @@ impl SystemApiImpl {
         match &self.api_type {
             ApiType::Start {} => Err(self.error_for(method_name)),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1014,7 +1012,7 @@ impl SystemApiImpl {
         match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
@@ -1038,7 +1036,7 @@ impl SystemApiImpl {
         match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
@@ -1070,7 +1068,7 @@ impl SystemApiImpl {
             } => Ok(Cycles::new(0)),
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1260,7 +1258,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. } => Err(self.error_for("ic0_msg_arg_data_size")),
             ApiType::Init {
@@ -1295,7 +1293,7 @@ impl SystemApi for SystemApiImpl {
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
             ApiType::Start { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. } => Err(self.error_for("ic0_msg_arg_data_copy")),
@@ -1349,7 +1347,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::Cleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Init { .. } => Err(self.error_for("ic0_msg_method_name_size")),
@@ -1373,7 +1371,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Init { .. } => Err(self.error_for("ic0_msg_method_name_copy")),
@@ -1410,7 +1408,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::Cleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Init { .. } => Err(self.error_for("ic0_accept_message")),
@@ -1582,7 +1580,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_canister_self_size")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1611,7 +1609,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_canister_self_copy")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::Update { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1645,7 +1643,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_controller_size")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1671,7 +1669,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_controller_copy")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1728,7 +1726,7 @@ impl SystemApi for SystemApiImpl {
                     },
                 ..
             }
-            | ApiType::Heartbeat {
+            | ApiType::SystemTask {
                 call_context_id, ..
             }
             | ApiType::ReplyCallback {
@@ -1854,7 +1852,7 @@ impl SystemApi for SystemApiImpl {
                     },
                 ..
             }
-            | ApiType::Heartbeat {
+            | ApiType::SystemTask {
                 outgoing_request, ..
             }
             | ApiType::ReplyCallback {
@@ -1923,7 +1921,7 @@ impl SystemApi for SystemApiImpl {
                     },
                 ..
             }
-            | ApiType::Heartbeat {
+            | ApiType::SystemTask {
                 outgoing_request, ..
             }
             | ApiType::ReplyCallback {
@@ -1970,7 +1968,7 @@ impl SystemApi for SystemApiImpl {
                     },
                 ..
             }
-            | ApiType::Heartbeat {
+            | ApiType::SystemTask {
                 outgoing_request, ..
             }
             | ApiType::ReplyCallback {
@@ -2027,7 +2025,7 @@ impl SystemApi for SystemApiImpl {
                 outgoing_request,
                 ..
             }
-            | ApiType::Heartbeat {
+            | ApiType::SystemTask {
                 call_context_id,
                 outgoing_request,
                 ..
@@ -2078,7 +2076,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_size")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -2096,7 +2094,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_grow")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -2134,7 +2132,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_read")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -2168,7 +2166,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_write")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -2196,7 +2194,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_size")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -2214,7 +2212,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_grow")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -2252,7 +2250,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_read")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -2286,7 +2284,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_write")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -2326,7 +2324,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_time")),
             ApiType::Init { time, .. }
-            | ApiType::Heartbeat { time, .. }
+            | ApiType::SystemTask { time, .. }
             | ApiType::Update { time, .. }
             | ApiType::Cleanup { time, .. }
             | ApiType::NonReplicatedQuery { time, .. }
@@ -2348,7 +2346,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_global_timer_set")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplyCallback { .. }
@@ -2548,7 +2546,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Update { .. }
-            | ApiType::Heartbeat { .. } => Ok(0),
+            | ApiType::SystemTask { .. } => Ok(0),
             ApiType::ReplicatedQuery {
                 data_certificate, ..
             }
@@ -2567,7 +2565,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
@@ -2598,7 +2596,7 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
@@ -2667,7 +2665,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_certified_data_set")),
             ApiType::Init { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
@@ -2718,7 +2716,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Init { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
@@ -2743,7 +2741,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_mint_cycles")),
             ApiType::Update { .. }
-            | ApiType::Heartbeat { .. }
+            | ApiType::SystemTask { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
                 self.sandbox_safe_system_state

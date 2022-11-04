@@ -399,7 +399,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
 }
 
 #[test]
-fn dts_pending_upgrade_with_system_method() {
+fn dts_pending_upgrade_with_heartbeat() {
     if should_skip_test_due_to_disabled_dts() {
         // Skip this test if DTS is not supported.
         return;

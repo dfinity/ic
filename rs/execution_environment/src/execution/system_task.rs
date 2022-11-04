@@ -1,4 +1,3 @@
-// TODO: RUN-415: Rename the file to `heartbeat_or_timer.rs`
 use crate::execution_environment::RoundLimits;
 // This module defines how `canister_heartbeat` messages are executed.
 // See https://smartcontracts.org/docs/interface-spec/index.html#_heartbeat.
@@ -21,23 +20,22 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-/// Holds the result of heartbeat execution.
-// TODO: RUN-415: Rename to `HeartbeatOrTimerResult`
-pub struct HeartbeatResult {
-    /// The canister state resulted from the heartbeat execution.
+/// Holds the result of a system task execution.
+pub struct SystemTaskResult {
+    /// The canister state resulted from the system task execution.
     pub canister_state: CanisterState,
-    /// The number of instructions used by the heartbeat execution.
+    /// The number of instructions used by the system task execution.
     pub instructions_used: NumInstructions,
     /// The size of the heap delta change, if execution is successful
     /// or the relevant error in case of failure.
-    pub heap_delta_result: Result<NumBytes, CanisterHeartbeatError>,
+    pub heap_delta_result: Result<NumBytes, CanisterSystemTaskError>,
 }
 
-impl HeartbeatResult {
+impl SystemTaskResult {
     pub fn new(
         canister_state: CanisterState,
         instructions_used: NumInstructions,
-        heap_delta_result: Result<NumBytes, CanisterHeartbeatError>,
+        heap_delta_result: Result<NumBytes, CanisterSystemTaskError>,
     ) -> Self {
         Self {
             canister_state,
@@ -51,7 +49,7 @@ impl HeartbeatResult {
     ) -> (
         CanisterState,
         NumInstructions,
-        Result<NumBytes, CanisterHeartbeatError>,
+        Result<NumBytes, CanisterSystemTaskError>,
     ) {
         (
             self.canister_state,
@@ -61,21 +59,21 @@ impl HeartbeatResult {
     }
 }
 
-// Validates a canister before executing the heartbeat.
+// Validates a canister before executing a heartbeat or a timer.
 //
 // Returns the canister split in parts if successful,
-// otherwise `HeartbeatResult` which contains the error.
+// otherwise `SystemTaskResult` which contains the error.
 fn validate_canister(
     canister: CanisterState,
     method: WasmMethod,
-) -> Result<(ExecutionState, SystemState, SchedulerState), HeartbeatResult> {
+) -> Result<(ExecutionState, SystemState, SchedulerState), SystemTaskResult> {
     // Check that the status of the canister is Running.
     if canister.status() != CanisterStatusType::Running {
         let status = canister.status();
-        return Err(HeartbeatResult::new(
+        return Err(SystemTaskResult::new(
             canister,
             NumInstructions::from(0),
-            Err(CanisterHeartbeatError::CanisterNotRunning { status }),
+            Err(CanisterSystemTaskError::CanisterNotRunning { status }),
         ));
     }
 
@@ -85,10 +83,10 @@ fn validate_canister(
     let execution_state = match execution_state {
         Some(es) => es,
         None => {
-            return Err(HeartbeatResult::new(
+            return Err(SystemTaskResult::new(
                 CanisterState::from_parts(None, old_system_state, scheduler_state),
                 NumInstructions::from(0),
-                Err(CanisterHeartbeatError::CanisterExecutionFailed(
+                Err(CanisterSystemTaskError::CanisterExecutionFailed(
                     HypervisorError::WasmModuleNotFound,
                 )),
             ))
@@ -96,7 +94,7 @@ fn validate_canister(
     };
 
     if !execution_state.exports_method(&method) {
-        return Err(HeartbeatResult::new(
+        return Err(SystemTaskResult::new(
             CanisterState::from_parts(Some(execution_state), old_system_state, scheduler_state),
             NumInstructions::from(0),
             // If the Wasm module does not export the method, then this execution
@@ -108,13 +106,13 @@ fn validate_canister(
     Ok((execution_state, old_system_state, scheduler_state))
 }
 
-/// Executes a heartbeat or a global timer method of a given canister.
+/// Executes a system task method of a given canister.
 ///
 /// Before executing, the canister is validated to meet the following conditions:
 ///     - The status of the canister is Running.
-///       Otherwise, `CanisterHeartbeatError::CanisterNotRunning` error is returned.
+///       Otherwise, `CanisterSystemTaskError::CanisterNotRunning` error is returned.
 ///     - Wasm module is present.
-///       Otherwise, `CanisterHeartbeatError::CanisterExecutionFailed` error is returned.
+///       Otherwise, `CanisterSystemTaskError::CanisterExecutionFailed` error is returned.
 ///     - Wasm module exports `canister_heartbeat` or `canister_global_timer`
 ///       system method.
 ///    
@@ -129,11 +127,11 @@ fn validate_canister(
 /// - Number of instructions left. This should be <= `instructions_limit`.
 ///
 /// - A result containing the size of the heap delta change if
-/// execution was successful or the relevant `CanisterHeartbeatError` error if execution fails.
+/// execution was successful or the relevant `CanisterSystemTaskError` error if execution fails.
 #[allow(clippy::too_many_arguments)]
-pub fn execute_heartbeat_or_timer(
+pub fn execute_system_task(
     canister: CanisterState,
-    heartbeat_or_timer: SystemMethod,
+    system_task: SystemMethod,
     network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
     own_subnet_type: SubnetType,
@@ -144,28 +142,28 @@ pub fn execute_heartbeat_or_timer(
     error_counter: &IntCounter,
     subnet_size: usize,
     log: &ReplicaLogger,
-) -> HeartbeatResult {
+) -> SystemTaskResult {
     match canister.next_execution() {
         NextExecution::None | NextExecution::StartNew => {}
         NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-            // We should never try to execute a heartbeat if there is a
-            // pending long execution.
+            // We should never try to execute a system task if
+            // there is a pending long execution.
             panic!(
-                "System method {:?} execution with another pending DTS execution: {:?}",
-                heartbeat_or_timer,
+                "System task {:?} execution with another pending DTS execution: {:?}",
+                system_task,
                 canister.next_execution()
             );
         }
     }
     // Only `canister_heartbeat` and `canister_global_timer` are allowed for now.
     assert!(
-        heartbeat_or_timer == SystemMethod::CanisterHeartbeat
-            || heartbeat_or_timer == SystemMethod::CanisterGlobalTimer
+        system_task == SystemMethod::CanisterHeartbeat
+            || system_task == SystemMethod::CanisterGlobalTimer
     );
-    // Heartbeat System methods run without DTS.
+    // System task methods run without DTS.
     let instruction_limits = &execution_parameters.instruction_limits;
     assert_eq!(instruction_limits.message(), instruction_limits.slice());
-    let method = WasmMethod::System(heartbeat_or_timer);
+    let method = WasmMethod::System(system_task);
     let memory_usage = canister.memory_usage(own_subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
     let message_instruction_limit = instruction_limits.message();
@@ -189,10 +187,10 @@ pub fn execute_heartbeat_or_timer(
     ) {
         Ok(cycles) => cycles,
         Err(err) => {
-            return HeartbeatResult::new(
+            return SystemTaskResult::new(
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
                 NumInstructions::from(0),
-                Err(CanisterHeartbeatError::OutOfCycles(err)),
+                Err(CanisterSystemTaskError::OutOfCycles(err)),
             )
         }
     };
@@ -201,8 +199,8 @@ pub fn execute_heartbeat_or_timer(
     let call_context_id = system_state
         .call_context_manager_mut()
         .unwrap()
-        .new_call_context(CallOrigin::Heartbeat, Cycles::new(0), time);
-    let api_type = ApiType::heartbeat(time, call_context_id);
+        .new_call_context(CallOrigin::SystemTask, Cycles::new(0), time);
+    let api_type = ApiType::system_task(time, call_context_id);
     let (output, output_execution_state, output_system_state) = hypervisor.execute(
         api_type,
         time,
@@ -232,7 +230,7 @@ pub fn execute_heartbeat_or_timer(
 
     let heap_delta = match heap_delta {
         Ok(heap_delta) => Ok(heap_delta),
-        Err(err) => Err(CanisterHeartbeatError::CanisterExecutionFailed(err)),
+        Err(err) => Err(CanisterSystemTaskError::CanisterExecutionFailed(err)),
     };
 
     // Refund the canister with any cycles left after message execution.
@@ -252,13 +250,13 @@ pub fn execute_heartbeat_or_timer(
             .saturating_sub(num_instructions_left.get()),
     );
 
-    HeartbeatResult::new(canister, instructions_used, heap_delta)
+    SystemTaskResult::new(canister, instructions_used, heap_delta)
 }
 
-/// Errors when executing `canister_heartbeat`.
-// TODO: RUN-415: Rename to `CanisterHeartbeatOrTimerError`
+/// Errors when executing `canister_heartbeat` or `canister_global_timer`
+/// system tasks.
 #[derive(Debug, Eq, PartialEq)]
-pub enum CanisterHeartbeatError {
+pub enum CanisterSystemTaskError {
     /// The canister isn't running.
     CanisterNotRunning {
         status: CanisterStatusType,
@@ -270,31 +268,31 @@ pub enum CanisterHeartbeatError {
     CanisterExecutionFailed(HypervisorError),
 }
 
-impl std::fmt::Display for CanisterHeartbeatError {
+impl std::fmt::Display for CanisterSystemTaskError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CanisterHeartbeatError::CanisterNotRunning { status } => write!(
+            CanisterSystemTaskError::CanisterNotRunning { status } => write!(
                 f,
                 "Canister in status {} instead of {}",
                 status,
                 CanisterStatusType::Running
             ),
-            CanisterHeartbeatError::OutOfCycles(err) => write!(f, "{}", err),
-            CanisterHeartbeatError::CanisterExecutionFailed(err) => write!(f, "{}", err),
+            CanisterSystemTaskError::OutOfCycles(err) => write!(f, "{}", err),
+            CanisterSystemTaskError::CanisterExecutionFailed(err) => write!(f, "{}", err),
         }
     }
 }
 
-impl CanisterHeartbeatError {
+impl CanisterSystemTaskError {
     /// Does this error come from a problem in the execution environment?
     /// Other errors could be caused by bad canister code.
     pub fn is_system_error(&self) -> bool {
         match self {
-            CanisterHeartbeatError::CanisterExecutionFailed(hypervisor_err) => {
+            CanisterSystemTaskError::CanisterExecutionFailed(hypervisor_err) => {
                 hypervisor_err.is_system_error()
             }
-            CanisterHeartbeatError::CanisterNotRunning { status: _ }
-            | CanisterHeartbeatError::OutOfCycles(_) => false,
+            CanisterSystemTaskError::CanisterNotRunning { status: _ }
+            | CanisterSystemTaskError::OutOfCycles(_) => false,
         }
     }
 }

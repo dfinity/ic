@@ -403,7 +403,7 @@ fn dts_update_resume_fails_due_to_call_context_change() {
         .system_state
         .call_context_manager_mut()
         .unwrap()
-        .new_call_context(CallOrigin::Heartbeat, Cycles::new(0), time);
+        .new_call_context(CallOrigin::SystemTask, Cycles::new(0), time);
 
     test.execute_slice(a_id);
 

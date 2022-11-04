@@ -1547,7 +1547,7 @@ struct ExecutionThreadResult {
 }
 
 /// Executes the given canisters one by one. For each canister it
-/// - runs the heartbeat handler of the canister if needed,
+/// - runs the heartbeat or timer handlers of the canister if needed,
 /// - executes all messages of the canister.
 /// The execution stops if `total_instruction_limit` is reached
 /// or all canisters are processed.

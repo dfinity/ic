@@ -1510,8 +1510,8 @@ pub fn uninstall_canister(
                     log,
                     "No callbacks with a query origin should be found when uninstalling"
                 ),
-                CallOrigin::Heartbeat => {
-                    // Cannot respond to heartbeat messages. Nothing to do.
+                CallOrigin::SystemTask => {
+                    // Cannot respond to system tasks. Nothing to do.
                 }
             }
 
