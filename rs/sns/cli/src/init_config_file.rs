@@ -243,7 +243,7 @@ impl SnsCliInitConfig {
 /// Generates a logo data URL from a file.
 fn load_logo(logo_path: &PathBuf) -> Result<String, anyhow::Error> {
     // Extensions and their corresponding mime types:
-    let supported_formats = [("svg", "image/svg+xml"), ("png", "image/png")];
+    let supported_formats = [("png", "image/png")];
     // In error messages we provide the list of supported file extensions:
     let supported_extensions = || -> String {
         supported_formats
@@ -279,7 +279,7 @@ fn load_logo(logo_path: &PathBuf) -> Result<String, anyhow::Error> {
         )),
     }?;
 
-    // SVG data URL prefix:
+    // Data prefix
     let mut buffer: Vec<u8> = format!("data:{};base64,", mime_type).into_bytes();
 
     // The image is base 64 encoded:
