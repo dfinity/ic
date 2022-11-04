@@ -1284,10 +1284,14 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             voting_power_percentage_multiplier: 100,
             ..Default::default()
         },
+        // A neuron with auto_staking enabled
         Neuron {
             id: Some(NeuronId { id: vec![4, 5, 6] }),
             cached_neuron_stake_e8s: 3,
             voting_power_percentage_multiplier: 100,
+            auto_stake_maturity: Some(true),
+            // Ensure the neuron is not dissolved (otherwise staked maturity is moved to maturity).
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
             ..Default::default()
         },
         // A neuron that will not vote.
@@ -1430,7 +1434,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     // Step 3.2: Inspect the neurons. In particular, look at their maturity to
     // make sure that their propotion of the reward purse is proportional to
     // their voting power/reward shares.
-    let mut neuron_total_maturity_e8s = 0;
+    let mut total_observed_rewards_e8s = 0;
     for (neuron, weight) in zip(&neurons, [2, 3, 0]) {
         let neuron = governance
             .proto
@@ -1438,7 +1442,15 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             .get(&neuron.id.as_ref().unwrap().to_string())
             .unwrap();
         let expected_share = i2d(weight) / dec!(5);
-        let observed_share = i2d(neuron.maturity_e8s_equivalent) / i2d(rewards_e8s);
+        let observed_reward = if weight == 3 {
+            // auto-staking neuron
+            assert_eq!(neuron.maturity_e8s_equivalent, 0);
+            assert!(neuron.staked_maturity_e8s_equivalent.unwrap_or(0) > 0);
+            neuron.staked_maturity_e8s_equivalent.unwrap_or(0)
+        } else {
+            neuron.maturity_e8s_equivalent
+        };
+        let observed_share = i2d(observed_reward) / i2d(rewards_e8s);
         let delta = (observed_share - expected_share).abs();
         let epsilon = i2d(1) / i2d(1_000_000);
         assert!(
@@ -1447,11 +1459,11 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             neuron, weight, rewards_e8s, delta, epsilon,
         );
 
-        neuron_total_maturity_e8s += neuron.maturity_e8s_equivalent;
+        total_observed_rewards_e8s += observed_reward;
     }
 
     // Assert that rewards add up.
-    assert_eq!(neuron_total_maturity_e8s, rewards_e8s);
+    assert_eq!(total_observed_rewards_e8s, rewards_e8s);
 }
 
 async fn paginate_neurons(
