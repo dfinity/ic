@@ -129,7 +129,7 @@ pub fn test(env: TestEnv) {
     };
 
     let mut subnet_recovery =
-        NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args, true);
+        NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args, true, false);
 
     // let's take f+1 nodes and break them.
     let f = (SUBNET_SIZE - 1) / 3;

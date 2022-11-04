@@ -1,3 +1,4 @@
+use crate::cli::{print_height_info, read_optional_ip, read_optional_version};
 use crate::file_sync_helper::create_dir;
 use crate::recovery_iterator::RecoveryIterator;
 use crate::RecoveryResult;
@@ -57,6 +58,7 @@ pub struct NNSRecoverySameNodes {
     step_iterator: Box<dyn Iterator<Item = StepType>>,
     pub params: NNSRecoverySameNodesArgs,
     pub recovery: Recovery,
+    interactive: bool,
     logger: Logger,
     new_state_dir: PathBuf,
 }
@@ -67,6 +69,7 @@ impl NNSRecoverySameNodes {
         recovery_args: RecoveryArgs,
         subnet_args: NNSRecoverySameNodesArgs,
         test: bool,
+        interactive: bool,
     ) -> Self {
         let recovery = Recovery::new(logger.clone(), recovery_args, None, !test)
             .expect("Failed to init recovery");
@@ -79,6 +82,7 @@ impl NNSRecoverySameNodes {
             recovery,
             logger,
             new_state_dir,
+            interactive,
         }
     }
 
@@ -94,6 +98,42 @@ impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
 
     fn get_logger(&self) -> &Logger {
         &self.logger
+    }
+
+    fn interactive(&self) -> bool {
+        self.interactive
+    }
+
+    fn read_step_params(&mut self, step_type: StepType) {
+        match step_type {
+            StepType::StopReplica => {
+                print_height_info(
+                    &self.logger,
+                    self.recovery.registry_client.clone(),
+                    self.params.subnet_id,
+                );
+
+                if self.params.download_node.is_none() {
+                    self.params.download_node =
+                        read_optional_ip(&self.logger, "Enter download IP:");
+                }
+            }
+
+            StepType::ICReplay => {
+                if self.params.upgrade_version.is_none() {
+                    self.params.upgrade_version =
+                        read_optional_version(&self.logger, "Upgrade version: ");
+                }
+            }
+
+            StepType::WaitForCUP => {
+                if self.params.upload_node.is_none() {
+                    self.params.upload_node = read_optional_ip(&self.logger, "Enter upload IP:");
+                }
+            }
+
+            _ => {}
+        }
     }
 
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {

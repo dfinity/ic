@@ -1,10 +1,14 @@
+use crate::cli::{
+    print_height_info, read_optional, read_optional_ip, read_optional_node_ids,
+    read_optional_subnet_id, read_optional_version, wait_for_confirmation,
+};
 use crate::recovery_iterator::RecoveryIterator;
 use crate::RecoveryResult;
 use crate::{error::RecoveryError, RecoveryArgs};
 use clap::Parser;
 use ic_base_types::{NodeId, SubnetId};
 use ic_types::ReplicaVersion;
-use slog::Logger;
+use slog::{info, Logger};
 use std::net::IpAddr;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -62,6 +66,7 @@ pub struct AppSubnetRecovery {
     step_iterator: Box<dyn Iterator<Item = StepType>>,
     pub params: AppSubnetRecoveryArgs,
     recovery: Recovery,
+    interactive: bool,
     logger: Logger,
 }
 
@@ -71,6 +76,7 @@ impl AppSubnetRecovery {
         recovery_args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
         subnet_args: AppSubnetRecoveryArgs,
+        interactive: bool,
     ) -> Self {
         let ssh_confirmation = neuron_args.is_some();
         let recovery = Recovery::new(logger.clone(), recovery_args, neuron_args, ssh_confirmation)
@@ -81,6 +87,7 @@ impl AppSubnetRecovery {
             params: subnet_args,
             recovery,
             logger,
+            interactive,
         }
     }
 
@@ -96,6 +103,76 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
 
     fn get_logger(&self) -> &Logger {
         &self.logger
+    }
+
+    fn interactive(&self) -> bool {
+        self.interactive
+    }
+
+    fn read_step_params(&mut self, step_type: StepType) {
+        // Depending on the next step we might require some user interaction before we can execute
+        // it.
+        match step_type {
+            StepType::Halt => {
+                if self.params.pub_key.is_none() {
+                    self.params.pub_key = read_optional(
+                        &self.logger,
+                        "Enter public key to add readonly SSH access to subnet: ",
+                    );
+                }
+            }
+
+            StepType::DownloadState => {
+                info!(&self.logger, "Ensure subnet is halted.");
+                // This can hardly be automated as currently the notion of "subnet is halted" is unclear,
+                // especially in the presence of failures.
+                wait_for_confirmation(&self.logger);
+
+                // We could pick a node with highest finalization height automatically,
+                // but we might have a preference between nodes of the same finalization height.
+                print_height_info(
+                    &self.logger,
+                    self.recovery.registry_client.clone(),
+                    self.params.subnet_id,
+                );
+
+                if self.params.download_node.is_none() {
+                    self.params.download_node =
+                        read_optional_ip(&self.logger, "Enter download IP:");
+                }
+            }
+
+            StepType::BlessVersion => {
+                if self.params.upgrade_version.is_none() {
+                    self.params.upgrade_version =
+                        read_optional_version(&self.logger, "Upgrade version: ");
+                }
+            }
+
+            StepType::ProposeCup => {
+                if self.params.replacement_nodes.is_none() {
+                    self.params.replacement_nodes = read_optional_node_ids(
+                        &self.logger,
+                        "Enter space separated list of replacement nodes: ",
+                    );
+                }
+                if self.params.ecdsa_subnet_id.is_none() {
+                    self.params.ecdsa_subnet_id = read_optional_subnet_id(
+                        &self.logger,
+                        "Enter ID of subnet to reshare ECDSA key from: ",
+                    );
+                }
+            }
+
+            StepType::UploadState => {
+                if self.params.upload_node.is_none() {
+                    self.params.upload_node =
+                        read_optional_ip(&self.logger, "Enter IP of node with admin access: ");
+                }
+            }
+
+            _ => {}
+        }
     }
 
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {

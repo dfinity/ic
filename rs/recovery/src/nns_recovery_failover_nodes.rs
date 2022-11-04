@@ -1,4 +1,8 @@
 use crate::admin_helper::RegistryParams;
+use crate::cli::{
+    print_height_info, read_optional, read_optional_ip, read_optional_node_ids, read_optional_url,
+    read_optional_version,
+};
 use crate::command_helper::pipe_all;
 use crate::recovery_iterator::RecoveryIterator;
 use crate::{error::RecoveryError, RecoveryArgs};
@@ -88,6 +92,7 @@ pub struct NNSRecoveryFailoverNodes {
     step_iterator: Box<dyn Iterator<Item = StepType>>,
     pub params: NNSRecoveryFailoverNodesArgs,
     recovery: Recovery,
+    interactive: bool,
     logger: Logger,
     new_registry_local_store: PathBuf,
 }
@@ -98,6 +103,7 @@ impl NNSRecoveryFailoverNodes {
         recovery_args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
         subnet_args: NNSRecoveryFailoverNodesArgs,
+        interactive: bool,
     ) -> Self {
         let ssh_confirmation = neuron_args.is_some();
         let recovery = Recovery::new(logger.clone(), recovery_args, neuron_args, ssh_confirmation)
@@ -110,6 +116,7 @@ impl NNSRecoveryFailoverNodes {
             recovery,
             logger,
             new_registry_local_store,
+            interactive,
         }
     }
 
@@ -131,6 +138,76 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
 
     fn get_logger(&self) -> &Logger {
         &self.logger
+    }
+
+    fn interactive(&self) -> bool {
+        self.interactive
+    }
+
+    fn read_step_params(&mut self, step_type: StepType) {
+        match step_type {
+            StepType::StopReplica => {
+                print_height_info(
+                    &self.logger,
+                    self.recovery.registry_client.clone(),
+                    self.params.subnet_id,
+                );
+
+                if self.params.download_node.is_none() {
+                    self.params.download_node =
+                        read_optional_ip(&self.logger, "Enter download IP:");
+                }
+            }
+
+            StepType::ProposeToCreateSubnet => {
+                if self.params.replica_version.is_none() {
+                    self.params.replica_version = read_optional_version(
+                        &self.logger,
+                        "New NNS version (current unassigned version or other version blessed by parent NNS): ",
+                    );
+                }
+                if self.params.replacement_nodes.is_none() {
+                    self.params.replacement_nodes = read_optional_node_ids(
+                        &self.logger,
+                        "Enter space separated list of replacement nodes: ",
+                    );
+                }
+            }
+
+            StepType::DownloadParentNNSStore => {
+                if self.params.parent_nns_host_ip.is_none() {
+                    self.params.parent_nns_host_ip = read_optional_ip(
+                        &self.logger,
+                        "Enter parent NNS IP to download the registry store from:",
+                    );
+                }
+            }
+
+            StepType::UploadAndHostTar => {
+                if self.params.aux_user.is_none() {
+                    self.params.aux_user = read_optional(&self.logger, "Enter aux user:");
+                }
+                if self.params.aux_ip.is_none() {
+                    self.params.aux_ip = read_optional_ip(&self.logger, "Enter aux IP:");
+                }
+                if (self.params.aux_user.is_none() || self.params.aux_ip.is_none())
+                    && self.params.registry_url.is_none()
+                {
+                    self.params.registry_url = read_optional_url(
+                        &self.logger,
+                        "Enter URL of the hosted registry store tar file:",
+                    );
+                }
+            }
+
+            StepType::WaitForCUP => {
+                if self.params.upload_node.is_none() {
+                    self.params.upload_node =
+                        read_optional_ip(&self.logger, "Enter IP of node with admin access: ");
+                }
+            }
+            _ => {}
+        }
     }
 
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
