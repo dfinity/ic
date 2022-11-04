@@ -8,6 +8,7 @@ use ic_btc_types::{Network, OutPoint, Satoshi, Utxo};
 use ic_icrc1::Account;
 use proptest::proptest;
 use proptest::{
+    array::uniform20,
     array::uniform32,
     collection::{btree_set, vec as pvec},
     option,
@@ -28,12 +29,33 @@ fn dummy_utxo_from_value(v: u64) -> Utxo {
     }
 }
 
+fn address_to_script_pubkey(address: &BitcoinAddress) -> bitcoin::Script {
+    use std::str::FromStr;
+
+    match address {
+        BitcoinAddress::WitnessV0(pkhash) => {
+            let address_string =
+                crate::address::network_and_pkhash_to_p2wpkh(Network::Mainnet, pkhash);
+            let btc_address = bitcoin::Address::from_str(&address_string).unwrap();
+            btc_address.script_pubkey()
+        }
+    }
+}
+
 fn as_txid(hash: &[u8]) -> bitcoin::Txid {
     bitcoin::Txid::from_hash(bitcoin::hashes::Hash::from_slice(hash).unwrap())
 }
 
-fn wpk_hash(pk: &[u8]) -> bitcoin::WPubkeyHash {
-    bitcoin::WPubkeyHash::from_hash(bitcoin::hashes::Hash::from_slice(&tx::hash160(pk)).unwrap())
+fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::Script {
+    use bitcoin::blockdata::{opcodes, script::Builder};
+
+    Builder::new()
+        .push_opcode(opcodes::all::OP_DUP)
+        .push_opcode(opcodes::all::OP_HASH160)
+        .push_slice(&pkhash[..])
+        .push_opcode(opcodes::all::OP_EQUALVERIFY)
+        .push_opcode(opcodes::all::OP_CHECKSIG)
+        .into_script()
 }
 
 fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transaction {
@@ -58,7 +80,7 @@ fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transacti
             .iter()
             .map(|txout| bitcoin::TxOut {
                 value: txout.value,
-                script_pubkey: bitcoin::Script::from(tx::script_from_pubkey(&txout.pubkey)),
+                script_pubkey: address_to_script_pubkey(&txout.address),
             })
             .collect(),
     }
@@ -77,7 +99,7 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
                     vout: txin.previous_output.vout,
                 },
                 sequence: txin.sequence,
-                script_sig: bitcoin::Script::new_v0_p2wpkh(&wpk_hash(&txin.pubkey)),
+                script_sig: bitcoin::Script::default(),
                 witness: bitcoin::Witness::from_vec(vec![
                     txin.signature.to_vec(),
                     txin.pubkey.to_vec(),
@@ -89,7 +111,7 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
             .iter()
             .map(|txout| bitcoin::TxOut {
                 value: txout.value,
-                script_pubkey: bitcoin::Script::from(tx::script_from_pubkey(&txout.pubkey)),
+                script_pubkey: address_to_script_pubkey(&txout.address),
             })
             .collect(),
     }
@@ -114,10 +136,15 @@ fn arb_out_point() -> impl Strategy<Value = tx::OutPoint> {
     (pvec(any::<u8>(), 32), any::<u32>()).prop_map(|(txid, vout)| tx::OutPoint { txid, vout })
 }
 
-fn arb_unsigned_input() -> impl Strategy<Value = tx::UnsignedInput> {
-    (arb_out_point(), any::<u32>()).prop_map(|(previous_output, sequence)| tx::UnsignedInput {
-        previous_output,
-        sequence,
+fn arb_unsigned_input(
+    value: impl Strategy<Value = Satoshi>,
+) -> impl Strategy<Value = tx::UnsignedInput> {
+    (arb_out_point(), value, any::<u32>()).prop_map(|(previous_output, value, sequence)| {
+        tx::UnsignedInput {
+            previous_output,
+            value,
+            sequence,
+        }
     })
 }
 
@@ -139,7 +166,10 @@ fn arb_signed_input() -> impl Strategy<Value = tx::SignedInput> {
 }
 
 fn arb_tx_out() -> impl Strategy<Value = tx::TxOut> {
-    (arb_amount(), pvec(any::<u8>(), 32)).prop_map(|(value, pubkey)| tx::TxOut { value, pubkey })
+    (arb_amount(), uniform20(any::<u8>())).prop_map(|(value, pkhash)| tx::TxOut {
+        value,
+        address: BitcoinAddress::WitnessV0(pkhash),
+    })
 }
 
 fn arb_utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utxo> {
@@ -221,7 +251,7 @@ proptest! {
 
     #[test]
     fn unsigned_tx_encoding_model(
-        inputs in pvec(arb_unsigned_input(), 1..20),
+        inputs in pvec(arb_unsigned_input(5_000u64..1_000_000_000), 1..20),
         outputs in pvec(arb_tx_out(), 1..20),
         lock_time in any::<u32>(),
     ) {
@@ -237,6 +267,51 @@ proptest! {
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
         prop_assert_eq!(&arb_tx.txid(), &*btc_tx.txid());
+    }
+
+    #[test]
+    fn unsigned_tx_sighash_model(
+        inputs_data in pvec(
+            (
+                arb_utxo(5_000u64..1_000_000_000),
+                any::<u32>(),
+                pvec(any::<u8>(), tx::PUBKEY_LEN)
+            ),
+            1..20
+        ),
+        outputs in pvec(arb_tx_out(), 1..20),
+        lock_time in any::<u32>(),
+    ) {
+        let inputs: Vec<tx::UnsignedInput> = inputs_data
+            .iter()
+            .map(|(utxo, seq, _)| tx::UnsignedInput {
+                previous_output: utxo.outpoint.clone(),
+                value: utxo.value,
+                sequence: *seq,
+            })
+            .collect();
+        let arb_tx = tx::UnsignedTransaction { inputs, outputs, lock_time };
+        let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
+
+        let sighasher = tx::TxSigHasher::new(&arb_tx);
+        let mut btc_sighasher = bitcoin::util::sighash::SighashCache::new(&btc_tx);
+
+        for (i, (utxo, _, pubkey)) in inputs_data.iter().enumerate() {
+            let mut buf = Vec::<u8>::new();
+            let pkhash = tx::hash160(pubkey);
+
+            sighasher.encode_sighash_data(i, &pkhash, &mut buf);
+
+            let mut btc_buf = Vec::<u8>::new();
+            let script_code = p2wpkh_script_code(&pkhash);
+            btc_sighasher.segwit_encode_signing_data_to(&mut btc_buf, i, &script_code, utxo.value, bitcoin::EcdsaSighashType::All)
+                .expect("failed to encode sighash data");
+            prop_assert_eq!(hex::encode(&buf), hex::encode(&btc_buf));
+
+            let sighash = sighasher.sighash(i, &pkhash);
+            let btc_sighash = btc_sighasher.segwit_signature_hash(i, &script_code, utxo.value, bitcoin::EcdsaSighashType::All).unwrap();
+            prop_assert_eq!(hex::encode(&sighash), hex::encode(&btc_sighash));
+        }
     }
 
     #[test]
@@ -262,8 +337,8 @@ proptest! {
     #[test]
     fn build_tx_splits_utxos(
         mut utxos in btree_set(arb_utxo(5_000u64..1_000_000_000), 1..20),
-        dst_pubkey in pvec(any::<u8>(), 32),
-        main_pubkey in pvec(any::<u8>(), 32),
+        dst_pkhash in uniform20(any::<u8>()),
+        main_pkhash in uniform20(any::<u8>()),
         fee_per_vbyte in 1000..2000u64,
     ) {
         let value_by_outpoint: HashMap<_, _> = utxos
@@ -275,8 +350,15 @@ proptest! {
         let total_value = utxos.iter().map(|u| u.value).sum::<u64>();
 
         let target = total_value / 2;
-        let unsigned_tx = build_unsigned_transaction(&mut utxos, dst_pubkey, main_pubkey, target, None, fee_per_vbyte)
-            .expect("failed to build transaction");
+        let unsigned_tx = build_unsigned_transaction(
+            &mut utxos,
+            BitcoinAddress::WitnessV0(dst_pkhash),
+            BitcoinAddress::WitnessV0(main_pkhash),
+            target,
+            None,
+            fee_per_vbyte
+        )
+        .expect("failed to build transaction");
 
         let fee = signed_transaction_length(&unsigned_tx) as u64 * fee_per_vbyte / 1000;
 
@@ -294,8 +376,8 @@ proptest! {
     #[test]
     fn build_tx_handles_change_from_inputs(
         mut utxos in btree_set(arb_utxo(1_000_000u64..1_000_000_000), 1..20),
-        dst_pubkey in pvec(any::<u8>(), 32),
-        main_pubkey in pvec(any::<u8>(), 32),
+        dst_pkhash in uniform20(any::<u8>()),
+        main_pkhash in uniform20(any::<u8>()),
         target in 10000..50000u64,
         fee_per_vbyte in 1000..2000u64,
     ) {
@@ -305,8 +387,15 @@ proptest! {
             .collect();
 
         let user_fee = 5000u64;
-        let unsigned_tx = build_unsigned_transaction(&mut utxos, dst_pubkey.clone(), main_pubkey.clone(), target, Some(user_fee), fee_per_vbyte)
-            .expect("failed to build transaction");
+        let unsigned_tx = build_unsigned_transaction(
+            &mut utxos,
+            BitcoinAddress::WitnessV0(dst_pkhash),
+            BitcoinAddress::WitnessV0(main_pkhash),
+            target,
+            Some(user_fee),
+            fee_per_vbyte
+        )
+        .expect("failed to build transaction");
 
         let fee = signed_transaction_length(&unsigned_tx) as u64 * fee_per_vbyte / 1000;
 
@@ -320,8 +409,14 @@ proptest! {
         prop_assert_eq!(
             &unsigned_tx.outputs,
             &vec![
-                tx::TxOut { pubkey: dst_pubkey, value: target - user_fee },
-                tx::TxOut { pubkey: main_pubkey, value: inputs_value - target },
+                tx::TxOut {
+                    value: target - user_fee,
+                    address: BitcoinAddress::WitnessV0(dst_pkhash),
+                },
+                tx::TxOut {
+                    value: inputs_value - target,
+                    address: BitcoinAddress::WitnessV0(main_pkhash),
+                },
             ]
         );
     }
@@ -329,8 +424,8 @@ proptest! {
     #[test]
     fn build_tx_does_not_modify_utxos_on_error(
         mut utxos in btree_set(arb_utxo(5_000u64..1_000_000_000), 1..20),
-        dst_pubkey in pvec(any::<u8>(), 32),
-        main_pubkey in pvec(any::<u8>(), 32),
+        dst_pkhash in uniform20(any::<u8>()),
+        main_pkhash in uniform20(any::<u8>()),
         fee_per_vbyte in 1000..2000u64,
     ) {
         let utxos_copy = utxos.clone();
@@ -338,22 +433,40 @@ proptest! {
         let total_value = utxos.iter().map(|u| u.value).sum::<u64>();
 
         prop_assert_eq!(
-            build_unsigned_transaction(&mut utxos, dst_pubkey.clone(), main_pubkey.clone(), total_value * 2, None, fee_per_vbyte)
-                .expect_err("build transaction should fail because the amount is too high"),
+            build_unsigned_transaction(
+                &mut utxos,
+                BitcoinAddress::WitnessV0(dst_pkhash),
+                BitcoinAddress::WitnessV0(main_pkhash),
+                total_value * 2,
+                None,
+                fee_per_vbyte
+            ).expect_err("build transaction should fail because the amount is too high"),
             BuildTxError::NotEnoughFunds
         );
         prop_assert_eq!(&utxos_copy, &utxos);
 
         prop_assert_eq!(
-            build_unsigned_transaction(&mut utxos, dst_pubkey.clone(), main_pubkey.clone(), 1000, Some(1), fee_per_vbyte)
-                .expect_err("build transaction should fail because max fee is too low"),
+            build_unsigned_transaction(
+                &mut utxos,
+                BitcoinAddress::WitnessV0(dst_pkhash),
+                BitcoinAddress::WitnessV0(main_pkhash),
+                1000,
+                Some(1),
+                fee_per_vbyte
+            ).expect_err("build transaction should fail because max fee is too low"),
             BuildTxError::UserFeeTooLow
         );
         prop_assert_eq!(&utxos_copy, &utxos);
 
         prop_assert_eq!(
-            build_unsigned_transaction(&mut utxos, dst_pubkey, main_pubkey, 1, None, fee_per_vbyte)
-                .expect_err("build transaction should fail because the amount is too low to pay the fee"),
+            build_unsigned_transaction(
+                &mut utxos,
+                BitcoinAddress::WitnessV0(dst_pkhash),
+                BitcoinAddress::WitnessV0(main_pkhash),
+                1,
+                None,
+                fee_per_vbyte
+            ).expect_err("build transaction should fail because the amount is too low to pay the fee"),
             BuildTxError::AmountTooLow
         );
         prop_assert_eq!(&utxos_copy, &utxos);

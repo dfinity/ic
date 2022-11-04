@@ -1,6 +1,7 @@
 //! This module contains definitions of Bitcoin P2PKWH transactions and rules to
 //! encode them into a byte stream.
 
+use crate::address::BitcoinAddress;
 use ic_crypto_sha::Sha256;
 use serde_bytes::ByteBuf;
 
@@ -20,6 +21,8 @@ pub const PUBKEY_LEN: usize = 32;
 const MARKER: u8 = 0;
 // The flags for the segregated witness encoding.
 const FLAGS: u8 = 1;
+// The signature applies to all inputs and outputs.
+pub const SIGHASH_ALL: u32 = 1;
 
 pub trait Buffer {
     type Output;
@@ -126,27 +129,120 @@ pub struct SignedInput {
     pub pubkey: ByteBuf,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnsignedInput {
     pub previous_output: OutPoint,
+    pub value: Satoshi,
     pub sequence: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxOut {
     pub value: Satoshi,
-    pub pubkey: Vec<u8>,
+    pub address: BitcoinAddress,
 }
 
-/// REQUIRES: pk.len() == PUBKEY_LEN
-pub fn script_from_pubkey(pk: &[u8]) -> Vec<u8> {
-    assert!(pk.len() == PUBKEY_LEN);
+/// Encodes the scriptPubkey required to unlock an output for the specified address.
+pub fn encode_address_scipt_pubkey(btc_address: &BitcoinAddress, buf: &mut impl Buffer) {
+    match btc_address {
+        BitcoinAddress::WitnessV0(pkhash) => encode_p2wpkh_script_pubkey(pkhash, buf),
+    }
+}
 
-    let mut buf = Vec::with_capacity(PUBKEY_LEN + 2);
-    buf.push(0);
-    buf.push(PUBKEY_LEN as u8);
-    buf.extend(pk);
-    buf
+/// Encodes an input sighash script code for a specified pubkey hash.
+pub fn encode_sighash_script_code(pkhash: &[u8; 20], buf: &mut impl Buffer) {
+    // For P2WPKH witness program, the scriptCode is 0x1976a914{20-byte-pubkey-hash}88ac.
+    // https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki#specification
+    buf.write(&[0x19, 0x76, 0xa9, 0x14][..]);
+    buf.write(pkhash);
+    buf.write(&[0x88, 0xac][..]);
+}
+
+pub struct TxSigHasher<'a> {
+    tx: &'a UnsignedTransaction,
+    hash_prevouts: [u8; 32],
+    hash_sequence: [u8; 32],
+    hash_outputs: [u8; 32],
+}
+
+impl<'a> TxSigHasher<'a> {
+    pub fn new(tx: &'a UnsignedTransaction) -> Self {
+        let hash_prevouts = {
+            let mut hasher = Sha256::new();
+            for input in tx.inputs.iter() {
+                input.previous_output.encode(&mut hasher);
+            }
+            Sha256::hash(&hasher.finish())
+        };
+
+        let hash_sequence = {
+            let mut hasher = Sha256::new();
+            for input in tx.inputs.iter() {
+                input.sequence.encode(&mut hasher);
+            }
+            Sha256::hash(&hasher.finish())
+        };
+
+        let hash_outputs = {
+            let mut hasher = Sha256::new();
+            for output in tx.outputs.iter() {
+                output.encode(&mut hasher);
+            }
+            Sha256::hash(&hasher.finish())
+        };
+
+        Self {
+            tx,
+            hash_prevouts,
+            hash_sequence,
+            hash_outputs,
+        }
+    }
+
+    pub fn encode_sighash_data(&self, index: usize, pkhash: &[u8; 20], buf: &mut impl Buffer) {
+        // Double SHA256 of the serialization of:
+        //      1. nVersion of the transaction (4-byte little endian)
+        TX_VERSION.encode(buf);
+        //      2. hashPrevouts (32-byte hash)
+        buf.write(&self.hash_prevouts[..]);
+        //      3. hashSequence (32-byte hash)
+        buf.write(&self.hash_sequence[..]);
+        let input = &self.tx.inputs[index];
+        //      4. outpoint (32-byte hash + 4-byte little endian)
+        input.previous_output.encode(buf);
+        //      5. scriptCode of the input (serialized as scripts inside CTxOuts)
+        encode_sighash_script_code(pkhash, buf);
+        //      6. value of the output spent by this input (8-byte little endian)
+        input.value.encode(buf);
+        //      7. nSequence of the input (4-byte little endian)
+        input.sequence.encode(buf);
+        //      8. hashOutputs (32-byte hash)
+        buf.write(&self.hash_outputs[..]);
+        //      9. nLocktime of the transaction (4-byte little endian)
+        self.tx.lock_time.encode(buf);
+        //     10. sighash type of the signature (4-byte little endian)
+        SIGHASH_ALL.encode(buf);
+    }
+
+    /// Returns the bytes that the input with the specified index needs to sign
+    /// for a P2WPKH transaction.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the `index` is invalid transaction input index.
+    pub fn sighash(&self, index: usize, pkhash: &[u8; 20]) -> [u8; 32] {
+        assert!(index < self.tx.inputs.len());
+
+        // Spec:
+        // https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki#specification
+        //
+        // Reference implementation:
+        // https://github.com/bitcoin/bitcoin/blob/5668ccec1d3785632caf4b74c1701019ecc88f41/src/script/interpreter.cpp#L1567-L1633
+
+        let mut hasher = Sha256::new();
+        self.encode_sighash_data(index, pkhash, &mut hasher);
+        Sha256::hash(&hasher.finish())
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -233,27 +329,29 @@ impl Encode for UnsignedInput {
     }
 }
 
+fn encode_p2wpkh_script_pubkey(pkhash: &[u8; 20], buf: &mut impl Buffer) {
+    // Encoding the scriptPubkey field for P2WPKH:
+    //    scriptPubKey: 0 <20-byte-key-hash>
+    //                 (0x0014{20-byte-key-hash})
+    buf.write(&[22, 0, 20]);
+    buf.write(&pkhash[..]);
+}
+
 impl Encode for SignedInput {
     fn encode(&self, buf: &mut impl Buffer) {
         // See: https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki#p2wpkh
         self.previous_output.encode(buf);
-        // Encoding the scriptPubkey field for P2WPKH:
-        //    scriptPubKey: 0 <20-byte-key-hash>
-        //                 (0x0014{20-byte-key-hash})
-        let pk_hash = hash160(&self.pubkey);
-        buf.write(&[22, 0, 20]);
-        buf.write(&pk_hash);
+        // Script signature is empty, the witness part goes at the end of the
+        // transaction encoding.
+        buf.write(&[0]);
         self.sequence.encode(buf);
-        // The witness part goes at the end of the transaction encoding.
     }
 }
 
 impl Encode for TxOut {
     fn encode(&self, buf: &mut impl Buffer) {
         self.value.encode(buf);
-        // Encode the scriptPubkey.
-        buf.write(&[34, 0, PUBKEY_LEN as u8]);
-        buf.write(&self.pubkey);
+        encode_address_scipt_pubkey(&self.address, buf);
     }
 }
 

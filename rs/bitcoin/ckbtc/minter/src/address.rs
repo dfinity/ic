@@ -12,21 +12,30 @@ pub enum BitcoinAddress {
     WitnessV0([u8; 20]),
 }
 
-/// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
-fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
+/// Returns the derivation path that should be used to sign a message from a
+/// specified account.
+pub fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
     const SCHEMA_V1: u8 = 1;
+    vec![
+        vec![SCHEMA_V1],
+        account.owner.as_slice().to_vec(),
+        account.effective_subaccount().to_vec(),
+    ]
+}
 
-    let derivation_schema = vec![
-        DerivationIndex(vec![SCHEMA_V1]),
-        DerivationIndex(account.owner.as_slice().to_vec()),
-        DerivationIndex(account.effective_subaccount().to_vec()),
-    ];
+/// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
+pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
     let ExtendedBip32DerivationOutput {
         derived_public_key,
         derived_chain_code,
-    } = DerivationPath::new(derivation_schema)
-        .key_derivation(&ecdsa_public_key.public_key, &ecdsa_public_key.chain_code)
-        .unwrap(); // the derivation should always be possible
+    } = DerivationPath::new(
+        derivation_path(account)
+            .into_iter()
+            .map(DerivationIndex)
+            .collect(),
+    )
+    .key_derivation(&ecdsa_public_key.public_key, &ecdsa_public_key.chain_code)
+    .unwrap(); // the derivation should always be possible
     ECDSAPublicKey {
         public_key: derived_public_key,
         chain_code: derived_chain_code,
@@ -46,22 +55,13 @@ pub fn account_to_p2wpkh_address(
     )
 }
 
-/// Calculates the p2wpkh address as described in [BIP-0173](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki).
-///
-/// # Panics
-///
-/// This function panics if the public key in not compressed.
-pub fn network_and_public_key_to_p2wpkh(network: Network, public_key: &[u8]) -> String {
+pub fn network_and_pkhash_to_p2wpkh(network: Network, pkhash: &[u8; 20]) -> String {
     use bech32::u5;
 
-    assert_eq!(public_key.len(), 33);
-    assert!(public_key[0] == 0x02 || public_key[0] == 0x03);
-
-    let data: [u8; 20] = crate::tx::hash160(public_key);
     let witness_version: u5 = u5::try_from_u8(0).unwrap();
     let data: Vec<u5> = std::iter::once(witness_version)
         .chain(
-            bech32::convert_bits(&data[..], 8, 5, true)
+            bech32::convert_bits(&pkhash[..], 8, 5, true)
                 .unwrap()
                 .into_iter()
                 .map(|b| u5::try_from_u8(b).unwrap()),
@@ -69,6 +69,18 @@ pub fn network_and_public_key_to_p2wpkh(network: Network, public_key: &[u8]) -> 
         .collect();
     let hrp = hrp(network);
     bech32::encode(hrp, data, bech32::Variant::Bech32).unwrap()
+}
+
+/// Calculates the p2wpkh address as described in [BIP-0173](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki).
+///
+/// # Panics
+///
+/// This function panics if the public key in not compressed.
+pub fn network_and_public_key_to_p2wpkh(network: Network, public_key: &[u8]) -> String {
+    assert_eq!(public_key.len(), 33);
+    assert!(public_key[0] == 0x02 || public_key[0] == 0x03);
+
+    network_and_pkhash_to_p2wpkh(network, &crate::tx::hash160(public_key))
 }
 
 /// Returns the human-readable part of a bech32 address
