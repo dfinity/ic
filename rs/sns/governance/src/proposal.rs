@@ -296,14 +296,16 @@ pub(crate) fn render_version(version: &Version) -> String {
     root: {},
     governance: {},
     ledger: {},
-    swap: {}
-    archive: {}
+    swap: {},
+    archive: {},
+    index: {},
 }}",
         hex::encode(&version.root_wasm_hash),
         hex::encode(&version.governance_wasm_hash),
         hex::encode(&version.ledger_wasm_hash),
         hex::encode(&version.swap_wasm_hash),
         hex::encode(&version.archive_wasm_hash),
+        hex::encode(&version.index_wasm_hash),
     )
 }
 /// Validates and renders a proposal with action UpgradeSnsToNextVersion.
@@ -1638,8 +1640,9 @@ Version {
     root: 4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a,
     governance: dbc1b4c900ffe48d575b5da5c638040125f65db0fe3e24494b76ea986457d986,
     ledger: 084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5,
-    swap: e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71
-    archive: e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db
+    swap: e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71,
+    archive: e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db,
+    index: ca358758f6d27e6cf45272937977a748fd88391db679ceda7dc7bf1f005ee879,
 }
 
 ## SNS New Version:
@@ -1647,8 +1650,9 @@ Version {
     root: 67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6,
     governance: dbc1b4c900ffe48d575b5da5c638040125f65db0fe3e24494b76ea986457d986,
     ledger: 084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5,
-    swap: e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71
-    archive: e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db
+    swap: e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71,
+    archive: e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db,
+    index: ca358758f6d27e6cf45272937977a748fd88391db679ceda7dc7bf1f005ee879,
 }
 
 ## Canisters to be upgraded: q7t5l-saaaa-aaaaa-aah2a-cai
