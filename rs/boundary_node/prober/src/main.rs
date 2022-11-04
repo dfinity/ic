@@ -45,6 +45,9 @@ use tracing::info;
 mod metrics;
 use metrics::{MetricParams, WithMetrics};
 
+mod retry;
+use retry::WithRetry;
+
 const SERVICE_NAME: &str = "prober";
 
 const MILLISECOND: Duration = Duration::from_millis(1);
@@ -115,6 +118,7 @@ async fn main() -> Result<(), Error> {
         creator,
         MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
     );
+    let creator = WithRetry::new(creator, 1);
 
     let wasm_module = wabt::wat2wasm(CANISTER_WAT).context("failed convert wat to wasm")?;
 
@@ -123,6 +127,7 @@ async fn main() -> Result<(), Error> {
         installer,
         MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
     );
+    let installer = WithRetry::new(installer, 1);
 
     let prober = Prober {};
     let prober = WithMetrics(
@@ -135,12 +140,14 @@ async fn main() -> Result<(), Error> {
         stopper,
         MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
     );
+    let stopper = WithRetry::new(stopper, 1);
 
     let deleter = Deleter {};
     let deleter = WithMetrics(
         deleter,
         MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
     );
+    let deleter = WithRetry::new(deleter, 1);
 
     let canister_ops = Arc::new(CanisterOps {
         creator,

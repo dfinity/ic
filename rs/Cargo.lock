@@ -990,6 +990,7 @@ dependencies = [
  "humantime 2.1.0",
  "hyper",
  "ic-agent",
+ "ic-error-types",
  "ic-utils 0.22.0",
  "indoc",
  "mockall 0.11.2",
