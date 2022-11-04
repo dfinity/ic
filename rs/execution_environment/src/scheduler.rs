@@ -885,6 +885,12 @@ impl SchedulerImpl {
                 all_rejects.push(uninstall_canister(&self.log, canister, state_time));
                 canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                 canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
+                // Burn the remaining balance of the canister.
+                let remaining_cycles = canister.system_state.balance_mut().take();
+                canister
+                    .system_state
+                    .canister_metrics
+                    .consumed_cycles_since_replica_started += NominalCycles::from(remaining_cycles);
 
                 info!(
                     self.log,

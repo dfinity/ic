@@ -9,7 +9,7 @@ use ic_state_machine_tests::{
 };
 use ic_types::{ingress::WasmResult, Cycles, NumBytes};
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
-use std::convert::TryInto;
+use std::{convert::TryInto, time::Duration};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -356,6 +356,64 @@ fn test_canister_out_of_cycles() {
             .code(),
         ErrorCode::CanisterWasmModuleNotFound
     );
+}
+
+#[test]
+fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
+    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let compute_percent_allocated_per_second_fee = subnet_config
+        .cycles_account_manager_config
+        .compute_percent_allocated_per_second_fee;
+
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig::default(),
+    ));
+
+    let now = std::time::SystemTime::now();
+    env.set_time(now);
+
+    // Install the canister.
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(CanisterSettingsArgs {
+                controller: None,
+                controllers: None,
+                compute_allocation: Some(candid::Nat::from(1)),
+                memory_allocation: None,
+                freezing_threshold: None,
+            }),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    // We don't charge for allocation periodically, we advance the state machine
+    // time to trigger allocation charging. The canister should get uninstalled
+    // since we simulate that enough time has passed to not be able to pay for
+    // its compute allocation.
+    let seconds_to_burn_balance = env.cycle_balance(canister_id) as u64
+        / compute_percent_allocated_per_second_fee.get() as u64;
+    env.advance_time(Duration::from_secs(seconds_to_burn_balance + 1));
+    env.tick();
+
+    // Verify the original canister still exists but it's uninstalled and has a
+    // zero cycle balance.
+    assert_eq!(env.cycle_balance(canister_id), 0);
+    assert_eq!(env.num_canisters_uninstalled_out_of_cycles(), 1);
+
+    // Advance the statem machine time a bit more and confirm the canister is
+    // still uninstalled.
+    env.advance_time(
+        2 * CyclesAccountManagerConfig::application_subnet().duration_between_allocation_charges,
+    );
+    env.tick();
+
+    // Verify the original canister still exists but it's uninstalled and has a
+    // zero cycle balance.
+    assert_eq!(env.cycle_balance(canister_id), 0);
+    assert_eq!(env.num_canisters_uninstalled_out_of_cycles(), 1);
 }
 
 /// Verifies that incremental manifest computation correctly handles memory

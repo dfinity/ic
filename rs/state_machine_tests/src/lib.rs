@@ -53,7 +53,7 @@ use ic_replicated_state::{
     Memory, PageMap, ReplicatedState,
 };
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities_metrics::fetch_histogram_stats;
+use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter};
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
@@ -644,6 +644,16 @@ impl StateMachine {
         )
         .map(|stats| stats.sum)
         .unwrap_or(0.0)
+    }
+
+    /// Returns the number of canisters that were uninstalled due to being low
+    /// on cycles.
+    pub fn num_canisters_uninstalled_out_of_cycles(&self) -> u64 {
+        fetch_int_counter(
+            &self.metrics_registry,
+            "scheduler_num_canisters_uninstalled_out_of_cycles",
+        )
+        .unwrap_or(0)
     }
 
     /// Sets the time that the state machine will use for executing next
