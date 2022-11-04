@@ -317,13 +317,6 @@ def make_argparser():
         type=str,
         help="An additional dockerfile to be layered on top of the first image.",
     )
-    parser.add_argument(
-        "--extra-vars",
-        type=str,
-        nargs="*",
-        default=[],
-        help="Extra vars to pass to docker",
-    )
     parser.add_argument("--dev-root-ca", type=str, default="", help="Root CA for the dev image")
     parser.add_argument(
         "build_args",
@@ -341,7 +334,6 @@ def main():
     out_file = args.output
     dockerfile = args.dockerfile
     extra_dockerfile = args.extra_dockerfile
-    extra_vars = args.extra_vars
     build_args = list(args.build_args)
     extra_args = list(args.build_args)
 
@@ -360,10 +352,8 @@ def main():
 
     # If an additional Dockerfile is specified, build an additional layer on top of the one already built
     if extra_dockerfile:
-        extra_vars.append("PREVIOUS_IMAGE=%s" % image_hash)
-        for var in extra_vars:
-            extra_args.append("--build-arg")
-            extra_args.append(var)
+        extra_args.append("--build-arg")
+        extra_args.append("PREVIOUS_IMAGE=%s" % image_hash)
         if args.dev_root_ca != "":
             try:
                 ca_contents = open(args.dev_root_ca, "r").read()
