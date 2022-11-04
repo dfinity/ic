@@ -39,6 +39,7 @@ impl Manager {
         let local_store_dir = config.root_dir.join("ic_registry_local_store");
         let data_provider = Arc::new(LocalStoreImpl::new(local_store_dir));
         let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
+        // TODO: load the state in order to deduce the starting replica version
         let mut backups = Vec::new();
         for s in config.subnets {
             let backup_helper = BackupHelper {
@@ -75,7 +76,6 @@ impl Manager {
             for b in &mut self.subnet_backups {
                 // TODO: split sync and replay into separate threads
                 if b.sync_last_time + b.sync_period < Instant::now() {
-                    b.backup_helper.download_binaries();
                     match b.backup_helper.collect_subnet_nodes() {
                         Ok(nodes) => {
                             // TODO: randomize and take first N
@@ -86,7 +86,6 @@ impl Manager {
                     }
                 }
                 if b.replay_last_time + b.replay_period < Instant::now() {
-                    b.backup_helper.download_binaries();
                     b.backup_helper.replay();
                     b.replay_last_time = Instant::now();
                 }

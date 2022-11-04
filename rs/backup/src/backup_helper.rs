@@ -68,7 +68,7 @@ impl BackupHelper {
         "backup".to_string()
     }
 
-    pub fn download_binaries(&self) {
+    fn download_binaries(&self) {
         if !self.binary_dir().exists() {
             std::fs::create_dir_all(self.binary_dir()).expect("Failure creating a directory");
         }
@@ -195,6 +195,23 @@ impl BackupHelper {
         }
     }
 
+    fn get_replica_version(&self) -> Result<ReplicaVersion, String> {
+        let subnet_id = self.subnet_id;
+        block_on(async {
+            if let Err(err) = self.registry_client.try_polling_latest_version(200) {
+                return Err(format!("couldn't poll the registry: {:?}", err));
+            };
+            let version = self.registry_client.get_latest_version();
+            match self.registry_client.get_replica_version(subnet_id, version) {
+                Ok(Some(replica_version)) => Ok(replica_version),
+                other => Err(format!(
+                    "can't fetch replica version from the registry for subnet_id={}: {:?}",
+                    subnet_id, other
+                )),
+            }
+        })
+    }
+
     pub fn collect_subnet_nodes(&self) -> Result<Vec<IpAddr>, String> {
         let subnet_id = self.subnet_id;
         let result = block_on(async {
@@ -254,15 +271,72 @@ impl BackupHelper {
         }
     }
 
-    pub fn replay(&self) {
+    // TODO: remove this function by improving ic-replay parameters
+    fn copy_local_store(&self) {
+        let subnet_registry = self.data_dir().join("ic_registry_local_store");
+        let mut cmd = Command::new("rm");
+        cmd.arg("-rf");
+        cmd.arg(subnet_registry.clone());
+        info!(self.log, "Will execute: {:?}", cmd);
+        if let Err(e) = exec_cmd(&mut cmd) {
+            error!(self.log, "Error: {}", e);
+        }
+        let mut cmd = Command::new("cp");
+        cmd.arg("-rf");
+        cmd.arg(self.local_store_dir());
+        cmd.arg(subnet_registry);
+        info!(self.log, "Will execute: {:?}", cmd);
+        if let Err(e) = exec_cmd(&mut cmd) {
+            error!(self.log, "Error: {}", e);
+        }
+    }
+
+    pub fn replay(&mut self) {
         let start_height = self.last_checkpoint();
-        info!(
-            self.log,
-            "Replaying from height #{} of subnet {:?}", start_height, self.subnet_id
-        );
         if !self.state_dir().exists() {
             std::fs::create_dir_all(self.state_dir()).expect("Failure creating a directory");
         }
+
+        self.copy_local_store();
+        self.replay_current_version();
+
+        if self.last_checkpoint() > start_height {
+            info!(self.log, "Replay was successful!");
+        } else {
+            match self.get_replica_version() {
+                Ok(latest_version) => {
+                    // Is there a replica version upgrade?
+                    if latest_version != self.replica_version {
+                        info!(self.log, "Upgrade detected to: {}", latest_version);
+                        self.replica_version = latest_version;
+                        // try to replay with the new version instead
+                        self.replay_current_version();
+                        if self.last_checkpoint() > start_height {
+                            info!(self.log, "Replay was successful with new version!");
+                        } else {
+                            warn!(self.log, "No progress with the new version!");
+                        }
+                    } else {
+                        warn!(self.log, "Replay had no progress!");
+                    }
+                }
+                Err(e) => {
+                    error!(self.log, "Error fetching replica version:: {}", e);
+                }
+            }
+        }
+    }
+
+    fn replay_current_version(&mut self) {
+        let start_height = self.last_checkpoint();
+        info!(
+            self.log,
+            "Replaying from height #{} of subnet {:?} with version {}",
+            start_height,
+            self.subnet_id,
+            self.replica_version
+        );
+        self.download_binaries();
 
         let ic_admin = self.binary_file("ic-replay");
         let mut cmd = Command::new(ic_admin);
@@ -285,16 +359,11 @@ impl BackupHelper {
             Ok(Some(stdout)) => {
                 info!(self.log, "Replay result:");
                 info!(self.log, "{}", stdout);
-                info!(
-                    self.log,
-                    "Finished replaying. Last checkpoint height: #{}",
-                    self.last_checkpoint()
-                );
             }
-            _ => {}
+            Ok(None) => {
+                error!(self.log, "No output from the replay process!")
+            }
         }
-        if self.last_checkpoint() > start_height {
-            info!(self.log, "Replay was successful!");
-        }
+        info!(self.log, "Last height: #{}!", self.last_checkpoint());
     }
 }
