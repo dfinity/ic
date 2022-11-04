@@ -5,6 +5,8 @@ use prost::Message;
 use std::fs;
 use std::path::Path;
 
+pub mod proto_pubkey_store;
+
 const PK_DATA_FILENAME: &str = "public_keys.pb";
 
 /// Error while reading or writing public keys
