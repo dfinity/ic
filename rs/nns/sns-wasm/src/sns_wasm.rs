@@ -832,6 +832,7 @@ where
             "Ledger Archive".into(),
             hex::encode(&version.archive_wasm_hash),
         );
+        versions_str.insert("Ledger Index".into(), hex::encode(&version.index_wasm_hash));
 
         versions_str
     }
