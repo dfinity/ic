@@ -92,7 +92,7 @@ fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
 
     let ctext = MEGaCiphertextSingle::encrypt(
         seed,
-        &[ptext_for_a, ptext_for_b],
+        &[ptext_for_a.clone(), ptext_for_b.clone()],
         &[a_pk.clone(), b_pk.clone()],
         dealer_index,
         associated_data,
@@ -144,7 +144,7 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
 
     let ctext = MEGaCiphertextPair::encrypt(
         seed,
-        &[ptext_for_a, ptext_for_b],
+        &[ptext_for_a.clone(), ptext_for_b.clone()],
         &[a_pk.clone(), b_pk.clone()],
         dealer_index,
         associated_data,

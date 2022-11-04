@@ -334,7 +334,7 @@ fn reconstruct_share_from_openings(
             for (receiver_index, opening) in openings {
                 if let CommitmentOpening::Simple(value) = opening {
                     x_values.push(*receiver_index);
-                    values.push(*value);
+                    values.push(value.clone());
                 } else {
                     return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                 }
@@ -352,8 +352,8 @@ fn reconstruct_share_from_openings(
             for (receiver_index, opening) in openings {
                 if let CommitmentOpening::Pedersen(value, mask) = opening {
                     x_values.push(*receiver_index);
-                    values.push(*value);
-                    masks.push(*mask);
+                    values.push(value.clone());
+                    masks.push(mask.clone());
                 } else {
                     return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                 }
@@ -562,7 +562,7 @@ impl CommitmentOpening {
                         for (dealer_index, opening) in openings {
                             if let Self::Simple(value) = opening {
                                 x_values.push(*dealer_index);
-                                values.push(*value);
+                                values.push(value.clone());
                             } else {
                                 return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                             }
@@ -581,8 +581,8 @@ impl CommitmentOpening {
                         for (dealer_index, opening) in openings {
                             if let Self::Pedersen(value, mask) = opening {
                                 x_values.push(*dealer_index);
-                                values.push(*value);
-                                masks.push(*mask);
+                                values.push(value.clone());
+                                masks.push(mask.clone());
                             } else {
                                 return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                             }

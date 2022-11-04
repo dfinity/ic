@@ -115,7 +115,8 @@ impl fmt::Display for EccCurveType {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
+#[derive(Clone, Eq, PartialEq, Zeroize)]
+#[zeroize(drop)]
 pub enum EccScalar {
     K256(secp256k1::Scalar),
     P256(secp256r1::Scalar),
@@ -212,7 +213,7 @@ impl EccScalar {
         domain_separator: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
         let h = hash2curve::hash_to_scalar(1, curve, input, domain_separator)?;
-        Ok(h[0])
+        Ok(h[0].clone())
     }
 
     /// Hash an input into multiple Scalar values
@@ -412,13 +413,14 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Zeroize)]
+#[zeroize(drop)]
 pub struct EccPoint {
     point: EccPointInternal,
     precompute: Option<NafLut>,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Zeroize)]
 pub enum EccPointInternal {
     K256(secp256k1::Point),
     P256(secp256r1::Point),
@@ -1345,7 +1347,7 @@ impl SlidingWindowMulState {
 
 /// Look-up table (LUT) that can be used to improve the efficiency of
 /// multiplication of the input `EccPoint` by an `EccScalar`.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Zeroize)]
 pub struct NafLut {
     multiplications: Vec<EccPoint>,
     window_size: usize,

@@ -172,7 +172,7 @@ impl ProtocolRound {
         for opening in &masked.openings {
             match opening {
                 CommitmentOpening::Pedersen(v, m) => {
-                    shares.push(SecretShares::ReshareOfMasked(*v, *m));
+                    shares.push(SecretShares::ReshareOfMasked(v.clone(), m.clone()));
                 }
                 _ => panic!("Unexpected opening type"),
             }
@@ -213,7 +213,7 @@ impl ProtocolRound {
         for opening in &unmasked.openings {
             match opening {
                 CommitmentOpening::Simple(v) => {
-                    shares.push(SecretShares::ReshareOfUnmasked(*v));
+                    shares.push(SecretShares::ReshareOfUnmasked(v.clone()));
                 }
                 _ => panic!("Unexpected opening type"),
             }
@@ -260,7 +260,10 @@ impl ProtocolRound {
         for opening in unmasked.openings.iter().zip(masked.openings.iter()) {
             match opening {
                 (CommitmentOpening::Simple(lhs_v), CommitmentOpening::Pedersen(rhs_v, rhs_m)) => {
-                    shares.push(SecretShares::UnmaskedTimesMasked(*lhs_v, (*rhs_v, *rhs_m)))
+                    shares.push(SecretShares::UnmaskedTimesMasked(
+                        lhs_v.clone(),
+                        (rhs_v.clone(), rhs_m.clone()),
+                    ))
                 }
                 _ => panic!("Unexpected opening type"),
             }
@@ -306,7 +309,7 @@ impl ProtocolRound {
                 for (idx, opening) in openings.iter().enumerate() {
                     if let CommitmentOpening::Simple(value) = opening {
                         indexes.push(idx as NodeIndex);
-                        g_openings.push(*value);
+                        g_openings.push(value.clone());
                     } else {
                         panic!("Unexpected opening type");
                     }
@@ -326,8 +329,8 @@ impl ProtocolRound {
                 for (idx, opening) in openings.iter().enumerate() {
                     if let CommitmentOpening::Pedersen(value, mask) = opening {
                         indexes.push(idx as NodeIndex);
-                        g_openings.push(*value);
-                        h_openings.push(*mask);
+                        g_openings.push(value.clone());
+                        h_openings.push(mask.clone());
                     } else {
                         panic!("Unexpected opening type");
                     }

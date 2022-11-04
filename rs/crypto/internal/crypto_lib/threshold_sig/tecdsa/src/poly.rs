@@ -88,7 +88,7 @@ impl Polynomial {
     /// Creates a random polynomial with the specified number of coefficients,
     /// one of which is the specified constant
     pub fn random_with_constant<R: CryptoRng + RngCore>(
-        constant: EccScalar,
+        constant: &EccScalar,
         num_coefficients: usize,
         rng: &mut R,
     ) -> ThresholdEcdsaResult<Self> {
@@ -101,7 +101,7 @@ impl Polynomial {
         let curve = constant.curve_type();
         let mut coefficients = Vec::with_capacity(num_coefficients);
 
-        coefficients.push(constant);
+        coefficients.push(constant.clone());
 
         for _ in 1..num_coefficients {
             coefficients.push(EccScalar::random(curve, rng))
@@ -117,7 +117,7 @@ impl Polynomial {
 
     fn coeff(&self, idx: usize) -> EccScalar {
         match self.coefficients.get(idx) {
-            Some(s) => *s,
+            Some(s) => s.clone(),
             None => EccScalar::zero(self.curve_type()),
         }
     }
@@ -210,9 +210,10 @@ impl Polynomial {
 
         // Could this instead be done using fold or reduce?
         let mut coefficients = self.coefficients.iter().rev();
-        let mut ans = *coefficients
+        let mut ans = coefficients
             .next()
-            .expect("Iterator was unexpectedly empty");
+            .expect("Iterator was unexpectedly empty")
+            .clone();
 
         for coeff in coefficients {
             ans = ans.mul(x)?;
@@ -233,12 +234,12 @@ impl Polynomial {
         let one = EccScalar::one(curve);
 
         // Constant polynomial interpolating the first sample `(x_0,y_0)`.
-        let mut poly = Polynomial::new(curve, vec![samples[0].1])?;
-        let mut minus_s0 = samples[0].0;
+        let mut poly = Polynomial::new(curve, vec![samples[0].1.clone()])?;
+        let mut minus_s0 = samples[0].0.clone();
         minus_s0 = minus_s0.negate();
         // Is zero on the first `i` samples.
         // Degree 1 polynomial evaluating to 0 in the first evaluation point `x_0`.
-        let mut base = Polynomial::new(curve, vec![minus_s0, one])?;
+        let mut base = Polynomial::new(curve, vec![minus_s0, one.clone()])?;
 
         // We update `base` so that it is always zero on all previous samples, and
         // `poly` so that it has the correct values on the previous samples.
@@ -274,13 +275,13 @@ impl Polynomial {
 
             // Update `base` to a degree `i+1` polynomial that evaluates to 0 for all points
             // `x_j` for j in 0..=i: `base(x) = base(x)(x-x_i)`
-            base = base.mul(&Polynomial::new(curve, vec![x.negate(), one])?)?;
+            base = base.mul(&Polynomial::new(curve, vec![x.negate(), one.clone()])?)?;
         }
         Ok(poly)
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum CommitmentOpening {
     Simple(EccScalar),
     Pedersen(EccScalar, EccScalar),
@@ -609,7 +610,7 @@ impl PolynomialCommitment {
         opening: &CommitmentOpening,
     ) -> ThresholdEcdsaResult<CommitmentOpening> {
         if self.check_opening(index, opening)? {
-            Ok(*opening)
+            Ok(opening.clone())
         } else {
             Err(ThresholdEcdsaError::InvalidCommitment)
         }
@@ -758,10 +759,10 @@ impl LagrangeCoefficients {
 
         let mut numerator = Vec::with_capacity(samples.len());
         let mut tmp = EccScalar::one(curve_type);
-        numerator.push(tmp);
+        numerator.push(tmp.clone());
         for x in samples.iter().take(samples.len() - 1) {
             tmp = tmp.mul(&x.sub(value)?)?;
-            numerator.push(tmp);
+            numerator.push(tmp.clone());
         }
 
         tmp = EccScalar::one(curve_type);
