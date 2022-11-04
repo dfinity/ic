@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::{collections::BTreeSet, fmt::Write};
 
 use candid::Decode;
-use ic_base_types::{CanisterId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_types::NetworkInRequest as BitcoinNetwork;
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
@@ -34,7 +34,7 @@ pub(super) fn resolve_destination(
     method_name: &str,
     payload: &[u8],
     own_subnet: SubnetId,
-) -> Result<SubnetId, ResolveDestinationError> {
+) -> Result<PrincipalId, ResolveDestinationError> {
     // Figure out the destination subnet based on the method and the payload.
     let method = Ic00Method::from_str(method_name);
     match method {
@@ -42,21 +42,23 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::RawRand)
         | Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
         | Ok(Ic00Method::HttpRequest)
-        | Ok(Ic00Method::BitcoinGetSuccessors) => Ok(own_subnet),
+        | Ok(Ic00Method::BitcoinGetSuccessors) => Ok(own_subnet.get()),
         // This message needs to be routed to the NNS subnet.  We assume that
         // this message can only be sent by canisters on the NNS subnet hence
         // returning `own_subnet` here is fine.
         //
         // It might be cleaner to pipe in the actual NNS subnet id to this
         // function and return that instead.
-        Ok(Ic00Method::SetupInitialDKG) => Ok(own_subnet),
+        Ok(Ic00Method::SetupInitialDKG) => Ok(own_subnet.get()),
         Ok(Ic00Method::UpdateSettings) => {
             // Find the destination canister from the payload.
             let args = Decode!(payload, UpdateSettingsArgs)?;
             let canister_id = args.get_canister_id();
+
             network_topology
                 .routing_table
                 .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
                 .ok_or({
                     ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::UpdateSettings)
                 })
@@ -68,6 +70,7 @@ pub(super) fn resolve_destination(
             network_topology
                 .routing_table
                 .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
                 .ok_or({
                     ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::InstallCode)
                 })
@@ -78,6 +81,7 @@ pub(super) fn resolve_destination(
             network_topology
                 .routing_table
                 .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
                 .ok_or({
                     ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::SetController)
                 })
@@ -93,6 +97,7 @@ pub(super) fn resolve_destination(
             network_topology
                 .routing_table
                 .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
                 .ok_or_else(|| {
                     ResolveDestinationError::SubnetNotFound(canister_id, method.unwrap())
                 })
@@ -103,6 +108,7 @@ pub(super) fn resolve_destination(
             network_topology
                 .routing_table
                 .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
                 .ok_or({
                     ResolveDestinationError::SubnetNotFound(
                         canister_id,
@@ -196,7 +202,7 @@ fn route_ecdsa_message(
     network_topology: &NetworkTopology,
     requested_subnet: &Option<SubnetId>,
     signing_must_be_enabled: EcdsaSubnetKind,
-) -> Result<SubnetId, ResolveDestinationError> {
+) -> Result<PrincipalId, ResolveDestinationError> {
     fn format_keys<'a>(mut found_keys: impl Iterator<Item = &'a EcdsaKeyId>) -> String {
         let mut keys = "[".to_string();
         if let Some(key) = found_keys.next() {
@@ -217,7 +223,7 @@ fn route_ecdsa_message(
             ))),
             Some(subnet_topology) => {
                 if subnet_topology.ecdsa_keys_held.contains(key_id) {
-                    Ok(*subnet_id)
+                    Ok((*subnet_id).get())
                 } else {
                     Err(ResolveDestinationError::EcdsaKeyError(format!(
                         "Requested ECDSA key {} on subnet {}, subnet has keys: {}",
@@ -231,7 +237,7 @@ fn route_ecdsa_message(
         None => {
             // If some subnet is enabled to sign for the key we can immediately return it.
             if let Some(subnet_id) = network_topology.ecdsa_signing_subnets(key_id).get(0) {
-                return Ok(*subnet_id);
+                return Ok((*subnet_id).get());
             }
             // Otherwise either return an error, or look through all subnets to
             // find one with the key if signing isn't required.
@@ -247,7 +253,7 @@ fn route_ecdsa_message(
                     let mut keys = BTreeSet::new();
                     for (subnet_id, topology) in &network_topology.subnets {
                         if topology.ecdsa_keys_held.contains(key_id) {
-                            return Ok(*subnet_id);
+                            return Ok((*subnet_id).get());
                         }
                         keys.extend(topology.ecdsa_keys_held.iter().cloned());
                     }
@@ -267,7 +273,7 @@ fn route_bitcoin_message(
     network_topology: &NetworkTopology,
     own_subnet: SubnetId,
     route_to_bitcoin_canister: bool,
-) -> SubnetId {
+) -> PrincipalId {
     match network {
         BitcoinNetwork::Testnet | BitcoinNetwork::testnet => {
             // Route according to the following priority:
@@ -286,7 +292,7 @@ fn route_bitcoin_message(
                         .route(canister_id.get())
                         .is_some()
                     {
-                        return SubnetId::from(canister_id.get());
+                        return canister_id.get();
                     }
                 }
             }
@@ -296,6 +302,7 @@ fn route_bitcoin_message(
                 .first()
                 .cloned()
                 .unwrap_or(own_subnet)
+                .get()
         }
         BitcoinNetwork::Mainnet | BitcoinNetwork::mainnet => {
             if route_to_bitcoin_canister {
@@ -308,14 +315,15 @@ fn route_bitcoin_message(
                     .bitcoin_mainnet_canister_id
                     .map(|c| SubnetId::from(c.get()))
                     .unwrap_or(own_subnet)
+                    .get()
             } else {
-                own_subnet
+                own_subnet.get()
             }
         }
         BitcoinNetwork::Regtest | BitcoinNetwork::regtest => {
             // We don't yet support a bitcoin regtest canister. Redirect to own
             // subnet.
-            own_subnet
+            own_subnet.get()
         }
     }
 }
@@ -417,7 +425,7 @@ mod tests {
                 subnet_test_id(2),
             )
             .unwrap(),
-            subnet_test_id(1)
+            PrincipalId::new_subnet_test_id(1)
         )
     }
 
@@ -507,7 +515,7 @@ mod tests {
                 subnet_test_id(1),
             )
             .unwrap(),
-            subnet_test_id(0)
+            PrincipalId::new_subnet_test_id(0)
         )
     }
 
@@ -537,7 +545,7 @@ mod tests {
                 subnet_test_id(1),
             )
             .unwrap(),
-            subnet_test_id(0)
+            PrincipalId::new_subnet_test_id(0)
         )
     }
 
@@ -551,7 +559,7 @@ mod tests {
                 subnet_test_id(1),
             )
             .unwrap(),
-            subnet_test_id(0)
+            PrincipalId::new_subnet_test_id(0)
         )
     }
 }

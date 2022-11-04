@@ -160,7 +160,7 @@ impl SystemStateChanges {
                     msg.method_payload.as_slice(),
                     own_subnet_id,
                 )
-                .map(|id| CanisterId::new(id.get()).unwrap())
+                .map(|id| CanisterId::new(id).unwrap())
                 {
                     Ok(destination_subnet) => {
                         msg.receiver = destination_subnet;
