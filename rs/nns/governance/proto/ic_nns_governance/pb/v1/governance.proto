@@ -1526,6 +1526,7 @@ message Governance {
     uint64 neurons_with_less_than_6_months_dissolve_delay_count = 14;
     uint64 neurons_with_less_than_6_months_dissolve_delay_e8s = 15;
     uint64 community_fund_total_staked_e8s = 16;
+    uint64 community_fund_total_maturity_e8s_equivalent = 17;
   }
 
   GovernanceCachedMetrics metrics = 15;

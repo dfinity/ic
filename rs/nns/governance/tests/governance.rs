@@ -8710,6 +8710,7 @@ fn test_compute_cached_metrics() {
             cached_neuron_stake_e8s: 234_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             joined_community_fund_timestamp_seconds: Some(1),
+            maturity_e8s_equivalent: 450_988_012,
             ..Default::default()
         },
     );
@@ -8895,6 +8896,7 @@ fn test_compute_cached_metrics() {
         neurons_with_less_than_6_months_dissolve_delay_count: 6,
         neurons_with_less_than_6_months_dissolve_delay_e8s: 5870000100,
         community_fund_total_staked_e8s: 234_000_000,
+        community_fund_total_maturity_e8s_equivalent: 450_988_012,
     };
 
     assert_eq!(expected_metrics, actual_metrics);
