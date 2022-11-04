@@ -19,10 +19,10 @@ const GB: u64 = 1024 * 1024 * 1024;
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
 ///
-/// The gen 1 machines in production will have 3TiB disks. We offer 350GiB to
+/// The gen 1 machines in production have 3TiB disks. We offer 450GiB to
 /// canisters. The rest will be used to for storing additional copies of the
 /// canister's data and the deltas.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(350 * GB);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(450 * GB);
 
 /// This is the upper limit on how much memory can be used by all canister
 /// messages on a given subnet.
