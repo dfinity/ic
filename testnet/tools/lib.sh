@@ -83,7 +83,7 @@ install_binary() {
 
     log "Downloading $DOWNLOAD_NAME..."
 
-    local DEST=$DEST_FOLDER/$DOWNLOAD_NAME.gz
+    local DEST=$DEST_FOLDER/$DOWNLOAD_NAME
     curl "https://download.dfinity.systems/ic/$GIT_HASH/release/$DOWNLOAD_NAME.gz" | zcat >"$DEST"
     chmod +x "$DEST"
 }

@@ -18,17 +18,17 @@ interaction with the subnet
 
 #### Run the entire script
 ```
-DIR=/tmp/$USER-nns-test/ ./nns_state_with_sns_wasms.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
+DIR=/tmp/$USER-nns-test/ ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
 ```
 
 #### Run only the full step 1 of the script.
 ```
-DIR=/tmp/$USER-nns-test/ STEPS='1' ./nns_state_with_sns_wasms.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
+DIR=/tmp/$USER-nns-test/ STEPS='1' ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
 ```
 
 #### Within step 1, run only substeps 3 and 4 of nns_state_deployment.sh.
 ```
-DIR=/tmp/$USER-nns-test/ STEPS='1' DEPLOYMENT_STEPS='[34]' ./nns_state_with_sns_wasms.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
+DIR=/tmp/$USER-nns-test/ STEPS='1' DEPLOYMENT_STEPS='[34]' ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
 ```
 
 ### Interacting afterwards
@@ -44,4 +44,5 @@ $SNS_CLI deploy --network "$SUBNET_URL" \
 ```
 
 Note: When making calls _through_ the wallet canister with `dfx` or `sns` you need to set the `--network` argument
-to be the $SUBNET_URL, as the $NNS_URL points at the NNS replica and will not route your requests to the correct subnet.
+to be the $SUBNET_URL, as the $NNS_URL points at the NNS replica and will not route your requests to the correct subnet
+where the wallet canister lives.
