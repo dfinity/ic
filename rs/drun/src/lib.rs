@@ -35,8 +35,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     replica_config::ReplicaConfig,
-    time::UNIX_EPOCH,
-    CanisterId, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
+    time, CanisterId, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use slog::{Drain, Logger};
 use std::collections::BTreeMap;
@@ -320,7 +319,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         randomness: Randomness::from([0; 32]),
         ecdsa_subnet_public_keys: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
-        time: UNIX_EPOCH,
+        time: time::current_time(),
         consensus_responses: vec![],
     }
 }
