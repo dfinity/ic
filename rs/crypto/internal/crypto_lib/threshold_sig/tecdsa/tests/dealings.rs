@@ -367,7 +367,7 @@ fn wrong_curve_mul_share_rejected() -> Result<(), ThresholdEcdsaError> {
     let rhs = EccScalar::random(curve, &mut rng);
     let mask = EccScalar::random(curve, &mut rng);
 
-    let shares = SecretShares::UnmaskedTimesMasked(flip_curve(&lhs), (rhs, mask));
+    let shares = SecretShares::UnmaskedTimesMasked(flip_curve(&lhs), (rhs.clone(), mask.clone()));
 
     let dealing = create_dealing(
         AlgorithmId::ThresholdEcdsaSecp256k1,

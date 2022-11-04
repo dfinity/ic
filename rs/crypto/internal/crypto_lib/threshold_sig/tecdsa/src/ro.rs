@@ -202,7 +202,7 @@ impl RandomOracle {
 
     /// Consume the random oracle and generate a scalar output
     pub fn output_scalar(self, curve_type: EccCurveType) -> ThresholdEcdsaResult<EccScalar> {
-        Ok(self.output_scalars(curve_type, 1)?[0])
+        Ok(self.output_scalars(curve_type, 1)?[0].clone())
     }
 
     /// Consume the random oracle and generate several scalar outputs

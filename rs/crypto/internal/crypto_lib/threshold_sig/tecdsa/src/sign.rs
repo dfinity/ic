@@ -179,18 +179,18 @@ impl ThresholdEcdsaSigShareInternal {
             .scalar_mul(&randomizer)?
             .add_points(&kappa_times_lambda_j)?;
 
-        match self.sigma_numerator {
+        match &self.sigma_numerator {
             CommitmentOpening::Pedersen(v, m) => {
-                if sigma_num != EccPoint::pedersen(&v, &m)? {
+                if sigma_num != EccPoint::pedersen(v, m)? {
                     return Err(ThresholdEcdsaError::InvalidCommitment);
                 }
             }
             _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
         }
 
-        match self.sigma_denominator {
+        match &self.sigma_denominator {
             CommitmentOpening::Pedersen(v, m) => {
-                if sigma_den != EccPoint::pedersen(&v, &m)? {
+                if sigma_den != EccPoint::pedersen(v, m)? {
                     return Err(ThresholdEcdsaError::InvalidCommitment);
                 }
             }
@@ -281,14 +281,14 @@ impl ThresholdEcdsaCombinedSigInternal {
             x_values.push(*index);
             // Reconstruction of the signature share does not require recombining the
             // masking values.
-            if let CommitmentOpening::Pedersen(c, _) = sig_share.sigma_numerator {
-                numerator_samples.push(c);
+            if let CommitmentOpening::Pedersen(c, _) = &sig_share.sigma_numerator {
+                numerator_samples.push(c.clone());
             } else {
                 return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
             }
 
-            if let CommitmentOpening::Pedersen(c, _) = sig_share.sigma_denominator {
-                denominator_samples.push(c);
+            if let CommitmentOpening::Pedersen(c, _) = &sig_share.sigma_denominator {
+                denominator_samples.push(c.clone());
             } else {
                 return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
             }

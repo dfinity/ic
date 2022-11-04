@@ -226,7 +226,7 @@ impl IDkgDealingInternal {
                 }
 
                 let values =
-                    Polynomial::random_with_constant(*secret, num_coefficients, &mut poly_rng)?;
+                    Polynomial::random_with_constant(secret, num_coefficients, &mut poly_rng)?;
 
                 let (ciphertext, commitment) = encrypt_and_commit_single_polynomial(
                     &values,
@@ -246,7 +246,7 @@ impl IDkgDealingInternal {
                 }
 
                 let values =
-                    Polynomial::random_with_constant(*secret, num_coefficients, &mut poly_rng)?;
+                    Polynomial::random_with_constant(secret, num_coefficients, &mut poly_rng)?;
 
                 let (ciphertext, commitment) = encrypt_and_commit_single_polynomial(
                     &values,
@@ -280,9 +280,9 @@ impl IDkgDealingInternal {
                 let product_masking = EccScalar::random(curve, &mut poly_rng);
 
                 let values =
-                    Polynomial::random_with_constant(product, num_coefficients, &mut poly_rng)?;
+                    Polynomial::random_with_constant(&product, num_coefficients, &mut poly_rng)?;
                 let mask = Polynomial::random_with_constant(
-                    product_masking,
+                    &product_masking,
                     num_coefficients,
                     &mut poly_rng,
                 )?;

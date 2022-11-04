@@ -2912,7 +2912,7 @@ fn corrupt_signed_dealing_for_one_receiver(
                 ctext.ctexts[receiver_index as usize] = corrupted_ctext;
             }
             MEGaCiphertext::Pairs(ref mut ctext) => {
-                let (ctext_1, ctext_2) = ctext.ctexts[receiver_index as usize];
+                let (ctext_1, ctext_2) = ctext.ctexts[receiver_index as usize].clone();
                 let corrupted_ctext_1 = corrupt_ecc_scalar(&ctext_1);
                 ctext.ctexts[receiver_index as usize] = (corrupted_ctext_1, ctext_2);
             }
