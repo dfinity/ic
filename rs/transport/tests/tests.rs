@@ -112,11 +112,13 @@ Establish connection with 2 peers, A and B.  Send message from A->B and B->A and
 */
 #[test]
 fn test_basic_message_send() {
-    test_basic_message_send_impl(false);
-    test_basic_message_send_impl(true);
+    test_send_big_message_succeeds(false);
+    test_send_big_message_succeeds(true);
 }
 
-fn test_basic_message_send_impl(use_h2: bool) {
+// StateSync may send chunks that are 30MB big so we want to make sure a message of this size can be sent and received
+// in both directions
+fn test_send_big_message_succeeds(use_h2: bool) {
     let registry_version = REG_V1;
     with_test_replica_logger(|logger| {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -139,8 +141,9 @@ fn test_basic_message_send_impl(use_h2: bool) {
             use_h2,
         );
 
-        let msg_1 = TransportPayload(vec![0xa; 1000000]);
-        let msg_2 = TransportPayload(vec![0xb; 1000000]);
+        // Testing message size of 30MB - this is currently largest we'd expect
+        let msg_1 = TransportPayload(vec![0xa; 30000000]);
+        let msg_2 = TransportPayload(vec![0xb; 30000000]);
         let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
 
         // A sends message to B
