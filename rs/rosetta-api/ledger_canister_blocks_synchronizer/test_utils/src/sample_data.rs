@@ -5,7 +5,7 @@ use icp_ledger::{
     DEFAULT_TRANSFER_FEE,
 };
 
-use ic_ledger_canister_blocks_synchronizer::store::HashedBlock;
+use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use rand_distr::Distribution;

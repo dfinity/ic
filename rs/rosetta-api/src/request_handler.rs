@@ -9,7 +9,7 @@ mod construction_submit;
 
 use crate::{convert, models, API_VERSION, NODE_VERSION};
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
-use ic_ledger_canister_blocks_synchronizer::store::HashedBlock;
+use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;

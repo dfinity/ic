@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 
 use async_trait::async_trait;
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
-use ic_ledger_canister_blocks_synchronizer::store::HashedBlock;
+use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 
 use ic_rosetta_api::convert::{from_arg, to_model_account_identifier};
 use ic_rosetta_api::ledger_client::LedgerAccess;
