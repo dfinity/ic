@@ -52,6 +52,14 @@ bazel-test-all:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going"
     BAZEL_TARGETS: "//... //:upload_sdk //ic-os/guestos/dev:upload_disk-img"
 
+bazel-config-check-all-rebuild:
+  extends:
+    - .bazel-test-all
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=check"
+    BAZEL_COMMAND: "build"
+    BAZEL_TARGETS: "//rs/..."
+
 bazel-cache-perf-test-linux:
   extends:
     - bazel-test-all
