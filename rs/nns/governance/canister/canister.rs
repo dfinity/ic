@@ -973,6 +973,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             metrics.community_fund_total_staked_e8s as f64,
             "The amount of Neurons' stake committed to the Internet Computer's community fund",
         )?;
+
+        w.encode_gauge(
+            "governance_community_fund_total_maturity_e8s_equivalent",
+            metrics.community_fund_total_maturity_e8s_equivalent as f64,
+            "The amount of Neurons' maturity committed to the Internet Computer's community fund",
+        )?;
     }
 
     Ok(())

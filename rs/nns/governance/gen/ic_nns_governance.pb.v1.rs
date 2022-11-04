@@ -1988,6 +1988,8 @@ pub mod governance {
         pub neurons_with_less_than_6_months_dissolve_delay_e8s: u64,
         #[prost(uint64, tag = "16")]
         pub community_fund_total_staked_e8s: u64,
+        #[prost(uint64, tag = "17")]
+        pub community_fund_total_maturity_e8s_equivalent: u64,
     }
 }
 /// Proposals with restricted voting are not included unless the caller

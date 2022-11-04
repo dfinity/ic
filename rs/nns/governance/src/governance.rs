@@ -1821,6 +1821,8 @@ impl GovernanceProto {
 
             if neuron.joined_community_fund_timestamp_seconds.unwrap_or(0) > 0 {
                 metrics.community_fund_total_staked_e8s += neuron.stake_e8s();
+                metrics.community_fund_total_maturity_e8s_equivalent +=
+                    neuron.maturity_e8s_equivalent;
             }
 
             if neuron.cached_neuron_stake_e8s < DEFAULT_TRANSFER_FEE.get_e8s() {
