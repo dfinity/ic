@@ -88,6 +88,14 @@ pub struct SnsGovernanceConfig {
     /// quadratic, and levels out at the end of the growth rate transition period.
     ///
     /// (A basis point is one in ten thousand.)
+    ///
+    /// Note that in the rest of the codebase, the analogous fields are
+    /// initial_reward_rate_basis_points and final_reward_rate_basis_points.
+    /// In the config file we use percentages instead of basis points to try to
+    /// be a bit more user friendly.
+    /// For example, on the ic dashbord
+    /// <https://dashboard.internetcomputer.org/circulation> we show the reward
+    /// rate in terms of percentages instead of basis points.
     pub initial_reward_rate_percentage: Option<f64>,
     pub final_reward_rate_percentage: Option<f64>,
 
@@ -108,6 +116,11 @@ pub struct SnsGovernanceConfig {
     // For no bonus, this should be set to 1.
     //
     // To achieve functionality equivalent to NNS, this should be set to 2.0.
+    ///
+    /// Note that in the rest of the codebase, the analogous field is
+    /// max_dissolve_delay_bonus_percentage.
+    /// In the config file we ask the user to specify a multiplier instead
+    /// because that is how this field is normally communicated to the users.
     pub max_dissolve_delay_bonus_multiplier: Option<f64>,
 
     // The voting power multiplier of a neuron whose age is
@@ -119,6 +132,11 @@ pub struct SnsGovernanceConfig {
     // but this one relates to neuron age instead of dissolve delay.
     //
     // To achieve functionality equivalent to NNS, this should be set to 1.25.
+    ///
+    /// Note that in the rest of the codebase, the analogous field is
+    /// max_age_bonus_percentage.
+    /// In the config file we ask the user to specify a multiplier instead
+    /// because that is how this field is normally communicated to the users.
     pub max_age_bonus_multiplier: Option<f64>,
 
     /// If the swap fails, control of the dapp canister(s) will be set to these
@@ -637,9 +655,10 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
             format!(
                 r##"#
 # The voting reward rate controls how quickly the supply of the SNS token 
-# increases. For example, a reward rate of 2% will cause the supply to increase 
-# by at most 2% each year. A higher voting reward rate incentivizes people to 
-# participate in governance, but also results in higher inflation. 
+# increases. For example, an initial_reward_rate_percentage of `2.0` will cause 
+# the supply to increase by at most 2% each year. A higher voting reward rate 
+# incentivizes people to participate in governance, but also results in higher 
+# inflation. 
 #
 # An initial and a final reward rate can be set, to have a higher reward rate at
 # the launch of the SNS, and a lower rate farther into the SNS’s lifetime. The 
@@ -653,6 +672,10 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # by the NNS is 10%.
 # The default value for final_reward_rate_percentage is {}. The value used by 
 # the NNS is 5%.
+#
+# These values correspond to
+# `NervousSystemParameters::initial_reward_rate_basis points` and 
+# `NervousSystemParameters::final_reward_rate_basis points` in the SNS.
 #"##,
                 default_config
                     .sns_governance
@@ -742,6 +765,9 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # The default value is {}. The value the NNS uses is 2. A value of 1 results in
 # no change in voting weight for neurons with higher dissolve delays. 
 # Values below 1 are prohibited.
+#
+# This value corresponds to
+# `NervousSystemParameters::max_dissolve_delay_bonus_percentage` in the SNS.
 #"##,
                 default_config
                     .sns_governance
@@ -762,10 +788,13 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # The default value is {}. The value the NNS uses is 1.25. A value of 1 results 
 # in no change in voting weight for neurons with higher age. 
 # Values below 1 are prohibited.
+#
+# This value corresponds to
+# `NervousSystemParameters::max_age_bonus_percentage` in the SNS.
 #"##,
                 default_config
                     .sns_governance
-                    .max_dissolve_delay_bonus_multiplier
+                    .max_age_bonus_multiplier
                     .unwrap(),
             ),
         ),
