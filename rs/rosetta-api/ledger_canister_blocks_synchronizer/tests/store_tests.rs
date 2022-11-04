@@ -1,6 +1,6 @@
 use ic_ledger_canister_blocks_synchronizer::{
     balance_book::BalanceBook,
-    store::{BlockStoreError, SQLiteStore},
+    blocks::{BlockStoreError, SQLiteStore},
 };
 use ic_ledger_canister_blocks_synchronizer_test_utils::{
     create_tmp_dir, init_test_logger, sample_data::Scribe,

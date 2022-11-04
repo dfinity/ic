@@ -1,4 +1,4 @@
-use crate::store::BlockStoreError;
+use crate::blocks::BlockStoreError;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {

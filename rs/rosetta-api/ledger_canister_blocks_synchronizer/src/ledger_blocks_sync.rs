@@ -10,10 +10,10 @@ use log::{debug, error, info, trace, warn};
 use tokio::sync::RwLock;
 
 use crate::blocks::Blocks;
+use crate::blocks::{BlockStoreError, HashedBlock};
 use crate::blocks_access::BlocksAccess;
 use crate::certification::{verify_block_hash, VerificationInfo};
 use crate::errors::Error;
-use crate::store::{BlockStoreError, HashedBlock};
 
 // If pruning is enabled, instead of pruning after each new block
 // we'll wait for PRUNE_DELAY blocks to accumulate and prune them in one go

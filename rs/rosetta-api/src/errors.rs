@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
 
-use ic_ledger_canister_blocks_synchronizer::store::BlockStoreError;
+use ic_ledger_canister_blocks_synchronizer::blocks::BlockStoreError;
 
 /// Each Rosetta `Error` has a "retriable" flag and optional "details"
 /// Rosetta error code and message are determined by the `ApiError` variant.
