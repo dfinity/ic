@@ -3,7 +3,7 @@ use ic_agent::Agent;
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     get_withdrawal_account::GetWithdrawalAccountResult,
-    retrieve_btc::{RetrieveBtcArgs, RetrieveBtcErr, RetrieveBtcOk},
+    retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk},
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
 use ic_icrc1::Subaccount;
@@ -77,10 +77,10 @@ impl CkBtcMinterAgent {
     pub async fn retrieve_btc(
         &self,
         args: RetrieveBtcArgs,
-    ) -> Result<Result<RetrieveBtcOk, RetrieveBtcErr>, CkBtcMinterAgentError> {
+    ) -> Result<Result<RetrieveBtcOk, RetrieveBtcError>, CkBtcMinterAgentError> {
         let args = &Encode!(&args)?;
         Ok(
-            Decode!(&self.update("retrieve_btc", args).await?, Result<RetrieveBtcOk, RetrieveBtcErr>)?,
+            Decode!(&self.update("retrieve_btc", args).await?, Result<RetrieveBtcOk, RetrieveBtcError>)?,
         )
     }
 

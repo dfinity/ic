@@ -6,14 +6,11 @@ use ic_icrc1::{
 };
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 
+use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
 use crate::{
+    address::ParseAddressError,
     guard::{retrieve_btc_guard, GuardError},
     state::{mutate_state, read_state, RetrieveBtcRequest},
-};
-
-use super::{
-    get_btc_address::{hrp, init_ecdsa_public_key},
-    get_withdrawal_account::compute_subaccount,
 };
 
 const MAX_CONCURRENT_PENDING_REQUESTS: usize = 100;
@@ -37,7 +34,7 @@ pub struct RetrieveBtcOk {
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
-pub enum RetrieveBtcErr {
+pub enum RetrieveBtcError {
     /// There is another request for this principle
     AlreadyProcessing,
 
@@ -60,7 +57,7 @@ pub enum RetrieveBtcErr {
     TooManyConcurrentRequests,
 }
 
-impl From<GuardError> for RetrieveBtcErr {
+impl From<GuardError> for RetrieveBtcError {
     fn from(e: GuardError) -> Self {
         match e {
             GuardError::AlreadyProcessing => Self::AlreadyProcessing,
@@ -69,34 +66,45 @@ impl From<GuardError> for RetrieveBtcErr {
     }
 }
 
-impl From<TransferError> for RetrieveBtcErr {
+impl From<TransferError> for RetrieveBtcError {
     fn from(e: TransferError) -> Self {
         Self::LedgerError(e)
     }
 }
 
-pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcErr> {
+impl From<ParseAddressError> for RetrieveBtcError {
+    fn from(e: ParseAddressError) -> Self {
+        Self::MalformedAddress(e.to_string())
+    }
+}
+
+pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
     let caller = ic_cdk::caller();
     init_ecdsa_public_key().await;
     let _guard = retrieve_btc_guard(caller)?;
-    let (default_fee, min_amount) =
-        read_state(|s| (s.retrieve_btc_min_fee, s.retrieve_btc_min_amount));
+    let (default_fee, min_amount, btc_network) = read_state(|s| {
+        (
+            s.retrieve_btc_min_fee,
+            s.retrieve_btc_min_amount,
+            s.btc_network,
+        )
+    });
     let fee = args.fee.unwrap_or(default_fee);
     if fee < default_fee {
-        return Err(RetrieveBtcErr::FeeTooLow(default_fee));
+        return Err(RetrieveBtcError::FeeTooLow(default_fee));
     }
     if args.amount < min_amount {
-        return Err(RetrieveBtcErr::AmountTooLow(min_amount));
+        return Err(RetrieveBtcError::AmountTooLow(min_amount));
     }
-    check_address(&args.address)?;
+    let parsed_address = crate::address::parse_address(&args.address, btc_network)?;
     if read_state(|s| s.pending_retrieve_btc_requests.len() >= MAX_CONCURRENT_PENDING_REQUESTS) {
-        return Err(RetrieveBtcErr::TooManyConcurrentRequests);
+        return Err(RetrieveBtcError::TooManyConcurrentRequests);
     }
 
     let block_index = burn_ckbtcs(caller, args.amount).await?;
     let request = RetrieveBtcRequest {
         amount: args.amount,
-        address: args.address,
+        address: parsed_address,
         fee,
         block_index,
     };
@@ -104,21 +112,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     Ok(RetrieveBtcOk { block_index })
 }
 
-/// Checks that the given address is a valid BIP-0173 address
-fn check_address(address: &str) -> Result<(), RetrieveBtcErr> {
-    let (found_hrp, _, _) =
-        bech32::decode(address).map_err(|e| RetrieveBtcErr::MalformedAddress(e.to_string()))?;
-    let expected_hrp = hrp(read_state(|s| s.btc_network));
-    if found_hrp.to_lowercase() != expected_hrp {
-        return Err(RetrieveBtcErr::MalformedAddress(format!(
-            "Found hrp {} but expected {}",
-            found_hrp, expected_hrp
-        )));
-    }
-    Ok(())
-}
-
-async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcErr> {
+async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcError> {
     let client = ICRC1Client {
         runtime: CdkRuntime,
         ledger_canister_id: read_state(|s| s.ledger_id.get().into()),
@@ -138,40 +132,6 @@ async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcErr
             amount: Nat::from(amount),
         })
         .await
-        .map_err(|(code, msg)| RetrieveBtcErr::LedgerConnectionError(code, msg))??;
+        .map_err(|(code, msg)| RetrieveBtcError::LedgerConnectionError(code, msg))??;
     Ok(block_index)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        lifecycle::init::{init, InitArgs},
-        updates::retrieve_btc::check_address,
-    };
-    use ic_ic00_types::BitcoinNetwork::Mainnet;
-
-    #[test]
-    fn test_check_address() {
-        init(InitArgs {
-            btc_network: Mainnet,
-            ecdsa_key_name: "".to_string(),
-            retrieve_btc_min_fee: 0,
-            retrieve_btc_min_amount: 0,
-            ledger_id: ic_base_types::CanisterId::from_u64(42),
-        });
-        assert_eq!(
-            Ok(()),
-            check_address("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
-        );
-        assert_eq!(
-            Ok(()),
-            check_address("BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4")
-        );
-
-        // invalid checksum
-        assert_ne!(
-            Ok(()),
-            check_address("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5")
-        );
-    }
 }

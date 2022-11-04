@@ -1,4 +1,7 @@
-use crate::{build_unsigned_transaction, greedy, signed_transaction_length, tx, BuildTxError};
+use crate::{
+    address::BitcoinAddress, build_unsigned_transaction, greedy, signed_transaction_length, tx,
+    BuildTxError,
+};
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_types::{Network, OutPoint, Satoshi, Utxo};
@@ -374,5 +377,17 @@ proptest! {
             state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
             state.check_invariants();
         }
+    }
+
+    #[test]
+    fn btc_v0_p2wpkh_address_parsing(mut pkbytes in pvec(any::<u8>(), 32)) {
+        use crate::address::network_and_public_key_to_p2wpkh;
+        pkbytes.insert(0, 0x02);
+
+        let addr = network_and_public_key_to_p2wpkh(Network::Testnet, &pkbytes);
+        prop_assert_eq!(
+            Ok(BitcoinAddress::WitnessV0(tx::hash160(&pkbytes))),
+            crate::address::parse_address(&addr, Network::Testnet)
+        );
     }
 }
