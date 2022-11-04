@@ -215,7 +215,7 @@ upload_canister_wasm_to_sns_wasm() {
 deploy_new_sns() {
     ensure_variable_set SNS_CLI
 
-    local NNS_URL=$1
+    local SUBNET_WITH_WALLET_URL=$1
     local WALLET_CANISTER=$2
     local CONFIG_FILE=$(3:-)
 
@@ -223,7 +223,7 @@ deploy_new_sns() {
         CONFIG_FILE=$SCRIPT_DIR/sns_default_test_init_params.yml
     fi
 
-    $SNS_CLI deploy --network "$NNS_URL" \
+    $SNS_CLI deploy --network "$SUBNET_WITH_WALLET_URL" \
         --wallet-canister-override "$WALLET_CANISTER" \
         --init-config-file "$CONFIG_FILE"
 }

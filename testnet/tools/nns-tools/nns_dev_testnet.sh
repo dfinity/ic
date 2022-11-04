@@ -13,7 +13,7 @@ VERSION=${2?GIT_VERSION for replica/canister builds must be specified}
 SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
 PEM=$SCRIPT_DIR/nns_test_user_dfx_identity
-# dfx identity import --force --disable-encryption  nns_test_user_dfx_identity $PEM
+dfx identity import --force --disable-encryption nns_test_user_dfx_identity $PEM
 dfx identity use nns_test_user_dfx_identity
 PRINCIPAL=$(dfx identity get-principal)
 
@@ -101,7 +101,7 @@ step 5 "Configure SNS-WASMs" || time (
 
 )
 
-step 6 "Upload WASMs to SNS-WASM" || time (
+step --optional 6 "Upload WASMs to SNS-WASM" || time (
     LOG_FILE="$DIR/4_upload_wasms_to_sns_wasm.txt"
     for TYPE in ledger governance archive swap root index; do
         upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" $TYPE "$VERSION"
