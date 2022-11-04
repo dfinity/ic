@@ -46,6 +46,14 @@ pub enum Error {
     },
     MultipleStartSections,
     UnexpectedElementType,
+    /// `memory.grow` and `memory.size` operations must have a 0x00 byte
+    /// immediately after the instruction (it is not valid to have some other
+    /// variable length encoding representation of 0). This is because the
+    /// immediate byte will be used to reference other memories in the
+    /// multi-memory proposal.
+    InvalidMemoryReservedByte {
+        func_range: Range<usize>,
+    },
 }
 
 impl From<BinaryReaderError> for Error {
@@ -106,6 +114,9 @@ impl std::fmt::Display for Error {
             }
             Error::UnexpectedElementType => {
                 write!(f, "Unexpected element type")
+            }
+            Error::InvalidMemoryReservedByte { func_range } => {
+                write!(f, "Found a `memory.*` instruction with an invalid reserved byte in function at {:?}", func_range)
             }
         }
     }
@@ -259,6 +270,15 @@ impl<'a> Module<'a> {
                                 func_range: body.range(),
                             });
                         }
+                    }
+                    if instructions.iter().any(|i| match i {
+                        Operator::MemoryGrow { mem_byte, .. }
+                        | Operator::MemorySize { mem_byte, .. } => *mem_byte != 0x00,
+                        _ => false,
+                    }) {
+                        return Err(Error::InvalidMemoryReservedByte {
+                            func_range: body.range(),
+                        });
                     }
                     code_sections.push(Body {
                         locals,

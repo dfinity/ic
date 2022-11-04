@@ -33,17 +33,15 @@ fn location(wat: &QuoteWat, text: &str, path: &PathBuf) -> String {
 }
 
 fn parse_and_encode(wat: &mut QuoteWat, text: &str, path: &PathBuf) -> Result<Vec<u8>, String> {
-    let wasm = wat.encode().unwrap();
-    let module = match wasm_transform::Module::parse(&wasm) {
-        Ok(module) => module,
-        Err(e) => {
-            return Err(format!(
-                "Parsing error: {:?} in {}",
-                e,
-                location(wat, text, path)
-            ))
-        }
-    };
+    let wasm = wat.encode().map_err(|e| {
+        format!(
+            "Error encoding wat from wast: {} in {}",
+            e,
+            location(wat, text, path)
+        )
+    })?;
+    let module = wasm_transform::Module::parse(&wasm)
+        .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))?;
     module
         .encode()
         .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))
@@ -67,6 +65,9 @@ fn validate_with_wasmtime(
 
 fn run_directive(directive: WastDirective, text: &str, path: &PathBuf) -> Result<(), String> {
     match directive {
+        // Here we check that an example module can be parsed and encoded with
+        // wasm-transform and is still validated by wasmtime after the round
+        // trip.
         WastDirective::Wat(mut wat) => {
             if is_component(&wat) {
                 return Ok(());
@@ -74,17 +75,45 @@ fn run_directive(directive: WastDirective, text: &str, path: &PathBuf) -> Result
             let wasm = parse_and_encode(&mut wat, text, path)?;
             validate_with_wasmtime(&wasm, &wat, text, path)
         }
-        // Maybe if it's binary encoded we can assert that we aren't able to parse/encode?
+        // wasm-transform itself should throw an error when trying to parse these modules.
+        // TODO(RUN-448): Change this to assert `parse_and_encode` returned an error.
         WastDirective::AssertMalformed {
             span: _,
-            module: _,
-            message: _,
-        } => Ok(()),
+            module: mut wat,
+            message,
+        } => {
+            if let Ok(wasm) = parse_and_encode(&mut wat, text, path) {
+                if validate_with_wasmtime(&wasm, &wat, text, path).is_ok() {
+                    return Err(format!(
+                        "Should not have been able to validate malformed module ({}) {}",
+                        message,
+                        location(&wat, text, path)
+                    ));
+                }
+            }
+            Ok(())
+        }
+        // These directives include many wasm modules that wasm-transform won't
+        // be able to recognize as invalid (e.g. function bodies that don't type
+        // check). So we want to assert that after parsing and endcoding,
+        // wasmtime still throws an error on validation. That is, wasm-transform
+        // didn't somehow make an invalid module valid.
         WastDirective::AssertInvalid {
             span: _,
-            module: _,
-            message: _,
-        } => Ok(()),
+            module: mut wat,
+            message,
+        } => {
+            if let Ok(wasm) = parse_and_encode(&mut wat, text, path) {
+                if validate_with_wasmtime(&wasm, &wat, text, path).is_ok() {
+                    return Err(format!(
+                        "Should not have been able to validate invalid module ({}) {}",
+                        message,
+                        location(&wat, text, path)
+                    ));
+                }
+            }
+            Ok(())
+        }
         // Not sure what this is for?
         WastDirective::Register {
             span: _,
