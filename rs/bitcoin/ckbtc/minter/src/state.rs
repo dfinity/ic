@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::lifecycle::init::InitArgs;
-use crate::ECDSAPublicKey;
+use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
 use ic_base_types::CanisterId;
 use ic_btc_types::{Network, OutPoint, Utxo};
@@ -24,7 +24,7 @@ thread_local! {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RetrieveBtcRequest {
     pub amount: u64,
-    pub address: String,
+    pub address: BitcoinAddress,
     pub fee: u64,
     pub block_index: u64,
 }

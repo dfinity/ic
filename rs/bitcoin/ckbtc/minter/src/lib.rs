@@ -4,6 +4,7 @@ use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeSet;
 
+pub mod address;
 pub mod guard;
 pub mod lifecycle;
 pub mod metrics;
