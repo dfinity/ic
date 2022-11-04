@@ -2,13 +2,11 @@
 //! Calls the recovery library.
 use crate::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use crate::get_node_heights_from_metrics;
-use crate::nns_recovery_failover_nodes;
 use crate::nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs};
-use crate::nns_recovery_same_nodes;
 use crate::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use crate::steps::Step;
+use crate::util;
 use crate::util::subnet_id_from_str;
-use crate::{app_subnet_recovery, util};
 use crate::{NeuronArgs, RecoveryArgs};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
@@ -47,69 +45,17 @@ pub fn app_subnet_recovery(
         neuron_args = Some(read_neuron_args(&logger));
     }
 
-    let mut subnet_recovery =
-        AppSubnetRecovery::new(logger.clone(), args, neuron_args, subnet_recovery_args);
+    let subnet_recovery = AppSubnetRecovery::new(
+        logger.clone(),
+        args,
+        neuron_args,
+        subnet_recovery_args,
+        true,
+    );
 
-    if subnet_recovery.params.pub_key.is_none() {
-        subnet_recovery.params.pub_key = read_optional(
-            &logger,
-            "Enter public key to add readonly SSH access to subnet: ",
-        );
-    }
-
-    while let Some((step_type, step)) = subnet_recovery.next() {
+    for (step_type, step) in subnet_recovery {
         print_step(&logger, &format!("{:?}", step_type));
         execute_step_after_consent(&logger, step);
-
-        // Depending on which step we just executed we might require some user interaction before we can start the next step.
-        match step_type {
-            app_subnet_recovery::StepType::Halt => {
-                info!(logger, "Ensure subnet is halted.");
-                // This can hardly be automated as currently the notion of "subnet is halted" is unclear,
-                // especially in the presence of failures.
-                wait_for_confirmation(&logger);
-
-                // We could pick a node with highest finalization height automatically,
-                // but we might have a preference between nodes of the same finalization height.
-                print_height_info(
-                    &logger,
-                    subnet_recovery.get_recovery_api().registry_client.clone(),
-                    subnet_recovery.params.subnet_id,
-                );
-
-                if subnet_recovery.params.download_node.is_none() {
-                    subnet_recovery.params.download_node =
-                        read_optional_ip(&logger, "Enter download IP:");
-                }
-            }
-
-            app_subnet_recovery::StepType::ValidateReplayOutput => {
-                if subnet_recovery.params.upgrade_version.is_none() {
-                    subnet_recovery.params.upgrade_version =
-                        read_optional_version(&logger, "Upgrade version: ");
-                }
-                if subnet_recovery.params.replacement_nodes.is_none() {
-                    subnet_recovery.params.replacement_nodes = read_optional_node_ids(
-                        &logger,
-                        "Enter space separated list of replacement nodes: ",
-                    );
-                }
-                if subnet_recovery.params.ecdsa_subnet_id.is_none() {
-                    subnet_recovery.params.ecdsa_subnet_id = read_optional_subnet_id(
-                        &logger,
-                        "Enter ID of subnet to reshare ECDSA key from: ",
-                    );
-                }
-            }
-
-            app_subnet_recovery::StepType::ProposeCup => {
-                if subnet_recovery.params.upload_node.is_none() {
-                    subnet_recovery.params.upload_node =
-                        read_optional_ip(&logger, "Enter IP of node with admin access: ");
-                }
-            }
-            _ => {}
-        }
     }
 }
 
@@ -134,35 +80,12 @@ pub fn nns_recovery_same_nodes(
     print_summary(&logger, &args, nns_recovery_args.subnet_id);
     wait_for_confirmation(&logger);
 
-    let mut nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args, nns_recovery_args, test);
+    let nns_recovery =
+        NNSRecoverySameNodes::new(logger.clone(), args, nns_recovery_args, test, true);
 
-    print_height_info(
-        &logger,
-        nns_recovery.get_recovery_api().registry_client.clone(),
-        nns_recovery.params.subnet_id,
-    );
-
-    if nns_recovery.params.download_node.is_none() {
-        nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
-    }
-    while let Some((step_type, step)) = nns_recovery.next() {
+    for (step_type, step) in nns_recovery {
         print_step(&logger, &format!("{:?}", step_type));
         execute_step_after_consent(&logger, step);
-
-        match step_type {
-            nns_recovery_same_nodes::StepType::DownloadState => {
-                if nns_recovery.params.upgrade_version.is_none() {
-                    nns_recovery.params.upgrade_version =
-                        read_optional_version(&logger, "Upgrade version: ");
-                }
-            }
-            nns_recovery_same_nodes::StepType::UploadCUPandRegistry => {
-                if nns_recovery.params.upload_node.is_none() {
-                    nns_recovery.params.upload_node = read_optional_ip(&logger, "Enter upload IP:");
-                }
-            }
-            _ => {}
-        }
     }
 }
 
@@ -192,70 +115,12 @@ pub fn nns_recovery_failover_nodes(
         neuron_args = Some(read_neuron_args(&logger));
     }
 
-    let mut nns_recovery =
-        NNSRecoveryFailoverNodes::new(logger.clone(), args, neuron_args, nns_recovery_args);
+    let nns_recovery =
+        NNSRecoveryFailoverNodes::new(logger.clone(), args, neuron_args, nns_recovery_args, true);
 
-    print_height_info(
-        &logger,
-        nns_recovery.get_recovery_api().registry_client.clone(),
-        nns_recovery.params.subnet_id,
-    );
-
-    if nns_recovery.params.download_node.is_none() {
-        nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
-    }
-
-    while let Some((step_type, step)) = nns_recovery.next() {
+    for (step_type, step) in nns_recovery {
         print_step(&logger, &format!("{:?}", step_type));
         execute_step_after_consent(&logger, step);
-
-        match step_type {
-            nns_recovery_failover_nodes::StepType::DownloadState => {
-                if nns_recovery.params.replica_version.is_none() {
-                    nns_recovery.params.replica_version = read_optional_version(
-                        &logger,
-                        "New NNS version (current unassigned version or other version blessed by parent NNS): ",
-                    );
-                }
-                if nns_recovery.params.replacement_nodes.is_none() {
-                    nns_recovery.params.replacement_nodes = read_optional_node_ids(
-                        &logger,
-                        "Enter space separated list of replacement nodes: ",
-                    );
-                }
-            }
-            nns_recovery_failover_nodes::StepType::ProposeToCreateSubnet => {
-                if nns_recovery.params.parent_nns_host_ip.is_none() {
-                    nns_recovery.params.parent_nns_host_ip = read_optional_ip(
-                        &logger,
-                        "Enter parent NNS IP to download the registry store from:",
-                    );
-                }
-            }
-            nns_recovery_failover_nodes::StepType::CreateRegistryTar => {
-                if nns_recovery.params.aux_user.is_none() {
-                    nns_recovery.params.aux_user = read_optional(&logger, "Enter aux user:");
-                }
-                if nns_recovery.params.aux_ip.is_none() {
-                    nns_recovery.params.aux_ip = read_optional_ip(&logger, "Enter aux IP:");
-                }
-                if (nns_recovery.params.aux_user.is_none() || nns_recovery.params.aux_ip.is_none())
-                    && nns_recovery.params.registry_url.is_none()
-                {
-                    nns_recovery.params.registry_url = read_optional_url(
-                        &logger,
-                        "Enter URL of the hosted registry store tar file:",
-                    );
-                }
-            }
-            nns_recovery_failover_nodes::StepType::ProposeCUP => {
-                if nns_recovery.params.upload_node.is_none() {
-                    nns_recovery.params.upload_node =
-                        read_optional_ip(&logger, "Enter IP of node with admin access: ");
-                }
-            }
-            _ => {}
-        }
     }
 }
 

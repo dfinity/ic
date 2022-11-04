@@ -245,7 +245,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     };
 
     let mut subnet_recovery =
-        AppSubnetRecovery::new(env.logger(), recovery_args, None, subnet_args);
+        AppSubnetRecovery::new(env.logger(), recovery_args, None, subnet_args, false);
     if upgrade {
         break_subnet(
             app_nodes,

@@ -11,10 +11,15 @@ use slog::{info, warn, Logger};
 pub trait RecoveryIterator<T: Copy + Debug> {
     fn get_step_iterator(&mut self) -> &mut Box<dyn Iterator<Item = T>>;
     fn get_step_impl(&self, step_type: T) -> RecoveryResult<Box<dyn Step>>;
+    fn interactive(&self) -> bool;
+    fn read_step_params(&mut self, step_type: T);
     fn get_logger(&self) -> &Logger;
 
     fn next_step(&mut self) -> Option<(T, Box<dyn Step>)> {
         if let Some(current_step) = self.get_step_iterator().next() {
+            if self.interactive() {
+                self.read_step_params(current_step);
+            }
             match self.get_step_impl(current_step) {
                 Ok(step) => Some((current_step, step)),
                 Err(RecoveryError::StepSkipped) => {
