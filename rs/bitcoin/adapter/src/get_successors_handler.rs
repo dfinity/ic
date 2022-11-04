@@ -21,13 +21,13 @@ use crate::{
 // for pagination on the replica side to work as expected.
 const MAX_RESPONSE_SIZE: usize = 2_000_000;
 
-// Max number of next block hashes that can be returned in the `GetSuccessorsResponse`.
-const MAX_NEXT_BLOCK_HASHES_LENGTH: usize = 100;
+// Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
+const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 
-const BLOCK_HASH_SIZE: usize = 32;
+const BLOCK_HEADER_SIZE: usize = 80;
 
 // The maximum number of bytes the `next` field in a response can take.
-const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HASHES_LENGTH * BLOCK_HASH_SIZE;
+const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HEADERS_LENGTH * BLOCK_HEADER_SIZE;
 
 // The maximum number of bytes the `blocks` in a response can take.
 // NOTE: This is a soft limit, and is only honored if there's > 1 blocks already in the response.
@@ -217,7 +217,7 @@ fn get_next_headers(
         .collect();
     let mut next_headers = vec![];
     while let Some(cached_header) = queue.pop_front() {
-        if next_headers.len() >= MAX_NEXT_BLOCK_HASHES_LENGTH {
+        if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
             break;
         }
 
