@@ -8,12 +8,12 @@ node.
 
 [source,shell]
 ....
-$ drun [-c <config.json5>] <messages>
+$ bazel run //rs/drun -- [-c <config.json5>] <messages_file>
 ....
 
 * `-c <config.json5>`: (Optional) A json file containing the node configuration. If no config is
 provided, default values will be used.
-* `<messages>`: A line-based ASCII-encoded text file containing the messages to be processed.
+* `<messages_file>`: A line-based ASCII-encoded text file containing the messages to be processed.
 
 == Configuration
 
@@ -47,7 +47,7 @@ Code installation messages have the following format:
 * `<mode>` is one of `install`, `reinstall` or `upgrade`
 
 * `<canister_id>` is the desired ID for the canister to be installed, given in textual
-representation (e.g. `lg264-qjkae`) as specified in https://sdk.dfinity.org/docs/interface-spec/index.html#textual-ids.
+representation (e.g. `rwlgt-iiaaa-aaaaa-aaaaa-cai`) as specified in https://sdk.dfinity.org/docs/interface-spec/index.html#textual-ids.
 
 * `<wasmfile>` is a path to a Wasm file that should be installed in this drun execution.
 
@@ -186,7 +186,7 @@ Running the command
 
 [source,shell]
 ----
-$ drun counter.wasm in.txt
+$ bazel run //rs/drun -- ${PWD}/in.txt
 ----
 
 should result in the following output:

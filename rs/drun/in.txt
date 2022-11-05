@@ -1,0 +1,3 @@
+create
+install rwlgt-iiaaa-aaaaa-aaaaa-cai /path/canister.wasm ""
+ingress rwlgt-iiaaa-aaaaa-aaaaa-cai go "DIDL\x00\x00"
