@@ -72,8 +72,7 @@
       artifacts: false
     - job: guest-os-diskimg-dev-malicious
       artifacts: false
-    - pipeline: $PARENT_PIPELINE_ID
-      job: bazel-test-all
+    - job: wait-for-bazel-test-all
       artifacts: false
     - job: guest-os-updateimg-build
       artifacts: false
@@ -193,8 +192,7 @@ upgrade-compatibility-pre-master:
   needs:
     - job: cargo-build-release-linux-native
       artifacts: false
-    - pipeline: $PARENT_PIPELINE_ID
-      job: bazel-test-all
+    - job: wait-for-bazel-test-all
       artifacts: false
     - job: guest-os-updateimg-build
       artifacts: false

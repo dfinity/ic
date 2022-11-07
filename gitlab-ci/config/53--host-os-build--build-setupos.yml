@@ -1,7 +1,6 @@
 setup-os-diskimg:
   needs:
-    - pipeline: $PARENT_PIPELINE_ID
-      job: bazel-test-all
+    - job: wait-for-bazel-test-all
       artifacts: false
     - job: host-os-diskimg
       artifacts: false
