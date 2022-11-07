@@ -1203,70 +1203,50 @@ macro_rules! define_affine_and_projective_types {
     }
 }
 
-macro_rules! declare_mul2_impl_for {
-    ( $typ:ty, $window:expr ) => {
-        impl $typ {
+// declare the impl for the mul2 table struct
+macro_rules! declare_mul2_table_impl {
+    ($projective:ty, $tbl_typ:ident, $window:expr) => {
+        /// Table for storing linear combinations of two points.
+        /// It is stored as a vector to reduce the amount of indirection for accessing cells.
+        /// A table can be computed by calling the `compute_mul2_tbl` function of the corresponding
+        /// projective `struct`, e.g., `G2Projective::mul2_prepared(...)`.
+        impl $tbl_typ {
+            // Compute the column offset in the vector from the column index.
+            pub(crate) fn col(i: usize) -> usize {
+                i
+            }
+
+            // Compute the row offset in the vector from the row index.
+            pub(crate) fn row(i: usize) -> usize {
+                // Configurable window size: an be in 1..=8
+                type Window = WindowInfo<$window>;
+                i << Window::SIZE
+            }
+
             /// Multiscalar multiplication (aka sum-of-products)
             ///
-            /// Equivalent to x*a + y*b
+            /// This table contains linear combinations of points x and y
+            /// that allow for fast multiplication with scalars.
+            /// The result of the computation is equivalent to x*a + y*b.
+            /// It is intended and beneficial to call this function on multiple
+            /// scalar pairs without recomputing this table.
+            /// If `mul2` is called only once, consider using the associated
+            /// `mul2` function of the respective projective struct, which
+            /// computes a smaller mul2 table on the fly and might thus be more efficient.
             ///
             /// Uses the Simultaneous 2w-Ary Method following Section 2.1 of
             /// <https://www.bmoeller.de/pdf/multiexp-sac2001.pdf>
             ///
             /// This function is intended to work in constant time, and not
             /// leak information about the inputs.
-            pub fn mul2(x: &Self, a: &Scalar, y: &Self, b: &Scalar) -> Self {
+            pub fn mul2(&self, a: &Scalar, b: &Scalar) -> $projective {
                 // Configurable window size: can be in 1..=8
                 type Window = WindowInfo<$window>;
-
-                // Derived constants
-                const TABLE_SIZE: usize = Window::ELEMENTS * Window::ELEMENTS;
-
-                // Indexing helpers
-                fn tbl_col(i: usize) -> usize {
-                    i
-                }
-                fn tbl_row(i: usize) -> usize {
-                    i << Window::SIZE
-                }
-
-                /*
-                A table which can be viewed as a 2^WINDOW_SIZE x 2^WINDOW_SIZE matrix
-
-                Each element is equal to a small linear combination of x and y:
-
-                tbl[(yi:xi)] = x*xi + y*yi
-
-                where xi is the lowest bits of the index and yi is the upper bits.  Each
-                xi and yi is WINDOW_SIZE bits long (and thus at most 2^WINDOW_SIZE).
-
-                We build up the table incrementally using additions and doubling, to
-                avoid the cost of full scalar mul.
-                 */
-                let mut tbl = Self::identities(TABLE_SIZE);
-
-                // Precompute the table (tbl[0] is left as the identity)
-                for i in 1..TABLE_SIZE {
-                    // The indexing here depends just on i, which is a public loop index
-
-                    let xi = i % Window::ELEMENTS;
-                    let yi = (i >> Window::SIZE) % Window::ELEMENTS;
-
-                    if xi % 2 == 0 && yi % 2 == 0 {
-                        tbl[i] = tbl[i / 2].double();
-                    } else if xi > 0 && yi > 0 {
-                        tbl[i] = &tbl[tbl_col(xi)] + &tbl[tbl_row(yi)];
-                    } else if xi > 0 {
-                        tbl[i] = &tbl[tbl_col(xi - 1)] + x;
-                    } else if yi > 0 {
-                        tbl[i] = &tbl[tbl_row(yi - 1)] + y;
-                    }
-                }
 
                 let s1 = a.serialize();
                 let s2 = b.serialize();
 
-                let mut accum = Self::identity();
+                let mut accum = <$projective>::identity();
 
                 for i in 0..Window::WINDOWS {
                     // skip on first iteration: doesn't leak secrets as index is public
@@ -1278,12 +1258,109 @@ macro_rules! declare_mul2_impl_for {
 
                     let w1 = Window::extract(&s1, i);
                     let w2 = Window::extract(&s2, i);
-                    let window = tbl_col(w1 as usize) + tbl_row(w2 as usize);
+                    let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
 
-                    accum += Self::ct_select(&tbl, window);
+                    accum += <$projective>::ct_select(&self.0, window);
                 }
 
                 accum
+            }
+        }
+    };
+}
+
+macro_rules! declare_compute_mul2_table_inline {
+    ($projective:ty, $tbl_typ:ident, $window_size:expr, $x:expr, $y:expr) => {{
+        // Configurable window size: can be in 1..=8
+        type Window = WindowInfo<$window_size>;
+
+        // Derived constants
+        const TABLE_SIZE: usize = Window::ELEMENTS * Window::ELEMENTS;
+
+        /*
+        A table which can be viewed as a 2^WINDOW_SIZE x 2^WINDOW_SIZE matrix
+
+        Each element is equal to a small linear combination of x and y:
+
+        tbl[(yi:xi)] = x*xi + y*yi
+
+        where xi is the lowest bits of the index and yi is the upper bits.  Each
+        xi and yi is WINDOW_SIZE bits long (and thus at most 2^WINDOW_SIZE).
+
+        We build up the table incrementally using additions and doubling, to
+        avoid the cost of full scalar mul.
+         */
+        let mut tbl = <$projective>::identities(TABLE_SIZE);
+
+        // Precompute the table (tbl[0] is left as the identity)
+        for i in 1..TABLE_SIZE {
+            // The indexing here depends just on i, which is a public loop index
+
+            let xi = i % Window::ELEMENTS;
+            let yi = (i >> Window::SIZE) % Window::ELEMENTS;
+
+            if xi % 2 == 0 && yi % 2 == 0 {
+                tbl[i] = tbl[i / 2].double();
+            } else if xi > 0 && yi > 0 {
+                tbl[i] = &tbl[$tbl_typ::col(xi)] + &tbl[$tbl_typ::row(yi)];
+            } else if xi > 0 {
+                tbl[i] = &tbl[$tbl_typ::col(xi - 1)] + $x;
+            } else if yi > 0 {
+                tbl[i] = &tbl[$tbl_typ::row(yi - 1)] + $y;
+            }
+        }
+
+        $tbl_typ(tbl)
+    }};
+}
+
+macro_rules! declare_mul2_impl_for {
+    ( $projective:ty, $tbl_typ:ident, $small_window_size:expr, $big_window_size:expr ) => {
+        paste! {
+            /// Contains a small precomputed table with linear combinations of two points that
+            /// can be used for faster mul2 computation. This table is called small because its
+            /// parameters are optimized for computation on the fly, meaning that it this table
+            /// is computed for each mul2 call without further optimizations.
+            pub(crate) struct [< Small $tbl_typ >](Vec<$projective>);
+            declare_mul2_table_impl!($projective, [< Small $tbl_typ >], $small_window_size);
+
+            /// Contains a small precomputed table with linear combinations of two points that
+            /// can be used for faster mul2 computation. This table is called large because
+            /// its parameters are optimized for the best trade-off for pre-computing the table
+            /// once and using it for multiplication of the points with multiple scalar pairs.
+            /// For further information, see the rustdoc of `mul2` and `compute_mul2_tbl`.
+            pub struct $tbl_typ(Vec<$projective>);
+            declare_mul2_table_impl!($projective, $tbl_typ, $big_window_size);
+
+            impl $projective {
+                /// Multiscalar multiplication (aka sum-of-products)
+                ///
+                /// Equivalent to x*a + y*b
+                ///
+                /// Uses the Simultaneous 2w-Ary Method following Section 2.1 of
+                /// <https://www.bmoeller.de/pdf/multiexp-sac2001.pdf>
+                ///
+                /// This function is intended to work in constant time, and not
+                /// leak information about the inputs.
+                pub fn mul2(x: &Self, a: &Scalar, y: &Self, b: &Scalar) -> Self {
+                    let tbl = Self::compute_small_mul2_tbl(x, y);
+                    tbl.mul2(a, b)
+                }
+
+                /// Compute a small mul2 table for computing mul2 on the fly, i.e.,
+                /// without amortizing the cost of the table computation by
+                /// reusing it (calling mul2) on multiple scalar pairs.
+                fn compute_small_mul2_tbl(x: &Self, y: &Self) -> [< Small $tbl_typ >] {
+                    declare_compute_mul2_table_inline!($projective, [< Small $tbl_typ >], $small_window_size, x, y)
+                }
+
+                /// Compute a mul2 table that contains linear combinations of `x` and `y`,
+                /// which is intended to be used for multiple mul2 calls with the same `x` and `y`
+                /// but different scalar pairs. To call `mul2` only once, consider calling
+                /// it directly, which might be more efficient.
+                pub fn compute_mul2_tbl(x: &Self, y: &Self) -> $tbl_typ {
+                    declare_compute_mul2_table_inline!($projective, $tbl_typ, $big_window_size, x, y)
+                }
             }
         }
     };
@@ -1463,7 +1540,7 @@ define_affine_and_projective_types!(G1Affine, G1Projective, 48);
 declare_addsub_ops_for!(G1Projective);
 declare_mixed_addition_ops_for!(G1Projective, G1Affine);
 declare_windowed_scalar_mul_ops_for!(G1Projective, 4);
-declare_mul2_impl_for!(G1Projective, 2);
+declare_mul2_impl_for!(G1Projective, G1Mul2Table, 2, 3);
 declare_muln_vartime_impl_for!(G1Projective, 3);
 declare_muln_vartime_affine_impl_for!(G1Projective, G1Affine);
 impl_debug_using_serialize_for!(G1Affine);
@@ -1473,7 +1550,7 @@ define_affine_and_projective_types!(G2Affine, G2Projective, 96);
 declare_addsub_ops_for!(G2Projective);
 declare_mixed_addition_ops_for!(G2Projective, G2Affine);
 declare_windowed_scalar_mul_ops_for!(G2Projective, 4);
-declare_mul2_impl_for!(G2Projective, 2);
+declare_mul2_impl_for!(G2Projective, G2Mul2Table, 2, 3);
 declare_muln_vartime_impl_for!(G2Projective, 3);
 impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);

@@ -222,18 +222,11 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
         let sigma: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
             .map(|_| Scalar::random_within_range(rng, range as u64) + &p_sub_s)
             .collect();
+        let tbl = G1Projective::compute_mul2_tbl(&G1Projective::from(&y0), &G1Projective::from(g1));
         let cc: Vec<G1Affine> = beta
             .iter()
             .zip(&sigma)
-            .map(|(beta_i, sigma_i)| {
-                G1Projective::mul2(
-                    &G1Projective::from(&y0),
-                    beta_i,
-                    &G1Projective::from(g1),
-                    sigma_i,
-                )
-                .to_affine()
-            })
+            .map(|(beta_i, sigma_i)| tbl.mul2(beta_i, sigma_i).to_affine())
             .collect();
 
         let first_move = FirstMoveChunking::from(&y0, &bb, &cc);
