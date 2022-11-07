@@ -20,11 +20,11 @@
 use crate::{
     metrics::{DataPlaneMetrics, IntGaugeResource},
     types::{
-        ChannelReader, ChannelWriter, Connected, ConnectionRole, SendQueueReader, TransportHeader,
-        TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
+        ChannelReader, ChannelWriter, Connected, ConnectionRole, PayloadData, SendQueueReader,
+        SendStreamWrapper, TransportHeader, TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT,
+        TRANSPORT_HEADER_SIZE,
     },
 };
-use bytes::Bytes;
 use h2::RecvStream;
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::TlsStream;
@@ -72,11 +72,6 @@ const TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS: u64 = 5000;
 enum StreamReadError {
     Failed(std::io::Error),
     TimeOut,
-}
-
-struct PayloadData {
-    header: Vec<u8>,
-    body: Vec<u8>,
 }
 
 /// Create header bytes to send with payload.
@@ -223,32 +218,10 @@ async fn write_one_message(
             writer.flush().await
         }
         ChannelWriter::H2SendStream(send_stream) => {
-            // Send the header, followed by the message body.
-            // H2 requires flushing data on the receive stream side, so no need to flush here
-            // TODO: do not use Bytes::copy_from_slice since it will do a copy
-            for payload in data {
-                send_stream
-                    .send_data(Bytes::copy_from_slice(&payload.header), false)
-                    .map_err(|err| {
-                        err.into_io().unwrap_or_else(|| {
-                            std::io::Error::new(std::io::ErrorKind::Other, "failed to send header")
-                        })
-                    })?;
-
-                if !payload.body.is_empty() {
-                    send_stream
-                        .send_data(Bytes::copy_from_slice(&payload.body), false)
-                        .map_err(|err| {
-                            err.into_io().unwrap_or_else(|| {
-                                std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    "failed to send body",
-                                )
-                            })
-                        })?
-                }
-            }
-            Ok(())
+            // Use SendStreamWrapper to manage capacity and send data as capacity becomes available
+            let mut send_stream_wrapper = SendStreamWrapper::new(send_stream);
+            send_stream_wrapper.prepare_send_data(data);
+            send_stream_wrapper.await
         }
     }
 }

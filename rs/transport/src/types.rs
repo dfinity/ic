@@ -15,9 +15,12 @@ use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Debug, Formatter};
+use std::future::Future;
 use std::net::IpAddr;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::{Arc, Weak};
+use std::task::Poll;
 use strum::AsRefStr;
 use tokio::{
     runtime::Handle,
@@ -100,6 +103,12 @@ impl ChannelWriter {
     }
 }
 
+#[derive(Clone)]
+pub struct PayloadData {
+    pub header: Vec<u8>,
+    pub body: Vec<u8>,
+}
+
 /// Transport implementation state struct. The control and data planes provide
 /// implementations for this struct.
 pub(crate) struct TransportImpl {
@@ -140,6 +149,78 @@ pub(crate) struct TransportImpl {
     pub weak_self: std::sync::RwLock<Weak<TransportImpl>>,
     /// If true, uses http/2 protocol
     pub use_h2: bool,
+}
+
+// Wrapper around SendStream to ensure that we only send data if there is available capacity,
+// since send stream uses an unbounded buffer to handle data.
+pub(crate) struct SendStreamWrapper<'a> {
+    send_stream: &'a mut SendStream<Bytes>,
+    data: Vec<PayloadData>,
+}
+
+impl<'a> SendStreamWrapper<'a> {
+    pub fn new(send_stream: &'a mut SendStream<Bytes>) -> Self {
+        Self {
+            send_stream,
+            data: vec![],
+        }
+    }
+
+    // Store the data to send and reserve capacity.  The poll function manages the actual send component
+    pub fn prepare_send_data(&mut self, data_to_send: Vec<PayloadData>) {
+        self.data = data_to_send;
+        let capacity_needed = self
+            .data
+            .iter()
+            .map(|p| p.header.len() + p.body.len())
+            .sum();
+        self.send_stream.reserve_capacity(capacity_needed);
+    }
+}
+
+impl Future for SendStreamWrapper<'_> {
+    type Output = Result<(), std::io::Error>;
+
+    // This is invoked to send data via sendstream. As a prerequisite, it checks available capacity
+    // and waits until non-zero capacity is available before calling send to avoid overloading memory
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        loop {
+            match self.send_stream.poll_capacity(cx) {
+                Poll::Ready(Some(Ok(0))) => continue,
+                Poll::Ready(Some(Ok(_))) => break,
+                Poll::Ready(None) | Poll::Ready(Some(Err(_))) => {
+                    let e = std::io::Error::new(std::io::ErrorKind::Other, "poll capacity failure");
+                    return Poll::Ready(Err(e));
+                }
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+        // Send header and body as separate frames
+        for payload in self.data.clone() {
+            if !payload.header.is_empty() {
+                // TODO: do not use Bytes::copy_from_slice since it will do a copy
+                self.send_stream
+                    .send_data(Bytes::copy_from_slice(&payload.header), false)
+                    .map_err(|err| {
+                        err.into_io().unwrap_or_else(|| {
+                            std::io::Error::new(std::io::ErrorKind::Other, "failed to send header")
+                        })
+                    })?;
+            }
+
+            if !payload.body.is_empty() {
+                // TODO: do not use Bytes::copy_from_slice since it will do a copy
+                self.send_stream
+                    .send_data(Bytes::copy_from_slice(&payload.body), false)
+                    .map_err(|err| {
+                        err.into_io().unwrap_or_else(|| {
+                            std::io::Error::new(std::io::ErrorKind::Other, "failed to send body")
+                        })
+                    })?
+            }
+        }
+        Poll::Ready(Ok(()))
+    }
 }
 
 pub(crate) struct TransportImplH2 {
