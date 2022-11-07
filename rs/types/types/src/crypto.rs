@@ -320,6 +320,8 @@ pub enum CryptoError {
     InvalidNotAfterDate { message: String, not_after: String },
     /// Internal error.
     InternalError { internal_error: String },
+    /// Transient internal error; retrying may cause the operation to succeed.
+    TransientInternalError { internal_error: String },
 }
 
 impl From<ThresholdSigPublicKeyBytesConversionError> for CryptoError {
@@ -559,6 +561,8 @@ impl fmt::Debug for CryptoError {
             ),
             CryptoError::InternalError { internal_error } =>
                 write!(f, "Internal error {}", internal_error),
+            CryptoError::TransientInternalError { internal_error: transient_internal_error } =>
+                write!(f, "Transient internal error {}", transient_internal_error),
         }
     }
 }

@@ -1,7 +1,9 @@
 //! Filesystem-backed secret key store
 #![allow(clippy::unwrap_used)]
 use crate::key_id::KeyId;
-use crate::secret_key_store::{Scope, SecretKeyStore, SecretKeyStoreError};
+use crate::secret_key_store::{
+    Scope, SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+};
 use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::CspSecretKey;
 use hex::{FromHex, ToHex};
@@ -176,15 +178,21 @@ impl ProtoSecretKeyStore {
         secret_keys
     }
 
-    fn secret_keys_to_sks_proto(secret_keys: &SecretKeys) -> pb::SecretKeyStore {
+    fn secret_keys_to_sks_proto(
+        secret_keys: &SecretKeys,
+    ) -> Result<pb::SecretKeyStore, SecretKeyStorePersistenceError> {
         let mut sks_proto = pb::SecretKeyStore {
             version: CURRENT_SKS_VERSION,
             ..Default::default()
         };
         for (key_id, (csp_key, maybe_scope)) in secret_keys {
             let key_id_hex = key_id.encode_hex();
-            let key_as_cbor = serde_cbor::to_vec(&csp_key)
-                .unwrap_or_else(|_| panic!("Error serializing key with ID {}", key_id));
+            let key_as_cbor = serde_cbor::to_vec(&csp_key).map_err(|_| {
+                SecretKeyStorePersistenceError::SerializationError(format!(
+                    "Error serializing key with ID {}",
+                    key_id
+                ))
+            })?;
             let sk_pb = match maybe_scope {
                 Some(scope) => pb::SecretKeyV1 {
                     csp_secret_key: key_as_cbor,
@@ -197,12 +205,20 @@ impl ProtoSecretKeyStore {
             };
             sks_proto.key_id_to_secret_key_v1.insert(key_id_hex, sk_pb);
         }
-        sks_proto
+        Ok(sks_proto)
     }
 
-    fn write_secret_keys_to_disk(sks_data_file: &Path, secret_keys: &SecretKeys) {
-        let sks_proto = ProtoSecretKeyStore::secret_keys_to_sks_proto(secret_keys);
-        ic_utils::fs::write_protobuf_using_tmp_file(sks_data_file, &sks_proto).unwrap();
+    fn write_secret_keys_to_disk(
+        sks_data_file: &Path,
+        secret_keys: &SecretKeys,
+    ) -> Result<(), SecretKeyStorePersistenceError> {
+        let sks_proto = ProtoSecretKeyStore::secret_keys_to_sks_proto(secret_keys)?;
+        ic_utils::fs::write_protobuf_using_tmp_file(sks_data_file, &sks_proto).map_err(|e| {
+            SecretKeyStorePersistenceError::IoError(format!(
+                "Secret key store internal error writing protobuf using tmp file: {}",
+                e
+            ))
+        })
     }
 }
 
@@ -213,14 +229,20 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         key: CspSecretKey,
         scope: Option<Scope>,
     ) -> Result<(), SecretKeyStoreError> {
-        with_write_lock(&self.keys, |keys| match keys.get(&id) {
-            Some(_) => Err(SecretKeyStoreError::DuplicateKeyId(id)),
-            None => {
-                keys.insert(id, (key, scope));
-                ProtoSecretKeyStore::write_secret_keys_to_disk(&self.proto_file, keys);
-                Ok(())
-            }
-        })
+        let inserted: Result<bool, SecretKeyStorePersistenceError> =
+            with_write_lock(&self.keys, |keys| match keys.get(&id) {
+                Some(_) => Ok(false),
+                None => {
+                    keys.insert(id, (key, scope));
+                    ProtoSecretKeyStore::write_secret_keys_to_disk(&self.proto_file, keys)?;
+                    Ok(true)
+                }
+            });
+        match inserted {
+            Ok(false) => Err(SecretKeyStoreError::DuplicateKeyId(id)),
+            Ok(true) => Ok(()),
+            Err(e) => Err(SecretKeyStoreError::PersistenceError(e)),
+        }
     }
 
     fn get(&self, id: &KeyId) -> Option<CspSecretKey> {
@@ -233,19 +255,18 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         self.get(id).is_some()
     }
 
-    fn remove(&mut self, id: &KeyId) -> bool {
-        let result = with_write_lock(&self.keys, |keys| match keys.get(id) {
+    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError> {
+        with_write_lock(&self.keys, |keys| match keys.get(id) {
             Some(_) => {
                 keys.remove(id);
-                ProtoSecretKeyStore::write_secret_keys_to_disk(&self.proto_file, keys);
+                ProtoSecretKeyStore::write_secret_keys_to_disk(&self.proto_file, keys)?;
                 Ok(true)
             }
             None => Ok(false),
-        });
-        result.expect("lambda unexpectedly returned Err")
+        })
     }
 
-    fn retain<F>(&mut self, filter: F, scope: Scope)
+    fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {
@@ -264,18 +285,17 @@ impl SecretKeyStore for ProtoSecretKeyStore {
                 }
             }
             if keys.len() < orig_keys_count {
-                ProtoSecretKeyStore::write_secret_keys_to_disk(&self.proto_file, keys);
+                ProtoSecretKeyStore::write_secret_keys_to_disk(&self.proto_file, keys)?;
             }
             Ok(())
         })
-        .unwrap_or_else(|e| panic!("retain failed for scope {} with error {}", scope, e));
     }
 }
 
-fn with_write_lock<T, I, R, F>(v: T, f: F) -> Result<R, SecretKeyStoreError>
+fn with_write_lock<T, I, R, F>(v: T, f: F) -> Result<R, SecretKeyStorePersistenceError>
 where
     T: AsRef<RwLock<I>>,
-    F: FnOnce(&mut I) -> Result<R, SecretKeyStoreError>,
+    F: FnOnce(&mut I) -> Result<R, SecretKeyStorePersistenceError>,
 {
     let mut lock_result = v.as_ref().write();
     f(lock_result.borrow_mut())
@@ -295,6 +315,7 @@ pub mod tests {
     use super::super::test_utils;
     use super::*;
     use crate::secret_key_store::test_utils::TempSecretKeyStore;
+    use crate::types::CspSecretKey;
     use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
     use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
     use ic_crypto_internal_multi_sig_bls12381::types::SecretKeyBytes;
@@ -305,6 +326,10 @@ pub mod tests {
     use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
     use ic_crypto_secrets_containers::SecretArray;
     use proptest::prelude::*;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt;
     use tempfile::{tempdir as tempdir_deleted_at_end_of_scope, TempDir};
 
     // TODO(CRP-351): add tests that SKS updates hit the disk.
@@ -408,6 +433,60 @@ pub mod tests {
             fs_key,
             CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(..))
         ));
+    }
+
+    #[test]
+    fn should_fail_to_write_to_read_only_secret_key_store_directory() {
+        let temp_dir: TempDir = mk_temp_dir_with_permissions(0o700);
+        copy_file_to_dir(
+            path_to_existing_secret_key_store().as_path(),
+            temp_dir.path(),
+        );
+
+        let mut secret_key_store = ProtoSecretKeyStore::open(temp_dir.path(), "sks_data.pb", None);
+        let mut seed = ChaCha20Rng::seed_from_u64(42);
+        let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+        let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+            SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+        ));
+
+        // make the crypto root directory non-writeable, causing the subsequent call to insert a
+        // new key into the key store to fail
+        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
+            .expect("Could not set the permissions of the temp dir.");
+
+        assert!(matches!(
+            secret_key_store.insert(key_id, key, None),
+            Err(SecretKeyStoreError::PersistenceError(
+                SecretKeyStorePersistenceError::IoError(msg)
+            ))
+            if msg.to_lowercase().contains("secret key store internal error writing protobuf using tmp file: permission denied")
+        ));
+
+        fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o700)).expect(
+            "failed to change permissions of temp_dir so that writing is possible \
+                again, so that the directory can automatically be cleaned up",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Error reading SKS data: Permission denied")]
+    fn should_fail_to_read_from_secret_key_store_with_no_read_permissions() {
+        let temp_dir: TempDir = mk_temp_dir_with_permissions(0o700);
+        copy_file_to_dir(
+            path_to_existing_secret_key_store().as_path(),
+            temp_dir.path(),
+        );
+
+        // remove read permissions from the secret key store file, causing the subsequent call to
+        // open the key store to panic (since it tries to read the key store)
+        fs::set_permissions(
+            temp_dir.path().join("sks_data.pb"),
+            Permissions::from_mode(0o000),
+        )
+        .expect("Could not set the permissions of the secret key store file.");
+
+        let _secret_key_store = ProtoSecretKeyStore::open(temp_dir.path(), "sks_data.pb", None);
     }
 
     fn copy_file_to_dir(source_file: &Path, target_dir: &Path) {

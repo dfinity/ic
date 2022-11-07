@@ -2,7 +2,7 @@
 use super::*;
 use crate::keygen::fixtures::multi_bls_test_vector;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
-use crate::vault::test_utils::sks::secret_key_store_with_error_on_insert;
+use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::X509NameEntries;
@@ -66,7 +66,7 @@ mod gen_key_pair_tests {
         let duplicated_key_id = KeyId::from([42; 32]);
         let csp = Csp::of(
             rng(),
-            secret_key_store_with_error_on_insert(duplicated_key_id),
+            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
         );
 
         let _ = csp.gen_key_pair(AlgorithmId::Ed25519);
@@ -112,7 +112,7 @@ mod gen_key_pair_with_pop_tests {
         let duplicated_key_id = KeyId::from([42; 32]);
         let csp = Csp::of(
             rng(),
-            secret_key_store_with_error_on_insert(duplicated_key_id),
+            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
         );
 
         let _ = csp.gen_key_pair_with_pop(AlgorithmId::MultiBls12_381);
@@ -123,6 +123,10 @@ mod idkg_create_mega_key_pair_tests {
     use super::*;
     use crate::api::CspCreateMEGaKeyError;
     use crate::keygen::fixtures::mega_test_vector;
+    use crate::vault::test_utils::sks::{
+        secret_key_store_with_io_error_on_insert,
+        secret_key_store_with_serialization_error_on_insert,
+    };
     use crate::CspIDkgProtocol;
 
     #[test]
@@ -155,12 +159,13 @@ mod idkg_create_mega_key_pair_tests {
             }
         }
     }
+
     #[test]
     fn should_fail_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
         let csp = Csp::of(
             rng(),
-            secret_key_store_with_error_on_insert(duplicated_key_id),
+            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
         );
 
         let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -168,6 +173,30 @@ mod idkg_create_mega_key_pair_tests {
         assert!(matches!(
             result,
             Err(CspCreateMEGaKeyError::DuplicateKeyId { key_id }) if key_id == duplicated_key_id
+        ));
+    }
+
+    #[test]
+    fn should_handle_serialization_failure_upon_insert() {
+        let csp = Csp::of(rng(), secret_key_store_with_serialization_error_on_insert());
+
+        let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
+
+        assert!(matches!(
+            result,
+            Err(CspCreateMEGaKeyError::InternalError { internal_error }) if internal_error.to_lowercase().contains("serialization error")
+        ));
+    }
+
+    #[test]
+    fn should_handle_io_error_upon_insert() {
+        let csp = Csp::of(rng(), secret_key_store_with_io_error_on_insert());
+
+        let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
+
+        assert!(matches!(
+            result,
+            Err(CspCreateMEGaKeyError::TransientInternalError { internal_error }) if internal_error.to_lowercase().contains("io error")
         ));
     }
 }
@@ -233,7 +262,7 @@ mod tls {
         let duplicated_key_id = KeyId::from([42; 32]);
         let csp = Csp::of(
             rng(),
-            secret_key_store_with_error_on_insert(duplicated_key_id),
+            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
         );
 
         let _ = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);

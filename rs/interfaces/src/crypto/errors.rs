@@ -60,6 +60,9 @@ impl ErrorReproducibility for CryptoError {
             CryptoError::InvalidNotAfterDate { .. } => true,
             // false, as the internal error can happen due to a local failure
             CryptoError::InternalError { .. } => false,
+            // false, as by definition the transient internal error is non-reproducible
+            // (catch-all for lower-level transient errors)
+            CryptoError::TransientInternalError { .. } => false,
         }
     }
 }

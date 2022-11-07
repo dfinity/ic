@@ -149,6 +149,9 @@ impl From<SecretKeyStoreError> for CspBasicSignatureKeygenError {
             SecretKeyStoreError::DuplicateKeyId(key_id) => {
                 CspBasicSignatureKeygenError::DuplicateKeyId { key_id }
             }
+            SecretKeyStoreError::PersistenceError(e) => {
+                panic!("Error persisting secret key store during CSP basic signature key generation: {}", e)
+            }
         }
     }
 }
@@ -159,6 +162,9 @@ impl From<SecretKeyStoreError> for CspMultiSignatureKeygenError {
             SecretKeyStoreError::DuplicateKeyId(key_id) => {
                 CspMultiSignatureKeygenError::DuplicateKeyId { key_id }
             }
+            SecretKeyStoreError::PersistenceError(e) => {
+                panic!("Error persisting secret key store during CSP multi-signature key generation: {}", e)
+            }
         }
     }
 }
@@ -168,6 +174,12 @@ impl From<SecretKeyStoreError> for CspTlsKeygenError {
         match err {
             SecretKeyStoreError::DuplicateKeyId(key_id) => {
                 CspTlsKeygenError::DuplicateKeyId { key_id }
+            }
+            SecretKeyStoreError::PersistenceError(e) => {
+                panic!(
+                    "Error persisting secret key store during CSP TLS key generation: {}",
+                    e
+                )
             }
         }
     }

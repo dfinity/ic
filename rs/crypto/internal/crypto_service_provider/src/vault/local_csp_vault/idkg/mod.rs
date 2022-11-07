@@ -1,7 +1,7 @@
 use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::IDKG_THRESHOLD_KEYS_SCOPE;
 use crate::key_id::KeyId;
-use crate::secret_key_store::SecretKeyStore;
+use crate::secret_key_store::{SecretKeyStore, SecretKeyStorePersistenceError};
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
@@ -190,10 +190,19 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> IDkgProtocolCspVa
     ) -> Result<(), IDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "idkg_retain_threshold_keys_if_present");
         let start_time = self.metrics.now();
-        self.canister_sks_write_lock().retain(
-            |key_id, _| active_key_ids.contains(key_id),
-            IDKG_THRESHOLD_KEYS_SCOPE,
-        );
+        self.canister_sks_write_lock()
+            .retain(
+                |key_id, _| active_key_ids.contains(key_id),
+                IDKG_THRESHOLD_KEYS_SCOPE,
+            )
+            .map_err(|e| match e {
+                SecretKeyStorePersistenceError::SerializationError(e) => {
+                    IDkgRetainThresholdKeysError::InternalError { internal_error: e }
+                }
+                SecretKeyStorePersistenceError::IoError(e) => {
+                    IDkgRetainThresholdKeysError::TransientInternalError { internal_error: e }
+                }
+            })?;
         self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
             MetricsScope::Local,
@@ -289,12 +298,21 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, 
                                 internal_error: format!("{:?}", e),
                             }
                         })?;
-                    self.canister_sks_write_lock().insert_or_replace(
+                    match self.canister_sks_write_lock().insert_or_replace(
                         KeyId::from(transcript.combined_commitment.commitment()),
                         CspSecretKey::IDkgCommitmentOpening(opening_bytes),
                         Some(IDKG_THRESHOLD_KEYS_SCOPE),
-                    );
-                    Ok(BTreeMap::new())
+                    ) {
+                        Ok(_) => Ok(BTreeMap::new()),
+                        Err(SecretKeyStorePersistenceError::SerializationError(e)) => {
+                            Err(IDkgLoadTranscriptError::InternalError { internal_error: e })
+                        }
+                        Err(SecretKeyStorePersistenceError::IoError(e)) => {
+                            Err(IDkgLoadTranscriptError::TransientInternalError {
+                                internal_error: e,
+                            })
+                        }
+                    }
                 }
                 Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
                     let seed = Seed::from_rng(&mut *self.rng_write_lock());
@@ -359,11 +377,22 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, 
                                 internal_error: format!("{:?}", e),
                             }
                         })?;
-                    self.canister_sks_write_lock().insert_or_replace(
-                        KeyId::from(transcript.combined_commitment.commitment()),
-                        CspSecretKey::IDkgCommitmentOpening(opening_bytes),
-                        Some(IDKG_THRESHOLD_KEYS_SCOPE),
-                    );
+                    self.canister_sks_write_lock()
+                        .insert_or_replace(
+                            KeyId::from(transcript.combined_commitment.commitment()),
+                            CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                            Some(IDKG_THRESHOLD_KEYS_SCOPE),
+                        )
+                        .map_err(|e| match e {
+                            SecretKeyStorePersistenceError::SerializationError(e) => {
+                                IDkgLoadTranscriptError::InternalError { internal_error: e }
+                            }
+                            SecretKeyStorePersistenceError::IoError(e) => {
+                                IDkgLoadTranscriptError::TransientInternalError {
+                                    internal_error: e,
+                                }
+                            }
+                        })?;
                     Ok(())
                 }
                 Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
@@ -406,15 +435,19 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, 
         let private_key_bytes = MEGaPrivateKeyK256Bytes::try_from(&private_key)
             .map_err(CspCreateMEGaKeyError::SerializationError)?;
 
+        let key_id =
+            KeyId::try_from(&public_key).map_err(|e| CspCreateMEGaKeyError::InternalError {
+                internal_error: format!(
+                    "Failed to create key ID from MEGa public key {:?}: {}",
+                    public_key, e
+                ),
+            })?;
         self.store_secret_key(
             CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
                 public_key: public_key_bytes,
                 private_key: private_key_bytes,
             }),
-            //TODO CRP-1702: should no longer panic with IDKG key rotation
-            KeyId::try_from(&public_key).unwrap_or_else(|err| {
-                panic!("Failed to create MEGa public/private key pair: {}", err)
-            }),
+            key_id,
         )?;
 
         Ok(public_key)

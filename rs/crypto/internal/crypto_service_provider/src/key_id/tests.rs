@@ -1,11 +1,20 @@
-use hex::FromHex;
-use ic_crypto_internal_types::curves::bls12_381;
+use crate::KeyId;
+use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint, MEGaPublicKey};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPublicKey;
+
+#[test]
+fn should_fail_to_create_key_id_from_mega_key_with_unsupported_curve() {
+    let mega_public_key = MEGaPublicKey::new(EccPoint::identity(EccCurveType::P256));
+    assert_eq!(
+        KeyId::try_from(&mega_public_key),
+        Err("unsupported curve: P256".to_string())
+    );
+}
 
 mod stability_tests {
     use super::*;
-    use crate::key_id::KeyId;
     use crate::CspPublicKey;
+    use hex::FromHex;
     use ic_crypto_internal_test_vectors::ed25519::TESTVEC_MESSAGE_LEN_256_BIT_STABILITY_1_PK;
     use ic_crypto_internal_test_vectors::ed25519::TESTVEC_MESSAGE_LEN_256_BIT_STABILITY_2_PK;
     use ic_crypto_internal_test_vectors::ed25519::TESTVEC_RFC8032_ED25519_SHA_ABC_PK;
@@ -14,9 +23,8 @@ mod stability_tests {
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_3_PK;
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_4_PK;
     use ic_crypto_internal_threshold_sig_ecdsa::PedersenCommitment;
-    use ic_crypto_internal_threshold_sig_ecdsa::{
-        EccCurveType, EccPoint, MEGaPublicKey, PolynomialCommitment, SimpleCommitment,
-    };
+    use ic_crypto_internal_threshold_sig_ecdsa::{PolynomialCommitment, SimpleCommitment};
+    use ic_crypto_internal_types::curves::bls12_381;
     use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
     use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
     use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;

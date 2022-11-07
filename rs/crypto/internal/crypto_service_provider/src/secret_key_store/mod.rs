@@ -36,15 +36,23 @@ pub trait SecretKeyStore: Send + Sync {
     /// * If there is no existing key with the given `id` in the store, the new
     ///   key is inserted.
     /// * If there is a key with the given `id` in the store, it is replaced.
-    #[allow(clippy::single_match)]
-    fn insert_or_replace(&mut self, id: KeyId, key: CspSecretKey, scope: Option<Scope>) {
-        self.remove(&id);
-        match self.insert(id, key, scope) {
-            Ok(()) => {}
-            Err(SecretKeyStoreError::DuplicateKeyId(_)) => {
+    fn insert_or_replace(
+        &mut self,
+        id: KeyId,
+        key: CspSecretKey,
+        scope: Option<Scope>,
+    ) -> Result<(), SecretKeyStorePersistenceError> {
+        self.remove(&id)?;
+        self.insert(id, key, scope).map_err(|e| match e {
+            SecretKeyStoreError::DuplicateKeyId(e) => {
                 // unreachable, because key with `id` was removed prior to insertion
+                panic!(
+                    "Duplicate key error although the key was just removed: {}",
+                    e
+                );
             }
-        }
+            SecretKeyStoreError::PersistenceError(e) => e,
+        })
     }
 
     /// Retrieves the key with the given `id`.
@@ -61,8 +69,9 @@ pub trait SecretKeyStore: Send + Sync {
     /// Removes the key with the given `id` from the store.
     ///
     /// The return value indicates whether a key with the given `id` was
-    /// previously contained and removed.
-    fn remove(&mut self, id: &KeyId) -> bool;
+    /// previously contained and removed, or an error if the updated secret key store
+    /// could not be written.
+    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError>;
 
     /// Keeps only entries in a scope for which the filter function returns
     /// `true` and removes the rest.
@@ -87,7 +96,7 @@ pub trait SecretKeyStore: Send + Sync {
     /// can be added to this implementation and we may require `panic="unwind"`.
     /// See the (book)[https://doc.rust-lang.org/edition-guide/rust-2018/error-handling-and-panics/controlling-panics-with-std-panic.html]
     /// and function documentation for more details.
-    fn retain<F>(&mut self, _filter: F, _scope: Scope)
+    fn retain<F>(&mut self, _filter: F, _scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {
@@ -99,6 +108,7 @@ pub trait SecretKeyStore: Send + Sync {
 #[derive(Clone, Debug)]
 pub enum SecretKeyStoreError {
     DuplicateKeyId(KeyId),
+    PersistenceError(SecretKeyStorePersistenceError),
 }
 
 impl std::error::Error for SecretKeyStoreError {}
@@ -108,6 +118,31 @@ impl fmt::Display for SecretKeyStoreError {
         match self {
             SecretKeyStoreError::DuplicateKeyId(key_id) => {
                 write!(f, "Key with ID {} already exists in the key store", key_id)
+            }
+            SecretKeyStoreError::PersistenceError(e) => {
+                write!(f, "{}", e)
+            }
+        }
+    }
+}
+
+/// Errors that can occur while persisting the secret key store
+#[derive(Clone, Debug)]
+pub enum SecretKeyStorePersistenceError {
+    SerializationError(String),
+    IoError(String),
+}
+
+impl std::error::Error for SecretKeyStorePersistenceError {}
+
+impl fmt::Display for SecretKeyStorePersistenceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SecretKeyStorePersistenceError::SerializationError(e) => {
+                write!(f, "Error serializing secret key store: {}", e)
+            }
+            SecretKeyStorePersistenceError::IoError(e) => {
+                write!(f, "I/O error persisting secret key store: {}", e)
             }
         }
     }
