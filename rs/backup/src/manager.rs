@@ -92,7 +92,6 @@ impl Manager {
             }
 
             // Have a small break before the next round of checks
-            // TODO: maybe configure it
             sleep_secs(30);
         }
     }

@@ -1,5 +1,5 @@
 use crate::util::{block_on, sleep_secs};
-use ic_recovery::command_helper::exec_cmd; // TODO: refactor this and next, out of ic_recovery
+use ic_recovery::command_helper::exec_cmd;
 use ic_recovery::file_sync_helper::download_binary;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::node::NodeRegistry;
@@ -170,7 +170,6 @@ impl BackupHelper {
         cmd.arg("--min-size=1").arg(remote_dir).arg(local_dir);
         info!(self.log, "Will execute: {:?}", cmd);
         if let Err(e) = exec_cmd(&mut cmd) {
-            // TODO: probably tolerate: rsync warning: some files vanished before they could be transferred (code 24)
             Err(format!("Error: {}", e))
         } else {
             Ok(())
@@ -271,33 +270,12 @@ impl BackupHelper {
         }
     }
 
-    // TODO: remove this function by improving ic-replay parameters
-    fn copy_local_store(&self) {
-        let subnet_registry = self.data_dir().join("ic_registry_local_store");
-        let mut cmd = Command::new("rm");
-        cmd.arg("-rf");
-        cmd.arg(subnet_registry.clone());
-        info!(self.log, "Will execute: {:?}", cmd);
-        if let Err(e) = exec_cmd(&mut cmd) {
-            error!(self.log, "Error: {}", e);
-        }
-        let mut cmd = Command::new("cp");
-        cmd.arg("-rf");
-        cmd.arg(self.local_store_dir());
-        cmd.arg(subnet_registry);
-        info!(self.log, "Will execute: {:?}", cmd);
-        if let Err(e) = exec_cmd(&mut cmd) {
-            error!(self.log, "Error: {}", e);
-        }
-    }
-
     pub fn replay(&mut self) {
         let start_height = self.last_checkpoint();
         if !self.state_dir().exists() {
             std::fs::create_dir_all(self.state_dir()).expect("Failure creating a directory");
         }
 
-        self.copy_local_store();
         self.replay_current_version();
 
         if self.last_checkpoint() > start_height {
@@ -345,7 +323,7 @@ impl BackupHelper {
             .arg("--subnet-id")
             .arg(&self.subnet_id.to_string())
             .arg(&self.ic_config_file_local())
-            .arg("restore-from-backup")
+            .arg("restore-from-backup2")
             .arg(&self.local_store_dir())
             .arg(&self.spool_root_dir())
             .arg(&self.replica_version.to_string())
