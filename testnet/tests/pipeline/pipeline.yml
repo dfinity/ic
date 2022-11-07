@@ -246,7 +246,7 @@ icos-continuous-upgrade-nightly:
   if [[ -z "${LOG_DEBUG_OVERRIDES:-}" ]]; then
     LOG_DEBUG_OVERRIDES_OPTS=()
   else
-    LOG_DEBUG_OVERRIDES_OPTS=("--log-debug-overrides" "${LOG_DEBUG_OVERRIDES}")
+    LOG_DEBUG_OVERRIDES_OPTS=("--log-debug-overrides=${LOG_DEBUG_OVERRIDES}")
   fi
 
   # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.

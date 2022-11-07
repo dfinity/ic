@@ -1,4 +1,3 @@
-use crate::driver::driver_setup::IcSetup;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::*;
 use anyhow::{bail, Result};
@@ -56,7 +55,7 @@ pub trait IcHandleConstructor {
 impl IcHandleConstructor for TestEnv {
     fn ic_handle(&self) -> Result<IcHandle> {
         let group_setup = GroupSetup::read_attribute(self);
-        let ic_setup = IcSetup::read_attribute(self);
+        let farm_base_url = self.get_farm_url()?;
         let ts = self.topology_snapshot();
 
         let mut nodes = vec![];
@@ -86,7 +85,7 @@ impl IcHandleConstructor for TestEnv {
                 runtime_descriptor: RuntimeDescriptor::Vm(FarmInfo {
                     group_name: group_setup.farm_group_name.clone(),
                     vm_name: n.node_id.to_string(),
-                    url: ic_setup.farm_base_url.clone(),
+                    url: farm_base_url.clone(),
                 }),
                 is_root_subnet: s.map_or(false, |s| s.subnet_id == root_subnet_id),
             });

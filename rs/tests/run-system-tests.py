@@ -57,6 +57,7 @@ POT_SETUP_FILE = "group_setup.json"
 POT_SETUP_RESULT_FILE = "pot_setup_result.json"
 SLACK_FAILURE_ALERTS_FILE = "slack_alerts.json"
 SHELL_WRAPPER_DEFAULT = "/usr/bin/time"
+DEFAULT_FARM_BASE_URL = "https://farm.dfinity.systems"
 
 
 class GetImageShaException(Exception):
@@ -264,20 +265,27 @@ def list_files(root_path: str) -> None:
     for root, _, files in os.walk(root_path):
         level = root.replace(root_path, "").count(os.sep)
         indent = " " * 4 * (level)
-        print("{}{}/".format(indent, os.path.basename(root)))
+        logging.debug("{}{}/".format(indent, os.path.basename(root)))
         sub_indent = " " * 4 * (level + 1)
         for f in files:
-            print("{}{}".format(sub_indent, f))
+            logging.debug("{}{}".format(sub_indent, f))
 
 
 def populate_dependencies_dir(
     dependencies_dir: str,
     ic_root_dir: str,
+    journalbeat_hosts: str,
+    farm_base_url: str,
+    log_debug_overrides: str,
+    ic_version_id: str,
     ic_os_img_url: str,
     ic_os_img_sha256: str,
     ic_os_update_img_url: str,
     ic_os_update_img_sha256: str,
-    ic_version_id: str,
+    boundary_node_snp_img_url: str,
+    boundary_node_snp_img_sha256: str,
+    boundary_node_img_url: str,
+    boundary_node_img_sha256: str,
 ) -> None:
     # Start: create symlinks for scripts
     scripts_rel_paths = [
@@ -295,18 +303,26 @@ def populate_dependencies_dir(
 
     # Start: create files with content
     files_with_content = [
+        ("farm_base_url", farm_base_url),
+        ("journalbeat_hosts", journalbeat_hosts),
+        ("log_debug_overrides", log_debug_overrides),
+        ("ic-os/guestos/dev/ic_version_id", ic_version_id),
         ("ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.url", ic_os_img_url),
         ("ic-os/guestos/dev/disk-img.tar.zst.sha256", ic_os_img_sha256),
         ("ic-os/guestos/dev/upload_update-img_upgrade.tar.zst.url", ic_os_update_img_url),
         ("ic-os/guestos/dev/upgrade.tar.zst.sha256", ic_os_update_img_sha256),
-        ("ic-os/guestos/dev/ic_version_id", ic_version_id),
+        ("ic-os/boundary-guestos/boundary_node_img_url", boundary_node_img_url),
+        ("ic-os/boundary-guestos/boundary_node_img_sha256", boundary_node_img_sha256),
+        ("ic-os/boundary-guestos/boundary_node_snp_img_url", boundary_node_snp_img_url),
+        ("ic-os/boundary-guestos/boundary_node_snp_img_sha256", boundary_node_snp_img_sha256),
     ]
 
     for (file_rel_path, content) in files_with_content:
         dst = os.path.join(dependencies_dir, file_rel_path)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        with open(dst, "w") as f:
-            f.write(content)
+        if content:
+            with open(dst, "w") as f:
+                f.write(content)
     # End: create files with content
 
 
@@ -399,6 +415,11 @@ def main(
     )
     dependencies_dir = os.path.join(working_dir, "system_env/dependencies")
     logging.info(f"Populating dependencies dir {dependencies_dir}")
+
+    (log_debug_overrides,) = try_extract_arguments(
+        search_args=["--log-debug-overrides"], separator="=", args=runner_args
+    )
+
     populate_dependencies_dir(
         dependencies_dir=dependencies_dir,
         ic_root_dir=CI_PROJECT_DIR,
@@ -407,6 +428,13 @@ def main(
         ic_os_update_img_url=IC_OS_UPD_DEV_IMG_URL,
         ic_os_update_img_sha256=IC_OS_UPD_DEV_IMG_SHA256,
         ic_version_id=IC_VERSION_ID,
+        journalbeat_hosts=TEST_ES_HOSTNAMES,
+        boundary_node_snp_img_sha256=BOUNDARY_NODE_SNP_IMG_SHA256,
+        boundary_node_snp_img_url=BOUNDARY_NODE_SNP_IMG_URL,
+        farm_base_url=DEFAULT_FARM_BASE_URL,
+        boundary_node_img_url=BOUNDARY_NODE_IMG_URL,
+        boundary_node_img_sha256=BOUNDARY_NODE_IMG_SHA256,
+        log_debug_overrides=log_debug_overrides,
     )
     logging.debug("dependencies dir has been populated with content:")
     list_files(dependencies_dir)
@@ -513,11 +541,6 @@ def main(
     logging.debug("ARTIFACTS_DIR content:")
     os.system(f"ls -R {ARTIFACT_DIR}")
 
-    external_ipv6_address = get_external_ipv6_address()
-
-    def optional(condition, item):
-        return [item] if condition else []
-
     run_test_driver_cmd = (
         [SHELL_WRAPPER]
         + RUN_CMD
@@ -525,21 +548,10 @@ def main(
         + runner_args
         + [
             f"--job-id={JOB_ID}",
-            f"--initial-replica-version={IC_VERSION_ID}",
-            f"--ic-os-img-url={IC_OS_DEV_IMG_URL}",
-            f"--ic-os-img-sha256={IC_OS_DEV_IMG_SHA256}",
-            f"--ic-os-update-img-url={IC_OS_UPD_DEV_IMG_URL}",
-            f"--ic-os-update-img-sha256={IC_OS_UPD_DEV_IMG_SHA256}",
-            f"--boundary-node-img-url={BOUNDARY_NODE_IMG_URL}",
-            f"--boundary-node-img-sha256={BOUNDARY_NODE_IMG_SHA256}",
-            f"--boundary-node-snp-img-url={BOUNDARY_NODE_SNP_IMG_URL}",
-            f"--boundary-node-snp-img-sha256={BOUNDARY_NODE_SNP_IMG_SHA256}",
             f"--nns-canister-path={ARTIFACT_DIR}",
             f"--artifacts-path={ARTIFACT_DIR}",
             f"--authorized-ssh-accounts={SSH_KEY_DIR}",
-            f"--journalbeat-hosts={TEST_ES_HOSTNAMES}",
         ]
-        + optional(external_ipv6_address is not None, f"--preferred-network={external_ipv6_address}")
     )
     logging.debug(f"run_test_driver_cmd: {run_test_driver_cmd}")
     # We launch prod-test-driver with a timeout. This enables us to send slack notification before the global CI timeout kills the whole job.

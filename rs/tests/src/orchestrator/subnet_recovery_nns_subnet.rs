@@ -18,11 +18,8 @@ Success::
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_universal_canisters;
-use crate::driver::driver_setup::{
-    IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
-};
+use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
     can_install_canister_with_retries, can_read_msg, cannot_store_msg, store_message,
@@ -55,12 +52,12 @@ pub fn test(env: TestEnv) {
     let logger = env.logger();
     let topo_snapshot = env.topology_snapshot();
 
-    let ic_version = IcSetup::read_attribute(&env).initial_replica_version;
-    let ic_version_str = ic_version.to_string();
-    info!(logger, "IC_VERSION_ID: {}", ic_version_str);
+    let ic_version = env.get_initial_replica_version().unwrap();
+    info!(logger, "IC_VERSION_ID: {:?}", &ic_version);
 
     // identifies the version of the replica after the recovery
-    let working_version = ReplicaVersion::try_from(format!("{}-test", ic_version_str)).unwrap();
+    let working_version =
+        ReplicaVersion::try_from(format!("{}-test", ic_version.as_ref())).unwrap();
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
