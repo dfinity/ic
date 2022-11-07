@@ -14,3 +14,21 @@ dependencies-check:
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/
       $SHELL_WRAPPER python3 dependencies/merge_hook.py
   allow_failure: true
+
+dependency-scan-nightly:
+  extends: 
+    - .ubuntu-docker-k8s
+    - .rules-dependency-scan-schedule
+  needs: []  # don't wait on other jobs
+  stage: test
+  variables: 
+    PYTHONPATH : ${CI_PROJECT_DIR}/gitlab-ci/src/dependencies
+    CARGO_AUDIT_VERSION : "0.16.0"
+  script:
+    - |
+      set -euo pipefail
+      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
+      $SHELL_WRAPPER python3 scanner/bazel_ic_scanner_periodic_job.py 
+  allow_failure: true
+
