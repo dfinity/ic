@@ -1,1 +1,4 @@
 too-many-arguments-threshold = 12
+disallowed-methods = [
+    { path = "bincode::deserialize_from" , reason = "bincode::deserialize_from is not safe to use on untrusted data since the method will read a u64 length value from the first 8 bytes of the serialized payload and will then attempt to allocate this number of bytes without any validation." }
+]
