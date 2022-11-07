@@ -1,13 +1,13 @@
 use ic_config::{ConfigSource, ConfigValidate};
 use ic_types::{ReplicaVersion, SubnetId};
-use serde::{de::Error, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SubnetConfig {
     pub subnet_id: SubnetId,
-    #[serde(deserialize_with = "replica_from_string")]
+    #[serde(deserialize_with = "crate::util::replica_from_string")]
     pub replica_version: ReplicaVersion,
     pub sync_period_secs: u64,
     pub replay_period_secs: u64,
@@ -19,14 +19,6 @@ pub struct Config {
     pub nns_url: String,
     pub ssh_credentials: PathBuf,
     pub subnets: Vec<SubnetConfig>,
-}
-
-fn replica_from_string<'de, D>(deserializer: D) -> Result<ReplicaVersion, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: String = Deserialize::deserialize(deserializer)?;
-    ReplicaVersion::try_from(s).map_err(D::Error::custom)
 }
 
 impl ConfigValidate for Config {
