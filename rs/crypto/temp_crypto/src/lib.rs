@@ -230,7 +230,11 @@ impl TempCryptoBuilder {
             .then(|| generate_dkg_dealing_encryption_keys(&mut csp, node_id));
         let idkg_dealing_encryption_pk = node_keys_to_generate
             .generate_idkg_dealing_encryption_keys
-            .then(|| generate_idkg_dealing_encryption_keys(&mut csp));
+            .then(|| {
+                generate_idkg_dealing_encryption_keys(&mut csp).unwrap_or_else(|e| {
+                    panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
+                })
+            });
         let tls_certificate = node_keys_to_generate
             .generate_tls_keys_and_certificate
             .then(|| generate_tls_keys(&mut csp, node_id).to_proto());

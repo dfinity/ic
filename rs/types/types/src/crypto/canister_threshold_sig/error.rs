@@ -138,6 +138,7 @@ impl_display_using_debug!(IDkgOpenTranscriptError);
 pub enum IDkgRetainThresholdKeysError {
     InternalError { internal_error: String },
     SerializationError { internal_error: String },
+    TransientInternalError { internal_error: String },
 }
 impl_display_using_debug!(IDkgRetainThresholdKeysError);
 
@@ -169,6 +170,9 @@ pub enum IDkgLoadTranscriptError {
         algorithm_id: Option<AlgorithmIdProto>,
     },
     RegistryError(RegistryClientError),
+    TransientInternalError {
+        internal_error: String,
+    },
 }
 impl_display_using_debug!(IDkgLoadTranscriptError);
 

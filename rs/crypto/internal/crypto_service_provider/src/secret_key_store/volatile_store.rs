@@ -1,6 +1,8 @@
 //! In-memory secret key store (for testing)
 use crate::key_id::KeyId;
-use crate::secret_key_store::{Scope, SecretKeyStore, SecretKeyStoreError};
+use crate::secret_key_store::{
+    Scope, SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+};
 use crate::types::CspSecretKey;
 use std::collections::HashMap;
 
@@ -46,11 +48,11 @@ impl SecretKeyStore for VolatileSecretKeyStore {
         self.keys.contains_key(id)
     }
 
-    fn remove(&mut self, id: &KeyId) -> bool {
-        self.keys.remove(id).is_some()
+    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError> {
+        Ok(self.keys.remove(id).is_some())
     }
 
-    fn retain<F>(&mut self, filter: F, scope: Scope)
+    fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {
@@ -68,6 +70,7 @@ impl SecretKeyStore for VolatileSecretKeyStore {
                 keep
             })
             .collect();
+        Ok(())
     }
 }
 

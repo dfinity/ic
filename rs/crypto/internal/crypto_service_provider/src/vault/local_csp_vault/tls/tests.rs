@@ -2,7 +2,7 @@
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::vault::test_utils;
 use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_encoding;
-use crate::vault::test_utils::sks::secret_key_store_with_error_on_insert;
+use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use ic_types_test_utils::ids::node_test_id;
 
 mod keygen {
@@ -24,7 +24,7 @@ mod keygen {
     fn should_fail_if_secret_key_insertion_yields_duplicate_error() {
         let duplicated_key_id = KeyId::from([42; 32]);
         let csp_vault = new_local_csp_vault_with_secret_key_store(
-            secret_key_store_with_error_on_insert(duplicated_key_id),
+            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
         );
 
         test_utils::tls::should_fail_if_secret_key_insertion_yields_duplicate_error(

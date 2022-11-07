@@ -9,7 +9,7 @@ use crate::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use crate::vault::test_utils;
 use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_encoding;
 use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_length;
-use crate::vault::test_utils::sks::secret_key_store_with_error_on_insert;
+use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use crate::LocalCspVault;
 use crate::RemoteCspVault;
 use crate::SecretKeyStore;
@@ -336,7 +336,7 @@ mod tls_keygen {
         let tokio_rt = new_tokio_runtime();
         let duplicated_key_id = KeyId::from([42; 32]);
         let local_csp_vault = new_local_csp_vault_with_secret_key_store(
-            secret_key_store_with_error_on_insert(duplicated_key_id),
+            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
         );
         let remote_csp_vault =
             new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), local_csp_vault);

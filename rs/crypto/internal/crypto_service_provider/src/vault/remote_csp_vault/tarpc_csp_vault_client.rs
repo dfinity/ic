@@ -541,7 +541,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
                 .idkg_gen_mega_key_pair(context_with_timeout(self.rpc_timeout), algorithm_id),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspCreateMEGaKeyError::CspServerError {
+            Err(CspCreateMEGaKeyError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })

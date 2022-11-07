@@ -7,6 +7,7 @@
 use crate::files::mk_temp_dir_with_permissions;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::secret_key_store;
+use ic_crypto_internal_csp::secret_key_store::SecretKeyStorePersistenceError;
 use ic_crypto_internal_csp::types::CspSecretKey;
 use mockall::predicate::*;
 use mockall::*;
@@ -22,7 +23,7 @@ mock! {
         fn insert(&mut self, id: KeyId, key: CspSecretKey, scope: Option<Scope>) -> Result<(), SecretKeyStoreError>;
         fn get(&self, id: &KeyId) -> Option<CspSecretKey>;
         fn contains(&self, id: &KeyId) -> bool;
-        fn remove(&mut self, id: &KeyId) -> bool;
+        fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError>;
     }
 }
 
@@ -65,11 +66,11 @@ impl SecretKeyStore for TempSecretKeyStore {
         self.store.contains(id)
     }
 
-    fn remove(&mut self, id: &KeyId) -> bool {
+    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError> {
         self.store.remove(id)
     }
 
-    fn retain<F>(&mut self, _filter: F, _scope: Scope)
+    fn retain<F>(&mut self, _filter: F, _scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {

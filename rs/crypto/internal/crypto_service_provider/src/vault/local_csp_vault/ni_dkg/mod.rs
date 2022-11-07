@@ -72,6 +72,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspVault
                     panic!(
                         "Could not insert key as the KeyId is already in use.  This suggests an insecure RNG."
                     ),
+                SecretKeyStoreError::PersistenceError(e) => {
+                    panic!("Error persisting secret key store while generating forward-secure key pair: {}", e)
+                }
             };
         };
 
@@ -161,10 +164,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspVault
     ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "retain_threshold_keys_if_present");
         let start_time = self.metrics.now();
-        self.sks_write_lock().retain(
-            |key_id, _| active_key_ids.contains(key_id),
-            NIDKG_THRESHOLD_SCOPE,
-        );
+        self.sks_write_lock()
+            .retain(
+                |key_id, _| active_key_ids.contains(key_id),
+                NIDKG_THRESHOLD_SCOPE,
+            )
+            .unwrap_or_else(|e| panic!("error retaining threshold keys: {}", e));
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Local,
@@ -220,11 +225,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, 
         };
 
         // Save state
-        self.sks_write_lock().insert_or_replace(
-            key_id,
-            CspSecretKey::FsEncryption(updated_key_set?),
-            Some(NIDKG_FS_SCOPE),
-        );
+        self.sks_write_lock()
+            .insert_or_replace(
+                key_id,
+                CspSecretKey::FsEncryption(updated_key_set?),
+                Some(NIDKG_FS_SCOPE),
+            )
+            .unwrap_or_else(|e| panic!("Error updating forward secure epoch: {}", e));
 
         // FIN
         Ok(())
@@ -375,6 +382,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, 
                 match result {
                     Ok(()) => Ok(()),
                     Err(SecretKeyStoreError::DuplicateKeyId(_key_id)) => Ok(()),
+                    Err(SecretKeyStoreError::PersistenceError(e)) => {
+                        panic!("Error persisting secret key store while loading threshold signing key: {}", e)
+                    }
                 }
             }
             other => Err(ni_dkg_errors::CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(other)),

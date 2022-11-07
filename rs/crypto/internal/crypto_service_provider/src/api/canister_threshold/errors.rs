@@ -1,5 +1,5 @@
 //! Errors encountered during CSP canister threshold signature operations.
-use crate::secret_key_store::SecretKeyStoreError;
+use crate::secret_key_store::{SecretKeyStoreError, SecretKeyStorePersistenceError};
 use crate::KeyId;
 use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaError;
 use ic_types::crypto::AlgorithmId;
@@ -11,8 +11,9 @@ pub enum CspCreateMEGaKeyError {
     UnsupportedAlgorithm { algorithm_id: AlgorithmId },
     FailedKeyGeneration(ThresholdEcdsaError),
     SerializationError(ThresholdEcdsaError),
-    CspServerError { internal_error: String },
+    TransientInternalError { internal_error: String },
     DuplicateKeyId { key_id: KeyId },
+    InternalError { internal_error: String },
 }
 
 impl std::fmt::Display for CspCreateMEGaKeyError {
@@ -33,13 +34,20 @@ impl std::fmt::Display for CspCreateMEGaKeyError {
                 "Error (de)serializing MEGa keypair: Underlying operation failed: {:?}",
                 tecdsa_err
             ),
-            Self::CspServerError { internal_error } => write!(
+            Self::TransientInternalError { internal_error } => write!(
                 f,
-                "Error creating MEGa keypair: CSP server operation failed: {:?}",
+                "Error creating MEGa keypair: Transient internal error: {}",
                 internal_error
             ),
             Self::DuplicateKeyId { key_id } => {
                 write!(f, "A key with ID {} has already been inserted", key_id)
+            }
+            Self::InternalError { internal_error } => {
+                write!(
+                    f,
+                    "Error creating MEGa keypair: Internal error: {}",
+                    internal_error
+                )
             }
         }
     }
@@ -51,6 +59,22 @@ impl From<SecretKeyStoreError> for CspCreateMEGaKeyError {
             SecretKeyStoreError::DuplicateKeyId(key_id) => {
                 CspCreateMEGaKeyError::DuplicateKeyId { key_id }
             }
+            SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(e)) => {
+                CspCreateMEGaKeyError::TransientInternalError {
+                    internal_error: format!(
+                        "Secret key store persistence I/O error while creating MEGa keys: {}",
+                        e
+                    ),
+                }
+            }
+            SecretKeyStoreError::PersistenceError(
+                SecretKeyStorePersistenceError::SerializationError(e),
+            ) => CspCreateMEGaKeyError::InternalError {
+                internal_error: format!(
+                    "Secret key store persistence serialization error while creating MEGa keys: {}",
+                    e
+                ),
+            },
         }
     }
 }

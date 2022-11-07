@@ -5,7 +5,9 @@
 
 use crate::key_id::KeyId;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
-use crate::secret_key_store::{scope::ConstScope, Scope, SecretKeyStore, SecretKeyStoreError};
+use crate::secret_key_store::{
+    scope::ConstScope, Scope, SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+};
 use crate::types::CspSecretKey;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
@@ -23,7 +25,7 @@ mock! {
         fn insert(&mut self, id: KeyId, key: CspSecretKey, scope: Option<Scope>) -> Result<(), SecretKeyStoreError>;
         fn get(&self, id: &KeyId) -> Option<CspSecretKey>;
         fn contains(&self, id: &KeyId) -> bool;
-        fn remove(&mut self, id: &KeyId) -> bool;
+        fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError>;
     }
 }
 
@@ -65,11 +67,11 @@ impl SecretKeyStore for TempSecretKeyStore {
         self.store.contains(id)
     }
 
-    fn remove(&mut self, id: &KeyId) -> bool {
+    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError> {
         self.store.remove(id)
     }
 
-    fn retain<F>(&mut self, filter: F, scope: Scope)
+    fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {
@@ -120,14 +122,14 @@ pub fn should_remove_existing_key<T: SecretKeyStore>(seed1: u64, seed2: u64, mut
         .is_ok());
 
     assert!(key_store.get(&key_id).is_some());
-    assert!(key_store.remove(&key_id));
+    assert!(key_store.remove(&key_id).unwrap());
     assert!(key_store.get(&key_id).is_none());
 }
 
 pub fn should_not_remove_nonexisting_key<T: SecretKeyStore>(seed1: u64, mut key_store: T) {
     let non_existing_key_id: KeyId = make_key_id(seed1);
 
-    assert!(!key_store.remove(&non_existing_key_id));
+    assert!(!key_store.remove(&non_existing_key_id).unwrap());
 }
 
 pub fn deleting_twice_should_return_false<T: SecretKeyStore>(
@@ -140,9 +142,9 @@ pub fn deleting_twice_should_return_false<T: SecretKeyStore>(
 
     assert!(key_store.insert(key_id_1, key_1, None).is_ok());
 
-    assert!(key_store.remove(&key_id_1));
+    assert!(key_store.remove(&key_id_1).unwrap());
     assert!(!key_store.contains(&key_id_1));
-    assert!(!key_store.remove(&key_id_1));
+    assert!(!key_store.remove(&key_id_1).unwrap());
 }
 
 pub fn no_overwrites<T: SecretKeyStore>(seed1: u64, seed2: u64, seed3: u64, mut key_store: T) {
@@ -194,10 +196,12 @@ pub fn should_retain_expected_keys<T: SecretKeyStore>(mut key_store: T) {
 
     let id_to_retain = &key_with_id_to_retain.0;
     let value_to_retain = &key_with_value_to_retain.1;
-    key_store.retain(
-        |id, value| (id == id_to_retain) || (value == value_to_retain),
-        selected_scope,
-    );
+    assert!(key_store
+        .retain(
+            |id, value| (id == id_to_retain) || (value == value_to_retain),
+            selected_scope,
+        )
+        .is_ok());
 
     assert!(
         key_store.contains(&key_with_id_to_retain.0),

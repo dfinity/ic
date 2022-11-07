@@ -96,7 +96,8 @@ fn ensure_node_keys_are_generated_correctly(node_pks: &CurrentNodePublicKeys, no
 fn should_correctly_generate_idkg_dealing_encryption_key() {
     CryptoConfig::run_with_temp_config(|config| {
         let mut csp = csp_for_config(&config, None);
-        let public_key = generate_idkg_dealing_encryption_keys(&mut csp);
+        let public_key = generate_idkg_dealing_encryption_keys(&mut csp)
+            .expect("error generation I-DKG dealing encryption keys");
         assert_eq!(public_key.version, 0);
         assert_eq!(public_key.algorithm, AlgorithmIdProto::MegaSecp256k1 as i32);
         assert!(!public_key.key_value.is_empty());
@@ -573,5 +574,30 @@ mod tls {
             .entries_by_nid(Nid::COMMONNAME)
             .next()
             .unwrap()
+    }
+}
+
+mod idkg {
+    use super::generate_idkg_dealing_encryption_keys;
+    use super::local_csp_in_temp_dir;
+    use crate::IDkgDealingEncryptionKeysGenerationError;
+    use std::fs;
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn should_fail_to_generate_idkg_dealing_encryption_keys_when_crypto_root_dir_write_protected() {
+        let (mut csp, temp_dir) = local_csp_in_temp_dir();
+
+        // make the crypto root directory non-writeable, causing
+        // ic_utils::fs::write_protobuf_using_tmp_file to fail
+        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
+            .expect("Could not set the permissions of the temp dir.");
+
+        assert!(matches!(
+            generate_idkg_dealing_encryption_keys(&mut csp),
+            Err(IDkgDealingEncryptionKeysGenerationError::TransientInternalError(msg))
+            if msg.to_lowercase().contains("secret key store internal error writing protobuf using tmp file: permission denied")
+        ));
     }
 }

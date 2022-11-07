@@ -1,6 +1,6 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::CspSecretKeyStoreChecker;
+use ic_crypto_internal_csp::api::{CspCreateMEGaKeyError, CspSecretKeyStoreChecker};
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::Csp;
@@ -23,6 +23,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
+use ic_interfaces::crypto::ErrorReproducibility;
 
 #[cfg(test)]
 mod tests;
@@ -85,19 +86,46 @@ pub fn generate_dkg_dealing_encryption_keys(
 ///
 /// The secret key is stored in the key store of the provided `csp`, while the corresponding
 /// public key is returned by this function.
+///
+/// # Errors
+/// * `IDkgDealingEncryptionKeysGenerationError::InternalError` if an unrecoverable error occurs
+/// * `IDkgDealingEncryptionKeysGenerationError::TransientInternalError` if a transient error (e.g.,
+///   an RPC timeout, or an error persisting the secret key store) occurs
 pub fn generate_idkg_dealing_encryption_keys(
     csp: &mut dyn CryptoServiceProvider,
-) -> PublicKeyProto {
+) -> Result<PublicKeyProto, IDkgDealingEncryptionKeysGenerationError> {
     let pubkey = csp
         .idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1)
-        .expect("Failed to generate IDkg dealing encryption keys");
+        .map_err(|e| match e {
+            CspCreateMEGaKeyError::TransientInternalError { internal_error } => {
+                IDkgDealingEncryptionKeysGenerationError::TransientInternalError(internal_error)
+            }
+            _ => IDkgDealingEncryptionKeysGenerationError::InternalError(format!("{}", e)),
+        })?;
 
-    PublicKeyProto {
+    Ok(PublicKeyProto {
         version: 0,
         algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
         key_value: pubkey.serialize(),
         proof_data: None,
         timestamp: None,
+    })
+}
+
+#[derive(Debug)]
+pub enum IDkgDealingEncryptionKeysGenerationError {
+    InternalError(String),
+    TransientInternalError(String),
+}
+
+impl ErrorReproducibility for IDkgDealingEncryptionKeysGenerationError {
+    fn is_reproducible(&self) -> bool {
+        match &self {
+            // true, since regular internal errors are treated as reproducible
+            IDkgDealingEncryptionKeysGenerationError::InternalError(_) => true,
+            // false, since by definition, transient errors are non-reproducible
+            IDkgDealingEncryptionKeysGenerationError::TransientInternalError(_) => false,
+        }
     }
 }
 
@@ -152,7 +180,9 @@ pub fn get_node_keys_or_generate_if_missing(
             let dkg_dealing_encryption_public_key =
                 generate_dkg_dealing_encryption_keys(&mut csp, node_id);
             let idkg_dealing_encryption_public_key =
-                generate_idkg_dealing_encryption_keys(&mut csp);
+                generate_idkg_dealing_encryption_keys(&mut csp).unwrap_or_else(|e| {
+                    panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
+                });
             let current_node_public_keys = CurrentNodePublicKeys {
                 node_signing_public_key: Some(node_signing_public_key),
                 committee_signing_public_key: Some(committee_signing_public_key),
@@ -183,7 +213,10 @@ pub fn get_node_keys_or_generate_if_missing(
                 && node_pks.idkg_dealing_encryption_pks.is_empty()
             {
                 let mut csp = csp_for_config(config, tokio_runtime_handle.clone());
-                let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(&mut csp);
+                let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(&mut csp)
+                    .unwrap_or_else(|e| {
+                        panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
+                    });
                 node_pks.idkg_dealing_encryption_pk = Some(idkg_dealing_encryption_pk.clone());
                 node_pks.idkg_dealing_encryption_pks = vec![idkg_dealing_encryption_pk];
                 node_pks.version = 1;
