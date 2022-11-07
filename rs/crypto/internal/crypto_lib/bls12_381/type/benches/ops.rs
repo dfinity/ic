@@ -1,5 +1,6 @@
 use criterion::*;
 use ic_crypto_internal_bls12_381_type::*;
+use paste::paste;
 use rand::Rng;
 
 fn random_g1() -> G1Projective {
@@ -547,11 +548,77 @@ fn pairing_ops(c: &mut Criterion) {
     });
 }
 
+macro_rules! crypto_bls12_381_mul2_precomputation_init {
+    ($group:ident, $projective:ty) => {
+        paste! {
+            fn [< mul2_precomputation_ $group >](c: &mut Criterion) {
+                let mut group =
+                    c.benchmark_group(format!("crypto_bls12_381_mul2_precomputation_{}", stringify!($group)));
+                    let random = [< random_ $group >];
+
+                // range of arguments for generic functions
+                for num_args in (1..=101).step_by(10) {
+                    group.bench_with_input(
+                        BenchmarkId::new("naive", num_args),
+                        &num_args,
+                        |b, &size| {
+                            b.iter_batched_ref(
+                                || (scalar_muln_instance(size), random(), random()),
+                                |((a, b), x, y)| {
+                                    let mut result = Vec::<_>::with_capacity(size);
+                                    for i in 0..a.len() {
+                                        result.push(<$projective>::mul2(x, &a[i], y, &b[i]));
+                                    }
+                                    result
+                                },
+                                BatchSize::SmallInput,
+                            )
+                        },
+                    );
+
+                    group.bench_with_input(
+                        BenchmarkId::new("precomputed", num_args),
+                        &num_args,
+                        |b, &size| {
+                            b.iter_batched_ref(
+                                || {
+                                    (
+                                        scalar_muln_instance(size),
+                                        <$projective>::compute_mul2_tbl(&random(), &random()),
+                                    )
+                                },
+                                |((a, b), tbl)| {
+                                    let mut result = Vec::<_>::with_capacity(size);
+                                    for i in 0..a.len() {
+                                        result.push(tbl.mul2(
+                                            &a[i],
+                                            &b[i],
+                                        ));
+                                    }
+                                    result
+                                },
+                                BatchSize::SmallInput,
+                            )
+                        },
+                    );
+                }
+
+                group.finish()
+            }
+        }
+    };
+}
+
+crypto_bls12_381_mul2_precomputation_init!(g1, G1Projective);
+crypto_bls12_381_mul2_precomputation_init!(g2, G2Projective);
+
 criterion_group!(
     benches,
     bls12_381_scalar_ops,
     bls12_381_g1_ops,
     bls12_381_g2_ops,
-    pairing_ops
+    pairing_ops,
+    mul2_precomputation_g1,
+    mul2_precomputation_g2,
 );
 criterion_main!(benches);

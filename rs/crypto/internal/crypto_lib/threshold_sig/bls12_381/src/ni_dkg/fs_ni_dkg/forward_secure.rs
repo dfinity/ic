@@ -600,12 +600,13 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
 
         for i in 0..receivers {
             let pk = G1Projective::from(&pks[i]);
+            let pk_g1_tbl = G1Projective::compute_mul2_tbl(&pk, &g1);
 
             let mut enc_chunks = Vec::with_capacity(chunks);
 
             for j in 0..chunks {
                 let s = Scalar::from_isize(sij[i][j]);
-                enc_chunks.push(G1Projective::mul2(&pk, &r[j], &g1, &s));
+                enc_chunks.push(pk_g1_tbl.mul2(&r[j], &s));
             }
 
             cc.push(G1Projective::batch_normalize(&enc_chunks));
@@ -618,9 +619,9 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
     let mut zz = Vec::with_capacity(chunks);
 
-    let h = G2Projective::from(&sys.h);
+    let id_h_tbl = G2Projective::compute_mul2_tbl(&id, &G2Projective::from(&sys.h));
     for j in 0..chunks {
-        zz.push(G2Projective::mul2(&id, &r[j], &h, &s[j]))
+        zz.push(id_h_tbl.mul2(&r[j], &s[j]));
     }
 
     let zz = G2Projective::batch_normalize(&zz);
