@@ -19,11 +19,10 @@ use std::fs::{create_dir_all, OpenOptions};
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use tempfile::NamedTempFile;
 
 #[cfg(test)]
 use std::io::BufReader;
-#[cfg(test)]
-use tempfile::NamedTempFile;
 
 use crate::{call_dfx, get_identity, hex_encode_candid, DeployArgs};
 
@@ -158,6 +157,9 @@ impl SnsWasmSnsDeployer {
             .expect("Couldn't decode DeployNewSnsRequest")
         );
 
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        writeln!(temp_file, "{}", request_idl).expect("Failed to write to temp file");
+
         let output = {
             let sns_creation_fee = SNS_CREATION_FEE.to_string();
             let wallet_canister = format!("{}", self.wallet_canister);
@@ -172,7 +174,11 @@ impl SnsWasmSnsDeployer {
                 &sns_creation_fee,
                 &self.sns_wasms_canister,
                 "deploy_new_sns",
-                &request_idl,
+                "--argument-file",
+                temp_file
+                    .path()
+                    .to_str()
+                    .expect("Expected temp file's path to exist"),
             ];
             if let Some(path) = self.args.candid.as_ref() {
                 args.push("--candid");
