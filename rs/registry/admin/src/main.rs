@@ -934,13 +934,13 @@ impl ProposalTitleAndPayload<RetireReplicaVersionPayload> for ProposeToRetireRep
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => {
-                if self.replica_version_ids.len() <= 4 {
+                if self.replica_version_ids.len() == 1 {
                     format!(
-                        "Retire replica versions from commits: {:?}",
-                        self.replica_version_ids
+                        "Retire replica version {}",
+                        self.replica_version_ids.first().unwrap()
                     )
                 } else {
-                    String::from("Retire replica versions from several commits")
+                    String::from("Retire multiple replica versions")
                 }
             }
         }
