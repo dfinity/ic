@@ -110,6 +110,7 @@ impl Request {
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
             | Ok(Method::BitcoinSendTransaction)
+            | Ok(Method::BitcoinSendTransactionInternal)
             | Ok(Method::BitcoinGetSuccessors)
             | Ok(Method::BitcoinGetCurrentFeePercentiles) => {
                 // No effective canister id.

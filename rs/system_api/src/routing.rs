@@ -42,6 +42,7 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::RawRand)
         | Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
         | Ok(Ic00Method::HttpRequest)
+        | Ok(Ic00Method::BitcoinSendTransactionInternal)
         | Ok(Ic00Method::BitcoinGetSuccessors) => Ok(own_subnet.get()),
         // This message needs to be routed to the NNS subnet.  We assume that
         // this message can only be sent by canisters on the NNS subnet hence
