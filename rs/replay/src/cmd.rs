@@ -56,8 +56,13 @@ pub enum SubCommand {
     /// Create a recovery CUP and write it to a file.
     GetRecoveryCup(GetRecoveryCupCmd),
 
-    /// Restore from the backup.
+    /// Restore from the backup. Deprecated.
     RestoreFromBackup(RestoreFromBackupCmd),
+
+    /// Restore from the backup.
+    /// Same as RestoreFromBackup but uses the registry local store from
+    /// the parameter. The other one will be substituted with this.
+    RestoreFromBackup2(RestoreFromBackup2Cmd),
 
     /// The replay will add a test Neuron to the Governance canister
     /// and the corresponding account in the ledger.
@@ -105,6 +110,18 @@ pub struct AddAndBlessReplicaVersionCmd {
 
 #[derive(Clone, Parser)]
 pub struct RestoreFromBackupCmd {
+    /// Registry local store path
+    pub registry_local_store_path: PathBuf,
+    /// Backup spool path
+    pub backup_spool_path: PathBuf,
+    /// The replica version to be restored
+    pub replica_version: String,
+    /// Height from which the restoration should happen
+    pub start_height: u64,
+}
+
+#[derive(Clone, Parser)]
+pub struct RestoreFromBackup2Cmd {
     /// Registry local store path
     pub registry_local_store_path: PathBuf,
     /// Backup spool path

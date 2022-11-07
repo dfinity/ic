@@ -132,6 +132,7 @@ impl Player {
         registry_local_store_path: &Path,
         subnet_id: SubnetId,
         start_height: u64,
+        is_new: bool,
     ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let DataProviderConfig::LocalStore(local_store_from_config) = cfg
@@ -153,8 +154,13 @@ impl Player {
                 records,
             );
         }
+        let local_store_path = if is_new {
+            registry_local_store_path
+        } else {
+            local_store_from_config
+        };
 
-        let data_provider = Arc::new(LocalStoreImpl::new(local_store_from_config));
+        let data_provider = Arc::new(LocalStoreImpl::new(local_store_path));
         let registry = Arc::new(RegistryClientImpl::new(data_provider, None));
         registry
             .poll_once()

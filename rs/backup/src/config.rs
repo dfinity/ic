@@ -25,9 +25,8 @@ fn replica_from_string<'de, D>(deserializer: D) -> Result<ReplicaVersion, D::Err
 where
     D: Deserializer<'de>,
 {
-    let s = String::from(&<String>::deserialize(deserializer)?);
-    let res: ReplicaVersion = s.try_into().map_err(D::Error::custom)?;
-    Ok(res)
+    let s: String = Deserialize::deserialize(deserializer)?;
+    ReplicaVersion::try_from(s).map_err(D::Error::custom)
 }
 
 impl ConfigValidate for Config {
