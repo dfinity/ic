@@ -316,6 +316,7 @@ fn get_account_transactions_ids(args: GetAccountTransactionsArgs) -> Vec<u64> {
 }
 
 pub async fn get_account_transactions(args: GetAccountTransactionsArgs) -> GetTransactionsResult {
+    let oldest_tx_id = get_oldest_txid(&args.account.clone());
     let txids = get_account_transactions_ids(args);
     let mut txs = vec![];
     for txid in &txids {
@@ -357,7 +358,17 @@ pub async fn get_account_transactions(args: GetAccountTransactionsArgs) -> GetTr
     }
     Ok(GetTransactions {
         transactions: txs,
-        oldest_tx_id: txids.get(0).map(|n| Nat::from(*n)),
+        oldest_tx_id,
+    })
+}
+
+fn get_oldest_txid(account: &Account) -> Option<Nat> {
+    with_index(|idx| {
+        idx.account_index
+            .get(&account.owner)?
+            .get(account.effective_subaccount())?
+            .first()
+            .map(|txid| Nat::from(*txid))
     })
 }
 

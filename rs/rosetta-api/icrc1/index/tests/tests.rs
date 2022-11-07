@@ -7,7 +7,7 @@ use ic_icrc1::{
     Account, Block, Memo, Operation, Subaccount, Transaction,
 };
 use ic_icrc1_index::{
-    GetAccountTransactionsArgs, GetTransactionsResult, InitArgs as IndexInitArgs,
+    GetAccountTransactionsArgs, GetTransactions, GetTransactionsResult, InitArgs as IndexInitArgs,
     ListSubaccountsArgs, TransactionWithId,
 };
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
@@ -225,7 +225,7 @@ fn get_account_transactions(
     account: Account,
     start: Option<u64>,
     max_results: u64,
-) -> Vec<TransactionWithId> {
+) -> GetTransactions {
     Decode!(
         &env.execute_ingress_as(
             account.owner,
@@ -244,7 +244,6 @@ fn get_account_transactions(
     )
     .expect("failed to decode get_account_transactions response")
     .expect("failed to get the range of transactions!")
-    .transactions
 }
 
 fn list_subaccounts(
@@ -326,6 +325,8 @@ fn test() {
     env.tick(); // trigger index heartbeat
 
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    assert_eq!(Some(Nat::from(offset)), txs.oldest_tx_id);
+    let txs = txs.transactions;
     assert_eq!(5, txs.len());
     check_burn(5 + offset, account(1), 10000, txs.get(0).unwrap());
     check_transfer(4 + offset, account(2), account(1), 20, txs.get(1).unwrap());
@@ -334,6 +335,8 @@ fn test() {
     check_mint(offset, account(1), 100000, txs.get(4).unwrap());
 
     let txs = get_account_transactions(&env, index_id, account(2), None, u64::MAX);
+    assert_eq!(Some(Nat::from(1 + offset)), txs.oldest_tx_id);
+    let txs = txs.transactions;
     assert_eq!(4, txs.len());
     check_transfer(4 + offset, account(2), account(1), 20, txs.get(0).unwrap());
     check_transfer(3 + offset, account(2), account(1), 10, txs.get(1).unwrap());
@@ -348,11 +351,15 @@ fn test() {
 
     // fetch the more recent transfers
     let txs = get_account_transactions(&env, index_id, account(1), Some(offset + 8), 2);
+    assert_eq!(Some(Nat::from(offset)), txs.oldest_tx_id);
+    let txs = txs.transactions;
     check_transfer(7 + offset, account(1), account(2), 7, txs.get(0).unwrap());
     check_transfer(6 + offset, account(1), account(3), 6, txs.get(1).unwrap());
 
     // // fetch two older transaction by setting a start to the oldest tx id seen
     let txs = get_account_transactions(&env, index_id, account(1), Some(offset + 5), 2);
+    assert_eq!(Some(Nat::from(offset)), txs.oldest_tx_id);
+    let txs = txs.transactions;
     check_burn(5 + offset, account(1), 10000, txs.get(0).unwrap());
     check_transfer(4 + offset, account(2), account(1), 20, txs.get(1).unwrap());
 
@@ -383,6 +390,7 @@ fn test_upgrade() {
         .expect("Failed to upgrade the Index canister");
 
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    let txs = txs.transactions;
     check_mint(0, account(1), 100000, txs.get(1).unwrap());
     check_transfer(1, account(1), account(2), 1, txs.get(0).unwrap());
 }
@@ -413,6 +421,7 @@ fn test_index_archived_txs() {
     let index_id = install_index(&env, ledger_id);
     env.run_until_completion(10_000);
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    let txs = txs.transactions;
     assert_eq!(num_txs, txs.len());
     for idx in 0..(num_txs as u64) {
         assert_eq!(
@@ -456,6 +465,7 @@ fn test_index_archived_txs_paging() {
 
     // check that the index has exactly indexed num_txs transactions
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    let txs = txs.transactions;
     let actual_txids: Vec<u64> = txs.iter().map(|tx| tx.id.0.to_u64().unwrap()).collect();
     let expected_txids: Vec<u64> = (0..ARCHIVE_TRIGGER_THRESHOLD).rev().collect();
     assert_eq!(expected_txids, actual_txids);
