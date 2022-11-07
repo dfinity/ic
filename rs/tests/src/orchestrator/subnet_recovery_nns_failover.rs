@@ -23,11 +23,8 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::canister_http::lib::get_universal_vm_address;
-use crate::driver::driver_setup::{
-    IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
-};
+use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
@@ -80,9 +77,8 @@ pub fn test(env: TestEnv) {
     let topo_broken_ic = env.topology_snapshot_by_name("broken");
     let topo_restore_ic = env.topology_snapshot_by_name("restore");
 
-    let ic_version = IcSetup::read_attribute(&env).initial_replica_version;
-    let ic_version_str = ic_version.to_string();
-    info!(logger, "IC_VERSION_ID: {}", ic_version_str);
+    let ic_version = env.get_initial_replica_version().unwrap();
+    info!(logger, "IC_VERSION_ID: {:?}", ic_version);
 
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);

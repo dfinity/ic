@@ -1,10 +1,8 @@
 use anyhow::{bail, Result};
 use clap::Parser;
 use humantime::parse_duration;
-use ic_types::ReplicaVersion;
 use regex::Regex;
-use std::{convert::TryFrom, net::Ipv6Addr, path::PathBuf, str::FromStr, time::Duration};
-use url::Url;
+use std::{path::PathBuf, str::FromStr, time::Duration};
 
 const RND_SEED_DEFAULT: u64 = 42;
 
@@ -72,77 +70,6 @@ If not provided, a default of the form `$HOSTNAME-<timestamp>` is used, where
     job_id: Option<String>,
 
     #[clap(
-        long = "initial-replica-version",
-        help = r#"
-The initial replica version. This version must match the version of the guest os
-image that the IC is bootstrapped with. If not provided, the default version is
-used."#
-    )]
-    initial_replica_version: String,
-
-    #[clap(
-        long = "ic-os-img-sha256",
-        help = r#"The sha256 hash sum of the IC-OS image."#
-    )]
-    ic_os_img_sha256: String,
-
-    #[clap(
-            long = "ic-os-img-url",
-            help = r#"The URL of the IC-OS disk image used by default for all IC nodes
-            version."#,
-            parse(try_from_str = url::Url::parse)
-        )]
-    ic_os_img_url: Url,
-
-    #[clap(
-        long = "ic-os-update-img-sha256",
-        help = r#"The sha256 hash sum of the IC-OS update image."#
-    )]
-    ic_os_update_img_sha256: String,
-
-    #[clap(
-            long = "ic-os-update-img-url",
-            help = r#"The URL of the IC-OS update disk image used by default for all IC nodes
-            version."#,
-            parse(try_from_str = url::Url::parse)
-        )]
-    ic_os_update_img_url: Url,
-
-    #[clap(
-        long = "boundary-node-img-sha256",
-        help = r#"The SHA-256 hash of the Boundary Node disk image"#
-    )]
-    boundary_node_img_sha256: String,
-
-    #[clap(
-            long = "boundary-node-img-url",
-            help = r#"The URL of the Boundary Node disk image"#,
-            parse(try_from_str = url::Url::parse)
-        )]
-    boundary_node_img_url: Url,
-
-    #[clap(
-        long = "boundary-node-snp-img-sha256",
-        help = r#"The SHA-256 hash of the Boundary Node SNP disk image"#
-    )]
-    boundary_node_snp_img_sha256: String,
-
-    #[clap(
-            long = "boundary-node-snp-img-url",
-            help = r#"The URL of the Boundary Node SNP disk image"#,
-            parse(try_from_str = url::Url::parse)
-        )]
-    boundary_node_snp_img_url: Url,
-
-    #[clap(
-            long = "farm-base-url",
-            help = r#"The base URL of the Farm-service to be used for resource
-            management. (default: https://farm.dfinity.systems)"#,
-            parse(try_from_str = url::Url::parse)
-        )]
-    farm_base_url: Option<Url>,
-
-    #[clap(
         long = "nns-canister-path",
         parse(from_os_str),
         help = r#"Path to directory containing wasm-files of NNS canisters.
@@ -182,19 +109,13 @@ used."#
     )]
     authorized_ssh_accounts: Option<PathBuf>,
 
-    #[clap(
-        long = "journalbeat-hosts",
-        help = r#"A comma-separated list of hostname/port-pairs that journalbeat
- should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
-    )]
-    journalbeat_hosts: Option<String>,
-
+    // TODO: remove this arg, which is anyway ignored, as it is should be passed as /dependencies.
     #[clap(
         long = "log-debug-overrides",
         help = r#"A string containing debug overrides in terms of ic.json5.template
  (e.g. "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors")"#
     )]
-    log_debug_overrides: Option<String>,
+    _log_debug_overrides: Option<String>,
 
     #[clap(
         long = "pot-timeout",
@@ -209,15 +130,6 @@ used."#
         help = "Path to a working directory of the test driver."
     )]
     working_dir: PathBuf,
-
-    #[clap(
-        long = "preferred-network",
-        help = r#"An IPv6 address like "2a00:fb01:400:42:3eec:efff:fe4a:7018".
- When specified, Farm will prefer allocating VMs to hosts which are "closer" to this network.
- Specifically it will order hosts based on how many matching leading bits the host's IPv6 network has
- with this specified preferred-network."#
-    )]
-    preferred_network: Option<Ipv6Addr>,
 }
 
 impl ProcessTestsArgs {
@@ -242,11 +154,6 @@ impl RunTestsArgs {
             bail!("Invalid log level: '{}'!", lvl_str);
         };
 
-        let initial_replica_version = match ReplicaVersion::try_from(self.initial_replica_version) {
-            Ok(v) => v,
-            Err(e) => bail!("Invalid initial replica version id: {}", e),
-        };
-
         let nns_canister_path = if let Some(p) = self.nns_canister_path {
             if !p.is_dir() {
                 bail!("nns-canister-path is not a directory");
@@ -265,43 +172,22 @@ impl RunTestsArgs {
             None
         };
 
-        bail_if_sha256_invalid(&self.ic_os_img_sha256, "ic_os_img")?;
-        bail_if_sha256_invalid(&self.ic_os_update_img_sha256, "ic_os_update_img")?;
-        bail_if_sha256_invalid(&self.boundary_node_img_sha256, "boundary_node_img")?;
-
         let include_pattern = parse_pattern(self.include_pattern)?;
         let skip_pattern = parse_pattern(self.skip_pattern)?;
-
-        let journalbeat_hosts = parse_journalbeat_hosts(self.journalbeat_hosts)?;
-
-        let log_debug_overrides = parse_log_debug_overrides(self.log_debug_overrides)?;
 
         Ok(ValidatedCliRunTestsArgs {
             log_level,
             propagate_test_logs: !self.no_propagate_test_logs,
             rand_seed: self.rand_seed.unwrap_or(RND_SEED_DEFAULT),
             job_id: self.job_id,
-            initial_replica_version,
-            ic_os_img_sha256: self.ic_os_img_sha256,
-            ic_os_img_url: self.ic_os_img_url,
-            ic_os_update_img_sha256: self.ic_os_update_img_sha256,
-            ic_os_update_img_url: self.ic_os_update_img_url,
-            boundary_node_img_sha256: self.boundary_node_img_sha256,
-            boundary_node_img_url: self.boundary_node_img_url,
-            boundary_node_snp_img_sha256: self.boundary_node_snp_img_sha256,
-            boundary_node_snp_img_url: self.boundary_node_snp_img_url,
-            farm_base_url: self.farm_base_url,
             nns_canister_path,
             artifacts_path,
             suite: self.suite,
             include_pattern,
             skip_pattern,
             authorized_ssh_accounts: self.authorized_ssh_accounts,
-            journalbeat_hosts,
-            log_debug_overrides,
             pot_timeout: self.pot_timeout,
             working_dir: self.working_dir,
-            preferred_network: self.preferred_network,
         })
     }
 }
@@ -330,30 +216,17 @@ pub struct ValidatedCliRunTestsArgs {
     pub propagate_test_logs: bool,
     pub rand_seed: u64,
     pub job_id: Option<String>,
-    pub initial_replica_version: ReplicaVersion,
-    pub ic_os_img_sha256: String,
-    pub ic_os_img_url: Url,
-    pub ic_os_update_img_sha256: String,
-    pub ic_os_update_img_url: Url,
-    pub boundary_node_img_sha256: String,
-    pub boundary_node_img_url: Url,
-    pub boundary_node_snp_img_sha256: String,
-    pub boundary_node_snp_img_url: Url,
-    pub farm_base_url: Option<Url>,
     pub nns_canister_path: Option<PathBuf>,
     pub artifacts_path: Option<PathBuf>,
     pub suite: String,
     pub include_pattern: Option<Regex>,
     pub skip_pattern: Option<Regex>,
     pub authorized_ssh_accounts: Option<PathBuf>,
-    pub journalbeat_hosts: Vec<String>,
-    pub log_debug_overrides: Vec<String>,
     pub pot_timeout: Duration,
     pub working_dir: PathBuf,
-    pub preferred_network: Option<Ipv6Addr>,
 }
 
-fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
+pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
     if !(l == 64 || sha256.chars().all(|c| c.is_ascii_hexdigit())) {
         bail!("option '{}': invalid sha256 value: {:?}", opt_name, sha256);
@@ -362,7 +235,7 @@ fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
 }
 
 /// Checks whether the input string as the form [hostname:port{,hostname:port}]
-fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
+pub fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
     const HOST_START: &str = r#"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*"#;
     const HOST_STOP: &str = r#"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])"#;
     const PORT: &str = r#":[[:digit:]]{2,5}$"#;
@@ -382,7 +255,7 @@ fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
     Ok(res)
 }
 
-fn parse_log_debug_overrides(s: Option<String>) -> Result<Vec<String>> {
+pub fn parse_log_debug_overrides(s: Option<String>) -> Result<Vec<String>> {
     let s = match s {
         Some(s) => s,
         None => return Ok(vec![]),

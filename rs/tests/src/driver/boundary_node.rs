@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     driver::{
-        driver_setup::{IcSetup, SSH_AUTHORIZED_PUB_KEYS_DIR},
+        driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
         farm::{CreateVmRequest, Farm, HostFeature, ImageLocation, VMCreateResponse, VmType},
         ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
         resource::{DiskImage, ImageType},
@@ -32,6 +32,7 @@ use reqwest::Url;
 use slog::info;
 use ssh2::Session;
 
+use super::test_env_api::HasIcDependencies;
 // The following default values are the same as for replica nodes
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
@@ -161,11 +162,12 @@ impl BoundaryNode {
     }
 
     pub fn with_snp_boot_img(mut self, env: &TestEnv) -> Self {
-        let ic_setup = IcSetup::read_attribute(env);
+        let boundary_node_snp_img_url = env.get_boundary_node_snp_img_url().unwrap();
+        let boundary_node_snp_img_sha256 = env.get_boundary_node_snp_img_sha256().unwrap();
         let snp_image = DiskImage {
             image_type: ImageType::IcOsImage,
-            url: ic_setup.boundary_node_snp_img_url,
-            sha256: ic_setup.boundary_node_snp_img_sha256,
+            url: boundary_node_snp_img_url,
+            sha256: boundary_node_snp_img_sha256,
         };
 
         self.boot_image = Some(snp_image);
@@ -175,8 +177,10 @@ impl BoundaryNode {
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         let logger = env.logger();
         let pot_setup = GroupSetup::read_attribute(env);
-        let ic_setup = IcSetup::read_attribute(env);
-        let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
+        let farm_url = env.get_farm_url()?;
+        let farm = Farm::new(farm_url, logger.clone());
+        let boundary_node_img_url = env.get_boundary_node_img_url()?;
+        let boundary_node_img_sha256 = env.get_boundary_node_img_sha256()?;
 
         let create_vm_req = CreateVmRequest::new(
             self.name.clone(),
@@ -200,8 +204,8 @@ impl BoundaryNode {
             self.qemu_cli_args.clone(),
             match &self.boot_image {
                 None => {
-                    let url = ic_setup.boundary_node_img_url;
-                    let sha256 = ic_setup.boundary_node_img_sha256;
+                    let url = boundary_node_img_url;
+                    let sha256 = boundary_node_img_sha256;
                     ImageLocation::IcOsImageViaUrl { url, sha256 }
                 }
                 Some(disk_image) => From::from(disk_image.clone()),

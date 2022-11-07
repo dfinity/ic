@@ -13,8 +13,8 @@ use super::farm::{CreateVmRequest, HostFeature};
 use super::farm::{Farm, VmType};
 use super::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
 use super::test_env::{TestEnv, TestEnvAttribute};
+use super::test_env_api::HasIcDependencies;
 use super::test_setup::GroupSetup;
-use crate::driver::driver_setup::IcSetup;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
@@ -135,10 +135,9 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let ic_setup = IcSetup::read_attribute(test_env);
-    let url = ic_setup.ic_os_img_url;
-    let primary_image_sha256 = ic_setup.ic_os_img_sha256;
-    let mut res_req = ResourceRequest::new(ImageType::IcOsImage, url, primary_image_sha256);
+    let ic_os_img_sha256 = test_env.get_ic_os_img_sha256()?;
+    let ic_os_img_url = test_env.get_ic_os_img_url()?;
+    let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
     let pot_setup = GroupSetup::read_attribute(test_env);
     let default_vm_resources = pot_setup.default_vm_resources;
     res_req.group_name = group_name.to_string();

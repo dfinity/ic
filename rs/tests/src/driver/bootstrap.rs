@@ -4,10 +4,10 @@ use std::convert::Into;
 use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
-use crate::driver::driver_setup::IcSetup;
 use crate::driver::farm::FarmResult;
 use crate::driver::ic::{InternetComputer, Node};
-use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
+use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env_api::HasIcDependencies;
 use ic_base_types::NodeId;
 use ic_fondue::ic_instance::{
     node_software_version::NodeSoftwareVersion, port_allocator::AddrType,
@@ -55,16 +55,16 @@ pub fn init_ic(
     // only as a placeholder: Updating individual binaries (replica/orchestrator)
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
-    let ic_setup = IcSetup::read_attribute(test_env);
+    let initial_replica_version = test_env.get_initial_replica_version()?;
     info!(
         logger,
-        "Replica Version that is passed in: {:?}", &ic_setup.initial_replica_version
+        "Replica Version that is passed in: {:?}", &initial_replica_version
     );
     let initial_replica = ic
         .initial_version
         .clone()
         .unwrap_or_else(|| NodeSoftwareVersion {
-            replica_version: ic_setup.initial_replica_version.clone(),
+            replica_version: initial_replica_version,
             // the following are dummy values, these are not used in production
             replica_url: Url::parse("file:///opt/replica").unwrap(),
             replica_hash: dummy_hash.clone(),
@@ -129,6 +129,8 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
+    let ic_os_update_img_url = test_env.get_ic_os_update_img_url()?;
+    let ic_os_update_img_sha256 = test_env.get_ic_os_update_img_sha256()?;
     let ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
@@ -140,8 +142,8 @@ pub fn init_ic(
         /* generate_subnet_records= */
         true,
         nns_subnet_idx,
-        Some(ic_setup.ic_os_update_img_url),
-        Some(ic_setup.ic_os_update_img_sha256),
+        Some(ic_os_update_img_url),
+        Some(ic_os_update_img_sha256),
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
@@ -224,14 +226,10 @@ pub fn create_config_disk_image(
         .base_path()
         .join("dependencies/ic-os/guestos/scripts/build-bootstrap-config-image.sh");
     let mut cmd = Command::new(script_path);
-    let ic_setup = IcSetup::read_attribute(test_env);
-    let journalbeat_hosts: Vec<String> = ic_setup.journalbeat_hosts;
-
     let local_store_path = test_env
         .prep_dir(ic_name)
         .expect("no no name IC")
         .registry_local_store_path();
-
     cmd.arg(img_path.clone())
         .arg("--hostname")
         .arg(node.node_id.to_string())
@@ -248,15 +246,27 @@ pub fn create_config_disk_image(
             .arg(ssh_authorized_pub_keys_dir);
     }
 
+    let journalbeat_hosts: Vec<String> = test_env.get_journalbeat_hosts()?;
+    info!(
+        test_env.logger(),
+        "journal beat hosts are {:?}", journalbeat_hosts
+    );
     if !journalbeat_hosts.is_empty() {
         cmd.arg("--journalbeat_hosts")
             .arg(journalbeat_hosts.join(" "));
     }
-    if !ic_setup.log_debug_overrides.is_empty() {
+
+    let log_debug_overrides: Vec<String> = test_env.get_log_debug_overrides()?;
+
+    info!(
+        test_env.logger(),
+        "log-debug-overrides args are {:?}", log_debug_overrides
+    );
+
+    if !log_debug_overrides.is_empty() {
         let log_debug_overrides_val = format!(
             "[{}]",
-            ic_setup
-                .log_debug_overrides
+            log_debug_overrides
                 .iter()
                 .map(|component_unquoted| format!("\"{}\"", component_unquoted))
                 .collect::<Vec<_>>()

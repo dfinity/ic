@@ -131,7 +131,8 @@
 //! better to let the user select a node.
 //!
 
-use super::driver_setup::{IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR};
+use super::cli::{bail_if_sha256_invalid, parse_journalbeat_hosts, parse_log_debug_overrides};
+use super::driver_setup::{DEFAULT_FARM_BASE_URL, SSH_AUTHORIZED_PRIV_KEYS_DIR};
 use super::test_setup::GroupSetup;
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::new::constants;
@@ -162,12 +163,13 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
-use ic_types::{NodeId, RegistryVersion, SubnetId};
+use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{LedgerCanisterInitPayload, Tokens};
 use slog::{info, warn, Logger};
 use ssh2::Session;
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::future::Future;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
@@ -536,20 +538,98 @@ impl HasRegistryLocalStore for TestEnv {
     }
 }
 
-pub trait HasIcSetup {
-    fn ensure_ic_setup_created(&self);
+pub trait HasIcDependencies {
+    fn get_farm_url(&self) -> Result<Url>;
+    fn get_journalbeat_hosts(&self) -> Result<Vec<String>>;
+    fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
+    fn get_log_debug_overrides(&self) -> Result<Vec<String>>;
+    fn get_ic_os_img_url(&self) -> Result<Url>;
+    fn get_ic_os_img_sha256(&self) -> Result<String>;
+    fn get_ic_os_update_img_url(&self) -> Result<Url>;
+    fn get_ic_os_update_img_sha256(&self) -> Result<String>;
+    fn get_boundary_node_snp_img_url(&self) -> Result<Url>;
+    fn get_boundary_node_snp_img_sha256(&self) -> Result<String>;
+    fn get_boundary_node_img_url(&self) -> Result<Url>;
+    fn get_boundary_node_img_sha256(&self) -> Result<String>;
 }
 
-impl HasIcSetup for TestEnv {
-    fn ensure_ic_setup_created(&self) {
-        let is_ic_setup_existing = self.get_json_path(IcSetup::attribute_name()).exists();
-        // This `if` is executed only for Bazel runs.
-        if !is_ic_setup_existing {
-            let log = self.logger();
-            info!(log, "Creating IcSetup.");
-            let ic_setup = IcSetup::from_bazel_env(self);
-            ic_setup.write_attribute(self);
-        }
+impl<T: HasDependencies> HasIcDependencies for T {
+    fn get_farm_url(&self) -> Result<Url> {
+        let dep_rel_path = "farm_base_url";
+        let url = self
+            .read_dependency_to_string(dep_rel_path)
+            .unwrap_or_else(|_| DEFAULT_FARM_BASE_URL.to_string());
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_journalbeat_hosts(&self) -> Result<Vec<String>> {
+        let dep_rel_path = "journalbeat_hosts";
+        let hosts = self.read_dependency_to_string(dep_rel_path).unwrap_or_else(|_| "elasticsearch-node-0.testnet.dfinity.systems:443,elasticsearch-node-1.testnet.dfinity.systems:443,elasticsearch-node-2.testnet.dfinity.systems:443".to_string());
+        parse_journalbeat_hosts(Some(hosts))
+    }
+
+    fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
+        let dep_rel_path = "ic-os/guestos/dev/ic_version_id";
+        let replica_ver = self.read_dependency_to_string(dep_rel_path)?;
+        Ok(ReplicaVersion::try_from(replica_ver)?)
+    }
+
+    fn get_log_debug_overrides(&self) -> Result<Vec<String>> {
+        let dep_rel_path = "log_debug_overrides";
+        let log_debug_overrides = self.read_dependency_to_string(dep_rel_path).ok();
+        parse_log_debug_overrides(log_debug_overrides)
+    }
+
+    fn get_ic_os_img_url(&self) -> Result<Url> {
+        let dep_rel_path = "ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.url";
+        let url = self.read_dependency_to_string(dep_rel_path)?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_ic_os_img_sha256(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/guestos/dev/disk-img.tar.zst.sha256";
+        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
+        Ok(sha256)
+    }
+
+    fn get_ic_os_update_img_url(&self) -> Result<Url> {
+        let dep_rel_path = "ic-os/guestos/dev/upload_update-img_upgrade.tar.zst.url";
+        let url = self.read_dependency_to_string(dep_rel_path)?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_ic_os_update_img_sha256(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/guestos/dev/upgrade.tar.zst.sha256";
+        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
+        Ok(sha256)
+    }
+
+    fn get_boundary_node_snp_img_url(&self) -> Result<Url> {
+        let dep_rel_path = "ic-os/boundary-guestos/boundary_node_snp_img_url";
+        let result = self.read_dependency_to_string(dep_rel_path)?;
+        Ok(Url::parse(&result)?)
+    }
+
+    fn get_boundary_node_snp_img_sha256(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/boundary-guestos/boundary_node_snp_img_sha256";
+        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        bail_if_sha256_invalid(&sha256, "boundary_node_snp_img_sha256")?;
+        Ok(sha256)
+    }
+
+    fn get_boundary_node_img_url(&self) -> Result<Url> {
+        let dep_rel_path = "ic-os/boundary-guestos/boundary_node_img_url";
+        let url = self.read_dependency_to_string(dep_rel_path)?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_boundary_node_img_sha256(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/boundary-guestos/boundary_node_img_sha256";
+        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        bail_if_sha256_invalid(&sha256, "boundary_node_snp_img_sha256")?;
+        Ok(sha256)
     }
 }
 
@@ -592,7 +672,7 @@ pub trait IcHandleConstructor {
 impl IcHandleConstructor for TestEnv {
     fn ic_handle(&self) -> Result<IcHandle> {
         let pot_setup = GroupSetup::read_attribute(self);
-        let ic_setup = IcSetup::read_attribute(self);
+        let farm_base_url = self.get_farm_url()?;
         let ts = self.topology_snapshot();
 
         let mut nodes = vec![];
@@ -625,7 +705,7 @@ impl IcHandleConstructor for TestEnv {
                 runtime_descriptor: RuntimeDescriptor::Vm(FarmInfo {
                     group_name: pot_setup.farm_group_name.clone(),
                     vm_name: n.node_id.to_string(),
-                    url: ic_setup.farm_base_url.clone(),
+                    url: farm_base_url.clone(),
                 }),
                 is_root_subnet: s.map_or(false, |s| s.subnet_id == root_subnet_id),
             });
@@ -703,9 +783,17 @@ impl HasIcName for IcNodeSnapshot {
 pub trait HasDependencies {
     fn get_dependency_path<P: AsRef<Path>>(&self, p: P) -> PathBuf;
 
-    fn read_dependency_to_string<P: AsRef<Path>>(&self, p: P) -> String {
+    fn read_dependency_to_string<P: AsRef<Path>>(&self, p: P) -> Result<String> {
         let dep_path = self.get_dependency_path(p);
-        std::fs::read_to_string(dep_path).expect("Could not read to string")
+        if dep_path.exists() {
+            let result = fs::read_to_string(&dep_path)
+                .unwrap_or_else(|e| panic!("Couldn't read content of the {dep_path:?} file: {e:?}"))
+                .trim_end()
+                .to_string();
+            Ok(result)
+        } else {
+            Err(anyhow!("Couldn't find dependency {dep_path:?}"))
+        }
     }
 }
 
@@ -1130,8 +1218,8 @@ where
     fn vm(&self) -> Box<dyn VmControl> {
         let env = self.test_env();
         let pot_setup = GroupSetup::read_attribute(&env);
-        let ic_setup = IcSetup::read_attribute(&env);
-        let farm = Farm::new(ic_setup.farm_base_url, env.logger());
+        let farm_base_url = env.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, env.logger());
         Box::new(FarmHostedVm {
             farm,
             group_name: pot_setup.farm_group_name,

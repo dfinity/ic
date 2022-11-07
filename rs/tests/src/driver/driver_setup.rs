@@ -1,20 +1,16 @@
-use crate::driver::test_env::{TestEnv, TestEnvAttribute};
+use crate::driver::test_env::TestEnv;
 use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
 use ic_nns_init::set_up_env_vars_for_all_canisters;
-use ic_types::ReplicaVersion;
 use rand_chacha::{rand_core, ChaCha8Rng};
 use slog::{o, warn, Drain, Logger};
 use std::ffi::OsStr;
-use std::net::Ipv6Addr;
 use std::time::SystemTime;
 use std::{fs, path::PathBuf, time::Duration};
-use url::Url;
 
 use super::cli::ValidatedCliRunTestsArgs;
 use super::farm::Farm;
-use super::test_env_api::HasDependencies;
-use serde::{Deserialize, Serialize};
+use super::test_env_api::HasIcDependencies;
 
 const ASYNC_CHAN_SIZE: usize = 8192;
 pub const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
@@ -22,95 +18,10 @@ pub const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 pub const SSH_AUTHORIZED_PUB_KEYS_DIR: &str = "ssh/authorized_pub_keys";
 pub const SSH_AUTHORIZED_PRIV_KEYS_DIR: &str = "ssh/authorized_priv_keys";
 
-#[derive(Deserialize, Serialize)]
-pub struct IcSetup {
-    pub farm_base_url: Url,
-    pub ic_os_img_url: Url,
-    pub ic_os_img_sha256: String,
-    pub ic_os_update_img_url: Url,
-    pub ic_os_update_img_sha256: String,
-    pub boundary_node_img_url: Url,
-    pub boundary_node_img_sha256: String,
-    pub boundary_node_snp_img_url: Url,
-    pub boundary_node_snp_img_sha256: String,
-    pub journalbeat_hosts: Vec<String>,
-    pub initial_replica_version: ReplicaVersion,
-    pub log_debug_overrides: Vec<String>,
-    pub preferred_network: Option<Ipv6Addr>,
-}
-
-impl Default for IcSetup {
-    fn default() -> IcSetup {
-        Self {
-            farm_base_url: Url::parse(DEFAULT_FARM_BASE_URL).expect(""),
-            ic_os_img_url: Url::parse("http://example.com").expect(""),
-            ic_os_img_sha256: String::default(),
-            ic_os_update_img_url: Url::parse("http://example.com").expect(""),
-            ic_os_update_img_sha256: String::default(),
-            boundary_node_img_url: Url::parse("http://example.com").expect(""),
-            boundary_node_img_sha256: String::default(),
-            boundary_node_snp_img_url: Url::parse("http://example.com").expect(""),
-            boundary_node_snp_img_sha256: String::default(),
-            journalbeat_hosts: Vec::<String>::default(),
-            initial_replica_version: ReplicaVersion::default(),
-            log_debug_overrides: Vec::<String>::default(),
-            preferred_network: None,
-        }
-    }
-}
-
-impl TestEnvAttribute for IcSetup {
-    fn attribute_name() -> String {
-        "ic_setup".to_string()
-    }
-}
-
-impl IcSetup {
-    pub fn from_bazel_env(env: &TestEnv) -> Self {
-        let dependency = |path: &str| -> String {
-            env.read_dependency_to_string(path)
-                .as_str()
-                .trim_end()
-                .to_string()
-        };
-        Self {
-            ic_os_img_url: Url::parse(&dependency(
-                "ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.url",
-            ))
-            .expect("Could not parse ic_os_img_url"),
-            ic_os_img_sha256: dependency("ic-os/guestos/dev/disk-img.tar.zst.sha256"),
-            ic_os_update_img_url: Url::parse(&dependency(
-                "ic-os/guestos/dev/upload_update-img_upgrade.tar.zst.url",
-            ))
-            .expect("Could not parse ic_os_update_img_url"),
-            ic_os_update_img_sha256: dependency("ic-os/guestos/dev/upgrade.tar.zst.sha256"),
-            initial_replica_version: dependency("ic-os/guestos/dev/ic_version_id")
-                .try_into()
-                .expect("cannot get ReplicaVersion"),
-            ..Default::default()
-        }
-    }
-}
-
 pub fn initialize_env(env: &TestEnv, cli_args: ValidatedCliRunTestsArgs) -> Result<()> {
-    let farm_base_url = cli_args
-        .farm_base_url // We should allow this url to be overridden via a FARM_BASE_URL environment variable,
-        .clone() //       and fall back to using DEFAULT_FARM_BASE_URL when FARM_BASE_URL is not set.
-        .unwrap_or_else(|| Url::parse(DEFAULT_FARM_BASE_URL).expect("should not fail!"));
-    if let Some(authorized_ssh_accounts) = cli_args.authorized_ssh_accounts.clone() {
+    if let Some(authorized_ssh_accounts) = cli_args.authorized_ssh_accounts {
         copy_ssh_keys(env, authorized_ssh_accounts)?;
     }
-    let mut ic_setup = IcSetup::from_bazel_env(env);
-    // For now the rest part of the arguments are taken from the CLI.
-    ic_setup.farm_base_url = farm_base_url;
-    ic_setup.boundary_node_img_url = cli_args.boundary_node_img_url;
-    ic_setup.boundary_node_img_sha256 = cli_args.boundary_node_img_sha256;
-    ic_setup.boundary_node_snp_img_url = cli_args.boundary_node_snp_img_url;
-    ic_setup.boundary_node_snp_img_sha256 = cli_args.boundary_node_snp_img_sha256;
-    ic_setup.journalbeat_hosts = cli_args.journalbeat_hosts;
-    ic_setup.log_debug_overrides = cli_args.log_debug_overrides;
-    ic_setup.preferred_network = cli_args.preferred_network;
-    ic_setup.write_attribute(env);
     Ok(())
 }
 
@@ -152,9 +63,7 @@ pub fn create_driver_context_from_cli(
     });
 
     let logger = env.logger();
-    let farm_url = cli_args
-        .farm_base_url
-        .unwrap_or_else(|| Url::parse(DEFAULT_FARM_BASE_URL).expect("should not fail!"));
+    let farm_url = env.get_farm_url().unwrap();
     let rng = rand_core::SeedableRng::seed_from_u64(cli_args.rand_seed);
     let farm = Farm::new(farm_url, logger.clone());
 

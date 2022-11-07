@@ -2,10 +2,11 @@ use std::{panic::catch_unwind, thread::JoinHandle, time::Duration};
 
 use crate::driver::{
     config,
-    driver_setup::{DriverContext, IcSetup},
+    driver_setup::DriverContext,
     farm::{Farm, GroupSpec},
     pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet},
     test_env::{HasTestPath, TestEnv, TestEnvAttribute},
+    test_env_api::HasIcDependencies,
     test_setup::GroupSetup,
 };
 use anyhow::{bail, Result};
@@ -173,8 +174,8 @@ fn create_group_for_pot_and_spawn_keepalive_thread(
     logger: &Logger,
 ) -> Result<(JoinHandle<()>, Sender<()>)> {
     let pot_setup = GroupSetup::read_attribute(env);
-    let ic_setup = IcSetup::read_attribute(env);
-    let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
+    let farm_base_url = env.get_farm_url().unwrap();
+    let farm = Farm::new(farm_base_url, logger.clone());
     info!(logger, "creating group '{}'", &pot_setup.farm_group_name);
     farm.create_group(
         &pot_setup.farm_group_name,
@@ -182,9 +183,8 @@ fn create_group_for_pot_and_spawn_keepalive_thread(
         GroupSpec {
             vm_allocation: pot.vm_allocation.clone(),
             required_host_features: pot.required_host_features.clone(),
-            preferred_network: ic_setup
-                .preferred_network
-                .map(|ipv6| ipv6.to_string() + "/128"),
+            // TODO: retrieve this value dynamically, based on the runner IPv6.
+            preferred_network: None,
         },
     )?;
 

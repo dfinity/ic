@@ -6,15 +6,16 @@ use ic_fondue::{
 };
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    btc_integration, canister_http, ckbtc, consensus, execution, icrc1_agent_test, ledger_tests,
-    message_routing, networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
-    wasm_generator_test, workload_counter_canister_test,
+    btc_integration, canister_http, ckbtc, consensus, driver::driver_setup::initialize_env,
+    execution, icrc1_agent_test, ledger_tests, message_routing, networking, nns_tests,
+    orchestrator, rosetta_test, spec_compliance, tecdsa, wasm_generator_test,
+    workload_counter_canister_test,
 };
 use ic_tests::{
     driver::{
         cli::{CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs},
         config::{self, *},
-        driver_setup::{create_driver_context_from_cli, initialize_env, mk_stdout_logger},
+        driver_setup::{create_driver_context_from_cli, mk_stdout_logger},
         evaluation::{evaluate, generate_suite_execution_contract},
         ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
         pot_dsl::*,

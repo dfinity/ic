@@ -1,4 +1,3 @@
-use super::driver_setup::IcSetup;
 use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use super::farm::Farm;
 use super::farm::HostFeature;
@@ -8,6 +7,7 @@ use super::resource::AllocatedVm;
 use super::resource::{allocate_resources, get_resource_request_for_universal_vm, DiskImage};
 use super::test_env::SshKeyGen;
 use super::test_env::{TestEnv, TestEnvAttribute};
+use super::test_env_api::HasIcDependencies;
 use super::test_env_api::{
     get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, ADMIN,
     READY_WAIT_TIMEOUT, RETRY_BACKOFF,
@@ -86,10 +86,10 @@ impl UniversalVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let ic_setup = IcSetup::read_attribute(env);
+        let farm_base_url = env.get_farm_url()?;
         let pot_setup = GroupSetup::read_attribute(env);
         let logger = env.logger();
-        let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
+        let farm = Farm::new(farm_base_url, logger.clone());
         let res_request =
             get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.farm_group_name)?;
         let resource_group = allocate_resources(&farm, &res_request)?;
