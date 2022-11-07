@@ -135,6 +135,10 @@
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "cargo-audit"'
 
+.rules-dependency-scan-schedule:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dependency-scan-nightly"'
+
 .rules-benchmarks-schedule:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "benchmarks"'

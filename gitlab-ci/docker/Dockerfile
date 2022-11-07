@@ -92,7 +92,7 @@ RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1
 RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml paramiko \
     python-gitlab libhoney termcolor pygithub python-dateutil elasticsearch elasticsearch-dsl freezegun \
     jsonschema mypy pylint pytest-shutil pyyaml xmltodict pytest==5.4.3 codeowners jira toml aenum cvss pytest-cov \
-    requests==2.27.1 urllib3==1.26.8
+    requests==2.27.1 urllib3==1.26.8 parse
 
 ARG didc_release_date=2022-01-06
 RUN curl --fail \
