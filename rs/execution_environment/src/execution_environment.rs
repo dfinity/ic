@@ -893,7 +893,7 @@ impl ExecutionEnvironment {
             }
             .map(|payload| (payload, msg.take_cycles())),
 
-            Err(ParseError::VariantNotFound) => {
+            Ok(Ic00Method::BitcoinSendTransactionInternal) | Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
                     format!("Management canister has no method '{}'", msg.method_name()),

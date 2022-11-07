@@ -1941,6 +1941,7 @@ fn get_instructions_limits_for_subnet_message(
             | BitcoinGetBalance
             | BitcoinGetUtxos
             | BitcoinSendTransaction
+            | BitcoinSendTransactionInternal
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | ProvisionalCreateCanisterWithCycles
@@ -1965,6 +1966,7 @@ fn is_bitcoin_request(msg: &CanisterInputMessage) -> bool {
                 BitcoinGetBalance
                 | BitcoinGetUtxos
                 | BitcoinSendTransaction
+                | BitcoinSendTransactionInternal
                 | BitcoinGetSuccessors
                 | BitcoinGetCurrentFeePercentiles => true,
                 CanisterStatus
