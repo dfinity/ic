@@ -4,8 +4,11 @@ use super::*;
 use crate::common::test_utils::{CryptoRegistryKey, CryptoRegistryRecord};
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_internal_csp::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+use ic_crypto_internal_csp::public_key_store::PublicKeyStore;
 use ic_crypto_internal_csp::secret_key_store::SecretKeyStore;
 use ic_crypto_internal_csp::types::CspSecretKey;
+use ic_crypto_internal_csp_test_utils::public_key_store::MockPublicKeyStore;
 use ic_crypto_internal_csp_test_utils::secret_key_store_test_utils::{
     MockSecretKeyStore, TempSecretKeyStore,
 };
@@ -129,6 +132,10 @@ pub fn secret_key_store_with(key_id: KeyId, secret_key: CspSecretKey) -> impl Se
     temp_store
 }
 
+pub fn temp_public_key_store() -> TempPublicKeyStore {
+    TempPublicKeyStore::new()
+}
+
 pub fn to_new_registry_record(
     record: &CryptoRegistryRecord,
 ) -> (String, RegistryVersion, PublicKeyProto) {
@@ -210,6 +217,10 @@ pub fn secret_key_store_panicking_on_usage() -> impl SecretKeyStore {
     sks.expect_contains().never();
     sks.expect_remove().never();
     sks
+}
+
+pub fn public_key_store() -> impl PublicKeyStore {
+    MockPublicKeyStore::new()
 }
 
 #[test]

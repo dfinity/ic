@@ -1,6 +1,7 @@
 //! Tests of Basic Signature operations in the CSP vault.
 use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::key_id::KeyId;
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::vault::api::{BasicSignatureCspVault, CspBasicSignatureError};
@@ -44,7 +45,7 @@ fn should_correctly_sign_compared_to_testvec() {
             .expect("failed to insert key into SKS");
 
         let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-        LocalCspVault::new_for_test(csprng, key_store)
+        LocalCspVault::new_for_test(csprng, key_store, TempPublicKeyStore::new())
     };
 
     assert_eq!(
@@ -81,9 +82,10 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
     let mut rng = thread_rng();
 
     let csp_vault = {
-        let key_store = TempSecretKeyStore::new();
+        let secret_key_store = TempSecretKeyStore::new();
+        let public_key_store = TempPublicKeyStore::new();
         let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-        LocalCspVault::new_for_test(csprng, key_store)
+        LocalCspVault::new_for_test(csprng, secret_key_store, public_key_store)
     };
 
     let threshold = NumberOfNodes::from(1);

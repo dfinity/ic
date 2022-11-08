@@ -1,3 +1,4 @@
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
 use crate::threshold::ni_dkg::specialise;
 use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
@@ -29,8 +30,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspVault
-    for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore> NiDkgCspVault
+    for LocalCspVault<R, S, C, P>
 {
     fn gen_forward_secure_key_pair(
         &self,
@@ -181,7 +182,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> NiDkgCspVault
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
     fn update_forward_secure_epoch_internal(
         &self,
         algorithm_id: AlgorithmId,

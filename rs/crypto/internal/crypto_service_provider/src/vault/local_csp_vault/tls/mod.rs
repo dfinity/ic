@@ -1,5 +1,6 @@
 //! TLS handshake operations provided by the CSP vault
 use crate::key_id::KeyId;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
@@ -20,8 +21,8 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> TlsHandshakeCspVault
-    for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    TlsHandshakeCspVault for LocalCspVault<R, S, C, P>
 {
     fn gen_tls_key_pair(
         &self,
@@ -93,7 +94,9 @@ fn ed25519_secret_key_bytes_from_der(
     ))
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
     fn store_tls_secret_key(
         &self,
         cert: &TlsPublicKeyCert,

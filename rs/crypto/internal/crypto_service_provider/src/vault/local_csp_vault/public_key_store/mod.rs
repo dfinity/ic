@@ -3,14 +3,15 @@ use crate::vault::api::{CspPublicKeyStoreError, PublicKeyStoreCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::SecretKeyStore;
 
+use crate::public_key_store::PublicKeyStore;
 use ic_types::crypto::CurrentNodePublicKeys;
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> PublicKeyStoreCspVault
-    for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    PublicKeyStoreCspVault for LocalCspVault<R, S, C, P>
 {
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
         Err(CspPublicKeyStoreError::TransientInternalError(

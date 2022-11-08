@@ -28,7 +28,10 @@ use crate::api::{
     CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspTlsHandshakeSignerProvider,
     NiDkgCspClient, NodePublicKeyData, ThresholdSignatureCspClient,
 };
-use crate::public_key_store::read_node_public_keys;
+use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+use crate::public_key_store::{read_node_public_keys, PublicKeyStore};
+use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::CspVault;
@@ -51,6 +54,8 @@ use std::time::Instant;
 mod tests;
 
 const SKS_DATA_FILENAME: &str = "sks_data.pb";
+// TODO CRP-1721: this duplicates constant ic-crypto-internal-csp::PK_DATA_FILENAME
+const PUBLIC_KEY_STORE_DATA_FILENAME: &str = "public_keys.pb";
 const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
 
 /// Describes the interface of the crypto service provider (CSP), e.g. for
@@ -153,6 +158,12 @@ impl<T> CspRwLock<T> {
         Self::new(content, "canister_secret_key_store".to_string(), metrics)
     }
 
+    pub fn new_for_public_key_store(content: T, metrics: Arc<CryptoMetrics>) -> Self {
+        // Note: The name will appear on metric dashboards and may be used in alerts, do
+        // not change this unless you are also updating the monitoring.
+        Self::new(content, "public_key_store".to_string(), metrics)
+    }
+
     fn new(content: T, lock_name: String, metrics: Arc<CryptoMetrics>) -> Self {
         Self {
             name: lock_name,
@@ -227,9 +238,12 @@ impl Csp {
             CANISTER_SKS_DATA_FILENAME,
             Some(new_logger!(&logger)),
         );
+        let public_key_store =
+            ProtoPublicKeyStore::open(&config.crypto_root, PUBLIC_KEY_STORE_DATA_FILENAME);
         let csp_vault = Arc::new(LocalCspVault::new(
             secret_key_store,
             canister_key_store,
+            public_key_store,
             metrics,
             new_logger!(&logger),
         ));
@@ -295,6 +309,7 @@ impl Csp {
             csp_vault: Arc::new(LocalCspVault::new_for_test(
                 csprng,
                 ProtoSecretKeyStore::open(&config.crypto_root, SKS_DATA_FILENAME, None),
+                ProtoPublicKeyStore::open(&config.crypto_root, PUBLIC_KEY_STORE_DATA_FILENAME),
             )),
             logger: no_op_logger(),
         }
@@ -334,17 +349,35 @@ impl Csp {
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
     /// key store and the canister secret key store is not guaranteed.
-    pub fn of<R: Rng + CryptoRng + Send + Sync + 'static, S: SecretKeyStore + 'static>(
+    pub fn of<
+        R: Rng + CryptoRng + Send + Sync + 'static,
+        S: SecretKeyStore + 'static,
+        P: PublicKeyStore + 'static,
+    >(
         csprng: R,
         secret_key_store: S,
+        public_key_store: P,
     ) -> Self {
         let node_public_keys: NodePublicKeys = Default::default();
         let public_key_data =
             PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
         Csp {
             public_key_data,
-            csp_vault: Arc::new(LocalCspVault::new_for_test(csprng, secret_key_store)),
+            csp_vault: Arc::new(LocalCspVault::new_for_test(
+                csprng,
+                secret_key_store,
+                public_key_store,
+            )),
             logger: no_op_logger(),
         }
+    }
+
+    // TODO CRP-1760: document + try with TempSecretKeyStore instead of VolatileSecretKeyStore
+    pub fn with_rng<R: Rng + CryptoRng + Send + Sync + 'static>(rng: R) -> Self {
+        Csp::of(
+            rng,
+            VolatileSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
+        )
     }
 }

@@ -1,5 +1,7 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
+use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
@@ -14,7 +16,9 @@ use crate::vault::api::{
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::remote_csp_vault::TarpcCspVault;
-use crate::{SecretKeyStore, CANISTER_SKS_DATA_FILENAME, SKS_DATA_FILENAME};
+use crate::{
+    SecretKeyStore, CANISTER_SKS_DATA_FILENAME, PUBLIC_KEY_STORE_DATA_FILENAME, SKS_DATA_FILENAME,
+};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
@@ -57,8 +61,13 @@ use tokio::net::UnixListener;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
 /// Crypto service provider (CSP) vault server based on the tarpc RPC framework.
-pub struct TarpcCspVaultServerImpl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
-    local_csp_vault: Arc<LocalCspVault<R, S, C>>,
+pub struct TarpcCspVaultServerImpl<
+    R: Rng + CryptoRng,
+    S: SecretKeyStore,
+    C: SecretKeyStore,
+    P: PublicKeyStore,
+> {
+    local_csp_vault: Arc<LocalCspVault<R, S, C, P>>,
     listener: UnixListener,
     thread_pool: ThreadPool,
     #[allow(unused)]
@@ -72,8 +81,13 @@ pub struct TarpcCspVaultServerImpl<R: Rng + CryptoRng, S: SecretKeyStore, C: Sec
 /// creates a pool handle whose behavior is similar to `Arc`][1].
 ///
 /// [1]: https://docs.rs/threadpool/1.8.1/threadpool/struct.ThreadPool.html#impl-Clone
-struct TarpcCspVaultServerWorker<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
-    local_csp_vault: Arc<LocalCspVault<R, S, C>>,
+struct TarpcCspVaultServerWorker<
+    R: Rng + CryptoRng,
+    S: SecretKeyStore,
+    C: SecretKeyStore,
+    P: PublicKeyStore,
+> {
+    local_csp_vault: Arc<LocalCspVault<R, S, C, P>>,
     thread_pool_handle: ThreadPool,
 }
 
@@ -100,8 +114,8 @@ where
     rx.await.expect("the sender was dropped")
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> Clone
-    for TarpcCspVaultServerWorker<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore> Clone
+    for TarpcCspVaultServerWorker<R, S, C, P>
 {
     fn clone(&self) -> Self {
         Self {
@@ -116,7 +130,8 @@ impl<
         R: Rng + CryptoRng + Send + Sync + 'static,
         S: SecretKeyStore + 'static,
         C: SecretKeyStore + 'static,
-    > TarpcCspVault for TarpcCspVaultServerWorker<R, S, C>
+        P: PublicKeyStore + 'static,
+    > TarpcCspVault for TarpcCspVaultServerWorker<R, S, C, P>
 {
     // `BasicSignatureCspVault`-methods.
     async fn sign(
@@ -493,23 +508,26 @@ impl<
     }
 }
 
-impl TarpcCspVaultServerImpl<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
+impl TarpcCspVaultServerImpl<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore> {
     pub fn new(
-        sks_dir: &Path,
+        key_store_dir: &Path,
         listener: UnixListener,
         logger: ReplicaLogger,
         metrics: Arc<CryptoMetrics>,
     ) -> Self {
         let node_secret_key_store =
-            ProtoSecretKeyStore::open(sks_dir, SKS_DATA_FILENAME, Some(new_logger!(&logger)));
+            ProtoSecretKeyStore::open(key_store_dir, SKS_DATA_FILENAME, Some(new_logger!(&logger)));
         let canister_secret_key_store = ProtoSecretKeyStore::open(
-            sks_dir,
+            key_store_dir,
             CANISTER_SKS_DATA_FILENAME,
             Some(new_logger!(&logger)),
         );
+        let public_key_store =
+            ProtoPublicKeyStore::open(key_store_dir, PUBLIC_KEY_STORE_DATA_FILENAME);
         let local_csp_server = Arc::new(LocalCspVault::new(
             node_secret_key_store,
             canister_secret_key_store,
+            public_key_store,
             metrics,
             new_logger!(&logger),
         ));
@@ -517,20 +535,22 @@ impl TarpcCspVaultServerImpl<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> TarpcCspVaultServerImpl<R, S, C> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    TarpcCspVaultServerImpl<R, S, C, P>
+{
     /// Creates a remote CSP vault server for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
     /// key store is not guaranteed.
     pub fn new_for_test(
-        local_csp_vault: Arc<LocalCspVault<R, S, C>>,
+        local_csp_vault: Arc<LocalCspVault<R, S, C, P>>,
         listener: UnixListener,
     ) -> Self {
         Self::new_with_local_csp_vault(local_csp_vault, listener, no_op_logger())
     }
 
     fn new_with_local_csp_vault(
-        local_csp_vault: Arc<LocalCspVault<R, S, C>>,
+        local_csp_vault: Arc<LocalCspVault<R, S, C, P>>,
         listener: UnixListener,
         logger: ReplicaLogger,
     ) -> Self {
@@ -550,7 +570,8 @@ impl<
         R: Rng + CryptoRng + Send + Sync + 'static,
         S: SecretKeyStore + Send + Sync + 'static,
         C: SecretKeyStore + Send + Sync + 'static,
-    > TarpcCspVaultServerImpl<R, S, C>
+        P: PublicKeyStore + 'static,
+    > TarpcCspVaultServerImpl<R, S, C, P>
 {
     pub async fn run(self) {
         // Wrap data in telegrams with a length header.

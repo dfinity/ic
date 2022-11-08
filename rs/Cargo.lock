@@ -4999,6 +4999,7 @@ dependencies = [
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-logger",
+ "ic-protobuf",
  "ic-types",
  "ic-types-test-utils",
  "mockall 0.7.2",

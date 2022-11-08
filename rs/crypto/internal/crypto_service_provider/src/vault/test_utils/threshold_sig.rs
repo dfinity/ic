@@ -1,5 +1,6 @@
 use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
 use crate::key_id::KeyId;
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::vault::api::CspVault;
@@ -86,9 +87,10 @@ pub fn test_threshold_signatures(
     }
     // Verify each individual signature:
     let verifier = {
-        let dummy_key_store = TempSecretKeyStore::new();
+        let dummy_secret_key_store = TempSecretKeyStore::new();
+        let dummy_public_key_store = TempPublicKeyStore::new();
         let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-        Csp::of(csprng, dummy_key_store)
+        Csp::of(csprng, dummy_secret_key_store, dummy_public_key_store)
     };
     for (index, signature) in signatures.iter().enumerate() {
         let public_key = match verifier.threshold_individual_public_key(

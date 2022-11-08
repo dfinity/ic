@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::keygen::fixtures::multi_bls_test_vector;
-use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
+use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
@@ -17,7 +17,7 @@ mod gen_key_pair_tests {
 
     #[test]
     fn should_correctly_generate_ed25519_keys() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
         let public_key = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
         let key_id = KeyId::from(&public_key);
 
@@ -39,7 +39,7 @@ mod gen_key_pair_tests {
     fn should_correctly_generate_multi_bls12_381_keys() {
         let test_vector = multi_bls_test_vector();
         let csprng = csprng_seeded_with(test_vector.seed);
-        let csp = Csp::of(csprng, volatile_key_store());
+        let csp = Csp::with_rng(csprng);
         let public_key = csp.gen_key_pair(AlgorithmId::MultiBls12_381).unwrap();
         let key_id = KeyId::from(&public_key);
 
@@ -50,7 +50,7 @@ mod gen_key_pair_tests {
     #[test]
     fn should_fail_generating_keys_for_unsupported_algorithms() {
         let supported_algorithm_ids = vec![AlgorithmId::Ed25519, AlgorithmId::MultiBls12_381];
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
 
         for algorithm_id in all_algorithm_ids() {
             if !supported_algorithm_ids.contains(&algorithm_id) {
@@ -67,6 +67,7 @@ mod gen_key_pair_tests {
         let csp = Csp::of(
             rng(),
             secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
+            MockPublicKeyStore::new(),
         );
 
         let _ = csp.gen_key_pair(AlgorithmId::Ed25519);
@@ -80,7 +81,7 @@ mod gen_key_pair_with_pop_tests {
     fn should_correctly_generate_multi_bls12_381_keys() {
         let test_vector = multi_bls_test_vector();
         let csprng = csprng_seeded_with(test_vector.seed);
-        let csp = Csp::of(csprng, volatile_key_store());
+        let csp = Csp::with_rng(csprng);
         let (public_key, pop) = csp
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .unwrap();
@@ -94,7 +95,7 @@ mod gen_key_pair_with_pop_tests {
     #[test]
     fn should_fail_generating_keys_for_unsupported_algorithms() {
         let supported_algorithm_ids = vec![AlgorithmId::MultiBls12_381];
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
 
         for algorithm_id in all_algorithm_ids() {
             if !supported_algorithm_ids.contains(&algorithm_id) {
@@ -113,6 +114,7 @@ mod gen_key_pair_with_pop_tests {
         let csp = Csp::of(
             rng(),
             secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
+            MockPublicKeyStore::new(),
         );
 
         let _ = csp.gen_key_pair_with_pop(AlgorithmId::MultiBls12_381);
@@ -133,7 +135,7 @@ mod idkg_create_mega_key_pair_tests {
     fn should_correctly_create_mega_key_pair() {
         let test_vector = mega_test_vector();
         let csprng = csprng_seeded_with(test_vector.seed);
-        let csp = Csp::of(csprng, volatile_key_store());
+        let csp = Csp::with_rng(csprng);
         let public_key = csp
             .idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1)
             .expect("failed creating MEGa key pair");
@@ -144,7 +146,7 @@ mod idkg_create_mega_key_pair_tests {
     #[test]
     fn should_fail_generating_keys_for_unsupported_algorithms() {
         let supported_algorithm_ids = vec![AlgorithmId::ThresholdEcdsaSecp256k1];
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
 
         for algorithm_id in all_algorithm_ids() {
             if !supported_algorithm_ids.contains(&algorithm_id) {
@@ -166,6 +168,7 @@ mod idkg_create_mega_key_pair_tests {
         let csp = Csp::of(
             rng(),
             secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
+            MockPublicKeyStore::new(),
         );
 
         let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -178,7 +181,11 @@ mod idkg_create_mega_key_pair_tests {
 
     #[test]
     fn should_handle_serialization_failure_upon_insert() {
-        let csp = Csp::of(rng(), secret_key_store_with_serialization_error_on_insert());
+        let csp = Csp::of(
+            rng(),
+            secret_key_store_with_serialization_error_on_insert(),
+            MockPublicKeyStore::new(),
+        );
 
         let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
 
@@ -190,7 +197,11 @@ mod idkg_create_mega_key_pair_tests {
 
     #[test]
     fn should_handle_io_error_upon_insert() {
-        let csp = Csp::of(rng(), secret_key_store_with_io_error_on_insert());
+        let csp = Csp::of(
+            rng(),
+            secret_key_store_with_io_error_on_insert(),
+            MockPublicKeyStore::new(),
+        );
 
         let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
 
@@ -243,10 +254,6 @@ fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng {
     ChaCha20Rng::seed_from_u64(seed)
 }
 
-fn volatile_key_store() -> VolatileSecretKeyStore {
-    VolatileSecretKeyStore::new()
-}
-
 mod tls {
     use super::*;
     use openssl::x509::X509VerifyResult;
@@ -263,6 +270,7 @@ mod tls {
         let csp = Csp::of(
             rng(),
             secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
+            MockPublicKeyStore::new(),
         );
 
         let _ = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
@@ -270,7 +278,7 @@ mod tls {
 
     #[test]
     fn should_return_der_encoded_self_signed_certificate() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -284,7 +292,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_subject_cn_as_node_id() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -299,7 +307,7 @@ mod tls {
 
     #[test]
     fn should_use_stable_node_id_string_representation_as_subject_cn() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -311,7 +319,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_issuer_cn_as_node_id() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -329,7 +337,7 @@ mod tls {
 
     #[test]
     fn should_not_set_cert_subject_alt_name() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -341,7 +349,7 @@ mod tls {
 
     #[test]
     fn should_set_random_cert_serial_number() {
-        let csp = Csp::of(csprng_seeded_with(FIXED_SEED), volatile_key_store());
+        let csp = Csp::with_rng(csprng_seeded_with(FIXED_SEED));
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -355,7 +363,7 @@ mod tls {
 
     #[test]
     fn should_set_different_serial_numbers_for_multiple_certs() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
 
         const SAMPLE_SIZE: usize = 20;
         let mut serial_samples = BTreeSet::new();
@@ -370,7 +378,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_not_after_correctly() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
         let not_after = NOT_AFTER;
 
         let cert = csp
@@ -382,7 +390,7 @@ mod tls {
 
     #[test]
     fn should_panic_on_invalid_not_after_date() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
         let invalid_not_after = "invalid_not_after_date";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
@@ -395,7 +403,7 @@ mod tls {
 
     #[test]
     fn should_panic_if_not_after_date_is_in_the_past() {
-        let csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::with_rng(rng());
         let date_in_the_past = "20211004235959Z";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);

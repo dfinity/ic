@@ -2,7 +2,6 @@
 pub mod cache;
 
 use super::*;
-use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
@@ -57,9 +56,10 @@ impl MockNode {
     }
     pub fn from_node_id(rng: &mut ChaCha20Rng, node_id: NodeId) -> Self {
         let csprng = ChaCha20Rng::from_seed(rng.gen::<[u8; 32]>());
-        let csp = Csp::of(csprng, VolatileSecretKeyStore::new());
+        let csp = Csp::with_rng(csprng);
         Self { node_id, csp }
     }
+
     /// Deal, resharing or not.
     #[allow(clippy::too_many_arguments)]
     pub fn create_dealing(

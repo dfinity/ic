@@ -3,6 +3,8 @@
 // TODO(CRP-1255): add tests with multiple clients.
 // TODO(CRP-1259): add tests with timeouts.
 
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::vault::api::CspVault;
 use crate::vault::remote_csp_vault::TarpcCspVaultServerImpl;
@@ -30,9 +32,10 @@ fn new_remote_csp_vault_with_local_csp_vault<
     R: Rng + CryptoRng + Send + Sync + 'static,
     S: SecretKeyStore + 'static,
     C: SecretKeyStore + 'static,
+    P: PublicKeyStore + 'static,
 >(
     rt_handle: &tokio::runtime::Handle,
-    local_csp_vault: Arc<LocalCspVault<R, S, C>>,
+    local_csp_vault: Arc<LocalCspVault<R, S, C, P>>,
 ) -> Arc<dyn CspVault> {
     let (socket_path, sks_dir, listener) = setup_listener(rt_handle);
     let server = TarpcCspVaultServerImpl::new_for_test(local_csp_vault, listener);
@@ -386,9 +389,11 @@ mod tls_keygen {
     fn should_set_random_cert_serial_number() {
         let local_csp_vault = {
             let key_store = TempSecretKeyStore::new();
+            let public_key_store = TempPublicKeyStore::new();
             LocalCspVault::new_for_test(
                 test_utils::tls::csprng_seeded_with(test_utils::tls::FIXED_SEED),
                 key_store,
+                public_key_store,
             )
         };
         let tokio_rt = new_tokio_runtime();

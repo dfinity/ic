@@ -7,6 +7,11 @@ use std::path::Path;
 
 pub mod proto_pubkey_store;
 
+pub mod temp_pubkey_store;
+
+#[cfg(test)]
+pub mod mock_pubkey_store;
+
 const PK_DATA_FILENAME: &str = "public_keys.pb";
 
 /// Error while reading or writing public keys
@@ -47,7 +52,7 @@ pub enum PublicKeySetOnceError {
 ///
 /// If errors occur regarding reading from or writing to disk,
 /// the methods generally return an error rather than panic.
-pub trait PublicKeyStore {
+pub trait PublicKeyStore: Send + Sync {
     /// Sets the node signing public key.
     ///
     /// Returns an error if a key is already set, or if writing to disk fails.

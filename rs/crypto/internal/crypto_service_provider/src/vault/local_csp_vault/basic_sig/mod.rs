@@ -1,5 +1,6 @@
 //! Basic Signature operations provided by the CSP vault.
 use crate::key_id::KeyId;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use crate::vault::api::{
@@ -14,8 +15,8 @@ use rand::{CryptoRng, Rng};
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> BasicSignatureCspVault
-    for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    BasicSignatureCspVault for LocalCspVault<R, S, C, P>
 {
     fn sign(
         &self,
@@ -52,7 +53,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> BasicSignatureCsp
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
     fn sign_internal(
         &self,
         algorithm_id: AlgorithmId,

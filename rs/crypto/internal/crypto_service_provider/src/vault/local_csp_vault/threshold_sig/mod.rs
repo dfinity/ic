@@ -1,5 +1,6 @@
 use crate::api::CspThresholdSignError;
 use crate::key_id::KeyId;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::types::{CspSignature, ThresBls12_381_Signature};
@@ -54,8 +55,8 @@ impl From<CspThresholdSignatureKeygenError> for CryptoError {
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatureCspVault
-    for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    ThresholdSignatureCspVault for LocalCspVault<R, S, C, P>
 {
     /// See the trait for documentation.
     ///
@@ -113,7 +114,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatur
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
     fn threshold_sign_internal(
         &self,
         algorithm_id: AlgorithmId,

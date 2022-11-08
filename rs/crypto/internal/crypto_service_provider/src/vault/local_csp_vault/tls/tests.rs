@@ -8,6 +8,7 @@ use ic_types_test_utils::ids::node_test_id;
 mod keygen {
     use super::*;
     use crate::key_id::KeyId;
+    use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
     use crate::vault::api::CspTlsKeygenError;
     use crate::vault::local_csp_vault::LocalCspVault;
     use crate::vault::test_utils::local_csp_vault::{
@@ -63,10 +64,12 @@ mod keygen {
     #[test]
     fn should_set_random_cert_serial_number() {
         let csp_vault = {
-            let key_store = TempSecretKeyStore::new();
+            let secret_key_store = TempSecretKeyStore::new();
+            let public_key_store = TempPublicKeyStore::new();
             LocalCspVault::new_for_test(
                 test_utils::tls::csprng_seeded_with(test_utils::tls::FIXED_SEED),
-                key_store,
+                secret_key_store,
+                public_key_store,
             )
         };
         test_utils::tls::should_set_random_cert_serial_number(Arc::new(csp_vault));

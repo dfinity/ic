@@ -3,15 +3,6 @@
 use crate::secret_key_store::test_utils::{make_key_id, make_secret_key};
 use crate::secret_key_store::SecretKeyStore;
 use crate::vault::local_csp_vault::test_utils::temp_local_csp_server::TempLocalCspVault;
-#[test]
-#[should_panic(
-    expected = "The node secret-key-store and the canister secret-key-store must use different files"
-)]
-fn should_panic_if_sks_and_csks_coincide() {
-    let temp_file = "temp_sks_data.pb";
-
-    TempLocalCspVault::new_from_store_files(temp_file, temp_file);
-}
 
 #[test]
 fn should_have_separate_sks_and_canister_sks() {
