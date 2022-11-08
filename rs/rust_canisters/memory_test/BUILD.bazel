@@ -58,6 +58,8 @@ rust_test(
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
+    # TODO(EXC-1289)
+    flaky = True,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
