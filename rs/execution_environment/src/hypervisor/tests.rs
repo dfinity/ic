@@ -4062,9 +4062,10 @@ fn dts_pause_resume_works_in_update_call() {
         .append_and_reply()
         .build();
 
-    // The workload above finishes in 5 slices.
+    // The workload above finishes in 6 slices.
+    // TODO: RUN-454: This fails after changing the UC
     let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
-    for _ in 0..4 {
+    for _ in 0..5 {
         test.execute_slice(canister_id);
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
@@ -4095,11 +4096,12 @@ fn dts_abort_works_in_update_call() {
         .append_and_reply()
         .build();
 
-    // The workload above finishes in 5 slices.
+    // The workload above finishes in 6 slices.
+    // TODO: RUN-454: This fails after changing the UC
     let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
-    for _ in 0..4 {
+    for _ in 0..5 {
         test.execute_slice(canister_id);
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
@@ -4132,7 +4134,8 @@ fn dts_abort_works_in_update_call() {
     );
 
     // Now execute from scratch.
-    for _ in 0..4 {
+    // TODO: RUN-454: This fails after changing the UC
+    for _ in 0..5 {
         test.execute_slice(canister_id);
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
@@ -4181,7 +4184,7 @@ fn dts_concurrent_subnet_available_change() {
         .append_and_reply()
         .build();
 
-    // The workload above finishes in 5 slices.
+    // The workload above finishes in 6 slices.
     let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
     test.execute_slice(canister_id);
     assert_eq!(

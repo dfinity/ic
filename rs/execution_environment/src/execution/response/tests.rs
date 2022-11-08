@@ -437,6 +437,7 @@ fn cycles_correct_if_cleanup_fails() {
 fn dts_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(1_000_000)
+        // TODO: RUN-454: This fails after changing the UC
         .with_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
@@ -457,7 +458,15 @@ fn dts_works_in_response_callback() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reply(
+                    wasm()
+                        .set_global_data(&[0; 100])
+                        .message_payload()
+                        .reply_data_append()
+                        .reply()
+                        .build(),
+                ),
             (0, 1000),
         )
         .build();
@@ -788,6 +797,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
 fn dts_abort_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(1_000_000)
+        // TODO: RUN-454: This fails after changing the UC
         .with_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
@@ -808,7 +818,15 @@ fn dts_abort_works_in_response_callback() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reply(
+                    wasm()
+                        .set_global_data(&[0; 100])
+                        .message_payload()
+                        .reply_data_append()
+                        .reply()
+                        .build(),
+                ),
             (0, 1000),
         )
         .build();

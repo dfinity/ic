@@ -23,6 +23,7 @@ const DTS_WAT: &str = r#"
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32))
             )
+            (import "ic0" "time" (func $time (result i64)))
             (import "ic0" "global_timer_set"
                 (func $global_timer_set (param i64) (result i64))
             )
@@ -47,7 +48,9 @@ const DTS_WAT: &str = r#"
 
             (func (export "canister_init")
                 (call $work)
-                (drop (call $global_timer_set (i64.const 1)))
+                (drop (call $global_timer_set
+                    (i64.add (call $time) (i64.const 1))
+                ))
             )
 
             (func (export "canister_query read")
@@ -476,6 +479,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 
     env.await_ingress(upgrade, 30).unwrap();
 
+    env.advance_time(Duration::from_secs(1));
     let read = env.send_ingress(user_id, canister, "read", vec![]);
     let result = env.await_ingress(read, 10).unwrap();
 

@@ -2730,14 +2730,15 @@ dependencies = [
 
 [[package]]
 name = "enum-ordinalize"
-version = "3.1.10"
+version = "3.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b166c9e378360dd5a6666a9604bb4f54ae0cac39023ffbac425e917a2a04fef"
+checksum = "a62bb1df8b45ecb7ffa78dca1c17a438fb193eb083db0b1b494d2a61bcb5096a"
 dependencies = [
  "num-bigint 0.4.3",
  "num-traits",
  "proc-macro2 1.0.46",
  "quote 1.0.17",
+ "rustc_version 0.4.0",
  "syn 1.0.96",
 ]
 
@@ -3451,9 +3452,9 @@ dependencies = [
 
 [[package]]
 name = "hex-literal"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "961de220ec9a91af2e1e5bd80d02109155695e516771762381ef8581317066e0"
+checksum = "d70693199b3cf4552f3fa720b54163927a3ebed2aef240efaf556033ab336a11"
 dependencies = [
  "hex-literal-impl",
  "proc-macro-hack",
@@ -3461,9 +3462,9 @@ dependencies = [
 
 [[package]]
 name = "hex-literal"
-version = "0.3.3"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21e4590e13640f19f249fe3e4eca5113bc4289f2497710378190e7f4bd96f45b"
+checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
 
 [[package]]
 name = "hex-literal-impl"
@@ -5123,7 +5124,7 @@ dependencies = [
  "criterion",
  "fe-derive",
  "hex",
- "hex-literal 0.3.3",
+ "hex-literal 0.3.4",
  "ic-crypto-internal-hmac",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-types",
@@ -6539,7 +6540,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "hex",
- "hex-literal 0.3.3",
+ "hex-literal 0.3.4",
  "ic-base-types",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha",
@@ -8413,7 +8414,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "ed25519-consensus",
- "hex-literal 0.2.1",
+ "hex-literal 0.2.2",
  "ic-artifact-pool",
  "ic-base-types",
  "ic-btc-types-internal",
@@ -8611,7 +8612,7 @@ dependencies = [
  "chrono",
  "derive_more 0.99.8-alpha.0",
  "hex",
- "hex-literal 0.2.1",
+ "hex-literal 0.2.2",
  "http",
  "ic-base-types",
  "ic-btc-types-internal",
@@ -8660,7 +8661,7 @@ name = "ic-universal-canister"
 version = "0.8.0"
 dependencies = [
  "candid",
- "hex-literal 0.2.1",
+ "hex-literal 0.2.2",
  "ic-crypto-sha",
  "ic-types",
  "serde",
@@ -10505,19 +10506,18 @@ dependencies = [
 
 [[package]]
 name = "num_enum"
-version = "0.5.1"
+version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "226b45a5c2ac4dd696ed30fa6b94b057ad909c7b7fc2e0d0808192bced894066"
+checksum = "cf5395665662ef45796a4ff5486c5d41d29e0c09640af4c5f17fd94ee2c119c9"
 dependencies = [
- "derivative",
  "num_enum_derive",
 ]
 
 [[package]]
 name = "num_enum_derive"
-version = "0.5.1"
+version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c0fd9eba1d5db0994a239e09c1be402d35622277e35468ba891aa5e3188ce7e"
+checksum = "3b0498641e53dd6ac1a4f22547548caa6864cc4933784319cd1775271c5a46ce"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2 1.0.46",
@@ -11333,10 +11333,12 @@ dependencies = [
 
 [[package]]
 name = "proc-macro-crate"
-version = "0.1.4"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e10d4b51f154c8a7fb96fd6dad097cb74b863943ec010ac94b9fd1be8861fe1e"
+checksum = "eda0fc3b0fb7c975631757e14d9049da17374063edb6ebbcbc54d880d4fe94e9"
 dependencies = [
+ "once_cell",
+ "thiserror",
  "toml",
 ]
 

@@ -5,6 +5,7 @@ extern crate wee_alloc;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc<'_> = wee_alloc::WeeAlloc::INIT;
 
+#[allow(clippy::unused_unit)]
 mod ic0 {
     #[link(wasm_import_module = "ic0")]
     extern "C" {
@@ -61,6 +62,7 @@ mod ic0 {
         pub fn data_certificate_copy(dst: u32, offset: u32, size: u32) -> ();
 
         pub fn time() -> u64;
+        pub fn global_timer_set(timestamp: u64) -> u64;
     }
 }
 
@@ -81,6 +83,7 @@ pub fn call_new(
     reject_env: u32,
 ) {
     unsafe {
+        #[allow(clippy::fn_to_numeric_cast_with_truncation)]
         ic0::call_new(
             callee.as_ptr() as u32,
             callee.len() as u32,
@@ -95,7 +98,10 @@ pub fn call_new(
 }
 
 pub fn call_on_cleanup(fun: fn(u32) -> (), env: u32) {
-    unsafe { ic0::call_on_cleanup(fun as u32, env as u32) }
+    #[allow(clippy::fn_to_numeric_cast_with_truncation)]
+    unsafe {
+        ic0::call_on_cleanup(fun as u32, env as u32)
+    }
 }
 
 pub fn call_data_append(payload: &[u8]) {
@@ -322,6 +328,10 @@ pub fn data_certificate() -> Vec<u8> {
 
 pub fn time() -> u64 {
     unsafe { ic0::time() }
+}
+
+pub fn global_timer_set(timestamp: u64) -> u64 {
+    unsafe { ic0::global_timer_set(timestamp) }
 }
 
 /// Prints the given message.

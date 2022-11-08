@@ -63,7 +63,7 @@ use ic_types::{
         extract_effective_canister_id, AnonymousQuery, Payload, RejectContext, Request, Response,
         SignedIngressContent, StopCanisterContext,
     },
-    CanisterId, Cycles, NumBytes, NumInstructions, SubnetId, Time,
+    CanisterId, CanisterTimer, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::SystemMethod, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
@@ -2335,6 +2335,8 @@ pub fn execute_canister(
                     max_instructions_per_message_without_dts,
                     max_instructions_per_message_without_dts,
                 );
+                // The global timer is one-off
+                canister.system_state.global_timer = CanisterTimer::Inactive;
                 let (canister, instructions_used, result) = exec_env.execute_canister_system_task(
                     canister,
                     SystemMethod::CanisterGlobalTimer,

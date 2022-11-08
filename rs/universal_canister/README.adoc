@@ -9,8 +9,14 @@ To make modifications to the universal canister:
     cd impl
     cargo build --target wasm32-unknown-unknown --release
 
-    # Copy the wasm into the /lib directory.
-    cp target/wasm32-unknown-unknown/release/universal_canister.wasm ../lib/src/universal_canister.wasm
+    # Optional: install ic-cdk-optimizer
+    cargo install ic-cdk-optimizer
+
+    # Reduce the Wasm binary size
+    ic-cdk-optimizer target/wasm32-unknown-unknown/release/universal_canister.wasm --output universal_canister.wasm
+
+    # Move reduced wasm into the /lib directory.
+    mv universal_canister.wasm ../lib/src/universal_canister.wasm
 
     # When done making changes and you're ready to push a change,
     # you need to update the checksum in /lib.

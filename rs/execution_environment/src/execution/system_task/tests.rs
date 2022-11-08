@@ -4,8 +4,12 @@ use assert_matches::assert_matches;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
 use ic_replicated_state::{page_map::PAGE_SIZE, CanisterStatus};
+use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::WasmResult;
 use ic_types::methods::SystemMethod;
 use ic_types::NumBytes;
+use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use std::time::{Duration, UNIX_EPOCH};
 
 #[test]
 fn heartbeat_is_executed() {
@@ -213,4 +217,212 @@ fn global_timer_doesnt_run_if_canister_is_stopping() {
             status: CanisterStatusType::Stopping,
         }
     );
+}
+
+#[test]
+fn global_timer_can_be_cancelled() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    // Setup global timer to increase a global counter
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let set_global_timer = wasm()
+        .set_global_timer_method(wasm().inc_global_counter())
+        .api_global_timer_set(now_nanos + 1)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+
+    // The counter is still zero as the timer has not yet reached the deadline
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter.clone())
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+
+    let cancel_global_counter = wasm().api_global_timer_set(0).reply_int64().build();
+
+    // Cancel the timer
+    let result = env
+        .execute_ingress(canister_id, "update", cancel_global_counter)
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply((now_nanos + 1).to_le_bytes().into())
+    );
+
+    // The timer should not be called
+    env.advance_time(Duration::from_secs(1));
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+}
+
+#[test]
+fn global_timer_can_be_immediately_cancelled() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    // Setup global timer to increase a global counter
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let set_global_timer = wasm()
+        .set_global_timer_method(wasm().inc_global_counter())
+        .api_global_timer_set(now_nanos + 1)
+        .api_global_timer_set(0)
+        .reply_int64()
+        .build();
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply((now_nanos + 1).to_le_bytes().into())
+    );
+
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+
+    // The counter must be zero as the timer should have been immediately cancelled
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+}
+
+#[test]
+fn global_timer_is_one_off() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    // Setup global timer to increase a global counter
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let set_global_timer = wasm()
+        .set_global_timer_method(wasm().inc_global_counter())
+        .api_global_timer_set(now_nanos + 1)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+
+    // The counter is still zero as the timer has not yet reached the deadline
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter.clone())
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+
+    // The timer should reach the deadline now
+    env.advance_time(Duration::from_secs(1));
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter.clone())
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+
+    // The timer should be called just once
+    env.advance_time(Duration::from_secs(1));
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+}
+
+#[test]
+fn global_timer_can_be_reactivated() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    // Setup global timer to increase a global counter
+    let set_global_timer = wasm()
+        .set_global_timer_method(wasm().inc_global_counter())
+        .api_global_timer_set(1)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+
+    // The timer should immediately reach the deadline
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter.clone())
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+
+    // The timer should be called just once
+    env.advance_time(Duration::from_secs(1));
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter.clone())
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+
+    let set_global_timer = wasm()
+        .api_global_timer_set(1)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    // Reactivate the timer
+    env.advance_time(Duration::from_secs(1));
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+
+    // The timer should be called again
+    env.advance_time(Duration::from_secs(1));
+    let result = env
+        .execute_ingress(canister_id, "update", get_global_counter)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(2u64.to_le_bytes().into()));
+}
+
+#[test]
+fn global_timer_can_be_reactivated_in_canister_global_timer_method() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    // Setup global timer to increase a global counter
+    let set_global_timer = wasm()
+        .set_global_timer_method(wasm().inc_global_counter().api_global_timer_set(1))
+        .api_global_timer_set(1)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+
+    for i in 1..5u64 {
+        // Each execution should trigger the timer, increase the counter
+        // and reactivate the timer again.
+        let result = env
+            .execute_ingress(canister_id, "update", get_global_counter.clone())
+            .unwrap();
+        assert_eq!(WasmResult::Reply(i.to_le_bytes().into()), result);
+    }
 }
