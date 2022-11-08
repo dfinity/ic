@@ -1077,21 +1077,23 @@ test_point_operation!(mul2, [g1, g2], {
 test_point_operation!(muln, [g1, g2], {
     let mut rng = seeded_rng();
 
-    assert_eq!(Projective::muln_vartime(&[]), Projective::identity());
+    assert_eq!(Projective::muln_vartime(&[], &[]), Projective::identity());
 
     for t in 1..100 {
-        let mut terms = Vec::with_capacity(t);
+        let mut points = Vec::with_capacity(t);
+        let mut scalars = Vec::with_capacity(t);
 
         for _ in 0..t {
-            terms.push((Projective::biased(&mut rng), Scalar::biased(&mut rng)));
+            points.push(Projective::biased(&mut rng));
+            scalars.push(Scalar::biased(&mut rng));
         }
 
-        let mut reference_val = Projective::identity();
-        for (p, s) in &terms {
-            reference_val += p * s;
-        }
+        let reference_val = points
+            .iter()
+            .zip(scalars.iter())
+            .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
 
-        let computed = Projective::muln_vartime(&terms);
+        let computed = Projective::muln_vartime(&points[..], &scalars[..]);
 
         assert_eq!(computed, reference_val);
     }

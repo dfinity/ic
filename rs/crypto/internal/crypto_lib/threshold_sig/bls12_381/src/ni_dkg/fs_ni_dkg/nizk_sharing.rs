@@ -271,16 +271,18 @@ pub fn verify_sharing(
 
     let mut ik = vec![Scalar::one(); instance.public_keys.len()];
 
-    let mut terms = Vec::with_capacity(instance.public_coefficients.len());
-    for pc in &instance.public_coefficients {
+    let mut scalars = Vec::with_capacity(instance.public_coefficients.len());
+    for _pc in &instance.public_coefficients {
         let acc = Scalar::muln_vartime(&ik, &xpow);
-        terms.push((pc.into(), acc));
+        scalars.push(acc);
 
         for i in 0..ik.len() {
             ik[i] *= Scalar::from_u64((i + 1) as u64);
         }
     }
-    let lhs = G2Projective::muln_vartime(&terms) * &x_challenge + &nizk.aa;
+    let lhs = G2Projective::muln_affine_vartime(&instance.public_coefficients[..], &scalars[..])
+        * &x_challenge
+        + &nizk.aa;
 
     let rhs = &instance.g2_gen * &nizk.z_alpha;
 
