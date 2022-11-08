@@ -1,4 +1,4 @@
-use ic_interfaces::certified_stream_store::{
+use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_types::{

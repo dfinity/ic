@@ -2,7 +2,8 @@
 #![allow(dead_code)]
 
 use ic_config::state_manager::Config;
-use ic_interfaces::{certification::Verifier, certified_stream_store::CertifiedStreamStore};
+use ic_interfaces::certification::Verifier;
+use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_state_manager::*;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;

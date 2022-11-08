@@ -1,7 +1,7 @@
 use crate::types::ids::subnet_test_id;
 use ic_crypto_sha::Sha256;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_interfaces::certified_stream_store::{
+use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{

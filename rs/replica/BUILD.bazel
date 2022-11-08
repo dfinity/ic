@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/http_endpoints/public",
     "//rs/interfaces",
     "//rs/interfaces/bitcoin_adapter_client",
+    "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/p2p",
     "//rs/interfaces/registry",
     "//rs/messaging",

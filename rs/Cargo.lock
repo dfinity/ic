@@ -4589,6 +4589,7 @@ dependencies = [
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-canister-http-adapter-client",
+ "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
@@ -6144,6 +6145,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-interfaces-certified-stream-store"
+version = "0.8.0"
+dependencies = [
+ "ic-types",
+]
+
+[[package]]
 name = "ic-interfaces-p2p"
 version = "0.8.0"
 dependencies = [
@@ -6306,6 +6314,7 @@ dependencies = [
  "ic-error-types",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
@@ -7421,6 +7430,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",
+ "ic-interfaces-certified-stream-store",
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
@@ -8267,6 +8277,7 @@ dependencies = [
  "ic-error-types",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-interfaces-certified-stream-store",
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
@@ -8434,6 +8445,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",
+ "ic-interfaces-certified-stream-store",
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
@@ -8797,6 +8809,7 @@ dependencies = [
  "hyper",
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
+ "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
@@ -8851,6 +8864,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
  "ic-interfaces",
+ "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",

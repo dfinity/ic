@@ -6,12 +6,12 @@ use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
-    certified_stream_store::CertifiedStreamStore,
     consensus_pool::ConsensusPoolCache,
     execution_environment::{
         AnonymousQueryService, IngressFilterService, QueryExecutionService, QueryHandler,
     },
 };
+use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_p2p::IngressIngestionService;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, ReplicaLogger};

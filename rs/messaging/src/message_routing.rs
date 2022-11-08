@@ -7,10 +7,10 @@ use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::{
-    certified_stream_store::CertifiedStreamStore,
     execution_environment::{IngressHistoryWriter, RegistryExecutionSettings, Scheduler},
     messaging::{MessageRouting, MessageRoutingError},
 };
+use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
