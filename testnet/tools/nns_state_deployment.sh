@@ -113,7 +113,7 @@ step 6 "Recover the NNS subnet to the first unassigned node." || (
 
     # Create a script driving the subnet recovery via ic-recovery tool.
     echo "#!/bin/bash" >$TMP_DIR/driver.sh
-    echo "echo y && echo "" && echo y && echo y && echo y && echo y && echo y && echo y && echo y && echo y && echo y && echo y && echo y && echo y" >>$TMP_DIR/driver.sh
+    echo "echo y && echo "" && echo y && echo y && echo y && echo "" && echo y && echo y && echo y && echo y && echo y && echo y && echo y && echo y" >>$TMP_DIR/driver.sh
     chmod +x $TMP_DIR/driver.sh
 
     # Run the recovery.
