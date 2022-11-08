@@ -63,8 +63,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
     ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
         let mut blocks = match store_location {
-            Some(loc) => Blocks::new_persistent(loc),
-            None => Blocks::new_in_memory(),
+            Some(loc) => Blocks::new_persistent(loc)?,
+            None => Blocks::new_in_memory()?,
         };
 
         if let Some(blocks_access) = &blocks_access {
@@ -280,7 +280,9 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             blockchain.get_latest_hashed_block()?.index
         );
 
-        blockchain.try_prune(&self.store_max_blocks, PRUNE_DELAY)
+        blockchain
+            .try_prune(&self.store_max_blocks, PRUNE_DELAY)
+            .map_err(|_| Error::InternalError("Failed to prune store".to_string()))
     }
 
     async fn sync_range_of_blocks(
@@ -377,7 +379,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
         }
 
-        blockchain.set_hashed_block_to_verified(range.end - 1)?;
+        blockchain.set_hashed_block_to_verified(&(range.end - 1))?;
         self.metrics.set_verified_height(range.end - 1);
         Ok(())
     }

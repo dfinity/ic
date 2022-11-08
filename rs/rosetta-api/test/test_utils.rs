@@ -56,7 +56,7 @@ pub struct TestLedger {
 impl TestLedger {
     pub fn new() -> Self {
         Self {
-            blockchain: RwLock::new(Blocks::new_in_memory()),
+            blockchain: RwLock::new(Blocks::new_in_memory().unwrap()),
             canister_id: CanisterId::new(
                 PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             )
@@ -90,9 +90,9 @@ impl TestLedger {
 
     async fn add_block(&self, hb: HashedBlock) -> Result<(), ApiError> {
         let mut blockchain = self.blockchain.write().await;
-        blockchain.push(hb.clone()).map_err(ApiError::from)?;
+        blockchain.push(&hb).map_err(ApiError::from)?;
         blockchain
-            .set_hashed_block_to_verified(hb.index)
+            .set_hashed_block_to_verified(&hb.index)
             .map_err(ApiError::from)
     }
 
@@ -133,8 +133,8 @@ impl LedgerAccess for TestLedger {
         {
             let mut blockchain = self.blockchain.write().await;
             for hb in queue.iter() {
-                blockchain.push(hb.clone())?;
-                blockchain.set_hashed_block_to_verified(hb.index)?;
+                blockchain.push(hb)?;
+                blockchain.set_hashed_block_to_verified(&hb.index)?;
             }
         }
 

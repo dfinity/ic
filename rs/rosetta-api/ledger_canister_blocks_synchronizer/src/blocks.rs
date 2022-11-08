@@ -15,8 +15,8 @@ mod database_access {
     use crate::blocks::{BlockStoreError, HashedBlock};
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
-    use icp_ledger::{AccountIdentifier, Block, Operation};
-    use rusqlite::{params, types::Null, Connection};
+    use icp_ledger::{Block, Operation};
+    use rusqlite::{params, types::Null, Connection, Error};
 
     pub fn push_hashed_block(
         con: &mut Connection,
@@ -157,13 +157,27 @@ mod database_access {
         con: &mut Connection,
         block_idx: &u64,
     ) -> Result<HashedBlock, BlockStoreError> {
-        let command = "SELECT  hash, block, parent_hash,idx from blocks where idx = ?";
+        let command = format!(
+            "SELECT  hash, block, parent_hash,idx from blocks where idx = {}",
+            block_idx
+        );
+        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
+        match blocks.next() {
+            Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
+            None => Err(BlockStoreError::NotFound(*block_idx)),
+        }
+    }
+
+    fn read_hashed_block(
+        con: &mut Connection,
+        command: &str,
+    ) -> Result<Vec<Result<HashedBlock, Error>>, BlockStoreError> {
         let mut stmt = con
             .prepare(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
-        let mut blocks = stmt
-            .query_map(params![block_idx], |row| {
+        let block = stmt
+            .query_map(params![], |row| {
                 Ok(HashedBlock {
                     hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
                     block: row.get(1).map(EncodedBlock::from_vec)?,
@@ -174,10 +188,7 @@ mod database_access {
                 })
             })
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        match blocks.next() {
-            Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
-            None => Err(BlockStoreError::NotFound(*block_idx)),
-        }
+        Ok(block.collect())
     }
 
     pub fn get_transaction_hash(
@@ -226,72 +237,20 @@ mod database_access {
             ))),
         }
     }
+    pub fn get_indices(
+        connection: &mut Connection,
+        command: &str,
+    ) -> Result<Vec<u64>, BlockStoreError> {
+        let mut stmt = connection
+            .prepare(command)
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let indices = stmt
+            .query_map(params![], |row| row.get(0))
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let block_indices: Vec<u64> = indices.map(|x| x.unwrap()).collect();
+        Ok(block_indices)
+    }
 
-    pub fn get_first_verified_hashed_block(
-        con: &mut Connection,
-    ) -> Result<HashedBlock, BlockStoreError> {
-        let command =
-            "SELECT  hash, block, parent_hash,idx from blocks WHERE verified=TRUE ORDER BY idx ASC";
-        let mut stmt = con
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
-        let mut blocks = stmt
-            .query_map(params![], |row| {
-                Ok(HashedBlock {
-                    hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                    block: row.get(1).map(EncodedBlock::from_vec)?,
-                    parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
-                        opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
-                    })?,
-                    index: row.get(3)?,
-                })
-            })
-            .unwrap();
-        match blocks.next() {
-            Some(geneis_block) => match blocks.next() {
-                Some(first_block) => {
-                    let block = first_block.unwrap();
-                    if block.index > 1 {
-                        Ok(block)
-                    } else {
-                        Ok(geneis_block.unwrap())
-                    }
-                }
-                None => Ok(geneis_block.unwrap()),
-            },
-            None => Err(BlockStoreError::Other(
-                "No block has been verified yet".to_string(),
-            )),
-        }
-    }
-    pub fn get_latest_verified_hashed_block(
-        con: &mut Connection,
-    ) -> Result<HashedBlock, BlockStoreError> {
-        let command = "SELECT  hash, block, parent_hash,idx from blocks WHERE verified=TRUE ORDER BY idx DESC";
-        let mut stmt = con
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
-        let mut block = stmt
-            .query_map(params![], |row| {
-                Ok(HashedBlock {
-                    hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                    block: row.get(1).map(EncodedBlock::from_vec)?,
-                    parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
-                        opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
-                    })?,
-                    index: row.get(3)?,
-                })
-            })
-            .unwrap();
-        match block.next() {
-            Some(first_block) => Ok(first_block.unwrap()),
-            None => Err(BlockStoreError::Other(
-                "No block has been verified yet".to_string(),
-            )),
-        }
-    }
     pub fn get_block_idx_by_block_hash(
         connection: &mut Connection,
         hash: &HashOf<EncodedBlock>,
@@ -314,61 +273,43 @@ mod database_access {
             ))),
         }
     }
-
-    pub fn get_first_hashed_block(con: &mut Connection) -> Result<HashedBlock, BlockStoreError> {
-        let command = "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx ASC";
-        let mut stmt = con
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
-        let mut blocks = stmt
-            .query_map(params![], |row| {
-                Ok(HashedBlock {
-                    hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                    block: row.get(1).map(EncodedBlock::from_vec)?,
-                    parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
-                        opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
-                    })?,
-                    index: row.get(3)?,
-                })
-            })
-            .unwrap();
-
+    pub fn get_first_hashed_block(
+        con: &mut Connection,
+        verified: Option<bool>,
+    ) -> Result<HashedBlock, BlockStoreError> {
+        let command = match verified {
+            Some(verified) => format!("SELECT  hash, block, parent_hash,idx from blocks WHERE verified = {} ORDER BY idx ASC",verified),
+            None => "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx ASC".to_string()
+        };
+        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
         match blocks.next() {
             Some(geneis_block) => match blocks.next() {
                 Some(first_block) => {
-                    let block = first_block.unwrap();
+                    let block = first_block.map_err(|e| BlockStoreError::Other(e.to_string()))?;
                     if block.index > 1 {
                         Ok(block)
                     } else {
-                        Ok(geneis_block.unwrap())
+                        Ok(geneis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?)
                     }
                 }
-                None => Ok(geneis_block.unwrap()),
+                None => Ok(geneis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?),
             },
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
     }
-    pub fn get_latest_hashed_block(con: &mut Connection) -> Result<HashedBlock, BlockStoreError> {
-        let command = "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx DESC";
-        let mut stmt = con
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
-        let mut block = stmt
-            .query_map(params![], |row| {
-                Ok(HashedBlock {
-                    hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                    block: row.get(1).map(EncodedBlock::from_vec)?,
-                    parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
-                        opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
-                    })?,
-                    index: row.get(3)?,
-                })
-            })
-            .unwrap();
-        match block.next() {
-            Some(first_block) => Ok(first_block.unwrap()),
+    pub fn get_latest_hashed_block(
+        con: &mut Connection,
+        verified: Option<bool>,
+    ) -> Result<HashedBlock, BlockStoreError> {
+        let command = match verified {
+            Some(verified) => format!("SELECT  hash, block, parent_hash,idx from blocks WHERE verified = {} ORDER BY idx DESC",verified),
+            None => "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx DESC".to_string()
+        };
+        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
+        match blocks.next() {
+            Some(first_block) => {
+                Ok(first_block.map_err(|e| BlockStoreError::Other(e.to_string()))?)
+            }
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
     }
@@ -387,27 +328,6 @@ mod database_access {
         {
             Some(_) => Ok(true),
             None => Ok(false),
-        }
-    }
-    pub fn get_account_balance(
-        connection: &mut Connection,
-        block_idx: &u64,
-        account: &AccountIdentifier,
-    ) -> Result<Option<u64>, BlockStoreError> {
-        let command = "SELECT icpt FROM account_balances WHERE block_idx<=?1 AND account=?2 ORDER BY block_idx DESC LIMIT 1";
-        let mut stmt = connection
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
-        let amount = stmt
-            .query_map(params![block_idx, account.to_hex()], |row| {
-                Ok(row.get(0).unwrap())
-            })
-            .unwrap()
-            .next();
-        match amount {
-            Some(tokens) => Ok(tokens.unwrap()),
-            None => Ok(None),
         }
     }
 }
@@ -452,227 +372,13 @@ fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
 
 pub struct Blocks {
     pub balance_book: BalanceBook,
-    block_store: SQLiteStore,
+    connection: Mutex<rusqlite::Connection>,
 }
 
 impl Blocks {
     const LOAD_FROM_STORE_BLOCK_BATCH_LEN: u64 = 10000;
 
-    pub fn new_persistent(store_location: &std::path::Path) -> Self {
-        let block_store = SQLiteStore::new_on_disk(store_location)
-            .expect("Failed to initialize sql store for ledger");
-        Self {
-            balance_book: BalanceBook::default(),
-            block_store,
-        }
-    }
-
-    pub fn new_in_memory() -> Self {
-        let block_store =
-            SQLiteStore::new_in_memory().expect("Failed to initialize sql store for ledger");
-        Self {
-            balance_book: BalanceBook::default(),
-            block_store,
-        }
-    }
-
-    pub fn load_from_store(&mut self) -> Result<u64, Error> {
-        assert!(
-            self.balance_book.store.acc_to_hist.is_empty(),
-            "Blocks is not empty"
-        );
-        match self.block_store.get_hashed_block(&0) {
-            Ok(genesis) => {
-                self.process_block(genesis)?;
-            }
-            Err(_) => return Ok(0),
-        }
-
-        if let Some((_, balance_book)) = self.block_store.first_snapshot() {
-            self.balance_book = balance_book;
-        }
-
-        let mut n = 1; // one block loaded so far (genesis or first from snapshot)
-        let mut next_idx = self
-            .get_first_hashed_block()
-            .map(|hb| hb.index + 1)
-            .unwrap();
-        loop {
-            let batch = self
-                .block_store
-                .get_hashed_block_range(next_idx..next_idx + Self::LOAD_FROM_STORE_BLOCK_BATCH_LEN);
-
-            match batch {
-                Ok(b) => {
-                    for hb in b {
-                        self.process_block(hb.clone()).map_err(|e| {
-                        error!(
-                            "Processing block retrieved from store failed. Block idx: {}, error: {:?}",
-                            next_idx, e
-                        );
-                        e
-                    })?;
-                        next_idx += 1;
-                        n += 1;
-                        if n % 30000 == 0 {
-                            info!("Loading... {} blocks processed", n);
-                        }
-                    }
-                }
-                Err(_) => break,
-            };
-        }
-
-        Ok(n)
-    }
-
-    pub fn is_verified_by_hash(
-        &self,
-        hash: &HashOf<EncodedBlock>,
-    ) -> Result<bool, BlockStoreError> {
-        self.block_store.is_verified_by_hash(hash)
-    }
-
-    pub fn is_verified_by_idx(&self, idx: &u64) -> Result<bool, BlockStoreError> {
-        self.block_store.is_verified_by_idx(idx)
-    }
-
-    /// Add a block to the block_store data structure, the parent_hash must
-    /// match the end of the chain
-    pub fn push(&mut self, hb: HashedBlock) -> Result<(), BlockStoreError> {
-        self.block_store.push(&hb)?;
-        self.process_block(hb)?;
-        Ok(())
-    }
-    pub fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
-        self.block_store.push_batch(batch.clone())?;
-        for hb in batch {
-            self.process_block(hb)?;
-        }
-        Ok(())
-    }
-    pub fn set_hashed_block_to_verified(
-        &self,
-        block_height: BlockIndex,
-    ) -> Result<(), BlockStoreError> {
-        self.block_store.set_hashed_block_to_verified(block_height)
-    }
-    fn process_block(&mut self, hb: HashedBlock) -> Result<(), BlockStoreError> {
-        let HashedBlock {
-            block,
-            hash: _,
-            parent_hash: _,
-            index,
-        } = hb;
-
-        let block = Block::decode(block).unwrap();
-        let mut bb = &mut self.balance_book;
-        bb.store.transaction_context = Some(index);
-        apply_operation(bb, &block.transaction.operation).unwrap();
-        bb.store.transaction_context = None;
-        Ok(())
-    }
-    pub fn get_block_idx_by_transaction_hash(
-        &self,
-        hash: &HashOf<icp_ledger::Transaction>,
-    ) -> Result<u64, BlockStoreError> {
-        self.block_store.get_block_idx_by_transaction_hash(hash)
-    }
-    pub fn get_hashed_block(&self, block_idx: &u64) -> Result<HashedBlock, BlockStoreError> {
-        self.block_store.get_hashed_block(block_idx)
-    }
-    pub fn get_first_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
-        self.block_store.get_first_hashed_block()
-    }
-    pub fn get_hashed_block_range(
-        &self,
-        range: std::ops::Range<BlockIndex>,
-    ) -> Result<Vec<HashedBlock>, BlockStoreError> {
-        self.block_store.get_hashed_block_range(range)
-    }
-    pub fn get_first_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
-        self.block_store.get_first_verified_hashed_block()
-    }
-
-    pub fn get_latest_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
-        self.block_store.get_latest_hashed_block()
-    }
-    pub fn get_block_idx_by_block_hash(
-        &self,
-        hash: &HashOf<EncodedBlock>,
-    ) -> Result<u64, BlockStoreError> {
-        self.block_store.get_block_idx_by_block_hash(hash)
-    }
-
-    pub fn get_latest_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
-        self.block_store.get_latest_verified_hashed_block()
-    }
-    pub fn get_account_balance(
-        &self,
-        acc: &AccountIdentifier,
-        h: &BlockIndex,
-    ) -> Result<Tokens, Error> {
-        let first_verified = self.get_first_verified_hashed_block();
-        if let Ok(b) = first_verified {
-            if *h < b.index {
-                return Err(Error::InvalidBlockId(format!(
-                    "Block at height: {} not available for query",
-                    h
-                )));
-            }
-        }
-        let last_verified = self.block_store.get_latest_verified_hashed_block()?;
-        if *h > last_verified.index {
-            Err(Error::InvalidBlockId(format!(
-                "Block not found at height: {}",
-                h
-            )))
-        } else {
-            self.balance_book.store.get_at(*acc, *h)
-        }
-    }
-
-    pub fn try_prune(&mut self, max_blocks: &Option<u64>, prune_delay: u64) -> Result<(), Error> {
-        if let Some(block_limit) = max_blocks {
-            let first_idx = self
-                .block_store
-                .get_first_hashed_block()
-                .map(|hb| hb.index)
-                .unwrap_or(0);
-            let last_idx = self
-                .get_latest_hashed_block()
-                .map(|hb| hb.index)
-                .unwrap_or(0);
-            if first_idx + block_limit + prune_delay < last_idx {
-                let new_first_idx = last_idx - block_limit;
-                let hb = self.block_store.get_hashed_block(&new_first_idx);
-                match hb {
-                    Ok(b) => {
-                        self.balance_book.store.prune_at(b.index);
-                        self.block_store
-                            .prune(&b, &self.balance_book)
-                            .map_err(Error::InternalError)?;
-                    }
-                    Err(_) => {
-                        return Err(Error::InternalError(format!(
-                            "Block ist not stored {}",
-                            new_first_idx
-                        )))
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-pub struct SQLiteStore {
-    connection: Mutex<rusqlite::Connection>,
-}
-
-impl SQLiteStore {
-    /// Constructs a new SQLite on-disk store.
-    pub fn new_on_disk(location: &Path) -> Result<Self, BlockStoreError> {
+    pub fn new_persistent(location: &Path) -> Result<Self, BlockStoreError> {
         std::fs::create_dir_all(location)
             .expect("Unable to create directory for SQLite on-disk store.");
         let path = location.join("db.sqlite");
@@ -691,6 +397,7 @@ impl SQLiteStore {
     fn new(connection: rusqlite::Connection) -> Result<Self, BlockStoreError> {
         let store = Self {
             connection: Mutex::new(connection),
+            balance_book: BalanceBook::default(),
         };
         store
             .connection
@@ -710,7 +417,7 @@ impl SQLiteStore {
         connection.execute(
             r#"
             CREATE TABLE IF NOT EXISTS blocks (
-                hash BLOB NOT NULL UNIQUE,
+                hash BLOB NOT NULL,
                 block BLOB NOT NULL,
                 parent_hash BLOB,
                 idx INTEGER NOT NULL PRIMARY KEY,
@@ -746,7 +453,7 @@ impl SQLiteStore {
         connection.execute(
             r#"
             CREATE TABLE IF NOT EXISTS transactions (
-                block_idx INTEGER NOT NULL UNIQUE,
+                block_idx INTEGER NOT NULL,
                 tx_hash BLOB NOT NULL,
                 operation_type VARCHAR NOT NULL,
                 from_account VARCHAR(64) ,
@@ -774,6 +481,44 @@ impl SQLiteStore {
             "#,
             [],
         )?;
+
+        Ok(())
+    }
+
+    pub fn prune(
+        &mut self,
+        hb: &HashedBlock,
+        balance_book: &BalanceBook,
+    ) -> Result<(), BlockStoreError> {
+        self.write_oldest_block_snapshot(hb, balance_book)?;
+        let mut connection = self.connection.lock().unwrap();
+        let tx = connection.transaction().expect("Cannot open transaction");
+        // NB: An optimization would be to update only modified accounts.
+        tx.execute(
+            "DELETE FROM books WHERE block_idx > 0 AND block_idx < ?",
+            params![hb.index],
+        )
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        tx.execute(
+            "DELETE FROM balances WHERE block_idx > 0 AND block_idx < ?",
+            params![hb.index],
+        )
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+
+        tx.execute(
+            "DELETE FROM transactions WHERE block_idx > 0 AND block_idx < ?",
+            params![hb.index],
+        )
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+
+        tx.execute(
+            "DELETE FROM blocks WHERE idx > 0 AND idx < ?",
+            params![hb.index],
+        )
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+
+        tx.commit()
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         Ok(())
     }
     pub fn get_block_idx_by_block_hash(
@@ -781,6 +526,7 @@ impl SQLiteStore {
         hash: &HashOf<EncodedBlock>,
     ) -> Result<u64, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
+
         database_access::get_block_idx_by_block_hash(&mut *connection, hash)
     }
 
@@ -790,64 +536,6 @@ impl SQLiteStore {
     ) -> Result<u64, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
         database_access::get_block_idx_by_transaction_hash(&mut *connection, hash)
-    }
-
-    fn read_oldest_block_snapshot(&self) -> Result<Option<(HashedBlock, BalanceBook)>, String> {
-        let mut balance_book = BalanceBook::default();
-        let last_index;
-        {
-            let mut con = self.connection.lock().unwrap();
-            let tx = con.transaction().expect("Cannot open transaction");
-
-            // Read last balance.
-            {
-                let mut stmt = tx
-                    .prepare(
-                        "SELECT block_idx,icpt_pool FROM balances ORDER BY block_idx DESC LIMIT 1",
-                    )
-                    .map_err(|e| e.to_string())?;
-                let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
-                let next = rows.next().map_err(|e| e.to_string())?;
-                if next.is_none() {
-                    // No existing snapshot.
-                    return Ok(None);
-                }
-                let row = next.unwrap();
-                last_index = row.get(0).expect("Expected index.");
-
-                // Convert back pool from i64 to u64.
-                let pool: i64 = row.get(1).expect("Expected icpt pool.");
-                let pool = pool as u64;
-                balance_book.token_pool = Tokens::from_e8s(pool);
-            }
-
-            // Read last books.
-            {
-                let mut stmt = tx
-                    .prepare("SELECT block_idx,account,icpt,num_pruned_transactions FROM books WHERE block_idx=?")
-                    .map_err(|e| e.to_string())?;
-                let mut rows = stmt.query(params![last_index]).map_err(|e| e.to_string())?;
-                while let Some(row) = rows.next().unwrap() {
-                    let acc_hex: String = row.get(1).expect("Expected account identifier.");
-                    let acc_id = AccountIdentifier::from_hex(&acc_hex).unwrap();
-                    let icpt = row.get(2).expect("Expected tokens.");
-                    balance_book
-                        .store
-                        .insert(acc_id, last_index, Tokens::from_e8s(icpt));
-                    balance_book
-                        .store
-                        .acc_to_hist
-                        .get_mut(&acc_id)
-                        .expect("Expected history for account.")
-                        .num_pruned_transactions = row.get(3).unwrap();
-                }
-
-                SQLiteStore::sanity_check(&balance_book).map_err(|e| e)?;
-            }
-        }
-
-        let last_block = self.get_at(last_index);
-        Ok(Some((last_block.unwrap(), balance_book)))
     }
 
     /// Sanity check (sum of tokens equal pool size).
@@ -865,16 +553,78 @@ impl SQLiteStore {
         }
         Ok(())
     }
+    fn read_oldest_block_snapshot(
+        &self,
+    ) -> Result<Option<(HashedBlock, BalanceBook)>, BlockStoreError> {
+        let mut balance_book = BalanceBook::default();
+        let last_index;
+
+        let mut con = self.connection.lock().unwrap();
+        // Read last balance.
+        {
+            let mut stmt = con
+                .prepare("SELECT block_idx,icpt_pool FROM balances ORDER BY block_idx DESC LIMIT 1")
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            let mut rows = stmt
+                .query([])
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+
+            let next = rows
+                .next()
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+
+            if next.is_none() {
+                // No existing snapshot.
+                return Ok(None);
+            }
+            let row = next.unwrap();
+            last_index = row.get(0).expect("Expected index.");
+
+            // Convert back pool from i64 to u64.
+            let pool: i64 = row.get(1).expect("Expected icpt pool.");
+            let pool = pool as u64;
+            balance_book.token_pool = Tokens::from_e8s(pool);
+        }
+
+        // Read last books.
+        {
+            let mut stmt = con
+                    .prepare("SELECT block_idx,account,icpt,num_pruned_transactions FROM books WHERE block_idx=?")
+                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            let mut rows = stmt
+                .query(params![last_index])
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            while let Some(row) = rows.next().unwrap() {
+                let acc_hex: String = row.get(1).expect("Expected account identifier.");
+                let acc_id = AccountIdentifier::from_hex(&acc_hex).unwrap();
+                let icpt = row.get(2).expect("Expected tokens.");
+                balance_book
+                    .store
+                    .insert(acc_id, last_index, Tokens::from_e8s(icpt));
+                balance_book
+                    .store
+                    .acc_to_hist
+                    .get_mut(&acc_id)
+                    .expect("Expected history for account.")
+                    .num_pruned_transactions = row.get(3).unwrap();
+            }
+        }
+
+        let last_block = database_access::get_hashed_block(&mut *con, &last_index)?;
+        Self::sanity_check(&balance_book).map_err(|e| BlockStoreError::Other(e))?;
+        Ok(Some((last_block, balance_book)))
+    }
 
     fn write_oldest_block_snapshot(
         &mut self,
         hb: &HashedBlock,
         balances: &BalanceBook,
-    ) -> Result<(), String> {
-        if let Ok(b) = self.get_first_hashed_block() {
+    ) -> Result<(), BlockStoreError> {
+        let mut con = self.connection.lock().unwrap();
+        if let Ok(b) = database_access::get_first_hashed_block(&mut *con, None) {
             // this check is made in upper levels, but for readability:
             assert!(
-                b.index <= hb.index,
+                b.index <= hb.index || (hb.index == 0 && b.index > 0),
                 "Oldest: {}, new oldest: {}",
                 b.index,
                 hb.index
@@ -885,9 +635,6 @@ impl SQLiteStore {
 
         // NB: storing the index of block should be enough, no need to store the
         // hashedblock itself.
-
-        let mut con = self.connection.lock().unwrap();
-        let tx = con.transaction().expect("Cannot open transaction");
 
         // Build balances.
         let mut balances_snapshot = BalanceBook::default();
@@ -904,24 +651,23 @@ impl SQLiteStore {
         // and Rusqlite doesn't like overflows when converting u64 to i64.
         let pool = balances_snapshot.token_pool.get_e8s() as i64;
 
-        tx.execute(
+        con.execute(
             "INSERT INTO balances(block_idx,icpt_pool) VALUES (?1,?2)",
             params![hb.index, pool],
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
 
         {
-            let mut stmt = tx.prepare("INSERT INTO books(block_idx,account,icpt,num_pruned_transactions) VALUES (?1,?2,?3,?4)")
+            let mut stmt = con.prepare("INSERT INTO books(block_idx,account,icpt,num_pruned_transactions) VALUES (?1,?2,?3,?4)")
                 .expect("Couldn't prepare statement");
             for (acc, history) in balances.store.acc_to_hist.iter() {
                 let icpts = history.get_at(hb.index).unwrap();
                 let num_pruned = history.num_pruned_transactions;
                 stmt.execute(params![hb.index, acc.to_hex(), icpts.get_e8s(), num_pruned])
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
         }
 
-        tx.commit().map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -937,12 +683,14 @@ impl SQLiteStore {
             Err(BlockStoreError::NotAvailable(*block_idx))
         }
     }
+
     pub fn get_first_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_first_verified_hashed_block(&mut *connection)
+        database_access::get_first_hashed_block(&mut *connection, Some(true))
     }
     pub fn get_hashed_block(&self, block_idx: &u64) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
+
         database_access::get_hashed_block(&mut *connection, block_idx)
     }
 
@@ -955,46 +703,67 @@ impl SQLiteStore {
     }
     fn check_table_coherence(&self) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        let mut stmt = connection
-            .prepare("SELECT idx FROM blocks")
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let indexes = stmt
-            .query_map(params![], |row| row.get(0))
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        //Get all indices for table blocks
-        let mut block_indices: Vec<u64> = indexes.map(|x| x.unwrap()).collect();
-        drop(stmt);
-
-        let mut stmt = connection
-            .prepare("SELECT block_idx FROM transactions")
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let indexes = stmt
-            .query_map(params![], |row| row.get(0))
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let mut transaction_block_indices: Vec<u64> = indexes.map(|x| x.unwrap()).collect();
-        drop(stmt);
-
-        let all_indices: Vec<u64> = block_indices
+        let mut block_indices =
+            database_access::get_indices(&mut *connection, "SELECT idx from blocks")?;
+        let mut transaction_block_indices =
+            database_access::get_indices(&mut *connection, "SELECT block_idx FROM transactions")?;
+        let vec_sorted_diff = |blocks_indices: &mut [u64],
+                               other_indices: &mut [u64]|
+         -> Result<Vec<u64>, BlockStoreError> {
+            if blocks_indices.len() >= other_indices.len() {
+                let mut result: Vec<u64> = Vec::new();
+                let mut idx_b = 0;
+                for item in blocks_indices {
+                    if idx_b >= other_indices.len() || *item < other_indices[idx_b] {
+                        result.push(*item);
+                        continue;
+                    }
+                    if *item == other_indices[idx_b] {
+                        idx_b += 1;
+                        continue;
+                    }
+                    if *item > other_indices[idx_b] {
+                        /* Vector a is representative of the block_idxes in the blocks table and since other tables refer to the blocks
+                        table with a forein key constraint it should not be possible for other tables to have a block idx that is
+                        not present in the blocks table. */
+                        while idx_b < other_indices.len() {
+                            if *item == other_indices[idx_b] {
+                                idx_b += 1;
+                                break;
+                            }
+                            result.push(other_indices[idx_b]);
+                            idx_b += 1;
+                        }
+                    }
+                }
+                Ok(result)
+            } else {
+                Err(BlockStoreError::Other(
+                    "Blocks table is not table with the most blocks_indices".to_string(),
+                ))
+            }
+        };
+        let mut all_indices: Vec<u64> = block_indices
             .iter()
             .cloned()
             .chain(transaction_block_indices.iter().cloned())
             .collect();
-        block_indices.sort_unstable();
+        all_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        all_indices.dedup();
+        block_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
         block_indices.dedup();
-        transaction_block_indices.sort_unstable();
+        transaction_block_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
         transaction_block_indices.dedup();
         if !all_indices.is_empty() {
+            let diff = vec_sorted_diff(all_indices.as_mut_slice(), block_indices.as_mut_slice())?;
             assert!(
-                all_indices
-                    .clone()
-                    .into_iter()
-                    .all(|item| block_indices.contains(&item)),
+                diff.is_empty(),
                 "Transaction Table has more unique block indizes than Blocks Table"
             );
-            let difference_transaction_indices: Vec<u64> = all_indices
-                .into_iter()
-                .filter(|item| !transaction_block_indices.contains(item))
-                .collect();
+            let difference_transaction_indices: Vec<u64> = vec_sorted_diff(
+                all_indices.as_mut_slice(),
+                transaction_block_indices.as_mut_slice(),
+            )?;
             for missing_index in difference_transaction_indices {
                 let missing_block =
                     database_access::get_hashed_block(&mut *connection, &missing_index)?;
@@ -1027,41 +796,34 @@ impl SQLiteStore {
             false => Err(BlockStoreError::NotFound(*idx)),
         }
     }
-    pub fn get_account_balance(
-        &self,
-        account: &AccountIdentifier,
-        block_idx: &u64,
-    ) -> Result<Tokens, BlockStoreError> {
-        if self.is_verified_by_idx(block_idx)? {
-            let mut connection = self.connection.lock().unwrap();
-            let amount =
-                database_access::get_account_balance(&mut *connection, block_idx, account)?;
-            match amount {
-                Some(a) => Ok(Tokens::from_e8s(a)),
-                None => Ok(Tokens::ZERO),
-            }
-        } else {
-            Err(BlockStoreError::Other(
-                "Block exists but is not available for querrying as it is not yet verified"
-                    .to_string(),
-            ))
-        }
-    }
 
     pub fn get_first_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_first_hashed_block(&mut *connection)
+
+        database_access::get_first_hashed_block(&mut *connection, None)
     }
 
     pub fn get_latest_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_latest_hashed_block(&mut *connection)
+
+        database_access::get_latest_hashed_block(&mut *connection, None)
     }
 
     pub fn get_latest_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-
-        database_access::get_latest_verified_hashed_block(&mut *connection)
+        database_access::get_latest_hashed_block(&mut *connection, Some(true))
+    }
+    pub fn get_account_balance(
+        &self,
+        acc: &AccountIdentifier,
+        h: &BlockIndex,
+    ) -> Result<Tokens, Error> {
+        let mut connection = self.connection.lock().unwrap();
+        if database_access::is_verified(&mut *connection, h)? {
+            self.balance_book.store.get_at(*acc, *h)
+        } else {
+            Err(Error::InvalidBlockId(h.to_string()))
+        }
     }
 
     pub fn get_at(&self, index: BlockIndex) -> Result<HashedBlock, BlockStoreError> {
@@ -1129,7 +891,7 @@ impl SQLiteStore {
         }
     }
 
-    pub fn push(&self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
+    pub fn push(&mut self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
         let mut con = self.connection.lock().unwrap();
         database_access::push_hashed_block(&mut *con, hb)?;
         database_access::push_transaction(
@@ -1137,7 +899,10 @@ impl SQLiteStore {
             &Block::decode(hb.block.clone()).unwrap().transaction,
             &hb.index,
         )?;
+        drop(con);
+        self.process_block(hb)?;
         //TODO: UPDATE ACCOUNT BALANCES
+
         Ok(())
     }
 
@@ -1146,8 +911,8 @@ impl SQLiteStore {
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
-        for hb in batch {
-            match database_access::push_hashed_block(&mut *connection, &hb) {
+        for hb in &batch {
+            match database_access::push_hashed_block(&mut *connection, hb) {
                 Ok(_) => (),
                 Err(e) => {
                     connection
@@ -1173,60 +938,127 @@ impl SQLiteStore {
         connection
             .execute_batch("COMMIT TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+        drop(connection);
+        for hb in &batch {
+            self.process_block(hb)?;
+        }
+        Ok(())
+    }
+    pub fn process_block(&mut self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
+        let HashedBlock {
+            block,
+            hash: _,
+            parent_hash: _,
+            index,
+        } = hb;
+
+        let block = Block::decode(block.clone()).unwrap();
+        let mut bb = &mut self.balance_book;
+        bb.store.transaction_context = Some(*index);
+        apply_operation(bb, &block.transaction.operation).unwrap();
+        bb.store.transaction_context = None;
         Ok(())
     }
 
-    pub fn prune(&mut self, hb: &HashedBlock, balance_book: &BalanceBook) -> Result<(), String> {
-        self.write_oldest_block_snapshot(hb, balance_book)?;
-        let mut connection = self.connection.lock().unwrap();
-        let tx = connection.transaction().expect("Cannot open transaction");
-        // NB: An optimization would be to update only modified accounts.
-        tx.execute(
-            "DELETE FROM books WHERE block_idx > 0 AND block_idx < ?",
-            params![hb.index],
-        )
-        .map_err(|e| e.to_string())?;
-        tx.execute(
-            "DELETE FROM balances WHERE block_idx > 0 AND block_idx < ?",
-            params![hb.index],
-        )
-        .map_err(|e| e.to_string())?;
-
-        tx.execute(
-            "DELETE FROM transactions WHERE block_idx > 0 AND block_idx < ?",
-            params![hb.index],
-        )
-        .map_err(|e| e.to_string())?;
-
-        tx.execute(
-            "DELETE FROM blocks WHERE idx > 0 AND idx < ?",
-            params![hb.index],
-        )
-        .map_err(|e| e.to_string())?;
-        tx.commit().map_err(|e| e.to_string())?;
+    pub fn try_prune(
+        &mut self,
+        max_blocks: &Option<u64>,
+        prune_delay: u64,
+    ) -> Result<(), BlockStoreError> {
+        if let Some(block_limit) = max_blocks {
+            let first_idx = self
+                .get_first_hashed_block()
+                .ok()
+                .map(|hb| hb.index)
+                .unwrap_or(0);
+            let last_idx = self
+                .get_latest_hashed_block()
+                .ok()
+                .map(|hb| hb.index)
+                .unwrap_or(0);
+            if first_idx + block_limit + prune_delay < last_idx {
+                let new_first_idx = last_idx - block_limit;
+                let hb = self.get_hashed_block(&new_first_idx).ok();
+                match hb {
+                    Some(b) => {
+                        self.balance_book.store.prune_at(b.index);
+                        self.prune(&b, &self.balance_book.clone())?
+                    }
+                    None => return Err(BlockStoreError::NotFound(new_first_idx)),
+                }
+            }
+        }
         Ok(())
     }
 
     pub fn first_snapshot(&self) -> Option<(HashedBlock, BalanceBook)> {
-        self.read_oldest_block_snapshot()
-            .expect("Error while retrieving first snapshot.")
+        self.read_oldest_block_snapshot().unwrap()
+    }
+    pub fn load_from_store(&mut self) -> Result<u64, BlockStoreError> {
+        assert!(
+            self.balance_book.store.acc_to_hist.is_empty(),
+            "Blocks is not empty"
+        );
+        match self.get_hashed_block(&0) {
+            Ok(genesis) => self.process_block(&genesis)?,
+
+            Err(_) => return Ok(0),
+        }
+
+        if let Some((_, balance_book)) = self.first_snapshot() {
+            self.balance_book = balance_book;
+        }
+
+        let mut n = 1; // one block loaded so far (genesis or first from snapshot)
+        let mut next_idx = self
+            .get_first_hashed_block()
+            .ok()
+            .map(|hb| hb.index + 1)
+            .unwrap();
+        loop {
+            let batch = self
+                .get_hashed_block_range(next_idx..next_idx + Self::LOAD_FROM_STORE_BLOCK_BATCH_LEN)
+                .ok();
+
+            match batch {
+                Some(b) => {
+                    for hb in b {
+                        self.process_block(&hb.clone()).map_err(|e| {
+                        error!(
+                            "Processing block retrieved from store failed. Block idx: {}, error: {:?}",
+                            next_idx, e
+                        );
+                        e
+                    })?;
+                        next_idx += 1;
+                        n += 1;
+                        if n % 30000 == 0 {
+                            info!("Loading... {} blocks processed", n);
+                        }
+                    }
+                }
+                None => break,
+            };
+        }
+
+        Ok(n)
     }
 
     pub fn set_hashed_block_to_verified(
         &self,
-        block_height: BlockIndex,
+        block_height: &BlockIndex,
     ) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
         let last_verified =
-            database_access::get_latest_verified_hashed_block(&mut *connection).ok();
-        let last_block = database_access::get_latest_hashed_block(&mut *connection)?;
+            database_access::get_latest_hashed_block(&mut *connection, Some(true)).ok();
+        let last_block = database_access::get_latest_hashed_block(&mut *connection, None)?;
         match last_verified {
             Some(verified) => {
-                assert!(verified.index <= block_height);
-                let height = if block_height > last_block.index {
+                assert!(verified.index <= *block_height);
+                let height = if *block_height > last_block.index {
                     last_block.index
                 } else {
-                    block_height
+                    *block_height
                 };
                 let mut stmt = connection
                     .prepare("UPDATE blocks SET verified = TRUE WHERE idx >= ?1 AND idx <= ?2")
@@ -1236,10 +1068,10 @@ impl SQLiteStore {
                 Ok(())
             }
             None => {
-                let height = if block_height > last_block.index {
+                let height = if *block_height > last_block.index {
                     last_block.index
                 } else {
-                    block_height
+                    *block_height
                 };
                 let mut stmt = connection
                     .prepare("UPDATE blocks SET verified = TRUE WHERE idx <= ?")
