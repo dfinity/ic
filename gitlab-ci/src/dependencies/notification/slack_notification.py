@@ -82,7 +82,7 @@ class SlackNotifier(ScannerSubscriber, FindingDataSourceSubscriber):
     @staticmethod
     def __get_finding_info(finding: Finding) -> str:
         if finding.more_info is None:
-            return f"({finding.repository},{finding.scanner},{finding.vulnerable_dependency.id},{finding.vulnerable_dependency.version})"
+            return f"({finding.repository}, {finding.scanner}, {finding.vulnerable_dependency.id}, {finding.vulnerable_dependency.version})"
         return finding.more_info
 
     def __is_risk_assessment_needed(self, finding: Finding) -> bool:

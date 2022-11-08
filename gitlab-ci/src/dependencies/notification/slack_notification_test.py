@@ -379,7 +379,7 @@ def test_on_finding_created_or_updated_notify_with_finding_primary_key_if_more_i
 
     assert len(api.messages) == 1
     assert (
-        f"({finding.repository},{finding.scanner},{finding.vulnerable_dependency.id},{finding.vulnerable_dependency.version})"
+        f"({finding.repository}, {finding.scanner}, {finding.vulnerable_dependency.id}, {finding.vulnerable_dependency.version})"
         in api.messages[0]
     )
 

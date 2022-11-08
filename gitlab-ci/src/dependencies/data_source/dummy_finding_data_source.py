@@ -4,6 +4,7 @@ from typing import Optional
 from data_source.commit_type import CommitType
 from data_source.finding_data_source import FindingDataSource
 from model.finding import Finding
+from model.user import User
 
 
 class DummyFindingDataSource(FindingDataSource):
@@ -18,5 +19,5 @@ class DummyFindingDataSource(FindingDataSource):
     def create_or_update_open_finding(self, finding: Finding):
         pass
 
-    def get_risk_assessor(self) -> List[str]:
+    def get_risk_assessor(self) -> List[User]:
         return []
