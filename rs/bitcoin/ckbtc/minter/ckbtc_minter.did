@@ -28,7 +28,7 @@ type TransferError = variant {
   TooOld;
   InsufficientFunds : record { balance : nat };
 };
-type UpdateBalanceArgs = record { subaccount : vec nat8 };
+type UpdateBalanceArgs = record { subaccount : opt vec nat8 };
 type UpdateBalanceError = variant {
   GenericError : record { error_message : text; error_code : nat64 };
   TemporarilyUnavailable : text;

@@ -24,7 +24,7 @@ const GET_UTXOS_COST_CYCLES: u64 = 100_000_000;
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct UpdateBalanceArgs {
-    pub subaccount: Subaccount,
+    pub subaccount: Option<Subaccount>,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -85,7 +85,7 @@ pub async fn update_balance(
 
     let account = Account {
         owner: PrincipalId::from(caller),
-        subaccount: Some(args.subaccount),
+        subaccount: args.subaccount,
     };
 
     let address =
@@ -118,7 +118,7 @@ pub async fn update_balance(
     // Mint ckBTC amount equals to the transferred BTC (minting == transfer to burn).
     let to_caller = Account {
         owner: PrincipalId::from(caller),
-        subaccount: Some(args.subaccount),
+        subaccount: args.subaccount,
     };
 
     ic_cdk::print(format!(

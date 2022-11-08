@@ -122,7 +122,9 @@ async fn test_retrieve_btc(agent: &CkBtcMinterAgent) {
 async fn test_update_balance(agent: &CkBtcMinterAgent) {
     let owner = PrincipalId(agent.agent.get_principal().unwrap());
     let subaccount = compute_subaccount(owner, 0);
-    let args = UpdateBalanceArgs { subaccount };
+    let args = UpdateBalanceArgs {
+        subaccount: Some(subaccount),
+    };
     let res = agent
         .update_balance(args)
         .await
