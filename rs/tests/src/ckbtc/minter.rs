@@ -355,7 +355,7 @@ async fn update_balance(
 ) -> UpdateBalanceResult {
     let result = ckbtc_minter_agent
         .update_balance(UpdateBalanceArgs {
-            subaccount: *subaccount,
+            subaccount: Some(*subaccount),
         })
         .await
         .expect("Error while calling update_balance")
@@ -480,7 +480,7 @@ async fn assert_no_new_utxo(agent: &CkBtcMinterAgent, subaccount: &Subaccount) {
 async fn assert_temporarily_unavailable(agent: &CkBtcMinterAgent, subaccount: &Subaccount) {
     let result = agent
         .update_balance(UpdateBalanceArgs {
-            subaccount: *subaccount,
+            subaccount: Some(*subaccount),
         })
         .await
         .expect("Error while calling update_balance");
@@ -494,7 +494,7 @@ async fn assert_update_balance_error(
 ) {
     let result = agent
         .update_balance(UpdateBalanceArgs {
-            subaccount: *subaccount,
+            subaccount: Some(*subaccount),
         })
         .await
         .expect("Error while calling update_balance");
