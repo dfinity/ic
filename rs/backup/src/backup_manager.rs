@@ -17,6 +17,8 @@ use crate::backup_helper::BackupHelper;
 use crate::config::Config;
 use crate::util::sleep_secs;
 
+const STATE_FILE_NAME: &str = "backup_manager_state.json5";
+
 pub struct SubnetBackup {
     pub sync_last_time: Instant,
     pub sync_period: Duration,
@@ -24,7 +26,7 @@ pub struct SubnetBackup {
     pub replay_period: Duration,
     pub backup_helper: BackupHelper,
 }
-pub struct Manager {
+pub struct BackupManager {
     pub root_dir: PathBuf,
     pub nns_url: String,
     pub subnet_backups: Vec<SubnetBackup>,
@@ -43,12 +45,12 @@ struct SubnetState {
     pub replay_last_time: Instant,
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct ManagerState {
+struct BackupManagerState {
     pub subnet_states: HashMap<SubnetId, SubnetState>,
 }
 
 fn fetch_value_or_default<T>(
-    state: &Result<ManagerState, String>,
+    state: &Result<BackupManagerState, String>,
     subnet_id: &SubnetId,
     fetch_value_fn: fn(&SubnetState) -> T,
     default_value: T,
@@ -62,12 +64,12 @@ fn fetch_value_or_default<T>(
     }
 }
 
-impl Manager {
-    pub fn new(config_file: PathBuf, log: Logger) -> Manager {
+impl BackupManager {
+    pub fn new(config_file: PathBuf, log: Logger) -> BackupManager {
         let config = Config::load_config(config_file).expect("Updated config file can't be loaded");
         // Load the manager state
-        let state_file = config.root_dir.join("manager_config.json5");
-        let manager_state = Manager::load_state(&state_file);
+        let state_file = config.root_dir.join(STATE_FILE_NAME);
+        let manager_state = BackupManager::load_state(&state_file);
         info!(log, "Loaded manager state: {:?}", manager_state);
         let ssh_credentials_file = match config.ssh_credentials.into_os_string().into_string() {
             Ok(f) => f,
@@ -115,7 +117,7 @@ impl Manager {
                 backup_helper,
             });
         }
-        Manager {
+        BackupManager {
             root_dir: config.root_dir.clone(),
             nns_url: config.nns_url,
             subnet_backups: backups,
@@ -124,9 +126,9 @@ impl Manager {
     }
 
     pub fn do_backups(&mut self) {
-        let config_file = self.root_dir.join("manager_config.json5");
+        let config_file = self.root_dir.join(STATE_FILE_NAME);
         loop {
-            let mut state = ManagerState::default();
+            let mut state = BackupManagerState::default();
             for b in &self.subnet_backups {
                 let s = SubnetState {
                     replica_version: b.backup_helper.replica_version.clone(),
@@ -149,7 +151,7 @@ impl Manager {
                                 .get_mut(&b.backup_helper.subnet_id)
                                 .expect("HashMap should still contain the value");
                             s.sync_last_time = b.sync_last_time;
-                            if let Err(err) = Manager::save_state(&state, &config_file) {
+                            if let Err(err) = BackupManager::save_state(&state, &config_file) {
                                 error!(self.log, "Error saving state: {:?}", err);
                             }
                         }
@@ -166,7 +168,7 @@ impl Manager {
                         .expect("HashMap should still contain the value");
                     s.replay_last_time = b.replay_last_time;
                     s.replica_version = b.backup_helper.replica_version.clone();
-                    if let Err(err) = Manager::save_state(&state, &config_file) {
+                    if let Err(err) = BackupManager::save_state(&state, &config_file) {
                         error!(self.log, "Error saving state: {:?}", err);
                     }
                 }
@@ -177,7 +179,7 @@ impl Manager {
         }
     }
 
-    fn save_state(state: &ManagerState, state_file: &PathBuf) -> Result<(), String> {
+    fn save_state(state: &BackupManagerState, state_file: &PathBuf) -> Result<(), String> {
         let json =
             json5::to_string(state).map_err(|err| format!("Error serializing state: {:?}", err))?;
         let mut file = File::create(state_file)
@@ -186,10 +188,10 @@ impl Manager {
             .map_err(|err| format!("Error writing state: {:?}", err))
     }
 
-    fn load_state(state_file: &PathBuf) -> Result<ManagerState, String> {
+    fn load_state(state_file: &PathBuf) -> Result<BackupManagerState, String> {
         let cfg_str = fs::read_to_string(&state_file)
             .map_err(|err| format!("Error loading state file: {:?}", err))?;
-        json5::from_str::<ManagerState>(&cfg_str)
+        json5::from_str::<BackupManagerState>(&cfg_str)
             .map_err(|err| format!("Error deserializing state: {:?}", err))
     }
 }
