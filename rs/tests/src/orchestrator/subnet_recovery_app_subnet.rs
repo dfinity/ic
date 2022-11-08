@@ -113,11 +113,6 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         Err(_) => panic!("Environment variable $IC_VERSION_ID is not set!"),
     };
     info!(logger, "IC_VERSION_ID: {}", master_version);
-    let working_version = if upgrade {
-        format!("{}-test", master_version)
-    } else {
-        master_version.clone()
-    };
     let master_version = ReplicaVersion::try_from(master_version).unwrap();
     let topology_snapshot = env.topology_snapshot();
 
@@ -213,7 +208,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
             .path()
             .to_path_buf(),
         nns_url: nns_node.get_public_url(),
-        replica_version: Some(master_version),
+        replica_version: Some(master_version.clone()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
     };
 
@@ -233,9 +228,16 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         .map(|n| n.node_id)
         .collect::<Vec<NodeId>>();
 
+    let version_is_broken = upgrade && unassigned_nodes_ids.is_empty();
+    let working_version = if version_is_broken {
+        format!("{}-test", master_version)
+    } else {
+        master_version.to_string()
+    };
+
     let subnet_args = AppSubnetRecoveryArgs {
         subnet_id,
-        upgrade_version: upgrade
+        upgrade_version: version_is_broken
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         pub_key: Some(pub_key),
