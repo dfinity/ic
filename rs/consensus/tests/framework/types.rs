@@ -8,12 +8,12 @@ use ic_consensus::{consensus::ConsensusImpl, dkg};
 use ic_interfaces::{
     canister_http::CanisterHttpPayloadBuilder,
     certification::Certifier,
-    certified_stream_store::CertifiedStreamStore,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
+use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};

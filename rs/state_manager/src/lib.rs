@@ -17,9 +17,9 @@ use ic_canonical_state::{
 };
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{recompute_digest, Digest, LabeledTree, MixedHashTree, Witness};
-use ic_interfaces::{
-    certification::Verifier,
-    certified_stream_store::{CertifiedStreamStore, DecodeStreamError, EncodeStreamError},
+use ic_interfaces::certification::Verifier;
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
     CertificationMask, CertificationScope, Labeled, PermanentStateHashError::*, StateHashError,

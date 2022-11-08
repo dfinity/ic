@@ -18,13 +18,13 @@ use hyper::{client::Client, Body, Request, StatusCode, Uri};
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::{
-    certified_stream_store::CertifiedStreamStore,
     messaging::{
         InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
         XNetTransientValidationError,
     },
     validation::ValidationError,
 };
+use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{info, log, warn, ReplicaLogger};

@@ -5,7 +5,7 @@ mod tests;
 
 use hyper::{Body, Request, Response, StatusCode};
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces::certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
+use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};

@@ -42,6 +42,7 @@ DEV_DEPENDENCIES = [
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/ingress_manager",
+    "//rs/interfaces/certified_stream_store",
     "//rs/messaging",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
