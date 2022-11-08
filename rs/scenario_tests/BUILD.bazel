@@ -28,7 +28,6 @@ DEPENDENCIES = [
     "//rs/registry/provisional_whitelist",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
-    "//rs/registry/transport",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
