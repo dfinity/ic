@@ -18,6 +18,7 @@ use strum::IntoEnumIterator;
 pub mod util {
     use super::*;
     use crate::api::CspThresholdSignError;
+    use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
     use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
 
     /// Test that a set of threshold signatures behaves correctly.
@@ -47,9 +48,10 @@ pub mod util {
             seed.derive("test_threshold_signatures::signature_selection");
         let mut rng = seed.into_rng();
         let verifier = {
-            let key_store = TempSecretKeyStore::new();
+            let secret_key_store = TempSecretKeyStore::new();
+            let public_key_store = TempPublicKeyStore::new();
             let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-            Csp::of(csprng, key_store)
+            Csp::of(csprng, secret_key_store, public_key_store)
         };
         let threshold = try_number_of_nodes_from_csp_pub_coeffs(public_coefficients)
             .expect("Intolerable number of nodes");
@@ -245,9 +247,10 @@ pub mod util {
         let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
 
         let csp = {
-            let key_store = TempSecretKeyStore::new();
+            let secret_key_store = TempSecretKeyStore::new();
+            let public_key_store = TempPublicKeyStore::new();
             let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-            Csp::of(csprng, key_store)
+            Csp::of(csprng, secret_key_store, public_key_store)
         };
 
         match csp.threshold_keygen(

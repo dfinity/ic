@@ -1,4 +1,5 @@
 use crate::CryptoComponentFatClient;
+use ic_crypto_internal_csp::public_key_store::PublicKeyStore;
 use ic_crypto_internal_csp::secret_key_store::SecretKeyStore;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_interfaces_registry::RegistryClient;
@@ -13,12 +14,13 @@ const NODE_ID: u64 = 42;
 /// Note that `S: 'static` is required so that `CspTlsHandshakeSignerProvider`
 /// can be implemented for [Csp]. See the documentation of the respective `impl`
 /// block for more details on the meaning of `S: 'static`.
-pub fn crypto_component_with<S: SecretKeyStore + 'static>(
+pub fn crypto_component_with<S: SecretKeyStore + 'static, P: PublicKeyStore + 'static>(
     registry_client: Arc<dyn RegistryClient>,
     secret_key_store: S,
+    public_key_store: P,
 ) -> CryptoComponentFatClient<impl CryptoServiceProvider> {
     let csprng = ChaCha20Rng::seed_from_u64(42);
-    let csp = Csp::of(csprng, secret_key_store);
+    let csp = Csp::of(csprng, secret_key_store, public_key_store);
 
     // The node id is currently irrelevant for the tests, so we set it to a constant
     // for now.

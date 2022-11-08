@@ -1,3 +1,4 @@
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdEcdsaSignerCspVault;
@@ -15,8 +16,8 @@ use ic_types::Randomness;
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdEcdsaSignerCspVault
-    for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    ThresholdEcdsaSignerCspVault for LocalCspVault<R, S, C, P>
 {
     fn ecdsa_sign_share(
         &self,
@@ -53,7 +54,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdEcdsaSig
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
     fn combined_commitment_opening_from_sks(
         &self,
         combined_commitment: &CombinedCommitment,

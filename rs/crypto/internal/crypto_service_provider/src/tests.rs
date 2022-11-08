@@ -2,7 +2,6 @@ mod csp_tests {
     use crate::api::CspSigner;
     use crate::api::CspTlsHandshakeSignerProvider;
     use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
-    use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
     use crate::vault::test_utils::tls::ed25519_csp_pubkey_from_tls_pubkey_cert;
     use crate::CryptoRng;
     use crate::Csp;
@@ -137,7 +136,7 @@ mod csp_tests {
         }
 
         fn csp_with_public_keys(public_keys: NodePublicKeys) -> Csp {
-            let mut csp = Csp::of(csprng(), VolatileSecretKeyStore::new());
+            let mut csp = Csp::with_rng(csprng());
             csp.public_key_data =
                 PublicKeyData::try_from(public_keys).expect("invalid public key data");
             csp
@@ -373,7 +372,7 @@ mod csp_tests {
     }
 
     fn csp_with_key_pair() -> (Csp, CspPublicKey) {
-        let csp = Csp::of(csprng(), VolatileSecretKeyStore::new());
+        let csp = Csp::with_rng(csprng());
         let public_key = csp
             .gen_key_pair(AlgorithmId::Ed25519)
             .expect("error generating public/private key pair");
@@ -383,7 +382,7 @@ mod csp_tests {
     fn csp_with_tls_key_pair() -> (Csp, TlsPublicKeyCert) {
         const NODE_1: u64 = 4241;
         const NOT_AFTER: &str = "25670102030405Z";
-        let csp = Csp::of(csprng(), VolatileSecretKeyStore::new());
+        let csp = Csp::with_rng(csprng());
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("error generating TLS key pair");

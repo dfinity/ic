@@ -14,6 +14,8 @@ mod threshold_sig;
 mod tls;
 
 use crate::key_id::KeyId;
+use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
@@ -25,7 +27,11 @@ use ic_logger::ReplicaLogger;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
+use std::fs;
+use std::fs::Permissions;
+use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
+use tempfile::TempDir;
 
 /// An implementation of `CspVault`-trait that runs in-process
 /// and uses local secret key stores.
@@ -35,17 +41,24 @@ use std::sync::Arc;
 /// Public methods of this struct may be called by implementers of the
 /// [crate::vault::remote_csp_vault::TarpcCspVault] trait in a separate
 /// thread. Panicking should therefore be avoided not to kill that thread.
-pub struct LocalCspVault<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> {
+pub struct LocalCspVault<
+    R: Rng + CryptoRng,
+    S: SecretKeyStore,
+    C: SecretKeyStore,
+    P: PublicKeyStore,
+> {
     // CSPRNG stands for cryptographically secure random number generator.
     csprng: CspRwLock<R>,
     node_secret_key_store: CspRwLock<S>,
-    #[allow(dead_code)]
     canister_secret_key_store: CspRwLock<C>,
+    //TODO CRP-1721: use new field to retrieve public key data
+    #[allow(dead_code)]
+    public_key_store: CspRwLock<P>,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
 }
 
-impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
+impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore> {
     /// Creates a production-grade local CSP vault.
     ///
     /// The `node_secret_key_store` and the `canister_secret_key_store`
@@ -53,33 +66,87 @@ impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     pub fn new(
         node_secret_key_store: ProtoSecretKeyStore,
         canister_secret_key_store: ProtoSecretKeyStore,
+        public_key_store: ProtoPublicKeyStore,
         metrics: Arc<CryptoMetrics>,
         logger: ReplicaLogger,
     ) -> Self {
+        //TODO CRP-1721: ensures paths for 3 key stores are distinct and add corresponding test
         if node_secret_key_store.proto_file_path() == canister_secret_key_store.proto_file_path() {
             panic!("The node secret-key-store and the canister secret-key-store must use different files")
         }
-        LocalCspVault::new_with_os_rng(
+        LocalCspVault::new_internal(
+            OsRng,
             node_secret_key_store,
             canister_secret_key_store,
+            public_key_store,
             metrics,
             logger,
         )
     }
+
+    pub fn new_in_temp_dir() -> (Self, TempDir) {
+        let temp_dir = tempfile::Builder::new()
+            .prefix("ic_crypto_")
+            .tempdir()
+            .expect("failed to create temporary crypto directory");
+        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o750)).unwrap_or_else(|_| {
+            panic!(
+                "failed to set permissions of crypto directory {}",
+                temp_dir.path().display()
+            )
+        });
+        let sks_file = "temp_sks_data.pb";
+        let canister_sks_file = "temp_canister_sks_data.pb";
+        let public_key_store_file = "temp_public_keys.pb";
+
+        let sks = ProtoSecretKeyStore::open(temp_dir.path(), sks_file, None);
+        let canister_sks = ProtoSecretKeyStore::open(temp_dir.path(), canister_sks_file, None);
+        let public_key_store = ProtoPublicKeyStore::open(temp_dir.path(), public_key_store_file);
+
+        let vault = Self::new(
+            sks,
+            canister_sks,
+            public_key_store,
+            Arc::new(CryptoMetrics::none()),
+            no_op_logger(),
+        );
+        (vault, temp_dir)
+    }
 }
 
-impl<S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<OsRng, S, C> {
-    /// Creates a local CSP vault setting the `csprng` to use the OS Rng.
-    pub fn new_with_os_rng(
+impl<R: Rng + CryptoRng, S: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, VolatileSecretKeyStore, P>
+{
+    /// Creates a local CSP vault for testing.
+    ///
+    /// Note: This MUST NOT be used in production as the secrecy of the secret
+    /// key store is not guaranteed.
+    pub fn new_for_test(csprng: R, node_secret_key_store: S, public_key_store: P) -> Self {
+        let metrics = Arc::new(CryptoMetrics::none());
+        Self::new_internal(
+            csprng,
+            node_secret_key_store,
+            VolatileSecretKeyStore::new(),
+            public_key_store,
+            metrics,
+            no_op_logger(),
+        )
+    }
+}
+
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
+    fn new_internal(
+        csprng: R,
         node_secret_key_store: S,
         canister_secret_key_store: C,
+        public_key_store: P,
         metrics: Arc<CryptoMetrics>,
         logger: ReplicaLogger,
     ) -> Self {
-        let csprng = OsRng::default();
-        let csprng = CspRwLock::new_for_rng(csprng, Arc::clone(&metrics));
         LocalCspVault {
-            csprng,
+            csprng: CspRwLock::new_for_rng(csprng, Arc::clone(&metrics)),
             node_secret_key_store: CspRwLock::new_for_sks(
                 node_secret_key_store,
                 Arc::clone(&metrics),
@@ -88,37 +155,20 @@ impl<S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<OsRng, S, C> {
                 canister_secret_key_store,
                 Arc::clone(&metrics),
             ),
+            public_key_store: CspRwLock::new_for_public_key_store(
+                public_key_store,
+                Arc::clone(&metrics),
+            ),
             logger,
             metrics,
         }
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore> LocalCspVault<R, S, VolatileSecretKeyStore> {
-    /// Creates a local CSP vault for testing.
-    ///
-    /// Note: This MUST NOT be used in production as the secrecy of the secret
-    /// key store is not guaranteed.
-    pub fn new_for_test(csprng: R, node_secret_key_store: S) -> Self {
-        let metrics = Arc::new(CryptoMetrics::none());
-        LocalCspVault {
-            csprng: CspRwLock::new_for_rng(csprng, Arc::clone(&metrics)),
-            node_secret_key_store: CspRwLock::new_for_sks(
-                node_secret_key_store,
-                Arc::clone(&metrics),
-            ),
-            canister_secret_key_store: CspRwLock::new_for_csks(
-                VolatileSecretKeyStore::new(),
-                Arc::clone(&metrics),
-            ),
-            logger: no_op_logger(),
-            metrics,
-        }
-    }
-}
-
 // CRP-1248: inline the following methods
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
     fn rng_write_lock(&self) -> RwLockWriteGuard<'_, R> {
         self.csprng.write()
     }

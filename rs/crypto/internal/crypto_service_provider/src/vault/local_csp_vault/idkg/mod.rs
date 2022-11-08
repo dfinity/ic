@@ -1,6 +1,7 @@
 use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::IDKG_THRESHOLD_KEYS_SCOPE;
 use crate::key_id::KeyId;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStorePersistenceError};
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
@@ -26,8 +27,8 @@ use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> IDkgProtocolCspVault
-    for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    IDkgProtocolCspVault for LocalCspVault<R, S, C, P>
 {
     fn idkg_create_dealing(
         &self,
@@ -214,7 +215,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> IDkgProtocolCspVa
     }
 }
 
-impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, S, C> {
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
     fn idkg_create_dealing_internal(
         &self,
         algorithm_id: AlgorithmId,

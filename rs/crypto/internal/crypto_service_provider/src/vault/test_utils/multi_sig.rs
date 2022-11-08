@@ -1,4 +1,5 @@
 use crate::api::CspSigner;
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::{CspMultiSignatureError, CspMultiSignatureKeygenError, CspVault};
@@ -11,9 +12,10 @@ use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 fn multi_sig_verifier() -> impl CspSigner {
-    let dummy_key_store = TempSecretKeyStore::new();
+    let dummy_secret_key_store = TempSecretKeyStore::new();
+    let dummy_public_key_store = TempPublicKeyStore::new();
     let csprng = ChaChaRng::from_seed(thread_rng().gen::<[u8; 32]>());
-    Csp::of(csprng, dummy_key_store)
+    Csp::of(csprng, dummy_secret_key_store, dummy_public_key_store)
 }
 
 pub fn should_generate_multi_bls12_381_key_pair(csp_vault: Arc<dyn CspVault>) {

@@ -1,5 +1,6 @@
 use crate::api::CspSigner;
 use crate::key_id::KeyId;
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::CspTlsKeygenError;
@@ -245,9 +246,10 @@ pub fn should_fail_to_sign_if_secret_key_in_store_has_invalid_length(
 }
 
 fn verifier() -> impl CryptoServiceProvider {
-    let dummy_key_store = TempSecretKeyStore::new();
+    let dummy_secret_key_store = TempSecretKeyStore::new();
+    let dummy_public_key_store = TempPublicKeyStore::new();
     let csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());
-    Csp::of(csprng, dummy_key_store)
+    Csp::of(csprng, dummy_secret_key_store, dummy_public_key_store)
 }
 
 pub fn ed25519_csp_pubkey_from_tls_pubkey_cert(public_key_cert: &TlsPublicKeyCert) -> CspPublicKey {

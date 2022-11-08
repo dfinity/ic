@@ -1,15 +1,15 @@
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
+use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::LocalCspVault;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
-use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_tlscert;
-use ic_logger::replica_logger::no_op_logger;
 use ic_types_test_utils::ids::NODE_1;
 use rand::rngs::OsRng;
 use std::sync::Arc;
+use tempfile::TempDir;
 use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;
 use tokio_rustls::rustls::sign::SigningKey;
 use tokio_rustls::rustls::{SignatureScheme, TLSError};
@@ -18,7 +18,7 @@ const NOT_AFTER: &str = "25670102030405Z";
 
 #[test]
 fn should_produce_same_signature_as_csp_server_if_ed25519_is_chosen() {
-    let csp_server = Arc::new(local_csp_server());
+    let (csp_server, _temp_dir) = local_csp_server();
     let cert = csp_server
         .gen_tls_key_pair(NODE_1, NOT_AFTER)
         .expect("Generation of TLS keys failed.");
@@ -48,7 +48,7 @@ fn should_produce_same_signature_as_csp_server_if_ed25519_is_chosen() {
 
 #[test]
 fn should_return_ed25519_as_signing_key_algorithm() {
-    let csp_server = Arc::new(local_csp_server());
+    let (csp_server, _temp_dir) = local_csp_server();
     let cert = csp_server
         .gen_tls_key_pair(NODE_1, NOT_AFTER)
         .expect("Generation of TLS keys failed.");
@@ -60,7 +60,7 @@ fn should_return_ed25519_as_signing_key_algorithm() {
 
 #[test]
 fn should_return_no_signer_if_ed25519_not_offered() {
-    let csp_server = Arc::new(local_csp_server());
+    let (csp_server, _temp_dir) = local_csp_server();
     let cert = csp_server
         .gen_tls_key_pair(NODE_1, NOT_AFTER)
         .expect("Generation of TLS keys failed.");
@@ -76,7 +76,7 @@ fn should_return_no_signer_if_ed25519_not_offered() {
 
 #[test]
 fn should_return_ed25519_as_signer_scheme() {
-    let csp_server = Arc::new(local_csp_server());
+    let (csp_server, _temp_dir) = local_csp_server();
     let cert = csp_server
         .gen_tls_key_pair(NODE_1, NOT_AFTER)
         .expect("Generation of TLS keys failed.");
@@ -94,7 +94,7 @@ fn should_return_ed25519_as_signer_scheme() {
 
 #[test]
 fn should_return_error_from_csp() {
-    let csp_server = Arc::new(local_csp_server());
+    let (csp_server, _temp_dir) = local_csp_server();
 
     let (_, cert_without_private_key_in_store) = generate_ed25519_tlscert();
 
@@ -110,11 +110,10 @@ fn should_return_error_from_csp() {
     ));
 }
 
-fn local_csp_server() -> LocalCspVault<OsRng, VolatileSecretKeyStore, VolatileSecretKeyStore> {
-    LocalCspVault::new_with_os_rng(
-        VolatileSecretKeyStore::new(),
-        VolatileSecretKeyStore::new(),
-        Arc::new(CryptoMetrics::none()),
-        no_op_logger(),
-    )
+fn local_csp_server() -> (
+    Arc<LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>>,
+    TempDir,
+) {
+    let (vault, temp_dir) = LocalCspVault::new_in_temp_dir();
+    (Arc::new(vault), temp_dir)
 }

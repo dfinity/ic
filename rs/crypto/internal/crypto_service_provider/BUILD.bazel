@@ -59,6 +59,7 @@ rust_library(
         "@crate_index//:slog",
         "@crate_index//:strum",
         "@crate_index//:tarpc",
+        "@crate_index//:tempfile",
         "@crate_index//:threadpool",
         "@crate_index//:tokio",
         "@crate_index//:tokio-openssl",
@@ -86,7 +87,6 @@ rust_test(
         "@crate_index//:lazy_static",
         "@crate_index//:mockall_0_7_2",
         "@crate_index//:proptest",
-        "@crate_index//:tempfile",
     ],
 )
 

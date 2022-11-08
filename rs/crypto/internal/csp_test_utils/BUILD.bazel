@@ -13,6 +13,7 @@ rust_library(
         "//rs/crypto/internal/logmon",
         "//rs/crypto/internal/test_vectors",
         "//rs/monitoring/logger",
+        "//rs/protobuf",
         "//rs/types/types",
         "//rs/types/types_test_utils",
         "@crate_index//:mockall_0_7_2",

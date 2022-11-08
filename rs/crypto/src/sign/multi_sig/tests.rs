@@ -30,7 +30,11 @@ mod test_multi_sign {
                 REG_V2,
             );
             let secret_key_store = secret_key_store_with(key_id, sk);
-            let crypto = crypto_component_with(registry_with(key_record), secret_key_store);
+            let crypto = crypto_component_with(
+                registry_with(key_record),
+                secret_key_store,
+                temp_public_key_store(),
+            );
             let signature = crypto.sign_multi(&msg, *node, REG_V2).unwrap();
             assert_eq!(signature, expected_sig, "Test vector {} failed.", index);
         }
@@ -62,7 +66,11 @@ mod test_multi_sig_verification {
                 REG_V1,
             );
             let secret_key_store = secret_key_store_with(key_id, sk);
-            let crypto = crypto_component_with(registry_with(key_record), secret_key_store);
+            let crypto = crypto_component_with(
+                registry_with(key_record),
+                secret_key_store,
+                temp_public_key_store(),
+            );
 
             let result = crypto.verify_multi_sig_individual(&sig, &msg, *node, REG_V1);
             assert!(result.is_ok(), "Test vector {} failed", index);
@@ -93,6 +101,7 @@ mod test_multi_sig_verification {
         let crypto = crypto_component_with(
             registry_with_records(vec![pk_rec_1, pk_rec_2]),
             secret_key_store_panicking_on_usage(),
+            public_key_store(),
         );
 
         assert_eq!(
@@ -118,6 +127,7 @@ mod test_multi_sig_verification {
         let crypto = crypto_component_with(
             registry_with_records(vec![pk_rec_1]),
             secret_key_store_panicking_on_usage(),
+            public_key_store(),
         );
 
         assert!(matches!(
@@ -152,6 +162,7 @@ mod test_multi_sig_verification {
         let crypto = crypto_component_with(
             registry_with_records(vec![pk_rec_1, pk_rec_2]),
             secret_key_store_panicking_on_usage(),
+            public_key_store(),
         );
 
         assert!(crypto
@@ -184,6 +195,7 @@ mod test_multi_sig_verification {
         let crypto = crypto_component_with(
             registry_with_records(vec![pk_rec_1, pk_rec_2]),
             secret_key_store_panicking_on_usage(),
+            public_key_store(),
         );
 
         assert!(matches!(
