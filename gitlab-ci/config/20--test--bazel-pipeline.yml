@@ -50,7 +50,7 @@ bazel-test-all:
     - .bazel-test-all
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going"
-    BAZEL_TARGETS: "//... //:upload_sdk //ic-os/guestos/dev:upload_disk-img //publish/canisters:upload"
+    BAZEL_TARGETS: "//... //:upload_sdk //publish/canisters:upload //ic-os/guestos/dev:upload_disk-img //ic-os/guestos/prod:upload_disk-img //ic-os/guestos/dev-malicious:upload_disk-img"
 
 bazel-config-check-all-rebuild:
   extends:

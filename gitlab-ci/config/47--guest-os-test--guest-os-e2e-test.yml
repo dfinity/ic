@@ -68,10 +68,6 @@
   extends:
     - .e2e-test-base-k8s
   needs:
-    - job: guest-os-diskimg
-      artifacts: false
-    - job: guest-os-diskimg-dev-malicious
-      artifacts: false
     - job: wait-for-bazel-test-all
       artifacts: false
     - job: guest-os-updateimg-build
