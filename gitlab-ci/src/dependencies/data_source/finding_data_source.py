@@ -4,6 +4,7 @@ from typing import Optional
 
 from data_source.commit_type import CommitType
 from model.finding import Finding
+from model.user import User
 
 
 class FindingDataSource(metaclass=abc.ABCMeta):
@@ -39,6 +40,6 @@ class FindingDataSource(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_risk_assessor(self) -> List[str]:
+    def get_risk_assessor(self) -> List[User]:
         """Get the IDs of the current on duty risk assessors."""
         raise NotImplementedError

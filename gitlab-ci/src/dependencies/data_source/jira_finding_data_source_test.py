@@ -303,6 +303,7 @@ def test_get_open_finding_raise_error_if_no_dependency_data_available(jira_ds, j
 def test_update_open_finding_create_issue(jira_ds, jira_lib_mock):
     issue = Mock()
     issue.id = "JIRA-ID"
+    issue.permalink.return_value = f"https://dfinity.atlassian.net/browse/{issue.id}"
     jira_lib_mock.create_issue.return_value = issue
     finding = Finding(
         "repo1",
@@ -322,6 +323,7 @@ def test_update_open_finding_create_issue(jira_ds, jira_lib_mock):
 
     assert isinstance(finding, JiraFinding)
     assert finding.jira_issue_id == issue.id
+    assert finding.more_info == f"https://dfinity.atlassian.net/browse/{issue.id}"
     jira_lib_mock.create_issue.assert_called_once_with(
         {
             "project": JIRA_BOARD_KEY,

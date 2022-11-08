@@ -498,6 +498,7 @@ class JiraFindingDataSource(FindingDataSource):
             jira_issue = self.jira.create_issue(fields_to_update)
             finding.__class__ = JiraFinding
             finding.jira_issue_id = jira_issue.id
+            finding.more_info = jira_issue.permalink()
             self.findings[jira_issue.id] = (finding_new, jira_issue)
             for sub in self.subscribers:
                 sub.on_finding_created(deepcopy(finding))
