@@ -412,13 +412,7 @@ pub fn verify_chunking(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let cij_to_eijks_terms = cij_to_eijks
-        .iter()
-        .cloned()
-        .zip(xpowers.clone())
-        .collect::<Vec<_>>();
-
-    let lhs = G1Projective::muln_vartime(&cij_to_eijks_terms) + &nizk.yy;
+    let lhs = G1Projective::muln_vartime(&cij_to_eijks[..], &xpowers[..]) + &nizk.yy;
 
     let acc = Scalar::muln_vartime(&nizk.z_s, &xpowers);
 

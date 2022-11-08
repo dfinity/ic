@@ -54,20 +54,24 @@ fn scalar_muln_instance(terms: usize) -> (Vec<Scalar>, Vec<Scalar>) {
     (n_random_scalar(terms), n_random_scalar(terms))
 }
 
-fn g1_muln_instance(terms: usize) -> Vec<(G1Projective, Scalar)> {
-    let mut r = Vec::with_capacity(terms);
+fn g1_muln_instance(terms: usize) -> (Vec<G1Projective>, Vec<Scalar>) {
+    let mut points = Vec::with_capacity(terms);
+    let mut scalars = Vec::with_capacity(terms);
     for _ in 0..terms {
-        r.push((random_g1(), random_scalar()));
+        points.push(random_g1());
+        scalars.push(random_scalar());
     }
-    r
+    (points, scalars)
 }
 
-fn g2_muln_instance(terms: usize) -> Vec<(G2Projective, Scalar)> {
-    let mut r = Vec::with_capacity(terms);
+fn g2_muln_instance(terms: usize) -> (Vec<G2Projective>, Vec<Scalar>) {
+    let mut points = Vec::with_capacity(terms);
+    let mut scalars = Vec::with_capacity(terms);
     for _ in 0..terms {
-        r.push((random_g2(), random_scalar()));
+        points.push(random_g2());
+        scalars.push(random_scalar());
     }
-    r
+    (points, scalars)
 }
 
 fn scalar_multiexp_naive(lhs: &[Scalar], rhs: &[Scalar]) -> Scalar {
@@ -79,12 +83,11 @@ fn scalar_multiexp_naive(lhs: &[Scalar], rhs: &[Scalar]) -> Scalar {
     accum
 }
 
-fn g1_multiexp_naive(terms: &[(G1Projective, Scalar)]) -> G1Projective {
-    let mut accum = G1Projective::identity();
-    for (pt, s) in terms {
-        accum += pt * s;
-    }
-    accum
+fn g1_multiexp_naive(points: &[G1Projective], scalars: &[Scalar]) -> G1Projective {
+    points
+        .iter()
+        .zip(scalars.iter())
+        .fold(G1Projective::identity(), |accum, (p, s)| accum + p * s)
 }
 
 fn bls12_381_scalar_ops(c: &mut Criterion) {
@@ -252,7 +255,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("multiexp_naive2", |b| {
         b.iter_batched_ref(
             || g1_muln_instance(2),
-            |terms| g1_multiexp_naive(terms),
+            |(points, scalars)| g1_multiexp_naive(&points[..], &scalars[..]),
             BatchSize::SmallInput,
         )
     });
@@ -260,7 +263,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("multiexp_naive8", |b| {
         b.iter_batched_ref(
             || g1_muln_instance(8),
-            |terms| g1_multiexp_naive(terms),
+            |(points, scalars)| g1_multiexp_naive(&points[..], &scalars[..]),
             BatchSize::SmallInput,
         )
     });
@@ -268,7 +271,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("multiexp_naive32", |b| {
         b.iter_batched_ref(
             || g1_muln_instance(32),
-            |terms| g1_multiexp_naive(terms),
+            |(points, scalars)| g1_multiexp_naive(&points[..], &scalars[..]),
             BatchSize::SmallInput,
         )
     });
@@ -284,7 +287,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("multiexp_muln_8", |b| {
         b.iter_batched_ref(
             || g1_muln_instance(8),
-            |terms| G1Projective::muln_vartime(terms),
+            |(points, scalars)| G1Projective::muln_vartime(&points[..], &scalars[..]),
             BatchSize::SmallInput,
         )
     });
@@ -292,7 +295,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("multiexp_muln_32", |b| {
         b.iter_batched_ref(
             || g1_muln_instance(32),
-            |terms| G1Projective::muln_vartime(terms),
+            |(points, scalars)| G1Projective::muln_vartime(&points[..], &scalars[..]),
             BatchSize::SmallInput,
         )
     });
@@ -431,7 +434,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("multiexp_muln_8", |b| {
         b.iter_batched_ref(
             || g2_muln_instance(8),
-            |terms| G2Projective::muln_vartime(terms),
+            |(points, scalars)| G2Projective::muln_vartime(&points[..], &scalars[..]),
             BatchSize::SmallInput,
         )
     });
@@ -439,7 +442,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("multiexp_muln_32", |b| {
         b.iter_batched_ref(
             || g2_muln_instance(32),
-            |terms| G2Projective::muln_vartime(terms),
+            |(points, scalars)| G2Projective::muln_vartime(&points[..], &scalars[..]),
             BatchSize::SmallInput,
         )
     });

@@ -1371,20 +1371,23 @@ macro_rules! declare_muln_vartime_impl_for {
         impl $typ {
             /// Multiscalar multiplication using Pippenger's algorithm
             ///
-            /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn
+            /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn,
+            /// where `n = min(points.len(), scalars.len())`.
             ///
             /// Returns the identity element if terms is empty.
             ///
             /// Warning: this function leaks information about the scalars via
             /// memory-based side channels. Do not use this function with secret
             /// scalars.
-            pub fn muln_vartime(terms: &[(Self, Scalar)]) -> Self {
+            pub fn muln_vartime(points: &[Self], scalars: &[Scalar]) -> Self {
                 // Configurable window size: can be in 1..=8
                 type Window = WindowInfo<$window>;
 
-                let mut windows = Vec::with_capacity(terms.len());
-                for (_pt, scalar) in terms {
-                    let sb = scalar.serialize();
+                let count = std::cmp::min(points.len(), scalars.len());
+
+                let mut windows = Vec::with_capacity(count);
+                for s in scalars {
+                    let sb = s.serialize();
 
                     let mut window = [0u8; Window::WINDOWS];
                     for i in 0..Window::WINDOWS {
@@ -1399,10 +1402,10 @@ macro_rules! declare_muln_vartime_impl_for {
 
                 for i in 0..Window::WINDOWS {
                     let mut max_bucket = 0;
-                    for j in 0..terms.len() {
+                    for j in 0..count {
                         let bucket_index = windows[j][i] as usize;
                         if bucket_index > 0 {
-                            buckets[bucket_index] += &terms[j].0;
+                            buckets[bucket_index] += &points[j];
                             max_bucket = std::cmp::max(max_bucket, bucket_index);
                         }
                     }
@@ -1433,7 +1436,8 @@ macro_rules! declare_muln_vartime_affine_impl_for {
         impl $proj {
             /// Multiscalar multiplication
             ///
-            /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn
+            /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn,
+            /// where `n = min(points.len(), scalars.len())`.
             ///
             /// Returns the identity element if terms is empty.
             ///
@@ -1442,13 +1446,13 @@ macro_rules! declare_muln_vartime_affine_impl_for {
             /// scalars.
             pub fn muln_affine_vartime(points: &[$affine], scalars: &[Scalar]) -> Self {
                 let count = std::cmp::min(points.len(), scalars.len());
-                let mut terms = Vec::with_capacity(count);
+                let mut proj_points = Vec::with_capacity(count);
 
                 for i in 0..count {
-                    terms.push((<$proj>::from(&points[i]), scalars[i].clone()));
+                    proj_points.push(<$proj>::from(&points[i]));
                 }
 
-                Self::muln_vartime(&terms)
+                Self::muln_vartime(&proj_points[..], scalars)
             }
         }
     };
@@ -1552,6 +1556,7 @@ declare_mixed_addition_ops_for!(G2Projective, G2Affine);
 declare_windowed_scalar_mul_ops_for!(G2Projective, 4);
 declare_mul2_impl_for!(G2Projective, G2Mul2Table, 2, 3);
 declare_muln_vartime_impl_for!(G2Projective, 3);
+declare_muln_vartime_affine_impl_for!(G2Projective, G2Affine);
 impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);
 
