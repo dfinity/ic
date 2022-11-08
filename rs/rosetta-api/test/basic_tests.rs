@@ -600,12 +600,12 @@ async fn load_from_store_test() {
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = Blocks::new_persistent(location);
+    let mut blocks = Blocks::new_persistent(location).unwrap();
     let mut last_verified = 0;
     for hb in &scribe.blockchain {
-        blocks.push(hb.clone()).unwrap();
+        blocks.push(hb).unwrap();
         if hb.index < 20 {
-            blocks.set_hashed_block_to_verified(hb.index).unwrap();
+            blocks.set_hashed_block_to_verified(&hb.index).unwrap();
             last_verified = hb.index;
         }
     }
@@ -623,7 +623,7 @@ async fn load_from_store_test() {
 
     drop(req_handler);
 
-    let mut blocks = Blocks::new_persistent(location);
+    let mut blocks = Blocks::new_persistent(location).unwrap();
     blocks.load_from_store().unwrap();
 
     assert!(blocks.is_verified_by_idx(&10).unwrap());
@@ -631,13 +631,13 @@ async fn load_from_store_test() {
     assert!(!blocks.is_verified_by_idx(&20).unwrap());
     assert!(blocks.get_account_balance(&some_acc, &20).is_err());
     last_verified = (scribe.blockchain.len() - 1) as u64;
-    blocks.set_hashed_block_to_verified(last_verified).unwrap();
+    blocks.set_hashed_block_to_verified(&last_verified).unwrap();
 
     assert!(blocks.get_account_balance(&some_acc, &20).is_ok());
 
     drop(blocks);
 
-    let mut blocks = Blocks::new_persistent(location);
+    let mut blocks = Blocks::new_persistent(location).unwrap();
     blocks.load_from_store().unwrap();
 
     verify_balances(&scribe, &blocks, 0);
@@ -658,7 +658,7 @@ async fn load_from_store_test() {
 
     drop(req_handler);
 
-    let mut blocks = Blocks::new_persistent(location);
+    let mut blocks = Blocks::new_persistent(location).unwrap();
     blocks.load_from_store().unwrap();
 
     verify_balances(&scribe, &blocks, 10);
@@ -694,11 +694,11 @@ async fn load_unverified_test() {
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = Blocks::new_persistent(location);
+    let mut blocks = Blocks::new_persistent(location).unwrap();
     for hb in &scribe.blockchain {
-        blocks.push(hb.clone()).unwrap();
+        blocks.push(hb).unwrap();
         if hb.index < 20 {
-            blocks.set_hashed_block_to_verified(hb.index).unwrap();
+            blocks.set_hashed_block_to_verified(&hb.index).unwrap();
         }
     }
 
@@ -711,10 +711,10 @@ async fn load_unverified_test() {
 
     drop(blocks);
 
-    let mut blocks = Blocks::new_persistent(location);
+    let mut blocks = Blocks::new_persistent(location).unwrap();
     blocks.load_from_store().unwrap();
     let last_verified = (scribe.blockchain.len() - 1) as u64;
-    blocks.set_hashed_block_to_verified(last_verified).unwrap();
+    blocks.set_hashed_block_to_verified(&last_verified).unwrap();
 
     assert!(blocks.is_verified_by_idx(&49).is_err());
     assert!(blocks.is_verified_by_idx(&50).unwrap());
@@ -733,10 +733,10 @@ async fn store_batch_test() {
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = Blocks::new_persistent(location);
+    let mut blocks = Blocks::new_persistent(location).unwrap();
     for hb in &scribe.blockchain {
         if hb.index < 21 {
-            blocks.push(hb.clone()).unwrap();
+            blocks.push(hb).unwrap();
         }
     }
 
@@ -776,6 +776,6 @@ async fn store_batch_test() {
     );
     assert!(blocks.get_hashed_block(&(last_idx + 1)).ok().is_none());
 
-    blocks.set_hashed_block_to_verified(last_idx).unwrap();
+    blocks.set_hashed_block_to_verified(&last_idx).unwrap();
     verify_balances(&scribe, &blocks, 0);
 }

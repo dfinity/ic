@@ -1,6 +1,6 @@
 use ic_ledger_canister_blocks_synchronizer::{
     balance_book::BalanceBook,
-    blocks::{BlockStoreError, SQLiteStore},
+    blocks::{BlockStoreError, Blocks},
 };
 use ic_ledger_canister_blocks_synchronizer_test_utils::{
     create_tmp_dir, init_test_logger, sample_data::Scribe,
@@ -10,15 +10,14 @@ use ic_ledger_core::{block::BlockType, Tokens};
 use icp_ledger::{AccountIdentifier, Block, BlockIndex};
 use rusqlite::params;
 use std::{collections::BTreeMap, path::Path};
-pub(crate) fn sqlite_on_disk_store(path: &Path) -> SQLiteStore {
-    SQLiteStore::new_on_disk(path).expect("Unable to create store")
+pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
+    Blocks::new_persistent(path).unwrap()
 }
-
 #[actix_rt::test]
 async fn store_smoke_test() {
     init_test_logger();
     let tmpdir = create_tmp_dir();
-    let store = sqlite_on_disk_store(tmpdir.path());
+    let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
 
     for hb in &scribe.blockchain {
@@ -186,7 +185,7 @@ pub(crate) fn to_balances(
     balance_book
 }
 
-fn prune(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
+fn prune(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     let oldest_idx = prune_at;
     let oldest_block = scribe.blockchain.get(oldest_idx as usize).unwrap();
     let oldest_balance = to_balances(
@@ -201,7 +200,7 @@ fn prune(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
     store.prune(oldest_block, &oldest_balance).unwrap();
 }
 
-fn verify_pruned(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
+fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     let after_last_idx = scribe.blockchain.len() as u64;
     let oldest_idx = prune_at.min(after_last_idx);
 
@@ -245,7 +244,7 @@ fn verify_pruned(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
     }
 }
 
-fn verify_balance_snapshot(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {
+fn verify_balance_snapshot(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     let oldest_idx = prune_at as usize;
     let (oldest_block, balances) = store.first_snapshot().unwrap();
     assert_eq!(oldest_block, *scribe.blockchain.get(oldest_idx).unwrap());
