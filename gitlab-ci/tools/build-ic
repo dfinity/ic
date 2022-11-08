@@ -95,7 +95,9 @@ if [ "$BUILD_BINARIES" == "true" ]; then
 fi
 if [ "$BUILD_CANISTERS" == "true" ]; then
     echo "Building Canisters"
-    gitlab-ci/tools/job-driver.py cargo-build-canisters "${CANISTERS_DIR}"
+    mkdir -p "${CANISTERS_DIR}"
+    bazel build --config=local //publish/canisters
+    bazel cquery --output=files //publish/canisters | xargs -I {} cp {} "${CANISTERS_DIR}"
 fi
 if [ "$BUILD_IMAGES" == "true" ]; then
     echo "Building IC-OS Guest Update Image"

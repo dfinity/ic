@@ -1,4 +1,5 @@
 load("//bazel:defs.bzl", "gzip_compress")
+load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 CANISTERS = {
     "candid-test-canister.wasm": "//rs/rust_canisters/dfn_candid:candid-test-canister",
@@ -95,4 +96,10 @@ filegroup(
     name = "canisters",
     srcs = [name + ".gz" for name in CANISTERS],
     visibility = ["//visibility:public"],
+)
+
+upload_artifacts(
+    name = "upload",
+    inputs = [":canisters"],
+    remote_subdir = "canisters",
 )

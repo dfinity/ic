@@ -60,10 +60,7 @@ pub fn load_wasm(manifest_dir: impl AsRef<Path>, binary_name: &str, features: &[
 
                 panic!(
                     "Running on CI and expected canister env var {0}\n\
-                         Please add {1} to the following locations:\n\
-                        \tgitlab-ci/tools/cargo-build-canisters\n\
-                        \tgitlab-ci/src/canisters/wasm-build-functions.sh\n\
-                        \trs/nns/constants/src/lib.rs\n",
+                         Please add {1} as a data dependency in the test's BUILD.bazel target:\n",
                     var_name, binary_name
                 )
             }

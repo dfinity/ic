@@ -3,7 +3,7 @@
 # Script for comparing artifacts in AWS S3 that are produced from our CI
 #
 # We build and push artifacts to S3:
-# * cargo-build-canisters            -> ic/<sha256>/canisters
+# * canister                         -> ic/<sha256>/canisters
 # * cargo-build-release-linux-native -> ic/<sha256>/binaries
 # * guest-os-updateimg               -> ic/<sha256>/guest-os/update-img
 # We build the same set of artifacts:

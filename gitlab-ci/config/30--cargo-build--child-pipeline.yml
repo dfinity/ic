@@ -54,25 +54,6 @@ cargo-build-release-linux-native-malicious:
   variables:
     ARTIFACT_EXT: "-malicious"
 
-cargo-build-canisters:
-  extends:
-    - .bazel-build-k8s
-    - .rules-parent-pipeline-autorun-on-trigger
-  stage: cargo-build
-  needs: []
-  variables:
-    ARTIFACT_EXT: ""
-  artifacts:
-    paths:
-      - "artifacts/canisters${ARTIFACT_EXT}/*"
-  script:
-    - |
-      "${CI_PROJECT_DIR}/gitlab-ci/tools/job-driver.py" "${CI_JOB_NAME}"
-
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-        gitlab-ci/src/artifacts/rclone_upload.py --version="$CI_COMMIT_SHA" \
-        "artifacts/canisters${ARTIFACT_EXT}" "canisters${ARTIFACT_EXT}"
-
 dfx-build-release-darwin:
   extends: .cargo-build-macos
   artifacts:
