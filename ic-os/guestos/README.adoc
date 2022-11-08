@@ -15,7 +15,6 @@ install the OVMF package, and then download the `OVMF_CODE.fd` file to your
 local machine for testing.
 
 == Quick build and test instructions (Linux required)
-
 To build a full system image for development, run:
 
   scripts/build-disk-image.sh -o /tmp/disk.img -v <version>  -t dev -p <password> -x ../../artifacts/docker-build-ic/artifacts/release
@@ -23,12 +22,14 @@ To build a full system image for development, run:
 When building your replica, nodemanger and other IC binaries, be sure *not* to use Nix to build those.
 Instead do a docker based build as described here: https://github.com/dfinity/ic#building-the-code
 
-  cd rs
-  ../gitlab-ci/tools/docker-run cargo build --bin ic-workload-generator --bin vsock_agent --bin state-tool --bin ic-consensus-pool-util --bin ic-crypto-csp --bin ic-regedit --bin ic-btc-adapter --bin ic-canister-http-adapter --release
-  ../gitlab-ci/tools/docker-run cargo build -p orchestrator -p ic-replica --release
-  # To build the NNS canisters needed for installing the NNS
-  cd ../ic-os/guestos
-  ../../gitlab-ci/tools/docker-run gitlab-ci/tools/cargo-build-canisters
+  ./gitlab-ci/tools/docker-run --bazel
+
+  # Build binaries and canisters
+  bazel build :binaries //publish/canisters
+
+  # Obtain the location of the binaries and canisters run
+  bazel cquery output=files :binaries
+  bazel cquery output=files //publish/canisters
 
 This can then be booted in qemu, e.g.:
 

@@ -52,7 +52,7 @@ include:
   needs:
     - job: cargo-build-release-linux-native
       artifacts: false
-    - job: cargo-build-canisters
+    - job: wait-for-bazel-test-all
       artifacts: false
   artifacts:
     reports:
@@ -126,9 +126,9 @@ include:
   extends: .cargo-crate-test
   stage: cargo-test
   needs:
-    - job: cargo-build-canisters
-      artifacts: false
     - job: cargo-build-release-linux-native
+      artifacts: false
+    - job: wait-for-bazel-test-all
       artifacts: false
   script:
     - |
