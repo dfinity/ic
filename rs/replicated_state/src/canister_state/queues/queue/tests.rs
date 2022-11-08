@@ -13,7 +13,7 @@ fn input_queue_constructor_test() {
     let capacity: usize = 14;
     let mut queue = InputQueue::new(capacity);
     assert_eq!(queue.num_messages(), 0);
-    assert!(queue.is_empty());
+    assert!(!queue.has_used_slots());
     assert_eq!(queue.pop(), None);
 }
 
@@ -25,7 +25,7 @@ fn input_queue_with_message_is_not_empty() {
         .push(RequestBuilder::default().build().into())
         .expect("could push");
     assert_ne!(input_queue.num_messages(), 0);
-    assert!(!input_queue.is_empty());
+    assert!(input_queue.has_used_slots());
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn input_queue_with_reservation_is_not_empty() {
     input_queue.reserve_slot().unwrap();
 
     assert_eq!(input_queue.num_messages(), 0);
-    assert!(!input_queue.is_empty());
+    assert!(input_queue.has_used_slots());
 }
 
 /// Test affirming success on popping pushed messages.
@@ -154,7 +154,7 @@ fn output_queue_with_message_is_not_empty() {
         .push_request(RequestBuilder::default().build().into(), mock_time())
         .expect("could push");
     assert_eq!(queue.num_messages(), 1);
-    assert!(!queue.is_empty());
+    assert!(queue.has_used_slots());
 }
 
 #[test]
@@ -163,7 +163,7 @@ fn output_queue_with_reservation_is_not_empty() {
     queue.reserve_slot().unwrap();
 
     assert_eq!(queue.num_messages(), 0);
-    assert!(!queue.is_empty());
+    assert!(queue.has_used_slots());
 }
 
 /// Test that overfilling an output queue with messages and reservations

@@ -100,6 +100,11 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
         self.num_slots_reserved
     }
 
+    /// Returns `true` if the queue has one or more used slots.
+    pub(super) fn has_used_slots(&self) -> bool {
+        !self.queue.is_empty() || self.reserved_slots() > 0
+    }
+
     /// Calculates the sum of the given stat across all enqueued messages.
     ///
     /// Time complexity: O(num_messages).
@@ -238,9 +243,9 @@ impl InputQueue {
         self.queue.reserved_slots()
     }
 
-    /// Returns `true` if the queue is empty (no messages and no reserved slots).
-    pub(super) fn is_empty(&self) -> bool {
-        self.queue.reserved_slots() == 0 && self.queue.queue.is_empty()
+    /// Returns `true` if the queue has one or more used slots.
+    pub(super) fn has_used_slots(&self) -> bool {
+        self.queue.has_used_slots()
     }
 
     /// Returns the amount of cycles contained in the queue.
@@ -516,9 +521,9 @@ impl OutputQueue {
         self.queue.reserved_slots()
     }
 
-    /// Returns `true` if the queue is empty (no messages and no reserved slots).
-    pub(super) fn is_empty(&self) -> bool {
-        self.queue.reserved_slots() == 0 && self.num_messages == 0
+    /// Returns `true` if the queue has one or more used slots.
+    pub(super) fn has_used_slots(&self) -> bool {
+        self.queue.has_used_slots()
     }
 
     /// Returns the amount of cycles contained in the queue.
