@@ -983,6 +983,7 @@ pub use ic_btc_types_internal::{
     CanisterGetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
     CanisterGetSuccessorsResponse as BitcoinGetSuccessorsResponse,
     CanisterGetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
+    CanisterSendTransactionRequest as BitcoinSendTransactionInternalArgs,
 };
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}
@@ -991,3 +992,4 @@ impl Payload<'_> for BitcoinSendTransactionArgs {}
 impl Payload<'_> for BitcoinGetCurrentFeePercentilesArgs {}
 impl Payload<'_> for BitcoinGetSuccessorsArgs {}
 impl Payload<'_> for BitcoinGetSuccessorsResponse {}
+impl Payload<'_> for BitcoinSendTransactionInternalArgs {}

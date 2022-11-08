@@ -1,4 +1,4 @@
-use ic_btc_types_internal::CanisterGetSuccessorsRequestInitial;
+use ic_btc_types_internal::{CanisterGetSuccessorsRequestInitial, CanisterSendTransactionRequest};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::EcdsaKeyId;
 use ic_logger::{info, ReplicaLogger};
@@ -23,6 +23,7 @@ pub enum SubnetCallContext {
     CanisterHttpRequest(CanisterHttpRequestContext),
     EcdsaDealings(EcdsaDealingsContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
+    BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
 }
 
 impl SubnetCallContext {
@@ -33,6 +34,7 @@ impl SubnetCallContext {
             SubnetCallContext::CanisterHttpRequest(context) => &context.request,
             SubnetCallContext::EcdsaDealings(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
+            SubnetCallContext::BitcoinSendTransactionInternal(context) => &context.request,
         }
     }
 
@@ -43,6 +45,7 @@ impl SubnetCallContext {
             SubnetCallContext::CanisterHttpRequest(context) => context.time,
             SubnetCallContext::EcdsaDealings(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
+            SubnetCallContext::BitcoinSendTransactionInternal(context) => context.time,
         }
     }
 }
@@ -55,6 +58,8 @@ pub struct SubnetCallContextManager {
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     pub ecdsa_dealings_contexts: BTreeMap<CallbackId, EcdsaDealingsContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
+    pub bitcoin_send_transaction_internal_contexts:
+        BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
 }
 
 impl SubnetCallContextManager {
@@ -107,6 +112,18 @@ impl SubnetCallContextManager {
         self.next_callback_id += 1;
 
         self.bitcoin_get_successors_contexts
+            .insert(callback_id, context);
+        callback_id.get()
+    }
+
+    pub fn push_bitcoin_send_transaction_internal_request(
+        &mut self,
+        context: BitcoinSendTransactionInternalContext,
+    ) -> u64 {
+        let callback_id = CallbackId::new(self.next_callback_id);
+        self.next_callback_id += 1;
+
+        self.bitcoin_send_transaction_internal_contexts
             .insert(callback_id, context);
         callback_id.get()
     }
@@ -178,6 +195,19 @@ impl SubnetCallContextManager {
                         SubnetCallContext::BitcoinGetSuccessors(context)
                     })
             })
+            .or_else(|| {
+                self.bitcoin_send_transaction_internal_contexts
+                    .remove(&callback_id)
+                    .map(|context| {
+                        info!(
+                            logger,
+                            "Received the response for BitcoinSendTransactionInternal with callback id {:?} from {:?}",
+                            context.request.sender_reply_callback,
+                            context.request.sender
+                        );
+                        SubnetCallContext::BitcoinSendTransactionInternal(context)
+                    })
+            })
     }
 }
 
@@ -235,6 +265,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
+            bitcoin_send_transaction_internal_contexts: item
+                .bitcoin_send_transaction_internal_contexts
+                .iter()
+                .map(|(callback_id, context)| {
+                    pb_metadata::BitcoinSendTransactionInternalContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    }
+                })
+                .collect(),
         }
     }
 }
@@ -286,6 +326,18 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             bitcoin_get_successors_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut bitcoin_send_transaction_internal_contexts =
+            BTreeMap::<CallbackId, BitcoinSendTransactionInternalContext>::new();
+        for entry in item.bitcoin_send_transaction_internal_contexts {
+            let pb_context = try_from_option_field(
+                entry.context,
+                "SystemMetadata::BitcoinSendTransactionInternalContext",
+            )?;
+            let context = BitcoinSendTransactionInternalContext::try_from((time, pb_context))?;
+            bitcoin_send_transaction_internal_contexts
+                .insert(CallbackId::new(entry.callback_id), context);
+        }
+
         Ok(Self {
             next_callback_id: item.next_callback_id,
             setup_initial_dkg_contexts,
@@ -293,6 +345,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             canister_http_request_contexts,
             ecdsa_dealings_contexts,
             bitcoin_get_successors_contexts,
+            bitcoin_send_transaction_internal_contexts,
         })
     }
 }
@@ -487,6 +540,48 @@ impl TryFrom<(Time, pb_metadata::BitcoinGetSuccessorsContext)> for BitcoinGetSuc
         let payload: CanisterGetSuccessorsRequestInitial =
             try_from_option_field(context.payload, "BitcoinGetSuccessorsContext::payload")?;
         Ok(BitcoinGetSuccessorsContext {
+            request,
+            payload,
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BitcoinSendTransactionInternalContext {
+    pub request: Request,
+    pub payload: CanisterSendTransactionRequest,
+    pub time: Time,
+}
+
+impl From<&BitcoinSendTransactionInternalContext>
+    for pb_metadata::BitcoinSendTransactionInternalContext
+{
+    fn from(context: &BitcoinSendTransactionInternalContext) -> Self {
+        pb_metadata::BitcoinSendTransactionInternalContext {
+            request: Some((&context.request).into()),
+            payload: Some((&context.payload).into()),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
+    for BitcoinSendTransactionInternalContext
+{
+    type Error = ProxyDecodeError;
+    fn try_from(
+        (time, context): (Time, pb_metadata::BitcoinSendTransactionInternalContext),
+    ) -> Result<Self, Self::Error> {
+        let request: Request =
+            try_from_option_field(context.request, "BitcoinGetSuccessorsContext::request")?;
+        let payload: CanisterSendTransactionRequest =
+            try_from_option_field(context.payload, "BitcoinGetSuccessorsContext::payload")?;
+        Ok(BitcoinSendTransactionInternalContext {
             request,
             payload,
             time: context

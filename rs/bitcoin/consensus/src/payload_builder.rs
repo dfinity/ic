@@ -17,6 +17,7 @@ use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
+    messages::CallbackId,
     registry::RegistryClientError,
     CountBytes, Height, NumBytes, SubnetId,
 };
@@ -102,12 +103,7 @@ impl BitcoinPayloadBuilder {
             .take();
 
         // If there are requests from the bitcoin wasm canister, then process those.
-        if !state
-            .metadata
-            .subnet_call_context_manager
-            .bitcoin_get_successors_contexts
-            .is_empty()
-        {
+        if bitcoin_requests_iter(&state).next().is_some() {
             return Ok(self.build_canister_payload(state, past_payloads, byte_limit));
         }
 
@@ -221,19 +217,14 @@ impl BitcoinPayloadBuilder {
             .map(|x| x.callback_id)
             .collect();
 
-        for (callback_id, context) in state
-            .metadata
-            .subnet_call_context_manager
-            .bitcoin_get_successors_contexts
-            .iter()
-        {
+        for (callback_id, request) in bitcoin_requests_iter(&state) {
             // We have already created a payload with the response for
             // this callback id, so skip it.
             if past_callback_ids.contains(&callback_id.get()) {
                 continue;
             }
 
-            let adapter_client = match context.payload.network {
+            let adapter_client = match request.network() {
                 NetworkSnakeCase::Mainnet => &self.bitcoin_mainnet_adapter_client,
                 NetworkSnakeCase::Testnet | NetworkSnakeCase::Regtest => {
                     &self.bitcoin_testnet_adapter_client
@@ -241,8 +232,6 @@ impl BitcoinPayloadBuilder {
             };
 
             // Send request to the adapter.
-            let request =
-                BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(context.payload.clone());
             let timer = Timer::start();
             let result = adapter_client.send_request(
                 request.clone(),
@@ -398,6 +387,37 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
         self.validate_self_validating_payload_impl(payload, validation_context, past_payloads)
     }
+}
+
+// Returns an iterator that iterates through the bitcoin requests in the state.
+fn bitcoin_requests_iter(
+    state: &ReplicatedState,
+) -> impl std::iter::Iterator<Item = (&CallbackId, BitcoinAdapterRequestWrapper)> {
+    let subnet_call_context_manager = &state.metadata.subnet_call_context_manager;
+    subnet_call_context_manager
+        .bitcoin_send_transaction_internal_contexts
+        .iter()
+        .map(|(callback_id, context)| {
+            (
+                callback_id,
+                BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(
+                    context.payload.clone(),
+                ),
+            )
+        })
+        .chain(
+            subnet_call_context_manager
+                .bitcoin_get_successors_contexts
+                .iter()
+                .map(|(callback_id, context)| {
+                    (
+                        callback_id,
+                        BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
+                            context.payload.clone(),
+                        ),
+                    )
+                }),
+        )
 }
 
 #[cfg(test)]

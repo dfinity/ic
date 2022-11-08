@@ -38,6 +38,45 @@ impl From<v1::GetSuccessorsRequest> for GetSuccessorsRequest {
     }
 }
 
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanisterSendTransactionRequest {
+    pub network: Network,
+    #[serde(with = "serde_bytes")]
+    pub transaction: Vec<u8>,
+}
+
+impl From<&CanisterSendTransactionRequest> for v1::CanisterSendTransactionRequest {
+    fn from(request: &CanisterSendTransactionRequest) -> Self {
+        Self {
+            network: match request.network {
+                Network::Testnet => 1,
+                Network::Mainnet => 2,
+                Network::Regtest => 3,
+            },
+            transaction: request.transaction.clone(),
+        }
+    }
+}
+
+impl TryFrom<v1::CanisterSendTransactionRequest> for CanisterSendTransactionRequest {
+    type Error = ProxyDecodeError;
+    fn try_from(request: v1::CanisterSendTransactionRequest) -> Result<Self, Self::Error> {
+        Ok(CanisterSendTransactionRequest {
+            network: match request.network {
+                1 => Network::Testnet,
+                2 => Network::Mainnet,
+                3 => Network::Regtest,
+                _ => {
+                    return Err(ProxyDecodeError::MissingField(
+                        "CanisterSendTransactionRequest::network",
+                    ))
+                }
+            },
+            transaction: request.transaction,
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SendTransactionRequest {
     pub transaction: Vec<u8>,
@@ -67,6 +106,7 @@ pub enum BitcoinAdapterRequestWrapper {
     // This supersedes `GetSuccessorsRequest`, which will be deleted
     // once the Bitcoin replica canister is phased out.
     CanisterGetSuccessorsRequest(CanisterGetSuccessorsRequestInitial),
+    CanisterSendTransactionRequest(CanisterSendTransactionRequest),
 }
 
 impl BitcoinAdapterRequestWrapper {
@@ -75,6 +115,26 @@ impl BitcoinAdapterRequestWrapper {
             BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_) => "get_successors",
             BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => "send_transaction",
             BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(_) => "get_successors",
+            BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(_) => "send_transaction",
+        }
+    }
+
+    /// Returns which bitcoin network the request is for.
+    pub fn network(&self) -> Network {
+        match self {
+            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_)
+            | BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => {
+                // NOTE: These are the deprecated replica requests that do not contain a network
+                // parameter. These requests do not trigger this code path and they'll be
+                // deleted in EXC-1239. For now, return a stub response.
+                Network::Testnet
+            }
+            BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
+                CanisterGetSuccessorsRequestInitial { network, .. },
+            ) => *network,
+            BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(
+                CanisterSendTransactionRequest { network, .. },
+            ) => *network,
         }
     }
 }
@@ -109,6 +169,15 @@ impl From<&BitcoinAdapterRequestWrapper> for v1::BitcoinAdapterRequestWrapper {
                     ),
                 }
             }
+            BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(request) => {
+                v1::BitcoinAdapterRequestWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_request_wrapper::R::CanisterSendTransactionRequest(
+                            request.into(),
+                        ),
+                    ),
+                }
+            }
         }
     }
 }
@@ -128,6 +197,9 @@ impl TryFrom<v1::BitcoinAdapterRequestWrapper> for BitcoinAdapterRequestWrapper 
             v1::bitcoin_adapter_request_wrapper::R::CanisterGetSuccessorsRequest(r) => Ok(
                 BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(r.try_into()?),
             ),
+            v1::bitcoin_adapter_request_wrapper::R::CanisterSendTransactionRequest(r) => {
+                Ok(BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(r.try_into()?))
+            }
         }
     }
 }
@@ -466,10 +538,11 @@ impl SendTransactionResponse {
 pub enum BitcoinAdapterResponseWrapper {
     GetSuccessorsResponse(GetSuccessorsResponse),
     SendTransactionResponse(SendTransactionResponse),
-    // A response for the bitcoin wasm canister.
-    // This supersedes `GetSuccessorsResponse`, which will be deleted
+    // Responses for the bitcoin wasm canister.
+    // These supersede the above responses, which will be deleted
     // once the Bitcoin replica canister is phased out.
     CanisterGetSuccessorsResponse(CanisterGetSuccessorsResponseComplete),
+    CanisterSendTransactionResponse(SendTransactionResponse),
 }
 
 impl BitcoinAdapterResponseWrapper {
@@ -479,6 +552,7 @@ impl BitcoinAdapterResponseWrapper {
             BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) => r.count_bytes(),
             BitcoinAdapterResponseWrapper::SendTransactionResponse(r) => r.count_bytes(),
             BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r) => r.count_bytes(),
+            BitcoinAdapterResponseWrapper::CanisterSendTransactionResponse(r) => r.count_bytes(),
         }
     }
 }
@@ -513,6 +587,15 @@ impl From<&BitcoinAdapterResponseWrapper> for v1::BitcoinAdapterResponseWrapper 
                     ),
                 }
             }
+            BitcoinAdapterResponseWrapper::CanisterSendTransactionResponse(response) => {
+                v1::BitcoinAdapterResponseWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_response_wrapper::R::CanisterSendTransactionResponse(
+                            response.into(),
+                        ),
+                    ),
+                }
+            }
         }
     }
 }
@@ -531,6 +614,9 @@ impl TryFrom<v1::BitcoinAdapterResponseWrapper> for BitcoinAdapterResponseWrappe
             ),
             v1::bitcoin_adapter_response_wrapper::R::CanisterGetSuccessorsResponse(r) => {
                 Ok(BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r.try_into()?))
+            }
+            v1::bitcoin_adapter_response_wrapper::R::CanisterSendTransactionResponse(r) => {
+                Ok(BitcoinAdapterResponseWrapper::CanisterSendTransactionResponse(r.try_into()?))
             }
         }
     }

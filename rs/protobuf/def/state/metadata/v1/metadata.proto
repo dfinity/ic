@@ -140,6 +140,17 @@ message BitcoinGetSuccessorsContextTree {
     BitcoinGetSuccessorsContext context = 2;
 }
 
+message BitcoinSendTransactionInternalContext {
+    state.queues.v1.Request request = 1;
+    bitcoin.v1.CanisterSendTransactionRequest payload = 2;
+    Time time = 3;
+}
+
+message BitcoinSendTransactionInternalContextTree {
+    uint64 callback_id = 1;
+    BitcoinSendTransactionInternalContext context = 2;
+}
+
 message SubnetCallContextManager {
     uint64 next_callback_id = 1;
     reserved 2;
@@ -151,6 +162,7 @@ message SubnetCallContextManager {
     repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;
     repeated EcdsaDealingsContextTree ecdsa_dealings_contexts = 7;
     repeated BitcoinGetSuccessorsContextTree bitcoin_get_successors_contexts = 8;
+    repeated BitcoinSendTransactionInternalContextTree bitcoin_send_transaction_internal_contexts = 9;
 }
 
 message TimeOfLastAllocationCharge {

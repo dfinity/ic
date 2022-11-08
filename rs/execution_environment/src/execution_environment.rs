@@ -875,6 +875,24 @@ impl ExecutionEnvironment {
                 Some(res)
             }
 
+            Ok(Ic00Method::BitcoinSendTransactionInternal) => match &msg {
+                RequestOrIngress::Request(request) => {
+                    match crate::bitcoin::send_transaction_internal(
+                        &self.config.bitcoin.privileged_access,
+                        request,
+                        &mut state,
+                    ) {
+                        Ok(Some(payload)) => Some(Ok(payload)),
+                        Ok(None) => None,
+                        Err(err) => Some(Err(err)),
+                    }
+                }
+                RequestOrIngress::Ingress(_) => self
+                    .reject_unexpected_ingress(Ic00Method::BitcoinGetSuccessors)
+                    .map(|(payload, _)| payload),
+            }
+            .map(|payload| (payload, msg.take_cycles())),
+
             Ok(Ic00Method::BitcoinGetSuccessors) => match &msg {
                 RequestOrIngress::Request(request) => {
                     match crate::bitcoin::get_successors(
@@ -893,7 +911,7 @@ impl ExecutionEnvironment {
             }
             .map(|payload| (payload, msg.take_cycles())),
 
-            Ok(Ic00Method::BitcoinSendTransactionInternal) | Err(ParseError::VariantNotFound) => {
+            Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
                     format!("Management canister has no method '{}'", msg.method_name()),

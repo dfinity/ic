@@ -4,7 +4,7 @@ use ic_btc_types_internal::{
     CanisterGetSuccessorsResponseComplete, CanisterGetSuccessorsResponsePartial,
 };
 use ic_error_types::RejectCode;
-use ic_ic00_types::{BitcoinGetSuccessorsResponse, Payload as _};
+use ic_ic00_types::{BitcoinGetSuccessorsResponse, EmptyBlob, Payload as _};
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_types::{
     messages::{CallbackId, Payload, RejectContext, Response},
@@ -81,6 +81,34 @@ pub fn push_response(
                     BitcoinStateError::FeatureNotEnabled,
                 )),
             }
+        }
+        BitcoinAdapterResponseWrapper::CanisterSendTransactionResponse(_) => {
+            // Retrieve the associated request from the call context manager.
+            let callback_id = CallbackId::from(response.callback_id);
+            let context = state
+                .metadata
+                .subnet_call_context_manager
+                .bitcoin_send_transaction_internal_contexts
+                .get_mut(&callback_id)
+                .ok_or_else(|| {
+                    StateError::BitcoinStateError(BitcoinStateError::NonMatchingResponse {
+                        callback_id: callback_id.get(),
+                    })
+                })?;
+
+            // The response to a `send_transaction` call is always the empty blob.
+            let response_payload = Payload::Data(EmptyBlob.encode());
+
+            // Add response to the consensus queue.
+            state.consensus_queue.push(Response {
+                originator: context.request.sender(),
+                respondent: CanisterId::ic_00(),
+                originator_reply_callback: callback_id,
+                refund: context.request.take_cycles(),
+                response_payload,
+            });
+
+            Ok(())
         }
     }
 }
