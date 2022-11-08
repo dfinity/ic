@@ -46,6 +46,24 @@ pub const CHUNK_MAX: isize = CHUNK_MIN + CHUNK_SIZE - 1;
 /// of Fr)
 pub const NUM_CHUNKS: usize = (MESSAGE_BYTES + CHUNK_BYTES - 1) / CHUNK_BYTES;
 
+/// Constant which controls the upper limit of epochs
+///
+/// Specifically 2**LAMBDA_T NI-DKG epochs cann occur
+///
+/// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
+pub const LAMBDA_T: usize = 32;
+
+/// The size of the hash function used during encryption
+///
+/// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
+pub const LAMBDA_H: usize = 256;
+
+/// The maximum epoch is derived from the size of LAMBDA_T
+///
+/// The maximum epoch is expressed as a u32 because that is the
+/// underlying size of the Epoch type in ic-crypto-internal-types
+pub const MAXIMUM_EPOCH: u32 = ((1u64 << LAMBDA_T) - 1) as u32;
+
 const DOMAIN_CIPHERTEXT_NODE: &str = "ic-fs-encryption/binary-tree-node";
 
 /// Type for a single bit
@@ -84,8 +102,8 @@ impl From<&Bit> for i32 {
 }
 
 /// Generates tau (a vector of bits) from an epoch.
-pub fn tau_from_epoch(sys: &SysParam, epoch: Epoch) -> Vec<Bit> {
-    (0..sys.lambda_t)
+pub fn tau_from_epoch(epoch: Epoch) -> Vec<Bit> {
+    (0..LAMBDA_T)
         .rev()
         .map(|index| {
             if (epoch.get() >> index) & 1 == 0 {
@@ -126,9 +144,9 @@ pub struct BTENode {
     pub b: G2Affine,
 
     // We split the d's into two groups.
-    // The vector `d_h` always contains the last lambda_H points
+    // The vector `d_h` always contains the last LAMBDA_H points
     // of d_l,...,d_lambda.
-    // The list `d_t` contains the other elements. There are at most lambda_T of them.
+    // The list `d_t` contains the other elements. There are at most LAMBDA_T of them.
     // The longer this list, the higher up we are in the binary tree,
     // and the more leaf node keys we are able to derive.
     pub d_t: LinkedList<G2Affine>,
@@ -185,11 +203,9 @@ impl PublicKeyWithPop {
 
 /// NI-DKG system parameters
 pub struct SysParam {
-    pub lambda_t: usize,
-    pub lambda_h: usize,
     pub f0: G2Affine,       // f_0 in the paper.
     pub f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
-    pub f_h: Vec<G2Affine>, // The remaining lambda_H f_i's in the paper.
+    pub f_h: Vec<G2Affine>, // The remaining LAMBDA_H f_i's in the paper.
     pub h: G2Affine,
     h_prep: G2Prepared,
 }
@@ -270,13 +286,13 @@ pub fn kgen<R: RngCore + CryptoRng>(
 
 impl SecretKey {
     /// The current key (the end of list of BTENodes) of a `SecretKey` should
-    /// always correspond to an epoch described by lambda_t bits. Some
-    /// internal operations break this invariant, leaving less than lambda_t
+    /// always correspond to an epoch described by LAMBDA_T bits. Some
+    /// internal operations break this invariant, leaving less than LAMBDA_T
     /// bits in the current key. This function should be called when this
     /// happens; it modifies the list so the current key corresponds to the
     /// first epoch of the subtree described by the current key.
     ///
-    /// For example, if lambda_t = 5, then [..., 011] will change to
+    /// For example, if LAMBDA_T = 5, then [..., 011] will change to
     /// [..., 0111, 01101, 01100].
     /// The current key's `tau` now has 5 bits, and the other entries cover the
     /// rest of the 011 subtree after we delete the current key.
@@ -301,7 +317,7 @@ impl SecretKey {
             return;
         }
         let now = self.current().expect("bte_nodes unexpectedly empty");
-        for i in 0..sys.lambda_t {
+        for i in 0..LAMBDA_T {
             if i < now.tau.len() {
                 epoch.push(now.tau[i]);
             } else {
@@ -339,6 +355,8 @@ impl SecretKey {
     /// Updates `self` to the given `epoch`.
     ///
     /// If `epoch` is in the past, then disables `self`.
+    ///
+    /// A key update can take up to 2*LAMBDA_T*LAMBDA_H G2 multiplications
     pub fn update_to<R: RngCore + CryptoRng>(
         &mut self,
         epoch: &[Bit],
@@ -673,11 +691,11 @@ pub enum DecErr {
 /// Decrypt the i-th group of chunks.
 ///
 /// Decrypting a message for a future epoch hardly costs more than a message for
-/// a current epoch: at most lambda_t point additions.
+/// a current epoch: at most LAMBDA_T point additions.
 ///
 /// Upgrading a key is expensive in comparison because we must compute new
 /// subtree roots and re-"blind" them (the random deltas of the paper) to hide
-/// ciphertexts from future keys. Each re-blinding costs at least lambda_h
+/// ciphertexts from future keys. Each re-blinding costs at least LAMBDA_H
 /// (which is 256 in our system) point multiplications.
 ///
 /// Caller must ensure i < n, where n = crsz.cc.len().
@@ -861,27 +879,27 @@ pub fn extend_tau(
 
 /// Computes the function f of the paper.
 ///
-/// The bit vector tau must have length lambda_T + lambda_H.
+/// The bit vector tau must have length LAMBDA_T + LAMBDA_H.
 pub fn ftau(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
-    if tau.len() != sys.lambda_t + sys.lambda_h {
+    if tau.len() != LAMBDA_T + LAMBDA_H {
         return None;
     }
     let mut id = G2Projective::from(&sys.f0);
     for (n, t) in tau.iter().enumerate() {
         if *t == Bit::One {
-            if n < sys.lambda_t {
+            if n < LAMBDA_T {
                 id += &sys.f[n];
             } else {
-                id += &sys.f_h[n - sys.lambda_t];
+                id += &sys.f_h[n - LAMBDA_T];
             }
         }
     }
     Some(id)
 }
 
-/// Computes f for bit vectors tau <= lambda_T.
+/// Computes f for bit vectors tau <= LAMBDA_T.
 fn ftau_partial(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
-    if tau.len() > sys.lambda_t {
+    if tau.len() > LAMBDA_T {
         return None;
     }
     // id = product $ f0 : [f | (t, f) <- zip tau sys_fs, t == 1]
@@ -893,22 +911,6 @@ fn ftau_partial(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
     });
     Some(id)
 }
-
-// An FS key upgrade can take up to 2 * LAMBDA_T * LAMBDA_H point
-// multiplications. This is tolerable in practice for LAMBDA_T = 32, but in
-// tests, smaller values are preferable.
-
-/// Constant which controls the upper limit of epochs
-///
-/// Specifically 2**LAMBDA_T NI-DKG epochs cann occur
-///
-/// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
-pub const LAMBDA_T: usize = 32;
-
-/// The size of the hash function used during encryption
-///
-/// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
-const LAMBDA_H: usize = 256;
 
 lazy_static! {
     static ref SYSTEM_PARAMS: SysParam =
@@ -936,8 +938,6 @@ impl SysParam {
         let h_prep = G2Prepared::from(&h);
 
         SysParam {
-            lambda_t: LAMBDA_T,
-            lambda_h: LAMBDA_H,
             f0,
             f,
             f_h,

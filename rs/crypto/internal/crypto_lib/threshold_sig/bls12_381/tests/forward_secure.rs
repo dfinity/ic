@@ -13,11 +13,8 @@ use rand_chacha::ChaCha20Rng;
 fn output_of_mk_sys_params_is_expected_values() {
     let sys = SysParam::global();
 
-    assert_eq!(sys.lambda_t, 32);
-    assert_eq!(sys.lambda_h, 256);
-
-    assert_eq!(sys.f.len(), sys.lambda_t);
-    assert_eq!(sys.f_h.len(), sys.lambda_h);
+    assert_eq!(sys.f.len(), LAMBDA_T);
+    assert_eq!(sys.f_h.len(), LAMBDA_H);
 
     fn assert_g2_equal(g2: &G2Affine, expected: &'static str) {
         assert_eq!(hex::encode(g2.serialize()), expected);
@@ -107,7 +104,7 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
         sij
     };
 
-    let tau = tau_from_epoch(sys, epoch);
+    let tau = tau_from_epoch(epoch);
     let (crsz, _witness) =
         enc_chunks(&sij[..], &pks, &tau, associated_data, sys, rng).expect("Encryption failed");
     (keys, sij, crsz)
@@ -127,7 +124,7 @@ fn integrity_check_should_return_error_on_wrong_associated_data() {
     };
 
     let (_keys, _message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
-    let tau = tau_from_epoch(sys, epoch);
+    let tau = tau_from_epoch(epoch);
 
     assert!(verify_ciphertext_integrity(&crsz, &tau, &wrong_associated_data, sys).is_err());
 }
@@ -140,7 +137,7 @@ fn should_encrypt_with_empty_associated_data() {
     let associated_data = [];
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(sys, epoch);
+    let tau = tau_from_epoch(epoch);
     assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
@@ -267,7 +264,7 @@ fn should_decrypt_correctly_for_cheating_dealer() {
     // however the new sij *is* larger than the maximum "legal" chunk
     assert!(sij[cheating_i][cheating_j] > CHUNK_MAX);
 
-    let tau = tau_from_epoch(sys, epoch);
+    let tau = tau_from_epoch(epoch);
     let crsz = enc_chunks_cheating(&sij[..], &pks, &tau, &associated_data, sys, &mut rng);
 
     // still a valid ciphertext
@@ -296,7 +293,7 @@ fn should_decrypt_correctly_for_epoch_0() {
     let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(sys, epoch);
+    let tau = tau_from_epoch(epoch);
     assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
@@ -314,7 +311,7 @@ fn should_decrypt_correctly_for_epoch_1() {
     let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(sys, epoch);
+    let tau = tau_from_epoch(epoch);
     assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
@@ -331,7 +328,7 @@ fn should_decrypt_correctly_for_epoch_5() {
     let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(sys, epoch);
+    let tau = tau_from_epoch(epoch);
     assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
@@ -348,7 +345,7 @@ fn should_decrypt_correctly_for_epoch_10() {
     let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(sys, epoch);
+    let tau = tau_from_epoch(epoch);
     assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {

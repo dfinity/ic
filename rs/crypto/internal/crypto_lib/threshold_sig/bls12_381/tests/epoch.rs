@@ -21,7 +21,7 @@ proptest! {
         assert!(sk.current().is_some());
 
         for i in 0..100 {
-            let next_epoch = tau_from_epoch(sys, Epoch::from(i));
+            let next_epoch = tau_from_epoch(Epoch::from(i));
             sk.update_to(&next_epoch, sys, &mut rng);
             assert!(sk.current().is_some());
         }
@@ -41,7 +41,7 @@ proptest! {
         let mut sorted_epochs : Vec<u32>= epochs;
         sorted_epochs.sort_unstable();
         for epoch in sorted_epochs{
-            let tau= tau_from_epoch(sys,Epoch::from(epoch));
+            let tau = tau_from_epoch(Epoch::from(epoch));
             sk.update_to(&tau, sys, &mut rng);
             assert!(sk.current().is_some());
         }
@@ -54,14 +54,9 @@ proptest! {
 
         let (_pk, mut sk) = kgen(&associated_data, sys, &mut rng);
 
-        let max_epoch = if sys.lambda_t < 32 {
-            (2u64.pow(sys.lambda_t as u32) - 1) as u32
-        } else {
-            u32::MAX
-        };
         assert!(sk.current().is_some());
         for i in (0..100).rev() {
-            let next_epoch = tau_from_epoch(sys, Epoch::from(max_epoch - i));
+            let next_epoch = tau_from_epoch(Epoch::from(MAXIMUM_EPOCH - i));
             sk.update_to(&next_epoch, sys, &mut rng);
             assert!(sk.current().is_some());
         }
@@ -75,10 +70,8 @@ proptest! {
 proptest! {
     #[test]
     fn should_convert_tau_to_epoch(epoch: u32) {
-        let sys = SysParam::global();
-
         let epoch = Epoch::from(epoch);
-        let tau = tau_from_epoch(sys, epoch);
+        let tau = tau_from_epoch(epoch);
 
         assert_eq!(epoch, epoch_from_tau_vec(&tau));
     }

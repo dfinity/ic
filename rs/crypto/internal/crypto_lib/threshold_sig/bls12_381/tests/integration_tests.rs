@@ -26,7 +26,7 @@ fn potpourri() {
         dk.update(sys, &mut rng);
     }
     let epoch10 = Epoch::from(10);
-    let tau10 = tau_from_epoch(sys, epoch10);
+    let tau10 = tau_from_epoch(epoch10);
 
     let mut keys = Vec::new();
     for i in 0..=3 {
@@ -153,7 +153,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     println!("Messages: {:#?}", plaintext_chunks);
 
     // Encrypt
-    let tau = tau_from_epoch(sys, epoch);
+    let tau = tau_from_epoch(epoch);
     let associated_data = rng.gen::<[u8; 10]>();
     let (crsz, encryption_witness) = enc_chunks(
         &plaintext_chunks[..],
