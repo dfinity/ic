@@ -841,7 +841,7 @@ impl CanisterQueues {
         // Adjust stats for any queue pairs we are going to GC.
         let mut have_empty_pair = false;
         for (_canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
-            if input_queue.is_empty() && output_queue.is_empty() {
+            if !input_queue.has_used_slots() && !output_queue.has_used_slots() {
                 self.input_queues_stats.size_bytes -= input_queue.calculate_size_bytes();
                 have_empty_pair = true;
             }
@@ -854,7 +854,7 @@ impl CanisterQueues {
         // Actually drop empty queue pairs.
         self.canister_queues
             .retain(|_canister_id, (input_queue, output_queue)| {
-                !input_queue.is_empty() || !output_queue.is_empty()
+                input_queue.has_used_slots() || output_queue.has_used_slots()
             });
         debug_assert!(self.stats_ok());
     }
