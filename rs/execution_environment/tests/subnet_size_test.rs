@@ -884,20 +884,21 @@ fn test_subnet_size_execute_heartbeat_default_cost() {
     let subnet_size_lo = 13;
     let subnet_size_hi = 34;
     let subnet_type = SubnetType::Application;
-    let per_year: u64 = 60 * 60 * 24 * 365; // Assuming 1 heartbeat per second.
+    let heart_beat_rate_ms = 917; // Based on production statistics for the past 2 days.
+    let per_year: u64 = 60 * 60 * 24 * 365 * 1_000 / heart_beat_rate_ms;
 
     // Assert small subnet size costs per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_lo);
     assert_eq!(cost, Cycles::new(590_000));
-    assert_eq!(cost * per_year, trillion_cycles(18.606_240));
+    assert_eq!(cost * per_year, trillion_cycles(20.290_337_770));
 
     // Assert big subnet size cost per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_hi);
     assert_eq!(cost, Cycles::new(1_543_077));
-    assert_eq!(cost * per_year, trillion_cycles(48.662_476_272));
+    assert_eq!(cost * per_year, trillion_cycles(53.067_039_890_031));
 
     // Assert big subnet size cost scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
     assert_eq!(adjusted_cost, Cycles::new(590_000));
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(18.606_240));
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(20.290_337_770));
 }
