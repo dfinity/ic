@@ -358,9 +358,14 @@ async fn read_one_message_h2(
         Ok(Some(Ok(header_chunk))) => {
             // First frame should be header
             if header_chunk.len() != TRANSPORT_HEADER_SIZE {
+                let msg = format!(
+                    "Unexpected transport header length.  Expected {:?} bytes but received {:?}",
+                    TRANSPORT_HEADER_SIZE,
+                    header_chunk.len()
+                );
                 return Err(StreamReadError::Failed(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "malformed header",
+                    msg,
                 )));
             }
             let header = unpack_header(header_chunk.to_vec());
@@ -385,7 +390,7 @@ async fn read_one_message_h2(
                     None | Some(Err(_)) => {
                         return Err(StreamReadError::Failed(std::io::Error::new(
                             std::io::ErrorKind::Other,
-                            "error fetching next data frame",
+                            "Error receiving next data frame",
                         )));
                     }
                 }
@@ -395,7 +400,7 @@ async fn read_one_message_h2(
         }
         Ok(None) | Ok(Some(Err(_))) => Err(StreamReadError::Failed(std::io::Error::new(
             std::io::ErrorKind::Other,
-            "error fetching next header",
+            "Error receiving next header",
         ))),
     }
 }
