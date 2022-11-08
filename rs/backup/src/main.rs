@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_backup::{cmd::BackupArgs, manager::Manager};
+use ic_backup::{backup_manager::BackupManager, cmd::BackupArgs};
 use slog::{o, Drain};
 
 // Here is an example config file:
@@ -32,5 +32,5 @@ fn main() {
     let log = slog::Logger::root(drain, o!());
 
     let args = BackupArgs::parse();
-    Manager::new(args.config_file, log).do_backups();
+    BackupManager::new(args.config_file, log).do_backups();
 }
