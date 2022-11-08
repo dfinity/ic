@@ -16,56 +16,103 @@ use hex_literal::hex;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal_canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("c54cce351c28b6334bfe6e88066128fc51cd374306be6bbbbf58849c3c70e2b5");
+    hex!("a4606bb463589478c07a69603f58402ac13495d4cca44e33fa32a4069373bcf2");
 
 /// Operands used in encoding UC payloads.
-enum Ops {
-    Noop = 0,
-    PushInt = 2,
-    PushBytes = 3,
-    ReplyDataAppend = 4,
-    Reply = 5,
-    Self_ = 6,
-    Reject = 7,
-    Caller = 8,
-    RejectMessage = 10,
-    RejectCode = 11,
-    IntToBlob = 12,
-    MessagePayload = 13,
-    StableSize = 15,
-    StableGrow = 16,
-    StableRead = 17,
-    StableWrite = 18,
-    DebugPrint = 19,
-    Trap = 20,
-    SetGlobal = 21,
-    GetGlobal = 22,
-    SetPreUpgrade = 24,
-    AcceptCycles = 30,
-    PushInt64 = 31,
-    CallNew = 32,
-    CallDataAppend = 33,
-    CallPerform = 35,
-    SetHeartbeat = 40,
-    AcceptMessage = 41,
-    SetInspectMessage = 42,
-    TrapIfEq = 43,
-    CallOnCleanup = 44,
-    StableFill = 45,
-    StableSize64 = 46,
-    StableGrow64 = 47,
-    StableRead64 = 48,
-    StableWrite64 = 49,
-    Int64ToBlob = 50,
-    AcceptCycles128 = 54,
-    CallCyclesAdd128 = 55,
-    MsgArgDataSize = 56,
-    MsgArgDataCopy = 57,
-    MsgCallerSize = 58,
-    MsgCallerCopy = 59,
-    MsgRejectMsgSize = 60,
-    MsgRejectMsgCopy = 61,
+macro_rules! try_from_u8 {
+    ($(#[$meta:meta])* $vis:vis enum $name:ident {
+        $($(#[$vmeta:meta])* $vname:ident $(= $val:expr)?,)*
+    }) => {
+        $(#[$meta])*
+        #[repr(u8)]
+        $vis enum $name {
+            $($(#[$vmeta])* $vname $(= $val)?,)*
+        }
+
+        impl std::convert::TryFrom<u8> for $name {
+            type Error = ();
+
+            fn try_from(v: u8) -> Result<Self, Self::Error> {
+                match v {
+                    $(x if x == $name::$vname as u8 => Ok($name::$vname),)*
+                    _ => Err(()),
+                }
+            }
+        }
+    }
 }
+
+try_from_u8!(
+    #[derive(Debug, PartialEq)]
+    pub enum Ops {
+        Noop = 0,
+        Drop = 1,
+        PushInt = 2,
+        PushBytes = 3,
+        ReplyDataAppend = 4,
+        Reply = 5,
+        Self_ = 6,
+        Reject = 7,
+        Caller = 8,
+        // = 9,
+        RejectMessage = 10,
+        RejectCode = 11,
+        IntToBlob = 12,
+        MessagePayload = 13,
+        Concat = 14,
+        StableSize = 15,
+        StableGrow = 16,
+        StableRead = 17,
+        StableWrite = 18,
+        DebugPrint = 19,
+        Trap = 20,
+        SetGlobal = 21,
+        GetGlobal = 22,
+        BadPrint = 23,
+        SetPreUpgrade = 24,
+        // = 25,
+        Time = 26,
+        CyclesAvailable = 27,
+        CyclesBalance = 28,
+        CyclesRefunded = 29,
+        AcceptCycles = 30,
+        PushInt64 = 31,
+        CallNew = 32,
+        CallDataAppend = 33,
+        CallCyclesAdd = 34,
+        CallPerform = 35,
+        CertifiedDataSet = 36,
+        DataCertificatePresent = 37,
+        DataCertificate = 38,
+        CanisterStatus = 39,
+        SetHeartbeat = 40,
+        AcceptMessage = 41,
+        SetInspectMessage = 42,
+        TrapIfEq = 43,
+        CallOnCleanup = 44,
+        StableFill = 45,
+        StableSize64 = 46,
+        StableGrow64 = 47,
+        StableRead64 = 48,
+        StableWrite64 = 49,
+        Int64ToBlob = 50,
+        CyclesAvailable128 = 51,
+        CyclesBalance128 = 52,
+        CyclesRefunded128 = 53,
+        AcceptCycles128 = 54,
+        CallCyclesAdd128 = 55,
+        MsgArgDataSize = 56,
+        MsgArgDataCopy = 57,
+        MsgCallerSize = 58,
+        MsgCallerCopy = 59,
+        MsgRejectMsgSize = 60,
+        MsgRejectMsgCopy = 61,
+        SetGlobalTimerMethod = 62,
+        ApiGlobalTimerSet = 63,
+        IncGlobalCounter = 64,
+        GetGlobalCounter = 65,
+    }
+);
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -225,6 +272,18 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn set_global_timer_method<P: AsRef<[u8]>>(mut self, payload: P) -> Self {
+        self = self.push_bytes(payload.as_ref());
+        self.0.push(Ops::SetGlobalTimerMethod as u8);
+        self
+    }
+
+    pub fn api_global_timer_set(mut self, timestamp: u64) -> Self {
+        self = self.push_int64(timestamp);
+        self.0.push(Ops::ApiGlobalTimerSet as u8);
+        self
+    }
+
     pub fn set_inspect_message<P: AsRef<[u8]>>(mut self, payload: P) -> Self {
         self = self.push_bytes(payload.as_ref());
         self.0.push(Ops::SetInspectMessage as u8);
@@ -342,6 +401,18 @@ impl PayloadBuilder {
     /// NOTE: This does _not_ correspond to a Wasm global.
     pub fn get_global_data(mut self) -> Self {
         self.0.push(Ops::GetGlobal as u8);
+        self
+    }
+
+    /// Increases heap-allocated global u64 counter.
+    pub fn inc_global_counter(mut self) -> Self {
+        self.0.push(Ops::IncGlobalCounter as u8);
+        self
+    }
+
+    /// Gets the heap-allocated global u64 counter.
+    pub fn get_global_counter(mut self) -> Self {
+        self.0.push(Ops::GetGlobalCounter as u8);
         self
     }
 
@@ -623,5 +694,10 @@ mod test {
             UNIVERSAL_CANISTER_WASM_SHA256,
             ic_crypto_sha::Sha256::hash(UNIVERSAL_CANISTER_WASM)
         );
+    }
+
+    #[test]
+    fn try_from_macro_works() {
+        assert_eq!(Ops::GetGlobalCounter, Ops::try_from(65).unwrap());
     }
 }
