@@ -38,6 +38,8 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /non-existence proofs for non-existing request id/",
     "$0 ~ /module_hash of empty canister/",
     "$0 ~ /metadata.absent/",
+    // canister http_request tests became flaky, disabling them temporarily
+    "$0 ~ /canister http calls/",
 ];
 
 pub fn config(env: TestEnv) {
