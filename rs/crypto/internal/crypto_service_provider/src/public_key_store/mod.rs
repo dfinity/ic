@@ -15,7 +15,7 @@ pub mod mock_pubkey_store;
 const PK_DATA_FILENAME: &str = "public_keys.pb";
 
 /// Error while reading or writing public keys
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PublicKeyStoreError {
     ParsingError(String),
     SerialisationError(String),
@@ -43,6 +43,7 @@ pub fn read_node_public_keys(crypto_root: &Path) -> Result<NodePublicKeys, Publi
     }
 }
 
+#[derive(Debug)]
 pub enum PublicKeySetOnceError {
     AlreadySet,
     Io(std::io::Error),

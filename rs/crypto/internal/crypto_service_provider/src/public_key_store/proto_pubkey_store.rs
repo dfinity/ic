@@ -18,7 +18,10 @@ pub struct ProtoPublicKeyStore {
 }
 
 impl ProtoPublicKeyStore {
-    /// Opens a public key store.
+    /// Opens a public key store in `dir`/`file_name`.
+    ///
+    /// If the store does not exist on disk, a new one is created in memory.
+    /// This store is then persisted to disk upon the first change of data.
     pub fn open(dir: &Path, file_name: &str) -> Self {
         let proto_file = dir.join(file_name);
         let keys = match Self::read_node_public_keys_proto_from_disk(&proto_file) {
