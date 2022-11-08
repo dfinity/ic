@@ -72,7 +72,10 @@ rust_library(
 rust_test(
     name = "crypto_service_provider_test",
     crate = ":crypto_service_provider",
-    data = ["test_resources/sks_data.pb"],
+    data = [
+        "test_resources/public_keys.pb",
+        "test_resources/sks_data.pb",
+    ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/crypto/internal/crypto_service_provider",
     },
