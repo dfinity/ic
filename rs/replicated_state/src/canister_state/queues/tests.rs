@@ -2,6 +2,8 @@ use super::{
     testing::{new_canister_queues_for_test, CanisterQueuesTesting},
     *,
 };
+use crate::{CanisterState, SchedulerState, SystemState};
+use ic_base_types::NumSeconds;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_test_utilities::{
     mock_time,
@@ -12,7 +14,7 @@ use ic_test_utilities::{
         messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     },
 };
-use ic_types::time::current_time_and_expiry_time;
+use ic_types::{messages::CallbackId, time::current_time_and_expiry_time};
 use proptest::prelude::*;
 use std::convert::TryInto;
 
@@ -1569,4 +1571,141 @@ proptest! {
             output_iter.next();
         }
     }
+}
+
+/// Tests 'has_expired_deadlines` reports
+/// - false for an empty `CanisterQueues`.
+/// - false for a non-empty `CanisterQueues` using a current time < all deadlines.
+/// - true for a non-empty `CanisterQueues` using a current time >= at least one deadline.
+#[test]
+fn has_expired_deadlines_reports_correctly() {
+    let mut canister_queues = CanisterQueues::default();
+
+    let time0 = Time::from_nanos_since_unix_epoch(0);
+    assert!(!canister_queues.has_expired_deadlines(time0 + REQUEST_LIFETIME));
+
+    let time1 = Time::from_nanos_since_unix_epoch(1);
+    canister_queues
+        .push_output_request(Arc::new(RequestBuilder::default().build()), time1)
+        .unwrap();
+
+    let current_time = time0 + REQUEST_LIFETIME;
+    assert!(!canister_queues.has_expired_deadlines(current_time));
+
+    let current_time = time1 + REQUEST_LIFETIME;
+    assert!(canister_queues.has_expired_deadlines(current_time));
+}
+
+/// Tests `time_out_requests` on an instance of `CanisterQueues` that contains exactly 4 output messages.
+/// - An output request addressed to self.
+/// - An output request addressed to a local canister.
+/// - Two output requests adressed to a remote canister.
+#[test]
+fn time_out_requests_pushes_correct_reject_responses() {
+    let mut canister_queues = CanisterQueues::default();
+
+    let own_canister_id = canister_test_id(67);
+    let local_canister_id = canister_test_id(79);
+    let remote_canister_id = canister_test_id(97);
+
+    let deadline1 = Time::from_nanos_since_unix_epoch(1);
+    let deadline2 = Time::from_nanos_since_unix_epoch(2);
+
+    for (canister_id, cycles, callback_id, deadline) in [
+        (own_canister_id, 3, 0, deadline1),
+        (local_canister_id, 5, 1, deadline1),
+        (remote_canister_id, 7, 2, deadline1),
+        (remote_canister_id, 14, 3, deadline2),
+    ] {
+        canister_queues
+            .push_output_request(
+                Arc::new(Request {
+                    receiver: canister_id,
+                    sender: own_canister_id,
+                    sender_reply_callback: CallbackId::from(callback_id),
+                    payment: Cycles::from(cycles as u64),
+                    method_name: "No-Op".to_string(),
+                    method_payload: vec![],
+                }),
+                deadline,
+            )
+            .unwrap();
+    }
+
+    let local_canisters = maplit::btreemap! {
+        local_canister_id => {
+            let scheduler_state = SchedulerState::default();
+            let system_state = SystemState::new_running(
+                CanisterId::from_u64(42),
+                user_test_id(24).get(),
+                Cycles::new(1 << 36),
+                NumSeconds::from(100_000),
+            );
+            CanisterState::new(system_state, None, scheduler_state)
+        }
+    };
+
+    let current_time = deadline1 + REQUEST_LIFETIME;
+    canister_queues.time_out_requests(current_time, &own_canister_id, &local_canisters);
+
+    // Check that each canister has one request timed out and removed from the output queue and one
+    // reject response in the corresponding input queue.
+    for (canister_id, num_output_messages) in [
+        (&own_canister_id, 0),
+        (&local_canister_id, 0),
+        (&remote_canister_id, 1),
+    ] {
+        if let Some((input_queue, output_queue)) = canister_queues.canister_queues.get(canister_id)
+        {
+            assert_eq!(num_output_messages, output_queue.num_messages());
+            assert_eq!(1, input_queue.num_messages());
+        }
+    }
+
+    // Explicitly check contents of a reject response.
+    if let Some(RequestOrResponse::Response(reject_response)) = canister_queues
+        .canister_queues
+        .get(&remote_canister_id)
+        .and_then(|(input_queue, _)| input_queue.peek())
+    {
+        assert_eq!(
+            Arc::new(Response {
+                originator: own_canister_id,
+                respondent: remote_canister_id,
+                originator_reply_callback: CallbackId::from(2),
+                refund: Cycles::from(7_u64),
+                response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                    RejectCode::SysTransient,
+                    "Request timed out.".to_string(),
+                    MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
+                ))
+            }),
+            *reject_response,
+        );
+    }
+
+    // Check that subnet input schedules contain the relevant canister IDs exactly once.
+    assert_eq!(
+        canister_queues.local_subnet_input_schedule,
+        VecDeque::from(vec![own_canister_id, local_canister_id])
+    );
+    assert_eq!(
+        canister_queues.remote_subnet_input_schedule,
+        VecDeque::from(vec![remote_canister_id]),
+    );
+
+    let current_time = deadline2 + REQUEST_LIFETIME;
+    canister_queues.time_out_requests(current_time, &own_canister_id, &local_canisters);
+
+    if let Some((input_queue, output_queue)) =
+        canister_queues.canister_queues.get(&remote_canister_id)
+    {
+        assert_eq!(0, output_queue.num_messages());
+        assert_eq!(2, input_queue.num_messages());
+    }
+    // Check that timing out twice does not lead to duplicate entries in subnet input schedules.
+    assert_eq!(
+        canister_queues.remote_subnet_input_schedule,
+        VecDeque::from(vec![remote_canister_id]),
+    );
 }

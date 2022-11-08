@@ -70,16 +70,16 @@ fn oversized_reject_message_is_truncated() {
     }
 
     assert_correct_truncation(
-        SYNTHETIC_REJECT_MESSAGE_MAX_LEN - 1,
-        SYNTHETIC_REJECT_MESSAGE_MAX_LEN - 1,
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN - 1,
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN - 1,
     );
     assert_correct_truncation(
-        SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-        SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     );
     assert_correct_truncation(
-        SYNTHETIC_REJECT_MESSAGE_MAX_LEN + 1,
-        SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN + 1,
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     );
 }
 

@@ -1,13 +1,16 @@
-use crate::message_routing::{LatencyMetrics, SYNTHETIC_REJECT_MESSAGE_MAX_LEN};
+use crate::message_routing::LatencyMetrics;
 use ic_base_types::NumBytes;
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_error_types::RejectCode;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::replicated_state::PeekableOutputIterator;
-use ic_replicated_state::Stream;
-use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
+use ic_replicated_state::{
+    replicated_state::{
+        PeekableOutputIterator, ReplicatedStateMessageRouting, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+    },
+    ReplicatedState, Stream,
+};
 use ic_types::{
     messages::{
         Payload, RejectContext, Request, RequestOrResponse, Response,
@@ -192,7 +195,7 @@ impl StreamBuilderImpl {
                         RejectContext::new_with_message_length_limit(
                             reject_code,
                             reject_message,
-                            SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
                         ),
                     ),
                 }

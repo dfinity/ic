@@ -2,7 +2,9 @@ mod queue;
 #[cfg(test)]
 mod tests;
 
-use crate::{InputQueueType, NextInputQueue, StateError};
+use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
+use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
+use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_protobuf::{
@@ -20,7 +22,7 @@ use ic_types::{
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, HashSet, VecDeque},
     convert::{From, TryFrom},
     ops::{AddAssign, SubAssign},
     sync::Arc,
@@ -30,8 +32,8 @@ use std::{
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 
 /// The default lifetime of a request in OutputQueue from which the deadline
-/// is computed as time + DEFAULT_OUTPUT_REQUEST_LIFETIME.
-pub const DEFAULT_OUTPUT_REQUEST_LIFETIME: Duration = Duration::from_secs(300);
+/// is computed as time + REQUEST_LIFETIME.
+pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
@@ -196,7 +198,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     }
 
     /// Permanently excludes from iteration the next queue (i.e. all messages
-    /// with the same sender and receiver as the next message). The mesages are
+    /// with the same sender and receiver as the next message). The messages are
     /// retained in the output queue.
     ///
     /// Returns the number of messages left in the excluded queue.
@@ -571,7 +573,7 @@ impl CanisterQueues {
             OutputQueuesStats::stats_delta(&RequestOrResponse::Request(msg.clone()));
 
         output_queue
-            .push_request(msg, time + DEFAULT_OUTPUT_REQUEST_LIFETIME)
+            .push_request(msg, time + REQUEST_LIFETIME)
             .expect("cannot fail due to checks above");
 
         self.input_queues_stats.reserved_slots += 1;
@@ -785,7 +787,7 @@ impl CanisterQueues {
             .transient_stream_responses_size_bytes
     }
 
-    /// Returns an existing a matching pair of input and output queues from/to
+    /// Returns an existing matching pair of input and output queues from/to
     /// the given canister; or creates a pair of empty queues, if non-existent.
     fn get_or_insert_queues(
         &mut self,
@@ -875,6 +877,41 @@ impl CanisterQueues {
         true
     }
 
+    /// Helper function to concisely validate `CanisterQueues` schedules in debug builds,
+    /// by writing 'debug_assert!(self.schedules_ok(own_canister_id, local_canisters)'.
+    ///
+    /// Checks that all canister IDs of input queues that contain at least one message
+    /// are found exactly once in either the input schedule for the local subnet or the
+    /// input schedule for remote subnets.
+    fn schedules_ok(
+        &self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) -> bool {
+        let mut local_canister_ids = HashSet::new();
+        let mut remote_canister_ids = HashSet::new();
+        for (canister_id, (input_queue, _)) in self.canister_queues.iter() {
+            if input_queue.num_messages() == 0 {
+                continue;
+            }
+            if canister_id == own_canister_id || local_canisters.contains_key(canister_id) {
+                local_canister_ids.insert(canister_id);
+            } else {
+                remote_canister_ids.insert(canister_id);
+            }
+        }
+
+        for (canister_ids, schedule) in [
+            (local_canister_ids, &self.local_subnet_input_schedule),
+            (remote_canister_ids, &self.remote_subnet_input_schedule),
+        ] {
+            assert_eq!(canister_ids.len(), schedule.len());
+            assert_eq!(canister_ids, schedule.iter().collect::<HashSet<_>>());
+        }
+
+        true
+    }
+
     /// Computes input queues stats from scratch. Used when deserializing and
     /// in `debug_assert!()` checks.
     ///
@@ -945,6 +982,72 @@ impl CanisterQueues {
         }
         stats
     }
+
+    /// Queries whether any of the `OutputQueues` in `self.canister_queues` have any expired
+    /// deadlines in them.
+    pub fn has_expired_deadlines(&self, current_time: Time) -> bool {
+        self.canister_queues
+            .iter()
+            .any(|(_, (_, output_queue))| output_queue.has_expired_deadlines(current_time))
+    }
+
+    /// Times out requests in `OutputQueues` given a current time, enqueuing a reject response
+    /// for each into the matching `InputQueue`.
+    ///
+    /// Updating the correct input queues schedule after enqueuing a reject response into a
+    /// previously empty queue also requires the full set of local canisters to decide whether
+    /// the destination canister was local or remote.
+    pub fn time_out_requests(
+        &mut self,
+        current_time: Time,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) {
+        for (canister_id, (input_queue, output_queue)) in self.canister_queues.iter_mut() {
+            for request in output_queue.time_out_requests(current_time) {
+                let response = generate_timeout_response(&request);
+
+                // Request was dropped, update stats.
+                let request = RequestOrResponse::Request(request);
+                self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &request);
+                self.output_queues_stats -= OutputQueuesStats::stats_delta(&request);
+
+                // Push response, update stats.
+                let iq_stats_delta = InputQueuesStats::stats_delta(QueueOp::Push, &response);
+                let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Push, &response);
+                input_queue.push(response).unwrap();
+                self.input_queues_stats += iq_stats_delta;
+                self.memory_usage_stats += mu_stats_delta;
+
+                // If this was a previously empty input queue, add it to input queue schedule.
+                if input_queue.num_messages() == 1 {
+                    if canister_id == own_canister_id || local_canisters.contains_key(canister_id) {
+                        self.local_subnet_input_schedule.push_back(*canister_id);
+                    } else {
+                        self.remote_subnet_input_schedule.push_back(*canister_id);
+                    }
+                }
+            }
+        }
+
+        debug_assert!(self.stats_ok());
+        debug_assert!(self.schedules_ok(own_canister_id, local_canisters));
+    }
+}
+
+/// Generates a timeout reject response from a request, refunding its payment.
+fn generate_timeout_response(request: &Arc<Request>) -> RequestOrResponse {
+    RequestOrResponse::Response(Arc::new(Response {
+        originator: request.sender,
+        respondent: request.receiver,
+        originator_reply_callback: request.sender_reply_callback,
+        refund: request.payment,
+        response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+            RejectCode::SysTransient,
+            "Request timed out.".to_string(),
+            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        )),
+    }))
 }
 
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {
@@ -1446,7 +1549,7 @@ pub mod testing {
             let req = Arc::new(req);
             updated_requests.push_back(RequestOrResponse::Request(Arc::clone(&req)));
             canister_queues
-                .push_output_request(req, Time::from_nanos_since_unix_epoch(0))
+                .push_output_request(req, Time::from_nanos_since_unix_epoch(i as u64))
                 .unwrap();
         });
         (canister_queues, updated_requests)
