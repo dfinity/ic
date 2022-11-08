@@ -24,6 +24,7 @@ type Transaction = record {
          to : Account;
          memo : opt blob;
          created_at_time : opt nat64;
+         fee : opt nat;
      };
      timestamp : nat64;
 };
