@@ -58,11 +58,11 @@ rust_library(
     name = "artifact_pool",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_name = "ic_artifact_pool",
-    features = select({
+    crate_features = select({
         "@platforms//os:osx": ["rocksdb_backend"],
         "//conditions:default": [],
     }),
+    crate_name = "ic_artifact_pool",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
