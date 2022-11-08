@@ -1,7 +1,7 @@
 use crate::{EccCurveType, ThresholdEcdsaError, ThresholdEcdsaResult};
 use std::convert::TryInto;
 use std::fmt;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // The secp256k1 parameters are defined in FIPS 186-4, section D.1.2
 // [https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf]
@@ -33,7 +33,7 @@ fe_derive::derive_field_element!(
     SSWU_Z = "-11",
 );
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum EccFieldElement {
     K256(Secp256k1FieldElement),
     P256(Secp256r1FieldElement),

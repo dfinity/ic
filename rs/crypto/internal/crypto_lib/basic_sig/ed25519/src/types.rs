@@ -2,13 +2,13 @@
 #![allow(clippy::unit_arg)] // Arbitrary is a unit arg in: derive(proptest_derive::Arbitrary)
 use ic_crypto_secrets_containers::SecretArray;
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod conversions;
 mod generic_traits;
 
 /// A wrapper for Ed25519 secret key bytes.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Zeroize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKeyBytes(pub SecretArray<{ SecretKeyBytes::SIZE }>);
 impl SecretKeyBytes {
     pub const SIZE: usize = 32;

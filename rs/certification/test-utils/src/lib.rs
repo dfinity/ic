@@ -114,7 +114,7 @@ impl CertificateBuilder {
 
         CertificateBuilder {
             public_key,
-            secret_key: secret_key_bytes.get(0).unwrap().unwrap(),
+            secret_key: secret_key_bytes.get(0).unwrap().clone().unwrap(),
             data,
             delegatee_pub_key: None,
             override_sig: None,

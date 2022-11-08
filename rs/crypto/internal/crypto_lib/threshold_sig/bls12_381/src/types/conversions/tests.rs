@@ -57,7 +57,7 @@ proptest! {
     #[test]
     #[allow(clippy::unnecessary_operation)] // Clippy believes that these tests are unnecessary.
     fn proptest_secret_key_stringifying_and_parsing_should_be_inverse(secret_key: SecretKeyBytes) {
-        let string = String::from(secret_key);
+        let string = String::from(secret_key.clone());
         let parsed = SecretKeyBytes::try_from(&string).expect("Failed to parse stringified secret key");
         assert_eq!(secret_key, parsed, "Stringifying followed by parsing produced a value different from the starting value.");
     }

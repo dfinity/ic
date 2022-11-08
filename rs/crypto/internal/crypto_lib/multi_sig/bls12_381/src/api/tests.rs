@@ -40,11 +40,11 @@ fn test_happy_path(
 ) {
     let pops: CryptoResult<Vec<PopBytes>> = keys
         .iter()
-        .map(|(secret_key, public_key)| multi_sig::create_pop(*public_key, *secret_key))
+        .map(|(secret_key, public_key)| multi_sig::create_pop(*public_key, secret_key.clone()))
         .collect();
     let signatures: Vec<IndividualSignatureBytes> = keys
         .iter()
-        .map(|(secret_key, _)| multi_sig::sign(message, *secret_key))
+        .map(|(secret_key, _)| multi_sig::sign(message, secret_key.clone()))
         .collect();
     let pops = pops.expect("PoP generation failed");
     let signature = multi_sig::combine(&signatures);

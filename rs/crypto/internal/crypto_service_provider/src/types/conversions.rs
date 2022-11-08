@@ -247,8 +247,8 @@ impl TryFrom<&UserPublicKey> for CspPublicKey {
 impl TryFrom<CspSecretKey> for threshold_types::SecretKeyBytes {
     type Error = CspSecretKeyConversionError;
     fn try_from(value: CspSecretKey) -> Result<Self, Self::Error> {
-        if let CspSecretKey::ThresBls12_381(key) = value {
-            Ok(key)
+        if let CspSecretKey::ThresBls12_381(key) = &value {
+            Ok(key.clone())
         } else {
             // TODO (CRP-822): Add the error type to the error message.
             Err(CspSecretKeyConversionError::WrongSecretKeyType {})

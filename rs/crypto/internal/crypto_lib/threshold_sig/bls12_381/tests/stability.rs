@@ -81,7 +81,7 @@ fn create_receiver_keys(
         let key_and_pop =
             create_forward_secure_key_pair(node_key_seed, b"ic-crypto-kgen-assoc-data");
         pk.insert(node_index as u32, key_and_pop.public_key);
-        sk.insert(node_index as u32, key_and_pop.secret_key);
+        sk.insert(node_index as u32, key_and_pop.secret_key.clone());
     }
 
     (pk, sk)
@@ -192,7 +192,7 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
             &receiver_pk,
             threshold,
             epoch,
-            Some(resharing_secret),
+            Some(resharing_secret.clone()),
         );
 
         assert_sha256_cbor_is(&dealing, expected_dealing_hashes[dealer as usize]);

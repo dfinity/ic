@@ -20,7 +20,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{CommitmentOpeningBytes, MEGaKeySetK
 use ic_types::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, IntoStaticStr};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub mod conversions;
 mod external_conversion_utilities;
@@ -52,8 +52,9 @@ pub use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspP
 /// The secret part of a public/private key pair.
 ///
 /// This enum can be persisted in a `SecretKeyStore`.
-#[derive(Clone, Eq, IntoStaticStr, PartialEq, Zeroize, Serialize, Deserialize, EnumCount)]
-#[zeroize(drop)]
+#[derive(
+    Clone, Eq, IntoStaticStr, PartialEq, Serialize, Deserialize, EnumCount, Zeroize, ZeroizeOnDrop,
+)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum CspSecretKey {
     #[cfg_attr(test, proptest(value(arbitrary_ed25519_secret_key)))]

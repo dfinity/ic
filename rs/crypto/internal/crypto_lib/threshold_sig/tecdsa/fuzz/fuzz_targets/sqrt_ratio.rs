@@ -15,7 +15,7 @@ fn cmov(
     b: &EccFieldElement,
     c: subtle::Choice,
 ) -> ThresholdEcdsaResult<EccFieldElement> {
-    let mut r = *a;
+    let mut r = a.clone();
     r.ct_assign(b, c)?;
     Ok(r)
 }

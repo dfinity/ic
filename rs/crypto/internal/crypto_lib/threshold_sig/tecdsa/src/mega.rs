@@ -5,7 +5,7 @@ use paste::paste;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// The type of MEGa ciphertext
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,8 +77,7 @@ impl MEGaPublicKey {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct MEGaPrivateKey {
     secret: EccScalar,
 }
@@ -725,8 +724,7 @@ macro_rules! generate_serializable_keyset {
                 }
             }
 
-            #[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
-            #[zeroize(drop)]
+            #[derive(Clone, Debug, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
             pub struct [<MEGaPublicKey $curve Bytes>]([u8; Self::SIZE]);
             ic_crypto_internal_types::derive_serde!([<MEGaPublicKey $curve Bytes>], [<MEGaPublicKey $curve Bytes>]::SIZE);
 
@@ -759,8 +757,7 @@ macro_rules! generate_serializable_keyset {
                 }
             }
 
-            #[derive(Clone, Eq, PartialEq, Zeroize)]
-            #[zeroize(drop)]
+            #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
             pub struct [<MEGaPrivateKey $curve Bytes>]([u8; Self::SIZE]);
             ic_crypto_internal_types::derive_serde!([<MEGaPrivateKey $curve Bytes>], [<MEGaPrivateKey $curve Bytes>]::SIZE);
 
@@ -791,8 +788,7 @@ macro_rules! generate_serializable_keyset {
                 }
             }
 
-            #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Zeroize)]
-            #[zeroize(drop)]
+            #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
             pub struct [<MEGaKeySet $curve Bytes>] {
                 pub public_key: [<MEGaPublicKey $curve Bytes>],
                 pub private_key: [<MEGaPrivateKey $curve Bytes>],

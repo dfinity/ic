@@ -4,11 +4,10 @@
 /// copies, the array is allocated on the heap as a `Box<u8>`.
 use core::fmt::{self, Debug};
 use serde::de::Error;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Sensitive data held as an array of `u8`s.
-#[derive(Clone, Eq, PartialEq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct SecretArray<const N: usize> {
     inner_secret: Box<[u8; N]>,
 }
