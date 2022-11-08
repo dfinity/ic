@@ -1,4 +1,4 @@
-use crate::message_routing::{LatencyMetrics, SYNTHETIC_REJECT_MESSAGE_MAX_LEN};
+use crate::message_routing::LatencyMetrics;
 use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
@@ -15,7 +15,7 @@ use ic_replicated_state::{
         ReplicatedStateMessageRouting, LABEL_VALUE_CANISTER_NOT_FOUND,
         LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
         LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INVALID_SUBNET_PAYLOAD, LABEL_VALUE_QUEUE_FULL,
-        LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
+        LABEL_VALUE_UNKNOWN_SUBNET_METHOD, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     },
     ReplicatedState, StateError,
 };
@@ -853,7 +853,7 @@ fn generate_reject_response(
             response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
                 reject_code,
                 message,
-                SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
             )),
         }
         .into()

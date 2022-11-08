@@ -31,6 +31,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
+/// Maximum message length of a synthetic reject response produced by message
+/// routing.
+pub const MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN: usize = 255;
+
 /// Input queue type: local or remote subnet.
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
 pub enum InputQueueType {
@@ -197,7 +201,7 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOr
     fn peek(&self) -> Option<(QueueId, &RequestOrResponse)>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
-    /// with the same sender and receiver as the next). The mesages are retained
+    /// with the same sender and receiver as the next). The messages are retained
     /// in the output queue.
     fn exclude_queue(&mut self);
 }
@@ -782,6 +786,39 @@ impl ReplicatedState {
 
     pub fn put_bitcoin_state(&mut self, bitcoin: BitcoinState) {
         self.bitcoin = bitcoin;
+    }
+
+    /// Times out requests in all `OutputQueues` found in the replicated state (except the subnet
+    /// queues).
+    ///
+    /// See `CanisterQueues::time_out_requests` for further details.
+    #[allow(clippy::needless_collect)]
+    pub fn time_out_requests(&mut self, current_time: Time) {
+        // Because the borrow checker requires us to remove each canister before
+        // calling `time_out_requests()` on it and replace it afterwards; and removing
+        // and replacing every canister on a large subnet is very costly; we first
+        // filter for the (usually much fewer) canisters with timed requests and only
+        // apply the costly remove-call-replace to those.
+        let canister_ids_with_expired_deadlines = self
+            .canister_states
+            .iter()
+            .filter(|(_, canister_state)| {
+                canister_state
+                    .system_state
+                    .has_expired_deadlines(current_time)
+            })
+            .map(|(canister_id, _)| *canister_id)
+            .collect::<Vec<_>>();
+
+        for canister_id in canister_ids_with_expired_deadlines {
+            let mut canister = self.canister_states.remove(&canister_id).unwrap();
+            canister.system_state.time_out_requests(
+                current_time,
+                &canister_id,
+                &self.canister_states,
+            );
+            self.canister_states.insert(canister_id, canister);
+        }
     }
 }
 

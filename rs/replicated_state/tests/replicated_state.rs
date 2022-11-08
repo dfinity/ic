@@ -27,10 +27,12 @@ use ic_test_utilities::types::{
 };
 use ic_types::{
     messages::{CallbackId, Payload, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
-    CountBytes, Cycles,
+    CountBytes, Cycles, Time,
 };
 use proptest::prelude::*;
+use std::collections::VecDeque;
 use std::str::FromStr;
+use std::sync::Arc;
 
 const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
@@ -816,6 +818,70 @@ fn insert_bitcoin_response() {
         state.consensus_queue[0].response_payload,
         Payload::Data(BitcoinGetSuccessorsResponse::Complete(response).encode())
     );
+}
+
+#[test]
+fn time_out_requests_updates_subnet_input_schedules_correctly() {
+    let local_canister_id1 = CanisterId::from_u64(13);
+    let local_canister_id2 = CanisterId::from_u64(17);
+
+    // Generate a replicated state for two canisters.
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+    for local_canister_id in [local_canister_id1, local_canister_id2] {
+        state.put_canister_state({
+            let scheduler_state = SchedulerState::default();
+            let system_state = SystemState::new_running(
+                local_canister_id,
+                user_test_id(24).get(),
+                INITIAL_CYCLES,
+                NumSeconds::from(100_000),
+            );
+            CanisterState::new(system_state, None, scheduler_state)
+        });
+    }
+
+    // Push 3 requests into the canister with id `local_canister_id1`:
+    // - one to self.
+    // - one to a another local canister.
+    // - one to a remote canister.
+    let remote_canister_id = CanisterId::from_u64(19);
+    if let Some(canister_state) = state.canister_state_mut(&local_canister_id1) {
+        for receiver in [local_canister_id1, local_canister_id2, remote_canister_id] {
+            canister_state
+                .push_output_request(
+                    Arc::new(
+                        RequestBuilder::default()
+                            .sender(local_canister_id1)
+                            .receiver(receiver)
+                            .build(),
+                    ),
+                    mock_time(),
+                )
+                .unwrap();
+        }
+    }
+
+    // Time out everything, then check subnet input schedules are as expected.
+    state.time_out_requests(Time::from_nanos_since_unix_epoch(u64::MAX));
+
+    let local_schedule = state
+        .canister_state(&local_canister_id1)
+        .unwrap()
+        .system_state
+        .queues()
+        .get_local_subnet_input_schedule();
+    assert_eq!(
+        local_schedule,
+        &VecDeque::from(vec![local_canister_id1, local_canister_id2])
+    );
+
+    let remote_schedule = state
+        .canister_state(&local_canister_id1)
+        .unwrap()
+        .system_state
+        .queues()
+        .get_remote_subnet_input_schedule();
+    assert_eq!(remote_schedule, &VecDeque::from(vec![remote_canister_id]));
 }
 
 proptest! {

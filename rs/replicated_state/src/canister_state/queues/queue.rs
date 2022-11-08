@@ -539,9 +539,16 @@ impl OutputQueue {
         self.queue.calculate_stat_sum(stat)
     }
 
+    /// Returns true if there are any expired deadlines at `current_time`, false otherwise.
+    pub(super) fn has_expired_deadlines(&self, current_time: Time) -> bool {
+        match self.deadline_range_ends.front() {
+            Some((deadline, _)) => *deadline <= current_time,
+            None => false,
+        }
+    }
+
     /// Purges timed out requests. Returns an iterator over the timed out requests.
     /// Only consumed items are purged.
-    #[allow(dead_code)]
     pub(super) fn time_out_requests(&mut self, current_time: Time) -> TimedOutRequestsIter {
         TimedOutRequestsIter {
             q: self,

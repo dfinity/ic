@@ -95,7 +95,7 @@ fn reject_local_request() {
         let mut expected_state = state.clone();
 
         // Reject the message.
-        let reject_message = (0..SYNTHETIC_REJECT_MESSAGE_MAX_LEN + 1)
+        let reject_message = (0..MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN + 1)
             .into_iter()
             .map(|_| "a")
             .collect::<String>();
@@ -117,7 +117,7 @@ fn reject_local_request() {
                     response_payload: Payload::Reject(RejectContext {
                         code: RejectCode::SysFatal,
                         message: reject_message
-                            .safe_truncate(SYNTHETIC_REJECT_MESSAGE_MAX_LEN)
+                            .safe_truncate(MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN)
                             .to_string(),
                     }),
                 }

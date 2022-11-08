@@ -3,7 +3,7 @@ mod call_context_manager;
 use super::queues::can_push;
 pub use super::queues::memory_required_to_push_request;
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::{CanisterQueues, InputQueueType, StateError};
+use crate::{CanisterQueues, CanisterState, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_interfaces::messages::{CanisterInputMessage, RequestOrIngress};
@@ -875,6 +875,25 @@ impl SystemState {
     /// Garbage collects empty input and output queue pairs.
     pub fn garbage_collect_canister_queues(&mut self) {
         self.queues.garbage_collect();
+    }
+
+    /// Queries whether any of the `OutputQueues` in `self.queues` have any expired
+    /// deadlines in them.
+    pub fn has_expired_deadlines(&self, current_time: Time) -> bool {
+        self.queues.has_expired_deadlines(current_time)
+    }
+
+    /// Times out requests in the `OutputQueues` of `self.queues`.
+    ///
+    /// See `CanisterQueues::time_out_requests` for further details.
+    pub fn time_out_requests(
+        &mut self,
+        current_time: Time,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) {
+        self.queues
+            .time_out_requests(current_time, own_canister_id, local_canisters);
     }
 }
 

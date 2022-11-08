@@ -469,7 +469,7 @@ proptest! {
 /// each with a unique deadline.
 fn generate_test_queue(num_requests: usize) -> OutputQueue {
     let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-    for t in 0..num_requests {
+    for t in 1..=num_requests {
         q.push_request(
             RequestBuilder::default().build().into(),
             Time::from_nanos_since_unix_epoch(t as u64),
@@ -477,6 +477,18 @@ fn generate_test_queue(num_requests: usize) -> OutputQueue {
         .unwrap();
     }
     q
+}
+
+#[test]
+fn output_queue_test_has_expired_deadlines() {
+    let end_of_time = Time::from_nanos_since_unix_epoch(u64::MAX);
+
+    let q = generate_test_queue(0);
+    assert!(!q.has_expired_deadlines(end_of_time));
+
+    let q = generate_test_queue(1);
+    assert!(!q.has_expired_deadlines(Time::from_nanos_since_unix_epoch(0)));
+    assert!(q.has_expired_deadlines(end_of_time));
 }
 
 #[test]
