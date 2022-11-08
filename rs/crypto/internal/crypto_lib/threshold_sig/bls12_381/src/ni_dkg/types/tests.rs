@@ -22,10 +22,10 @@ fn should_redact_csp_fs_encryption_secretkey_debug() {
 
     let full_str = format!("{:?}", csp_sk);
 
-    match csp_sk {
+    match &csp_sk {
         CspFsEncryptionSecretKey::Groth20_Bls12_381(sk) => {
-            for node in sk.bte_nodes {
-                assert_bte_node_components_are_redacted(&node, &full_str);
+            for node in &sk.bte_nodes {
+                assert_bte_node_components_are_redacted(node, &full_str);
             }
         }
     }

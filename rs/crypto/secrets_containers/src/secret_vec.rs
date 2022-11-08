@@ -1,11 +1,10 @@
 /// Sensitive data held as a Vec of `u8`s.
 use core::fmt::{self, Debug};
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Sensitive data held as a Vec of `u8`s.
-#[derive(Clone, Deserialize, Eq, PartialEq, Serialize, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretVec {
     inner_secret: Vec<u8>,
 }

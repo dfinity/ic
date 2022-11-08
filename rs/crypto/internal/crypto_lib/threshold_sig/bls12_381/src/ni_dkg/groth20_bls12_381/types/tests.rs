@@ -37,7 +37,7 @@ fn should_redact_fs_encryption_secret_key_debug() {
 
     let full_str = format!("{:?}", sk);
 
-    for node in sk.bte_nodes {
-        assert_bte_node_components_are_redacted(&node, &full_str);
+    for node in &sk.bte_nodes {
+        assert_bte_node_components_are_redacted(node, &full_str);
     }
 }

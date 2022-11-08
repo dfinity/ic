@@ -190,7 +190,7 @@ fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
     let p_dash = config.p_dash;
 
     quote! {
-        #[derive(Copy, Clone, Zeroize)]
+        #[derive(Clone, Zeroize, ZeroizeOnDrop)]
         pub struct #ident {
             limbs: [u64; #limbs]
         }

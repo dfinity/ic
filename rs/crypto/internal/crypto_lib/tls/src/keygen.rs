@@ -12,7 +12,7 @@ use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[cfg(test)]
 mod tests;
@@ -46,8 +46,8 @@ pub enum TlsKeyPairAndCertGenerationError {
 }
 
 /// The raw bytes of a DER-encoded Ed25519 secret key.
-#[derive(Clone, Eq, PartialEq, Zeroize, Deserialize, Serialize)]
-#[zeroize(drop)] // TODO (CRP-1251) Use SecretVec in TlsEd25519CertificateDerBytes instead of Vec
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
+// TODO (CRP-1251) Use SecretVec in TlsEd25519CertificateDerBytes instead of Vec
 pub struct TlsEd25519SecretKeyDerBytes {
     #[serde(with = "serde_bytes")]
     pub bytes: Vec<u8>,

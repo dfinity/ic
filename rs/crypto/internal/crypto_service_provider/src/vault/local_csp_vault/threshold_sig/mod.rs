@@ -75,9 +75,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> ThresholdSignatur
                 let key_ids: Vec<Option<KeyId>> = secret_keys
                     .iter()
                     .map(|secret_key_maybe| {
-                        secret_key_maybe.map(|secret_key| loop {
+                        secret_key_maybe.clone().map(|secret_key| loop {
                             let key_id = KeyId::from(self.rng_write_lock().gen::<[u8; 32]>());
-                            let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key);
+                            let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key.clone());
                             let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
                             if result.is_ok() {
                                 break key_id;

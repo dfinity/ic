@@ -15,7 +15,7 @@ use paste::paste;
 use rand::{CryptoRng, RngCore};
 use std::fmt;
 use std::sync::Arc;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 macro_rules! ctoption_ok_or {
     ($val:expr, $err:expr) => {
@@ -42,8 +42,7 @@ pub enum PairingInvalidScalar {
 }
 
 /// An integer of the order of the groups G1/G2/Gt
-#[derive(Clone, Eq, PartialEq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Scalar {
     value: ic_bls12_381::Scalar,
 }
@@ -624,8 +623,7 @@ macro_rules! define_affine_and_projective_types {
         }
 
         paste! {
-            #[derive(Zeroize)]
-            #[zeroize(drop)]
+            #[derive(Zeroize, ZeroizeOnDrop)]
             /// Structure for fast multiplication for known/fixed points
             ///
             /// This algorithm works by precomputing a table such that by adding
@@ -993,8 +991,7 @@ macro_rules! define_affine_and_projective_types {
         }
 
         /// An element of the group in projective form
-        #[derive(Clone, Eq, PartialEq, Zeroize)]
-        #[zeroize(drop)]
+        #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
         pub struct $projective {
             value: ic_bls12_381::$projective
         }
@@ -1479,8 +1476,7 @@ impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);
 
 /// An element of the group Gt
-#[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, Debug, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Gt {
     value: ic_bls12_381::Gt,
 }

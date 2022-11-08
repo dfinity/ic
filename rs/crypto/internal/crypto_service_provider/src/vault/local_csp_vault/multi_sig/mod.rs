@@ -67,9 +67,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, 
             })?;
 
         let result = match algorithm_id {
-            AlgorithmId::MultiBls12_381 => match secret_key {
+            AlgorithmId::MultiBls12_381 => match &secret_key {
                 CspSecretKey::MultiBls12_381(key) => {
-                    let sig = multi_bls12381::sign(message, key);
+                    let sig = multi_bls12381::sign(message, key.clone());
                     Ok(CspSignature::MultiBls12_381(
                         MultiBls12_381_Signature::Individual(sig),
                     ))
@@ -94,7 +94,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<R, 
             AlgorithmId::MultiBls12_381 => {
                 let (sk_bytes, pk_bytes) =
                     multi_bls12381::keypair_from_rng(&mut *self.rng_write_lock());
-                let pop_bytes = multi_bls12381_pop(algorithm_id, sk_bytes, pk_bytes)?;
+                let pop_bytes = multi_bls12381_pop(algorithm_id, sk_bytes.clone(), pk_bytes)?;
 
                 let sk = CspSecretKey::MultiBls12_381(sk_bytes);
                 let pk = CspPublicKey::MultiBls12_381(pk_bytes);

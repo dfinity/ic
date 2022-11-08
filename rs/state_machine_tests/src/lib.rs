@@ -467,7 +467,7 @@ impl StateMachine {
 
         Self {
             subnet_id,
-            secret_key: secret_key_bytes.get(0).unwrap().unwrap(),
+            secret_key: secret_key_bytes.get(0).unwrap().clone().unwrap(),
             public_key,
             registry_data_provider,
             registry_client,

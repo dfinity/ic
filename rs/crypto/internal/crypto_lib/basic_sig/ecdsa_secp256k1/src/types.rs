@@ -3,7 +3,7 @@
 
 use ic_crypto_secrets_containers::SecretVec;
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod conversions;
 mod generic_traits;
@@ -18,7 +18,7 @@ pub const FIELD_SIZE: usize = 32;
 /// ECDSA secp256k1 secret key bytes.
 ///
 /// An unsigned big integer in DER-encoding.
-#[derive(Zeroize, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKeyBytes(pub SecretVec);
 
 /// ECDSA secp256k1 public key bytes, in uncompressed format

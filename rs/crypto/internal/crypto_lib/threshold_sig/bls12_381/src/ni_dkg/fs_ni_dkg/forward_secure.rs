@@ -25,7 +25,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
 use rand::{CryptoRng, RngCore};
 use std::collections::LinkedList;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// The ciphertext is an element of Fr which is 256-bits
 pub(crate) const MESSAGE_BYTES: usize = 32;
@@ -146,6 +146,13 @@ impl zeroize::Zeroize for BTENode {
         self.d_t.iter_mut().for_each(|x| x.zeroize());
         self.d_h.zeroize();
         self.e.zeroize();
+    }
+}
+
+// ZeroizeOnDrop doesn't work if you don't derive Zeroize
+impl Drop for BTENode {
+    fn drop(&mut self) {
+        self.zeroize();
     }
 }
 
@@ -545,8 +552,7 @@ impl FsEncryptionCiphertext {
 }
 
 /// Randomness needed for NIZK proofs.
-#[derive(Zeroize)]
-#[zeroize(drop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct EncryptionWitness {
     pub spec_r: Vec<Scalar>,
 }

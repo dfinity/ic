@@ -53,8 +53,11 @@ fn epoch_of_a_new_key_should_be_zero() {
 #[test]
 fn single_stepping_a_key_should_increment_current_epoch() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 5u8, 0u8, 5u8];
-    let FsEncryptionKeySetWithPop { secret_key, .. } =
+
+    let key_with_pop =
         create_forward_secure_key_pair(Seed::from_bytes(&[89u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+    let secret_key = key_with_pop.secret_key.clone();
+
     let mut secret_key = trusted_secret_key_into_miracl(&secret_key);
     for epoch in 4..8 {
         let secret_key_epoch = Epoch::from(epoch);
@@ -110,7 +113,7 @@ fn generate_threshold_keys(
             .expect("Test fail: Threshold keygen failed");
     let threshold_keys = threshold_keys_maybe
         .iter()
-        .map(|key_maybe| key_maybe.unwrap())
+        .map(|key_maybe| key_maybe.clone().unwrap())
         .collect::<Vec<_>>();
     let public_coefficients = internal_types::PublicCoefficientsBytes {
         coefficients: public_coefficients

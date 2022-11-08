@@ -449,8 +449,8 @@ pub mod specialise {
             secret_key: CspSecretKey,
         ) -> Result<threshold_types::SecretKeyBytes, ni_dkg_errors::MalformedSecretKeyError>
         {
-            if let CspSecretKey::ThresBls12_381(secret_key) = secret_key {
-                Ok(secret_key)
+            if let CspSecretKey::ThresBls12_381(secret_key) = &secret_key {
+                Ok(secret_key.clone())
             } else {
                 let unexpected_type_name: &'static str = secret_key.into();
                 Err(ni_dkg_errors::MalformedSecretKeyError {
@@ -524,8 +524,8 @@ pub mod specialise {
             key_set: CspFsEncryptionKeySet,
         ) -> Result<clib::types::FsEncryptionKeySetWithPop, ni_dkg_errors::MalformedSecretKeyError>
         {
-            if let CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set) = key_set {
-                Ok(key_set)
+            if let CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set) = &key_set {
+                Ok(key_set.clone())
             } else {
                 let unexpected_type_name: &'static str = key_set.into();
                 Err(ni_dkg_errors::MalformedSecretKeyError {

@@ -57,7 +57,7 @@ proptest! {
     #[test]
     fn secret_key_base64_serde(key in arbitrary::secret_key()) {
         let bytes = SecretKeyBytes::from(key);
-        let base64: String = bytes.into();
+        let base64: String = bytes.clone().into();
         assert_eq!(Ok(bytes), SecretKeyBytes::try_from(&base64));
     }
     #[test]

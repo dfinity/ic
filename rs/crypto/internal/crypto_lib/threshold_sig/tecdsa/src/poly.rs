@@ -4,7 +4,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::IDkgOpening;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A Polynomial whose coefficients are scalars in an elliptic curve group
 ///
@@ -366,8 +366,7 @@ impl TryFrom<&IDkgOpening> for CommitmentOpening {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Zeroize, Serialize, Deserialize)]
-#[zeroize(drop)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub enum CommitmentOpeningBytes {
     Simple(EccScalarBytes),
     Pedersen(EccScalarBytes, EccScalarBytes),

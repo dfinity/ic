@@ -6,8 +6,8 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
-use subtle::{Choice, ConditionallySelectable};
-use zeroize::Zeroize;
+use subtle::Choice;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod secp256k1;
 mod secp256r1;
@@ -115,8 +115,7 @@ impl fmt::Display for EccCurveType {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub enum EccScalar {
     K256(secp256k1::Scalar),
     P256(secp256r1::Scalar),
@@ -380,8 +379,7 @@ impl<'de> Deserialize<'de> for EccScalar {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Zeroize, Serialize, Deserialize)]
-#[zeroize(drop)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub enum EccScalarBytes {
     K256([u8; 32]),
 }
@@ -413,14 +411,13 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct EccPoint {
     point: EccPointInternal,
     precompute: Option<NafLut>,
 }
 
-#[derive(Clone, Eq, PartialEq, Zeroize)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub enum EccPointInternal {
     K256(secp256k1::Point),
     P256(secp256r1::Point),
@@ -1347,7 +1344,7 @@ impl SlidingWindowMulState {
 
 /// Look-up table (LUT) that can be used to improve the efficiency of
 /// multiplication of the input `EccPoint` by an `EccScalar`.
-#[derive(Clone, Eq, PartialEq, Zeroize)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct NafLut {
     multiplications: Vec<EccPoint>,
     window_size: usize,

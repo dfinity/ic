@@ -79,7 +79,7 @@ fn test_ct_assign_is_conditional() -> Result<(), ThresholdEcdsaError> {
         let fe1 = random_field_element(curve_type);
         let fe2 = random_field_element(curve_type);
 
-        let mut dest = fe1;
+        let mut dest = fe1.clone();
         dest.ct_assign(&fe2, subtle::Choice::from(0u8))?;
         assert_eq!(dest, fe1);
 
