@@ -5,11 +5,14 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetSuccessorsArgs,
     BitcoinGetSuccessorsResponse, BitcoinGetUtxosArgs, BitcoinNetwork, BitcoinSendTransactionArgs,
-    EmptyBlob, Method as Ic00Method, Payload,
+    BitcoinSendTransactionInternalArgs, EmptyBlob, Method as Ic00Method, Payload,
 };
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext, ReplicatedState,
+    metadata_state::subnet_call_context_manager::{
+        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext,
+    },
+    ReplicatedState,
 };
 use ic_types::{messages::Request, CanisterId, Cycles};
 
@@ -141,6 +144,7 @@ pub fn get_current_fee_percentiles(
 }
 
 /// Handles a `bitcoin_send_transaction` request.
+// TODO(EXC-1239): Remove this endpoint once the migration to a canister is complete.
 pub fn send_transaction(
     payload: &[u8],
     state: &mut ReplicatedState,
@@ -246,6 +250,40 @@ pub fn get_successors(
                     }
                 }
             }
+        }
+        Err(err) => Err(candid_error_to_user_error(err)),
+    }
+}
+
+/// Handles a `bitcoin_send_transaction_internal` request.
+/// Returns Ok if the request has been accepted, and an error otherwise.
+pub fn send_transaction_internal(
+    privileged_access: &[CanisterId],
+    request: &Request,
+    state: &mut ReplicatedState,
+) -> Result<Option<Vec<u8>>, UserError> {
+    if !privileged_access.contains(&request.sender()) {
+        return Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            String::from("Permission denied."),
+        ));
+    }
+
+    match BitcoinSendTransactionInternalArgs::decode(request.method_payload()) {
+        Ok(send_transaction_internal_request) => {
+            // Insert request into subnet call contexts.
+            state
+                .metadata
+                .subnet_call_context_manager
+                .push_bitcoin_send_transaction_internal_request(
+                    BitcoinSendTransactionInternalContext {
+                        request: request.clone(),
+                        payload: send_transaction_internal_request,
+                        time: state.time(),
+                    },
+                );
+
+            Ok(None)
         }
         Err(err) => Err(candid_error_to_user_error(err)),
     }

@@ -14,11 +14,11 @@ use ic_btc_service::{
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, Block as InternalBlock,
     BlockHeader as InternalBlockHeader, CanisterGetSuccessorsRequestInitial,
-    CanisterGetSuccessorsResponseComplete, GetSuccessorsRequest as InternalGetSuccessorsRequest,
-    GetSuccessorsResponse, OutPoint as InternalOutPoint,
-    SendTransactionRequest as InternalSendTransactionRequest, SendTransactionResponse,
-    Transaction as InternalTransaction, TxIn as InternalTxIn, TxOut as InternalTxOut,
-    Txid as InternalTxid,
+    CanisterGetSuccessorsResponseComplete, CanisterSendTransactionRequest,
+    GetSuccessorsRequest as InternalGetSuccessorsRequest, GetSuccessorsResponse,
+    OutPoint as InternalOutPoint, SendTransactionRequest as InternalSendTransactionRequest,
+    SendTransactionResponse, Transaction as InternalTransaction, TxIn as InternalTxIn,
+    TxOut as InternalTxOut, Txid as InternalTxid,
 };
 use ic_config::adapters::AdaptersConfig;
 use ic_interfaces_bitcoin_adapter_client::{
@@ -188,6 +188,25 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                         })
                         .map_err(convert_tonic_error)
                 }
+                BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(
+                    CanisterSendTransactionRequest { transaction, .. },
+                ) => {
+                    request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION);
+                    let send_transaction_request = BtcServiceSendTransactionRequest { transaction };
+                    let mut tonic_request = tonic::Request::new(send_transaction_request);
+                    tonic_request.set_timeout(opts.timeout);
+
+                    client
+                        .send_transaction(tonic_request)
+                        .await
+                        .map(|tonic_response| {
+                            let _inner = tonic_response.into_inner();
+                            BitcoinAdapterResponseWrapper::CanisterSendTransactionResponse(
+                                SendTransactionResponse {},
+                            )
+                        })
+                        .map_err(convert_tonic_error)
+                }
                 BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
                     CanisterGetSuccessorsRequestInitial {
                         anchor,
@@ -254,14 +273,13 @@ impl BitcoinAdapterClient for BrokenConnectionBitcoinClient {
             [UNKNOWN_LABEL, UNKNOWN_LABEL],
         );
         match request {
-            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_) => {
+            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_)
+            | BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(_) => {
                 request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_GET_SUCCESSORS)
             }
-            BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => {
+            BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(_)
+            | BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => {
                 request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION)
-            }
-            BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(_) => {
-                request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_GET_SUCCESSORS)
             }
         }
         request_timer.set_label(

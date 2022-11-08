@@ -189,6 +189,23 @@ pub struct BitcoinGetSuccessorsContextTree {
     pub context: ::core::option::Option<BitcoinGetSuccessorsContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BitcoinSendTransactionInternalContext {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<super::super::queues::v1::Request>,
+    #[prost(message, optional, tag = "2")]
+    pub payload:
+        ::core::option::Option<super::super::super::bitcoin::v1::CanisterSendTransactionRequest>,
+    #[prost(message, optional, tag = "3")]
+    pub time: ::core::option::Option<Time>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BitcoinSendTransactionInternalContextTree {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub context: ::core::option::Option<BitcoinSendTransactionInternalContext>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetCallContextManager {
     #[prost(uint64, tag = "1")]
     pub next_callback_id: u64,
@@ -202,6 +219,9 @@ pub struct SubnetCallContextManager {
     pub ecdsa_dealings_contexts: ::prost::alloc::vec::Vec<EcdsaDealingsContextTree>,
     #[prost(message, repeated, tag = "8")]
     pub bitcoin_get_successors_contexts: ::prost::alloc::vec::Vec<BitcoinGetSuccessorsContextTree>,
+    #[prost(message, repeated, tag = "9")]
+    pub bitcoin_send_transaction_internal_contexts:
+        ::prost::alloc::vec::Vec<BitcoinSendTransactionInternalContextTree>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TimeOfLastAllocationCharge {

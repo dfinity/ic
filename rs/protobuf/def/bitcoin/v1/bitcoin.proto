@@ -63,6 +63,11 @@ message SendTransactionRequest {
   bytes transaction = 1;
 }
 
+message CanisterSendTransactionRequest {
+  Network network = 1;
+  bytes transaction = 2;
+}
+
 message SendTransactionResponse {};
 
 // Wraps the different types of requests to the Bitcoin Adapter.
@@ -71,6 +76,7 @@ message BitcoinAdapterRequestWrapper {
     GetSuccessorsRequest get_successors_request = 1;
     SendTransactionRequest send_transaction_request = 2;
     CanisterGetSuccessorsRequestInitial canister_get_successors_request = 3;
+    CanisterSendTransactionRequest canister_send_transaction_request = 4;
   }
 }
 
@@ -80,6 +86,7 @@ message BitcoinAdapterResponseWrapper {
     GetSuccessorsResponse get_successors_response = 1;
     SendTransactionResponse send_transaction_response = 2;
     CanisterGetSuccessorsResponseComplete canister_get_successors_response = 3;
+    SendTransactionResponse canister_send_transaction_response = 4;
   }
 }
 

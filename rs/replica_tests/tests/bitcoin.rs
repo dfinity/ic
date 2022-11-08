@@ -16,7 +16,8 @@ use ic_config::{
 use ic_error_types::RejectCode;
 use ic_ic00_types::{
     self as ic00, BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs,
-    BitcoinGetSuccessorsArgs, BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, Method, Payload,
+    BitcoinGetSuccessorsArgs, BitcoinGetUtxosArgs, BitcoinSendTransactionArgs,
+    BitcoinSendTransactionInternalArgs, EmptyBlob, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_tests as utils;
@@ -79,15 +80,45 @@ fn call_get_successors(
         .unwrap()
 }
 
+fn call_send_transaction_internal(
+    canister: &ic_replica_tests::UniversalCanister,
+    args: BitcoinSendTransactionInternalArgs,
+) -> WasmResult {
+    canister
+        .update(
+            wasm().call_simple(
+                ic00::IC_00,
+                Method::BitcoinSendTransactionInternal,
+                call_args()
+                    .other_side(args.encode())
+                    .on_reject(wasm().reject_message().reject()),
+            ),
+        )
+        .unwrap()
+}
+
 fn bitcoin_test<F: 'static>(adapter_response: BtcServiceGetSuccessorsResponse, test: F)
 where
     F: FnOnce(utils::LocalTestRuntime),
 {
+    bitcoin_test_with_config(adapter_response, true, test)
+}
+
+fn bitcoin_test_with_config<F: 'static>(
+    adapter_response: BtcServiceGetSuccessorsResponse,
+    privileged_access: bool,
+    test: F,
+) where
+    F: FnOnce(utils::LocalTestRuntime),
+{
     let (mut config, _tmpdir) = ic_config::Config::temp_config();
-    config.hypervisor.bitcoin = BitcoinConfig {
-        privileged_access: vec![CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap()],
-        ..Default::default()
-    };
+    if privileged_access {
+        // Give canister the privileged access of calling the internal bitcoin APIs.
+        config.hypervisor.bitcoin = BitcoinConfig {
+            privileged_access: vec![CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap()],
+            ..Default::default()
+        };
+    }
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _rt_guard = rt.enter();
@@ -208,6 +239,97 @@ fn bitcoin_get_successors_pagination_invalid_adapter_request() {
                 WasmResult::Reject(
                     "Received invalid response from adapter: NotOneBlock".to_string()
                 )
+            );
+        },
+    );
+}
+
+#[test]
+fn bitcoin_send_transaction_internal_valid_request() {
+    bitcoin_test(
+        BtcServiceGetSuccessorsResponse {
+            blocks: vec![],
+            next: vec![],
+        },
+        |runtime| {
+            let canister_id = runtime.create_universal_canister();
+            let canister = ic_replica_tests::UniversalCanister {
+                runtime,
+                canister_id,
+            };
+
+            // Send a request.
+            let response = call_send_transaction_internal(
+                &canister,
+                ic00::BitcoinSendTransactionInternalArgs {
+                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    transaction: vec![1, 2, 3],
+                },
+            );
+
+            // Expect an empty response.
+            assert_eq!(response, WasmResult::Reply(EmptyBlob.encode()));
+        },
+    );
+}
+
+#[test]
+fn bitcoin_send_transaction_internal_invalid_request() {
+    bitcoin_test(
+        BtcServiceGetSuccessorsResponse {
+            blocks: vec![],
+            next: vec![],
+        },
+        |runtime| {
+            let canister_id = runtime.create_universal_canister();
+            let canister = ic_replica_tests::UniversalCanister {
+                runtime,
+                canister_id,
+            };
+
+            // Send a request.
+            let response = canister
+                .update(wasm().call_simple(
+                    ic00::IC_00,
+                    Method::BitcoinSendTransactionInternal,
+                    call_args().other_side(vec![1, 2, 3]), // garbage payload
+                ))
+                .unwrap();
+
+            // Expect request to be rejected.
+            utils::assert_reject(Ok(response), RejectCode::CanisterError);
+        },
+    );
+}
+
+#[test]
+fn bitcoin_send_transaction_internal_no_permissions() {
+    bitcoin_test_with_config(
+        BtcServiceGetSuccessorsResponse {
+            blocks: vec![],
+            next: vec![],
+        },
+        false, // Do not give permission to call internal bitcoin APIs.
+        |runtime| {
+            let canister_id = runtime.create_universal_canister();
+            let canister = ic_replica_tests::UniversalCanister {
+                runtime,
+                canister_id,
+            };
+
+            // Send a valid request.
+            let response = call_send_transaction_internal(
+                &canister,
+                ic00::BitcoinSendTransactionInternalArgs {
+                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    transaction: vec![1, 2, 3],
+                },
+            );
+
+            // Expect request to be rejected. No permission to canister.
+            assert_eq!(
+                response,
+                WasmResult::Reject("Permission denied.".to_string())
             );
         },
     );

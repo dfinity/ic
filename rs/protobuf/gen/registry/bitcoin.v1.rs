@@ -85,11 +85,18 @@ pub struct SendTransactionRequest {
     pub transaction: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterSendTransactionRequest {
+    #[prost(enumeration = "Network", tag = "1")]
+    pub network: i32,
+    #[prost(bytes = "vec", tag = "2")]
+    pub transaction: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendTransactionResponse {}
 /// Wraps the different types of requests to the Bitcoin Adapter.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterRequestWrapper {
-    #[prost(oneof = "bitcoin_adapter_request_wrapper::R", tags = "1, 2, 3")]
+    #[prost(oneof = "bitcoin_adapter_request_wrapper::R", tags = "1, 2, 3, 4")]
     pub r: ::core::option::Option<bitcoin_adapter_request_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterRequestWrapper`.
@@ -102,12 +109,14 @@ pub mod bitcoin_adapter_request_wrapper {
         SendTransactionRequest(super::SendTransactionRequest),
         #[prost(message, tag = "3")]
         CanisterGetSuccessorsRequest(super::CanisterGetSuccessorsRequestInitial),
+        #[prost(message, tag = "4")]
+        CanisterSendTransactionRequest(super::CanisterSendTransactionRequest),
     }
 }
 /// Wraps the different types of responses from the Bitcoin Adapter.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterResponseWrapper {
-    #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "1, 2, 3")]
+    #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "1, 2, 3, 4")]
     pub r: ::core::option::Option<bitcoin_adapter_response_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterResponseWrapper`.
@@ -120,6 +129,8 @@ pub mod bitcoin_adapter_response_wrapper {
         SendTransactionResponse(super::SendTransactionResponse),
         #[prost(message, tag = "3")]
         CanisterGetSuccessorsResponse(super::CanisterGetSuccessorsResponseComplete),
+        #[prost(message, tag = "4")]
+        CanisterSendTransactionResponse(super::SendTransactionResponse),
     }
 }
 /// A Bitcoin Adapter request, used to store the requests in the
