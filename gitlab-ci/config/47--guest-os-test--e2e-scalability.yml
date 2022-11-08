@@ -2,8 +2,7 @@ e2e-scalability-suite-test:
   extends:
     - .e2e-test-base-k8s
   needs:
-    - pipeline: $PARENT_PIPELINE_ID
-      job: bazel-test-all
+    - job: wait-for-bazel-test-all
       artifacts: false
     - job: guest-os-updateimg-build
       artifacts: false
