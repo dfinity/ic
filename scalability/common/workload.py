@@ -1,6 +1,5 @@
 import codecs
 import os
-import re
 import threading
 import time
 import uuid
@@ -9,7 +8,6 @@ from typing import NamedTuple
 
 from common import misc
 from common import ssh
-from termcolor import colored
 
 
 class WorkloadDescription(NamedTuple):
@@ -108,7 +106,7 @@ class Workload(threading.Thread):
             raise Exception("Not using any workload generators, aborting")
 
         target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
-        cmd = f'./ic-workload-generator "{target_list}"' f" -n {self.workload.duration} -p 9090 --no-status-check"
+        cmd = f'./ic-workload-generator "{target_list}"' f" -n {self.workload.duration} --no-status-check"
         cmd += " " + " ".join(self.workload.arguments)
         cmd += " --query-timeout-secs " + str(self.query_timeout_secs)
         cmd += " --ingress-timeout-secs " + str(self.ingress_timeout_secs)
@@ -177,27 +175,9 @@ class Workload(threading.Thread):
         ]
 
         rc = ssh.scp_in_parallel(sources, destinations)
-        if not rc == [0 for _ in range(len(destinations))]:
-            print(colored("⚠️  Some workload generators failed:", "red"))
-            for fname in os.listdir(self.outdir):
-                if re.match("workload-generator.*stderr.*", fname):
-                    with open(os.path.join(self.outdir, fname)) as ferr:
-                        lines = ferr.read().split("\n")
-                        print("\n".join(lines[-10:]))
 
-        # exit the experiment if more than half of workload generators fail to run
-        # failures = [r for r in enumerate(rc) if r != 0]
-        # print(rc)
-        # print(failures)
-        # if len(failures) * 2 > len(destinations):
-        #     print(
-        #         colored(
-        #             "⚠️  More than half ({} out of {}) workload generators failed. Exiting...".format(
-        #                 len(failures), len(destinations)
-        #             ),
-        #             "red",
-        #         )
-        #     )
-        #     exit(1)
+        # If workload generators fail, the result of the experiment is invalid anyway.
+        # Just abort in such a case.
+        assert rc == [0 for _ in range(len(destinations))], "Workload generator failed, aborting"
 
         return destinations

@@ -124,7 +124,7 @@ maximum-capacity-system-baseline-update:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
       
-      $SHELL_WRAPPER pipenv run python3 experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=100 --increment_rps=20 --target_rps=600 --max_rps=2000
+      $SHELL_WRAPPER pipenv run python3 experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=100 --increment_rps=20 --target_rps=800 --max_rps=2000
 
       # Critical experiment runs passed, disable strict failure mode
       set +eo pipefail
@@ -444,6 +444,7 @@ benchmark-xnet:
 # BENCHMARK SUITE gossip experiment
 large-subnet-gossip-experiment:
   extends: .benchmark-test
+  timeout: 5 hours # 3 hours is not enough for this benchmark
   artifacts:
     when: always
     paths:
