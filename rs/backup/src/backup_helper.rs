@@ -5,7 +5,6 @@ use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{ReplicaVersion, SubnetId};
-use rand::{seq::SliceRandom, thread_rng};
 use slog::{error, info, warn, Logger};
 use std::ffi::OsStr;
 use std::net::IpAddr;
@@ -109,7 +108,7 @@ impl BackupHelper {
         );
     }
 
-    fn rsync_node_backup(&self, node_ip: IpAddr) {
+    fn rsync_node_backup(&self, node_ip: &IpAddr) {
         info!(self.log, "Sync backup data from the node: {}", node_ip);
         let remote_dir = format!(
             "{}@[{}]:/var/lib/ic/backup/{}/",
@@ -134,7 +133,7 @@ impl BackupHelper {
         warn!(self.log, "Didn't sync at all with host: {}", node_ip);
     }
 
-    fn rsync_config(&self, node_ip: IpAddr) {
+    fn rsync_config(&self, node_ip: &IpAddr) {
         info!(self.log, "Sync ic.json5 from the node: {}", node_ip);
         let remote_dir = format!(
             "{}@[{}]:/run/ic-node/config/ic.json5",
@@ -181,7 +180,7 @@ impl BackupHelper {
         }
     }
 
-    pub fn sync(&self, nodes: Vec<IpAddr>) {
+    pub fn sync(&self, nodes: &Vec<&IpAddr>) {
         if !self.spool_dir().exists() {
             std::fs::create_dir_all(self.spool_dir()).expect("Failure creating a directory");
         }
@@ -189,12 +188,10 @@ impl BackupHelper {
             std::fs::create_dir_all(self.ic_config_dir()).expect("Failure creating a directory");
         }
 
-        let mut shuf_nodes = nodes;
-        shuf_nodes.shuffle(&mut thread_rng());
-        for n in shuf_nodes.clone() {
+        for n in nodes {
             self.rsync_config(n);
         }
-        for n in shuf_nodes {
+        for n in nodes {
             self.rsync_node_backup(n);
         }
     }
