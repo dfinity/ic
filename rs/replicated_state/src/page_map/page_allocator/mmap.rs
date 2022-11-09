@@ -146,7 +146,7 @@ impl PageAllocatorInner {
         pages: &[(PageIndex, &PageBytes)],
     ) -> Vec<(PageIndex, Page)> {
         let mut guard = page_allocator.0.lock().unwrap();
-        let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
+        let core = guard.get_or_insert_with(MmapBasedPageAllocatorCore::new);
         // It would also be correct to increment the counters after all the
         // allocations, but doing it before gives better performance because
         // the core allocator can memory-map larger chunks.
@@ -165,7 +165,7 @@ impl PageAllocatorInner {
     // See the comments of the corresponding method in `PageAllocator`.
     pub fn serialize(&self) -> PageAllocatorSerialization {
         let mut guard = self.0.lock().unwrap();
-        let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
+        let core = guard.get_or_insert_with(MmapBasedPageAllocatorCore::new);
         PageAllocatorSerialization(FileDescriptor {
             fd: core.file_descriptor,
         })
@@ -194,7 +194,7 @@ impl PageAllocatorInner {
             })
             .collect();
         let mut guard = self.0.lock().unwrap();
-        let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
+        let core = guard.get_or_insert_with(MmapBasedPageAllocatorCore::new);
         PageDeltaSerialization {
             file_len: core.file_len,
             pages,
