@@ -48,6 +48,7 @@ mod tests {
         CertificationVersion,
     };
     use ic_base_types::{NumBytes, NumSeconds};
+    use ic_certification_version::CURRENT_CERTIFICATION_VERSION;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
@@ -92,7 +93,8 @@ mod tests {
 
     #[test]
     fn test_traverse_empty_state() {
-        let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -102,7 +104,7 @@ mod tests {
                 E::EndSubtree, // canisters
                 edge("metadata"),
                 E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: Some(0),
+                    id_counter: None,
                     prev_state_hash: None
                 })),
                 edge("request_status"),
@@ -172,7 +174,7 @@ mod tests {
         );
 
         // Test new certification version.
-        state.metadata.certification_version = CertificationVersion::V2;
+        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -189,7 +191,7 @@ mod tests {
                 E::EndSubtree, // canisters
                 edge("metadata"),
                 E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: Some(0),
+                    id_counter: None,
                     prev_state_hash: None
                 })),
                 edge("request_status"),
@@ -334,7 +336,7 @@ mod tests {
         );
 
         // Test new certification version.
-        state.metadata.certification_version = CertificationVersion::V6;
+        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -364,7 +366,7 @@ mod tests {
                 E::EndSubtree, // canisters
                 edge("metadata"),
                 E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: Some(0),
+                    id_counter: None,
                     prev_state_hash: None
                 })),
                 edge("request_status"),
@@ -402,6 +404,7 @@ mod tests {
         );
 
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         state.modify_streams(move |streams| {
             streams.insert(subnet_test_id(5), stream);
         });
@@ -415,7 +418,7 @@ mod tests {
                 E::EndSubtree, // canisters
                 edge("metadata"),
                 E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: Some(0),
+                    id_counter: None,
                     prev_state_hash: None
                 })),
                 edge("request_status"),
@@ -457,6 +460,7 @@ mod tests {
         let canister_id = canister_test_id(1);
         let time = mock_time();
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         state.set_ingress_status(
             message_test_id(1),
             IngressStatus::Unknown,
@@ -580,7 +584,7 @@ mod tests {
     #[test]
     fn test_traverse_time() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-
+        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         state.metadata.batch_time += Duration::new(1, 123456789);
 
         let visitor = TracingVisitor::new(NoopVisitor);
@@ -592,7 +596,7 @@ mod tests {
                 E::EndSubtree, // canisters
                 edge("metadata"),
                 E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: Some(0),
+                    id_counter: None,
                     prev_state_hash: None
                 })),
                 edge("request_status"),
@@ -686,9 +690,9 @@ mod tests {
             traverse(&state, visitor).0
         );
 
-        let patter = Pattern::match_only("subnet", Pattern::all());
-        let visitor = SubtreeVisitor::new(&patter, TracingVisitor::new(NoopVisitor));
-        state.metadata.certification_version = CertificationVersion::V3;
+        let pattern = Pattern::match_only("subnet", Pattern::all());
+        let visitor = SubtreeVisitor::new(&pattern, TracingVisitor::new(NoopVisitor));
+        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         assert_eq!(
             vec![
                 E::StartSubtree,

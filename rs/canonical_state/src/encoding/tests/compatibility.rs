@@ -442,7 +442,7 @@ fn canonical_encoding_reject_response() {
 /// ```text
 /// A2       # map(2)
 ///    00    # field_index(SystemMetadata::id_counter)
-///    0E    # unsigned(14)
+///    00    # unsigned(0)
 ///    01    # field_index(SystemMetadata::prev_state_hash)
 ///    81    # array(1)
 ///       0F # unsigned(15)
@@ -451,13 +451,12 @@ fn canonical_encoding_reject_response() {
 fn canonical_encoding_system_metadata() {
     for certification_version in all_supported_versions() {
         let mut metadata = SystemMetadata::new(subnet_test_id(13), SubnetType::Application);
-        metadata.generated_id_counter = 14;
         metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(vec![15])));
 
         if certification_version <= CertificationVersion::V9 {
             // `generated_id_counter` encoded up to and including V9.
             assert_eq!(
-                "A2 00 0E 01 81 0F",
+                "A2 00 00 01 81 0F",
                 as_hex(&encode_metadata(&metadata, certification_version))
             );
         } else {
