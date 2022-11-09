@@ -26,6 +26,11 @@ pub struct BackupHelper {
     pub log: Logger,
 }
 
+enum ReplayResult {
+    Done,
+    UpgradeRequired(ReplicaVersion),
+}
+
 impl BackupHelper {
     fn binary_dir(&self) -> PathBuf {
         self.root_dir
@@ -194,23 +199,6 @@ impl BackupHelper {
         }
     }
 
-    fn get_replica_version(&self) -> Result<ReplicaVersion, String> {
-        let subnet_id = self.subnet_id;
-        block_on(async {
-            if let Err(err) = self.registry_client.try_polling_latest_version(200) {
-                return Err(format!("couldn't poll the registry: {:?}", err));
-            };
-            let version = self.registry_client.get_latest_version();
-            match self.registry_client.get_replica_version(subnet_id, version) {
-                Ok(Some(replica_version)) => Ok(replica_version),
-                other => Err(format!(
-                    "can't fetch replica version from the registry for subnet_id={}: {:?}",
-                    subnet_id, other
-                )),
-            }
-        })
-    }
-
     pub fn collect_subnet_nodes(&self) -> Result<Vec<IpAddr>, String> {
         let subnet_id = self.subnet_id;
         let result = block_on(async {
@@ -276,36 +264,20 @@ impl BackupHelper {
             std::fs::create_dir_all(self.state_dir()).expect("Failure creating a directory");
         }
 
-        self.replay_current_version();
+        while let Ok(ReplayResult::UpgradeRequired(upgrade_version)) = self.replay_current_version()
+        {
+            info!(self.log, "Upgrade detected to: '{:?}'", upgrade_version);
+            self.replica_version = upgrade_version;
+        }
 
         if self.last_checkpoint() > start_height {
             info!(self.log, "Replay was successful!");
         } else {
-            match self.get_replica_version() {
-                Ok(latest_version) => {
-                    // Is there a replica version upgrade?
-                    if latest_version != self.replica_version {
-                        info!(self.log, "Upgrade detected to: {}", latest_version);
-                        self.replica_version = latest_version;
-                        // try to replay with the new version instead
-                        self.replay_current_version();
-                        if self.last_checkpoint() > start_height {
-                            info!(self.log, "Replay was successful with new version!");
-                        } else {
-                            warn!(self.log, "No progress with the new version!");
-                        }
-                    } else {
-                        warn!(self.log, "Replay had no progress!");
-                    }
-                }
-                Err(e) => {
-                    error!(self.log, "Error fetching replica version:: {}", e);
-                }
-            }
+            warn!(self.log, "No progress in the replay!");
         }
     }
 
-    fn replay_current_version(&mut self) {
+    fn replay_current_version(&self) -> Result<ReplayResult, String> {
         let start_height = self.last_checkpoint();
         info!(
             self.log,
@@ -333,15 +305,40 @@ impl BackupHelper {
         match exec_cmd(&mut cmd) {
             Err(e) => {
                 error!(self.log, "Error: {}", e.to_string());
+                Err(e.to_string())
             }
             Ok(Some(stdout)) => {
                 info!(self.log, "Replay result:");
                 info!(self.log, "{}", stdout);
+                if let Some(upgrade_version) = self.check_upgrade_request(stdout) {
+                    info!(self.log, "Upgrade detected to: {}", upgrade_version);
+                    Ok(ReplayResult::UpgradeRequired(
+                        ReplicaVersion::try_from(upgrade_version).map_err(|e| e.to_string())?,
+                    ))
+                } else {
+                    info!(self.log, "Last height: #{}!", self.last_checkpoint());
+                    Ok(ReplayResult::Done)
+                }
             }
             Ok(None) => {
-                error!(self.log, "No output from the replay process!")
+                error!(self.log, "No output from the replay process!");
+                Err("No ic-replay output".to_string())
             }
         }
-        info!(self.log, "Last height: #{}!", self.last_checkpoint());
+    }
+
+    pub fn check_upgrade_request(&self, stdout: String) -> Option<String> {
+        let prefix = "Please use the replay tool of version";
+        let suffix = "to continue backup recovery from height";
+        let min_version_len = 8;
+        if let Some(pos) = stdout.find(prefix) {
+            if pos + prefix.len() + min_version_len + suffix.len() < stdout.len() {
+                let pos2 = pos + prefix.len();
+                if let Some(pos3) = stdout[pos2..].find(suffix) {
+                    return Some(stdout[pos2..(pos2 + pos3)].trim().to_string());
+                }
+            }
+        }
+        None
     }
 }
