@@ -179,7 +179,9 @@ message BitcoinGetSuccessorsFollowUpResponses {
 }
 
 message SystemMetadata {
-    uint64 generated_id_counter = 1;
+    reserved 1, 12;
+    reserved "generated_id_counter", "stable_memory_delta_estimate";
+
     google.protobuf.BytesValue prev_state_hash = 2;
     uint64 batch_time_nanos = 3;
     ingress.v1.IngressHistoryState ingress_history = 4;
@@ -207,9 +209,6 @@ message SystemMetadata {
     uint32 certification_version = 10;
 
     uint64 heap_delta_estimate = 11;
-
-    reserved 12;
-    reserved "stable_memory_delta_estimate";
 
     registry.subnet.v1.SubnetFeatures own_subnet_features = 13;
     // TODO(EXC-1214): This field is deprecated.

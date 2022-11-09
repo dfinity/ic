@@ -440,7 +440,7 @@ impl
     ) -> Self {
         Self {
             id_counter: if certification_version <= CertificationVersion::V9 {
-                Some(metadata.generated_id_counter)
+                Some(0)
             } else {
                 None
             },

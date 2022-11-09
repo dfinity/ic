@@ -214,9 +214,8 @@ impl
         ),
     ) -> Self {
         Self {
-            // When `generated_id_counter` is removed, initialize with the value of some
-            // other `SystemMetadata` field (as we need some arbitrary value for testing).
-            id_counter: metadata.generated_id_counter,
+            // `SystemMetadata::generated_id_counter` was removed, set this to its default value.
+            id_counter: 0,
             prev_state_hash: metadata
                 .prev_state_hash
                 .as_ref()

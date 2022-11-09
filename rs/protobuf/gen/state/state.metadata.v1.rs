@@ -243,8 +243,6 @@ pub struct BitcoinGetSuccessorsFollowUpResponses {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SystemMetadata {
-    #[prost(uint64, tag = "1")]
-    pub generated_id_counter: u64,
     #[prost(message, optional, tag = "2")]
     pub prev_state_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[prost(uint64, tag = "3")]

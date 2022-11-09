@@ -263,10 +263,6 @@ fn init_allocation_ranges_if_empty() {
     );
     assert_eq!(None, system_metadata.last_generated_canister_id);
 
-    // Pretend we've fully consumed the first routing table range and generated
-    // 13 canister IDs from the second routing table range already.
-    system_metadata.generated_id_counter = CANISTER_IDS_PER_SUBNET + 13;
-
     system_metadata.init_allocation_ranges_if_empty().unwrap();
 
     assert_eq!(
@@ -277,10 +273,7 @@ fn init_allocation_ranges_if_empty() {
         .unwrap(),
         system_metadata.canister_allocation_ranges
     );
-    assert_eq!(
-        Some(CanisterId::from(3 * CANISTER_IDS_PER_SUBNET + 12)),
-        system_metadata.last_generated_canister_id
-    );
+    assert!(system_metadata.last_generated_canister_id.is_none());
 }
 
 #[test]
@@ -379,9 +372,6 @@ fn generate_new_canister_id() {
     assert_next_generated(30, &mut system_metadata);
     assert_eq!(1, system_metadata.canister_allocation_ranges.len());
 
-    // Ensure backwards compatibility: we've generated 6 canister IDs so far.
-    assert_eq!(6, system_metadata.generated_id_counter);
-
     // No more canister IDs can be generated.
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
@@ -391,8 +381,6 @@ fn generate_new_canister_id() {
     assert_eq!(Some(30.into()), system_metadata.last_generated_canister_id);
     // The last allocation range is still there.
     assert_eq!(1, system_metadata.canister_allocation_ranges.len());
-    // And we're still at 6 generated canister IDs.
-    assert_eq!(6, system_metadata.generated_id_counter);
 }
 
 #[test]
