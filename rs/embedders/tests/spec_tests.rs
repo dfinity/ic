@@ -332,12 +332,13 @@ impl<'a> TestState<'a> {
         }
     }
 
-    fn update_module(&mut self, wasm: &[u8], id: Option<Id<'a>>) {
+    fn try_create_instance(&mut self, wasm: &[u8]) -> Result<Instance, anyhow::Error> {
         let module = wasmtime::Module::new(&self.engine, wasm).unwrap();
-        let instance = self
-            .linker
-            .instantiate(&mut self.store, &module)
-            .map(|i| (i, id));
+        self.linker.instantiate(&mut self.store, &module)
+    }
+
+    fn update_module(&mut self, wasm: &[u8], id: Option<Id<'a>>) {
+        let instance = self.try_create_instance(wasm).map(|i| (i, id));
         self.current = CurrentModule::Unregistered(instance);
     }
 
@@ -590,21 +591,108 @@ fn run_directive<'a>(
             Ok(())
         }
         WastDirective::AssertTrap {
-            span: _,
-            exec: _,
-            message: _,
+            span,
+            exec,
+            message,
+        } => match exec {
+            wast::WastExecute::Invoke(invoke) => {
+                let result = test_state.run(invoke.name, invoke.args, invoke.module);
+                match result {
+                    Ok(_) => Err(format!(
+                        "Should not have been able to execute assert_trap of type {} at {}",
+                        message,
+                        span_location(span, text, path)
+                    )),
+                    Err(e) => {
+                        // There seemes to be one case in `bulk.wast` where the
+                        // error message contains extra information.
+                        let message = if message.starts_with("uninitialized element") {
+                            "uninitialized element"
+                        } else {
+                            message
+                        };
+                        if e.contains(message) {
+                            Ok(())
+                        } else {
+                            Err(format!(
+                                "Error for assert_trap at {}: {} did not contain trap message {}",
+                                span_location(span, text, path),
+                                e,
+                                message
+                            ))
+                        }
+                    }
+                }
+            }
+            wast::WastExecute::Wat(_) | wast::WastExecute::Get { .. } => Ok(()),
+        },
+        WastDirective::AssertExhaustion {
+            span,
+            call: invoke,
+            message,
+        } => {
+            let result = test_state.run(invoke.name, invoke.args, invoke.module);
+            match result {
+                Ok(_) => Err(format!(
+                    "Should not have been able to execute assert_exhaustion of type {} at {}",
+                    message,
+                    span_location(span, text, path)
+                )),
+                Err(e) => {
+                    if e.contains(message) {
+                        Ok(())
+                    } else {
+                        Err(format!(
+                            "Error for assert_exhaustion at {}: {} did not contain message {}",
+                            span_location(span, text, path),
+                            e,
+                            message
+                        ))
+                    }
+                }
+            }
         }
-        | WastDirective::AssertExhaustion {
-            span: _,
-            call: _,
-            message: _,
+        WastDirective::AssertException { span, exec } => match exec {
+            wast::WastExecute::Invoke(invoke) => {
+                let result = test_state.run(invoke.name, invoke.args, invoke.module);
+                match result {
+                    Ok(_) => Err(format!(
+                        "Should not have been able to execute assert_exception at {}",
+                        span_location(span, text, path)
+                    )),
+                    Err(_) => Ok(()),
+                }
+            }
+            wast::WastExecute::Wat(_) | wast::WastExecute::Get { .. } => Ok(()),
+        },
+        WastDirective::AssertUnlinkable {
+            span,
+            module,
+            message,
+        } => {
+            let mut wat = QuoteWat::Wat(module);
+            let wasm = parse_and_encode(&mut wat, text, path)?;
+            validate_with_wasmtime(&wasm, &wat, text, path)?;
+            match test_state.try_create_instance(&wasm) {
+                Ok(_) => Err(format!(
+                    "Should not have been able to link assert_unlinkable at {} of type {}",
+                    span_location(span, text, path),
+                    message
+                )),
+                Err(e) => {
+                    if e.to_string().contains(message) {
+                        Ok(())
+                    } else {
+                        Err(format!(
+                            "Error for assert_unlinkable at {}: {} did not contain message {}",
+                            span_location(span, text, path),
+                            e,
+                            message
+                        ))
+                    }
+                }
+            }
         }
-        | WastDirective::AssertUnlinkable {
-            span: _,
-            module: _,
-            message: _,
-        }
-        | WastDirective::AssertException { span: _, exec: _ } => Ok(()),
     }
 }
 
