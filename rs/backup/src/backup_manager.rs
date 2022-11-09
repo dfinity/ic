@@ -10,6 +10,7 @@ use std::{
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_types::{ReplicaVersion, SubnetId};
+use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 use slog::{error, info, Logger};
 
@@ -20,6 +21,7 @@ use crate::util::sleep_secs;
 const STATE_FILE_NAME: &str = "backup_manager_state.json5";
 
 pub struct SubnetBackup {
+    pub nodes_syncing: u32,
     pub sync_last_time: Instant,
     pub sync_period: Duration,
     pub replay_last_time: Instant,
@@ -110,6 +112,7 @@ impl BackupManager {
                 Instant::now() - replay_period,
             );
             backups.push(SubnetBackup {
+                nodes_syncing: s.nodes_syncing,
                 sync_last_time,
                 sync_period,
                 replay_last_time,
@@ -138,12 +141,17 @@ impl BackupManager {
                 state.subnet_states.insert(b.backup_helper.subnet_id, s);
             }
             for b in &mut self.subnet_backups {
-                // TODO: split sync and replay into separate threads
                 if b.sync_last_time + b.sync_period < Instant::now() {
                     match b.backup_helper.collect_subnet_nodes() {
                         Ok(nodes) => {
-                            // TODO: randomize and take first N
-                            b.backup_helper.sync(nodes);
+                            let mut shuf_nodes = nodes;
+                            shuf_nodes.shuffle(&mut thread_rng());
+                            b.backup_helper.sync(
+                                &shuf_nodes
+                                    .iter()
+                                    .take(b.nodes_syncing as usize)
+                                    .collect::<Vec<_>>(),
+                            );
                             b.sync_last_time = Instant::now();
                             // save the updated state
                             let s = state

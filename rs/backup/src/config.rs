@@ -9,6 +9,7 @@ pub struct SubnetConfig {
     pub subnet_id: SubnetId,
     #[serde(deserialize_with = "crate::util::replica_from_string")]
     pub replica_version: ReplicaVersion,
+    pub nodes_syncing: u32,
     pub sync_period_secs: u64,
     pub replay_period_secs: u64,
 }
