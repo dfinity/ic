@@ -4546,6 +4546,7 @@ dependencies = [
  "ripemd",
  "serde",
  "serde_bytes",
+ "simple_asn1 0.6.1",
 ]
 
 [[package]]
