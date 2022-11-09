@@ -25,10 +25,12 @@ use icp_ledger::{
 };
 
 use crate::driver::ic::InternetComputer;
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasDependencies, HasGroupSetup, NnsCanisterEnvVars};
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
-use ic_fondue::ic_manager::IcHandle;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::acc_id;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
@@ -67,13 +69,19 @@ lazy_static! {
     static ref FEE: Tokens = Tokens::from_e8s(1_000);
 }
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_fast_single_node_subnet(SubnetType::System)
-    //.add_subnet(Subnet::new(SubnetType::System).add_nodes(2))
+pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    InternetComputer::new()
+        .add_fast_single_node_subnet(SubnetType::System)
+        //.add_subnet(Subnet::new(SubnetType::System).add_nodes(2))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 /// No changes to the IC environment
-pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test_everything(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
+
     let minting_address = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None);
 
     let (acc_a, kp_a, _pk_a, _pid_a) = make_user(100);
@@ -464,6 +472,8 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let dummy_canister = remote_runtime.create_canister_max_cycles_with_retries().await.unwrap();
         assert_eq!(dummy_canister.canister_id(), REGISTRY_CANISTER_ID);
 
+        env.set_nns_canisters_env_vars().expect("Failed to set environment variables pointing to the NNS canisters WASMs!");
+
         info!(&ctx.logger, "Installing governance canister");
         let governance_future = set_up_governance_canister(&remote_runtime, governance_canister_init);
 
@@ -490,12 +500,14 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let (_cert, tip_idx) = get_tip(&ledger).await;
 
         info!(&ctx.logger, "Starting rosetta-api");
+        let rosetta_api_bin_path = rosetta_api_bin_path(&env);
         let mut rosetta_api_serv = RosettaApiHandle::start(
+            rosetta_api_bin_path.clone(),
             node_url.clone(),
             8099,
             ledger.canister_id(),
             governance.canister_id(),
-            workspace_path(),
+            rosetta_workspace_path(&env),
             Some(&root_key),
         )
         .await;
@@ -541,15 +553,15 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         test_multiple_transfers_fail(&rosetta_api_serv, &ledger, acc_b, Arc::clone(&kp_b)).await;
 
         // Rosetta-cli tests
-        let cli_json = PathBuf::from(format!("{}/rosetta_cli.json", workspace_path()));
-        let cli_ros = PathBuf::from(format!("{}/rosetta_workflows.ros", workspace_path()));
+        let cli_json = PathBuf::from(format!("{}/rosetta_cli.json", rosetta_workspace_path(&env)));
+        let cli_ros = PathBuf::from(format!("{}/rosetta_workflows.ros", rosetta_workspace_path(&env)));
         let conf = rosetta_api_serv.generate_rosetta_cli_config(&cli_json, &cli_ros);
         info!(&ctx.logger, "Running rosetta-cli check:construction");
-        rosetta_cli_construction_check(&conf);
+        rosetta_cli_construction_check(&env, &conf);
         info!(&ctx.logger, "check:construction finished successfully");
 
         info!(&ctx.logger, "Running rosetta-cli check:data");
-        rosetta_cli_data_check(&conf);
+        rosetta_cli_data_check(&env, &conf);
         info!(&ctx.logger, "check:data finished successfully");
 
         // Finish up. (calling stop is optional because it would be called on drop, but
@@ -560,11 +572,12 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let (_cert, tip_idx) = get_tip(&ledger).await;
         info!(&ctx.logger, "Starting rosetta-api again to see if it properly fetches blocks in batches from all the archives");
         let mut rosetta_api_serv = RosettaApiHandle::start(
+            rosetta_api_bin_path.clone(),
             node_url.clone(),
             8101,
             ledger.canister_id(),
             governance.canister_id(),
-            workspace_path(),
+            rosetta_workspace_path(&env),
             Some(&root_key),
         ).await;
 
@@ -582,18 +595,19 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             &ctx.logger,
             "Test wrong canister id (expected rosetta-api sync errors in logs)"
         );
-        test_wrong_canister_id(node_url.clone(), None).await;
+        test_wrong_canister_id(&env, node_url.clone(), None).await;
         info!(&ctx.logger, "Test wrong canister id finished");
 
         let (_cert, tip_idx) = get_tip(&ledger_for_governance).await;
 
         info!(&ctx.logger, "Starting rosetta-api with default fee");
         let mut rosetta_api_serv = RosettaApiHandle::start(
+            rosetta_api_bin_path,
             node_url,
             8100,
             ledger_for_governance.canister_id(),
             governance.canister_id(),
-            workspace_path(),
+            rosetta_workspace_path(&env),
             Some(&root_key),
         )
             .await;
@@ -967,16 +981,18 @@ async fn test_ingress_window(ros: &RosettaApiHandle, funding_key_pair: Arc<EdKey
     assert_canister_error(&err, 750, "transaction is a duplicate");
 }
 
-async fn test_wrong_canister_id(node_url: Url, root_key_blob: Option<&Blob>) {
+async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Option<&Blob>) {
     let (_acc1, kp, _pk, pid) = make_user(1);
 
     let some_can_id = CanisterId::new(pid).unwrap();
+    let rosetta_api_bin_path = rosetta_api_bin_path(env);
     let ros = RosettaApiHandle::start(
+        rosetta_api_bin_path,
         node_url,
         8101,
         some_can_id,
         some_can_id,
-        workspace_path(),
+        rosetta_workspace_path(env),
         root_key_blob,
     )
     .await;
@@ -3509,11 +3525,12 @@ fn create_neuron(id: u64) -> Neuron {
     }
 }
 
-fn rosetta_cli_construction_check(conf_file: &str) {
+fn rosetta_cli_construction_check(env: &TestEnv, conf_file: &str) {
+    let rosetta_cli = rosetta_cli_bin_path(env);
     let output = std::process::Command::new("timeout")
         .args(&[
             "300s",
-            "rosetta-cli",
+            &rosetta_cli,
             "check:construction",
             "--configuration-file",
             conf_file,
@@ -3534,11 +3551,12 @@ fn rosetta_cli_construction_check(conf_file: &str) {
     );
 }
 
-fn rosetta_cli_data_check(conf_file: &str) {
+fn rosetta_cli_data_check(env: &TestEnv, conf_file: &str) {
+    let rosetta_cli = rosetta_cli_bin_path(env);
     let output = std::process::Command::new("timeout")
         .args(&[
             "300s",
-            "rosetta-cli",
+            &rosetta_cli,
             "check:data",
             "--configuration-file",
             conf_file,
@@ -3559,11 +3577,22 @@ fn rosetta_cli_data_check(conf_file: &str) {
     );
 }
 
-fn workspace_path() -> String {
-    match std::env::var("CI_PROJECT_DIR") {
-        Ok(dir) => format!("{}/rs/tests/rosetta_workspace", dir),
-        Err(_) => "rosetta_workspace".to_string(),
-    }
+fn rosetta_workspace_path(env: &TestEnv) -> String {
+    env.get_dependency_path("rs/tests/rosetta_workspace")
+        .into_os_string()
+        .into_string()
+        .unwrap()
+}
+
+fn rosetta_api_bin_path(env: &TestEnv) -> PathBuf {
+    env.get_dependency_path("rs/rosetta-api/ic-rosetta-api")
+}
+
+fn rosetta_cli_bin_path(env: &TestEnv) -> String {
+    env.get_dependency_path("external/rosetta-cli/rosetta-cli")
+        .into_os_string()
+        .into_string()
+        .unwrap()
 }
 
 fn one_day_from_now_nanos() -> u64 {

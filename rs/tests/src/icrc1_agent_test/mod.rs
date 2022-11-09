@@ -3,36 +3,43 @@ use std::convert::TryFrom;
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId, RemoteTestRuntime, Runtime};
 use ic_canister_client::{Agent, Sender};
-use ic_fondue::ic_manager::IcHandle;
 use ic_icrc1::Account;
 use ic_icrc1_agent::{CallMode, Icrc1Agent, TransferArg, Value};
 use ic_icrc1_ledger::InitArgs;
-use ic_nns_test_utils::itest_helpers::install_rust_canister;
+use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::ArchiveOptions;
 
 use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
-        pot_dsl::{par, pot, t, Pot},
+        pot_dsl::{get_ic_handle_and_ctx, par, pot_with_setup, sys_t, Pot},
+        test_env::TestEnv,
+        test_env_api::{HasDependencies, HasGroupSetup},
     },
     nns::first_root_endpoint,
     util::assert_create_agent,
 };
 
 pub fn icrc1_agent_test_pot() -> Pot {
-    pot(
+    pot_with_setup(
         "icrc1_agent_test_pot",
-        config(),
-        par(vec![t("icrc1_agent_test", test)]),
+        config,
+        par(vec![sys_t("icrc1_agent_test", test)]),
     )
 }
 
-fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(Subnet::fast_single_node(SubnetType::Application))
+pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    InternetComputer::new()
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
+
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
@@ -83,7 +90,7 @@ fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 max_transactions_per_response: None,
             },
         };
-        install_icrc1_ledger(&mut ledger, &init_args).await;
+        install_icrc1_ledger(&env, &mut ledger, &init_args).await;
 
         /////////////
         // test
@@ -225,11 +232,10 @@ fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     });
 }
 
-pub async fn install_icrc1_ledger<'a>(canister: &mut Canister<'a>, args: &InitArgs) {
-    install_rust_canister(
+pub async fn install_icrc1_ledger<'a>(env: &TestEnv, canister: &mut Canister<'a>, args: &InitArgs) {
+    install_rust_canister_from_path(
         canister,
-        "ic-icrc1-ledger",
-        &[],
+        env.get_dependency_path("rs/rosetta-api/icrc1/ledger/ledger_canister.wasm"),
         Some(Encode!(&args).unwrap()),
     )
     .await

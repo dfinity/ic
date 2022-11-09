@@ -69,14 +69,6 @@ If not provided, a default of the form `$HOSTNAME-<timestamp>` is used, where
     )]
     job_id: Option<String>,
 
-    #[clap(
-        long = "nns-canister-path",
-        parse(from_os_str),
-        help = r#"Path to directory containing wasm-files of NNS canisters.
- Required for tests that install NNS canisters."#
-    )]
-    nns_canister_path: Option<PathBuf>,
-
     #[clap(long = "suite", help = r#"Mandatory name of a test suite to run."#)]
     suite: String,
 
@@ -154,15 +146,6 @@ impl RunTestsArgs {
             bail!("Invalid log level: '{}'!", lvl_str);
         };
 
-        let nns_canister_path = if let Some(p) = self.nns_canister_path {
-            if !p.is_dir() {
-                bail!("nns-canister-path is not a directory");
-            }
-            Some(p)
-        } else {
-            None
-        };
-
         let artifacts_path = if let Some(p) = self.artifacts_path {
             if !p.is_dir() {
                 bail!("artifacts-path is not a directory");
@@ -180,7 +163,6 @@ impl RunTestsArgs {
             propagate_test_logs: !self.no_propagate_test_logs,
             rand_seed: self.rand_seed.unwrap_or(RND_SEED_DEFAULT),
             job_id: self.job_id,
-            nns_canister_path,
             artifacts_path,
             suite: self.suite,
             include_pattern,
@@ -216,7 +198,6 @@ pub struct ValidatedCliRunTestsArgs {
     pub propagate_test_logs: bool,
     pub rand_seed: u64,
     pub job_id: Option<String>,
-    pub nns_canister_path: Option<PathBuf>,
     pub artifacts_path: Option<PathBuf>,
     pub suite: String,
     pub include_pattern: Option<Regex>,

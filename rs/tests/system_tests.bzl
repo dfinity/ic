@@ -2,7 +2,6 @@
 Rules for system-tests.
 """
 
-load("@bazel_skylib//lib:dicts.bzl", "dicts")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 def _run_system_test(ctx):
@@ -24,13 +23,8 @@ def _run_system_test(ctx):
     )
 
     runtime_deps = []
-    runtime_env = {}
-    has_single_file = lambda t: DefaultInfo in t and len(t[DefaultInfo].files.to_list()) == 1
-    for target, env_var in ctx.attr.runtime_deps.items():
+    for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
-        if env_var != "" and has_single_file(target):
-            file = target[DefaultInfo].files.to_list()[0]
-            runtime_env[env_var] = "root_env/dependencies/" + file.short_path
 
     return [
         DefaultInfo(
@@ -47,7 +41,7 @@ def _run_system_test(ctx):
             ),
         ),
         RunEnvironmentInfo(
-            environment = dicts.add(runtime_env, ctx.attr.env),
+            environment = ctx.attr.env,
         ),
     ]
 
@@ -57,11 +51,11 @@ run_system_test = rule(
     attrs = {
         "src": attr.label(executable = True, cfg = "exec"),
         "env": attr.string_dict(allow_empty = True),
-        "runtime_deps": attr.label_keyed_string_dict(allow_files = True),
+        "runtime_deps": attr.label_list(allow_files = True),
     },
 )
 
-def system_test(name, runtime_deps = {}, test_timeout = "long", **kwargs):
+def system_test(name, runtime_deps = [], test_timeout = "long", **kwargs):
     """Declares a system-test.
 
     Args:
@@ -85,3 +79,23 @@ def system_test(name, runtime_deps = {}, test_timeout = "long", **kwargs):
         tags = ["requires-network", "system_test"],
         timeout = test_timeout,
     )
+
+def _symlink_dir(ctx):
+    dirname = ctx.attr.name
+    lns = []
+    for target, canister_name in ctx.attr.targets.items():
+        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
+        file = target[DefaultInfo].files.to_list()[0]
+        ctx.actions.symlink(
+            output = ln,
+            target_file = file,
+        )
+        lns.append(ln)
+    return [DefaultInfo(files = depset(direct = lns))]
+
+symlink_dir = rule(
+    implementation = _symlink_dir,
+    attrs = {
+        "targets": attr.label_keyed_string_dict(allow_files = True),
+    },
+)

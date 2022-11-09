@@ -1,9 +1,8 @@
 use crate::driver::test_env::TestEnv;
 use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
-use ic_nns_init::set_up_env_vars_for_all_canisters;
 use rand_chacha::{rand_core, ChaCha8Rng};
-use slog::{o, warn, Drain, Logger};
+use slog::{o, Drain, Logger};
 use std::ffi::OsStr;
 use std::time::SystemTime;
 use std::{fs, path::PathBuf, time::Duration};
@@ -66,18 +65,6 @@ pub fn create_driver_context_from_cli(
     let farm_url = env.get_farm_url().unwrap();
     let rng = rand_core::SeedableRng::seed_from_u64(cli_args.rand_seed);
     let farm = Farm::new(farm_url, logger.clone());
-
-    // Setting the global env variables that point to the wasm files for NNS
-    // canisters. This is a known hack inherited from the canister_test
-    // framework.
-    if let Some(p) = &cli_args.nns_canister_path {
-        set_up_env_vars_for_all_canisters(p);
-    } else {
-        warn!(
-            logger,
-            "Path to nns canister not provided; tests might not be able to install them!"
-        );
-    }
 
     DriverContext {
         logger: logger.clone(),

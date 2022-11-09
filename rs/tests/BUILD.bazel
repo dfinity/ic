@@ -1,6 +1,5 @@
-load("@bazel_skylib//lib:dicts.bzl", "dicts")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load(":system_tests.bzl", "system_test")
+load(":system_tests.bzl", "symlink_dir", "system_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -185,31 +184,36 @@ rust_test(
     deps = DEPENDENCIES,
 )
 
-GUESTOS_RUNTIME_DEPS = {
-    "//ic-os/guestos/dev:hash_and_upload_disk-img": "",
-    "//ic-os/guestos/dev:hash_and_upload_upgrade-img": "",
-    "//ic-os/guestos:scripts/build-bootstrap-config-image.sh": "",
-    "//ic-os/guestos/dev:ic_version_id": "",
-}
+GUESTOS_RUNTIME_DEPS = [
+    "//ic-os/guestos/dev:hash_and_upload_disk-img",
+    "//ic-os/guestos/dev:hash_and_upload_upgrade-img",
+    "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+    "//ic-os/guestos/dev:ic_version_id",
+]
 
 exports_files([
     "create-universal-vm-config-image.sh",
 ])
 
-UNIVERSAL_VM_RUNTIME_DEPS = {
-    ":create-universal-vm-config-image.sh": "",
-}
+UNIVERSAL_VM_RUNTIME_DEPS = [
+    ":create-universal-vm-config-image.sh",
+]
 
-NNS_CANISTER_RUNTIME_DEPS = {
-    "//rs/registry/canister:registry-canister": "REGISTRY_CANISTER_WASM_PATH",
-    "//rs/nns/governance:governance-canister-test": "GOVERNANCE_CANISTER_TEST_WASM_PATH",
-    "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method": "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH",
-    "//rs/nns/handlers/root:root-canister": "ROOT_CANISTER_WASM_PATH",
-    "//rs/nns/cmc:cycles-minting-canister": "CYCLES_MINTING_CANISTER_WASM_PATH",
-    "//rs/nns/handlers/lifeline:lifeline_actor": "LIFELINE_WASM_PATH",
-    "//rs/nns/gtc:genesis-token-canister": "GENESIS_TOKEN_CANISTER_WASM_PATH",
-    "//rs/nns/sns-wasm:sns-wasm-canister": "SNS_WASM_CANISTER_WASM_PATH",
-}
+symlink_dir(
+    name = "nns-canisters",
+    targets = {
+        "//rs/registry/canister:registry-canister": "registry-canister",
+        "//rs/nns/governance:governance-canister-test": "governance-canister_test",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method": "ledger-canister_notify-method",
+        "//rs/nns/handlers/root:root-canister": "root-canister",
+        "//rs/nns/cmc:cycles-minting-canister": "cycles-minting-canister",
+        "//rs/nns/handlers/lifeline:lifeline_actor": "lifeline",
+        "//rs/nns/gtc:genesis-token-canister": "genesis-token-canister",
+        "//rs/nns/sns-wasm:sns-wasm-canister": "sns-wasm-canister",
+    },
+)
+
+NNS_CANISTER_RUNTIME_DEPS = [":nns-canisters"]
 
 rust_binary(
     name = "test-driver-e2e-scenarios",
@@ -231,7 +235,7 @@ system_test(
     name = "basic_health_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = dicts.add(GUESTOS_RUNTIME_DEPS, UNIVERSAL_VM_RUNTIME_DEPS),
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -239,9 +243,7 @@ system_test(
     name = "tecdsa_add_nodes_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    # TODO: replace the following with: GUESTOS_RUNTIME_DEPS | NNS_CANISTER_RUNTIME_DEPS
-    # once we have Bazel >= 6.0
-    runtime_deps = dicts.add(GUESTOS_RUNTIME_DEPS, NNS_CANISTER_RUNTIME_DEPS),
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -249,6 +251,53 @@ system_test(
     name = "btc_get_balance_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = dicts.add(GUESTOS_RUNTIME_DEPS, UNIVERSAL_VM_RUNTIME_DEPS, NNS_CANISTER_RUNTIME_DEPS),
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+filegroup(
+    name = "rosetta_workspace",
+    srcs = glob(["rosetta_workspace/*"]),
+)
+
+system_test(
+    name = "rosetta_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            ":rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "ckbtc_minter_basics_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
+        ],
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "icrc1_agent_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS + [
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+        ],
     deps = DEPENDENCIES + [":tests"],
 )

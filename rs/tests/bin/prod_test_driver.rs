@@ -1067,10 +1067,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(
         suite(
             "rosetta",
-            vec![pot(
+            vec![pot_with_setup(
                 "rosetta_pot",
-                rosetta_test::config(),
-                par(vec![t(
+                rosetta_test::config,
+                par(vec![sys_t(
                     "rosetta_test_everything",
                     rosetta_test::test_everything,
                 )]),

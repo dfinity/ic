@@ -50,7 +50,8 @@ pub struct RosettaApiHandle {
 }
 
 impl RosettaApiHandle {
-    pub async fn start(
+    pub async fn start<P: AsRef<Path>>(
+        rosetta_api_bin_path: P,
         node_url: Url,
         port: u16,
         ledger_can_id: CanisterId,
@@ -103,7 +104,7 @@ impl RosettaApiHandle {
             args.push(String::from(root_key_file_path.to_str().unwrap()));
         }
 
-        let process = std::process::Command::new("ic-rosetta-api")
+        let process = std::process::Command::new(rosetta_api_bin_path.as_ref().as_os_str())
             .args(&args)
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
