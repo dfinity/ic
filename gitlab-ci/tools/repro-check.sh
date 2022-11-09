@@ -34,7 +34,7 @@ if [ -n "${proposal_id}" ]; then
     PROPOSAL_URL="https://ic-api.internetcomputer.org/api/v3/proposals/${proposal_id}"
     PROPOSAL_BODY=$(curl --silent --retry 5 --retry-delay 10 "${PROPOSAL_URL}")
 
-    release_package_url=$(echo "${PROPOSAL_BODY}" | jq --raw-output '.payload.release_package_url')
+    release_package_url=$(echo "${PROPOSAL_BODY}" | jq --raw-output '.payload.release_package_urls.[0]')
     case "${release_package_url}" in
         */guest-os/update-img/update-img.*)
             UPDATE_IMG_FILE="${release_package_url##*/guest-os/update-img/}"
