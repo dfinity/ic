@@ -70,6 +70,26 @@ pub fn ledger_id() -> CanisterId {
     with_index(|idx| idx.ledger_id)
 }
 
+struct HeartbeatGuard;
+
+impl HeartbeatGuard {
+    fn new() -> Option<HeartbeatGuard> {
+        with_index_mut(|idx| {
+            if idx.is_heartbeat_running {
+                return None;
+            }
+            idx.is_heartbeat_running = true;
+            Some(HeartbeatGuard {})
+        })
+    }
+}
+
+impl Drop for HeartbeatGuard {
+    fn drop(&mut self) {
+        with_index_mut(|idx| idx.is_heartbeat_running = false)
+    }
+}
+
 #[derive(CandidType, Clone, Debug, candid::Deserialize)]
 pub struct InitArgs {
     // The Ledger canister id of the Ledger to index
@@ -141,16 +161,14 @@ pub fn list_subaccounts(list_subaccounts_args: ListSubaccountsArgs) -> Vec<Subac
 }
 
 pub async fn heartbeat() {
-    if with_index(|idx| idx.is_heartbeat_running) {
-        return;
-    }
-    with_index_mut(|idx| idx.is_heartbeat_running = true);
+    let _guard = match HeartbeatGuard::new() {
+        Some(guard) => guard,
+        None => return,
+    };
 
     if let Err(err) = build_index().await {
         ic_cdk::eprintln!("{}Failed to fetch blocks: {}", LOG_PREFIX, err);
     }
-
-    with_index_mut(|idx| idx.is_heartbeat_running = false);
 }
 
 async fn get_transactions_from_ledger(
@@ -205,7 +223,7 @@ async fn build_index() -> Result<(), String> {
                 .start
                 .0
                 .to_u64()
-                .expect("The Ledger returned an index that is not a valid u64");
+                .ok_or("The Ledger returned an index that is not a valid u64")?;
             for transaction in res.transactions {
                 index_transaction(idx, transaction)?;
                 idx += 1;
@@ -217,7 +235,7 @@ async fn build_index() -> Result<(), String> {
         .first_index
         .0
         .to_u64()
-        .expect("The Ledger returned an index that is not a valid u64");
+        .ok_or("The Ledger returned an index that is not a valid u64")?;
     for transaction in res.transactions {
         index_transaction(idx, transaction)?;
         idx += 1;
@@ -228,15 +246,25 @@ async fn build_index() -> Result<(), String> {
 fn index_transaction(txid: u64, transaction: Transaction) -> Result<(), String> {
     match transaction.kind.as_str() {
         "mint" => {
-            add_tx(txid, transaction.mint.unwrap().to);
+            let mint = transaction
+                .mint
+                .ok_or("Got a transaction with kind 'mint' but the mint field was None")?
+                .to;
+            add_tx(txid, mint);
             Ok(())
         }
         "burn" => {
-            add_tx(txid, transaction.burn.unwrap().from);
+            let burn = transaction
+                .burn
+                .ok_or("Got a transaction with kind 'burn' but the burn field was None")?
+                .from;
+            add_tx(txid, burn);
             Ok(())
         }
         "transfer" => {
-            let Transfer { from, to, .. } = transaction.transfer.unwrap();
+            let Transfer { from, to, .. } = transaction
+                .transfer
+                .ok_or("Got a transaction with kind 'transfer' but the transfer field was None")?;
             add_tx(txid, from);
             add_tx(txid, to);
             Ok(())
@@ -421,7 +449,8 @@ mod tests {
     use proptest::{option, proptest};
 
     use crate::{
-        add_tx, get_account_transactions_ids, with_index, GetAccountTransactionsArgs, Index, INDEX,
+        add_tx, get_account_transactions_ids, with_index, GetAccountTransactionsArgs,
+        HeartbeatGuard, Index, INDEX,
     };
 
     fn account(n: u64) -> Account {
@@ -617,5 +646,22 @@ mod tests {
         assert_eq!(6, add_tx_for(2, 1));
         assert_eq!(7, add_tx_for(2, 3));
         assert_eq!(8, add_tx_for(2, 10));
+    }
+
+    #[test]
+    fn heartbeat_guard_test() {
+        init_state(vec![]);
+
+        let guard = HeartbeatGuard::new().unwrap();
+
+        // should not allow to create another guard
+        // while the previous one is still open
+        assert!(HeartbeatGuard::new().is_none());
+
+        drop(guard);
+
+        // should allow to create a new guard after the
+        // previous ones have been closed
+        assert!(HeartbeatGuard::new().is_some());
     }
 }
