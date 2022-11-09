@@ -1,6 +1,8 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::{CspCreateMEGaKeyError, CspSecretKeyStoreChecker};
+use ic_crypto_internal_csp::api::{
+    CspCreateMEGaKeyError, CspSecretKeyStoreChecker, NodePublicKeyData,
+};
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::Csp;
@@ -37,34 +39,14 @@ pub fn generate_node_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKeyP
     let generated = csp
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("Could not generate node signing keys");
-    match generated {
-        CspPublicKey::Ed25519(pk) => PublicKeyProto {
-            algorithm: AlgorithmIdProto::Ed25519 as i32,
-            key_value: pk.0.to_vec(),
-            version: 0,
-            proof_data: None,
-            timestamp: None,
-        },
-        _ => panic!("Unexpected types"),
-    }
+    ic_crypto_internal_csp::keygen::utils::node_signing_pk_to_proto(generated)
 }
 
 pub fn generate_committee_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKeyProto {
     let generated = csp
         .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
         .expect("Could not generate committee signing keys");
-    match generated {
-        (CspPublicKey::MultiBls12_381(pk_bytes), CspPop::MultiBls12_381(pop_bytes)) => {
-            PublicKeyProto {
-                algorithm: AlgorithmIdProto::MultiBls12381 as i32,
-                key_value: pk_bytes.0.to_vec(),
-                version: 0,
-                proof_data: Some(pop_bytes.0.to_vec()),
-                timestamp: None,
-            }
-        }
-        _ => panic!("Unexpected types"),
-    }
+    ic_crypto_internal_csp::keygen::utils::committee_signing_pk_to_proto(generated)
 }
 
 /// Generates (forward-secure) NI-DKG dealing encryption key material given the
@@ -102,14 +84,7 @@ pub fn generate_idkg_dealing_encryption_keys(
             }
             _ => IDkgDealingEncryptionKeysGenerationError::InternalError(format!("{}", e)),
         })?;
-
-    Ok(PublicKeyProto {
-        version: 0,
-        algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
-        key_value: pubkey.serialize(),
-        proof_data: None,
-        timestamp: None,
-    })
+    Ok(ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto(pubkey))
 }
 
 #[derive(Debug)]
@@ -204,6 +179,7 @@ pub fn get_node_keys_or_generate_if_missing(
             (current_node_public_keys, node_id)
         }
         Ok(Some(mut node_pks)) => {
+            let mut csp = csp_for_config(config, tokio_runtime_handle.clone());
             // Generate I-DKG key if it is not present yet: we generate the key
             // purely based on whether it already exists and at the same time
             // set the key material version to 1, so that afterwards the
@@ -212,7 +188,6 @@ pub fn get_node_keys_or_generate_if_missing(
             if node_pks.idkg_dealing_encryption_pk.is_none()
                 && node_pks.idkg_dealing_encryption_pks.is_empty()
             {
-                let mut csp = csp_for_config(config, tokio_runtime_handle.clone());
                 let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(&mut csp)
                     .unwrap_or_else(|e| {
                         panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
@@ -235,7 +210,7 @@ pub fn get_node_keys_or_generate_if_missing(
                 .as_ref()
                 .expect("Missing node signing public key");
             let node_id = derive_node_id(node_signing_pk);
-            (CurrentNodePublicKeys::from(node_pks), node_id)
+            (csp.current_node_public_keys(), node_id)
         }
         Err(e) => panic!("Node contains inconsistent key material: {}", e),
     }

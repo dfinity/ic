@@ -172,13 +172,6 @@ mod current_node_public_keys {
     }
 
     #[test]
-    fn should_map_node_public_keys_to_current_node_public_keys() {
-        let current_node_public_keys = CurrentNodePublicKeys::from(all_node_public_keys());
-
-        assert_eq!(current_node_public_keys, all_current_node_public_keys());
-    }
-
-    #[test]
     fn should_map_current_node_public_keys_to_node_public_keys_with_version_1() {
         let node_public_keys = NodePublicKeys::from(all_current_node_public_keys());
 
@@ -227,10 +220,6 @@ mod current_node_public_keys {
             idkg_dealing_encryption_public_key: None,
         };
 
-        assert_eq!(
-            CurrentNodePublicKeys::from(empty_node_public_keys.clone()),
-            empty_current_node_public_keys
-        );
         assert_eq!(
             NodePublicKeys::from(empty_current_node_public_keys),
             empty_node_public_keys

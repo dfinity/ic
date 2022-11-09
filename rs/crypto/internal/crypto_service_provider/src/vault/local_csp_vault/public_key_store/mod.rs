@@ -14,7 +14,20 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
     PublicKeyStoreCspVault for LocalCspVault<R, S, C, P>
 {
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
-        Err(CspPublicKeyStoreError::TransientInternalError(
-            "TODO: As part of CRP-1719, implement the functionality for returning the current node public keys".to_string()))
+        let guard = self.public_key_store_read_lock();
+        let node_signing_public_key = guard.node_signing_pubkey().cloned();
+        let committee_signing_public_key = guard.committee_signing_pubkey().cloned();
+        let tls_certificate = guard.tls_certificate().cloned();
+        let dkg_dealing_encryption_public_key = guard.ni_dkg_dealing_encryption_pubkey().cloned();
+        let last_idkg_dealing_encryption_public_key =
+            guard.idkg_dealing_encryption_pubkeys().last().cloned();
+
+        Ok(CurrentNodePublicKeys {
+            node_signing_public_key,
+            committee_signing_public_key,
+            tls_certificate,
+            dkg_dealing_encryption_public_key,
+            idkg_dealing_encryption_public_key: last_idkg_dealing_encryption_public_key,
+        })
     }
 }

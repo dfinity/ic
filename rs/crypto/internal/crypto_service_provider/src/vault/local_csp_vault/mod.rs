@@ -51,8 +51,6 @@ pub struct LocalCspVault<
     csprng: CspRwLock<R>,
     node_secret_key_store: CspRwLock<S>,
     canister_secret_key_store: CspRwLock<C>,
-    //TODO CRP-1721: use new field to retrieve public key data
-    #[allow(dead_code)]
     public_key_store: CspRwLock<P>,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
@@ -179,6 +177,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn sks_read_lock(&self) -> RwLockReadGuard<'_, S> {
         self.node_secret_key_store.read()
+    }
+
+    fn public_key_store_read_lock(&self) -> RwLockReadGuard<'_, P> {
+        self.public_key_store.read()
+    }
+
+    fn public_key_store_write_lock(&self) -> RwLockWriteGuard<'_, P> {
+        self.public_key_store.write()
     }
 
     fn canister_sks_write_lock(&self) -> RwLockWriteGuard<'_, C> {

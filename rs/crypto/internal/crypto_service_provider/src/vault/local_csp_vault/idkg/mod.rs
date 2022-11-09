@@ -149,6 +149,19 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         debug!(self.logger; crypto.method_name => "idkg_gen_mega_key_pair");
         let start_time = self.metrics.now();
         let result = self.idkg_gen_mega_key_pair_internal(algorithm_id);
+        //TODO CRP-1753: do proper error handling and add corresponding unit tests
+        if let Ok(public_key) = &result {
+            let mut existing_public_keys = self
+                .public_key_store_read_lock()
+                .idkg_dealing_encryption_pubkeys()
+                .clone();
+            existing_public_keys.push(crate::keygen::utils::idkg_dealing_encryption_pk_to_proto(
+                public_key.clone(),
+            ));
+            let _store_result = self
+                .public_key_store_write_lock()
+                .set_idkg_dealing_encryption_pubkeys(existing_public_keys);
+        }
         self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
             MetricsScope::Local,

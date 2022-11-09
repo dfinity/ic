@@ -3,7 +3,6 @@ pub mod cache;
 
 use super::*;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
@@ -118,7 +117,7 @@ impl MockNetwork {
             .iter_mut()
             .map(|(node_id, node)| {
                 println!("Creating fs keys for {}", node_id);
-                let (id, (pubkey, pop)) = (
+                let (id, (pubkey, _pop)) = (
                     *node_id,
                     node.csp
                         .create_forward_secure_key_pair(
@@ -132,17 +131,6 @@ impl MockNetwork {
                             )
                         }),
                 );
-                let node_pks = NodePublicKeys {
-                    version: 0,
-                    dkg_dealing_encryption_pk: Some(
-                        crate::keygen::utils::dkg_dealing_encryption_pk_to_proto(
-                            pubkey.to_owned(),
-                            pop,
-                        ),
-                    ),
-                    ..Default::default()
-                };
-                node.csp.reset_public_key_data(node_pks);
                 (id, pubkey)
             })
             .collect();

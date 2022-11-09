@@ -752,18 +752,6 @@ impl CurrentNodePublicKeys {
     }
 }
 
-impl From<NodePublicKeys> for CurrentNodePublicKeys {
-    fn from(node_public_keys: NodePublicKeys) -> Self {
-        CurrentNodePublicKeys {
-            node_signing_public_key: node_public_keys.node_signing_pk,
-            committee_signing_public_key: node_public_keys.committee_signing_pk,
-            tls_certificate: node_public_keys.tls_certificate,
-            dkg_dealing_encryption_public_key: node_public_keys.dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_public_key: node_public_keys.idkg_dealing_encryption_pk,
-        }
-    }
-}
-
 impl From<CurrentNodePublicKeys> for NodePublicKeys {
     fn from(current_node_public_keys: CurrentNodePublicKeys) -> Self {
         NodePublicKeys {

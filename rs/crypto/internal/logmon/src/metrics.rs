@@ -143,7 +143,7 @@ impl<T, E> From<&Result<T, E>> for MetricsResult {
 ///  - `pk_registry`: The number of node public keys (and TLS x.509 certificates) stored
 ///    in the registry
 ///  - `pk_local`: The number of node public keys (and TLS x.509 certificates) stored
-///    locally
+///    in the local public key store
 ///  - `sk_local`: The number of node secret keys stored in the local secret key store
 pub struct KeyCounts {
     pk_registry: u8,

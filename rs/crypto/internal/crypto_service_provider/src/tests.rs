@@ -14,157 +14,33 @@ mod csp_tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
-    mod public_key_data {
+    mod node_public_key_data {
         use super::*;
-        use crate::{NodePublicKeyData, PublicKeyData};
-        use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes;
-        use ic_crypto_internal_types::curves::bls12_381;
-        use ic_protobuf::crypto::v1::NodePublicKeys;
-        use ic_protobuf::registry::crypto::v1::AlgorithmId;
-        use ic_protobuf::registry::crypto::v1::PublicKey;
-
-        const INVALID_PUBLIC_KEY: PublicKey = PublicKey {
-            version: 0,
-            algorithm: 0,
-            key_value: vec![],
-            proof_data: None,
-            timestamp: None,
-        };
+        use crate::NodePublicKeyData;
+        use ic_types::crypto::CurrentNodePublicKeys;
 
         #[test]
-        fn should_be_ok_when_empty() {
-            let data = PublicKeyData::try_from(NodePublicKeys {
-                version: 0,
-                node_signing_pk: None,
-                committee_signing_pk: None,
-                tls_certificate: None,
-                dkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pks: vec![],
-            });
-            assert!(data.is_ok());
-        }
+        fn should_return_empty_when_no_public_keys() {
+            let csp = Csp::with_rng(csprng());
 
-        #[test]
-        fn should_be_ok_when_valid_node_signing_key() {
-            let data = PublicKeyData::try_from(NodePublicKeys {
-                version: 0,
-                node_signing_pk: Some(valid_node_signing_key()),
-                committee_signing_pk: None,
-                tls_certificate: None,
-                dkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pks: vec![],
-            });
+            let current_node_public_keys = csp.current_node_public_keys();
 
-            assert!(data.is_ok());
-        }
-
-        #[test]
-        fn should_be_ok_with_valid_dkg_dealing_encryption_pk() {
-            let data = PublicKeyData::try_from(NodePublicKeys {
-                version: 0,
-                node_signing_pk: None,
-                committee_signing_pk: None,
-                tls_certificate: None,
-                dkg_dealing_encryption_pk: Some(valid_dkg_dealing_encryption_pk()),
-                idkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pks: vec![],
-            });
-
-            assert!(data.is_ok());
-        }
-
-        #[test]
-        fn should_be_ok_with_node_signing_pk_and_dkg_dealing_encryption_pk() {
-            let data = PublicKeyData::try_from(NodePublicKeys {
-                version: 0,
-                node_signing_pk: Some(valid_node_signing_key()),
-                committee_signing_pk: None,
-                tls_certificate: None,
-                dkg_dealing_encryption_pk: Some(valid_dkg_dealing_encryption_pk()),
-                idkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pks: vec![],
-            });
-
-            assert!(data.is_ok());
-        }
-
-        #[test]
-        fn should_err_when_invalid_dkg_dealing_encryption_key() {
-            let data = PublicKeyData::try_from(NodePublicKeys {
-                version: 0,
-                node_signing_pk: None,
-                committee_signing_pk: None,
-                tls_certificate: None,
-                dkg_dealing_encryption_pk: Some(INVALID_PUBLIC_KEY),
-                idkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pks: vec![],
-            });
-
-            assert!(data.is_err())
-        }
-
-        #[test]
-        fn should_err_when_invalid_node_signing_key() {
-            let data = PublicKeyData::try_from(NodePublicKeys {
-                version: 0,
-                node_signing_pk: Some(INVALID_PUBLIC_KEY),
-                committee_signing_pk: None,
-                tls_certificate: None,
-                dkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pks: vec![],
-            });
-
-            assert!(data.is_err())
-        }
-
-        #[test]
-        fn should_not_panic_when_no_public_keys() {
-            let csp = csp_with_public_keys(NodePublicKeys {
-                version: 0,
-                node_signing_pk: None,
-                committee_signing_pk: None,
-                tls_certificate: None,
-                dkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pk: None,
-                idkg_dealing_encryption_pks: vec![],
-            });
-
-            let _current_public_keys = csp.current_node_public_keys();
-        }
-
-        fn csp_with_public_keys(public_keys: NodePublicKeys) -> Csp {
-            let mut csp = Csp::with_rng(csprng());
-            csp.public_key_data =
-                PublicKeyData::try_from(public_keys).expect("invalid public key data");
-            csp
-        }
-
-        fn valid_node_signing_key() -> PublicKey {
-            PublicKey {
-                version: 0,
-                algorithm: AlgorithmId::Ed25519 as i32,
-                key_value: [0; PublicKeyBytes::SIZE].to_vec(),
-                proof_data: None,
-                timestamp: None,
-            }
-        }
-
-        fn valid_dkg_dealing_encryption_pk() -> PublicKey {
-            PublicKey {
-                version: 0,
-                algorithm: AlgorithmId::Groth20Bls12381 as i32,
-                key_value: [0u8; bls12_381::G1::SIZE].to_vec(),
-                proof_data: None,
-                timestamp: None,
-            }
+            assert_eq!(
+                current_node_public_keys,
+                CurrentNodePublicKeys {
+                    node_signing_public_key: None,
+                    committee_signing_public_key: None,
+                    tls_certificate: None,
+                    dkg_dealing_encryption_public_key: None,
+                    idkg_dealing_encryption_public_key: None
+                }
+            );
         }
     }
 
     mod migration_to_rotated_idkg_dealing_enc_pubkey {
         use super::super::super::public_key_store;
+        use crate::api::NodePublicKeyData;
         use crate::{read_node_public_keys, Csp};
         use ic_config::crypto::CryptoConfig;
         use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -180,19 +56,13 @@ mod csp_tests {
             let (mut node_public_keys, config, crypto_root) = generate_node_keys_in_temp_dir();
             node_public_keys.idkg_dealing_encryption_pks = vec![];
             write_to_public_key_store_file(crypto_root.path(), &node_public_keys);
+            assert!(node_public_keys.idkg_dealing_encryption_pk.is_some());
 
             let csp = csp_from_config(&config);
             assert_eq!(
-                only_element_in_vec(
-                    &csp.public_key_data
-                        .node_public_keys
-                        .idkg_dealing_encryption_pks
-                ),
-                only_element_in_option(
-                    &csp.public_key_data
-                        .node_public_keys
-                        .idkg_dealing_encryption_pk
-                )
+                csp.current_node_public_keys()
+                    .idkg_dealing_encryption_public_key,
+                node_public_keys.idkg_dealing_encryption_pk,
             );
 
             let node_public_keys =
@@ -223,10 +93,9 @@ mod csp_tests {
 
             let csp = csp_from_config(&config);
             assert_eq!(
-                csp.public_key_data
-                    .node_public_keys
-                    .idkg_dealing_encryption_pks,
-                original_idkg_keys_vec
+                csp.current_node_public_keys()
+                    .idkg_dealing_encryption_public_key,
+                original_idkg_keys_vec.first().cloned()
             );
 
             let node_public_keys = read_from_public_key_store_file(crypto_root.path());
@@ -245,10 +114,9 @@ mod csp_tests {
 
             let csp = csp_from_config(&config);
             assert!(csp
-                .public_key_data
-                .node_public_keys
-                .idkg_dealing_encryption_pks
-                .is_empty());
+                .current_node_public_keys()
+                .idkg_dealing_encryption_public_key
+                .is_none());
 
             assert!(read_from_public_key_store_file(crypto_root.path())
                 .idkg_dealing_encryption_pks
