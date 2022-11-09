@@ -13578,6 +13578,7 @@ dependencies = [
  "humantime 2.1.0",
  "hyper",
  "hyper-rustls",
+ "hyper-tls",
  "ic-agent",
  "ic-artifact-pool",
  "ic-base-types",

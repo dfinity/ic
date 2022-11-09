@@ -38,11 +38,16 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /non-existence proofs for non-existing request id/",
     "$0 ~ /module_hash of empty canister/",
     "$0 ~ /metadata.absent/",
-    // canister http_request tests became flaky, disabling them temporarily
-    "$0 ~ /canister http calls/",
 ];
 
 pub fn config(env: TestEnv) {
+    use crate::driver::test_env_api::{retry, secs};
+    use crate::util::block_on;
+    use hyper::client::connect::HttpConnector;
+    use hyper::Client;
+    use hyper_tls::HttpsConnector;
+    use std::env;
+
     // Set up Universal VM with HTTP Bin testing service
     let activate_script = &get_universal_vm_activation_script()[..];
     let config_dir = env
@@ -58,6 +63,8 @@ pub fn config(env: TestEnv) {
         "key.pem",
         get_pem_content(&PemType::PemKey).as_bytes(),
     );
+    env::set_var("SSL_CERT_FILE", config_dir.as_path().join("cert.pem"));
+    env::remove_var("NIX_SSL_CERT_FILE");
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_dir(config_dir)
@@ -88,6 +95,35 @@ pub fn config(env: TestEnv) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
+
+    let log = env.logger();
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let httpbin = format!("https://[{webserver_ipv6}]:20443");
+    retry(log.clone(), secs(300), secs(10), || {
+        block_on(async {
+            let mut http_connector = HttpConnector::new();
+            http_connector.enforce_http(false);
+            let mut https_connector = HttpsConnector::new_with_connector(http_connector);
+            https_connector.https_only(true);
+            let client = Client::builder().build::<_, hyper::Body>(https_connector);
+
+            let addr = format!("{}/ip", httpbin);
+            let req = hyper::Request::builder()
+                .method(hyper::Method::GET)
+                .uri(addr)
+                .body(hyper::Body::from(""))?;
+
+            let resp = client.request(req).await?;
+
+            let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+            let body = String::from_utf8(body_bytes.to_vec()).unwrap();
+
+            info!(log, "response body from httpbin: {}", body);
+
+            Ok(())
+        })
+    })
+    .expect("Httpbin server should respond to incoming requests!");
 }
 
 pub fn test_system_subnet(env: TestEnv) {
