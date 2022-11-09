@@ -864,6 +864,9 @@ pub fn assert_reject(res: Result<WasmResult, UserError>, reject_code: RejectCode
 pub fn assert_reply(res: Result<WasmResult, UserError>, bytes: &[u8]) {
     match res {
         Ok(WasmResult::Reply(res)) => assert_eq!(res.as_slice(), bytes),
-        _ => unreachable!("Assert reply failed."),
+        other_response => unreachable!(
+            "Assert reply failed. Response received: {:?}",
+            other_response
+        ),
     }
 }

@@ -123,7 +123,6 @@ pub(super) fn resolve_destination(
                 args.network,
                 network_topology,
                 own_subnet,
-                true,
             ))
         }
         Ok(Ic00Method::BitcoinGetUtxos) => {
@@ -132,20 +131,15 @@ pub(super) fn resolve_destination(
                 args.network,
                 network_topology,
                 own_subnet,
-                true,
             ))
         }
         Ok(Ic00Method::BitcoinSendTransaction) => {
             let args = Decode!(payload, BitcoinSendTransactionArgs)?;
 
-            // Do not yet route SendTransaction to the Bitcoin canister, as that endpoint isn't
-            // implemented yet.
-            // TODO(EXC-1201): Expose the send transaction endpoint on the bitcoin canister.
             Ok(route_bitcoin_message(
                 args.network,
                 network_topology,
                 own_subnet,
-                false,
             ))
         }
         Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
@@ -154,7 +148,6 @@ pub(super) fn resolve_destination(
                 args.network,
                 network_topology,
                 own_subnet,
-                true,
             ))
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
@@ -273,7 +266,6 @@ fn route_bitcoin_message(
     network: BitcoinNetwork,
     network_topology: &NetworkTopology,
     own_subnet: SubnetId,
-    route_to_bitcoin_canister: bool,
 ) -> PrincipalId {
     match network {
         BitcoinNetwork::Testnet | BitcoinNetwork::testnet => {
@@ -285,16 +277,14 @@ fn route_bitcoin_message(
             //    enabled if one exists).
             //
             // 3. Route to own subnet.
-            if route_to_bitcoin_canister {
-                if let Some(canister_id) = network_topology.bitcoin_testnet_canister_id {
-                    // Does the canister exist?
-                    if network_topology
-                        .routing_table
-                        .route(canister_id.get())
-                        .is_some()
-                    {
-                        return canister_id.get();
-                    }
+            if let Some(canister_id) = network_topology.bitcoin_testnet_canister_id {
+                // Does the canister exist?
+                if network_topology
+                    .routing_table
+                    .route(canister_id.get())
+                    .is_some()
+                {
+                    return canister_id.get();
                 }
             }
 
@@ -306,24 +296,18 @@ fn route_bitcoin_message(
                 .get()
         }
         BitcoinNetwork::Mainnet | BitcoinNetwork::mainnet => {
-            if route_to_bitcoin_canister {
-                // Route to the mainnet canister ID if it exists, otherwise route to
-                // own subnet.
-                //
-                // Note that the bitcoin mainnet subnet feature was never enabled/used, so, unlike
-                // the bitcoin testnet, there is no bitcoin subnet to route to.
-                network_topology
-                    .bitcoin_mainnet_canister_id
-                    .map(|c| SubnetId::from(c.get()))
-                    .unwrap_or(own_subnet)
-                    .get()
-            } else {
-                own_subnet.get()
-            }
+            // Route to the mainnet canister ID if it exists, otherwise route to
+            // own subnet.
+            //
+            // Note that the bitcoin mainnet subnet feature was never enabled/used, so, unlike
+            // the bitcoin testnet, there is no bitcoin subnet to route to.
+            network_topology
+                .bitcoin_mainnet_canister_id
+                .unwrap_or_else(|| CanisterId::from(own_subnet))
+                .get()
         }
         BitcoinNetwork::Regtest | BitcoinNetwork::regtest => {
-            // We don't yet support a bitcoin regtest canister. Redirect to own
-            // subnet.
+            // We don't support a bitcoin regtest canister. Redirect to own subnet.
             own_subnet.get()
         }
     }

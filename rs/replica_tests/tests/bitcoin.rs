@@ -389,6 +389,14 @@ fn test_canister_routing(env: StateMachine, networks: Vec<BitcoinNetwork>) {
                 "bitcoin_get_current_fee_percentiles",
                 BitcoinGetCurrentFeePercentilesArgs { network }.encode(),
             ),
+            (
+                "bitcoin_send_transaction",
+                BitcoinSendTransactionArgs {
+                    network,
+                    transaction: vec![1, 2, 3],
+                }
+                .encode(),
+            ),
         ];
 
         for (method, payload) in tests {
@@ -401,24 +409,6 @@ fn test_canister_routing(env: StateMachine, networks: Vec<BitcoinNetwork>) {
                 format!("Hello from {}!", network).as_bytes(),
             );
         }
-
-        // Send transaction requests are a special case and do not go to the bitcoin canister.
-        utils::assert_reject(
-            canister.update(
-                wasm().call_simple(
-                    CanisterId::ic_00(),
-                    "bitcoin_send_transaction",
-                    call_args().other_side(
-                        BitcoinSendTransactionArgs {
-                            network,
-                            transaction: vec![],
-                        }
-                        .encode(),
-                    ),
-                ),
-            ),
-            RejectCode::CanisterReject,
-        );
     }
 }
 
