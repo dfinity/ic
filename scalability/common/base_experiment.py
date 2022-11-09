@@ -23,6 +23,7 @@ import traceback
 from typing import List
 
 import gflags
+from common import ansible
 from common import flamegraphs
 from common import machine_failure
 from common import misc
@@ -377,8 +378,6 @@ class BaseExperiment:
         if FLAGS.testnet == "mercury":
             return BaseExperiment.get_mainnet_nns_url()
         else:
-            from common import ansible
-
             return ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX, sort=False)[0]
 
     def _get_nns_url(self):

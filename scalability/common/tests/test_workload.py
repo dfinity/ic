@@ -42,11 +42,11 @@ class Test_Workload(unittest.TestCase):
         print(commands[1])
         assert (
             commands[0]
-            == './ic-workload-generator "http://[tm_1]:8080,http://[tm_2]:8080,http://[tm_3]:8080" -n 60 -p 9090 --no-status-check  --query-timeout-secs 30 --ingress-timeout-secs 360 --payload \'\' -m plus --call-method "call" --canister-id c_a -r 5.0 --summary-file '
+            == './ic-workload-generator "http://[tm_1]:8080,http://[tm_2]:8080,http://[tm_3]:8080" -n 60 --no-status-check  --query-timeout-secs 30 --ingress-timeout-secs 360 --payload \'\' -m plus --call-method "call" --canister-id c_a -r 5.0 --summary-file '
         )
         assert (
             commands[1]
-            == './ic-workload-generator "http://[tm_1]:8080,http://[tm_2]:8080,http://[tm_3]:8080" -n 60 -p 9090 --no-status-check  --query-timeout-secs 30 --ingress-timeout-secs 360 --payload \'\' -m plus --call-method "call" --canister-id c_b -r 5.0 --summary-file '
+            == './ic-workload-generator "http://[tm_1]:8080,http://[tm_2]:8080,http://[tm_3]:8080" -n 60 --no-status-check  --query-timeout-secs 30 --ingress-timeout-secs 360 --payload \'\' -m plus --call-method "call" --canister-id c_b -r 5.0 --summary-file '
         )
 
 
