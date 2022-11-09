@@ -16,72 +16,86 @@ mod database_access {
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
     use icp_ledger::{Block, Operation};
-    use rusqlite::{params, types::Null, Connection, Error};
+    use rusqlite::{params, types::Null, Connection, Error, Statement};
 
     pub fn push_hashed_block(
         con: &mut Connection,
         hb: &HashedBlock,
     ) -> Result<(), BlockStoreError> {
+        let mut stmt = con
+        .prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)")
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        push_hashed_block_execution(hb, &mut stmt)
+    }
+
+    pub fn push_hashed_block_execution(
+        hb: &HashedBlock,
+        stmt: &mut Statement,
+    ) -> Result<(), BlockStoreError> {
         let hash = hb.hash.into_bytes().to_vec();
         let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
-        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)";
-        con.execute(
-            command,
-            params![hash, hb.block.clone().into_vec(), parent_hash, hb.index],
-        )
+        stmt.execute(params![
+            hash,
+            hb.block.clone().into_vec(),
+            parent_hash,
+            hb.index
+        ])
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         Ok(())
     }
+
     pub fn push_transaction(
         connection: &mut Connection,
         tx: &icp_ledger::Transaction,
         index: &u64,
     ) -> Result<(), BlockStoreError> {
+        let mut stmt = connection
+        .prepare("INSERT INTO transactions (block_idx,tx_hash,operation_type,from_account,to_account,amount,fee) VALUES (?1, ?2, ?3, ?4, ?5,?6,?7)")
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        push_transaction_execution(tx, &mut stmt, index)
+    }
+
+    pub fn push_transaction_execution(
+        tx: &icp_ledger::Transaction,
+        stmt: &mut Statement,
+        index: &u64,
+    ) -> Result<(), BlockStoreError> {
         let tx_hash = tx.hash().into_bytes().to_vec();
         let operation_type = tx.operation.clone();
-        let command = "INSERT INTO transactions (block_idx,tx_hash,operation_type,from_account,to_account,amount,fee) VALUES (?1, ?2, ?3, ?4, ?5,?6,?7)";
         match operation_type {
             Operation::Burn { from, amount } => {
-                let op_string: &'static str = operation_type.into();
+                let op_string: &str = operation_type.into();
                 let from_account = from.to_hex();
                 let tokens = amount.get_e8s();
                 let to_account = Null;
                 let fees = Null;
-                connection
-                    .execute(
-                        command,
-                        params![
-                            index,
-                            tx_hash,
-                            op_string,
-                            from_account,
-                            to_account,
-                            tokens,
-                            fees
-                        ],
-                    )
-                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+                stmt.execute(params![
+                    index,
+                    tx_hash,
+                    op_string,
+                    from_account,
+                    to_account,
+                    tokens,
+                    fees
+                ])
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
             Operation::Mint { to, amount } => {
-                let op_string: &'static str = operation_type.into();
+                let op_string: &str = operation_type.into();
                 let from_account = Null;
                 let tokens = amount.get_e8s();
                 let to_account = to.to_hex();
                 let fees = Null;
-                connection
-                    .execute(
-                        command,
-                        params![
-                            index,
-                            tx_hash,
-                            op_string,
-                            from_account,
-                            to_account,
-                            tokens,
-                            fees
-                        ],
-                    )
-                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+                stmt.execute(params![
+                    index,
+                    tx_hash,
+                    op_string,
+                    from_account,
+                    to_account,
+                    tokens,
+                    fees
+                ])
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
             Operation::Transfer {
                 from,
@@ -89,35 +103,32 @@ mod database_access {
                 amount,
                 fee,
             } => {
-                let op_string: &'static str = operation_type.into();
+                let op_string: &str = operation_type.into();
                 let from_account = from.to_hex();
                 let tokens = amount.get_e8s();
                 let to_account = to.to_hex();
                 let fees = fee.get_e8s();
-                connection
-                    .execute(
-                        command,
-                        params![
-                            index,
-                            tx_hash,
-                            op_string,
-                            from_account,
-                            to_account,
-                            tokens,
-                            fees
-                        ],
-                    )
-                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+                stmt.execute(params![
+                    index,
+                    tx_hash,
+                    op_string,
+                    from_account,
+                    to_account,
+                    tokens,
+                    fees
+                ])
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
         }
         Ok(())
     }
+
     pub fn contains_block(
         connection: &mut Connection,
         block_idx: &u64,
     ) -> Result<bool, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT * FROM blocks WHERE idx = ?")
+            .prepare("SELECT Null FROM blocks WHERE idx = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut rows = stmt
             .query(params![block_idx])
@@ -273,37 +284,40 @@ mod database_access {
             ))),
         }
     }
+    // The option is left None if both verified and unverified blocks should be querried. It is set to False for only unverified blocks and True for only verified blocks
     pub fn get_first_hashed_block(
         con: &mut Connection,
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
         let command = match verified {
-            Some(verified) => format!("SELECT  hash, block, parent_hash,idx from blocks WHERE verified = {} ORDER BY idx ASC",verified),
-            None => "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx ASC".to_string()
+            Some(verified) => format!("SELECT  hash, block, parent_hash,idx from blocks WHERE verified = {} ORDER BY idx ASC Limit 2",verified),
+            None => "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx ASC Limit 2".to_string()
         };
         let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
         match blocks.next() {
-            Some(geneis_block) => match blocks.next() {
+            Some(genesis_block) => match blocks.next() {
                 Some(first_block) => {
                     let block = first_block.map_err(|e| BlockStoreError::Other(e.to_string()))?;
                     if block.index > 1 {
                         Ok(block)
                     } else {
-                        Ok(geneis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?)
+                        Ok(genesis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?)
                     }
                 }
-                None => Ok(geneis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?),
+                None => Ok(genesis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?),
             },
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
     }
+    // The option is left None if both verified and unverified blocks should be querried. It is set to False for only unverified blocks and True for only verified blocks
+
     pub fn get_latest_hashed_block(
         con: &mut Connection,
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
         let command = match verified {
-            Some(verified) => format!("SELECT  hash, block, parent_hash,idx from blocks WHERE verified = {} ORDER BY idx DESC",verified),
-            None => "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx DESC".to_string()
+            Some(verified) => format!("SELECT  hash, block, parent_hash,idx from blocks WHERE verified = {} ORDER BY idx DESC Limit 1",verified),
+            None => "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx DESC Limit 1".to_string()
         };
         let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
         match blocks.next() {
@@ -313,6 +327,7 @@ mod database_access {
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
     }
+
     pub fn is_verified(con: &mut Connection, block_idx: &u64) -> Result<bool, BlockStoreError> {
         let command = "SELECT null from blocks WHERE verified=TRUE AND idx=?";
         let mut stmt = con
@@ -404,10 +419,11 @@ impl Blocks {
             .lock()
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])
-            .unwrap();
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         store.create_tables().map_err(|e| {
             BlockStoreError::Other(format!("Failed to initialize SQLite database: {}", e))
         })?;
+
         store.check_table_coherence()?;
         Ok(store)
     }
@@ -470,14 +486,6 @@ impl Blocks {
             r#"
             CREATE UNIQUE INDEX IF NOT EXISTS block_hash_indexer
             ON blocks (hash);    
-            "#,
-            [],
-        )?;
-
-        connection.execute(
-            r#"
-            CREATE UNIQUE INDEX IF NOT EXISTS block_idx_indexer
-            ON transactions (block_idx);    
             "#,
             [],
         )?;
@@ -893,12 +901,16 @@ impl Blocks {
 
     pub fn push(&mut self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
         let mut con = self.connection.lock().unwrap();
-        database_access::push_hashed_block(&mut *con, hb)?;
+        con.execute_batch("BEGIN TRANSACTION;")
+            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+        database_access::push_hashed_block(&mut con, hb)?;
         database_access::push_transaction(
             &mut *con,
             &Block::decode(hb.block.clone()).unwrap().transaction,
             &hb.index,
         )?;
+        con.execute_batch("COMMIT TRANSACTION;")
+            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
         drop(con);
         self.process_block(hb)?;
         //TODO: UPDATE ACCOUNT BALANCES
@@ -907,12 +919,16 @@ impl Blocks {
     }
 
     pub fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
-        let mut connection = self.connection.lock().unwrap();
+        let connection = self.connection.lock().unwrap();
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
-        for hb in &batch {
-            match database_access::push_hashed_block(&mut *connection, hb) {
+        let mut stmt_hb =  connection .prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)")
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut stmt_tx = connection .prepare("INSERT INTO transactions (block_idx,tx_hash,operation_type,from_account,to_account,amount,fee) VALUES (?1, ?2, ?3, ?4, ?5,?6,?7)")
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        for hb in batch.clone() {
+            match database_access::push_hashed_block_execution(&hb, &mut stmt_hb) {
                 Ok(_) => (),
                 Err(e) => {
                     connection
@@ -921,9 +937,9 @@ impl Blocks {
                     return Err(e);
                 }
             };
-            match database_access::push_transaction(
-                &mut *connection,
+            match database_access::push_transaction_execution(
                 &Block::decode(hb.block.clone()).unwrap().transaction,
+                &mut stmt_tx,
                 &hb.index,
             ) {
                 Ok(_) => (),
@@ -938,9 +954,11 @@ impl Blocks {
         connection
             .execute_batch("COMMIT TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+        drop(stmt_tx);
+        drop(stmt_hb);
         drop(connection);
-        for hb in &batch {
-            self.process_block(hb)?;
+        for hb in batch {
+            self.process_block(&hb)?;
         }
         Ok(())
     }
