@@ -3,7 +3,7 @@ use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
-use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
+use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_generation::{
     derive_node_id, generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
@@ -23,7 +23,6 @@ use ic_interfaces::crypto::{
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
@@ -299,27 +298,6 @@ impl TempCryptoBuilder {
             fake_registry_client.reload();
             fake_registry_client as Arc<dyn RegistryClient>
         });
-
-        if node_keys_to_generate != NodeKeysToGenerate::none() {
-            public_key_store::read_node_public_keys(&config.crypto_root).expect_err(
-                "New private keys were generated and so the corresponding \
-                public keys need to be saved. This would have overwritten the existing \
-                public keys store and so is probably not what you wanted.",
-            );
-            let node_pubkeys = NodePublicKeys {
-                version: 1,
-                node_signing_pk,
-                committee_signing_pk,
-                dkg_dealing_encryption_pk,
-                idkg_dealing_encryption_pks: idkg_dealing_encryption_pk
-                    .clone()
-                    .map_or(vec![], |public_key| vec![public_key]),
-                idkg_dealing_encryption_pk,
-                tls_certificate,
-            };
-            public_key_store::store_node_public_keys(&config.crypto_root, &node_pubkeys)
-                .unwrap_or_else(|_| panic!("failed to store public key material"));
-        }
 
         let opt_remote_vault_environment = if self.start_remote_vault {
             let vault_server =

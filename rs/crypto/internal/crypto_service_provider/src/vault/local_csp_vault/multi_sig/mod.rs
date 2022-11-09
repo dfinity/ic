@@ -42,6 +42,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
         let start_time = self.metrics.now();
         let result = self.gen_key_pair_with_pop_internal(algorithm_id);
+        //TODO CRP-1750: do proper error handling and add corresponding unit tests
+        if let Ok(public_key) = &result {
+            let _store_result = self
+                .public_key_store_write_lock()
+                .set_once_committee_signing_pubkey(
+                    crate::keygen::utils::committee_signing_pk_to_proto(public_key.clone()),
+                );
+        }
         self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
             MetricsScope::Local,

@@ -66,16 +66,20 @@ fn should_have_the_csp_public_keys_that_were_previously_generated() {
 fn should_generate_all_keys_for_a_node_without_public_keys() {
     CryptoConfig::run_with_temp_config(|config| {
         let csp = csp_for_config(&config, None);
-        let first_node_signing_pk = generate_node_signing_keys(&csp);
-        // first_node_signing_pk NOT saved.
-
-        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
-        assert_ne!(
-            first_node_signing_pk,
-            *node_pks.node_signing_public_key.as_ref().unwrap()
+        assert_eq!(
+            csp.current_node_public_keys(),
+            CurrentNodePublicKeys {
+                node_signing_public_key: None,
+                committee_signing_public_key: None,
+                tls_certificate: None,
+                dkg_dealing_encryption_public_key: None,
+                idkg_dealing_encryption_public_key: None
+            }
         );
 
+        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
+
+        ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
         let csp = csp_for_config(&config, None);
         assert_eq!(node_pks, csp.current_node_public_keys());
     })
@@ -250,18 +254,6 @@ fn should_panic_if_node_has_inconsistent_keys() {
 #[test]
 fn check_keys_locally_returns_none_if_no_keys_are_present() {
     CryptoConfig::run_with_temp_config(|config| {
-        let result = check_keys_locally(&config, None);
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
-    })
-}
-
-#[test]
-fn check_keys_locally_returns_none_if_no_public_keys_are_present() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let csp = csp_for_config(&config, None);
-        let _node_signing_pk = generate_node_signing_keys(&csp);
-        // _node_signing_pk NOT saved.
         let result = check_keys_locally(&config, None);
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());

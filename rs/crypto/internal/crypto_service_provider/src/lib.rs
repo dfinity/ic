@@ -90,45 +90,10 @@ impl<T> CryptoServiceProvider for T where
 {
 }
 
-struct PublicKeyData {
-    node_public_keys: NodePublicKeys,
-}
-
-impl TryFrom<NodePublicKeys> for PublicKeyData {
-    type Error = String;
-
-    fn try_from(node_public_keys: NodePublicKeys) -> Result<Self, Self::Error> {
-        let signing_pk = node_public_keys
-            .node_signing_pk
-            .to_owned()
-            .map(|pk| CspPublicKey::try_from(pk));
-        if let Some(Err(e)) = signing_pk {
-            return Err(format!(
-                "Unsupported public key proto as node signing public key: {:?}",
-                e
-            ));
-        }
-
-        let dkg_pk = node_public_keys
-            .dkg_dealing_encryption_pk
-            .to_owned()
-            .map(|pk| CspFsEncryptionPublicKey::try_from(pk));
-        if let Some(Err(e)) = dkg_pk {
-            return Err(format!(
-                "Unsupported public key proto as dkg dealing encryption public key: {:?}",
-                e
-            ));
-        }
-
-        Ok(PublicKeyData { node_public_keys })
-    }
-}
-
 /// Implements `CryptoServiceProvider` that uses a `CspVault` for
 /// storing and managing secret keys.
 pub struct Csp {
     csp_vault: Arc<dyn CspVault>,
-    public_key_data: PublicKeyData,
     logger: ReplicaLogger,
 }
 
@@ -207,6 +172,7 @@ impl Csp {
         logger: Option<ReplicaLogger>,
         metrics: Arc<CryptoMetrics>,
     ) -> Self {
+        Self::migrate_idkg_dealing_encryption_pk_before_instantiating_vault(&config.crypto_root);
         match &config.csp_vault_type {
             CspVaultType::InReplica => Self::new_with_in_replica_vault(config, logger, metrics),
             CspVaultType::UnixSocket(socket_path) => Self::new_with_unix_socket_vault(
@@ -247,7 +213,7 @@ impl Csp {
             metrics,
             new_logger!(&logger),
         ));
-        Self::csp_with(&config.crypto_root, logger, csp_vault)
+        Csp { csp_vault, logger }
     }
 
     fn new_with_unix_socket_vault(
@@ -267,10 +233,13 @@ impl Csp {
                 socket_path, e
             )
         });
-        Self::csp_with(&config.crypto_root, logger, Arc::new(csp_vault))
+        Csp {
+            csp_vault: Arc::new(csp_vault),
+            logger,
+        }
     }
 
-    fn csp_with(pk_path: &Path, logger: ReplicaLogger, csp_vault: Arc<dyn CspVault>) -> Self {
+    fn migrate_idkg_dealing_encryption_pk_before_instantiating_vault(pk_path: &Path) {
         let mut node_public_keys: NodePublicKeys =
             read_node_public_keys(pk_path).unwrap_or_default();
         if node_public_keys.idkg_dealing_encryption_pks.is_empty() {
@@ -281,13 +250,6 @@ impl Csp {
                 public_key_store::store_node_public_keys(pk_path, &node_public_keys)
                     .unwrap_or_else(|err| panic!("Failed to store public key material: {err:?}"));
             }
-        }
-        let public_key_data =
-            PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
-        Csp {
-            public_key_data,
-            csp_vault,
-            logger,
         }
     }
 }
@@ -301,11 +263,7 @@ impl Csp {
         csprng: R,
         config: &CryptoConfig,
     ) -> Self {
-        let node_public_keys = read_node_public_keys(&config.crypto_root).unwrap_or_default();
-        let public_key_data =
-            PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
         Csp {
-            public_key_data,
             csp_vault: Arc::new(LocalCspVault::new_for_test(
                 csprng,
                 ProtoSecretKeyStore::open(&config.crypto_root, SKS_DATA_FILENAME, None),
@@ -316,27 +274,17 @@ impl Csp {
     }
 }
 
-impl Csp {
-    /// Resets public key data according to the given `NodePublicKeys`.
-    ///
-    /// Note: This is for testing only and MUST NOT be used in production.
-    pub fn reset_public_key_data(&mut self, node_public_keys: NodePublicKeys) {
-        self.public_key_data =
-            PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
-    }
-}
-
 impl NodePublicKeyData for Csp {
     fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
-        CurrentNodePublicKeys::from(self.public_key_data.node_public_keys.clone())
+        self.csp_vault
+            .current_node_public_keys()
+            .expect("error retrieving public keys")
     }
 
     fn dkg_dealing_encryption_key_id(&self) -> KeyId {
         CspFsEncryptionPublicKey::try_from(
-            self.public_key_data
-                .node_public_keys
-                .dkg_dealing_encryption_pk
-                .to_owned()
+            self.current_node_public_keys()
+                .dkg_dealing_encryption_public_key
                 .expect("Missing dkg dealing encryption key id"),
         )
         .map(|pk| KeyId::from(&pk))
@@ -358,11 +306,7 @@ impl Csp {
         secret_key_store: S,
         public_key_store: P,
     ) -> Self {
-        let node_public_keys: NodePublicKeys = Default::default();
-        let public_key_data =
-            PublicKeyData::try_from(node_public_keys).expect("invalid node public keys");
         Csp {
-            public_key_data,
             csp_vault: Arc::new(LocalCspVault::new_for_test(
                 csprng,
                 secret_key_store,

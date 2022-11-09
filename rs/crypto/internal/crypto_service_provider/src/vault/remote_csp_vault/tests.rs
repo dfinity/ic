@@ -508,11 +508,16 @@ mod public_key_store {
     use super::*;
 
     #[test]
-    fn should_fail_on_unimplemented_get_current_node_public_keys() {
+    fn should_retrieve_current_public_keys() {
         let tokio_rt = new_tokio_runtime();
         let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::public_key_store::should_fail_on_unimplemented_get_current_node_public_keys(
-            csp_vault,
-        );
+        test_utils::public_key_store::should_retrieve_current_public_keys(csp_vault);
+    }
+
+    #[test]
+    fn should_retrieve_last_idkg_public_key() {
+        let tokio_rt = new_tokio_runtime();
+        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
+        test_utils::public_key_store::should_retrieve_last_idkg_public_key(csp_vault);
     }
 }

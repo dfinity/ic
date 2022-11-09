@@ -411,6 +411,10 @@ pub trait SecretKeyStoreCspVault {
 pub trait PublicKeyStoreCspVault {
     /// Returns the node's current public keys.
     ///
+    /// For keys that are periodically rotated (such as the iDKG dealing encryption key pair) only
+    /// the latest public key locally available will be returned. This public key may in particular
+    /// not yet be in the registry.
+    ///
     /// # Errors
     /// * if a transient error (e.g., RPC timeout) occurs when accessing the public key store
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;

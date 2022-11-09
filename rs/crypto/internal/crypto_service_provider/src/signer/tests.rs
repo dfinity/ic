@@ -447,6 +447,10 @@ fn secret_key_store_panicking_on_usage() -> impl SecretKeyStore {
     sks
 }
 
+// fn public_key_store() -> impl PublicKeyStore {
+//     MockPublicKeyStore::new()
+// }
+
 #[test]
 #[should_panic]
 fn should_panic_when_panicking_secret_key_store_is_used() {

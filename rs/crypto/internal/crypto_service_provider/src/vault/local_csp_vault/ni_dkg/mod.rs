@@ -78,7 +78,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 }
             };
         };
-
+        //TODO CRP-1752: do proper error handling and add corresponding unit tests
+        let _store_result = self
+            .public_key_store_write_lock()
+            .set_once_ni_dkg_dealing_encryption_pubkey(
+                crate::keygen::utils::dkg_dealing_encryption_pk_to_proto(public_key, pop),
+            );
         // FIN:
         Ok((public_key, pop))
     }
