@@ -43,6 +43,12 @@ pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
 pub(crate) const ADDRESS_LENGTH: usize = 44;
 
+pub(crate) const TRANSFER_FEE: u64 = 1_000;
+
+pub(crate) const RETRIEVE_BTC_MIN_FEE: u64 = 100;
+
+pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 100;
+
 pub fn config(env: TestEnv) {
     // Use the btc integration setup.
     btc_integration::btc::config(env.clone());
@@ -224,7 +230,7 @@ pub(crate) async fn install_ledger(
     let init_args = InitArgs {
         minting_account,
         initial_balances: vec![],
-        transfer_fee: 1_000,
+        transfer_fee: TRANSFER_FEE,
         token_name: "Wrapped Bitcoin".to_string(),
         token_symbol: "ckBTC".to_string(),
         metadata: vec![],
@@ -254,8 +260,8 @@ pub(crate) async fn install_minter(
         /// a testing key for testnet and mainnet
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
         // ecdsa_key_name: "test_key_1".parse().unwrap(),
-        retrieve_btc_min_fee: 0,
-        retrieve_btc_min_amount: 0,
+        retrieve_btc_min_fee: RETRIEVE_BTC_MIN_FEE,
+        retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
     };
     install_rust_canister(
