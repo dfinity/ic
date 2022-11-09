@@ -1088,6 +1088,7 @@ where
 {
     fn install_nns_canisters(&self) -> Result<()> {
         let test_env = self.test_env();
+        test_env.set_nns_canisters_env_vars()?;
         let log = test_env.logger();
         let ic_name = self.ic_name();
         let url = self.get_public_url();
@@ -1098,6 +1099,38 @@ where
         info!(log, "Wait for node reporting healthy status");
         self.await_status_is_healthy().unwrap();
         install_nns_canisters(&log, url, &prep_dir, true);
+        Ok(())
+    }
+}
+
+pub trait NnsCanisterEnvVars {
+    fn set_nns_canisters_env_vars(&self) -> Result<()>;
+}
+
+impl NnsCanisterEnvVars for TestEnv {
+    fn set_nns_canisters_env_vars(&self) -> Result<()> {
+        self.set_canister_env_vars("rs/tests/nns-canisters")
+    }
+}
+
+pub trait CanisterEnvVars {
+    fn set_canister_env_vars<P: AsRef<Path>>(&self, dirname: P) -> Result<()>;
+}
+
+impl<T: HasDependencies> CanisterEnvVars for T {
+    fn set_canister_env_vars<P: AsRef<Path>>(&self, dirname: P) -> Result<()> {
+        let dir = self.get_dependency_path(dirname);
+        for entry in (std::fs::read_dir(dir.clone())?).flatten() {
+            let file_name = entry.file_name();
+            let canister_name = file_name
+                .to_str()
+                .expect("Couldn't convert file path to canister name!");
+            let env_name = format!("{}_WASM_PATH", canister_name)
+                .replace('-', "_")
+                .to_uppercase();
+            let path = std::fs::read_link(dir.join(file_name))?;
+            std::env::set_var(env_name, path);
+        }
         Ok(())
     }
 }

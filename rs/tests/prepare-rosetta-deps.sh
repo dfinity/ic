@@ -34,15 +34,16 @@ if ! command -v rosetta-cli &>/dev/null; then
         log "Note: Running as a wrapper script (3rd party downloads will be deleted after this script) ..."
     fi
     set -x
-    ROSETTA_CLI_DIR="$(mktemp -d)/rosetta-cli"
+    export ROSETTA_CLI_DIR="$(mktemp -d)/rosetta-cli"
     ROSETTA_CLI_VERSION="0.6.7"
     BASE_URL="https://github.com/coinbase/rosetta-cli/releases/download/"
     mkdir -p "${ROSETTA_CLI_DIR}" && cd "${ROSETTA_CLI_DIR}"
     curl -sSL "${BASE_URL}v${ROSETTA_CLI_VERSION}/rosetta-cli-${ROSETTA_CLI_VERSION}-linux-amd64.tar.gz" | tar -xzv
     mv "rosetta-cli-${ROSETTA_CLI_VERSION}-linux-amd64" rosetta-cli
-    PATH=$PATH:"$ROSETTA_CLI_DIR"
     cd -
     set +x
+else
+    export ROSETTA_CLI_DIR="$(dirname $(which rosetta-cli))"
 fi
 
 "$@"
@@ -50,5 +51,6 @@ fi
 if [ -n "$*" ] && [ -n "${ROSETTA_CLI_DIR:-}" ]; then
     set -x
     rm -rf "${ROSETTA_CLI_DIR}"
+    unset ROSETTA_CLI_DIR
     set +x
 fi

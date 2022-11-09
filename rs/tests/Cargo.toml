@@ -158,5 +158,17 @@ name = "ic-systest-btc-get-balance"
 path = "bin/btc_get_balance_test.rs"
 
 [[bin]]
+name = "ic-systest-rosetta"
+path = "bin/rosetta_test.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-minter-basics-test"
+path = "bin/ckbtc_minter_basics_test.rs"
+
+[[bin]]
+name = "ic-systest-icrc1-agent-test"
+path = "bin/icrc1_agent_test.rs"
+
+[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "bin/test_driver_e2e_scenarios.rs"

@@ -45,7 +45,7 @@ use lifeline::LIFELINE_CANISTER_WASM;
 use on_wire::{bytes, IntoWire};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
-use std::{future::Future, thread, time::SystemTime};
+use std::{future::Future, path::Path, thread, time::SystemTime};
 
 /// All the NNS canisters that exist at genesis.
 #[derive(Clone)]
@@ -248,6 +248,29 @@ async fn install_rust_canister_with_memory_allocation(
     );
 }
 
+/// Installs a rust canister with the provided memory allocation
+/// from the specified path to the WASM code.
+async fn install_rust_canister_with_memory_allocation_from_path<P: AsRef<Path>>(
+    canister: &mut Canister<'_>,
+    path_to_wasm: P,
+    canister_init_payload: Option<Vec<u8>>,
+    memory_allocation: u64, // in bytes
+) {
+    let wasm: Wasm = Wasm::from_file(path_to_wasm.as_ref());
+    wasm.install_with_retries_onto_canister(
+        canister,
+        canister_init_payload,
+        Some(memory_allocation),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("Could not install {:?} due to {}", path_to_wasm.as_ref(), e));
+    println!(
+        "Installed {} with {:?}",
+        canister.canister_id(),
+        path_to_wasm.as_ref(),
+    );
+}
+
 /// Install a rust canister bytecode in a subnet.
 pub async fn install_rust_canister(
     canister: &mut Canister<'_>,
@@ -259,6 +282,22 @@ pub async fn install_rust_canister(
         canister,
         binary_name,
         cargo_features,
+        canister_init_payload,
+        memory_allocation_of(canister.canister_id()),
+    )
+    .await
+}
+
+/// Install a rust canister bytecode in a subnet
+/// from a specified path to the WASM code.
+pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
+    canister: &mut Canister<'_>,
+    path_to_wasm: P,
+    canister_init_payload: Option<Vec<u8>>,
+) {
+    install_rust_canister_with_memory_allocation_from_path(
+        canister,
+        path_to_wasm,
         canister_init_payload,
         memory_allocation_of(canister.canister_id()),
     )

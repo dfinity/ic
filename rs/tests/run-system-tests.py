@@ -273,6 +273,7 @@ def list_files(root_path: str) -> None:
 
 def populate_dependencies_dir(
     dependencies_dir: str,
+    artifacts_dir: str,
     ic_root_dir: str,
     journalbeat_hosts: str,
     farm_base_url: str,
@@ -292,6 +293,9 @@ def populate_dependencies_dir(
         "ic-os/guestos/scripts/build-bootstrap-config-image.sh",
         "ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh",
         "rs/tests/create-universal-vm-config-image.sh",
+        "rs/tests/rosetta_workspace/ic_rosetta_api_log_config.yml",
+        "rs/tests/rosetta_workspace/rosetta_cli.json",
+        "rs/tests/rosetta_workspace/rosetta_workflows.ros",
     ]
 
     for src_rel_path in scripts_rel_paths:
@@ -324,6 +328,40 @@ def populate_dependencies_dir(
             with open(dst, "w") as f:
                 f.write(content)
     # End: create files with content
+
+    # Create symlinks to $artifacts_dir/$key from $dependencies_dir/$value
+    links = {
+        # NNS canisters
+        "registry-canister.wasm": "rs/tests/nns-canisters/registry-canister",
+        "governance-canister_test.wasm": "rs/tests/nns-canisters/governance-canister_test",
+        "ledger-canister_notify-method.wasm": "rs/tests/nns-canisters/ledger-canister_notify-method",
+        "root-canister.wasm": "rs/tests/nns-canisters/root-canister",
+        "cycles-minting-canister.wasm": "rs/tests/nns-canisters/cycles-minting-canister",
+        "lifeline.wasm": "rs/tests/nns-canisters/lifeline",
+        "genesis-token-canister.wasm": "rs/tests/nns-canisters/genesis-token-canister",
+        "sns-wasm-canister.wasm": "rs/tests/nns-canisters/sns-wasm-canister",
+        # Other required canisters
+        "ic-icrc1-ledger.wasm": "rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
+        "ic-ckbtc-minter.wasm": "rs/bitcoin/ckbtc/minter/ckbtc_minter.wasm",
+        # Needed for rosetta tests
+        "ic-rosetta-api": "rs/rosetta-api/ic-rosetta-api",
+    }
+    for source, dest in links.items():
+        dst = os.path.join(dependencies_dir, dest)
+        dirname = os.path.dirname(dst)
+        os.makedirs(dirname, exist_ok=True)
+        src = os.path.join(artifacts_dir, source)
+        os.symlink(src, dst)  # dst -> src
+
+    # See ./prepare-rosetta-deps.sh
+    ROSETTA_CLI_DIR = os.getenv("ROSETTA_CLI_DIR")
+    if ROSETTA_CLI_DIR is not None:
+        rosetta_cli_dir = os.path.join(dependencies_dir, "external/rosetta-cli")
+        os.makedirs(rosetta_cli_dir)
+        os.symlink(
+            os.path.join(ROSETTA_CLI_DIR, "rosetta-cli"),
+            os.path.join(rosetta_cli_dir, "rosetta-cli"),
+        )
 
 
 def main(
@@ -413,31 +451,6 @@ def main(
     IC_OS_UPD_DEV_IMG_SHA256, IC_OS_UPD_DEV_IMG_URL = get_ic_os_image_sha(
         f"{IMG_BASE_URL}/guest-os/update-img-dev/", filename="update-img.tar.zst"
     )
-    dependencies_dir = os.path.join(working_dir, "system_env/dependencies")
-    logging.info(f"Populating dependencies dir {dependencies_dir}")
-
-    (log_debug_overrides,) = try_extract_arguments(
-        search_args=["--log-debug-overrides"], separator="=", args=runner_args
-    )
-
-    populate_dependencies_dir(
-        dependencies_dir=dependencies_dir,
-        ic_root_dir=CI_PROJECT_DIR,
-        ic_os_img_url=IC_OS_DEV_IMG_URL,
-        ic_os_img_sha256=IC_OS_DEV_IMG_SHA256,
-        ic_os_update_img_url=IC_OS_UPD_DEV_IMG_URL,
-        ic_os_update_img_sha256=IC_OS_UPD_DEV_IMG_SHA256,
-        ic_version_id=IC_VERSION_ID,
-        journalbeat_hosts=TEST_ES_HOSTNAMES,
-        boundary_node_snp_img_sha256=BOUNDARY_NODE_SNP_IMG_SHA256,
-        boundary_node_snp_img_url=BOUNDARY_NODE_SNP_IMG_URL,
-        farm_base_url=DEFAULT_FARM_BASE_URL,
-        boundary_node_img_url=BOUNDARY_NODE_IMG_URL,
-        boundary_node_img_sha256=BOUNDARY_NODE_IMG_SHA256,
-        log_debug_overrides=log_debug_overrides,
-    )
-    logging.debug("dependencies dir has been populated with content:")
-    list_files(dependencies_dir)
 
     if SSH_KEY_DIR is None:
         logging.info("SSH_KEY_DIR variable is not set, generating keys.")
@@ -465,6 +478,34 @@ def main(
     else:
         ARTIFACT_DIR = f"{CI_PROJECT_DIR}/artifacts"
         RUN_CMD = [f"{ARTIFACT_DIR}/prod-test-driver"]
+
+    dependencies_dir = os.path.join(working_dir, "system_env/dependencies")
+    logging.info(f"Populating dependencies dir {dependencies_dir}")
+
+    (log_debug_overrides,) = try_extract_arguments(
+        search_args=["--log-debug-overrides"], separator="=", args=runner_args
+    )
+
+    populate_dependencies_dir(
+        dependencies_dir=dependencies_dir,
+        artifacts_dir=ARTIFACT_DIR,
+        ic_root_dir=CI_PROJECT_DIR,
+        ic_os_img_url=IC_OS_DEV_IMG_URL,
+        ic_os_img_sha256=IC_OS_DEV_IMG_SHA256,
+        ic_os_update_img_url=IC_OS_UPD_DEV_IMG_URL,
+        ic_os_update_img_sha256=IC_OS_UPD_DEV_IMG_SHA256,
+        ic_version_id=IC_VERSION_ID,
+        journalbeat_hosts=TEST_ES_HOSTNAMES,
+        boundary_node_snp_img_sha256=BOUNDARY_NODE_SNP_IMG_SHA256,
+        boundary_node_snp_img_url=BOUNDARY_NODE_SNP_IMG_URL,
+        farm_base_url=DEFAULT_FARM_BASE_URL,
+        boundary_node_img_url=BOUNDARY_NODE_IMG_URL,
+        boundary_node_img_sha256=BOUNDARY_NODE_IMG_SHA256,
+        log_debug_overrides=log_debug_overrides,
+    )
+    logging.debug("dependencies dir has been populated with content:")
+    list_files(dependencies_dir)
+
     RESULT_FILE = f"{working_dir}/{TEST_RESULT_FILE}"
 
     SUMMARY_ARGS = [
@@ -548,7 +589,6 @@ def main(
         + runner_args
         + [
             f"--job-id={JOB_ID}",
-            f"--nns-canister-path={ARTIFACT_DIR}",
             f"--artifacts-path={ARTIFACT_DIR}",
             f"--authorized-ssh-accounts={SSH_KEY_DIR}",
         ]

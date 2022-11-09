@@ -4,7 +4,8 @@ use crate::{
     driver::{
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
+            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            SubnetSnapshot,
         },
     },
     icrc1_agent_test::install_icrc1_ledger,
@@ -30,7 +31,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID,
-    itest_helpers::install_rust_canister,
+    itest_helpers::install_rust_canister_from_path,
 };
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
@@ -218,6 +219,7 @@ pub(crate) async fn create_canister(runtime: &Runtime) -> Canister<'_> {
 }
 
 pub(crate) async fn install_ledger(
+    env: &TestEnv,
     canister: &mut Canister<'_>,
     minting_user: PrincipalId,
     logger: &Logger,
@@ -244,11 +246,12 @@ pub(crate) async fn install_ledger(
             max_transactions_per_response: None,
         },
     };
-    install_icrc1_ledger(canister, &init_args).await;
+    install_icrc1_ledger(env, canister, &init_args).await;
     canister.canister_id()
 }
 
 pub(crate) async fn install_minter(
+    env: &TestEnv,
     canister: &mut Canister<'_>,
     ledger_id: CanisterId,
     logger: &Logger,
@@ -264,10 +267,9 @@ pub(crate) async fn install_minter(
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
     };
-    install_rust_canister(
+    install_rust_canister_from_path(
         canister,
-        "ic-ckbtc-minter",
-        &[],
+        env.get_dependency_path("rs/bitcoin/ckbtc/minter/ckbtc_minter.wasm"),
         Some(Encode!(&args).unwrap()),
     )
     .await;
