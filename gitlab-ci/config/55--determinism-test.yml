@@ -22,7 +22,7 @@ build-determinism-canisters:
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
-    - job: cargo-build-release-linux-native
+    - job: wait-for-bazel-test-all
       artifacts: false
     - job: docker-build-ic
       artifacts: false
