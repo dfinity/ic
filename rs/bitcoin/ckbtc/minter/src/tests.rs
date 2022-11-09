@@ -14,7 +14,7 @@ use proptest::{
     option,
     prelude::{any, Strategy},
 };
-use proptest::{prop_assert, prop_assert_eq};
+use proptest::{prop_assert, prop_assert_eq, prop_assume};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeSet, HashMap};
 
@@ -502,5 +502,41 @@ proptest! {
             Ok(BitcoinAddress::WitnessV0(tx::hash160(&pkbytes))),
             crate::address::parse_address(&addr, Network::Testnet)
         );
+    }
+
+    #[test]
+    fn sec1_to_der_positive_parses(sig in pvec(1u8..0x0f, 64)) {
+        use simple_asn1::{from_der, ASN1Block::{Sequence, Integer}};
+
+        let der = crate::sec1_to_der(&sig);
+        let decoded = from_der(&der).expect("failed to decode DER");
+        if let[Sequence(_, items)] = &decoded[..] {
+            if let [Integer(_, r), Integer(_, s)] = &items[..] {
+                let (_, r_be) = r.to_bytes_be();
+                let (_, s_be) = s.to_bytes_be();
+                prop_assert_eq!(&r_be[..], &sig[..32]);
+                prop_assert_eq!(&s_be[..], &sig[32..]);
+                return Ok(());
+            }
+        }
+        prop_assert!(false, "expected a DER sequence with two items, got: {:?}", decoded);
+    }
+
+    #[test]
+    fn sec1_to_der_non_zero_parses(sig in pvec(any::<u8>(), 64)) {
+        use simple_asn1::{from_der, ASN1Block::{Sequence, Integer}};
+
+        prop_assume!(sig[..32].iter().any(|x| *x > 0));
+        prop_assume!(sig[32..].iter().any(|x| *x > 0));
+
+        let der = crate::sec1_to_der(&sig);
+        let decoded = from_der(&der).expect("failed to decode DER");
+
+        if let[Sequence(_, items)] = &decoded[..] {
+            if let [Integer(_, _r), Integer(_, _s)] = &items[..] {
+                return Ok(());
+            }
+        }
+        prop_assert!(false, "expected a DER sequence with two items, got: {:?}", decoded);
     }
 }

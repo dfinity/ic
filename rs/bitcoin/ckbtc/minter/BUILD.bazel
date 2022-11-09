@@ -76,6 +76,7 @@ rust_test(
     deps = [
         "@crate_index//:bitcoin",
         "@crate_index//:proptest",
+        "@crate_index//:simple_asn1",
     ],
 )
 

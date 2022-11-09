@@ -102,8 +102,10 @@ pub fn sec1_to_der(sec1: &[u8]) -> Vec<u8> {
             "bug: one of the signature components is zero"
         );
 
+        assert_ne!(bytes[0], 0);
+
         let neg = bytes[0] & 0x80 != 0;
-        let n = if neg { bytes.len() } else { bytes.len() + 1 };
+        let n = if neg { bytes.len() + 1 } else { bytes.len() };
         debug_assert!(n <= u8::MAX as usize);
 
         buf.push(0x02);
