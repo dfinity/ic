@@ -98,8 +98,8 @@ pub fn get_pem_content(typ: &PemType) -> String {
         PemType::PemCert => "DEV_ROOT_CA",
         PemType::PemKey => "DEV_ROOT_CA_KEY",
     };
-    let dev_root_ca_value =
-        env::var(name).expect("Expected environment variable {name} not found!");
+    let dev_root_ca_value = env::var(name)
+        .unwrap_or_else(|_| panic!("Expected environment variable {} not found!", name));
     match fs::read_to_string(dev_root_ca_value.clone()) {
         Ok(content) => content,
         Err(_) => dev_root_ca_value,
