@@ -15,13 +15,15 @@ Runbook::
     - update_balance
         - with canister upgrades to verify proper state preservation.
         - with ledger failure simulation to verify proper utxo handling.
+    - retrieve_btc
 
 end::catalog[] */
 
 use crate::{
     ckbtc::lib::{
         activate_ecdsa_signature, create_canister, install_ledger, install_minter, print_subnets,
-        subnet_app, subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
+        subnet_app, subnet_sys, ADDRESS_LENGTH, RETRIEVE_BTC_MIN_AMOUNT, RETRIEVE_BTC_MIN_FEE,
+        TEST_KEY_LOCAL, TRANSFER_FEE,
     },
     driver::{
         test_env::TestEnv,
@@ -38,11 +40,14 @@ use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     get_withdrawal_account::{compute_subaccount, GetWithdrawalAccountResult},
+    retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
-use ic_icrc1::endpoints::{BlockIndex, GetTransactionsRequest, GetTransactionsResponse};
+use ic_icrc1::endpoints::{
+    BlockIndex, GetTransactionsRequest, GetTransactionsResponse, TransferArg, TransferError,
+};
 use ic_icrc1::{Account, Subaccount};
-use ic_icrc1_agent::{Icrc1Agent, Icrc1AgentError};
+use ic_icrc1_agent::{CallMode, Icrc1Agent, Icrc1AgentError};
 use ic_universal_canister::{management, wasm};
 use slog::{debug, info, Logger};
 use std::time::{Duration, Instant};
@@ -200,7 +205,6 @@ pub fn test_update_balance(env: TestEnv) {
         let subaccount0 = compute_subaccount(PrincipalId::from(caller), 0);
         let subaccount1 = compute_subaccount(PrincipalId::from(caller), 567);
         let subaccount2 = compute_subaccount(PrincipalId::from(caller), 890);
-
         let account1 = Account {
             owner: PrincipalId::from(caller),
             subaccount: Some(subaccount1),
@@ -210,7 +214,7 @@ pub fn test_update_balance(env: TestEnv) {
             subaccount: Some(subaccount2),
         };
 
-        // Get the BTC address of the caller's subaccount.
+        // Get the BTC address of the caller's sub-accounts.
         let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;
         let btc_address1 = get_btc_address(&minter_agent, &logger, subaccount1).await;
         let btc_address2 = get_btc_address(&minter_agent, &logger, subaccount2).await;
@@ -298,6 +302,220 @@ pub fn test_update_balance(env: TestEnv) {
         // Calling update_balance again will always trigger a NoNewUtxo error.
         upgrade_canister(&mut minter_canister).await;
         assert_no_new_utxo(&minter_agent, &subaccount2).await;
+    });
+}
+
+/// Test retrieve_btc method of the minter canister.
+pub fn test_retrieve_btc(env: TestEnv) {
+    let logger = env.logger();
+    let subnet_app = subnet_app(&env);
+    let subnet_sys = subnet_sys(&env);
+    let node = subnet_app.nodes().next().expect("No node in app subnet.");
+    let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
+    let app_subnet_id = subnet_app.subnet_id;
+    let btc_rpc = get_btc_client(&env);
+    ensure_wallet(&btc_rpc, &logger);
+
+    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    // Creating the 10 first block to reach the min confirmations of the minter canister.
+    debug!(
+        &logger,
+        "Generating 10 blocks to default address: {}", &default_btc_address
+    );
+    btc_rpc
+        .generate_to_address(10, &default_btc_address)
+        .unwrap();
+
+    block_on(async {
+        let runtime = runtime_from_url(node.get_public_url());
+        let mut ledger_canister = create_canister(&runtime).await;
+        let mut minter_canister = create_canister(&runtime).await;
+        let minting_user = minter_canister.canister_id().get();
+        let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger).await;
+        let minter = Principal::from(minter_id.get());
+        let ledger = Principal::from(ledger_id.get());
+        let agent = assert_create_agent(node.get_public_url().as_str()).await;
+        let universal_canister = UniversalCanister::new(&agent, node.effective_canister_id()).await;
+        activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
+
+        let ledger_agent = Icrc1Agent {
+            agent: agent.clone(),
+            ledger_canister_id: ledger,
+        };
+        let minter_agent = CkBtcMinterAgent {
+            agent: agent.clone(),
+            minter_canister_id: minter,
+        };
+
+        let caller = agent
+            .get_principal()
+            .expect("Error while getting principal.");
+        let subaccount0 = compute_subaccount(PrincipalId::from(caller), 0);
+        let subaccount1 = compute_subaccount(PrincipalId::from(caller), 567);
+        let subaccount2 = compute_subaccount(PrincipalId::from(caller), 890);
+        let account1 = Account {
+            owner: PrincipalId::from(caller),
+            subaccount: Some(subaccount1),
+        };
+
+        // Get the BTC address of the caller's sub-accounts.
+        let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;
+        let btc_address1 = get_btc_address(&minter_agent, &logger, subaccount1).await;
+        let btc_address2 = get_btc_address(&minter_agent, &logger, subaccount2).await;
+
+        // -- beginning of test logic --
+        // Scenario: We are minting btc to account 1, minting ckbtc out of it,
+        // transferring ckbtc to the withdraw account, calling retrieve_btc.
+
+        // Start by creating ckBTC to the first subaccount.
+        generate_blocks(&btc_rpc, &logger, 3, &btc_address1);
+        generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
+        wait_for_bitcoin_balance(
+            &universal_canister,
+            &logger,
+            BTC_MIN_CONFIRMATIONS * BTC_BLOCK_SIZE,
+            &btc_address0,
+        )
+        .await;
+        let update_result = update_balance(&minter_agent, &logger, &subaccount1).await;
+        assert_mint_transaction(
+            &ledger_agent,
+            &logger,
+            update_result.block_index,
+            &account1,
+            3 * BTC_BLOCK_SIZE,
+        )
+        .await;
+
+        // Now test retrieve_btc logic.
+        // Get the subaccount used for btc retrieval.
+        let withdrawal_account = minter_agent
+            .get_withdrawal_account()
+            .await
+            .expect("Error while calling get_withdrawal_account")
+            .account;
+        info!(&logger, "Transferring to the minter the ckBTC to be burned");
+        let transfer_amount = 42_000_000;
+        let transfer_result = ledger_agent
+            .transfer(TransferArg {
+                from_subaccount: Some(subaccount1),
+                to: withdrawal_account.clone(),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(transfer_amount),
+            })
+            .await
+            .expect("Error while calling transfer")
+            .expect("Error during transfer");
+        debug!(
+            &logger,
+            "Transfer to the minter account occurred at block {}", transfer_result
+        );
+        info!(
+            &logger,
+            "Verify account1 balance on the ledger (adjusted for fee)"
+        );
+        assert_account_balance(
+            &ledger_agent,
+            &account1,
+            3 * BTC_BLOCK_SIZE - transfer_amount - TRANSFER_FEE,
+        )
+        .await;
+        info!(&logger, "Verify withdrawal_account balance on the ledger");
+        assert_account_balance(&ledger_agent, &withdrawal_account, transfer_amount).await;
+
+        info!(&logger, "Call retrieve_btc");
+        let retrieve_result = minter_agent
+            .retrieve_btc(RetrieveBtcArgs {
+                amount: 35_000_000,
+                fee: None,
+                address: btc_address2.to_string(),
+            })
+            .await
+            .expect("Error while calling retrieve_btc")
+            .expect("Error in retrieve_btc");
+        assert_eq!(2, retrieve_result.block_index);
+
+        info!(&logger, "Call retrieve_btc with insufficient funds");
+        let retrieve_result = minter_agent
+            .retrieve_btc(RetrieveBtcArgs {
+                amount: 35_000_000,
+                fee: None,
+                address: btc_address2.to_string(),
+            })
+            .await
+            .expect("Error while calling retrieve_btc");
+        assert_eq!(
+            Err(RetrieveBtcError::LedgerError(
+                TransferError::InsufficientFunds {
+                    balance: Nat::from(7_000_000u64)
+                }
+            )),
+            retrieve_result
+        );
+
+        info!(&logger, "Call retrieve_btc with insufficient fee");
+        let retrieve_result = minter_agent
+            .retrieve_btc(RetrieveBtcArgs {
+                amount: 1_000_000,
+                fee: Some(80),
+                address: btc_address2.to_string(),
+            })
+            .await
+            .expect("Error while calling retrieve_btc");
+        assert_eq!(
+            Err(RetrieveBtcError::FeeTooLow(RETRIEVE_BTC_MIN_FEE)),
+            retrieve_result
+        );
+
+        info!(&logger, "Call retrieve_btc with insufficient amount");
+        let retrieve_result = minter_agent
+            .retrieve_btc(RetrieveBtcArgs {
+                amount: 33,
+                fee: None,
+                address: btc_address2.to_string(),
+            })
+            .await
+            .expect("Error while calling retrieve_btc");
+        assert_eq!(
+            Err(RetrieveBtcError::AmountTooLow(RETRIEVE_BTC_MIN_AMOUNT)),
+            retrieve_result
+        );
+
+        // Verify that a burn transaction occurred.
+        assert_burn_transaction(&ledger_agent, &logger, 2, &withdrawal_account, 35_000_000).await;
+
+        // Testing maximum amount of concurrent requests
+        // NB: remove this test once heartbeat is done.
+        debug!(&logger, "Testing transfers up to max concurrency");
+        for i in 1..100 {
+            let retrieve_result = minter_agent
+                .retrieve_btc(RetrieveBtcArgs {
+                    amount: 70_000,
+                    fee: None,
+                    address: btc_address2.to_string(),
+                })
+                .await
+                .expect("Error while calling retrieve_btc")
+                .expect("Error in retrieve_btc");
+            assert_eq!(i + 2, retrieve_result.block_index);
+        }
+        // One additional transfer should trigger an error.
+        debug!(&logger, "Testing one more transfer");
+        let retrieve_result = minter_agent
+            .retrieve_btc(RetrieveBtcArgs {
+                amount: 70_000,
+                fee: None,
+                address: btc_address2.to_string(),
+            })
+            .await
+            .expect("Error while calling retrieve_btc");
+        assert_eq!(
+            Err(RetrieveBtcError::TooManyConcurrentRequests),
+            retrieve_result
+        );
     });
 }
 
@@ -416,6 +634,17 @@ async fn upgrade_canister(canister: &mut Canister<'_>) {
     assert!(upgrade_result.is_ok(), "Error while upgrading canister");
 }
 
+/// Verify the account balance on the ledger.
+async fn assert_account_balance(agent: &Icrc1Agent, account: &Account, expected_balance: u64) {
+    assert_eq!(
+        Nat::from(expected_balance),
+        agent
+            .balance_of(account.clone(), CallMode::Query)
+            .await
+            .expect("Error while calling balance_of")
+    );
+}
+
 /// Verify that a mint transaction exists on the ledger at given block.
 async fn assert_mint_transaction(
     agent: &Icrc1Agent,
@@ -448,6 +677,43 @@ async fn assert_mint_transaction(
     assert_eq!(
         Nat::from(amount),
         mint.amount,
+        "Expecting {} satoshis",
+        amount
+    );
+}
+
+/// Verify that a burn transaction exists on the ledger at given block.
+async fn assert_burn_transaction(
+    agent: &Icrc1Agent,
+    logger: &Logger,
+    block_index: u64,
+    from: &Account,
+    amount: u64,
+) {
+    debug!(
+        &logger,
+        "Looking for a burn transaction at block {}", block_index
+    );
+    let res = get_ledger_transactions(
+        agent,
+        GetTransactionsRequest {
+            start: BlockIndex::from(block_index),
+            length: Nat::from(1u32),
+        },
+    )
+    .await
+    .expect("Error while getting ledger transaction");
+    assert_eq!(1, res.transactions.len(), "Expecting one transaction");
+    let transaction = res.transactions.get(0).unwrap();
+    assert_eq!("burn", transaction.kind);
+    let burn = transaction
+        .burn
+        .as_ref()
+        .expect("Expecting burn transaction");
+    assert_eq!(from, &burn.from, "Expecting burn from account {}", from);
+    assert_eq!(
+        Nat::from(amount),
+        burn.amount,
         "Expecting {} satoshis",
         amount
     );
