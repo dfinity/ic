@@ -22,7 +22,6 @@ impl PendingRequests for PendingBalanceUpdates {
         &mut state.update_balance_principals
     }
 }
-
 pub struct RetrieveBtcUpdates;
 
 impl PendingRequests for RetrieveBtcUpdates {
@@ -33,6 +32,7 @@ impl PendingRequests for RetrieveBtcUpdates {
 
 /// Guards a block from executing twice when called by the same user and from being
 /// executed [MAX_CONCURRENT] or more times in parallel.
+#[must_use]
 pub struct Guard<PR: PendingRequests> {
     principal: Principal,
     _marker: PhantomData<PR>,
@@ -66,6 +66,32 @@ impl<PR: PendingRequests> Drop for Guard<PR> {
     }
 }
 
+/// Ensures that there is only one instance of the heartbeat state machine.
+// Note: the struct has one private field to ensure that nobody can construct it
+// directly outside of this module.
+#[must_use]
+pub struct HeartbeatGuard(());
+
+impl HeartbeatGuard {
+    pub fn new() -> Option<Self> {
+        mutate_state(|s| {
+            if s.is_heartbeat_running {
+                return None;
+            }
+            s.is_heartbeat_running = true;
+            Some(HeartbeatGuard(()))
+        })
+    }
+}
+
+impl Drop for HeartbeatGuard {
+    fn drop(&mut self) {
+        mutate_state(|s| {
+            s.is_heartbeat_running = false;
+        });
+    }
+}
+
 pub fn balance_update_guard(p: Principal) -> Result<Guard<PendingBalanceUpdates>, GuardError> {
     Guard::new(p)
 }
@@ -79,12 +105,13 @@ mod tests {
     use crate::{
         guard::{GuardError, MAX_CONCURRENT},
         lifecycle::init::{init, InitArgs},
+        state::read_state,
     };
     use ic_base_types::CanisterId;
     use ic_btc_types::Network;
     use ic_cdk::export::Principal;
 
-    use super::balance_update_guard;
+    use super::{balance_update_guard, HeartbeatGuard};
 
     fn test_principal(id: u64) -> Principal {
         Principal::try_from_slice(&id.to_le_bytes()).unwrap()
@@ -112,7 +139,7 @@ mod tests {
             let res = balance_update_guard(p).err();
             assert_eq!(res, Some(GuardError::AlreadyProcessing));
         }
-        balance_update_guard(p).unwrap();
+        let _ = balance_update_guard(p).unwrap();
     }
 
     #[test]
@@ -133,5 +160,18 @@ mod tests {
         let pid = test_principal(MAX_CONCURRENT as u64 + 1);
         let res = balance_update_guard(pid).err();
         assert_eq!(res, Some(GuardError::TooManyConcurrentRequests));
+    }
+
+    #[test]
+    fn guard_heartbeat() {
+        init(test_state_args());
+        assert!(!read_state(|s| s.is_heartbeat_running));
+
+        let guard = HeartbeatGuard::new().expect("could not grab heartbeat guard");
+        assert!(HeartbeatGuard::new().is_none());
+        assert!(read_state(|s| s.is_heartbeat_running));
+
+        drop(guard);
+        assert!(!read_state(|s| s.is_heartbeat_running));
     }
 }

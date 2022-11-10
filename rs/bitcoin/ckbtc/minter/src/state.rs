@@ -76,6 +76,7 @@ pub struct CkBtcMinterState {
     pub utxos_state_addresses: BTreeMap<Account, BTreeSet<Utxo>>,
 
     /// Process one heartbeat at a time
+    #[serde(skip)]
     pub is_heartbeat_running: bool,
 }
 
