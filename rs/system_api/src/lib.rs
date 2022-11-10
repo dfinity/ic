@@ -21,7 +21,7 @@ use ic_sys::PageBytes;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    methods::{Callback, WasmClosure},
+    methods::{Callback, SystemMethod, WasmClosure},
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, NumBytes, NumInstructions, NumPages,
     PrincipalId, SubnetId, Time,
 };
@@ -304,6 +304,9 @@ pub enum ApiType {
 
     // For executing the `canister_heartbeat` or `canister_global_timer` methods
     SystemTask {
+        /// System task to execute.
+        /// Only `canister_heartbeat` and `canister_global_timer` are allowed.
+        system_task: SystemMethod,
         time: Time,
         call_context_id: CallContextId,
         /// Optional outgoing request under construction. If `None` no outgoing
@@ -335,11 +338,16 @@ impl ApiType {
         }
     }
 
-    pub fn system_task(time: Time, call_context_id: CallContextId) -> Self {
+    pub fn system_task(
+        system_task: SystemMethod,
+        time: Time,
+        call_context_id: CallContextId,
+    ) -> Self {
         Self::SystemTask {
             time,
             call_context_id,
             outgoing_request: None,
+            system_task,
         }
     }
 
@@ -505,7 +513,11 @@ impl ApiType {
         match self {
             ApiType::Start { .. } => "start",
             ApiType::Init { .. } => "init",
-            ApiType::SystemTask { .. } => "system task",
+            ApiType::SystemTask { system_task, .. } => match system_task {
+                SystemMethod::CanisterHeartbeat => "heartbeat",
+                SystemMethod::CanisterGlobalTimer => "global timer",
+                _ => panic!("Only `canister_heartbeat` and `canister_global_timer` are allowed."),
+            },
             ApiType::Update { .. } => "update",
             ApiType::ReplicatedQuery { .. } => "replicated query",
             ApiType::NonReplicatedQuery { .. } => "non replicated query",

@@ -1132,9 +1132,6 @@ impl ExecutionEnvironment {
                         messaging.canister_id => canister.canister_id().to_string(),
                     );
                 }
-                self.metrics
-                    .execution_round_failed_heartbeat_executions
-                    .inc();
             }
         }
         (canister, instructions_used, result)

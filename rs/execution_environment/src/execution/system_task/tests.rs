@@ -6,9 +6,11 @@ use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
 use ic_replicated_state::{page_map::PAGE_SIZE, CanisterStatus};
 use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::WasmResult;
+use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::methods::SystemMethod;
 use ic_types::NumBytes;
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
 
 #[test]
@@ -425,4 +427,83 @@ fn global_timer_can_be_reactivated_in_canister_global_timer_method() {
             .unwrap();
         assert_eq!(WasmResult::Reply(i.to_le_bytes().into()), result);
     }
+}
+
+#[test]
+fn system_task_metrics_are_observable() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    let set_global_timer = wasm()
+        .set_global_timer_method(wasm().api_global_timer_set(1))
+        .api_global_timer_set(1)
+        .reply_int64()
+        .build();
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+
+    // The timer should be triggered and reactivated each round.
+    for _ in 0..5 {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
+    let executed_messages =
+        fetch_int_counter_vec(env.metrics_registry(), "hypervisor_executed_messages_total");
+
+    let heartbeat_no_response = btreemap! {
+        "api_type".into() => "heartbeat".into(),
+        "status".into() => "NoResponse".into(),
+    };
+    // Includes install code, update and 5 ticks
+    assert_eq!(7, executed_messages[&heartbeat_no_response]);
+
+    let global_timer_no_response = btreemap! {
+        "api_type".into() => "global timer".into(),
+        "status".into() => "NoResponse".into(),
+    };
+    // Includes just 5 ticks, as the timer is activated after the update
+    assert_eq!(5, executed_messages[&global_timer_no_response]);
+}
+
+#[test]
+fn global_timer_is_not_set_if_execution_traps() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    let set_global_timer = wasm()
+        .set_global_timer_method(wasm().api_global_timer_set(1).trap())
+        .api_global_timer_set(1)
+        .reply_int64()
+        .build();
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+
+    // The timer should trap and never reactivated again.
+    for _ in 0..5 {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
+    let executed_messages =
+        fetch_int_counter_vec(env.metrics_registry(), "hypervisor_executed_messages_total");
+
+    let global_timer_called_trap = btreemap! {
+        "api_type".into() => "global timer".into(),
+        "status".into() => "CalledTrap".into(),
+    };
+    assert_eq!(1, executed_messages[&global_timer_called_trap]);
+
+    let heartbeat_no_response = btreemap! {
+        "api_type".into() => "heartbeat".into(),
+        "status".into() => "NoResponse".into(),
+    };
+    // Includes install code, update and 5 ticks
+    assert_eq!(7, executed_messages[&heartbeat_no_response]);
 }
