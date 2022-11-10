@@ -18,14 +18,14 @@ impl CspNiDkgDealing {
     /// TODO (CRP-824): Delete when stub implementations are complete.
     pub fn placeholder_to_delete(seed: u8) -> Self {
         use ni_dkg_groth20_bls12_381 as scheme;
-        fn fr(seed: u8) -> scheme::Fr {
-            scheme::Fr([seed; scheme::Fr::SIZE])
+        fn fr(seed: u8) -> scheme::FrBytes {
+            scheme::FrBytes([seed; scheme::FrBytes::SIZE])
         }
-        fn g1(seed: u8) -> scheme::G1 {
-            scheme::G1([seed; scheme::G1::SIZE])
+        fn g1(seed: u8) -> scheme::G1Bytes {
+            scheme::G1Bytes([seed; scheme::G1Bytes::SIZE])
         }
-        fn g2(seed: u8) -> scheme::G2 {
-            scheme::G2([seed; scheme::G2::SIZE])
+        fn g2(seed: u8) -> scheme::G2Bytes {
+            scheme::G2Bytes([seed; scheme::G2Bytes::SIZE])
         }
         const NUM_RECEIVERS: usize = 1;
         CspNiDkgDealing::Groth20_Bls12_381(scheme::Dealing {
@@ -112,7 +112,7 @@ pub mod ni_dkg_groth20_bls12_381 {
     // These are all the types used together with this scheme, made public in one
     // place for ease of use:
     pub use super::Epoch;
-    pub use crate::curves::bls12_381::{Fr, G1, G2};
+    pub use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     pub use crate::encrypt::forward_secure::groth20_bls12_381::{
         Chunk, FsEncryptionCiphertextBytes, FsEncryptionPlaintext, FsEncryptionPop,
         FsEncryptionPublicKey, NUM_CHUNKS,
@@ -140,14 +140,14 @@ pub mod ni_dkg_groth20_bls12_381 {
     /// corresponding receivers.
     #[derive(Clone)]
     pub struct ZKProofDec {
-        pub first_move_y0: G1,
-        pub first_move_b: [G1; NUM_ZK_REPETITIONS],
-        pub first_move_c: [G1; NUM_ZK_REPETITIONS],
-        pub second_move_d: Vec<G1>, // Has length #receivers+1
-        pub second_move_y: G1,
-        pub response_z_r: Vec<Fr>,
-        pub response_z_s: [Fr; NUM_ZK_REPETITIONS],
-        pub response_z_b: Fr,
+        pub first_move_y0: G1Bytes,
+        pub first_move_b: [G1Bytes; NUM_ZK_REPETITIONS],
+        pub first_move_c: [G1Bytes; NUM_ZK_REPETITIONS],
+        pub second_move_d: Vec<G1Bytes>, // Has length #receivers+1
+        pub second_move_y: G1Bytes,
+        pub response_z_r: Vec<FrBytes>,
+        pub response_z_s: [FrBytes; NUM_ZK_REPETITIONS],
+        pub response_z_b: FrBytes,
     }
 
     /// Private structure to help implement ZKProofDec traits.
@@ -163,14 +163,14 @@ pub mod ni_dkg_groth20_bls12_381 {
     #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
     #[serde(rename(serialize = "ZKProofDec"))]
     struct ZKProofDecHelper {
-        pub first_move_y0: G1,
-        pub first_move_b: Vec<G1>,
-        pub first_move_c: Vec<G1>,
-        pub second_move_d: Vec<G1>, // Has length #receivers+1
-        pub second_move_y: G1,
-        pub response_z_r: Vec<Fr>,
-        pub response_z_s: Vec<Fr>,
-        pub response_z_b: Fr,
+        pub first_move_y0: G1Bytes,
+        pub first_move_b: Vec<G1Bytes>,
+        pub first_move_c: Vec<G1Bytes>,
+        pub second_move_d: Vec<G1Bytes>, // Has length #receivers+1
+        pub second_move_y: G1Bytes,
+        pub response_z_r: Vec<FrBytes>,
+        pub response_z_s: Vec<FrBytes>,
+        pub response_z_b: FrBytes,
     }
 
     impl From<&ZKProofDec> for ZKProofDecHelper {
@@ -192,11 +192,11 @@ pub mod ni_dkg_groth20_bls12_381 {
         type Error = ();
 
         fn try_from(item: ZKProofDecHelper) -> Result<Self, Self::Error> {
-            let first_move_b: ArrayVec<[G1; NUM_ZK_REPETITIONS]> =
+            let first_move_b: ArrayVec<[G1Bytes; NUM_ZK_REPETITIONS]> =
                 item.first_move_b.into_iter().collect();
-            let first_move_c: ArrayVec<[G1; NUM_ZK_REPETITIONS]> =
+            let first_move_c: ArrayVec<[G1Bytes; NUM_ZK_REPETITIONS]> =
                 item.first_move_c.into_iter().collect();
-            let response_z_s: ArrayVec<[Fr; NUM_ZK_REPETITIONS]> =
+            let response_z_s: ArrayVec<[FrBytes; NUM_ZK_REPETITIONS]> =
                 item.response_z_s.into_iter().collect();
             Ok(ZKProofDec {
                 first_move_y0: item.first_move_y0,
@@ -259,11 +259,11 @@ pub mod ni_dkg_groth20_bls12_381 {
     /// curve.
     #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
     pub struct ZKProofShare {
-        pub first_move_f: G1,
-        pub first_move_a: G2,
-        pub first_move_y: G1,
-        pub response_z_r: Fr,
-        pub response_z_a: Fr,
+        pub first_move_f: G1Bytes,
+        pub first_move_a: G2Bytes,
+        pub first_move_y: G1Bytes,
+        pub response_z_r: FrBytes,
+        pub response_z_a: FrBytes,
     }
 
     /// All the public data needed for threshold key derivation.

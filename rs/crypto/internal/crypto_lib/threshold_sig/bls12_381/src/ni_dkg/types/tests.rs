@@ -1,7 +1,7 @@
 use super::super::groth20_bls12_381::types::{BTENode, FsEncryptionSecretKey};
 use super::*;
 use crate::test_utils::assert_bte_node_components_are_redacted;
-use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
 
 #[test]
 fn should_redact_csp_fs_encryption_secretkey_debug() {

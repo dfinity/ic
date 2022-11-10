@@ -5,7 +5,7 @@ pub use rand_chacha::ChaChaRng;
 pub use std::collections::BTreeMap;
 
 mod internal_types {
-    pub use ic_crypto_internal_types::curves::bls12_381::Fr as FrBytes;
+    pub use ic_crypto_internal_types::curves::bls12_381::FrBytes;
     pub use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
     pub use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
     pub use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes as ThresholdPublicKeyBytes;

@@ -141,7 +141,7 @@ mod basic_functionality {
 mod advanced_functionality {
     use super::*;
     use crate::types::{PopBytes, PublicKeyBytes};
-    use ic_crypto_internal_types::curves::bls12_381::G2;
+    use ic_crypto_internal_types::curves::bls12_381::G2Bytes;
     use proptest::prelude::*;
 
     #[test]
@@ -177,7 +177,7 @@ mod advanced_functionality {
         let pop = multi_crypto::create_pop(&public_key, &secret_key);
         let pop_bytes = PopBytes::from(pop);
         let mut public_key_bytes = PublicKeyBytes::from(public_key);
-        public_key_bytes.0[G2::FLAG_BYTE_OFFSET] &= !G2::COMPRESSED_FLAG;
+        public_key_bytes.0[G2Bytes::FLAG_BYTE_OFFSET] &= !G2Bytes::COMPRESSED_FLAG;
         match api::verify_pop(pop_bytes, public_key_bytes) {
             Err(e) => assert!(e.to_string().contains("Point decoding failed")),
             Ok(_) => panic!("error should have been thrown"),
@@ -193,10 +193,10 @@ mod advanced_functionality {
         // Zero out the bytes, set the compression flag.
         // This represents x = 0, which happens to have no solution
         // on the G2 curve.
-        for i in 0..G2::SIZE {
+        for i in 0..G2Bytes::SIZE {
             public_key_bytes.0[i] = 0;
         }
-        public_key_bytes.0[G2::FLAG_BYTE_OFFSET] |= G2::COMPRESSED_FLAG;
+        public_key_bytes.0[G2Bytes::FLAG_BYTE_OFFSET] |= G2Bytes::COMPRESSED_FLAG;
         match api::verify_pop(pop_bytes, public_key_bytes) {
             Err(e) => assert!(e.to_string().contains("Point decoding failed")),
             Ok(_) => panic!("error should have been thrown"),
@@ -211,10 +211,10 @@ mod advanced_functionality {
         let mut public_key_bytes = PublicKeyBytes::from(public_key);
         // By manual rejection sampling, we found an x-coordinate with a
         // solution, which is unlikely to have order r.
-        for i in 0..G2::SIZE {
+        for i in 0..G2Bytes::SIZE {
             public_key_bytes.0[i] = 0;
         }
-        public_key_bytes.0[G2::FLAG_BYTE_OFFSET] |= G2::COMPRESSED_FLAG;
+        public_key_bytes.0[G2Bytes::FLAG_BYTE_OFFSET] |= G2Bytes::COMPRESSED_FLAG;
         public_key_bytes.0[5] = 3;
         match api::verify_pop(pop_bytes, public_key_bytes) {
             Err(e) => assert!(e.to_string().contains("Point decoding failed")),

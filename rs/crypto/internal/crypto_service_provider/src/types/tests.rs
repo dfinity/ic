@@ -15,7 +15,7 @@ use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKey
 use ic_crypto_internal_threshold_sig_ecdsa::{
     EccCurveType, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
 };
-use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPok, FsEncryptionPublicKey,
 };

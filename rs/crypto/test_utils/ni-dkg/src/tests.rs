@@ -173,7 +173,7 @@ fn should_correctly_retrieve_initial_high_threshold_ni_dkg_transcript_from_regis
 /// for tests whose aim is to detect changes in the serialization of the
 /// transcript.
 fn transcript_without_empty_or_default_data() -> NiDkgTranscript {
-    use ic_crypto_internal_types::curves::bls12_381::{G1, G2};
+    use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
         EncryptedShares, PublicCoefficientsBytes, Transcript, NUM_CHUNKS,
     };
@@ -181,10 +181,10 @@ fn transcript_without_empty_or_default_data() -> NiDkgTranscript {
     use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 
     let encrypted_shares = EncryptedShares {
-        rand_r: [G1([1; G1::SIZE]); NUM_CHUNKS],
-        rand_s: [G1([12; G1::SIZE]); NUM_CHUNKS],
-        rand_z: [G2([123; G2::SIZE]); NUM_CHUNKS],
-        ciphertext_chunks: vec![[G1([234; G1::SIZE]); NUM_CHUNKS]],
+        rand_r: [G1Bytes([1; G1Bytes::SIZE]); NUM_CHUNKS],
+        rand_s: [G1Bytes([12; G1Bytes::SIZE]); NUM_CHUNKS],
+        rand_z: [G2Bytes([123; G2Bytes::SIZE]); NUM_CHUNKS],
+        ciphertext_chunks: vec![[G1Bytes([234; G1Bytes::SIZE]); NUM_CHUNKS]],
     };
     NiDkgTranscript {
         dkg_id: NiDkgId {

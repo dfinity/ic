@@ -2,7 +2,7 @@
 use super::super::types::{BTENode, FsEncryptionSecretKey};
 use super::crypto;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
-use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Chunk, FsEncryptionPlaintext, FsEncryptionPop, FsEncryptionPublicKey, NUM_CHUNKS,
 };

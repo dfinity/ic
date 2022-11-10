@@ -11,7 +11,7 @@ use crate::{
     crypto::{keygen, keygen_with_secret},
 };
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_types::curves::bls12_381::Fr as FrBytes;
+use ic_crypto_internal_types::curves::bls12_381::FrBytes;
 use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;

@@ -20,7 +20,7 @@ mod proto_to_csp_fs_enc_pubkey_conversions_tests {
         assert_eq!(
             csp_fs_enc_pk.unwrap(),
             CspFsEncryptionPublicKey::Groth20_Bls12_381(groth20_bls12_381::FsEncryptionPublicKey(
-                bls12_381::G1(pk_data)
+                bls12_381::G1Bytes(pk_data)
             ))
         );
     }
@@ -78,7 +78,7 @@ mod proto_to_csp_fs_enc_pubkey_conversions_tests {
 
 mod proto_to_csp_fs_enc_pop_conversions_tests {
     use super::*;
-    use crate::curves::bls12_381::{Fr, G1};
+    use crate::curves::bls12_381::{FrBytes, G1Bytes};
 
     #[test]
     fn should_convert_proto_to_pop() {
@@ -160,9 +160,9 @@ mod proto_to_csp_fs_enc_pop_conversions_tests {
 
     fn dummy_csp_pop() -> CspFsEncryptionPop {
         CspFsEncryptionPop::Groth20WithPop_Bls12_381(groth20_bls12_381::FsEncryptionPop {
-            pop_key: G1([42; G1::SIZE]),
-            challenge: Fr([42; Fr::SIZE]),
-            response: Fr([42; Fr::SIZE]),
+            pop_key: G1Bytes([42; G1Bytes::SIZE]),
+            challenge: FrBytes([42; FrBytes::SIZE]),
+            response: FrBytes([42; FrBytes::SIZE]),
         })
     }
 }

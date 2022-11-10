@@ -12,7 +12,6 @@ pub mod bls12_381 {
     pub mod conversions;
 
     use std::fmt;
-    use std::hash::{Hash, Hasher};
     use zeroize::DefaultIsZeroes;
 
     /// A field representative in serialised, library independent form.
@@ -24,35 +23,35 @@ pub mod bls12_381 {
     /// - The IETF draft does not specify a serialisation for this:
     ///   https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/>
     #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-    pub struct Fr(pub [u8; Fr::SIZE]);
-    crate::derive_serde!(Fr, Fr::SIZE);
-    impl Fr {
+    pub struct FrBytes(pub [u8; FrBytes::SIZE]);
+    crate::derive_serde!(FrBytes, FrBytes::SIZE);
+    impl FrBytes {
         pub const SIZE: usize = 32;
 
         #[inline]
-        pub fn as_bytes(&self) -> &[u8; Fr::SIZE] {
+        pub fn as_bytes(&self) -> &[u8; FrBytes::SIZE] {
             &self.0
         }
     }
-    impl fmt::Debug for Fr {
+    impl fmt::Debug for FrBytes {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "Fr({:?})", hex::encode(&self.0[..]))
         }
     }
-    impl Default for Fr {
+    impl Default for FrBytes {
         fn default() -> Self {
-            Fr([0; Fr::SIZE])
+            FrBytes([0; FrBytes::SIZE])
         }
     }
-    impl DefaultIsZeroes for Fr {}
+    impl DefaultIsZeroes for FrBytes {}
 
-    impl AsRef<[u8]> for Fr {
+    impl AsRef<[u8]> for FrBytes {
         fn as_ref(&self) -> &[u8] {
             &self.0
         }
     }
-    impl From<[u8; Fr::SIZE]> for Fr {
-        fn from(b: [u8; Fr::SIZE]) -> Self {
+    impl From<[u8; FrBytes::SIZE]> for FrBytes {
+        fn from(b: [u8; FrBytes::SIZE]) -> Self {
             Self(b)
         }
     }
@@ -73,11 +72,11 @@ pub mod bls12_381 {
     /// - This representation is consistent with IETF draft: https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/?include_text=1
     ///   which specifies the "compressed serialization formats for E1 and E2
     ///   defined by [ZCash]"
-    #[derive(Copy, Clone)]
-    pub struct G1(pub [u8; G1::SIZE]);
-    crate::derive_serde!(G1, G1::SIZE);
+    #[derive(Copy, Clone, Eq, PartialEq, Hash)]
+    pub struct G1Bytes(pub [u8; G1Bytes::SIZE]);
+    crate::derive_serde!(G1Bytes, G1Bytes::SIZE);
 
-    impl G1 {
+    impl G1Bytes {
         pub const SIZE: usize = 48;
         pub const COMPRESSED_FLAG: u8 = 1 << 7;
         pub const INFINITY_FLAG: u8 = 1 << 6;
@@ -87,39 +86,28 @@ pub mod bls12_381 {
         pub const X_BYTES_OFFSET: usize = 0;
 
         #[inline]
-        pub fn as_bytes(&self) -> &[u8; G1::SIZE] {
+        pub fn as_bytes(&self) -> &[u8; G1Bytes::SIZE] {
             &self.0
         }
     }
-    impl fmt::Debug for G1 {
+    impl fmt::Debug for G1Bytes {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "G1(0x{})", hex::encode(&self.0[..]))
         }
     }
-    impl PartialEq for G1 {
-        fn eq(&self, other: &Self) -> bool {
-            self.0[..] == other.0[..]
-        }
-    }
-    impl Eq for G1 {}
-    impl Hash for G1 {
-        fn hash<H: Hasher>(&self, state: &mut H) {
-            self.0[..].hash(state);
-        }
-    }
-    impl AsRef<[u8]> for G1 {
+    impl AsRef<[u8]> for G1Bytes {
         fn as_ref(&self) -> &[u8] {
             &self.0
         }
     }
-    impl Default for G1 {
+    impl Default for G1Bytes {
         fn default() -> Self {
-            G1([0; G1::SIZE])
+            G1Bytes([0; G1Bytes::SIZE])
         }
     }
-    impl DefaultIsZeroes for G1 {}
-    impl From<[u8; G1::SIZE]> for G1 {
-        fn from(b: [u8; G1::SIZE]) -> Self {
+    impl DefaultIsZeroes for G1Bytes {}
+    impl From<[u8; G1Bytes::SIZE]> for G1Bytes {
+        fn from(b: [u8; G1Bytes::SIZE]) -> Self {
             Self(b)
         }
     }
@@ -143,11 +131,11 @@ pub mod bls12_381 {
     ///   which specifies the "compressed serialization formats for E1 and E2
     ///   defined by [ZCash]"
     /// - Ordering is by c1, or by c0 if the c1 are identical.
-    #[derive(Copy, Clone)]
-    pub struct G2(pub [u8; G2::SIZE]);
-    crate::derive_serde!(G2, G2::SIZE);
+    #[derive(Copy, Clone, Eq, PartialEq, Hash)]
+    pub struct G2Bytes(pub [u8; G2Bytes::SIZE]);
+    crate::derive_serde!(G2Bytes, G2Bytes::SIZE);
 
-    impl G2 {
+    impl G2Bytes {
         pub const SIZE: usize = 96;
         pub const COMPRESSED_FLAG: u8 = 1 << 7;
         pub const INFINITY_FLAG: u8 = 1 << 6;
@@ -158,40 +146,29 @@ pub mod bls12_381 {
         pub const X0_BYTES_OFFSET: usize = 48;
 
         #[inline]
-        pub fn as_bytes(&self) -> &[u8; G2::SIZE] {
+        pub fn as_bytes(&self) -> &[u8; G2Bytes::SIZE] {
             &self.0
         }
     }
-    impl fmt::Debug for G2 {
+    impl fmt::Debug for G2Bytes {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let hex_sig = hex::encode(&self.0[..]);
             write!(f, "G2(0x{})", hex_sig)
         }
     }
-    impl PartialEq for G2 {
-        fn eq(&self, other: &Self) -> bool {
-            self.0[..] == other.0[..]
-        }
-    }
-    impl Eq for G2 {}
-    impl Hash for G2 {
-        fn hash<H: Hasher>(&self, state: &mut H) {
-            self.0[..].hash(state);
-        }
-    }
-    impl AsRef<[u8]> for G2 {
+    impl AsRef<[u8]> for G2Bytes {
         fn as_ref(&self) -> &[u8] {
             &self.0
         }
     }
-    impl Default for G2 {
+    impl Default for G2Bytes {
         fn default() -> Self {
-            G2([0; G2::SIZE])
+            G2Bytes([0; G2Bytes::SIZE])
         }
     }
-    impl DefaultIsZeroes for G2 {}
-    impl From<[u8; G2::SIZE]> for G2 {
-        fn from(b: [u8; G2::SIZE]) -> Self {
+    impl DefaultIsZeroes for G2Bytes {}
+    impl From<[u8; G2Bytes::SIZE]> for G2Bytes {
+        fn from(b: [u8; G2Bytes::SIZE]) -> Self {
             Self(b)
         }
     }
@@ -204,25 +181,25 @@ mod test {
 
     #[test]
     fn test_fr_zeroize_leaves_zero() {
-        let mut fr = Fr([42u8; Fr::SIZE]);
-        assert_ne!(fr, Fr::default());
+        let mut fr = FrBytes([42u8; FrBytes::SIZE]);
+        assert_ne!(fr, FrBytes::default());
         fr.zeroize();
-        assert_eq!(fr, Fr::default());
+        assert_eq!(fr, FrBytes::default());
     }
 
     #[test]
     fn test_g1_zeroize_leaves_zero() {
-        let mut g1 = G1([42u8; G1::SIZE]);
-        assert_ne!(g1, G1::default());
+        let mut g1 = G1Bytes([42u8; G1Bytes::SIZE]);
+        assert_ne!(g1, G1Bytes::default());
         g1.zeroize();
-        assert_eq!(g1, G1::default());
+        assert_eq!(g1, G1Bytes::default());
     }
 
     #[test]
     fn test_g2_zeroize_leaves_zero() {
-        let mut g2 = G2([42u8; G2::SIZE]);
-        assert_ne!(g2, G2::default());
+        let mut g2 = G2Bytes([42u8; G2Bytes::SIZE]);
+        assert_ne!(g2, G2Bytes::default());
         g2.zeroize();
-        assert_eq!(g2, G2::default());
+        assert_eq!(g2, G2Bytes::default());
     }
 }
