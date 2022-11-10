@@ -8,7 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.7.2] - 2022-10-18
 ### Fixed
-- Invalid Docker image configuration
+- Invalid Docker image configuration.
+
+### Changed
+- The dfinity/rosetta-api docker image is now based on a
+  [distroless](https://github.com/GoogleContainerTools/distroless)
+  container that contains only the rosetta binary and direct runtime dependencies.
+  As a consequence, you will not be able to enter shell on this image.
 
 ## [1.7.1] - 2022-10-12
 ### Fixed
