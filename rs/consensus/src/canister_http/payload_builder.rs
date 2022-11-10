@@ -121,21 +121,21 @@ impl CanisterHttpPayloadBuilderImpl {
     }
 }
 
-/// This function takes sets of shares for each response associated with a
-/// single callback id, and checks whether that collection of sets of shares can
-/// be considered to have enough disagreement that it will be impossible to
-/// reach consensus with the number of faults tolerated. Specifically, what is
-/// done is as follows:
+/// This function takes a mapping of response metadata to supporting shares
+/// and determines, whether the divergence criterium is met.
 ///
+/// The divergence criterium is met, if enough nodes support different responses,
+/// such that the support of nodes who are missing from the set
+/// (since their shares have not been received yet) can not bring any response
+/// above the required threshold.
+///
+/// Specifically, what is done is as follows:
 /// - The sets of shares are sorted from largest to smallest, and then the
 /// largest set is removed.
-///
 /// - A new set of "diverging signers" is created by collecting every node id
 /// that has signed a share not in the largest group.
-///
 /// - Finally any signers appearing in the largest group are
 /// removed from the diverging signers group.
-///
 /// - If the size of this group exceeds the number of faults tolerated, then the
 /// divergence criteria is met.
 fn grouped_shares_meet_divergence_criteria(
