@@ -118,8 +118,8 @@ def exit_with_log(msg: str) -> None:
 
 
 def extract_artifacts(source_dir: str, dest_dir: str, is_set_executable: bool) -> None:
-    logging.info(f"Unzipping files in {source_dir} dir.")
     files_list = os.listdir(source_dir)
+    logging.info(f"Unzipping {len(files_list)} files in {source_dir} dir.")
     for file in files_list:
         file_name = os.path.join(source_dir, file)
         if file_name.endswith(".gz"):
@@ -479,33 +479,6 @@ def main(
         ARTIFACT_DIR = f"{CI_PROJECT_DIR}/artifacts"
         RUN_CMD = [f"{ARTIFACT_DIR}/prod-test-driver"]
 
-    dependencies_dir = os.path.join(working_dir, "system_env/dependencies")
-    logging.info(f"Populating dependencies dir {dependencies_dir}")
-
-    (log_debug_overrides,) = try_extract_arguments(
-        search_args=["--log-debug-overrides"], separator="=", args=runner_args
-    )
-
-    populate_dependencies_dir(
-        dependencies_dir=dependencies_dir,
-        artifacts_dir=ARTIFACT_DIR,
-        ic_root_dir=CI_PROJECT_DIR,
-        ic_os_img_url=IC_OS_DEV_IMG_URL,
-        ic_os_img_sha256=IC_OS_DEV_IMG_SHA256,
-        ic_os_update_img_url=IC_OS_UPD_DEV_IMG_URL,
-        ic_os_update_img_sha256=IC_OS_UPD_DEV_IMG_SHA256,
-        ic_version_id=IC_VERSION_ID,
-        journalbeat_hosts=TEST_ES_HOSTNAMES,
-        boundary_node_snp_img_sha256=BOUNDARY_NODE_SNP_IMG_SHA256,
-        boundary_node_snp_img_url=BOUNDARY_NODE_SNP_IMG_URL,
-        farm_base_url=DEFAULT_FARM_BASE_URL,
-        boundary_node_img_url=BOUNDARY_NODE_IMG_URL,
-        boundary_node_img_sha256=BOUNDARY_NODE_IMG_SHA256,
-        log_debug_overrides=log_debug_overrides,
-    )
-    logging.debug("dependencies dir has been populated with content:")
-    list_files(dependencies_dir)
-
     RESULT_FILE = f"{working_dir}/{TEST_RESULT_FILE}"
 
     SUMMARY_ARGS = [
@@ -579,8 +552,35 @@ def main(
         if download_release_returncode != 0:
             logging.error(f"{RED}Failed to download release artifacts.{NC}")
 
-    logging.debug("ARTIFACTS_DIR content:")
-    os.system(f"ls -R {ARTIFACT_DIR}")
+    logging.debug(f"ARTIFACT_DIR = {ARTIFACT_DIR} content:")
+    list_files(ARTIFACT_DIR)
+
+    dependencies_dir = os.path.join(working_dir, "system_env/dependencies")
+    logging.info(f"Populating dependencies dir {dependencies_dir}")
+
+    (log_debug_overrides,) = try_extract_arguments(
+        search_args=["--log-debug-overrides"], separator="=", args=runner_args
+    )
+
+    populate_dependencies_dir(
+        dependencies_dir=dependencies_dir,
+        artifacts_dir=ARTIFACT_DIR,
+        ic_root_dir=CI_PROJECT_DIR,
+        ic_os_img_url=IC_OS_DEV_IMG_URL,
+        ic_os_img_sha256=IC_OS_DEV_IMG_SHA256,
+        ic_os_update_img_url=IC_OS_UPD_DEV_IMG_URL,
+        ic_os_update_img_sha256=IC_OS_UPD_DEV_IMG_SHA256,
+        ic_version_id=IC_VERSION_ID,
+        journalbeat_hosts=TEST_ES_HOSTNAMES,
+        boundary_node_snp_img_sha256=BOUNDARY_NODE_SNP_IMG_SHA256,
+        boundary_node_snp_img_url=BOUNDARY_NODE_SNP_IMG_URL,
+        farm_base_url=DEFAULT_FARM_BASE_URL,
+        boundary_node_img_url=BOUNDARY_NODE_IMG_URL,
+        boundary_node_img_sha256=BOUNDARY_NODE_IMG_SHA256,
+        log_debug_overrides=log_debug_overrides,
+    )
+    logging.debug("dependencies dir has been populated with content:")
+    list_files(dependencies_dir)
 
     run_test_driver_cmd = (
         [SHELL_WRAPPER]
