@@ -13,7 +13,7 @@ pub enum InstOrBytes<'a> {
 }
 
 pub struct Body<'a> {
-    locals: Vec<(u32, ValType)>,
+    pub locals: Vec<(u32, ValType)>,
     pub instructions: Vec<Operator<'a>>,
 }
 
