@@ -1,0 +1,178 @@
+{
+  "canisters": {
+    "nns-governance": {
+      "build": "",
+      "wasm": "",
+      "candid": "../nns/governance/canister/governance.did",
+      "type": "custom",
+      "remote": {
+        "id": {
+          "ic": "rrkah-fqaaa-aaaaa-aaaaq-cai"
+        }
+      }
+    },
+    "sns-wasm": {
+      "build": "",
+      "wasm": "",
+      "candid": "../nns/sns-wasm/canister/sns-wasm.did",
+      "type": "custom",
+      "remote": {
+        "id": {
+          "ic": "qaa6y-5yaaa-aaaaa-aaafa-cai"
+        }
+      }
+    },
+    "nns-ledger": {
+      "build": "",
+      "wasm": "",
+      "candid": "../rosetta-api/icp_ledger/ledger.did",
+      "type": "custom",
+      "remote": {
+        "id": {
+          "ic": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+        }
+      }
+    },
+    "sns-governance": {
+      "build": "",
+      "wasm": "",
+      "candid": "governance/canister/governance.did",
+      "type": "custom"
+    },
+    "sns-index": {
+      "build": "",
+      "wasm": "",
+      "candid": "../rosetta-api/icrc1/index/index.did",
+      "type": "custom"
+    },
+    "sns-ledger": {
+      "build": "",
+      "wasm": "",
+      "candid": "../rosetta-api/icrc1/ledger/icrc1.did",
+      "type": "custom"
+    },
+    "sns-root": {
+      "build": "",
+      "wasm": "",
+      "candid": "root/canister/root.did",
+      "type": "custom"
+    },
+    "sns-swap": {
+      "build": "",
+      "wasm": "",
+      "candid": "swap/canister/swap.did",
+      "type": "custom"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8080",
+      "config": {
+        "FETCH_ROOT_KEY": true,
+        "HOST": "http://localhost:8080"
+      },
+      "replica": {
+        "subnet_type": "system"
+      },
+      "type": "ephemeral"
+    },
+    "ic": {
+      "config": {
+        "FETCH_ROOT_KEY": false,
+        "HOST": "https://ic0.app",
+        "IDENTITY_SERVICE_URL": "https://identity.ic0.app/"
+      },
+      "providers": [
+        "https://ic0.app/"
+      ],
+      "type": "persistent"
+    },
+    "small06": {
+      "config": {
+        "FETCH_ROOT_KEY": true,
+        "HOST": "https://small06.dfinity.network"
+      },
+      "providers": [
+        "http://[2a00:fb01:400:42:5000:caff:fed1:b2e7]:8080"
+      ],
+      "type": "persistent"
+    },
+    "small09": {
+      "config": {
+        "FETCH_ROOT_KEY": true,
+        "HOST": "https://small09.dfinity.network"
+      },
+      "providers": [
+        "http://[2a00:fb01:400:42:5000:d0ff:fe7c:bd3f]:8080"
+      ],
+      "type": "persistent"
+    },
+    "small11": {
+      "config": {
+        "FETCH_ROOT_KEY": true,
+        "HOST": "https://small11.dfinity.network"
+      },
+      "providers": [
+        "http://[2a00:fb01:400:42:5000:eeff:feae:ab37]:8080"
+      ],
+      "type": "persistent"
+    },
+    "small12": {
+      "config": {
+        "FETCH_ROOT_KEY": true,
+        "HOST": "https://small12.dfinity.network"
+      },
+      "providers": [
+        "http://[2a00:fb01:400:42:5000:54ff:fef3:eb8]:8080"
+      ],
+      "type": "persistent"
+    },
+    "small13": {
+      "config": {
+        "FETCH_ROOT_KEY": true,
+        "HOST": "https://small13.dfinity.network"
+      },
+      "providers": [
+        "http://[2a00:fb01:400:42:5000:c6ff:fe29:bfba]:8080"
+      ],
+      "type": "persistent"
+    },
+    "small14": {
+      "config": {
+        "FETCH_ROOT_KEY": true,
+        "HOST": "https://small14.dfinity.network"
+      },
+      "providers": [
+        "http://[2a00:fb01:400:42:5000:a4ff:fe4f:a75e]:8080"
+      ],
+      "type": "persistent"
+    },
+    "staging": {
+      "config": {
+        "FETCH_ROOT_KEY": true,
+        "HOST": "https://nnsdapp.dfinity.network"
+      },
+      "providers": [
+        "http://[2a00:fb01:400:42:5000:d1ff:fefe:987e]:8080"
+      ],
+      "type": "persistent"
+    },
+    "testnet": {
+      "config": {
+        "FETCH_ROOT_KEY": true,
+        "HOST": "https://nnsdapp.dfinity.network"
+      },
+      "providers": [
+        "http://[2a00:fb01:400:42:5000:d1ff:fefe:987e]:8080"
+      ],
+      "type": "persistent"
+    }
+  },
+  "version": 1
+}
