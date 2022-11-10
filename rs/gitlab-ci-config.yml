@@ -79,7 +79,6 @@ ci_jobs_required:
   - gen-cargo-pipeline
   - pre-commit
   - python-tests
-  - dependencies-check
   # prod tests
   - rejoin-nightly
   - rejoin-test-slo
