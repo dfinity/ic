@@ -1,7 +1,7 @@
 use super::*;
 use crate::crypto::tests::set_of;
 use crate::NumberOfNodes;
-use ic_crypto_internal_types::curves::bls12_381::{Fr, G1, G2};
+use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Dealing, EncryptedShares, PublicCoefficientsBytes, ZKProofDec, ZKProofShare, NUM_CHUNKS,
@@ -253,10 +253,10 @@ fn csp_dealing() -> CspNiDkgDealing {
             coefficients: vec![],
         },
         ciphertexts: EncryptedShares {
-            rand_r: [G1([1; G1::SIZE]); NUM_CHUNKS],
-            rand_s: [G1([12; G1::SIZE]); NUM_CHUNKS],
-            rand_z: [G2([123; G2::SIZE]); NUM_CHUNKS],
-            ciphertext_chunks: vec![[G1([234; G1::SIZE]); NUM_CHUNKS]],
+            rand_r: [G1Bytes([1; G1Bytes::SIZE]); NUM_CHUNKS],
+            rand_s: [G1Bytes([12; G1Bytes::SIZE]); NUM_CHUNKS],
+            rand_z: [G2Bytes([123; G2Bytes::SIZE]); NUM_CHUNKS],
+            ciphertext_chunks: vec![[G1Bytes([234; G1Bytes::SIZE]); NUM_CHUNKS]],
         },
         zk_proof_decryptability: zk_proof_dec(),
         zk_proof_correct_sharing: zk_proof_share(),
@@ -264,8 +264,8 @@ fn csp_dealing() -> CspNiDkgDealing {
 }
 
 pub fn zk_proof_dec() -> ZKProofDec {
-    let fr = Fr([0u8; Fr::SIZE]);
-    let g1 = G1([0u8; G1::SIZE]);
+    let fr = FrBytes([0u8; FrBytes::SIZE]);
+    let g1 = G1Bytes([0u8; G1Bytes::SIZE]);
 
     ZKProofDec {
         first_move_y0: g1,
@@ -280,9 +280,9 @@ pub fn zk_proof_dec() -> ZKProofDec {
 }
 
 pub fn zk_proof_share() -> ZKProofShare {
-    let fr = Fr([0u8; Fr::SIZE]);
-    let g1 = G1([0u8; G1::SIZE]);
-    let g2 = G2([0u8; G2::SIZE]);
+    let fr = FrBytes([0u8; FrBytes::SIZE]);
+    let g1 = G1Bytes([0u8; G1Bytes::SIZE]);
+    let g2 = G2Bytes([0u8; G2Bytes::SIZE]);
 
     ZKProofShare {
         first_move_f: g1,

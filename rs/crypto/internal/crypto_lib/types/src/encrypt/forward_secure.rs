@@ -42,14 +42,14 @@ impl TryFrom<PublicKeyProto> for CspFsEncryptionPublicKey {
                 internal_error: format!(
                     "Wrong data length {}, expected length {}.",
                     pk_proto.key_value.len(),
-                    bls12_381::G1::SIZE
+                    bls12_381::G1Bytes::SIZE
                 ),
             });
         }
-        let mut pk_array = [0u8; bls12_381::G1::SIZE];
+        let mut pk_array = [0u8; bls12_381::G1Bytes::SIZE];
         pk_array[..].copy_from_slice(&pk_proto.key_value);
         Ok(CspFsEncryptionPublicKey::Groth20_Bls12_381(
-            groth20_bls12_381::FsEncryptionPublicKey(bls12_381::G1(pk_array)),
+            groth20_bls12_381::FsEncryptionPublicKey(bls12_381::G1Bytes(pk_array)),
         ))
     }
 }
@@ -137,7 +137,7 @@ impl fmt::Display for CspFsEncryptionPopFromPublicKeyProtoError {
 pub mod groth20_bls12_381 {
     //! The forward secure encryption keys used in Groth20.
 
-    use crate::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
+    use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     use crate::NodeIndex;
     use serde::{Deserialize, Serialize};
     use std::convert::TryFrom;

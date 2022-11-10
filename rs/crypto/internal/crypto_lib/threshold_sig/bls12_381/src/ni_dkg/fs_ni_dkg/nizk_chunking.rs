@@ -7,7 +7,7 @@ use crate::ni_dkg::fs_ni_dkg::random_oracles::{
 };
 use arrayvec::ArrayVec;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
-use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;

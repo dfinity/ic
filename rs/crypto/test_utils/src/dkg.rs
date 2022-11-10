@@ -9,14 +9,14 @@ use ic_types_test_utils::ids::node_test_id;
 
 pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {
     use ni_dkg_groth20_bls12_381 as scheme;
-    fn fr(seed: u8) -> scheme::Fr {
-        scheme::Fr([seed; scheme::Fr::SIZE])
+    fn fr(seed: u8) -> scheme::FrBytes {
+        scheme::FrBytes([seed; scheme::FrBytes::SIZE])
     }
-    fn g1(seed: u8) -> scheme::G1 {
-        scheme::G1([seed; scheme::G1::SIZE])
+    fn g1(seed: u8) -> scheme::G1Bytes {
+        scheme::G1Bytes([seed; scheme::G1Bytes::SIZE])
     }
-    fn g2(seed: u8) -> scheme::G2 {
-        scheme::G2([seed; scheme::G2::SIZE])
+    fn g2(seed: u8) -> scheme::G2Bytes {
+        scheme::G2Bytes([seed; scheme::G2Bytes::SIZE])
     }
     const NUM_RECEIVERS: usize = 1;
     CspNiDkgDealing::Groth20_Bls12_381(scheme::Dealing {

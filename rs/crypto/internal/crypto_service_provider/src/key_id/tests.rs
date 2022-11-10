@@ -361,8 +361,8 @@ t7Ica9iKR8XXVy+W5eyW52YYPbGzXZ0FgxPcOMk3Tm2qx/zJJ7pkN+rJeIEgQHEj
     }
 
     pub fn csp_fs_enc_pk(data: u8) -> CspFsEncryptionPublicKey {
-        CspFsEncryptionPublicKey::Groth20_Bls12_381(FsEncryptionPublicKey(bls12_381::G1(
-            [data; bls12_381::G1::SIZE],
+        CspFsEncryptionPublicKey::Groth20_Bls12_381(FsEncryptionPublicKey(bls12_381::G1Bytes(
+            [data; bls12_381::G1Bytes::SIZE],
         )))
     }
 }

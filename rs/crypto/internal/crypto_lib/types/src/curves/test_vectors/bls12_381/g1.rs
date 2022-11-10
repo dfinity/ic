@@ -41,7 +41,7 @@ pub const NEGATIVE_NUMBERS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::curves::bls12_381::G2;
+    use crate::curves::bls12_381::G1Bytes;
     const FINITE_TEST_VECTORS: &[&[&str]] = &[POSITIVE_NUMBERS, POWERS_OF_2, NEGATIVE_NUMBERS];
 
     #[test]
@@ -51,12 +51,17 @@ mod tests {
             ans = (ans & 0x33) + ((ans >> 2) & 0x33);
             (ans & 0x0f) + ((ans >> 4) & 0x0f)
         }
-        assert_eq!(weight(G2::COMPRESSED_FLAG), 1);
-        assert_eq!(weight(G2::INFINITY_FLAG), 1);
-        assert_eq!(weight(G2::SIGN_FLAG), 1);
-        assert_eq!(weight(G2::NON_FLAG_BITS), 5);
+        assert_eq!(weight(G1Bytes::COMPRESSED_FLAG), 1);
+        assert_eq!(weight(G1Bytes::INFINITY_FLAG), 1);
+        assert_eq!(weight(G1Bytes::SIGN_FLAG), 1);
+        assert_eq!(weight(G1Bytes::NON_FLAG_BITS), 5);
         assert_eq!(
-            weight(G2::COMPRESSED_FLAG | G2::INFINITY_FLAG | G2::SIGN_FLAG | G2::NON_FLAG_BITS),
+            weight(
+                G1Bytes::COMPRESSED_FLAG
+                    | G1Bytes::INFINITY_FLAG
+                    | G1Bytes::SIGN_FLAG
+                    | G1Bytes::NON_FLAG_BITS
+            ),
             8
         );
     }
@@ -69,8 +74,8 @@ mod tests {
             .chain([INFINITY].iter())
         {
             assert_eq!(
-                hex::decode(hex).unwrap()[G2::FLAG_BYTE_OFFSET] & G2::COMPRESSED_FLAG,
-                G2::COMPRESSED_FLAG
+                hex::decode(hex).unwrap()[G1Bytes::FLAG_BYTE_OFFSET] & G1Bytes::COMPRESSED_FLAG,
+                G1Bytes::COMPRESSED_FLAG
             );
         }
     }
@@ -78,15 +83,15 @@ mod tests {
     #[test]
     fn infinity_flag_is_set_for_infinity() {
         assert_eq!(
-            hex::decode(INFINITY).unwrap()[G2::FLAG_BYTE_OFFSET] & G2::INFINITY_FLAG,
-            G2::INFINITY_FLAG
+            hex::decode(INFINITY).unwrap()[G1Bytes::FLAG_BYTE_OFFSET] & G1Bytes::INFINITY_FLAG,
+            G1Bytes::INFINITY_FLAG
         );
     }
     #[test]
     fn infinity_flag_is_not_set_for_finite_values() {
         for hex in FINITE_TEST_VECTORS.iter().flat_map(|x| x.iter()) {
             assert_eq!(
-                hex::decode(hex).unwrap()[G2::FLAG_BYTE_OFFSET] & G2::INFINITY_FLAG,
+                hex::decode(hex).unwrap()[G1Bytes::FLAG_BYTE_OFFSET] & G1Bytes::INFINITY_FLAG,
                 0
             );
         }
@@ -96,7 +101,7 @@ mod tests {
         for (negative, positive) in NEGATIVE_NUMBERS.iter().zip(POSITIVE_NUMBERS) {
             let positive = hex::decode(positive).unwrap();
             let mut negated_negative = hex::decode(negative).unwrap();
-            negated_negative[G2::FLAG_BYTE_OFFSET] ^= G2::SIGN_FLAG;
+            negated_negative[G1Bytes::FLAG_BYTE_OFFSET] ^= G1Bytes::SIGN_FLAG;
             assert_eq!(negated_negative, positive);
         }
     }

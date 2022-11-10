@@ -263,8 +263,8 @@ mod current_node_public_keys {
         PublicKey {
             version: 0,
             algorithm: AlgorithmId::MultiBls12_381 as i32,
-            key_value: [0u8; bls12_381::G2::SIZE].to_vec(),
-            proof_data: Some([0u8; bls12_381::G1::SIZE].to_vec()),
+            key_value: [0u8; bls12_381::G2Bytes::SIZE].to_vec(),
+            proof_data: Some([0u8; bls12_381::G1Bytes::SIZE].to_vec()),
             timestamp: None,
         }
     }
@@ -279,7 +279,7 @@ mod current_node_public_keys {
         PublicKey {
             version: 0,
             algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
-            key_value: [0u8; bls12_381::G1::SIZE].to_vec(),
+            key_value: [0u8; bls12_381::G1Bytes::SIZE].to_vec(),
             proof_data: None,
             timestamp: None,
         }
