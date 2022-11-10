@@ -1,6 +1,6 @@
 //! This module implements the types necessary for consensus to perform http requests.
 //!
-//! The life of a request looks as follows (from consensus perspective):
+//! The life of a request looks as follows (from consensus' perspective):
 //!
 //! 1. A [`CanisterHttpRequestContext`] is stored in the state.
 //! The canister http pool manager will take the request pass it to the network layer to make the actual request.
@@ -16,6 +16,19 @@
 //! 4a. We gossip [`CanisterHttpResponseShare`]s, until we have enough of those to aggregate them into a
 //! [`CanisterHttpResponseProof`]. Together with the content, this artifact forms the [`CanisterHttpResponseWithConsensus`],
 //! which is the artifact we can include into the block to prove consensus on the response.
+//! Once the [`CanisterHttpResponseWithConsensus`] has made it into a finalized block, the response is delivered
+//! to execution to resume the initial call.
+//!
+//! 4b. Since there is no guarantee that all nodes will get the same [`CanisterHttpResponseContent`] back from the server,
+//! there is no guarantee to reach consensus on a single [`CanisterHttpResponseMetadata`] either.
+//! This can often be detected by the block maker.
+//! The blockmaker can then compile a [`CanisterHttpResponseDivergence`] proof and include it in it's payload.
+//! Once the proof has made it into a finalized block, the request is answered with an error message.
+//! This is a qualitiy-of-live feature, as the timeout mechanism would eventually end the request anyway.
+//! However, returning the error as soon as possible allows the canister execution to resume faster.
+//!
+//! 4c. If neither 4a nor 4b yield a result after a certrain amount of time, the timeout mechanism ends the request
+//! with an error and unblocks the requesting canister.
 
 use crate::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use crate::{
