@@ -1,4 +1,5 @@
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::{
     wasm_utils::{
         instrumentation::{export_additional_symbols, ExportModuleData},
@@ -37,21 +38,51 @@ fn inject_and_cmp(testname: &str) {
     features.enable_bulk_memory();
     let buff = wabt::wat2wasm_with_features(content, features.clone())
         .expect("couldn't convert the input wat to Wasm");
-    let config = EmbeddersConfig::default();
+
+    let mut config_old = EmbeddersConfig::default();
+    config_old.feature_flags.new_wasm_transform_lib = FlagStatus::Disabled;
+    let mut config_new = EmbeddersConfig::default();
+    config_new.feature_flags.new_wasm_transform_lib = FlagStatus::Enabled;
+
+    let output_old = validate_and_instrument_for_testing(
+        &WasmtimeEmbedder::new(config_old, no_op_logger()),
+        &BinaryEncodedWasm::new(buff.clone()),
+    )
+    .expect("couldn't instrument Wasm code")
+    .1;
+
     let output = validate_and_instrument_for_testing(
-        &WasmtimeEmbedder::new(config, no_op_logger()),
+        &WasmtimeEmbedder::new(config_new, no_op_logger()),
         &BinaryEncodedWasm::new(buff),
     )
     .expect("couldn't instrument Wasm code")
     .1;
-    let module: Module = parity_wasm::elements::deserialize_buffer(output.binary.as_slice())
+
+    assert_eq!(
+        output.exported_functions, output_old.exported_functions,
+        "exported functions differ in old and new instrumentation"
+    );
+    assert_eq!(
+        output.compilation_cost, output_old.compilation_cost,
+        "compilation costs differ in old and new instrumentation"
+    );
+    assert_eq!(
+        output.data, output_old.data,
+        "data segments differ in old and new instrumentation"
+    );
+
+    let out = wabt::wasm2wat_with_features(output.binary.as_slice(), features.clone())
+        .expect("couldn't convert metered Wasm to wat");
+
+    let module: Module = parity_wasm::elements::deserialize_buffer(output_old.binary.as_slice())
         .expect("couldn't deserialize module");
-    let out = wabt::wasm2wat_with_features(
+    let out_old = wabt::wasm2wat_with_features(
         elements::serialize(module).expect("couldn't serialize after metering"),
         features,
     )
     .expect("couldn't convert metered Wasm to wat");
     assert_snapshot!(out);
+    assert_eq!(out, out_old);
 }
 
 #[test]

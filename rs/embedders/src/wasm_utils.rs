@@ -53,7 +53,7 @@ pub struct WasmValidationDetails {
     pub largest_function_instruction_count: NumInstructions,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 struct Segment {
     offset: usize,
     #[serde(with = "serde_bytes")]
@@ -61,7 +61,7 @@ struct Segment {
 }
 
 /// Vector of heap data chunks with their offsets.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Segments(Vec<Segment>);
 
 impl FromIterator<(usize, Vec<u8>)> for Segments {
