@@ -38,7 +38,7 @@ pub const PERMITTED_DRIFT_AT_ARTIFACT_MANAGER: Duration = Duration::from_secs(60
 /// the matching input stream.
 pub const SYSTEM_SUBNET_STREAM_MSG_LIMIT: usize = 100;
 
-/// The configuration for app subnets is used for new app subnets with at most
-/// 13 nodes. App subnets with more nodes will be deployed with the NNS
-/// subnet configs.
+/// The `ic-prep` configuration for app subnets is used for new app subnets with at most
+/// 13 nodes. App subnets with more nodes will be deployed with the `ic-prep`
+/// configuration for NNS subnet.
 pub const SMALL_APP_SUBNET_MAX_SIZE: usize = 13;
