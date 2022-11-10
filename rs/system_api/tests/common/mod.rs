@@ -20,6 +20,7 @@ use ic_test_utilities::{
 use ic_test_utilities::{state::SystemStateBuilder, types::ids::canister_test_id};
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext},
+    methods::SystemMethod,
     ComputeAllocation, Cycles, NumInstructions, Time,
 };
 use maplit::btreemap;
@@ -79,7 +80,11 @@ impl ApiTypeBuilder {
     }
 
     pub fn build_system_task_api() -> ApiType {
-        ApiType::system_task(mock_time(), CallContextId::from(1))
+        ApiType::system_task(
+            SystemMethod::CanisterHeartbeat,
+            mock_time(),
+            CallContextId::from(1),
+        )
     }
 
     pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {

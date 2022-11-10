@@ -155,7 +155,7 @@ pub fn execute_system_task(
             );
         }
     }
-    // Only `canister_heartbeat` and `canister_global_timer` are allowed for now.
+    // Only `canister_heartbeat` and `canister_global_timer` are allowed.
     assert!(
         system_task == SystemMethod::CanisterHeartbeat
             || system_task == SystemMethod::CanisterGlobalTimer
@@ -163,7 +163,7 @@ pub fn execute_system_task(
     // System task methods run without DTS.
     let instruction_limits = &execution_parameters.instruction_limits;
     assert_eq!(instruction_limits.message(), instruction_limits.slice());
-    let method = WasmMethod::System(system_task);
+    let method = WasmMethod::System(system_task.clone());
     let memory_usage = canister.memory_usage(own_subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
     let message_instruction_limit = instruction_limits.message();
@@ -200,7 +200,7 @@ pub fn execute_system_task(
         .call_context_manager_mut()
         .unwrap()
         .new_call_context(CallOrigin::SystemTask, Cycles::new(0), time);
-    let api_type = ApiType::system_task(time, call_context_id);
+    let api_type = ApiType::system_task(system_task, time, call_context_id);
     let (output, output_execution_state, output_system_state) = hypervisor.execute(
         api_type,
         time,

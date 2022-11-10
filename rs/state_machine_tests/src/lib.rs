@@ -624,6 +624,11 @@ impl StateMachine {
         )
     }
 
+    /// Returns an immutable reference to the metrics registry.
+    pub fn metrics_registry(&self) -> &MetricsRegistry {
+        &self.metrics_registry
+    }
+
     /// Returns the total number of Wasm instructions this state machine consumed in replicated
     /// message execution (ingress messages, inter-canister messages, and heartbeats).
     pub fn instructions_consumed(&self) -> f64 {
