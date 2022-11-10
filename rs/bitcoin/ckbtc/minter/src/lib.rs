@@ -24,19 +24,12 @@ pub struct ECDSAPublicKey {
 }
 
 pub async fn heartbeat() {
-    if state::read_state(|s| s.is_heartbeat_running) {
-        return;
-    }
-
-    state::mutate_state(|s| {
-        s.is_heartbeat_running = true;
-    });
+    let _heartbeat_guard = match guard::HeartbeatGuard::new() {
+        Some(guard) => guard,
+        None => return,
+    };
 
     // Do Stuff
-
-    state::mutate_state(|s| {
-        s.is_heartbeat_running = false;
-    });
 }
 
 #[allow(dead_code)]
