@@ -343,8 +343,8 @@ pub struct CyclesAccountManagerConfig {
 
     /// Fair (not subsidised) fee for storing a GiB of data per second.
     /// Used when `subnet_size >= FAIR_STORAGE_COST_SUBNET_SIZE`.
-    /// The value is calculated for `reference_subnet_size` and is scaled
-    /// according to a subnet size.
+    /// The value is calculated for `reference_subnet_size` and must be scaled
+    /// according to the actual subnet size separately.
     fair_gib_storage_per_second_fee: Cycles,
 
     /// Fee for each percent of the reserved compute allocation. Note that
@@ -422,7 +422,8 @@ impl CyclesAccountManagerConfig {
         }
     }
 
-    /// Fee for storing 1 GiB per second adjusted according to subnet size.
+    /// Fee for storing 1 GiB per second adjusted according to subnet size,
+    /// but normalized for `reference_subnet_size`.
     pub fn gib_storage_per_second_fee(&self, use_cost_scaling: bool, subnet_size: usize) -> Cycles {
         match use_cost_scaling {
             false => self.subsidised_gib_storage_per_second_fee,
