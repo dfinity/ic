@@ -508,7 +508,7 @@ proptest! {
     fn sec1_to_der_positive_parses(sig in pvec(1u8..0x0f, 64)) {
         use simple_asn1::{from_der, ASN1Block::{Sequence, Integer}};
 
-        let der = crate::sec1_to_der(&sig);
+        let der = crate::management::sec1_to_der(&sig);
         let decoded = from_der(&der).expect("failed to decode DER");
         if let[Sequence(_, items)] = &decoded[..] {
             if let [Integer(_, r), Integer(_, s)] = &items[..] {
@@ -529,7 +529,7 @@ proptest! {
         prop_assume!(sig[..32].iter().any(|x| *x > 0));
         prop_assume!(sig[32..].iter().any(|x| *x > 0));
 
-        let der = crate::sec1_to_der(&sig);
+        let der = crate::management::sec1_to_der(&sig);
         let decoded = from_der(&der).expect("failed to decode DER");
 
         if let[Sequence(_, items)] = &decoded[..] {
