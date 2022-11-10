@@ -1,6 +1,6 @@
 e2e-scalability-suite-test:
   extends:
-    - .e2e-test-base-k8s
+    - .e2e-test-base
   needs:
     - job: wait-for-bazel-test-all
       artifacts: false
