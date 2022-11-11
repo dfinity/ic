@@ -1,7 +1,7 @@
 .bazel-test-all:
   extends:
     - .bazel-rules-pipeline
-    - .bazel-build-docker
+    - .bazel-build-k8s
     - .ic-build-bazel-image
   stage: test
   needs: []
