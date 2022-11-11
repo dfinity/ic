@@ -1,6 +1,8 @@
 python-tests:
   extends: .ubuntu-nix-docker-k8s
-  needs: []  # don't wait on other jobs
+  needs:
+    job: bazel-test-all # Some tests download canisters from the s3 - it has to only run when all canisters were uploaded to not populate proxy cache with partial results.
+    artifacts: false
   stage: test
   variables: 
     PYTHONPATH : ${CI_PROJECT_DIR}/gitlab-ci/src
