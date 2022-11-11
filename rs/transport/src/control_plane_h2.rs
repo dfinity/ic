@@ -278,13 +278,44 @@ impl TransportImplH2 {
                             // TODO: P2P-516
                             continue;
                         }
-                        let tls_stream = match arc_self.tls_client_handshake(peer_id, stream).await {
+                        match arc_self.tls_client_handshake(peer_id, stream).await {
                             Ok(tls_stream) => {
                                 arc_self.control_plane_metrics
                                 .tls_handshakes
                                     .with_label_values(&[ConnectionRole::Client.as_ref(), STATUS_SUCCESS])
                                     .inc();
-                                tls_stream
+                                let mut event_handler = match arc_self.event_handler.lock().await.as_ref() {
+                                    Some(event_handler) => event_handler.clone(),
+                                    None => continue,
+                                };
+                                let connected_state = create_connected_state_write_path(
+                                    peer_id,
+                                    channel_id,
+                                    peer_state.peer_label.clone(),
+                                    peer_state.send_queue.get_reader(),
+                                    ConnectionRole::Client,
+                                    peer_addr,
+                                    tls_stream,
+                                    event_handler.clone(),
+                                    arc_self.data_plane_metrics.clone(),
+                                    arc_self.weak_self.read().unwrap().clone(),
+                                    arc_self.rt_handle.clone(),
+
+                                );
+                                event_handler
+                                    .call(TransportEvent::PeerUp(peer_id))
+                                    .await
+                                    .expect("Can't panic on infallible");
+                                peer_state.update(ConnectionState::ConnectedH2(connected_state), ConnectionRole::Client);
+                                arc_self.control_plane_metrics
+                                    .tcp_conn_to_server_success
+                                    .with_label_values(&[
+                                        &peer_id.to_string(),
+                                        &channel_id.to_string(),
+                                    ])
+                                    .inc();
+                                // Stop this task since we successfully spawned the write tasks
+                                return;
                             }
                             Err(err) => {
                                 arc_self.control_plane_metrics
@@ -299,41 +330,9 @@ impl TransportImplH2 {
                                     local_addr,
                                     peer_addr,
                                 );
-                                continue;
                             }
                         };
 
-                        let mut event_handler = match arc_self.event_handler.lock().await.as_ref() {
-                            Some(event_handler) => event_handler.clone(),
-                            None => continue,
-                        };
-                        let connected_state = create_connected_state_write_path(
-                            peer_id,
-                            channel_id,
-                            peer_state.peer_label.clone(),
-                            peer_state.send_queue.get_reader(),
-                            ConnectionRole::Client,
-                            peer_addr,
-                            tls_stream,
-                            event_handler.clone(),
-                            arc_self.data_plane_metrics.clone(),
-                            arc_self.weak_self.read().unwrap().clone(),
-                            arc_self.rt_handle.clone(),
-
-                        );
-                        event_handler
-                            .call(TransportEvent::PeerUp(peer_id))
-                            .await
-                            .expect("Can't panic on infallible");
-                        peer_state.update(ConnectionState::ConnectedH2(connected_state), ConnectionRole::Client);
-                        arc_self.control_plane_metrics
-                            .tcp_conn_to_server_success
-                            .with_label_values(&[
-                                &peer_id.to_string(),
-                                &channel_id.to_string(),
-                            ])
-                            .inc();
-                        return;
                     }
                     Err(err) => {
                         arc_self.control_plane_metrics
