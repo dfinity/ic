@@ -482,11 +482,11 @@ impl RosettaRequestHandler {
             let acc = from_model_account_identifier(aid)
                 .map_err(|e| ApiError::InvalidAccountId(false, e.into()))?;
 
-            let hist = blocks.balance_book.store.get_history(&acc, max_block);
+            let hist = blocks.get_account_balance_history(&acc, max_block)?;
             heights = hist
                 .iter()
-                .rev()
                 .map(|(h, _)| *h)
+                .rev()
                 .filter(|h| *h <= last_idx)
                 .skip(offset)
                 .collect();
