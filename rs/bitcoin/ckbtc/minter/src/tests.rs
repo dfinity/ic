@@ -1,6 +1,6 @@
 use crate::{
-    address::BitcoinAddress, build_unsigned_transaction, greedy, signed_transaction_length, tx,
-    BuildTxError,
+    address::BitcoinAddress, build_unsigned_transaction, greedy, signature::EncodedSignature,
+    signed_transaction_length, tx, BuildTxError,
 };
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -101,7 +101,7 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
                 sequence: txin.sequence,
                 script_sig: bitcoin::Script::default(),
                 witness: bitcoin::Witness::from_vec(vec![
-                    txin.signature.to_vec(),
+                    txin.signature.as_slice().to_vec(),
                     txin.pubkey.to_vec(),
                 ]),
             })
@@ -152,14 +152,14 @@ fn arb_signed_input() -> impl Strategy<Value = tx::SignedInput> {
     (
         arb_out_point(),
         any::<u32>(),
-        pvec(any::<u8>(), 72),
+        pvec(1u8..0xff, 64),
         pvec(any::<u8>(), 32),
     )
         .prop_map(
-            |(previous_output, sequence, signature, pubkey)| tx::SignedInput {
+            |(previous_output, sequence, sec1, pubkey)| tx::SignedInput {
                 previous_output,
                 sequence,
-                signature: ByteBuf::from(signature),
+                signature: EncodedSignature::from_sec1(&sec1),
                 pubkey: ByteBuf::from(pubkey),
             },
         )
@@ -508,7 +508,7 @@ proptest! {
     fn sec1_to_der_positive_parses(sig in pvec(1u8..0x0f, 64)) {
         use simple_asn1::{from_der, ASN1Block::{Sequence, Integer}};
 
-        let der = crate::management::sec1_to_der(&sig);
+        let der = crate::signature::sec1_to_der(&sig);
         let decoded = from_der(&der).expect("failed to decode DER");
         if let[Sequence(_, items)] = &decoded[..] {
             if let [Integer(_, r), Integer(_, s)] = &items[..] {
@@ -529,7 +529,7 @@ proptest! {
         prop_assume!(sig[..32].iter().any(|x| *x > 0));
         prop_assume!(sig[32..].iter().any(|x| *x > 0));
 
-        let der = crate::management::sec1_to_der(&sig);
+        let der = crate::signature::sec1_to_der(&sig);
         let decoded = from_der(&der).expect("failed to decode DER");
 
         if let[Sequence(_, items)] = &decoded[..] {
@@ -539,4 +539,14 @@ proptest! {
         }
         prop_assert!(false, "expected a DER sequence with two items, got: {:?}", decoded);
     }
+
+    #[test]
+    fn encode_valid_signatures(sig in pvec(any::<u8>(), 64)) {
+        prop_assume!(sig[..32].iter().any(|x| *x > 0));
+        prop_assume!(sig[32..].iter().any(|x| *x > 0));
+
+        let encoded = crate::signature::EncodedSignature::from_sec1(&sig);
+        crate::signature::validate_encoded_signature(encoded.as_slice()).expect("invalid signature");
+    }
+
 }

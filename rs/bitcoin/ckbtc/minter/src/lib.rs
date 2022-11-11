@@ -10,6 +10,7 @@ pub mod guard;
 pub mod lifecycle;
 pub mod management;
 pub mod metrics;
+pub mod signature;
 pub mod state;
 pub mod tx;
 pub mod updates;
@@ -103,7 +104,7 @@ pub async fn sign_transaction(
         let sec1_signature = management::sign_with_ecdsa(key_name.clone(), path, sighash).await?;
 
         signed_inputs.push(tx::SignedInput {
-            signature: ByteBuf::from(management::sec1_to_der(&sec1_signature)),
+            signature: signature::EncodedSignature::from_sec1(&sec1_signature),
             pubkey,
             previous_output: outpoint.clone(),
             sequence: input.sequence,
@@ -124,7 +125,7 @@ fn signed_transaction_length(unsigned_tx: &tx::UnsignedTransaction) -> usize {
             .map(|unsigned_input| tx::SignedInput {
                 previous_output: unsigned_input.previous_output.clone(),
                 sequence: unsigned_input.sequence,
-                signature: ByteBuf::from(vec![0u8; tx::SIGNATURE_LEN]),
+                signature: signature::EncodedSignature::fake(),
                 pubkey: ByteBuf::from(vec![0u8; tx::PUBKEY_LEN]),
             })
             .collect(),
