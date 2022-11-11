@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
 use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
@@ -10,7 +10,8 @@ use ic_logger::{info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::DEFAULT_QUEUE_CAPACITY, CanisterStatus, NetworkTopology, SystemState,
+    canister_state::DEFAULT_QUEUE_CAPACITY, CallOrigin, CanisterStatus, NetworkTopology,
+    SystemState,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request},
@@ -135,6 +136,7 @@ impl SystemStateChanges {
         // Verify we don't accept more cycles than are available from each call
         // context and update each call context balance
         if !self.call_context_balance_taken.is_empty() {
+            let own_canister_id = system_state.canister_id;
             let call_context_manager = system_state
                 .call_context_manager_mut()
                 .ok_or_else(|| error("Call context manager does not exists"))?;
@@ -145,6 +147,19 @@ impl SystemStateChanges {
                 call_context.withdraw_cycles(*amount_taken).map_err(|_| {
                     error("Canister accepted more cycles than available from call context")
                 })?;
+                if (*amount_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+                    match call_context.call_origin() {
+                        CallOrigin::CanisterUpdate(origin_canister_id, _)
+                        | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
+                            logger,
+                            "Canister {} accepted {} cycles from canister {}.",
+                            own_canister_id,
+                            *amount_taken,
+                            origin_canister_id
+                        ),
+                        _ => (),
+                    };
+                }
             }
         }
 
@@ -163,6 +178,7 @@ impl SystemStateChanges {
                 .map(|id| CanisterId::new(id).unwrap())
                 {
                     Ok(destination_subnet) => {
+                        let sent_cycles = msg.payment.get();
                         msg.receiver = destination_subnet;
                         callback_changes.insert(msg.sender_reply_callback, destination_subnet);
                         system_state
@@ -170,6 +186,15 @@ impl SystemStateChanges {
                             .map_err(|e| {
                                 error(format!("Failed to push output request: {:?}", e))
                             })?;
+                        if sent_cycles > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+                            info!(
+                                logger,
+                                "Canister {} sent {} cycles to canister {}.",
+                                system_state.canister_id,
+                                sent_cycles,
+                                destination_subnet
+                            );
+                        }
                     }
                     Err(err) => {
                         info!(
@@ -193,9 +218,20 @@ impl SystemStateChanges {
                     }
                 }
             } else {
+                let sent_cycles = msg.payment.get();
+                let msg_receiver = msg.receiver;
                 system_state
                     .push_output_request(msg.into(), time)
                     .map_err(|e| error(format!("Failed to push output request: {:?}", e)))?;
+                if sent_cycles > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+                    info!(
+                        logger,
+                        "Canister {} sent {} cycles to canister {}.",
+                        system_state.canister_id,
+                        sent_cycles,
+                        msg_receiver
+                    );
+                }
             }
         }
 

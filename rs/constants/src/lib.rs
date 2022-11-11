@@ -42,3 +42,6 @@ pub const SYSTEM_SUBNET_STREAM_MSG_LIMIT: usize = 100;
 /// 13 nodes. App subnets with more nodes will be deployed with the `ic-prep`
 /// configuration for NNS subnet.
 pub const SMALL_APP_SUBNET_MAX_SIZE: usize = 13;
+
+///Cycles threshold to reduce logging load for canister operations with cycles.
+pub const LOG_CANISTER_OPERATION_CYCLES_THRESHOLD: u128 = 100_000_000_000;

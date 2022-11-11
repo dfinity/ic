@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use ic_base_types::CanisterId;
+use ic_constants::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use prometheus::IntCounter;
 
 use ic_embedders::wasm_executor::{
@@ -98,6 +99,7 @@ struct PausedResponseHelper {
     refund_for_sent_cycles: Cycles,
     refund_for_response_transmission: Cycles,
     initial_cycles_balance: Cycles,
+    response_sender: CanisterId,
 }
 
 /// A helper that implements and keeps track of response execution steps.
@@ -107,6 +109,7 @@ struct ResponseHelper {
     refund_for_sent_cycles: Cycles,
     refund_for_response_transmission: Cycles,
     initial_cycles_balance: Cycles,
+    response_sender: CanisterId,
 }
 
 impl ResponseHelper {
@@ -165,11 +168,13 @@ impl ResponseHelper {
 
         let canister = clean_canister.clone();
         let initial_cycles_balance = canister.system_state.balance();
+        let response_sender = response.respondent;
         Self {
             canister,
             refund_for_sent_cycles,
             refund_for_response_transmission,
             initial_cycles_balance,
+            response_sender,
         }
     }
 
@@ -247,6 +252,7 @@ impl ResponseHelper {
             refund_for_sent_cycles: self.refund_for_sent_cycles,
             refund_for_response_transmission: self.refund_for_response_transmission,
             initial_cycles_balance: self.initial_cycles_balance,
+            response_sender: self.response_sender,
         }
     }
 
@@ -278,6 +284,7 @@ impl ResponseHelper {
             refund_for_sent_cycles: paused.refund_for_sent_cycles,
             refund_for_response_transmission: paused.refund_for_response_transmission,
             initial_cycles_balance: clean_canister.system_state.balance(),
+            response_sender: paused.response_sender,
         };
         helper.apply_initial_refunds(round);
 
@@ -470,6 +477,17 @@ impl ResponseHelper {
                 .get()
                 .saturating_sub(instructions_left.get()),
         );
+
+        if self.refund_for_sent_cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+            info!(
+                round.log,
+                "Canister {} received unaccepted {} cycles as refund from canister {}.",
+                self.canister.system_state.canister_id,
+                self.refund_for_sent_cycles,
+                self.response_sender,
+            );
+        }
+
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
