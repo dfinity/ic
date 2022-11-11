@@ -255,6 +255,7 @@ fn check_keys_locally(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,
 ) -> CryptoResult<Option<NodePublicKeys>> {
+    let csp = csp_for_config(config, tokio_runtime_handle);
     let crypto_root = config.crypto_root.as_path();
     let node_pks = match read_public_keys(crypto_root) {
         Ok(pks) => pks,
@@ -263,7 +264,6 @@ fn check_keys_locally(
     if node_public_keys_are_empty(&node_pks) {
         return Ok(None);
     }
-    let csp = csp_for_config(config, tokio_runtime_handle);
     ensure_node_signing_key_is_set_up_locally(node_pks.node_signing_pk.clone(), &csp)?;
     ensure_committee_signing_key_is_set_up_locally(node_pks.committee_signing_pk.clone(), &csp)?;
     ensure_dkg_dealing_encryption_key_is_set_up_locally(
@@ -271,12 +271,10 @@ fn check_keys_locally(
         &csp,
     )?;
     ensure_tls_cert_is_set_up_locally(node_pks.tls_certificate.clone(), &csp)?;
-    if node_pks.idkg_dealing_encryption_pk.is_some() {
-        ensure_idkg_dealing_encryption_key_is_set_up_locally(
-            node_pks.idkg_dealing_encryption_pk.clone(),
-            &csp,
-        )?;
-    }
+    ensure_idkg_dealing_encryption_keys_are_set_up_locally(
+        &node_pks.idkg_dealing_encryption_pks,
+        &csp,
+    )?;
     Ok(Some(node_pks))
 }
 
@@ -332,17 +330,23 @@ fn ensure_dkg_dealing_encryption_key_is_set_up_locally(
     Ok(())
 }
 
-fn ensure_idkg_dealing_encryption_key_is_set_up_locally(
-    maybe_pk_proto: Option<PublicKeyProto>,
+fn ensure_idkg_dealing_encryption_keys_are_set_up_locally(
+    pk_protos: &[PublicKeyProto],
     csp: &dyn CspSecretKeyStoreChecker,
 ) -> CryptoResult<()> {
-    let pk_proto = maybe_pk_proto.ok_or_else(|| CryptoError::MalformedPublicKey {
-        algorithm: AlgorithmId::MegaSecp256k1,
-        key_bytes: None,
-        internal_error: "missing iDKG dealing encryption key in local public key store".to_string(),
-    })?;
-    ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(pk_proto, csp)?;
-    Ok(())
+    if pk_protos.is_empty() {
+        Err(CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::MegaSecp256k1,
+            key_bytes: None,
+            internal_error: "missing iDKG dealing encryption key in local public key store"
+                .to_string(),
+        })
+    } else {
+        for pk_proto in pk_protos {
+            ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(pk_proto, csp)?;
+        }
+        Ok(())
+    }
 }
 
 fn ensure_tls_cert_is_set_up_locally(
@@ -475,11 +479,11 @@ fn ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(
 }
 
 fn ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(
-    pubkey_proto: PublicKeyProto,
+    pubkey_proto: &PublicKeyProto,
     csp: &dyn CspSecretKeyStoreChecker,
 ) -> CryptoResult<()> {
     let idkg_dealing_encryption_pk =
-        mega_public_key_from_proto(&pubkey_proto).map_err(|e| match e {
+        mega_public_key_from_proto(pubkey_proto).map_err(|e| match e {
             MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { algorithm_id } => {
                 CryptoError::MalformedPublicKey {
                     algorithm: AlgorithmId::MegaSecp256k1,
@@ -535,7 +539,7 @@ fn node_public_keys_are_empty(node_pks: &NodePublicKeys) -> bool {
     node_pks.node_signing_pk.is_none()
         && node_pks.committee_signing_pk.is_none()
         && node_pks.dkg_dealing_encryption_pk.is_none()
-        && node_pks.idkg_dealing_encryption_pk.is_none()
+        && node_pks.idkg_dealing_encryption_pks.is_empty()
         && node_pks.tls_certificate.is_none()
 }
 
