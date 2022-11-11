@@ -6,8 +6,8 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::{
     create_tmp_dir, init_test_logger, sample_data::Scribe,
 };
 use ic_ledger_canister_core::ledger::LedgerTransaction;
-use ic_ledger_core::{block::BlockType, Tokens};
-use icp_ledger::{AccountIdentifier, Block, BlockIndex};
+use ic_ledger_core::{balances::BalancesStore, block::BlockType, Tokens};
+use icp_ledger::{apply_operation, AccountIdentifier, Block, BlockIndex, Operation};
 use rusqlite::params;
 use std::{collections::BTreeMap, path::Path};
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
@@ -25,17 +25,23 @@ async fn store_smoke_test() {
     }
 
     for hb in &scribe.blockchain {
-        assert_eq!(store.get_at(hb.index).unwrap(), *hb);
-        let block = hb.block.clone();
+        assert_eq!(store.get_hashed_block(&hb.index).unwrap(), *hb);
         assert_eq!(
             store.get_transaction(&hb.index).unwrap(),
-            Block::decode(block).unwrap().transaction
+            Block::decode((*hb).clone().block).unwrap().transaction
         );
     }
-
+    assert_eq!(
+        store.get_first_hashed_block().unwrap(),
+        *scribe.blockchain.get(0).unwrap()
+    );
+    assert_eq!(
+        store.get_latest_hashed_block().unwrap(),
+        *scribe.blockchain.get(109).unwrap()
+    );
     let last_idx = scribe.blockchain.back().unwrap().index;
     assert_eq!(
-        store.get_at(last_idx + 1).unwrap_err(),
+        store.get_hashed_block(&(last_idx + 1)).unwrap_err(),
         BlockStoreError::NotFound(last_idx + 1)
     );
 }
@@ -75,6 +81,64 @@ async fn store_coherance_test() {
         );
     }
 }
+
+#[actix_rt::test]
+async fn store_account_balances_test() {
+    init_test_logger();
+    let tmpdir = create_tmp_dir();
+    let mut store = sqlite_on_disk_store(tmpdir.path());
+    let scribe = Scribe::new_with_sample_data(10, 100);
+    let mut account_balances = &mut BalanceBook::default();
+    for hb in &scribe.blockchain {
+        let tx = Block::decode(hb.block.clone()).unwrap().transaction;
+        let operation = tx.operation;
+        account_balances.store.transaction_context = Some(hb.index);
+        apply_operation(account_balances, &operation).ok();
+        account_balances.store.transaction_context = None;
+        store.push(hb).unwrap();
+        store.set_hashed_block_to_verified(&hb.index).unwrap();
+        let to_account: Option<String>;
+        let from_account: Option<String>;
+        match operation {
+            Operation::Burn { from, amount: _ } => {
+                from_account = Some(from.to_hex());
+                to_account = None;
+            }
+            Operation::Mint { to, amount: _ } => {
+                from_account = None;
+                to_account = Some(to.to_hex());
+            }
+            Operation::Transfer {
+                from,
+                to,
+                amount: _,
+                fee: _,
+            } => {
+                from_account = Some(from.to_hex());
+                to_account = Some(to.to_hex());
+            }
+        }
+        if let Some(acc_str) = from_account {
+            let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
+            let amount_from = store.get_account_balance(&id, &hb.index).unwrap();
+            let amount_local = *account_balances.store.get_balance(&id).unwrap();
+            assert_eq!(amount_from, amount_local);
+        }
+        if let Some(acc_str) = to_account {
+            let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
+            let amount_to = store.get_account_balance(&id, &hb.index).unwrap();
+            let amount_local = *account_balances.store.get_balance(&id).unwrap();
+            assert_eq!(amount_to, amount_local);
+        }
+    }
+    for (acc, history) in account_balances.store.acc_to_hist.iter() {
+        for (block_index, tokens) in history.get_history(None) {
+            let amount = store.get_account_balance(acc, block_index).unwrap();
+            assert_eq!(*tokens, amount);
+        }
+    }
+}
+
 #[actix_rt::test]
 async fn store_prune_test() {
     init_test_logger();
