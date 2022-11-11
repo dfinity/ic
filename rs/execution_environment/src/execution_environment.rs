@@ -23,7 +23,7 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -1001,8 +1001,9 @@ impl ExecutionEnvironment {
                     network_topology,
                     round_limits,
                     subnet_size,
-                );
+                )
             }
+
             CanisterInputMessage::Request(request) => RequestOrIngress::Request(request),
             CanisterInputMessage::Ingress(ingress) => RequestOrIngress::Ingress(ingress),
         };
@@ -1248,8 +1249,18 @@ impl ExecutionEnvironment {
             ),
 
             Some(canister_state) => {
+                let cycles = msg.take_cycles();
                 self.cycles_account_manager
-                    .add_cycles(canister_state.system_state.balance_mut(), msg.take_cycles());
+                    .add_cycles(canister_state.system_state.balance_mut(), cycles);
+                if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+                    info!(
+                        self.log,
+                        "Canister {} deposited {} cycles to canister {}.",
+                        msg.sender(),
+                        cycles,
+                        canister_id.get(),
+                    );
+                }
                 (Ok(EmptyBlob.encode()), Cycles::zero())
             }
         }

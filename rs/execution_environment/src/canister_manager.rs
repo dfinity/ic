@@ -1168,8 +1168,10 @@ impl CanisterManager {
 
         info!(
             self.log,
-            "Successfully created canister, canister_id: {}, subnet_id: {}",
-            new_canister_id.to_string(),
+            "Canister {} created canister {} with {} initial balance on subnet {}.",
+            sender,
+            new_canister_id.get(),
+            cycles,
             self.config.own_subnet_id.get()
         );
 
