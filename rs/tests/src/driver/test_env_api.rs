@@ -803,37 +803,8 @@ impl<T: HasTestEnv> HasDependencies for T {
     }
 }
 
-pub trait HasArtifacts {
-    /// Returns the path to an artifact named `p` that is situated relative to a
-    /// global directory containing artifacts that were provided to the test
-    /// driver. Note that the directory is possibly shared and should be
-    /// treated as *read only*.
-    ///
-    /// # Panics
-    ///
-    /// This method panics if ...
-    ///
-    /// * ... the driver was not provided with a path to an artifacts directory.
-    /// * ... the given path is not relative.
-    /// * ... the given path does not point to a file.
-    fn get_artifact_path<P: AsRef<Path>>(&self, p: P) -> PathBuf;
-
-    /// Returns the content of an artifact named `p` that is situated relative
-    /// to a global directory containing artifacts that were provided to the
-    /// test driver. Note that the directory is possibly shared and should be
-    /// treated as *read only*.
-    ///
-    /// # Panics
-    ///
-    /// This method panics if ...
-    ///
-    /// * ... the driver was not provided with a path to an artifacts directory.
-    /// * ... the given path is not relative.
-    /// * ... the given path does not point to a file.
-    /// * ... an I/O-Error occurred when reading the file.
-    fn get_artifact<P: AsRef<Path>>(&self, p: P) -> Vec<u8>;
-
-    /// Convenience method that loads a wasm-module from the artifacts
+pub trait HasWasm {
+    /// Convenience method that loads a wasm-module from the dependencies
     /// directory.
     ///
     /// # Panics
@@ -841,8 +812,13 @@ pub trait HasArtifacts {
     /// * if `get_artifacs(p)` panics.
     /// * if a .wat-module cannot be compiled
     /// * if a .wasm-module does not start with the expected magic bytes
+    fn load_wasm<P: AsRef<Path>>(&self, p: P) -> Vec<u8>;
+}
+
+impl<T: HasDependencies> HasWasm for T {
     fn load_wasm<P: AsRef<Path>>(&self, p: P) -> Vec<u8> {
-        let mut wasm_bytes = self.get_artifact(&p);
+        let mut wasm_bytes = std::fs::read(self.get_dependency_path(&p))
+            .unwrap_or_else(|_| panic!("Could not read WASM from {:?}", p.as_ref()));
 
         if p.as_ref().extension().unwrap() == "wat" {
             wasm_bytes = wabt::wat2wasm(wasm_bytes).expect("Could not compile wat to wasm");
@@ -853,22 +829,6 @@ pub trait HasArtifacts {
         }
 
         wasm_bytes
-    }
-}
-
-impl<T> HasArtifacts for T
-where
-    T: HasTestEnv,
-{
-    fn get_artifact_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
-        let artifact_path = GroupSetup::read_attribute(&self.test_env())
-            .artifact_path
-            .expect("Artifact path is not set.");
-        artifact_path.join(p)
-    }
-
-    fn get_artifact<P: AsRef<Path>>(&self, p: P) -> Vec<u8> {
-        std::fs::read(self.get_artifact_path(p)).expect("Could not read artifact")
     }
 }
 

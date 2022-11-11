@@ -9,8 +9,8 @@ use super::test_env::SshKeyGen;
 use super::test_env::{TestEnv, TestEnvAttribute};
 use super::test_env_api::HasIcDependencies;
 use super::test_env_api::{
-    get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, ADMIN,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    get_ssh_session_from_env, retry, HasDependencies, HasTestEnv, HasVmName, RetrieveIpv4Addr,
+    SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::driver::test_setup::GroupSetup;
 use anyhow::{bail, Result};
@@ -106,9 +106,8 @@ impl UniversalVm {
             let config_img = universal_vm_dir.join(CONF_IMG_FNAME);
             std::fs::create_dir_all(universal_vm_dir)?;
 
-            let script_path = env
-                .base_path()
-                .join("dependencies/rs/tests/create-universal-vm-config-image.sh");
+            let script_path =
+                env.get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
             let mut cmd = Command::new(script_path);
 
             // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.

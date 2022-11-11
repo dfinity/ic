@@ -15,12 +15,11 @@ Success::
 1. Http requests succeed in environment where nodes fail.
 
 end::catalog[] */
-use crate::canister_http::lib::*;
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::HasArtifacts;
 use crate::driver::vm_control::IcControl;
 use crate::util;
+use crate::{canister_http::lib::*, driver::test_env_api::HasWasm};
 use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
@@ -69,10 +68,13 @@ pub fn test(env: TestEnv) {
             .await
             .expect("failed to create a canister")
             .0;
-        mgr.install_code(&cid, &env.load_wasm("proxy_canister.wasm"))
-            .call_and_wait(util::delay())
-            .await
-            .expect("failed to install canister");
+        mgr.install_code(
+            &cid,
+            &env.load_wasm("rs/rust_canisters/proxy_canister/proxy_canister.wasm"),
+        )
+        .call_and_wait(util::delay())
+        .await
+        .expect("failed to install canister");
         cid
     });
 

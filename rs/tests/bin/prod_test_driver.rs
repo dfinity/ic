@@ -326,10 +326,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         tecdsa::tecdsa_add_nodes_test::test,
                     )]),
                 ),
-                pot(
+                pot_with_setup(
                     "tecdsa_remove_nodes_pot",
-                    tecdsa::tecdsa_remove_nodes_test::config(),
-                    par(vec![t(
+                    tecdsa::tecdsa_remove_nodes_test::config,
+                    par(vec![sys_t(
                         "test_tecdsa_remove_nodes",
                         tecdsa::tecdsa_remove_nodes_test::test,
                     )]),

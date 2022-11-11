@@ -7,7 +7,7 @@ use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, p
 use crate::driver::farm::FarmResult;
 use crate::driver::ic::{InternetComputer, Node};
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::HasIcDependencies;
+use crate::driver::test_env_api::{HasDependencies, HasIcDependencies};
 use ic_base_types::NodeId;
 use ic_fondue::ic_instance::{
     node_software_version::NodeSoftwareVersion, port_allocator::AddrType,
@@ -222,9 +222,8 @@ pub fn create_config_disk_image(
     group_name: &str,
 ) -> anyhow::Result<()> {
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-    let script_path = test_env
-        .base_path()
-        .join("dependencies/ic-os/guestos/scripts/build-bootstrap-config-image.sh");
+    let script_path =
+        test_env.get_dependency_path("ic-os/guestos/scripts/build-bootstrap-config-image.sh");
     let mut cmd = Command::new(script_path);
     let local_store_path = test_env
         .prep_dir(ic_name)

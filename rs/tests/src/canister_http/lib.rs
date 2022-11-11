@@ -1,7 +1,5 @@
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env_api::{
-    HasArtifacts, HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
-};
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr};
 use crate::driver::universal_vm::*;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::util::{self, create_and_install};
@@ -142,7 +140,7 @@ pub fn create_proxy_canister<'a>(
     let proxy_canister_id = rt.block_on(create_and_install(
         &node.build_default_agent(),
         node.effective_canister_id(),
-        &env.load_wasm("proxy_canister.wasm"),
+        &env.load_wasm("rs/rust_canisters/proxy_canister/proxy_canister.wasm"),
     ));
     info!(
         &env.logger(),

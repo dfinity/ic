@@ -3,7 +3,6 @@ use crate::driver::test_env_api::*;
 use anyhow::{bail, Result};
 use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -15,7 +14,6 @@ pub struct GroupSetup {
     /// For now, the group timeout strictly translates to the corresponding group
     /// TTL.
     pub group_timeout: Duration,
-    pub artifact_path: Option<PathBuf>,
     pub default_vm_resources: Option<VmResources>,
 }
 

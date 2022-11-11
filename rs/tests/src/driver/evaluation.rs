@@ -97,7 +97,6 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: &TestPath) -> Result<()
     GroupSetup {
         farm_group_name: group_name.clone(),
         group_timeout: pot.pot_timeout.unwrap_or(ctx.pot_timeout),
-        artifact_path: ctx.artifacts_path.clone(),
         default_vm_resources: pot.default_vm_resources,
     }
     .write_attribute(&pot_env);

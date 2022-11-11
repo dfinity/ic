@@ -73,13 +73,6 @@ If not provided, a default of the form `$HOSTNAME-<timestamp>` is used, where
     suite: String,
 
     #[clap(
-        long = "artifacts-path",
-        parse(from_os_str),
-        help = r#"Path containing test artifacts (additional binaries, canisters, etc.)."#
-    )]
-    artifacts_path: Option<PathBuf>,
-
-    #[clap(
         long = "include-pattern",
         help = r#"If set, only tests matching this regex will be exercised
  and all others will be ignored. Note: when `include-pattern` is set, `skip-pattern` is not effective."#
@@ -146,15 +139,6 @@ impl RunTestsArgs {
             bail!("Invalid log level: '{}'!", lvl_str);
         };
 
-        let artifacts_path = if let Some(p) = self.artifacts_path {
-            if !p.is_dir() {
-                bail!("artifacts-path is not a directory");
-            }
-            Some(p)
-        } else {
-            None
-        };
-
         let include_pattern = parse_pattern(self.include_pattern)?;
         let skip_pattern = parse_pattern(self.skip_pattern)?;
 
@@ -163,7 +147,6 @@ impl RunTestsArgs {
             propagate_test_logs: !self.no_propagate_test_logs,
             rand_seed: self.rand_seed.unwrap_or(RND_SEED_DEFAULT),
             job_id: self.job_id,
-            artifacts_path,
             suite: self.suite,
             include_pattern,
             skip_pattern,
@@ -198,7 +181,6 @@ pub struct ValidatedCliRunTestsArgs {
     pub propagate_test_logs: bool,
     pub rand_seed: u64,
     pub job_id: Option<String>,
-    pub artifacts_path: Option<PathBuf>,
     pub suite: String,
     pub include_pattern: Option<Regex>,
     pub skip_pattern: Option<Regex>,

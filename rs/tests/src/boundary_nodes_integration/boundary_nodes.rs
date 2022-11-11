@@ -22,7 +22,7 @@ use crate::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasArtifacts, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasWasm, IcNodeContainer,
             NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
         },
@@ -304,7 +304,7 @@ pub fn canister_test(env: TestEnv) {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let counter_canister = env.load_wasm("counter.wat");
+        let counter_canister = env.load_wasm("rs/workload_generator/src/counter.wat");
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.unwrap().1, &counter_canister, None)
@@ -378,7 +378,8 @@ pub fn http_canister_test(env: TestEnv) {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let http_counter_canister = env.load_wasm("http_counter.wasm");
+        let http_counter_canister =
+            env.load_wasm("rs/tests/test_canisters/http_counter/http_counter.wasm");
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(
@@ -547,7 +548,7 @@ pub fn denylist_test(env: TestEnv) {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let http_counter_canister = env.load_wasm("http_counter.wasm");
+        let http_counter_canister = env.load_wasm("rs/tests/test_canisters/http_counter/http_counter.wasm");
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.unwrap().1, &http_counter_canister, None)
@@ -635,7 +636,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let http_counter_canister = env.load_wasm("http_counter.wasm");
+        let http_counter_canister = env.load_wasm("rs/tests/test_canisters/http_counter/http_counter.wasm");
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.unwrap().1, &http_counter_canister, None)
@@ -1110,7 +1111,7 @@ pub fn sw_test(env: TestEnv) {
         .block_on(install_canister(
             env.clone(),
             logger.clone(),
-            "http_counter.wasm",
+            "rs/tests/test_canisters/http_counter/http_counter.wasm",
         ))
         .unwrap();
 
@@ -1299,7 +1300,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         .block_on(install_canister(
             env.clone(),
             logger.clone(),
-            "http_counter.wasm",
+            "rs/tests/test_canisters/http_counter/http_counter.wasm",
         ))
         .unwrap();
 
@@ -1464,7 +1465,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             let agent = assert_create_agent(install_url.as_str()).await;
 
             info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("counter.wat");
+            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
 
             info!(&logger, "creating canister");
             let cid = create_canister(&agent, effective_canister_id, &wasm, None)
@@ -1507,7 +1508,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             let agent = assert_create_agent(install_url.as_str()).await;
 
             info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("counter.wat");
+            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
 
             info!(&logger, "creating canister");
             let cid = create_canister(&agent, effective_canister_id, &wasm, None)
@@ -1603,7 +1604,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             let agent = assert_create_agent(install_url.as_str()).await;
 
             info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("counter.wat");
+            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
 
             info!(&logger, "creating canister");
             let cid = create_canister(&agent, effective_canister_id, &wasm, None)
@@ -1797,7 +1798,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             let agent = assert_create_agent(install_url.as_str()).await;
 
             info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("counter.wat");
+            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
 
             info!(&logger, "creating canister");
             let cid = create_canister(&agent, effective_canister_id, &wasm, None)
@@ -1843,7 +1844,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             let agent = assert_create_agent(install_url.as_str()).await;
 
             info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("counter.wat");
+            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
 
             info!(&logger, "creating canister");
             let cid = create_canister(&agent, effective_canister_id, &wasm, None)
@@ -1929,7 +1930,7 @@ pub fn seo_test(env: TestEnv) {
         .block_on(install_canister(
             env.clone(),
             logger.clone(),
-            "http_counter.wasm",
+            "rs/tests/test_canisters/http_counter/http_counter.wasm",
         ))
         .unwrap();
 
