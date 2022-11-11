@@ -345,15 +345,9 @@ class Farm(object):
             )
             channel = ssh_client.get_transport().open_session()
             tarball = "/home/admin/prometheus-data-dir.tar.zst"
-            # Note that p8s is configured with --enable-feature=memory-snapshot-on-shutdown.
-            # This causes p8s to snapshot its memory to its data directory on shutdown.
-            # This means we can remove most of the contents of the wal directory
-            # from the tarball saving significant space.
             channel.exec_command(
                 f"""
                     sudo systemctl stop prometheus.service &&
-                    sudo rm -rf /var/lib/prometheus/wal/* &&
-                    sudo touch /var/lib/prometheus/wal/00000000 &&
                     sudo tar -cf "{tarball}" \
                         --sparse \
                         --use-compress-program="zstd --threads=0 -10" \
