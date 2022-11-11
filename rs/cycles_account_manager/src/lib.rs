@@ -190,36 +190,13 @@ impl CyclesAccountManager {
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
     ) -> Cycles {
-        let one_gib: u128 = 1 << 30;
-        let seconds_per_day = 24 * 60 * 60;
-
-        let memory_fee = {
-            let memory = match memory_allocation {
-                MemoryAllocation::Reserved(bytes) => bytes,
-                MemoryAllocation::BestEffort => memory_usage,
-            };
-            let total_memory_fee = memory.get() as u128
-                * seconds_per_day
-                * self
-                    .config
-                    .gib_storage_per_second_fee(self.use_cost_scaling_flag, subnet_size)
-                    .get();
-
-            // Round up the memory fee.
-            if total_memory_fee > 0 && total_memory_fee < one_gib {
-                Cycles::new(1)
-            } else {
-                Cycles::from((total_memory_fee + one_gib - 1) / one_gib)
-            }
+        let memory = match memory_allocation {
+            MemoryAllocation::Reserved(bytes) => bytes,
+            MemoryAllocation::BestEffort => memory_usage,
         };
-
-        let compute_fee = Cycles::from(
-            compute_allocation.as_percent() as u128
-                * seconds_per_day
-                * self.config.compute_percent_allocated_per_second_fee.get(),
-        );
-
-        self.scale_cost(memory_fee + compute_fee, subnet_size)
+        let day = Duration::from_secs(24 * 60 * 60);
+        self.memory_cost(memory, day, subnet_size)
+            + self.compute_allocation_cost(compute_allocation, day, subnet_size)
     }
 
     /// Returns the freezing threshold for this canister in Cycles.
