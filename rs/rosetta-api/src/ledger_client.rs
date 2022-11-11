@@ -55,6 +55,13 @@ use crate::request::Request;
 use crate::request_types::{RequestType, Status};
 use crate::transaction_id::TransactionIdentifier;
 
+fn waiter() -> garcon::Delay {
+    garcon::Delay::builder()
+        .throttle(std::time::Duration::from_millis(500))
+        .timeout(std::time::Duration::from_secs(60 * 5))
+        .build()
+}
+
 struct LedgerBlocksSynchronizerMetricsImpl {}
 
 impl LedgerBlocksSynchronizerMetrics for LedgerBlocksSynchronizerMetricsImpl {
@@ -105,6 +112,11 @@ pub enum OperationOutput {
     NeuronResponse(NeuronResponse),
 }
 
+fn public_key_to_der(key: ThresholdSigPublicKey) -> Result<Vec<u8>, ApiError> {
+    ic_crypto_utils_threshold_sig_der::public_key_to_der(&key.into_bytes())
+        .map_err(ApiError::internal_error)
+}
+
 impl LedgerClient {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
@@ -120,7 +132,13 @@ impl LedgerClient {
         let canister_access = if offline {
             None
         } else {
-            let canister_access = CanisterAccess::new(ic_url.clone(), canister_id);
+            let canister_access = CanisterAccess::new(
+                ic_url.clone(),
+                canister_id,
+                root_key.map(public_key_to_der).transpose()?,
+            )
+            .await
+            .map_err(|e| ApiError::internal_error(format!("{}", e)))?;
             LedgerClient::check_ledger_symbol(&token_symbol, &canister_access).await?;
             Some(Arc::new(canister_access))
         };
@@ -158,14 +176,12 @@ impl LedgerClient {
 
         let symbol_res: Result<Symbol, String> = canister_access
             .agent
-            .execute_query(&canister_access.canister_id, "symbol", arg)
+            .query(&canister_access.canister_id.get().0, "symbol")
+            .with_arg(arg)
+            .call()
             .await
-            .and_then(|bytes| {
-                CandidOne::from_bytes(
-                    bytes.ok_or_else(|| "symbol reply payload was empty".to_string())?,
-                )
-                .map(|c| c.0)
-            });
+            .map_err(|e| format!("{}", e))
+            .and_then(|bytes| CandidOne::from_bytes(bytes).map(|c| c.0));
 
         match symbol_res {
             Ok(Symbol { symbol }) => {
@@ -280,34 +296,25 @@ impl LedgerAccess for LedgerClient {
             .into_bytes()
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
         let bytes = if verified {
-            let nonce = Vec::from(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis()
-                    .to_be_bytes(),
-            );
             agent
-                .execute_update(
-                    &self.governance_canister_id,
+                .update(
+                    &self.governance_canister_id.get().0,
                     "get_neuron_info_by_id_or_subaccount",
-                    arg,
-                    nonce,
                 )
+                .with_arg(arg)
+                .call_and_wait(waiter())
                 .await
         } else {
             agent
-                .execute_query(
-                    &self.governance_canister_id,
+                .query(
+                    &self.governance_canister_id.get().0,
                     "get_neuron_info_by_id_or_subaccount",
-                    arg,
                 )
+                .with_arg(arg)
+                .call()
                 .await
         }
-        .map_err(ApiError::internal_error)?
-        .ok_or_else(|| {
-            ApiError::internal_error("neuron_info reply payload was empty".to_string())
-        })?;
+        .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
         let ninfo: Result<Result<NeuronInfo, GovernanceError>, _> =
             CandidOne::from_bytes(bytes).map(|c| c.0);
         let ninfo = ninfo.map_err(|e| {
@@ -339,7 +346,9 @@ impl LedgerAccess for LedgerClient {
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
 
         let res = agent
-            .execute_query(&self.canister_id, "transfer_fee", arg)
+            .query(&self.canister_id.get().0, "transfer_fee")
+            .with_arg(arg)
+            .call()
             .await;
 
         // Older Ledger versions may not have the transfer_fee method. Ideally
@@ -361,10 +370,7 @@ impl LedgerAccess for LedgerClient {
                     transfer_fee: DEFAULT_TRANSFER_FEE,
                 })
             }
-            Ok(None) => Err(ApiError::internal_error(
-                "conf reply payload was empty".to_string(),
-            )),
-            Ok(Some(bytes)) => CandidOne::from_bytes(bytes).map(|c| c.0).map_err(|e| {
+            Ok(bytes) => CandidOne::from_bytes(bytes).map(|c| c.0).map_err(|e| {
                 ApiError::internal_error(format!("Error querying transfer_fee: {}", e))
             }),
         }

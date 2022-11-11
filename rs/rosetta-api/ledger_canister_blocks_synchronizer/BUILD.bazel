@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/canister_client",
     "//rs/certification",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_core",
@@ -12,6 +11,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/types/types",
     "@crate_index//:candid",
+    "@crate_index//:ic-agent",
     "@crate_index//:log",
     "@crate_index//:log4rs",
     "@crate_index//:rusqlite",
