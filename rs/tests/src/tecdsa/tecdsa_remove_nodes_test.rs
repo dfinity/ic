@@ -17,6 +17,9 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::driver::vm_control::IcControl;
 use crate::tecdsa::tecdsa_signature_test::{enable_ecdsa_signing, make_key};
 use crate::{
@@ -25,7 +28,7 @@ use crate::{
     util::*,
 };
 use canister_test::{Canister, Cycles};
-use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
+use ic_fondue::ic_manager::IcEndpoint;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
@@ -36,19 +39,30 @@ use super::tecdsa_signature_test::DKG_INTERVAL;
 const NODES_COUNT: usize = 4;
 const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-            .add_nodes(NODES_COUNT),
-    )
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NODES_COUNT),
+        )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let logger = ctx.logger.clone();
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
 
     info!(logger, "Setup: install all necessary NNS canisters");
-    ctx.install_nns_canisters(&handle, true);
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+
     let mut rng = ctx.rng.clone();
     let mut endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     let message_hash = [0xabu8; 32];

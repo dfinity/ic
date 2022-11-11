@@ -340,11 +340,12 @@ def populate_dependencies_dir(
         "lifeline.wasm": "rs/tests/nns-canisters/lifeline",
         "genesis-token-canister.wasm": "rs/tests/nns-canisters/genesis-token-canister",
         "sns-wasm-canister.wasm": "rs/tests/nns-canisters/sns-wasm-canister",
-        # Other required canisters
         "ic-icrc1-ledger.wasm": "rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
         "ic-ckbtc-minter.wasm": "rs/bitcoin/ckbtc/minter/ckbtc_minter.wasm",
-        # Needed for rosetta tests
         "ic-rosetta-api": "rs/rosetta-api/ic-rosetta-api",
+        "http_counter.wasm": "rs/tests/test_canisters/http_counter/http_counter.wasm",
+        "counter.wat": "rs/workload_generator/src/counter.wat",
+        "proxy_canister.wasm": "rs/rust_canisters/proxy_canister/proxy_canister.wasm",
     }
     for source, dest in links.items():
         dst = os.path.join(dependencies_dir, dest)
@@ -589,7 +590,6 @@ def main(
         + runner_args
         + [
             f"--job-id={JOB_ID}",
-            f"--artifacts-path={ARTIFACT_DIR}",
             f"--authorized-ssh-accounts={SSH_KEY_DIR}",
         ]
     )

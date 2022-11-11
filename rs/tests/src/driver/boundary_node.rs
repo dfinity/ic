@@ -15,9 +15,9 @@ use crate::{
         resource::{DiskImage, ImageType},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_ssh_session_from_env, retry, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot,
-            HasVmName, IcNodeContainer, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            get_ssh_session_from_env, retry, HasDependencies, HasPublicApiUrl, HasTestEnv,
+            HasTopologySnapshot, HasVmName, IcNodeContainer, RetrieveIpv4Addr, SshSession, ADMIN,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
         test_setup::GroupSetup,
     },
@@ -254,9 +254,8 @@ fn create_and_upload_config_disk_image(
         .join(BOUNDARY_NODE_VMS_DIR)
         .join(boundary_node.name.clone());
     let img_path = boundary_node_dir.join(CONF_IMG_FNAME);
-    let script_path = env
-        .base_path()
-        .join("dependencies/ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh");
+    let script_path =
+        env.get_dependency_path("ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh");
     let mut cmd = Command::new(script_path);
     let ssh_authorized_pub_keys_dir: PathBuf = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
