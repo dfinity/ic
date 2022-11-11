@@ -1,5 +1,4 @@
 use crate::balance_book::BalanceBook;
-use crate::errors::Error;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use icp_ledger::{apply_operation, AccountIdentifier, Block, Tokens};
 use log::debug;
@@ -15,7 +14,7 @@ mod database_access {
     use crate::blocks::{BlockStoreError, HashedBlock};
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
-    use icp_ledger::{Block, Operation};
+    use icp_ledger::{AccountIdentifier, Block, Operation};
     use rusqlite::{params, types::Null, Connection, Error, Statement};
 
     pub fn push_hashed_block(
@@ -121,6 +120,30 @@ mod database_access {
             }
         }
         Ok(())
+    }
+    pub fn get_all_block_indices_from_blocks_table(
+        connection: &mut Connection,
+    ) -> Result<Vec<u64>, BlockStoreError> {
+        let mut stmt = connection
+            .prepare("SELECT idx from blocks")
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let indices = stmt
+            .query_map(params![], |row| row.get(0))
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let block_indices: Vec<u64> = indices.map(|x| x.unwrap()).collect();
+        Ok(block_indices)
+    }
+    pub fn get_all_block_indices_from_transactions_table(
+        connection: &mut Connection,
+    ) -> Result<Vec<u64>, BlockStoreError> {
+        let mut stmt = connection
+            .prepare("SELECT block_idx FROM transactions")
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let indices = stmt
+            .query_map(params![], |row| row.get(0))
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let block_indices: Vec<u64> = indices.map(|x| x.unwrap()).collect();
+        Ok(block_indices)
     }
 
     pub fn contains_block(
@@ -230,59 +253,39 @@ mod database_access {
         connection: &mut Connection,
         hash: &HashOf<icp_ledger::Transaction>,
     ) -> Result<u64, BlockStoreError> {
-        let command = "SELECT block_idx from transactions where tx_hash = ?";
+        get_block_idx_by_hash(
+            connection,
+            &hash.into_bytes().to_vec(),
+            "SELECT block_idx from transactions where tx_hash = ?",
+        )
+    }
+    fn get_block_idx_by_hash(
+        connection: &mut Connection,
+        hash: &Vec<u8>,
+        command: &str,
+    ) -> Result<u64, BlockStoreError> {
         let mut stmt = connection
             .prepare(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
-        let mut blocks = stmt
-            .query_map(params![hash.into_bytes().to_vec()], |row| {
-                Ok(row.get(0).unwrap())
-            })
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        match blocks.next() {
-            Some(block) => Ok(block.map_err(|e| BlockStoreError::Other(e.to_string()))?),
-            None => Err(BlockStoreError::Other(format!(
-                "Transaction hash not found {}",
-                hash
-            ))),
-        }
-    }
-    pub fn get_indices(
-        connection: &mut Connection,
-        command: &str,
-    ) -> Result<Vec<u64>, BlockStoreError> {
-        let mut stmt = connection
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let indices = stmt
-            .query_map(params![], |row| row.get(0))
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let block_indices: Vec<u64> = indices.map(|x| x.unwrap()).collect();
-        Ok(block_indices)
+        let block_idx = stmt
+            .query_map(params![hash], |row| Ok(row.get(0).unwrap()))
+            .unwrap()
+            .next()
+            .ok_or_else(|| BlockStoreError::Other("Hash Not Found".to_string()))
+            .map(|block| block.unwrap())?;
+        Ok(block_idx)
     }
 
     pub fn get_block_idx_by_block_hash(
         connection: &mut Connection,
         hash: &HashOf<EncodedBlock>,
     ) -> Result<u64, BlockStoreError> {
-        let command = "SELECT idx from blocks where hash = ?";
-        let mut stmt = connection
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
-        let mut hashes = stmt
-            .query_map(params![hash.into_bytes().to_vec()], |row| {
-                Ok(row.get(0).unwrap())
-            })
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        match hashes.next() {
-            Some(hash) => Ok(hash.map_err(|e| BlockStoreError::Other(e.to_string()))?),
-            None => Err(BlockStoreError::Other(format!(
-                "Block hash not found {}",
-                hash
-            ))),
-        }
+        get_block_idx_by_hash(
+            connection,
+            &hash.into_bytes().to_vec(),
+            "SELECT idx from blocks where hash = ?",
+        )
     }
     // The option is left None if both verified and unverified blocks should be querried. It is set to False for only unverified blocks and True for only verified blocks
     pub fn get_first_hashed_block(
@@ -326,6 +329,157 @@ mod database_access {
             }
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
+    }
+    pub fn get_account_balance(
+        connection: &mut Connection,
+        block_idx: &u64,
+        account: &AccountIdentifier,
+    ) -> Result<Option<u64>, BlockStoreError> {
+        let command = "SELECT tokens FROM account_balances WHERE block_idx<=?1 AND account=?2 ORDER BY block_idx DESC LIMIT 1";
+        let mut stmt = connection
+            .prepare(command)
+            .map_err(|e| BlockStoreError::Other(e.to_string()))
+            .unwrap();
+        let amount = stmt
+            .query_map(params![block_idx, account.to_hex()], |row| {
+                Ok(row.get(0).unwrap())
+            })
+            .unwrap()
+            .next();
+        match amount {
+            Some(tokens) => Ok(tokens.unwrap()),
+            None => Ok(None),
+        }
+    }
+    pub fn update_balance_book_execution(
+        hb: &HashedBlock,
+        stmt_select: &mut Statement,
+        stmt_insert: &mut Statement,
+    ) -> Result<(), BlockStoreError> {
+        let block = Block::decode(hb.block.clone()).unwrap();
+        let operation_type = block.transaction.operation;
+        let mut new_balances: Vec<(String, u64)> = vec![];
+        let mut extract_latest_balance =
+            |account: AccountIdentifier| -> Result<Option<(String, u64)>, BlockStoreError> {
+                let account_balance_opt = stmt_select
+                    .query_map(params![account.to_hex(), hb.index], |row| {
+                        Ok((
+                            row.get(1).map(|x: String| x as String)?,
+                            row.get(2).map(|x: u64| x as u64)?,
+                        ))
+                    })
+                    .map_err(|e| BlockStoreError::Other(e.to_string()))?
+                    .map(|x| x.unwrap())
+                    .next();
+                Ok(account_balance_opt)
+            };
+        match operation_type {
+            Operation::Burn { from, amount } => {
+                let account_balance_opt = extract_latest_balance(from)?;
+                match account_balance_opt {
+                    Some(mut balance) => {
+                        balance.1 -= amount.get_e8s();
+                        new_balances.push(balance);
+                    }
+                    None => {
+                        return Err(BlockStoreError::Other("Trying to burn tokens from an account that has not yet been allocated any tokens".to_string()));
+                    }
+                }
+            }
+            Operation::Mint { to, amount } => {
+                let account_balance_opt = extract_latest_balance(to)?;
+                match account_balance_opt {
+                    Some(mut balance) => {
+                        balance.1 += amount.get_e8s();
+                        new_balances.push(balance);
+                    }
+                    None => {
+                        new_balances.push((to.to_hex(), amount.get_e8s()));
+                    }
+                }
+            }
+            Operation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            } => {
+                let account_balance_opt = extract_latest_balance(to)?;
+                let self_transfer = from.to_hex() == to.to_hex();
+                match account_balance_opt {
+                    Some(mut balance) => {
+                        balance.1 += amount.get_e8s();
+                        if self_transfer {
+                            balance.1 -= amount.get_e8s();
+                            balance.1 -= fee.get_e8s();
+                        }
+                        new_balances.push(balance);
+                    }
+                    None => {
+                        new_balances.push((to.to_hex(), amount.get_e8s()));
+                    }
+                }
+                if !self_transfer {
+                    let account_balance_opt = extract_latest_balance(from)?;
+                    match account_balance_opt {
+                        Some(mut balance) => {
+                            let payable = amount.get_e8s() + fee.get_e8s();
+                            if balance.1 >= payable {
+                                balance.1 -= payable;
+                                new_balances.push(balance);
+                            } else {
+                                return Err(BlockStoreError::Other(format!("Trying to transfer tokens from an account that has not enough tokens. Current balance is {}, payable amount is {}.",balance.1,payable)));
+                            }
+                        }
+                        None => {
+                            return Err(BlockStoreError::Other("Trying to transfer tokens from an account that has not yet been allocated any tokens".to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        for (account, tokens) in new_balances {
+            stmt_insert
+                .execute(params![hb.index, account, tokens])
+                .map_err(|e| {
+                    BlockStoreError::Other(
+                        e.to_string()
+                            + format!(" | Block IDX: {} , Account {}", hb.index, account).as_str(),
+                    )
+                })?;
+        }
+        Ok(())
+    }
+
+    pub fn update_balance_book(
+        con: &mut Connection,
+        hb: &HashedBlock,
+    ) -> Result<(), BlockStoreError> {
+        let mut stmt_select =  con
+        .prepare("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut stmt_insert = con
+            .prepare("INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)")
+            .expect("Couldn't prepare statement");
+        update_balance_book_execution(hb, &mut stmt_select, &mut stmt_insert)
+    }
+
+    pub fn _get_all_accounts(
+        connection: &mut Connection,
+    ) -> Result<Vec<AccountIdentifier>, BlockStoreError> {
+        let mut accounts = vec![];
+        let mut stmt = connection
+            .prepare("SELECT DISTINCT account FROM account_balances")
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut rows = stmt
+            .query(params![])
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        while let Some(row) = rows.next().unwrap() {
+            let account: String = row.get(0).unwrap();
+            accounts.push(AccountIdentifier::from_hex(account.as_str()).unwrap());
+        }
+        Ok(accounts)
     }
 
     pub fn is_verified(con: &mut Connection, block_idx: &u64) -> Result<bool, BlockStoreError> {
@@ -484,8 +638,12 @@ impl Blocks {
         )?;
         connection.execute(
             r#"
-            CREATE UNIQUE INDEX IF NOT EXISTS block_hash_indexer
-            ON blocks (hash);    
+            CREATE TABLE IF NOT EXISTS account_balances (
+                block_idx INTEGER NOT NULL,
+                account VARCHAR(64) NOT NULL,
+                tokens INTEGER NOT NULL,
+                PRIMARY KEY(account,block_idx)
+            )
             "#,
             [],
         )?;
@@ -548,15 +706,15 @@ impl Blocks {
 
     /// Sanity check (sum of tokens equal pool size).
     fn sanity_check(balance_book: &BalanceBook) -> Result<(), String> {
-        let mut sum_icpt = Tokens::ZERO;
+        let mut sum_tokens = Tokens::ZERO;
         for acc in balance_book.store.acc_to_hist.keys() {
-            sum_icpt += balance_book.account_balance(acc);
+            sum_tokens += balance_book.account_balance(acc);
         }
-        let expected_icpt_pool = (Tokens::MAX - sum_icpt).unwrap();
-        if expected_icpt_pool != balance_book.token_pool {
+        let expected_tokens_pool = (Tokens::MAX - sum_tokens).unwrap();
+        if expected_tokens_pool != balance_book.token_pool {
             return Err(format!(
                 "Incorrect ICPT pool value in the snapshot (expected: {}, got: {})",
-                expected_icpt_pool, balance_book.token_pool
+                expected_tokens_pool, balance_book.token_pool
             ));
         }
         Ok(())
@@ -712,9 +870,9 @@ impl Blocks {
     fn check_table_coherence(&self) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
         let mut block_indices =
-            database_access::get_indices(&mut *connection, "SELECT idx from blocks")?;
+            database_access::get_all_block_indices_from_blocks_table(&mut *connection)?;
         let mut transaction_block_indices =
-            database_access::get_indices(&mut *connection, "SELECT block_idx FROM transactions")?;
+            database_access::get_all_block_indices_from_transactions_table(&mut *connection)?;
         let vec_sorted_diff = |blocks_indices: &mut [u64],
                                other_indices: &mut [u64]|
          -> Result<Vec<u64>, BlockStoreError> {
@@ -823,14 +981,19 @@ impl Blocks {
     }
     pub fn get_account_balance(
         &self,
-        acc: &AccountIdentifier,
-        h: &BlockIndex,
-    ) -> Result<Tokens, Error> {
-        let mut connection = self.connection.lock().unwrap();
-        if database_access::is_verified(&mut *connection, h)? {
-            self.balance_book.store.get_at(*acc, *h)
+        account: &AccountIdentifier,
+        block_idx: &u64,
+    ) -> Result<Tokens, BlockStoreError> {
+        if self.is_verified_by_idx(block_idx)? {
+            let mut connection = self.connection.lock().unwrap();
+            let amount =
+                database_access::get_account_balance(&mut *connection, block_idx, account)?;
+            match amount {
+                Some(a) => Ok(Tokens::from_e8s(a)),
+                None => Ok(Tokens::ZERO),
+            }
         } else {
-            Err(Error::InvalidBlockId(h.to_string()))
+            Err(BlockStoreError::NotAvailable(*block_idx))
         }
     }
 
@@ -909,6 +1072,7 @@ impl Blocks {
             &Block::decode(hb.block.clone()).unwrap().transaction,
             &hb.index,
         )?;
+        database_access::update_balance_book(&mut *con, hb)?;
         con.execute_batch("COMMIT TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
         drop(con);
@@ -927,8 +1091,15 @@ impl Blocks {
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_tx = connection .prepare("INSERT INTO transactions (block_idx,tx_hash,operation_type,from_account,to_account,amount,fee) VALUES (?1, ?2, ?3, ?4, ?5,?6,?7)")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        for hb in batch.clone() {
-            match database_access::push_hashed_block_execution(&hb, &mut stmt_hb) {
+        let mut stmt_select =  connection
+        .prepare("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut stmt_insert = connection
+            .prepare("INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)")
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+
+        for hb in &batch {
+            match database_access::push_hashed_block_execution(hb, &mut stmt_hb) {
                 Ok(_) => (),
                 Err(e) => {
                     connection
@@ -950,15 +1121,30 @@ impl Blocks {
                     return Err(e);
                 }
             }
+            match database_access::update_balance_book_execution(
+                hb,
+                &mut stmt_select,
+                &mut stmt_insert,
+            ) {
+                Ok(_) => (),
+                Err(e) => {
+                    connection
+                        .execute_batch("ROLLBACK TRANSACTION;")
+                        .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+                    return Err(e);
+                }
+            }
         }
         connection
             .execute_batch("COMMIT TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
         drop(stmt_tx);
         drop(stmt_hb);
+        drop(stmt_select);
+        drop(stmt_insert);
         drop(connection);
-        for hb in batch {
-            self.process_block(&hb)?;
+        for hb in &batch {
+            self.process_block(hb)?;
         }
         Ok(())
     }
