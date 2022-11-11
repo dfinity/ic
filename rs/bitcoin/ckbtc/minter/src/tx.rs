@@ -2,17 +2,15 @@
 //! encode them into a byte stream.
 
 use crate::address::BitcoinAddress;
+use crate::signature::EncodedSignature;
 use ic_crypto_sha::Sha256;
-use serde_bytes::ByteBuf;
+use serde_bytes::{ByteBuf, Bytes};
 
 pub use ic_btc_types::{OutPoint, Satoshi};
 
 /// The current Bitcoin transaction encoding version.
 /// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
 pub const TX_VERSION: u32 = 2;
-
-/// The length of the transaction signature.
-pub const SIGNATURE_LEN: usize = 72;
 
 /// The length of the public key.
 pub const PUBKEY_LEN: usize = 32;
@@ -121,9 +119,7 @@ pub fn write_compact_size(n: usize, buf: &mut impl Buffer) {
 pub struct SignedInput {
     pub previous_output: OutPoint,
     pub sequence: u32,
-    // DER-encoded ECDSA signature of the txid.
-    // Must be SIGNATURE_LEN bytes long.
-    pub signature: ByteBuf,
+    pub signature: EncodedSignature,
     // The public key bytes.
     // Must be PUBKEY_LEN bytes long.
     pub pubkey: ByteBuf,
@@ -298,6 +294,13 @@ impl Encode for ByteBuf {
     }
 }
 
+impl Encode for &Bytes {
+    fn encode(&self, buf: &mut impl Buffer) {
+        write_compact_size(self.len(), buf);
+        buf.write(self.as_ref())
+    }
+}
+
 impl<T: Encode> Encode for &T {
     fn encode(&self, buf: &mut impl Buffer) {
         (*self).encode(buf)
@@ -377,7 +380,11 @@ impl Encode for SignedTransaction {
         self.inputs.encode(buf);
         self.outputs.encode(buf);
         for txin in self.inputs.iter() {
-            (&[&txin.signature, &txin.pubkey]).encode(buf);
+            (&[
+                Bytes::new(txin.signature.as_slice()),
+                Bytes::new(&txin.pubkey),
+            ][..])
+                .encode(buf);
         }
         self.lock_time.encode(buf)
     }
