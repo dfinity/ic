@@ -9,7 +9,7 @@ use prometheus::{HistogramVec, IntCounter};
 use std::str::FromStr;
 
 pub const FINISHED_OUTCOME_LABEL: &str = "finished";
-pub const SUBMITTED_OUTCOME_LABEL: &str = "finished";
+pub const SUBMITTED_OUTCOME_LABEL: &str = "submitted";
 pub const ERROR_OUTCOME_LABEL: &str = "error";
 pub const SUCCESS_STATUS_LABEL: &str = "success";
 
