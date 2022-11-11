@@ -115,6 +115,7 @@ pub enum MetricsDomain {
     IDkgProtocol,
     ThresholdEcdsa,
     IcCanisterSignature,
+    PublicSeed,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
@@ -218,6 +219,7 @@ impl MetricsDomain {
             MetricsDomain::IDkgProtocol => "idkg",
             MetricsDomain::ThresholdEcdsa => "threshold_ecdsa",
             MetricsDomain::IcCanisterSignature => "ic_canister_signature",
+            MetricsDomain::PublicSeed => "public_seed",
         }
     }
 }
