@@ -2,8 +2,8 @@ use std::{ffi::OsString, fmt::Write, fs, path::PathBuf};
 
 use ic_embedders::wasm_utils::wasm_transform;
 use wasmtime::{
-    Engine, Global, GlobalType, Instance, Linker, Memory, MemoryType, Mutability, Store, Table,
-    TableType, Val, ValType,
+    Config, Engine, Global, GlobalType, Instance, Linker, Memory, MemoryType, Mutability, Store,
+    Table, TableType, Val, ValType,
 };
 use wast::{
     parser::ParseBuffer,
@@ -16,15 +16,19 @@ use wast::{
 /// `names.wast`: `wast` itself seems to hit an error reading this file.
 /// `linking.wast`: The wast module Id's aren't yet properly handled.
 /// `exports.wast`: The wast module Id's aren't yet properly handled.
-/// All `simd` files are also skipped. There seems to be at least one encoding
-/// bug in `wasm-encoder` that causes them to fail.
-const FILES_TO_SKIP: &[&str] = &["names.wast", "linking.wast", "exports.wast"];
+/// `simd_i64x2_cmp.wast`: There is a bug in wasm-encoder that incorrectly
+/// encodes the LeS instruction and causes this test to fail.
+const FILES_TO_SKIP: &[&str] = &[
+    "names.wast",
+    "linking.wast",
+    "exports.wast",
+    "simd_i64x2_cmp.wast",
+];
 
 /// Conversions between wast and wasmtime types.
 mod convert {
-    use wasmtime::Val;
     use wast::{
-        core::{HeapType, NanPattern, V128Pattern, WastArgCore, WastRetCore},
+        core::{HeapType, NanPattern, V128Pattern, WastArgCore},
         token::{Float32, Float64},
         WastArg, WastRet,
     };
@@ -66,124 +70,164 @@ mod convert {
         }
     }
 
-    // Canonicalize all nan values to these fixed nans.
-    const F32_NAN: u32 = 4290772992;
-    const F64_NAN: u64 = 18444492273895866368;
+    /// Comparison of a Wasmtime f32 result with the expected Wast value. Copied
+    /// from
+    /// https://github.com/bytecodealliance/wasmtime/blob/main/crates/wast/src/core.rs#L106.
+    fn f32_equal(actual: u32, expected: &NanPattern<Float32>) -> bool {
+        match expected {
+            // Check if an f32 (as u32 bits to avoid possible quieting when moving values in registers, e.g.
+            // https://developer.arm.com/documentation/ddi0344/i/neon-and-vfp-programmers-model/modes-of-operation/default-nan-mode?lang=en)
+            // is a canonical NaN:
+            //  - the sign bit is unspecified,
+            //  - the 8-bit exponent is set to all 1s
+            //  - the MSB of the payload is set to 1 (a quieted NaN) and all others to 0.
+            // See https://webassembly.github.io/spec/core/syntax/values.html#floating-point.
+            NanPattern::CanonicalNan => {
+                let canon_nan = 0x7fc0_0000;
+                (actual & 0x7fff_ffff) == canon_nan
+            }
 
-    pub(super) fn canonicalize_nans(r: Val) -> Val {
-        match r {
-            Val::F32(f) if f32::from_bits(f).is_nan() => Val::F32(F32_NAN),
-            Val::F64(f) if f64::from_bits(f).is_nan() => Val::F64(F64_NAN),
-            _ => r,
+            // Check if an f32 (as u32, see comments above) is an arithmetic NaN.
+            // This is the same as a canonical NaN including that the payload MSB is
+            // set to 1, but one or more of the remaining payload bits MAY BE set to
+            // 1 (a canonical NaN specifies all 0s). See
+            // https://webassembly.github.io/spec/core/syntax/values.html#floating-point.
+            NanPattern::ArithmeticNan => {
+                const AF32_NAN: u32 = 0x7f80_0000;
+                let is_nan = actual & AF32_NAN == AF32_NAN;
+                const AF32_PAYLOAD_MSB: u32 = 0x0040_0000;
+                let is_msb_set = actual & AF32_PAYLOAD_MSB == AF32_PAYLOAD_MSB;
+                is_nan && is_msb_set
+            }
+            NanPattern::Value(expected_value) => actual == expected_value.bits,
         }
     }
 
-    fn nan32(f: NanPattern<Float32>) -> u32 {
-        match f {
-            NanPattern::CanonicalNan => F32_NAN,
-            NanPattern::ArithmeticNan => F32_NAN,
-            NanPattern::Value(f) => {
-                let bits = f.bits;
-                if f32::from_bits(bits).is_nan() {
-                    F32_NAN
-                } else {
-                    bits
-                }
+    /// Comparison of a Wasmtime f64 result with the expected Wast value. Copied
+    /// from
+    /// https://github.com/bytecodealliance/wasmtime/blob/main/crates/wast/src/core.rs#L171.
+    pub fn f64_equal(actual: u64, expected: &NanPattern<Float64>) -> bool {
+        match expected {
+            // Check if an f64 (as u64 bits to avoid possible quieting when moving values in registers, e.g.
+            // https://developer.arm.com/documentation/ddi0344/i/neon-and-vfp-programmers-model/modes-of-operation/default-nan-mode?lang=en)
+            // is a canonical NaN:
+            //  - the sign bit is unspecified,
+            //  - the 11-bit exponent is set to all 1s
+            //  - the MSB of the payload is set to 1 (a quieted NaN) and all others to 0.
+            // See https://webassembly.github.io/spec/core/syntax/values.html#floating-point.
+            NanPattern::CanonicalNan => {
+                let canon_nan = 0x7ff8_0000_0000_0000;
+                (actual & 0x7fff_ffff_ffff_ffff) == canon_nan
+            }
+
+            // Check if an f64 (as u64, see comments above) is an arithmetic NaN. This is the same as a
+            // canonical NaN including that the payload MSB is set to 1, but one or more of the remaining
+            // payload bits MAY BE set to 1 (a canonical NaN specifies all 0s). See
+            // https://webassembly.github.io/spec/core/syntax/values.html#floating-point.
+            NanPattern::ArithmeticNan => {
+                const AF64_NAN: u64 = 0x7ff0_0000_0000_0000;
+                let is_nan = actual & AF64_NAN == AF64_NAN;
+                const AF64_PAYLOAD_MSB: u64 = 0x0008_0000_0000_0000;
+                let is_msb_set = actual & AF64_PAYLOAD_MSB == AF64_PAYLOAD_MSB;
+                is_nan && is_msb_set
+            }
+            NanPattern::Value(expected_value) => actual == expected_value.bits,
+        }
+    }
+
+    fn v128_equal(left: u128, right: &V128Pattern) -> bool {
+        match right {
+            V128Pattern::I8x16(parts) => {
+                left == u128::from_le_bytes(
+                    parts
+                        .iter()
+                        .flat_map(|i| i.to_le_bytes())
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .unwrap(),
+                )
+            }
+            V128Pattern::I16x8(parts) => {
+                left == u128::from_le_bytes(
+                    parts
+                        .iter()
+                        .flat_map(|i| i.to_le_bytes())
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .unwrap(),
+                )
+            }
+            V128Pattern::I32x4(parts) => {
+                left == u128::from_le_bytes(
+                    parts
+                        .iter()
+                        .flat_map(|i| i.to_le_bytes())
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .unwrap(),
+                )
+            }
+            V128Pattern::I64x2(parts) => {
+                left == u128::from_le_bytes(
+                    parts
+                        .iter()
+                        .flat_map(|i| i.to_le_bytes())
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .unwrap(),
+                )
+            }
+            V128Pattern::F32x4([r1, r2, r3, r4]) => {
+                let bytes = left.to_le_bytes();
+                let l1 = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+                let l2 = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+                let l3 = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
+                let l4 = u32::from_le_bytes(bytes[12..16].try_into().unwrap());
+                f32_equal(l1, r1) && f32_equal(l2, r2) && f32_equal(l3, r3) && f32_equal(l4, r4)
+            }
+            V128Pattern::F64x2([r1, r2]) => {
+                let bytes = left.to_le_bytes();
+                let l1 = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
+                let l2 = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+                f64_equal(l1, r1) && f64_equal(l2, r2)
             }
         }
     }
 
-    fn nan64(f: NanPattern<Float64>) -> u64 {
-        match f {
-            NanPattern::CanonicalNan => F64_NAN as u64,
-            NanPattern::ArithmeticNan => F64_NAN as u64,
-            NanPattern::Value(f) => {
-                let bits = f.bits;
-                if f64::from_bits(bits).is_nan() {
-                    F64_NAN
-                } else {
-                    bits
-                }
-            }
-        }
-    }
+    fn val_equal(left: &wasmtime::Val, right: &WastRet) -> bool {
+        use wasmtime::Val as V;
+        use wast::core::WastRetCore as R;
+        use WastRet::Core as C;
 
-    fn v128_pattern(v: V128Pattern) -> i128 {
-        match v {
-            V128Pattern::I8x16(i8s) => i128::from_le_bytes(
-                i8s.into_iter()
-                    .map(|i| i as u8)
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .unwrap(),
-            ),
-            V128Pattern::I16x8(is) => i128::from_le_bytes(
-                is.into_iter()
-                    .flat_map(|i| i.to_le_bytes())
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .unwrap(),
-            ),
-            V128Pattern::I32x4(is) => i128::from_le_bytes(
-                is.into_iter()
-                    .flat_map(|i| i.to_le_bytes())
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .unwrap(),
-            ),
-            V128Pattern::I64x2(is) => i128::from_le_bytes(
-                is.into_iter()
-                    .flat_map(|i| i.to_le_bytes())
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .unwrap(),
-            ),
-            V128Pattern::F32x4(fs) => i128::from_le_bytes(
-                fs.into_iter()
-                    .flat_map(|f| nan32(f).to_le_bytes())
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .unwrap(),
-            ),
-            V128Pattern::F64x2(fs) => i128::from_le_bytes(
-                fs.into_iter()
-                    .flat_map(|f| nan64(f).to_le_bytes())
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .unwrap(),
-            ),
-        }
-    }
-
-    pub(super) fn ret(ret: WastRet) -> Option<wasmtime::Val> {
-        match ret {
-            WastRet::Core(WastRetCore::I32(i)) => Some(wasmtime::Val::I32(i)),
-            WastRet::Core(WastRetCore::I64(i)) => Some(wasmtime::Val::I64(i)),
-            WastRet::Core(WastRetCore::F32(f)) => Some(wasmtime::Val::F32(nan32(f))),
-            WastRet::Core(WastRetCore::F64(f)) => Some(wasmtime::Val::F64(nan64(f))),
-            WastRet::Core(WastRetCore::V128(v)) => {
-                Some(wasmtime::Val::V128(v128_pattern(v) as u128))
+        match (left, right) {
+            (V::I32(l), C(R::I32(r))) => l == r,
+            (V::I64(l), C(R::I64(r))) => l == r,
+            (V::F32(l), C(R::F32(r))) => f32_equal(*l, r),
+            (V::F64(l), C(R::F64(r))) => f64_equal(*l, r),
+            (V::V128(l), C(R::V128(r))) => v128_equal(*l, r),
+            (V::ExternRef(None), C(R::RefExtern(_))) => false,
+            // `WastArgCore::RefExtern` always stores a `u32`.
+            (V::ExternRef(Some(l)), C(R::RefExtern(r))) => {
+                let l = l.data().downcast_ref::<u32>().unwrap();
+                l == r
             }
-            WastRet::Core(WastRetCore::RefNull(ty)) => match ty {
-                Some(ty) => Some(heap_type(ty)),
-                None => Some(wasmtime::Val::null()),
+            (V::ExternRef(l), C(R::RefNull(_))) => l.is_none(),
+            (V::FuncRef(l), C(R::RefNull(_))) => l.is_none(),
+            (V::FuncRef(l), C(R::RefFunc(r))) => match (l, r) {
+                (None, None) => true,
+                // Should these be compared using the raw value?
+                (Some(_), Some(_)) => false,
+                _ => false,
             },
-            WastRet::Core(WastRetCore::RefExtern(n)) => Some(wasmtime::ExternRef::new(n).into()),
-            WastRet::Core(WastRetCore::RefFunc(_)) => {
-                println!("RefFunc ret types not yet supported");
-                None
-            }
-            WastRet::Core(WastRetCore::Either(_)) => {
-                println!("Either ret types not yet supported");
-                None
-            }
-            WastRet::Component(_) => {
-                println!(
-                    "Component feature not enabled. Can't handle WastRet {:?}",
-                    ret
-                );
-                None
-            }
+            _ => false,
+        }
+    }
+
+    pub(super) fn vals_equal(left: &[wasmtime::Val], right: &[WastRet]) -> bool {
+        if left.len() == right.len() {
+            left.iter().zip(right.iter()).all(|(l, r)| val_equal(l, r))
+        } else {
+            false
         }
     }
 }
@@ -194,43 +238,6 @@ fn wat_id<'a>(wat: &QuoteWat<'a>) -> Option<Id<'a>> {
         QuoteWat::Wat(Wat::Component(component)) => component.id,
         QuoteWat::QuoteModule(_, _) => None,
         QuoteWat::QuoteComponent(_, _) => None,
-    }
-}
-
-fn val_equal(left: &wasmtime::Val, right: &wasmtime::Val) -> bool {
-    use wasmtime::Val as V;
-
-    match (left, right) {
-        (V::I32(l), V::I32(r)) => l == r,
-        (V::I64(l), V::I64(r)) => l == r,
-        (V::F32(l), V::F32(r)) => l == r,
-        (V::F64(l), V::F64(r)) => l == r,
-        (V::V128(l), V::V128(r)) => l == r,
-        // `WastArgCore::RefExtern` always stores a `u32`.
-        (V::ExternRef(l), V::ExternRef(r)) => match (l, r) {
-            (None, None) => true,
-            (Some(l), Some(r)) => {
-                let l = l.data().downcast_ref::<u32>().unwrap();
-                let r = r.data().downcast_ref::<u32>().unwrap();
-                l == r
-            }
-            _ => false,
-        },
-        (V::FuncRef(l), V::FuncRef(r)) => match (l, r) {
-            (None, None) => true,
-            // Should these be compared using the raw value?
-            (Some(_), Some(_)) => false,
-            _ => false,
-        },
-        _ => false,
-    }
-}
-
-fn vals_equal(left: &[wasmtime::Val], right: &[wasmtime::Val]) -> bool {
-    if left.len() == right.len() {
-        left.iter().zip(right.iter()).all(|(l, r)| val_equal(l, r))
-    } else {
-        false
     }
 }
 
@@ -319,7 +326,11 @@ struct TestState<'a> {
 
 impl<'a> TestState<'a> {
     fn new() -> Self {
-        let engine = Engine::default();
+        // Note that the tests should pass with or without
+        // `cranelift_nan_canonicalization`. But we only use `wasmtime` with
+        // this feature enabled, so it's better to test the case we actually
+        // use.
+        let engine = Engine::new(Config::new().cranelift_nan_canonicalization(true)).unwrap();
         let mut store = Store::new(&engine, ());
         let mut linker = Linker::new(&engine);
         define_spectest_exports(&mut linker, &mut store);
@@ -423,12 +434,7 @@ impl<'a> TestState<'a> {
             return Ok(vec![]);
         }
         let params: Vec<_> = params.into_iter().map(Option::unwrap).collect();
-        self.run_with_wasmtime(name, &params, id).map(|results| {
-            results
-                .into_iter()
-                .map(|r| convert::canonicalize_nans(r))
-                .collect()
-        })
+        self.run_with_wasmtime(name, &params, id)
     }
 }
 
@@ -557,18 +563,11 @@ fn run_directive<'a>(
             match exec {
                 wast::WastExecute::Invoke(invoke) => {
                     let run_results = test_state.run(invoke.name, invoke.args, invoke.module)?;
-                    let expected_results: Vec<_> =
-                        results.into_iter().map(|r| convert::ret(r)).collect();
-                    if expected_results.iter().any(|r| r.is_none()) {
-                        return Ok(());
-                    }
-                    let expected_results: Vec<_> =
-                        expected_results.into_iter().map(|r| r.unwrap()).collect();
-                    if !vals_equal(&run_results, &expected_results) {
+                    if !convert::vals_equal(&run_results, &results) {
                         return Err(format!(
                             "Incorrect result running wasm at {}: Expected {:?} but got {:?}",
                             span_location(span, text, path),
-                            expected_results,
+                            results,
                             run_results,
                         ));
                     }
@@ -731,7 +730,6 @@ fn spec_testsuite() {
         let path = entry.path();
         if path.extension() == Some(&OsString::from("wast"))
             && !FILES_TO_SKIP.contains(&path.file_name().unwrap().to_str().unwrap())
-            && !path.file_name().unwrap().to_str().unwrap().contains("simd")
         {
             test_files.push(path);
         }
