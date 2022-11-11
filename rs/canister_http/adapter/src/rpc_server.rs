@@ -1,7 +1,7 @@
 use crate::metrics::{
     AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_BODY_RECEIVE_TIMEOUT, LABEL_CONNECT,
-    LABEL_HTTP_METHOD, LABEL_HTTP_SCHEME, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
-    LABEL_URL_PARSE,
+    LABEL_DOWNLOAD, LABEL_HTTP_METHOD, LABEL_HTTP_SCHEME, LABEL_REQUEST_HEADERS,
+    LABEL_RESPONSE_HEADERS, LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use byte_unit::Byte;
 use core::convert::TryFrom;
@@ -43,14 +43,14 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
         &self,
         request: Request<CanisterHttpSendRequest>,
     ) -> Result<Response<CanisterHttpSendResponse>, Status> {
-        self.metrics.requests_total.inc();
+        self.metrics.requests.inc();
 
         let req = request.into_inner();
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
             self.metrics
-                .request_errors_total
+                .request_errors
                 .with_label_values(&[LABEL_URL_PARSE])
                 .inc();
             Status::new(
@@ -65,7 +65,7 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 "Got request with no or http scheme specified. {}", uri
             );
             self.metrics
-                .request_errors_total
+                .request_errors
                 .with_label_values(&[LABEL_HTTP_SCHEME])
                 .inc();
             return Err(Status::new(
@@ -87,7 +87,7 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 HttpMethod::Head => Ok(Method::HEAD),
                 _ => {
                     self.metrics
-                        .request_errors_total
+                        .request_errors
                         .with_label_values(&[LABEL_HTTP_METHOD])
                         .inc();
                     Err(Status::new(
@@ -98,20 +98,28 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             })?;
 
         // Build Http Request.
+        let mut request_size = req.body.len();
         let mut http_req = hyper::Request::new(Body::from(req.body));
-        let headers: HeaderMap =
-            HeaderMap::try_from(&req.headers.into_iter().map(|h| (h.name, h.value)).collect())
-                .map_err(|err| {
-                    debug!(self.logger, "Failed to parse headers: {}", err);
-                    self.metrics
-                        .request_errors_total
-                        .with_label_values(&[LABEL_REQUEST_HEADERS])
-                        .inc();
-                    Status::new(
-                        tonic::Code::InvalidArgument,
-                        format!("Failed to parse headers: {}", err),
-                    )
-                })?;
+        let headers: HeaderMap = HeaderMap::try_from(
+            &req.headers
+                .into_iter()
+                .map(|h| {
+                    request_size += h.name.len() + h.value.len();
+                    (h.name, h.value)
+                })
+                .collect(),
+        )
+        .map_err(|err| {
+            debug!(self.logger, "Failed to parse headers: {}", err);
+            self.metrics
+                .request_errors
+                .with_label_values(&[LABEL_REQUEST_HEADERS])
+                .inc();
+            Status::new(
+                tonic::Code::InvalidArgument,
+                format!("Failed to parse headers: {}", err),
+            )
+        })?;
         *http_req.headers_mut() = headers;
         *http_req.method_mut() = method;
         *http_req.uri_mut() = uri;
@@ -119,7 +127,7 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
         let http_resp = self.client.request(http_req).await.map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
             self.metrics
-                .request_errors_total
+                .request_errors
                 .with_label_values(&[LABEL_CONNECT])
                 .inc();
             Status::new(
@@ -127,24 +135,29 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 format!("Failed to connect: {}", err),
             )
         })?;
+        self.metrics
+            .network_traffic
+            .with_label_values(&[LABEL_UPLOAD])
+            .inc_by(request_size as u64);
 
         let status = http_resp.status().as_u16() as u32;
 
         // Parse received headers.
+        let mut headers_size_bytes = 0;
         let headers = http_resp
             .headers()
             .iter()
             .map(|(k, v)| {
-                Ok(HttpHeader {
-                    name: k.to_string(),
-                    value: v.to_str()?.to_string(),
-                })
+                let name = k.to_string();
+                let value = v.to_str()?.to_string();
+                headers_size_bytes += name.len() + value.len();
+                Ok(HttpHeader { name, value })
             })
             .collect::<Result<Vec<_>, ToStrError>>()
             .map_err(|err| {
                 debug!(self.logger, "Failed to parse headers: {}", err);
                 self.metrics
-                    .request_errors_total
+                    .request_errors
                     .with_label_values(&[LABEL_RESPONSE_HEADERS])
                     .inc();
                 Status::new(
@@ -165,7 +178,7 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 // SysTransient error
                 BodyReceiveError::Timeout(e) | BodyReceiveError::Unavailable(e) => {
                     self.metrics
-                        .request_errors_total
+                        .request_errors
                         .with_label_values(&[LABEL_BODY_RECEIVE_TIMEOUT])
                         .inc();
                     Status::new(
@@ -176,7 +189,7 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 // SysFatal error
                 BodyReceiveError::TooLarge(e) => {
                     self.metrics
-                        .request_errors_total
+                        .request_errors
                         .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
                         .inc();
                     Status::new(tonic::Code::OutOfRange, e)
@@ -184,6 +197,10 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             }
         })?;
 
+        self.metrics
+            .network_traffic
+            .with_label_values(&[LABEL_DOWNLOAD])
+            .inc_by(body_bytes.len() as u64 + headers_size_bytes as u64);
         Ok(Response::new(CanisterHttpSendResponse {
             status,
             headers,
