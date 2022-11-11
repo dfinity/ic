@@ -48,4 +48,6 @@ fi
     "$f" \
     "public-s3:dfinity-download-public/ic/${VERSION}/@@REMOTE_SUBDIR@@/"
 
-echo "http://download.dfinity.systems/ic/${VERSION}/@@REMOTE_SUBDIR@@/$(basename $f)" > "$2"
+URL_PATH="ic/${VERSION}/@@REMOTE_SUBDIR@@/$(basename $f)"
+echo "https://download.dfinity.systems/${URL_PATH}" > "$2"
+echo "http://download.proxy-global.dfinity.network:8080/${URL_PATH}" > "$3"
