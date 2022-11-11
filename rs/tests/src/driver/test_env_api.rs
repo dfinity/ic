@@ -581,7 +581,7 @@ impl<T: HasDependencies> HasIcDependencies for T {
     }
 
     fn get_ic_os_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.url";
+        let dep_rel_path = "ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
         let url = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&url)?)
     }
@@ -594,7 +594,7 @@ impl<T: HasDependencies> HasIcDependencies for T {
     }
 
     fn get_ic_os_update_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/guestos/dev/upload_update-img_upgrade.tar.zst.url";
+        let dep_rel_path = "ic-os/guestos/dev/upload_update-img_upgrade.tar.zst.proxy-cache-url";
         let url = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&url)?)
     }

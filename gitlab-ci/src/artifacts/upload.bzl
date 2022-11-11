@@ -52,19 +52,21 @@ def _upload_artifact_impl(ctx):
 
     fileurl = []
     for f in ctx.files.inputs + [checksum]:
-        url = ctx.actions.declare_file(ctx.label.name + "_" + f.basename + ".url")
+        filename = ctx.label.name + "_" + f.basename
+        url = ctx.actions.declare_file(filename + ".url")
+        proxy_cache_url = ctx.actions.declare_file(filename + ".proxy-cache-url")
         ctx.actions.run(
             executable = uploader,
-            arguments = [f.path, url.path],
+            arguments = [f.path, url.path, proxy_cache_url.path],
             env = {
                 "RCLONE_S3_ENDPOINT": rclone_endpoint,
                 "VERSION": ctx.attr._ic_version[BuildSettingInfo].value,
             },
             inputs = [f, ctx.version_file, rclone_config],
-            outputs = [url],
+            outputs = [url, proxy_cache_url],
             tools = [ctx.file._rclone],
         )
-        fileurl.append(url)
+        fileurl.extend([url, proxy_cache_url])
 
     urls = ctx.actions.declare_file(ctx.label.name + ".urls")
     ctx.actions.run_shell(
