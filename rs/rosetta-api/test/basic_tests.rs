@@ -505,24 +505,24 @@ async fn verify_account_search(
 
     let middle_idx = (scribe.blockchain.len() as u64 - 1 + oldest_idx) / 2;
     for acc in &scribe.accounts {
-        let h2: Vec<BlockIndex> = history
+        let mut h2: Vec<BlockIndex> = history
             .get(acc)
             .unwrap()
             .clone()
             .into_iter()
-            .rev()
             .filter(|i| *i >= oldest_idx && *i <= last_verified_idx)
             .collect();
 
         let search_res = query_search_transactions(req_handler, acc, None, None, None)
             .await
             .unwrap();
-        let h: Vec<BlockIndex> = search_res
+        let mut h: Vec<BlockIndex> = search_res
             .transactions
             .iter()
             .map(|t| t.block_identifier.index as BlockIndex)
             .collect();
-
+        h.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        h2.sort_by(|a, b| a.partial_cmp(b).unwrap());
         assert_eq!(h, h2);
 
         let limit = 3;
@@ -531,7 +531,6 @@ async fn verify_account_search(
             .unwrap()
             .clone()
             .into_iter()
-            .rev()
             .filter(|i| *i <= middle_idx && *i >= oldest_idx && *i <= last_verified_idx)
             .collect();
 
@@ -558,7 +557,7 @@ async fn verify_account_search(
 
         let mut h1_limit = h1.clone();
         h1_limit.truncate(limit);
-
+        h1_limit.sort_by(|a, b| a.partial_cmp(b).unwrap());
         assert_eq!(h, h1_limit);
         assert_eq!(search_res.next_offset, next_offset);
 
@@ -587,7 +586,7 @@ async fn verify_account_search(
         let mut h1_offset = h1.clone();
         h1_offset = h1_offset.split_off(offset as usize);
         h1_offset.truncate(limit);
-
+        h1_offset.sort_by(|a, b| a.partial_cmp(b).unwrap());
         assert_eq!(h, h1_offset);
         assert_eq!(search_res.next_offset, next_offset);
     }

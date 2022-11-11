@@ -13,7 +13,10 @@ mod database_access {
     use super::vec_into_array;
     use crate::blocks::{BlockStoreError, HashedBlock};
     use ic_ledger_canister_core::ledger::LedgerTransaction;
-    use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
+    use ic_ledger_core::{
+        block::{BlockType, EncodedBlock, HashOf},
+        Tokens,
+    };
     use icp_ledger::{AccountIdentifier, Block, Operation};
     use rusqlite::{params, types::Null, Connection, Error, Statement};
 
@@ -465,7 +468,7 @@ mod database_access {
         update_balance_book_execution(hb, &mut stmt_select, &mut stmt_insert)
     }
 
-    pub fn _get_all_accounts(
+    pub fn get_all_accounts(
         connection: &mut Connection,
     ) -> Result<Vec<AccountIdentifier>, BlockStoreError> {
         let mut accounts = vec![];
@@ -480,6 +483,92 @@ mod database_access {
             accounts.push(AccountIdentifier::from_hex(account.as_str()).unwrap());
         }
         Ok(accounts)
+    }
+
+    pub fn prune_account_balances(
+        con: &mut Connection,
+        block_idx: &u64,
+    ) -> Result<(), BlockStoreError> {
+        let mut stmt = con
+            .prepare(
+                "SELECT DISTINCT account FROM account_balances WHERE block_idx >= ?1 AND account IN (SELECT DISTINCT account from account_balances WHERE block_idx < ?1)",
+            )
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut rows = stmt
+            .query(params![block_idx])
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let get_last_involved_block_idx = |acc: &str| -> Result<u64, BlockStoreError> {
+            let command = "SELECT block_idx FROM account_balances WHERE block_idx <= ?1 AND account = ?2 ORDER BY block_idx DESC LIMIT 1";
+            let mut stmt = con
+                .prepare(command)
+                .map_err(|e| BlockStoreError::Other(e.to_string()))
+                .unwrap();
+            let mut block_idx = stmt
+                .query_map(params![block_idx, acc], |row| {
+                    Ok(row.get(0).map(|x: u64| x as u64).unwrap())
+                })
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            match block_idx.next() {
+                Some(Ok(idx)) => Ok(idx),
+                Some(Err(e)) => Err(BlockStoreError::Other(e.to_string())),
+                None => Ok(0),
+            }
+        };
+        while let Some(row) = rows.next().unwrap() {
+            let account: String = row.get(0).unwrap();
+            let last_block_idx = get_last_involved_block_idx(&account)?;
+            con.execute(
+                "DELETE FROM account_balances WHERE account = ?1 AND block_idx < ?2",
+                params![account, last_block_idx],
+            )
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    pub fn get_account_balance_history(
+        connection: &mut Connection,
+        acc: &AccountIdentifier,
+        max_block: Option<u64>,
+    ) -> Result<Vec<(u64, Tokens)>, BlockStoreError> {
+        let first_idx = get_first_hashed_block(connection, Some(true))?.index;
+
+        let command = match max_block {
+            Some(limit) => match first_idx {
+                0 => {
+                    format!( "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} ORDER BY block_idx DESC",limit)
+                }
+                _ => {
+                    format!( "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} AND block_idx > {} ORDER BY block_idx DESC",limit,first_idx)
+                }
+            },
+            None => match first_idx {
+                0 => {
+                    String::from("SELECT block_idx,tokens from account_balances where account = ? ORDER BY block_idx DESC")}
+
+                _ => {
+                    format!("SELECT block_idx,tokens from account_balances where account = ? AND block_idx > {} ORDER BY block_idx DESC",first_idx)
+                }
+                }
+        };
+        let account = acc.to_hex();
+        let mut result = Vec::new();
+        let mut stmt = connection
+            .prepare(command.as_str())
+            .map_err(|e| BlockStoreError::Other(e.to_string()))
+            .unwrap();
+        let account_history = stmt
+            .query_map(params![account], |row| {
+                Ok((
+                    row.get(0).map(|x: u64| x as u64)?,
+                    row.get(1).map(|x| Tokens::from_e8s(x))?,
+                ))
+            })
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        for tuple in account_history {
+            result.push(tuple.unwrap());
+        }
+        Ok(result)
     }
 
     pub fn is_verified(con: &mut Connection, block_idx: &u64) -> Result<bool, BlockStoreError> {
@@ -657,34 +746,43 @@ impl Blocks {
         balance_book: &BalanceBook,
     ) -> Result<(), BlockStoreError> {
         self.write_oldest_block_snapshot(hb, balance_book)?;
-        let mut connection = self.connection.lock().unwrap();
-        let tx = connection.transaction().expect("Cannot open transaction");
         // NB: An optimization would be to update only modified accounts.
-        tx.execute(
-            "DELETE FROM books WHERE block_idx > 0 AND block_idx < ?",
-            params![hb.index],
-        )
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        tx.execute(
-            "DELETE FROM balances WHERE block_idx > 0 AND block_idx < ?",
-            params![hb.index],
-        )
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut connection = self.connection.lock().unwrap();
+        connection
+            .execute_batch("BEGIN TRANSACTION;")
+            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
 
-        tx.execute(
-            "DELETE FROM transactions WHERE block_idx > 0 AND block_idx < ?",
-            params![hb.index],
-        )
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-
-        tx.execute(
-            "DELETE FROM blocks WHERE idx > 0 AND idx < ?",
-            params![hb.index],
-        )
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-
-        tx.commit()
+        connection
+            .execute(
+                "DELETE FROM books WHERE block_idx > 0 AND block_idx < ?",
+                params![hb.index],
+            )
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        connection
+            .execute(
+                "DELETE FROM balances WHERE block_idx > 0 AND block_idx < ?",
+                params![hb.index],
+            )
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+
+        connection
+            .execute(
+                "DELETE FROM transactions WHERE block_idx > 0 AND block_idx < ?",
+                params![hb.index],
+            )
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        database_access::prune_account_balances(&mut connection, &hb.index)?;
+        connection
+            .execute(
+                "DELETE FROM blocks WHERE idx > 0 AND idx < ?",
+                params![hb.index],
+            )
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+
+        connection
+            .execute_batch("COMMIT TRANSACTION;")
+            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+
         Ok(())
     }
     pub fn get_block_idx_by_block_hash(
@@ -703,22 +801,32 @@ impl Blocks {
         let mut connection = self.connection.lock().unwrap();
         database_access::get_block_idx_by_transaction_hash(&mut *connection, hash)
     }
+    pub fn get_account_balance_history(
+        &self,
+        acc: &AccountIdentifier,
+        limit_num_blocks: Option<u64>,
+    ) -> Result<Vec<(u64, Tokens)>, BlockStoreError> {
+        let mut connection = self.connection.lock().unwrap();
+        database_access::get_account_balance_history(&mut *connection, acc, limit_num_blocks)
+    }
 
     /// Sanity check (sum of tokens equal pool size).
-    fn sanity_check(balance_book: &BalanceBook) -> Result<(), String> {
-        let mut sum_tokens = Tokens::ZERO;
-        for acc in balance_book.store.acc_to_hist.keys() {
-            sum_tokens += balance_book.account_balance(acc);
+    fn sanity_check(&self, latest_hb: &HashedBlock) -> Result<(), BlockStoreError> {
+        let mut connection = self.connection.lock().unwrap();
+        let accounts = database_access::get_all_accounts(&mut *connection)?;
+        let mut total = Tokens::ZERO;
+        for account in accounts {
+            let amount = database_access::get_account_balance(
+                &mut *connection,
+                &latest_hb.index.clone(),
+                &account,
+            )?;
+            total += Tokens::from_e8s(amount.unwrap());
         }
-        let expected_tokens_pool = (Tokens::MAX - sum_tokens).unwrap();
-        if expected_tokens_pool != balance_book.token_pool {
-            return Err(format!(
-                "Incorrect ICPT pool value in the snapshot (expected: {}, got: {})",
-                expected_tokens_pool, balance_book.token_pool
-            ));
-        }
+        assert!(total <= Tokens::MAX);
         Ok(())
     }
+
     fn read_oldest_block_snapshot(
         &self,
     ) -> Result<Option<(HashedBlock, BalanceBook)>, BlockStoreError> {
@@ -777,7 +885,6 @@ impl Blocks {
         }
 
         let last_block = database_access::get_hashed_block(&mut *con, &last_index)?;
-        Self::sanity_check(&balance_book).map_err(|e| BlockStoreError::Other(e))?;
         Ok(Some((last_block, balance_book)))
     }
 
@@ -1076,10 +1183,15 @@ impl Blocks {
         con.execute_batch("COMMIT TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
         drop(con);
+        self.sanity_check(hb)?;
         self.process_block(hb)?;
         //TODO: UPDATE ACCOUNT BALANCES
 
         Ok(())
+    }
+    pub fn get_all_accounts(&self) -> Result<Vec<AccountIdentifier>, BlockStoreError> {
+        let mut connection = self.connection.lock().unwrap();
+        database_access::get_all_accounts(&mut *connection)
     }
 
     pub fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
