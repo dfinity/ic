@@ -108,7 +108,6 @@ async fn test_get_withdrawal_account(agent: &CkBtcMinterAgent) {
 async fn test_retrieve_btc(agent: &CkBtcMinterAgent) {
     let args = RetrieveBtcArgs {
         amount: 42_000,
-        fee: Some(1_000),
         address: "".to_string(),
     };
     let res = agent

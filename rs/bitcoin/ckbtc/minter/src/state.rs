@@ -25,7 +25,6 @@ thread_local! {
 pub struct RetrieveBtcRequest {
     pub amount: u64,
     pub address: BitcoinAddress,
-    pub fee: u64,
     pub block_index: u64,
 }
 
@@ -52,9 +51,6 @@ pub struct CkBtcMinterState {
 
     /// Per-principal lock for retrieve_btc
     pub retrieve_btc_principals: BTreeSet<Principal>,
-
-    /// Minimum fee for retrieve_btc bitcoin transactions
-    pub retrieve_btc_min_fee: u64,
 
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
@@ -136,7 +132,6 @@ impl From<InitArgs> for CkBtcMinterState {
             min_confirmations: crate::lifecycle::init::DEFAULT_MIN_CONFIRMATIONS,
             update_balance_principals: Default::default(),
             retrieve_btc_principals: Default::default(),
-            retrieve_btc_min_fee: args.retrieve_btc_min_fee,
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),
             ledger_id: args.ledger_id,

@@ -84,13 +84,14 @@ pub async fn update_balance(
     init_ecdsa_public_key().await;
     let _guard = balance_update_guard(caller)?;
 
-    let account = Account {
+    let caller_account = Account {
         owner: PrincipalId::from(caller),
         subaccount: args.subaccount,
     };
 
-    let address =
-        state::read_state(|s| get_btc_address::account_to_p2wpkh_address_from_state(s, &account));
+    let address = state::read_state(|s| {
+        get_btc_address::account_to_p2wpkh_address_from_state(s, &caller_account)
+    });
 
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
@@ -99,7 +100,7 @@ pub async fn update_balance(
 
     let utxos = get_utxos(btc_network, &address, min_confirmations).await?;
 
-    let new_utxos = state::read_state(|s| match s.utxos_state_addresses.get(&account) {
+    let new_utxos = state::read_state(|s| match s.utxos_state_addresses.get(&caller_account) {
         Some(known_utxos) => utxos
             .into_iter()
             .filter(|u| !known_utxos.contains(u))
@@ -116,21 +117,15 @@ pub async fn update_balance(
         return Err(UpdateBalanceError::NoNewUtxos);
     }
 
-    // Mint ckBTC amount equals to the transferred BTC (minting == transfer to burn).
-    let to_caller = Account {
-        owner: PrincipalId::from(caller),
-        subaccount: args.subaccount,
-    };
-
     ic_cdk::print(format!(
         "minting {} wrapped BTC for {} new UTXOs",
         satoshis_to_mint,
         new_utxos.len()
     ));
 
-    let block_index: u64 = mint(satoshis_to_mint, to_caller).await?;
+    let block_index: u64 = mint(satoshis_to_mint, caller_account.clone()).await?;
 
-    state::mutate_state(|s| s.add_utxos(account, new_utxos));
+    state::mutate_state(|s| s.add_utxos(caller_account, new_utxos));
 
     Ok(UpdateBalanceResult {
         amount: satoshis_to_mint,
