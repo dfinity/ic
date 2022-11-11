@@ -22,8 +22,8 @@ end::catalog[] */
 use crate::{
     ckbtc::lib::{
         activate_ecdsa_signature, create_canister, install_ledger, install_minter, print_subnets,
-        subnet_app, subnet_sys, ADDRESS_LENGTH, RETRIEVE_BTC_MIN_AMOUNT, RETRIEVE_BTC_MIN_FEE,
-        TEST_KEY_LOCAL, TRANSFER_FEE,
+        subnet_app, subnet_sys, ADDRESS_LENGTH, RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL,
+        TRANSFER_FEE,
     },
     driver::{
         test_env::TestEnv,
@@ -430,7 +430,6 @@ pub fn test_retrieve_btc(env: TestEnv) {
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
                 amount: 35_000_000,
-                fee: None,
                 address: btc_address2.to_string(),
             })
             .await
@@ -442,7 +441,6 @@ pub fn test_retrieve_btc(env: TestEnv) {
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
                 amount: 35_000_000,
-                fee: None,
                 address: btc_address2.to_string(),
             })
             .await
@@ -456,25 +454,10 @@ pub fn test_retrieve_btc(env: TestEnv) {
             retrieve_result
         );
 
-        info!(&logger, "Call retrieve_btc with insufficient fee");
-        let retrieve_result = minter_agent
-            .retrieve_btc(RetrieveBtcArgs {
-                amount: 1_000_000,
-                fee: Some(80),
-                address: btc_address2.to_string(),
-            })
-            .await
-            .expect("Error while calling retrieve_btc");
-        assert_eq!(
-            Err(RetrieveBtcError::FeeTooLow(RETRIEVE_BTC_MIN_FEE)),
-            retrieve_result
-        );
-
         info!(&logger, "Call retrieve_btc with insufficient amount");
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
                 amount: 33,
-                fee: None,
                 address: btc_address2.to_string(),
             })
             .await
@@ -494,7 +477,6 @@ pub fn test_retrieve_btc(env: TestEnv) {
             let retrieve_result = minter_agent
                 .retrieve_btc(RetrieveBtcArgs {
                     amount: 70_000,
-                    fee: None,
                     address: btc_address2.to_string(),
                 })
                 .await
@@ -507,7 +489,6 @@ pub fn test_retrieve_btc(env: TestEnv) {
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
                 amount: 70_000,
-                fee: None,
                 address: btc_address2.to_string(),
             })
             .await

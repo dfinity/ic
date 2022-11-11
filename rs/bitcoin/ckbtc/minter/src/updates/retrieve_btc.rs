@@ -20,9 +20,6 @@ pub struct RetrieveBtcArgs {
     // amount to retrieve in satoshi
     pub amount: u64,
 
-    // bitcoin fee to use
-    pub fee: Option<u64>,
-
     // address where to send bitcoins
     pub address: String,
 }
@@ -46,9 +43,6 @@ pub enum RetrieveBtcError {
 
     /// The Ledger rejected the burn operation
     LedgerError(TransferError),
-
-    /// The bitcoin fee is too low
-    FeeTooLow(u64),
 
     /// The bitcoin address is not valid
     MalformedAddress(String),
@@ -82,17 +76,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     let caller = ic_cdk::caller();
     init_ecdsa_public_key().await;
     let _guard = retrieve_btc_guard(caller)?;
-    let (default_fee, min_amount, btc_network) = read_state(|s| {
-        (
-            s.retrieve_btc_min_fee,
-            s.retrieve_btc_min_amount,
-            s.btc_network,
-        )
-    });
-    let fee = args.fee.unwrap_or(default_fee);
-    if fee < default_fee {
-        return Err(RetrieveBtcError::FeeTooLow(default_fee));
-    }
+    let (min_amount, btc_network) = read_state(|s| (s.retrieve_btc_min_amount, s.btc_network));
     if args.amount < min_amount {
         return Err(RetrieveBtcError::AmountTooLow(min_amount));
     }
@@ -105,7 +89,6 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     let request = RetrieveBtcRequest {
         amount: args.amount,
         address: parsed_address,
-        fee,
         block_index,
     };
     mutate_state(|s| s.pending_retrieve_btc_requests.push_back(request));

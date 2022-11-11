@@ -62,7 +62,6 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
         /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
         /// a testing key for testnet and mainnet
         ecdsa_key_name: "dfx_test_key".parse().unwrap(),
-        retrieve_btc_min_fee: 0,
         retrieve_btc_min_amount: 0,
         ledger_id,
     };

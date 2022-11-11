@@ -4,14 +4,12 @@ type GetWithdrawalAccountResult = record { account : Account };
 type Result = variant { Ok : RetrieveBtcOk; Err : RetrieveBtcErr };
 type Result_1 = variant { Ok : UpdateBalanceResult; Err : UpdateBalanceError };
 type RetrieveBtcArgs = record {
-  fee : opt nat64;
   address : text;
   amount : nat64;
 };
 type RetrieveBtcErr = variant {
   MalformedAddress : text;
   AlreadyProcessing;
-  FeeTooLow : nat64;
   LedgerError : TransferError;
   AmountTooLow : nat64;
   TooManyConcurrentRequests;
@@ -44,7 +42,6 @@ type InitArgs = record {
     btc_network: BtcNetwork;
     ledger_id : principal;
     ecdsa_key_name: text;
-    retrieve_btc_min_fee: nat64;
     retrieve_btc_min_amount: nat64;
 };
 

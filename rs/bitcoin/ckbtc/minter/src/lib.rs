@@ -140,8 +140,6 @@ pub enum BuildTxError {
     /// The minter does not have enough UTXOs to make the transfer
     /// Try again later after pending transactions have settled.
     NotEnoughFunds,
-    /// The requested fee is too low.
-    UserFeeTooLow,
     /// The amount is too low to pay the transfer fee.
     AmountTooLow,
 }
@@ -157,15 +155,9 @@ pub enum BuildTxError {
 /// * `dst_address` - The destination BTC address.
 /// * `main_address` - The BTC address of minter's main account.
 /// * `amount` - The amount to transfer to the `dst_pubkey`.
-/// * `user_fee` - The fee user is willing to pay.
 /// * `fee_per_vbyte` - The current 50th percentile of BTC fees, in millisatoshi/byte
 ///
 /// # Success case properties
-///
-/// * Transaction fee does not exceed the user fee and the amount.
-/// ```text
-/// fee(tx) < min(user_fee, amount)
-/// ```
 ///
 /// * The total value of minter UTXOs decreases at least by the amount.
 /// ```text
@@ -194,7 +186,6 @@ pub fn build_unsigned_transaction(
     dst_address: address::BitcoinAddress,
     main_address: address::BitcoinAddress,
     amount: Satoshi,
-    user_fee: Option<Satoshi>,
     fee_per_vbyte: u64,
 ) -> Result<tx::UnsignedTransaction, BuildTxError> {
     const DUST_THRESHOLD: Satoshi = 300;
@@ -258,19 +249,9 @@ pub fn build_unsigned_transaction(
         return Err(BuildTxError::AmountTooLow);
     }
 
-    match user_fee {
-        Some(fee) if fee < expected_fee => {
-            for utxo in input_utxos {
-                minter_utxos.insert(utxo);
-            }
-            return Err(BuildTxError::UserFeeTooLow);
-        }
-        _ => (),
-    }
-
     // NB. The receiver (always the first output) pays the fee.
     debug_assert_eq!(&unsigned_tx.outputs[0].address, &dst_address);
-    unsigned_tx.outputs[0].value -= user_fee.unwrap_or(expected_fee);
+    unsigned_tx.outputs[0].value -= expected_fee;
 
     Ok(unsigned_tx)
 }

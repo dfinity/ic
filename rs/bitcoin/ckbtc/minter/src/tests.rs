@@ -355,7 +355,6 @@ proptest! {
             BitcoinAddress::WitnessV0(dst_pkhash),
             BitcoinAddress::WitnessV0(main_pkhash),
             target,
-            None,
             fee_per_vbyte
         )
         .expect("failed to build transaction");
@@ -386,20 +385,16 @@ proptest! {
             .map(|utxo| (utxo.outpoint.clone(), utxo.value))
             .collect();
 
-        let user_fee = 5000u64;
         let unsigned_tx = build_unsigned_transaction(
             &mut utxos,
             BitcoinAddress::WitnessV0(dst_pkhash),
             BitcoinAddress::WitnessV0(main_pkhash),
             target,
-            Some(user_fee),
             fee_per_vbyte
         )
         .expect("failed to build transaction");
 
         let fee = signed_transaction_length(&unsigned_tx) as u64 * fee_per_vbyte / 1000;
-
-        prop_assert!(fee <= user_fee);
 
         let inputs_value = unsigned_tx.inputs
             .iter()
@@ -410,7 +405,7 @@ proptest! {
             &unsigned_tx.outputs,
             &vec![
                 tx::TxOut {
-                    value: target - user_fee,
+                    value: target - fee,
                     address: BitcoinAddress::WitnessV0(dst_pkhash),
                 },
                 tx::TxOut {
@@ -438,24 +433,12 @@ proptest! {
                 BitcoinAddress::WitnessV0(dst_pkhash),
                 BitcoinAddress::WitnessV0(main_pkhash),
                 total_value * 2,
-                None,
                 fee_per_vbyte
             ).expect_err("build transaction should fail because the amount is too high"),
             BuildTxError::NotEnoughFunds
         );
         prop_assert_eq!(&utxos_copy, &utxos);
 
-        prop_assert_eq!(
-            build_unsigned_transaction(
-                &mut utxos,
-                BitcoinAddress::WitnessV0(dst_pkhash),
-                BitcoinAddress::WitnessV0(main_pkhash),
-                1000,
-                Some(1),
-                fee_per_vbyte
-            ).expect_err("build transaction should fail because max fee is too low"),
-            BuildTxError::UserFeeTooLow
-        );
         prop_assert_eq!(&utxos_copy, &utxos);
 
         prop_assert_eq!(
@@ -464,7 +447,6 @@ proptest! {
                 BitcoinAddress::WitnessV0(dst_pkhash),
                 BitcoinAddress::WitnessV0(main_pkhash),
                 1,
-                None,
                 fee_per_vbyte
             ).expect_err("build transaction should fail because the amount is too low to pay the fee"),
             BuildTxError::AmountTooLow
@@ -482,7 +464,6 @@ proptest! {
         let mut state = CkBtcMinterState::from(InitArgs {
             btc_network: Network::Regtest,
             ecdsa_key_name: "".to_string(),
-            retrieve_btc_min_fee: 0,
             retrieve_btc_min_amount: 0,
             ledger_id: CanisterId::from_u64(42),
         });

@@ -121,7 +121,6 @@ mod tests {
         InitArgs {
             btc_network: Network::Regtest,
             ecdsa_key_name: "".to_string(),
-            retrieve_btc_min_fee: 0,
             retrieve_btc_min_amount: 0,
             ledger_id: CanisterId::from_u64(42),
         }

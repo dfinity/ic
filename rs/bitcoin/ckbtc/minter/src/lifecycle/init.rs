@@ -15,9 +15,6 @@ pub struct InitArgs {
     /// a testing key for testnet and mainnet
     pub ecdsa_key_name: String,
 
-    /// Minimum fee for retrieve_btc bitcoin transactions
-    pub retrieve_btc_min_fee: u64,
-
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
 
