@@ -4,7 +4,7 @@ use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::CspVault;
 use crate::LocalCspVault;
 use crate::SecretKeyStore;
-use rand::{thread_rng, Rng, SeedableRng};
+use rand::{thread_rng, CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::sync::Arc;
 
@@ -17,6 +17,18 @@ pub fn new_local_csp_vault_with_secret_key_store<S: 'static + SecretKeyStore>(
     secret_key_store: S,
 ) -> Arc<LocalCspVault<ChaChaRng, S, VolatileSecretKeyStore, TempPublicKeyStore>> {
     let csprng = ChaChaRng::from_seed(thread_rng().gen::<[u8; 32]>());
+    let public_key_store = TempPublicKeyStore::new();
+    Arc::new(LocalCspVault::new_for_test(
+        csprng,
+        secret_key_store,
+        public_key_store,
+    ))
+}
+
+pub fn new_local_csp_vault_with_csprng<R: Rng + CryptoRng>(
+    csprng: R,
+) -> Arc<LocalCspVault<R, TempSecretKeyStore, VolatileSecretKeyStore, TempPublicKeyStore>> {
+    let secret_key_store = TempSecretKeyStore::new();
     let public_key_store = TempPublicKeyStore::new();
     Arc::new(LocalCspVault::new_for_test(
         csprng,
