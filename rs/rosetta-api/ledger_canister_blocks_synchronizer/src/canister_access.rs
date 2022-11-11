@@ -1,5 +1,7 @@
 use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_canister_client::{Agent, HttpClient, Sender};
+use ic_agent::agent::http_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::identity::AnonymousIdentity;
+use ic_agent::{Agent, AgentError, NonceGenerator};
 use ic_ledger_core::block::EncodedBlock;
 use ic_types::CanisterId;
 use icp_ledger::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse, TipOfChainRequest};
@@ -11,6 +13,20 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::task::{spawn, JoinHandle};
 use url::Url;
+
+#[derive(Default)]
+pub struct TimestampBlob {}
+impl NonceGenerator for TimestampBlob {
+    fn generate(&self) -> Option<Vec<u8>> {
+        Some(Vec::from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+                .to_be_bytes(),
+        ))
+    }
+}
 
 pub struct CanisterAccess {
     pub agent: Agent,
@@ -30,14 +46,32 @@ impl CanisterAccess {
     const BLOCKS_BATCH_LEN: u64 = 2000;
     const MAX_BLOCK_QUERIES: usize = 5;
 
-    pub fn new(url: Url, canister_id: CanisterId) -> Self {
-        let agent = Agent::new_with_client(HttpClient::new(), url, Sender::Anonymous);
-        Self {
+    pub async fn new(
+        url: Url,
+        canister_id: CanisterId,
+        root_key: Option<Vec<u8>>,
+    ) -> Result<Self, AgentError> {
+        let agent = Agent::builder()
+            .with_identity(AnonymousIdentity)
+            .with_transport(ReqwestHttpReplicaV2Transport::create(url)?)
+            .with_nonce_generator(TimestampBlob::default())
+            .build()
+            .unwrap();
+
+        match root_key {
+            Some(root_key) => agent.set_root_key(root_key)?,
+            None => {
+                warn!("Fetching the root key from the replica because it was not set");
+                agent.fetch_root_key().await?
+            }
+        };
+
+        Ok(Self {
             agent,
             canister_id,
             archive_list: Arc::new(tokio::sync::Mutex::new(None)),
             ongoing_block_queries: Default::default(),
-        }
+        })
     }
 
     pub async fn query<Payload: ToProto, Res: ToProto>(
@@ -45,13 +79,7 @@ impl CanisterAccess {
         method: &str,
         payload: Payload,
     ) -> Result<Res, String> {
-        let arg = ProtoBuf(payload).into_bytes()?;
-        let bytes = self
-            .agent
-            .execute_query(&self.canister_id, method, arg)
-            .await?
-            .ok_or_else(|| "Reply payload was empty".to_string())?;
-        ProtoBuf::from_bytes(bytes).map(|c| c.0)
+        self.query_canister(self.canister_id, method, payload).await
     }
 
     pub async fn query_canister<Payload: ToProto, Res: ToProto>(
@@ -63,9 +91,11 @@ impl CanisterAccess {
         let arg = ProtoBuf(payload).into_bytes()?;
         let bytes = self
             .agent
-            .execute_query(&canister_id, method, arg)
-            .await?
-            .ok_or_else(|| "Reply payload was empty".to_string())?;
+            .query(&canister_id.get().0, method)
+            .with_arg(arg)
+            .call()
+            .await
+            .map_err(|e| format!("{}", e))?;
         ProtoBuf::from_bytes(bytes).map(|c| c.0)
     }
 
