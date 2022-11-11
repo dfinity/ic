@@ -284,4 +284,4 @@ class Bazel(DependencyManager):
                 project_builder.add(project_string)
 
         project_builder.discard("")
-        return list(project_builder)
+        return sorted(list(project_builder))
