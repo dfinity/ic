@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
 
-use super::super::PK_DATA_FILENAME;
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use crate::read_node_public_keys;
+use crate::PUBLIC_KEY_STORE_DATA_FILENAME;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
@@ -21,7 +21,7 @@ const PUBLIC_KEYS_FILE: &str = "public_keys.pb";
 fn should_contain_no_keys_after_opening_non_existing_pubkey_store() {
     let temp_dir = temp_dir();
 
-    let store = ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME);
+    let store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
 
     assert!(store.node_signing_pubkey().is_none());
     assert!(store.committee_signing_pubkey().is_none());
@@ -40,7 +40,7 @@ fn should_contain_correct_keys_after_opening_existing_pubkey_store() {
     assert!(!generated_keys.idkg_dealing_encryption_pks.is_empty());
     assert!(generated_keys.tls_certificate.is_some());
 
-    let store = ProtoPublicKeyStore::open(crypto_root.path(), PK_DATA_FILENAME);
+    let store = ProtoPublicKeyStore::open(crypto_root.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
 
     assert_eq!(
         store.node_signing_pubkey(),
@@ -67,7 +67,7 @@ fn should_contain_correct_keys_after_opening_existing_pubkey_store() {
 #[test]
 fn should_set_pubkeys_if_not_set() {
     let temp_dir = temp_dir();
-    let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME);
+    let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
     let (generated_keys, _temp_dir) = generate_node_keys_in_temp_dir();
 
     assert!(store.node_signing_pubkey().is_none());
@@ -130,7 +130,7 @@ fn should_set_pubkeys_if_not_set() {
 #[test]
 fn should_set_non_rotating_pubkeys_only_once() {
     let (generated_keys, crypto_root) = generate_node_keys_in_temp_dir();
-    let mut store = ProtoPublicKeyStore::open(crypto_root.path(), PK_DATA_FILENAME);
+    let mut store = ProtoPublicKeyStore::open(crypto_root.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
     let some_pubkey = generated_keys.node_signing_pk.unwrap();
     let some_cert = generated_keys.tls_certificate.unwrap();
 
@@ -162,14 +162,15 @@ fn should_set_non_rotating_pubkeys_only_once() {
 #[test]
 fn should_persist_pubkeys_to_disk_when_setting_them() {
     let temp_dir = temp_dir();
-    let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME);
+    let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
     let (generated_keys, _temp_dir) = generate_node_keys_in_temp_dir();
 
     assert!(store
         .set_once_node_signing_pubkey(generated_keys.node_signing_pk.clone().unwrap())
         .is_ok());
     assert_eq!(
-        ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME).node_signing_pubkey(),
+        ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
+            .node_signing_pubkey(),
         generated_keys.node_signing_pk.as_ref()
     );
 
@@ -177,7 +178,8 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
         .set_once_committee_signing_pubkey(generated_keys.committee_signing_pk.clone().unwrap())
         .is_ok());
     assert_eq!(
-        ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME).committee_signing_pubkey(),
+        ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
+            .committee_signing_pubkey(),
         generated_keys.committee_signing_pk.as_ref()
     );
 
@@ -187,7 +189,7 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
         )
         .is_ok());
     assert_eq!(
-        ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME)
+        ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
             .ni_dkg_dealing_encryption_pubkey(),
         generated_keys.dkg_dealing_encryption_pk.as_ref()
     );
@@ -196,7 +198,8 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
         .set_once_tls_certificate(generated_keys.tls_certificate.clone().unwrap())
         .is_ok());
     assert_eq!(
-        ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME).tls_certificate(),
+        ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
+            .tls_certificate(),
         generated_keys.tls_certificate.as_ref()
     );
 
@@ -204,7 +207,7 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
         .set_idkg_dealing_encryption_pubkeys(generated_keys.idkg_dealing_encryption_pks.clone())
         .is_ok());
     assert_eq!(
-        ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME)
+        ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
             .idkg_dealing_encryption_pubkeys(),
         &generated_keys.idkg_dealing_encryption_pks
     );
@@ -213,7 +216,7 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
 #[test]
 fn should_preserve_order_of_rotating_pubkeys() {
     let temp_dir = temp_dir();
-    let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME);
+    let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
     let pubkeys = vec![
         public_key_with(42),
         public_key_with(43),
@@ -225,7 +228,7 @@ fn should_preserve_order_of_rotating_pubkeys() {
         .is_ok());
     assert_eq!(store.idkg_dealing_encryption_pubkeys(), &pubkeys);
     assert_eq!(
-        ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME)
+        ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
             .idkg_dealing_encryption_pubkeys(),
         &pubkeys
     );
@@ -235,10 +238,10 @@ fn should_preserve_order_of_rotating_pubkeys() {
 #[should_panic(expected = "error parsing public key store data")]
 fn should_panic_on_opening_corrupt_pubkey_store() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
-    let corrupt_store_file = temp_dir.path().join(PK_DATA_FILENAME);
+    let corrupt_store_file = temp_dir.path().join(PUBLIC_KEY_STORE_DATA_FILENAME);
     fs::write(corrupt_store_file, b"corrupt store content").expect("failed to write store");
 
-    ProtoPublicKeyStore::open(temp_dir.path(), PK_DATA_FILENAME);
+    ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
 }
 
 #[test]

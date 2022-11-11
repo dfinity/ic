@@ -54,7 +54,6 @@ use std::time::Instant;
 mod tests;
 
 const SKS_DATA_FILENAME: &str = "sks_data.pb";
-// TODO CRP-1721: this duplicates constant ic-crypto-internal-csp::PK_DATA_FILENAME
 const PUBLIC_KEY_STORE_DATA_FILENAME: &str = "public_keys.pb";
 const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
 

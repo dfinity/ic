@@ -27,9 +27,11 @@ use ic_logger::ReplicaLogger;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
+use std::collections::HashSet;
 use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
 
@@ -59,8 +61,9 @@ pub struct LocalCspVault<
 impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore> {
     /// Creates a production-grade local CSP vault.
     ///
-    /// The `node_secret_key_store` and the `canister_secret_key_store`
-    /// must be ProtoSecretKeyStore using distinct protobuf files.
+    /// # Panics
+    /// If the key stores (`node_secret_key_store`,`canister_secret_key_store` or `public_key_store`)
+    /// do not use distinct files.
     pub fn new(
         node_secret_key_store: ProtoSecretKeyStore,
         canister_secret_key_store: ProtoSecretKeyStore,
@@ -68,10 +71,11 @@ impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicK
         metrics: Arc<CryptoMetrics>,
         logger: ReplicaLogger,
     ) -> Self {
-        //TODO CRP-1721: ensures paths for 3 key stores are distinct and add corresponding test
-        if node_secret_key_store.proto_file_path() == canister_secret_key_store.proto_file_path() {
-            panic!("The node secret-key-store and the canister secret-key-store must use different files")
-        }
+        ensure_unique_paths(&[
+            node_secret_key_store.proto_file_path(),
+            canister_secret_key_store.proto_file_path(),
+            public_key_store.proto_file_path(),
+        ]);
         LocalCspVault::new_internal(
             OsRng,
             node_secret_key_store,
@@ -202,4 +206,21 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<(), SecretKeyStoreError> {
         self.sks_write_lock().insert(key_id, csp_secret_key, None)
     }
+}
+
+fn ensure_unique_paths(paths: &[&Path]) {
+    let mut distinct_paths: HashSet<&Path> = HashSet::new();
+    for path in paths {
+        if !distinct_paths.insert(*path) {
+            panic!(
+                "Expected key stores to use distinct files but {:?} is used more than once",
+                path
+            )
+        }
+    }
+    assert_eq!(
+        paths.len(),
+        distinct_paths.len(),
+        "Key stores do not use distinct files"
+    );
 }
