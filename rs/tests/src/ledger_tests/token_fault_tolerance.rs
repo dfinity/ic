@@ -14,9 +14,9 @@ Runbook::
 Success:: balances obtained by queries matches expected balances after transfers
 
 end::catalog[] */
-use ic_fondue::ic_manager::IcHandle;
-
-use crate::nns::NnsExt;
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::util;
 
 use crate::{
@@ -34,22 +34,33 @@ use std::time::Duration;
 
 const MAX_NUMBER_OF_RETRIES: usize = 5;
 
-pub fn config() -> InternetComputer {
+pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System).add_nodes(3))
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
     let mut rng = ctx.rng.clone();
     let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
     util::block_on(async {
         util::assert_endpoints_health(endpoints.as_slice(), util::EndpointsStatus::AllHealthy).await
     });
-    info!(ctx.logger, "All nodes are reachable, IC setup succeeded.");
-    ctx.install_nns_canisters(&handle, true);
-    info!(&ctx.logger, "Installed NNS canisters");
+    info!(logger, "All nodes are reachable, IC setup succeeded.");
+    info!(logger, "Installing NNS canisters...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
 

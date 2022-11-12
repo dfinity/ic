@@ -1,13 +1,15 @@
 /* tag::catalog[]
 end::catalog[] */
 
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::types::*;
 use crate::util::*;
-use ic_fondue::ic_manager::IcHandle;
 use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_universal_canister::{call_args, wasm};
 
-pub fn test_raw_rand_api(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test_raw_rand_api(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({

@@ -17,12 +17,11 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::driver::vm_control::IcControl;
 use crate::util::{assert_all_ready, assert_create_agent, block_on, UniversalCanister};
-use ic_fondue::{
-    ic_manager::{IcEndpoint, IcHandle},
-    iterator::PermOf,
-};
+use ic_fondue::{ic_manager::IcEndpoint, iterator::PermOf};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
@@ -33,16 +32,20 @@ const NODES_COUNT: usize = 3 * ALLOWED_FAILURES + 1;
 const DKG_INTERVAL: u64 = 14;
 const NOTARY_DELAY: Duration = Duration::from_millis(100);
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .add_nodes(NODES_COUNT)
-            .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-            .with_initial_notary_delay(NOTARY_DELAY),
-    )
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .add_nodes(NODES_COUNT)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_initial_notary_delay(NOTARY_DELAY),
+        )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     info!(&ctx.logger, "Checking readiness of all nodes...");
     block_on(assert_all_ready(
         handle

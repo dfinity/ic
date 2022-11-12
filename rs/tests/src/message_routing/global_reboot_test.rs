@@ -27,6 +27,8 @@ end::catalog[] */
 
 use std::time::Duration;
 
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::util::{
     self, assert_endpoints_health, assert_subnet_can_make_progress, block_on, runtime_from_url,
     EndpointsStatus,
@@ -35,7 +37,6 @@ use crate::util::{
 use crate::driver::{ic::InternetComputer, vm_control::IcControl};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
-use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 use tokio::time::sleep;
@@ -47,13 +48,17 @@ const CANISTER_TO_SUBNET_RATE: u64 = 10;
 const PAYLOAD_SIZE_BYTES: u64 = 1024;
 const MSG_EXEC_TIME_SEC: u64 = 15;
 
-pub fn config() -> InternetComputer {
-    (0..SUBNETS_COUNT).fold(InternetComputer::new(), |ic, _idx| {
-        ic.add_fast_single_node_subnet(SubnetType::Application)
-    })
+pub fn config(env: TestEnv) {
+    (0..SUBNETS_COUNT)
+        .fold(InternetComputer::new(), |ic, _idx| {
+            ic.add_fast_single_node_subnet(SubnetType::Application)
+        })
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let endpoints = handle.as_permutation(&mut rng).collect::<Vec<_>>();
     let endpoints_runtime = (0..SUBNETS_COUNT)

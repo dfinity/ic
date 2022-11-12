@@ -19,31 +19,49 @@ end::catalog[] */
 
 use crate::{
     driver::ic::{InternetComputer, Subnet},
-    driver::vm_control::IcControl,
+    driver::{
+        pot_dsl::get_ic_handle_and_ctx,
+        test_env::TestEnv,
+        test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt},
+        vm_control::IcControl,
+    },
 };
 use crate::{
     nns::NnsExt,
     util::{assert_endpoints_health, assert_subnet_can_make_progress, block_on, EndpointsStatus},
 };
-use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
+use ic_fondue::ic_manager::IcEndpoint;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
+use slog::info;
 
 const DKG_INTERVAL: u64 = 14;
 const NODES_COUNT: usize = 4;
 const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-            .add_nodes(NODES_COUNT),
-    )
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(NODES_COUNT),
+        )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // Setup: install all necessary NNS canisters.
-    ctx.install_nns_canisters(&handle, true);
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+    info!(logger, "Installing NNS canisters...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
     let mut rng = ctx.rng.clone();
     let mut endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status

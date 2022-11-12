@@ -22,10 +22,9 @@ use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     retry, retry_async, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    NnsInstallationExt, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::driver::universal_vm::UniversalVms;
-use crate::nns::NnsExt;
 use crate::util::{self, *};
 use crate::{
     driver::ic::{InternetComputer, Subnet},
@@ -176,13 +175,21 @@ pub fn get_balance(env: TestEnv) {
     // should be 50 * 101 = 5050 bitcoin or 505000000000 satoshis.
     let expected_balance_in_satoshis = 5050_0000_0000_u64;
 
+    // Install NNS canisters
+    info!(logger, "Installing NNS canisters...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
     // TODO: adapt the test below to use the env directly
     // instead of using the deprecated IcHandle and Context.
     let (handle, ctx) = get_ic_handle_and_ctx(env.clone());
-
-    // Install NNS canisters
-    ctx.install_nns_canisters(&handle, true);
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
 
     let app_endpoint = util::get_random_application_node_endpoint(&handle, &mut rng);

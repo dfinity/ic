@@ -1,12 +1,13 @@
 use slog::info;
 
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
 
 use crate::driver::ic::InternetComputer;
-use ic_fondue::ic_manager::IcHandle;
 use ic_nns_governance::pb::v1::{GovernanceError, NeuronInfo};
 
-use crate::nns::NnsExt;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 
@@ -18,8 +19,11 @@ use proptest::strategy::{Strategy, ValueTree};
 use proptest::test_runner::TestRunner;
 
 /// A test runs within a given IC configuration.
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_fast_single_node_subnet(SubnetType::System)
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_fast_single_node_subnet(SubnetType::System)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 /// This is a simple example (proof of concept) of how the Proptest framework
@@ -32,8 +36,21 @@ pub fn config() -> InternetComputer {
 /// Note that `TestRunner::run` cannot be used since that does not work for
 /// `async` methods. Also, the `proptest!` macro cannot be used in this context
 /// because it is intended for unit tests (i.e. with `#[test]` annotation)
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    ctx.install_nns_canisters(&handle, true);
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+
+    info!(logger, "Installing NNS canisters on the root subnet...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+    info!(&logger, "NNS canisters installed successfully.");
+
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
+
     let mut rng = ctx.rng.clone();
     let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");

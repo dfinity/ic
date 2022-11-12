@@ -1,11 +1,11 @@
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::util;
 use candid::Encode;
 use ic_agent::export::Principal;
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;
-use ic_fondue::ic_manager::IcHandle;
-use ic_fondue::{self};
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 use slog::info;
@@ -13,11 +13,15 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     let node = util::get_random_application_node_endpoint(&handle, &mut rng);

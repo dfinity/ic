@@ -16,13 +16,14 @@ Runbook::
 
 end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::util::{block_on, get_random_root_node_endpoint, runtime_from_url};
 use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response,
 };
 use ic_crypto::threshold_sig_public_key_from_der;
-use ic_fondue::ic_manager::IcHandle;
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
@@ -40,11 +41,15 @@ use slog::info;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let root_subnet_endpoint = get_random_root_node_endpoint(&handle, &mut rng);
     block_on(root_subnet_endpoint.assert_ready(ctx));

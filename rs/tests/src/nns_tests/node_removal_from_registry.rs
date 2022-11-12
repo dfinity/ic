@@ -22,22 +22,23 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::nns::{
-    submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt,
-};
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
+use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
 use crate::{
     nns::vote_execute_proposal_assert_failed,
     util::{self, block_on},
 };
 use ic_base_types::PrincipalId;
-use ic_fondue::ic_manager::IcHandle;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
+use slog::info;
 
-pub fn config() -> InternetComputer {
+pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -47,11 +48,25 @@ pub fn config() -> InternetComputer {
         .with_node_provider(PrincipalId::new_user_test_id(1))
         .with_node_operator(PrincipalId::new_user_test_id(1))
         .with_unassigned_nodes(1)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // Install all necessary NNS canisters.
-    ctx.install_nns_canisters(&handle, true);
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+
+    info!(logger, "Installing NNS canisters on the root subnet...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+    info!(&logger, "NNS canisters installed successfully.");
+
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
+
     // Assert that necessary endpoints are reachable.
     let mut rng = ctx.rng.clone();
     let nns_endpoint = util::get_random_nns_node_endpoint(&handle, &mut rng);

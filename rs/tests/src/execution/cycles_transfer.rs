@@ -1,15 +1,16 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use crate::{types::RejectCode, util::*};
-use ic_fondue::ic_manager::IcHandle;
+use crate::{
+    driver::{pot_dsl::get_ic_handle_and_ctx, test_env::TestEnv},
+    types::RejectCode,
+    util::*,
+};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 
-pub fn can_transfer_cycles_from_a_canister_to_another(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn can_transfer_cycles_from_a_canister_to_another(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -64,10 +65,8 @@ pub fn can_transfer_cycles_from_a_canister_to_another(
     })
 }
 
-pub fn trapping_with_large_blob_does_not_cause_cycles_underflow(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn trapping_with_large_blob_does_not_cause_cycles_underflow(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let initial_balance = 123_000_000_000_000u64;
@@ -101,10 +100,8 @@ pub fn trapping_with_large_blob_does_not_cause_cycles_underflow(
     });
 }
 
-pub fn rejecting_with_large_blob_does_not_cause_cycles_underflow(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn rejecting_with_large_blob_does_not_cause_cycles_underflow(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let initial_balance = 123_000_000_000_000u64;

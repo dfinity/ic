@@ -13,14 +13,18 @@ Runbook::
 
 
 end::catalog[] */
-use crate::util::*;
+use crate::{
+    driver::{pot_dsl::get_ic_handle_and_ctx, test_env::TestEnv},
+    util::*,
+};
 use ic_agent::identity::Identity;
 use ic_fondue::ic_manager::IcHandle;
 use ic_universal_canister::wasm;
 use reqwest::StatusCode;
 
 /// Not defining `canister_inspect_message` accepts all ingress messages.
-pub fn canister_accepts_ingress_by_default(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn canister_accepts_ingress_by_default(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -58,10 +62,8 @@ pub fn canister_accepts_ingress_by_default(handle: IcHandle, ctx: &ic_fondue::po
 }
 
 /// Defining an empty `canister_inspect_message` rejects all messages.
-pub fn empty_canister_inspect_rejects_all_messages(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn empty_canister_inspect_rejects_all_messages(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -89,7 +91,8 @@ pub fn empty_canister_inspect_rejects_all_messages(
 }
 
 /// Defining a `canister_inspect_message` that accepts all messages.
-pub fn canister_can_accept_ingress(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn canister_can_accept_ingress(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -116,7 +119,8 @@ pub fn canister_can_accept_ingress(handle: IcHandle, ctx: &ic_fondue::pot::Conte
 
 /// Defining a `canister_inspect_message` that only accepts messages with
 /// payload.
-pub fn canister_only_accepts_ingress_with_payload(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn canister_only_accepts_ingress_with_payload(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -166,10 +170,8 @@ pub fn canister_only_accepts_ingress_with_payload(handle: IcHandle, ctx: &ic_fon
     })
 }
 
-pub fn canister_rejects_ingress_only_from_one_caller(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn canister_rejects_ingress_only_from_one_caller(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({

@@ -23,7 +23,9 @@ Runbook::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::nns::NnsExt;
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::util::{
     assert_canister_counter_with_retries, assert_create_agent, assert_endpoints_health, block_on,
     delay, get_random_application_node_endpoint, EndpointsStatus,
@@ -31,7 +33,6 @@ use crate::util::{
 use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::PrincipalId;
-use ic_fondue::ic_manager::IcHandle;
 use ic_prep_lib::subnet_configuration::constants;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
@@ -48,61 +49,52 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // Thi
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(5); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 
 /// Default configuration for this test
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(Subnet::new(SubnetType::Application).add_nodes(NODES_COUNT))
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(NODES_COUNT))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 /// SLO test configuration with a NNS subnet and an app subnet with the same number of nodes as used on mainnet
-pub fn two_third_latency_config() -> InternetComputer {
+pub fn two_third_latency_config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(40))
         .add_subnet(
             Subnet::new(SubnetType::Application).add_nodes(constants::SMALL_APP_SUBNET_MAX_SIZE),
         )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 /// Default test installing two canisters and sending 60 requests per second for 30 seconds
 /// This test is run in hourly jobs.
-pub fn short_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn short_test(env: TestEnv) {
     let is_install_nns_canisters = false;
     let canister_count: usize = 2;
     let rps: usize = 60;
     let duration: Duration = Duration::from_secs(30);
-    test(
-        handle,
-        ctx,
-        canister_count,
-        rps,
-        duration,
-        is_install_nns_canisters,
-    );
+    test(env, canister_count, rps, duration, is_install_nns_canisters);
 }
 
 /// SLO test installing two canisters and sending 200 requests per second for 500 seconds.
 /// This test is run nightly.
-pub fn two_third_latency_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn two_third_latency_test(env: TestEnv) {
     let is_install_nns_canisters = true;
     let canister_count: usize = 2;
     let rps: usize = 200;
     let duration: Duration = Duration::from_secs(500);
-    test(
-        handle,
-        ctx,
-        canister_count,
-        rps,
-        duration,
-        is_install_nns_canisters,
-    );
+    test(env, canister_count, rps, duration, is_install_nns_canisters);
 }
 
 fn test(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
+    env: TestEnv,
     canister_count: usize,
     rps: usize,
     duration: Duration,
     is_install_nns_canisters: bool,
 ) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
     let mut rng = ctx.rng.clone();
     let app_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
     let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
@@ -115,7 +107,13 @@ fn test(
 
     if is_install_nns_canisters {
         info!(&ctx.logger, "Installing NNS canisters...");
-        ctx.install_nns_canisters(&handle, true);
+        env.topology_snapshot()
+            .root_subnet()
+            .nodes()
+            .next()
+            .unwrap()
+            .install_nns_canisters()
+            .expect("Could not install NNS canisters");
     }
 
     block_on(async move {

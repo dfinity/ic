@@ -24,11 +24,12 @@ If the NNS canisters are not deployed, the subnets will stop making progress aft
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::nns::NnsExt;
+use crate::driver::pot_dsl::{get_ic_handle_and_ctx, PotSetupFn, SysTestFn};
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::util::{assert_endpoints_health, block_on, runtime_from_url, EndpointsStatus};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
-use ic_fondue::{ic_manager::IcHandle, pot::FondueTestFn};
 use ic_registry_subnet_type::SubnetType;
 use slog::{info, Logger};
 use std::fmt::Display;
@@ -47,7 +48,7 @@ const SEND_RATE_THRESHOLD: f64 = 0.3;
 const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
 const TARGETED_LATENCY_SECONDS: u64 = 20;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     subnets: usize,
     nodes_per_subnet: usize,
@@ -90,15 +91,13 @@ impl Config {
     }
 
     /// Builds the IC instance.
-    pub fn build(&self) -> InternetComputer {
-        (0..self.subnets).fold(InternetComputer::new(), |ic, _idx| {
-            ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(self.nodes_per_subnet))
-        })
+    pub fn build(self) -> impl PotSetupFn {
+        move |env: TestEnv| setup(env, self)
     }
 
     /// Returns a test function based on this configuration.
-    pub fn test(self) -> impl FondueTestFn<IcHandle> {
-        move |handle: IcHandle, ctx: &ic_fondue::pot::Context| test(handle, ctx, self)
+    pub fn test(self) -> impl SysTestFn {
+        move |env: TestEnv| test(env, self)
     }
 }
 
@@ -122,9 +121,21 @@ pub fn config_hotfix_slo_3_subnets() -> Config {
     Config::new(3, 4, Duration::from_secs(120), 10)
 }
 
+// Generic setup
+fn setup(env: TestEnv, config: Config) {
+    (0..config.subnets)
+        .fold(InternetComputer::new(), |ic, _idx| {
+            ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))
+        })
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+}
+
 // Generic test
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
-    info!(ctx.logger, "Config for the test: {:?}", config);
+pub fn test(env: TestEnv, config: Config) {
+    let logger = env.logger();
+    info!(logger, "Config for the test: {:?}", config);
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
     let mut rng = ctx.rng.clone();
     let mut endpoints = handle.as_permutation(&mut rng).collect::<Vec<_>>();
     assert_eq!(endpoints.len(), config.subnets * config.nodes_per_subnet);
@@ -134,18 +145,21 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         EndpointsStatus::AllHealthy,
     ));
     info!(
-        ctx.logger,
+        logger,
         "IC setup succeeded, all status endpoints are reachable over http."
     );
     // Install NNS for long tests (note that for large numbers of subnets or
     // nodes the registry might be too big for installation as a canister)
     if config.runtime > Duration::from_secs(1200) {
-        info!(
-            &ctx.logger,
-            "Installing NNS canisters on the root subnet ..."
-        );
-        ctx.install_nns_canisters(&handle, true);
-        info!(&ctx.logger, "NNS canisters installed successfully.");
+        info!(logger, "Installing NNS canisters on the root subnet...");
+        env.topology_snapshot()
+            .root_subnet()
+            .nodes()
+            .next()
+            .unwrap()
+            .install_nns_canisters()
+            .expect("Could not install NNS canisters");
+        info!(&logger, "NNS canisters installed successfully.");
     }
     // Installing canisters on a subnet requires an Agent (or a Runtime wrapper around Agent).
     // We need only one endpoint per subnet for canister installation.
@@ -163,11 +177,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         .collect::<Vec<_>>();
     assert_eq!(endpoints_runtime.len(), config.subnets);
     // Step 1: Build and install Xnet canisters on each subnet.
-    info!(ctx.logger, "Building Xnet canister wasm...");
+    info!(logger, "Building Xnet canister wasm...");
     let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]);
-    info!(ctx.logger, "Installing Xnet canisters on subnets ...");
+    info!(logger, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(
-        ctx.logger.clone(),
+        logger.clone(),
         &endpoints_runtime,
         config.subnets,
         config.canisters_per_subnet,
@@ -179,11 +193,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         config.subnets * config.canisters_per_subnet
     );
     info!(
-        ctx.logger,
+        logger,
         "All {} canisters installed successfully.", canisters_count
     );
     // Step 2: Start all canisters (via update `start` call).
-    info!(ctx.logger, "Calling start() on all canisters...");
+    info!(logger, "Calling start() on all canisters...");
     start_all_canisters(
         &canisters,
         config.payload_size_bytes,
@@ -192,7 +206,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     let msgs_per_round =
         config.canister_to_subnet_rate * config.canisters_per_subnet * (config.subnets - 1);
     info!(
-        ctx.logger,
+        logger,
         "Starting chatter: {} messages/round * {} bytes = {} bytes/round",
         msgs_per_round,
         config.payload_size_bytes,
@@ -200,7 +214,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     );
     // Step 3: Wait for canisters to exchange messages.
     info!(
-        ctx.logger,
+        logger,
         "Sending messages for {} secs...",
         config.runtime.as_secs()
     );
@@ -208,19 +222,19 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         sleep(Duration::from_secs(config.runtime.as_secs())).await;
     });
     // Step 4: Stop all canisters (via update `stop` call).
-    info!(ctx.logger, "Stopping all canisters...");
+    info!(logger, "Stopping all canisters...");
     stop_all_canister(&canisters);
     // Step 5: Collect metrics from all canisters (via query `metrics` call).
-    info!(ctx.logger, "Collecting metrics from all canisters...");
+    info!(logger, "Collecting metrics from all canisters...");
     let metrics = collect_metrics(&canisters);
     // Step 6: Aggregate metrics for each subnet (over its canisters).
-    info!(ctx.logger, "Aggregating metrics for each subnet...");
+    info!(logger, "Aggregating metrics for each subnet...");
     let mut aggregated_metrics = Vec::<Metrics>::new();
     for (subnet_idx, subnet_metrics) in metrics.iter().enumerate() {
         let mut merged_metric = Metrics::default();
         for (canister_idx, canister_metric) in subnet_metrics.iter().enumerate() {
             info!(
-                ctx.logger,
+                logger,
                 "Metrics for subnet {}, canister {}: {:?}",
                 subnet_idx,
                 canister_idx,
@@ -230,20 +244,20 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         }
         aggregated_metrics.push(merged_metric);
         info!(
-            ctx.logger,
+            logger,
             "Aggregated metrics for subnet {}: {:?}",
             subnet_idx,
             aggregated_metrics.last()
         );
     }
     // Step 7. Assert metric are within limits.
-    info!(ctx.logger, "Asserting metrics are within limits...");
+    info!(logger, "Asserting metrics are within limits...");
     let mut success = true;
     let mut expect =
         |cond: bool, subnet: usize, ok_msg: &str, fail_msg: &str, val: &dyn Display| {
             success &= cond;
             info!(
-                ctx.logger,
+                logger,
                 "Subnet {}: {} {}: {}",
                 subnet,
                 if cond { "Success:" } else { "Failure:" },
@@ -302,7 +316,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         // executed before ingress messages, i.e. the heartbeat was executed before
         // metrics collection) or uncounted responses (if ingress executed first).
         info!(
-            ctx.logger,
+            logger,
             "responses_expected={} subnet_to_subnet_rate={}, responses_received={}",
             responses_expected,
             config.subnet_to_subnet_rate,
@@ -340,20 +354,12 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         }
     }
     // Step 8: Stop/delete all canisters.
-    info!(ctx.logger, "Stop/delete all canisters...");
+    info!(logger, "Stop/delete all canisters...");
     block_on(async {
         for canister in canisters.iter().flatten() {
-            info!(
-                ctx.logger,
-                "Stopping canister {} ...",
-                canister.canister_id()
-            );
+            info!(logger, "Stopping canister {} ...", canister.canister_id());
             canister.stop().await.expect("Stopping canister failed.");
-            info!(
-                ctx.logger,
-                "Deleting canister {} ...",
-                canister.canister_id()
-            );
+            info!(logger, "Deleting canister {} ...", canister.canister_id());
             canister.delete().await.expect("Deleting canister failed.");
         }
     });

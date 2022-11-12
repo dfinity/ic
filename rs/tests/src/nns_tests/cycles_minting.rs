@@ -1,8 +1,11 @@
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::nns::{
     change_subnet_type_assignment, change_subnet_type_assignment_with_failure,
     get_governance_canister, set_authorized_subnetwork_list,
     set_authorized_subnetwork_list_with_failure, submit_external_proposal_with_test_id,
-    update_subnet_type, update_xdr_per_icp, NnsExt,
+    update_subnet_type, update_xdr_per_icp,
 };
 use crate::util::{
     assert_all_ready, get_random_application_node_endpoint, get_random_nns_node_endpoint,
@@ -24,7 +27,6 @@ use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_tree_hash::MixedHashTree;
-use ic_fondue::ic_manager::IcHandle;
 use ic_ic00_types::{CanisterIdRecord, CanisterStatusResult};
 use ic_ledger_core::block::BlockType;
 use ic_nervous_system_common_test_keys::{
@@ -58,18 +60,22 @@ use url::Url;
 /// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
 const USE_COST_SCALING_FLAG: bool = false;
 
-pub fn config() -> InternetComputer {
+pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn config_with_multiple_app_subnets() -> InternetComputer {
+pub fn config_with_multiple_app_subnets(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
         .add_fast_single_node_subnet(SubnetType::Application)
         .add_fast_single_node_subnet(SubnetType::Application)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 // TODO(EXC-1168): remove after cost scaling is fully implemented.
@@ -83,11 +89,22 @@ fn scale_cycles(cycles: Cycles) -> Cycles {
     Cycles::from((cycles.get() * subnet_size) / reference_subnet_size)
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // Install NNS canisters
-    ctx.install_nns_canisters(&handle, true);
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+
+    info!(logger, "Installing NNS canisters on the root subnet...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+    info!(&logger, "NNS canisters installed successfully.");
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
 
     rt.block_on(async move {
         let mut rng = ctx.rng.clone();
@@ -128,13 +145,13 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .as_secs();
 
         // Set the XDR-to-cycles conversion rate.
-        info!(ctx.logger, "setting CYCLES_PER_XDR");
+        info!(logger, "setting CYCLES_PER_XDR");
         update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
             .await
             .unwrap();
 
         // Set the XDR-to-cycles conversion rate, but expect it to fail
-        info!(ctx.logger, "setting conversion rate to 0, failure expected");
+        info!(logger, "setting conversion rate to 0, failure expected");
         let governance_canister = get_governance_canister(&nns);
         let proposal_payload = UpdateIcpXdrConversionRatePayload {
             timestamp_seconds: std::time::SystemTime::now()
@@ -204,7 +221,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
         // Set the XDR-to-cycles conversion rate again but with the same timestamp.
         // No change expected.
-        info!(ctx.logger, "setting CYCLES_PER_XDR");
+        info!(logger, "setting CYCLES_PER_XDR");
         submit_external_proposal_with_test_id(
             &governance_canister,
             NnsFunction::IcpXdrConversionRate,
@@ -230,7 +247,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
         /* The first attempt to create a canister should fail because we
          * haven't registered subnets with the cycles minting canister. */
-        info!(ctx.logger, "creating canister (no subnets)");
+        info!(logger, "creating canister (no subnets)");
 
         let send_amount = Tokens::new(2, 0).unwrap();
 
@@ -239,7 +256,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap_err();
 
-        info!(ctx.logger, "error: {}", err);
+        info!(logger, "error: {}", err);
         assert!(err.contains("No subnets in which to create a canister"));
 
         /* Check that the funds for the failed creation attempt are returned to use
@@ -255,7 +272,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 .await
                 .unwrap_err();
 
-            info!(ctx.logger, "error: {}", err);
+            info!(logger, "error: {}", err);
             assert!(err.contains("No subnets in which to create a canister"));
 
             /* Check that the funds for the failed creation attempt are returned to use
@@ -266,7 +283,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         }
 
         /* Register a subnet. */
-        info!(ctx.logger, "registering subnets");
+        info!(logger, "registering subnets");
         let app_subnets: Vec<_> = handle
             .as_permutation(&mut rng)
             .filter(|ep| ep.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::Application))
@@ -283,7 +300,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .unwrap();
 
         /* Create with funds < the canister creation fee. */
-        info!(ctx.logger, "creating canister (not enough funds 1)");
+        info!(logger, "creating canister (not enough funds 1)");
 
         let small_amount = Tokens::new(0, 500_000).unwrap();
 
@@ -292,7 +309,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap_err();
 
-        info!(ctx.logger, "error: {}", err);
+        info!(logger, "error: {}", err);
         assert!(err.contains("Creating a canister requires a fee of"));
 
         let refund_block = refund_block.unwrap();
@@ -306,7 +323,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 .await
                 .unwrap_err();
 
-            info!(ctx.logger, "error: {}", err);
+            info!(logger, "error: {}", err);
             assert!(err.contains("Creating a canister requires a fee of"));
 
             let refund_block = refund_block.unwrap();
@@ -315,7 +332,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         }
 
         /* Create with funds < the refund fee. */
-        info!(ctx.logger, "creating canister (not enough funds 2)");
+        info!(logger, "creating canister (not enough funds 2)");
 
         let tiny_amount = (DEFAULT_TRANSFER_FEE + Tokens::from_e8s(10_000)).unwrap();
 
@@ -324,7 +341,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap_err();
 
-        info!(ctx.logger, "error: {}", err);
+        info!(logger, "error: {}", err);
         assert!(err.contains("Creating a canister requires a fee of"));
 
         /* There should be no refund, all the funds will be burned. */
@@ -348,7 +365,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 .await
                 .unwrap_err();
 
-            info!(ctx.logger, "error: {}", err);
+            info!(logger, "error: {}", err);
             assert!(err.contains("Creating a canister requires a fee of"));
 
             /* There should be no refund, all the funds will be burned. */
@@ -367,7 +384,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         }
 
         /* Create with sufficient funds. */
-        info!(ctx.logger, "creating canister");
+        info!(logger, "creating canister");
 
         let initial_amount = Tokens::new(10_000, 0).unwrap();
 
@@ -407,7 +424,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap_err();
 
-        info!(ctx.logger, "topping up");
+        info!(logger, "topping up");
 
         let topup1 = Tokens::new(1000, 0).unwrap();
         let topup2 = Tokens::new(1000, 0).unwrap();
@@ -544,7 +561,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 _ => panic!("unexpected block {:?}", txn),
             }
 
-            info!(ctx.logger, "topping up");
+            info!(logger, "topping up");
 
             let top_up_amount = Tokens::new(5_000, 0).unwrap();
 
@@ -602,7 +619,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         }
 
         /* Override the list of subnets for a specific controller. */
-        info!(ctx.logger, "registering subnets override");
+        info!(logger, "registering subnets override");
         let system_subnets: Vec<_> = handle
             .as_permutation(&mut rng)
             .filter(|ep| ep.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::System))
@@ -618,7 +635,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap();
 
-        info!(ctx.logger, "creating NNS canister");
+        info!(logger, "creating NNS canister");
 
         let nns_amount = Tokens::new(2, 0).unwrap();
 
@@ -678,10 +695,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
          * mappings). Note: we first update to a dummy canister
          * because upgrade_nns_canister_by_proposal() doesn't want to
          * upgrade to the same version of the canister. */
-        info!(
-            ctx.logger,
-            "upgrading cycles minting canister to empty module"
-        );
+        info!(logger, "upgrading cycles minting canister to empty module");
 
         let wasm = wabt::wat2wasm("(module)").unwrap();
 
@@ -694,7 +708,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         )
         .await;
 
-        info!(ctx.logger, "creating NNS canister (will fail)");
+        info!(logger, "creating NNS canister (will fail)");
         let block = user1
             .pay_for_canister(nns_amount, None, &controller_pid)
             .await;
@@ -723,7 +737,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             );
         }
 
-        info!(ctx.logger, "upgrading cycles minting canister");
+        info!(logger, "upgrading cycles minting canister");
         let wasm = Project::cargo_bin_maybe_from_env("cycles-minting-canister", &[]);
 
         upgrade_nns_canister_by_proposal(
@@ -735,7 +749,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         )
         .await;
 
-        info!(ctx.logger, "creating NNS canister");
+        info!(logger, "creating NNS canister");
 
         user1
             .notify_canister_create_cmc(block, None, &controller_pid, None)
@@ -749,7 +763,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .unwrap();
 
         /* Exceed the daily cycles minting limit. */
-        info!(ctx.logger, "creating canister (exceeding daily limit)");
+        info!(logger, "creating canister (exceeding daily limit)");
 
         let amount = Tokens::new(100_000, 0).unwrap();
 
@@ -758,7 +772,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap_err();
 
-        info!(ctx.logger, "error: {}", err);
+        info!(logger, "error: {}", err);
         assert!(err
             .contains("cycles have been minted in the last 3600 seconds, please try again later"));
 
@@ -775,7 +789,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 .await
                 .unwrap_err();
 
-            info!(ctx.logger, "error: {}", err);
+            info!(logger, "error: {}", err);
             assert!(err.contains(
                 "cycles have been minted in the last 3600 seconds, please try again later"
             ));
@@ -806,11 +820,22 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     });
 }
 
-pub fn create_canister_on_specific_subnet_type(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // Install NNS canisters
-    ctx.install_nns_canisters(&handle, true);
+pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
+    let logger = env.logger();
+
+    info!(logger, "Installing NNS canisters on the root subnet...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+    info!(&logger, "NNS canisters installed successfully.");
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
 
     rt.block_on(async move {
         let mut rng = ctx.rng.clone();
@@ -840,14 +865,14 @@ pub fn create_canister_on_specific_subnet_type(handle: IcHandle, ctx: &ic_fondue
             .as_secs();
 
         // Set the XDR-to-cycles conversion rate.
-        info!(ctx.logger, "setting CYCLES_PER_XDR");
+        info!(logger, "setting CYCLES_PER_XDR");
         update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
             .await
             .unwrap();
 
         // The first attempt to create a canister should fail because we
         // haven't registered any subnets with the cycles minting canister.
-        info!(ctx.logger, "creating canister (no subnets)");
+        info!(logger, "creating canister (no subnets)");
 
         let send_amount = Tokens::new(2, 0).unwrap();
 
@@ -856,7 +881,7 @@ pub fn create_canister_on_specific_subnet_type(handle: IcHandle, ctx: &ic_fondue
             .await
             .unwrap_err();
 
-        info!(ctx.logger, "error: {}", err);
+        info!(logger, "error: {}", err);
         assert!(err.contains("No subnets in which to create a canister"));
 
         // Check that the funds for the failed creation attempt are returned to use
@@ -866,7 +891,7 @@ pub fn create_canister_on_specific_subnet_type(handle: IcHandle, ctx: &ic_fondue
             .await;
 
         // Register an authorized subnet and additionally assign a subnet to a type.
-        info!(ctx.logger, "registering subnets");
+        info!(logger, "registering subnets");
         let app_subnets: Vec<_> = handle
             .as_permutation(&mut rng)
             .filter(|ep| ep.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::Application))
@@ -919,7 +944,7 @@ pub fn create_canister_on_specific_subnet_type(handle: IcHandle, ctx: &ic_fondue
         // Create canisters with sufficient funds on both an authorized and a
         // subnet with a specific type and confirm the canisters are created
         // on the expected subnet on each case.
-        info!(ctx.logger, "creating canisters");
+        info!(logger, "creating canisters");
         let initial_amount = Tokens::new(10_000, 0).unwrap();
 
         let canister_on_authorized_subnet = user1

@@ -2,9 +2,10 @@
 end::catalog[] */
 
 use crate::driver::ic::InternetComputer;
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::types::*;
 use crate::util::*;
-use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 
@@ -15,7 +16,7 @@ pub fn config() -> InternetComputer {
 }
 
 /// Tests that query replies can be larger than update replies.
-pub fn query_reply_sizes(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn query_reply_sizes(env: TestEnv) {
     // A wasm that exports a query function that has a 3MiB reply.
     let wasm = wabt::wat2wasm(
         r#"(module
@@ -32,6 +33,7 @@ pub fn query_reply_sizes(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
               (export "canister_query hi" (func $hi)))"#,
     )
     .unwrap();
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
