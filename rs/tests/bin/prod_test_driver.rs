@@ -455,19 +455,19 @@ fn get_test_suites() -> HashMap<String, Suite> {
             execution::upgraded_pots::inter_canister_queries(),
             execution::upgraded_pots::compute_allocation_pot(),
             execution::upgraded_pots::max_number_of_canisters_pot(),
-            pot(
+            pot_with_setup(
                 "global_reboot_pot",
-                message_routing::global_reboot_test::config(),
-                par(vec![t(
+                message_routing::global_reboot_test::config,
+                par(vec![sys_t(
                     "global_reboot_test",
                     message_routing::global_reboot_test::test,
                 )]),
             ),
             icrc1_agent_test::icrc1_agent_test_pot(),
-            pot(
+            pot_with_setup(
                 "node_removal_from_registry_pot",
-                nns_tests::node_removal_from_registry::config(),
-                par(vec![t(
+                nns_tests::node_removal_from_registry::config,
+                par(vec![sys_t(
                     "node_removal_from_registry_test",
                     nns_tests::node_removal_from_registry::test,
                 )]),
@@ -480,84 +480,84 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     orchestrator::node_assign_test::test,
                 )]),
             ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
-            pot(
+            pot_with_setup(
                 "node_graceful_leaving_pot",
-                consensus::node_graceful_leaving_test::config(),
-                par(vec![t(
+                consensus::node_graceful_leaving_test::config,
+                par(vec![sys_t(
                     "node_graceful_leaving_test",
                     consensus::node_graceful_leaving_test::test,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "nns_follow_pot",
-                nns_tests::nns_follow::config(),
-                par(vec![t("follow_test", nns_tests::nns_follow::test)]),
+                nns_tests::nns_follow::config,
+                par(vec![sys_t("follow_test", nns_tests::nns_follow::test)]),
             ),
-            pot(
+            pot_with_setup(
                 "nns_voting_pot",
-                nns_tests::nns_voting::config(),
-                par(vec![t("voting_test", nns_tests::nns_voting::test)]),
+                nns_tests::nns_voting::config,
+                par(vec![sys_t("voting_test", nns_tests::nns_voting::test)]),
             ),
-            pot(
+            pot_with_setup(
                 "nns_token_balance_pot",
-                ledger_tests::token_balance::config(),
-                par(vec![t(
+                ledger_tests::token_balance::config,
+                par(vec![sys_t(
                     "token_balance_test",
                     ledger_tests::token_balance::test,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "cycles_minting_pot",
-                nns_tests::cycles_minting::config(),
-                par(vec![t(
+                nns_tests::cycles_minting::config,
+                par(vec![sys_t(
                     "cycles_minting_test",
                     nns_tests::cycles_minting::test,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "cycles_minting_pot_with_multiple_app_subnets",
-                nns_tests::cycles_minting::config_with_multiple_app_subnets(),
-                par(vec![t(
+                nns_tests::cycles_minting::config_with_multiple_app_subnets,
+                par(vec![sys_t(
                     "cycles_minting_with_subnet_types_test",
                     nns_tests::cycles_minting::create_canister_on_specific_subnet_type,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "nns_voting_fuzzing_poc_pot",
-                nns_tests::nns_voting_fuzzing_poc_test::config(),
-                par(vec![t(
+                nns_tests::nns_voting_fuzzing_poc_test::config,
+                par(vec![sys_t(
                     "nns_voting_fuzzing_poc_test",
                     nns_tests::nns_voting_fuzzing_poc_test::test,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "nns_canister_uninstall_pot",
-                nns_tests::nns_uninstall_canister_by_proposal::config(),
-                par(vec![t(
+                nns_tests::nns_uninstall_canister_by_proposal::config,
+                par(vec![sys_t(
                     "nns_uninstall_canister_by_proposal_test",
                     nns_tests::nns_uninstall_canister_by_proposal::test,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "nns_canister_upgrade_pot",
-                nns_tests::nns_canister_upgrade::config(),
-                par(vec![t(
+                nns_tests::nns_canister_upgrade::config,
+                par(vec![sys_t(
                     "nns_canister_upgrade_test",
                     nns_tests::nns_canister_upgrade::test,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "certified_registry_pot",
-                execution::registry_authentication_test::config(),
-                par(vec![t(
+                execution::registry_authentication_test::config,
+                par(vec![sys_t(
                     "registry_authentication_test",
                     execution::registry_authentication_test::test,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "transaction_ledger_correctness_pot",
-                ledger_tests::transaction_ledger_correctness::config(),
-                par(vec![t(
+                ledger_tests::transaction_ledger_correctness::config,
+                par(vec![sys_t(
                     "transaction_ledger_correctness_test",
                     ledger_tests::transaction_ledger_correctness::test,
                 )]),
@@ -614,10 +614,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
     let xnet_slo_3_subnets = message_routing::xnet_slo_test::config_hotfix_slo_3_subnets();
     m.add_suite(suite(
         "hotfix",
-        vec![pot(
+        vec![pot_with_setup(
             "xnet_slo_3_subnets_pot",
-            xnet_slo_3_subnets.build(),
-            par(vec![t(
+            xnet_slo_3_subnets.clone().build(),
+            par(vec![sys_t(
                 "xnet_slo_3_subnets_test",
                 xnet_slo_3_subnets.test(),
             )]),
@@ -627,10 +627,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
     let xnet_slo_3_subnets = message_routing::xnet_slo_test::config_prod_slo_3_subnets();
     m.add_suite(suite(
         "prod_slo",
-        vec![pot(
+        vec![pot_with_setup(
             "xnet_slo_3_subnets_pot",
-            xnet_slo_3_subnets.build(),
-            par(vec![t(
+            xnet_slo_3_subnets.clone().build(),
+            par(vec![sys_t(
                 "xnet_slo_3_subnets_test",
                 xnet_slo_3_subnets.test(),
             )]),
@@ -642,10 +642,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "staging", //runs nightly, allowed to fail
             vec![
-                pot(
+                pot_with_setup(
                     "xnet_120_subnets_pot",
-                    xnet_nightly_120_subnets.build(),
-                    par(vec![t(
+                    xnet_nightly_120_subnets.clone().build(),
+                    par(vec![sys_t(
                         "xnet_slo_120_subnets_test",
                         xnet_nightly_120_subnets.test(),
                     )]),
@@ -728,18 +728,18 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(suite(
         "nightly_short_duration",
         vec![
-            pot(
+            pot_with_setup(
                 "xnet_slo_3_subnets_pot",
-                xnet_nightly_3_subnets.build(),
-                par(vec![t(
+                xnet_nightly_3_subnets.clone().build(),
+                par(vec![sys_t(
                     "xnet_slo_3_subnets_test",
                     xnet_nightly_3_subnets.test(),
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "xnet_slo_29_subnets_pot",
-                xnet_nightly_29_subnets.build(),
-                par(vec![t(
+                xnet_nightly_29_subnets.clone().build(),
+                par(vec![sys_t(
                     "xnet_slo_29_subnets_test",
                     xnet_nightly_29_subnets.test(),
                 )]),
@@ -760,10 +760,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     canister_http::http_time_out::test,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "two_third_latency_pot",
-                workload_counter_canister_test::two_third_latency_config(),
-                par(vec![t(
+                workload_counter_canister_test::two_third_latency_config,
+                par(vec![sys_t(
                     "workload_counter_canister_test",
                     workload_counter_canister_test::two_third_latency_test,
                 )]),
@@ -814,10 +814,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         orchestrator::node_reassignment_test::test,
                     )]),
                 ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
-                pot(
+                pot_with_setup(
                     "token_fault_tolerance_pot",
-                    ledger_tests::token_fault_tolerance::config(),
-                    par(vec![t(
+                    ledger_tests::token_fault_tolerance::config,
+                    par(vec![sys_t(
                         "token_fault_tolerance_test",
                         ledger_tests::token_fault_tolerance::test,
                     )]),
@@ -835,15 +835,15 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         canister_http::http_correctness::test,
                     )]),
                 ),
-                pot(
+                pot_with_setup(
                     "rejoin",
-                    message_routing::rejoin_test::config(),
-                    par(vec![t("rejoin", message_routing::rejoin_test::test)]),
+                    message_routing::rejoin_test::config,
+                    par(vec![sys_t("rejoin", message_routing::rejoin_test::test)]),
                 ),
-                pot(
+                pot_with_setup(
                     "workload_counter_canister_pot",
-                    workload_counter_canister_test::config(),
-                    par(vec![t(
+                    workload_counter_canister_test::config,
+                    par(vec![sys_t(
                         "workload_counter_canister_test",
                         workload_counter_canister_test::short_test,
                     )]),
@@ -972,10 +972,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(
         suite(
             "wasm_generator",
-            vec![pot(
+            vec![pot_with_setup(
                 "wasm_generator_pot",
-                wasm_generator_test::config(),
-                par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
+                wasm_generator_test::config,
+                par(vec![sys_t(
+                    "wasm_generator_test",
+                    wasm_generator_test::test,
+                )]),
             )],
         )
         .with_alert(TEST_FAILURE_CHANNEL),

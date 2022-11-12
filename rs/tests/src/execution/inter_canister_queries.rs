@@ -1,6 +1,8 @@
 /* tag::catalog[]
 end::catalog[] */
 use crate::driver::ic::InternetComputer;
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::{
     types::RejectCode,
     util::{
@@ -9,7 +11,6 @@ use crate::{
         get_random_verified_app_node_endpoint, UniversalCanister,
     },
 };
-use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;
 use ic_universal_canister::{call_args, wasm};
@@ -21,7 +22,8 @@ pub fn config() -> InternetComputer {
 }
 
 /// User queries A on first subnet. A queries B on another subnet which fails.
-pub fn cannot_query_xnet_canister(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn cannot_query_xnet_canister(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -50,7 +52,8 @@ pub fn cannot_query_xnet_canister(handle: IcHandle, ctx: &ic_fondue::pot::Contex
 }
 
 /// User queries canister A; A replies to user.
-pub fn simple_query(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn simple_query(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -72,7 +75,8 @@ pub fn simple_query(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 }
 
 /// User queries canister A; A queries self which fails.
-pub fn self_loop_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn self_loop_fails(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -90,7 +94,8 @@ pub fn self_loop_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 }
 
 /// User queries canister A; A queries B; B queries A which fails.
-pub fn canisters_loop_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn canisters_loop_fails(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -116,7 +121,8 @@ pub fn canisters_loop_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
 /// User queries canister A; A queries B; B replies to A; A does not reply to
 /// the user.
-pub fn intermediate_canister_does_not_reply(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn intermediate_canister_does_not_reply(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -143,7 +149,8 @@ pub fn intermediate_canister_does_not_reply(handle: IcHandle, ctx: &ic_fondue::p
 
 /// User queries canister A; canister A queries canister B; B replies to A; A
 /// replies to user.
-pub fn query_two_canisters(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn query_two_canisters(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -170,7 +177,8 @@ pub fn query_two_canisters(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
 /// User queries A; A queries B; B queries C; C replies to B; B replies to A; A
 /// replies to user
-pub fn query_three_canisters(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn query_three_canisters(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -200,7 +208,8 @@ pub fn query_three_canisters(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 }
 
 /// User queries A; A queries non-existent canister; A sends error to user;
-pub fn canister_queries_non_existent(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn canister_queries_non_existent(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -220,7 +229,8 @@ pub fn canister_queries_non_existent(handle: IcHandle, ctx: &ic_fondue::pot::Con
 
 /// User queries A; A queries B; B does not respond; A handles no-reply and
 /// replies to user;
-pub fn canister_queries_does_not_reply(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn canister_queries_does_not_reply(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -244,10 +254,8 @@ pub fn canister_queries_does_not_reply(handle: IcHandle, ctx: &ic_fondue::pot::C
 /// End user sends a query msg to canisterA; canisterA sends two queries to
 /// canisterB; canisterB replies to both; canisterA replies when it sees the
 /// second reply from canisterB.
-pub fn inter_canister_query_first_canister_multiple_request(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn inter_canister_query_first_canister_multiple_request(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({

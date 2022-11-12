@@ -5,9 +5,11 @@ Goal:: Test the robustness of the replica by sending invalid requests to its HTT
 
 
 end::catalog[] */
-use crate::util;
+use crate::{
+    driver::{pot_dsl::get_ic_handle_and_ctx, test_env::TestEnv},
+    util,
+};
 use ic_base_types::CanisterId;
-use ic_fondue::ic_manager::IcHandle;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
@@ -17,19 +19,20 @@ use std::time::{Duration, SystemTime};
 
 const ENDPOINTS: &[&str; 3] = &["call", "query", "read_state"];
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    test_invalid_content_type(&handle, ctx);
-    test_invalid_get_requests(&handle, ctx);
-    test_garbage_payload(&handle, ctx);
-    test_valid_query_followed_by_garbage(&handle, ctx);
-    test_valid_update_followed_by_garbage(&handle, ctx);
+pub fn test(env: TestEnv) {
+    test_invalid_content_type(env.clone());
+    test_invalid_get_requests(env.clone());
+    test_garbage_payload(env.clone());
+    test_valid_query_followed_by_garbage(env.clone());
+    test_valid_update_followed_by_garbage(env);
 }
 
 // Endpoints reject requests without the "application/cbor" content type.
-fn test_invalid_content_type(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
+fn test_invalid_content_type(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let client = reqwest::blocking::Client::new();
-    let endpoint = util::get_random_node_endpoint(handle, &mut rng);
+    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
     util::block_on(endpoint.assert_ready(ctx));
     let canister_id = CanisterId::from_u64(123456789);
     for e in ENDPOINTS {
@@ -54,9 +57,10 @@ fn test_invalid_content_type(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
 }
 
 // Endpoints reject get requests.
-fn test_invalid_get_requests(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
+fn test_invalid_get_requests(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
-    let endpoint = util::get_random_node_endpoint(handle, &mut rng);
+    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
     util::block_on(endpoint.assert_ready(ctx));
     let client = reqwest::blocking::Client::new();
 
@@ -74,9 +78,10 @@ fn test_invalid_get_requests(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
 }
 
 // Endpoints reject garbage payloads.
-fn test_garbage_payload(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
+fn test_garbage_payload(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
-    let endpoint = util::get_random_node_endpoint(handle, &mut rng);
+    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
     util::block_on(endpoint.assert_ready(ctx));
     let client = reqwest::blocking::Client::new();
 
@@ -102,9 +107,10 @@ fn test_garbage_payload(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
     }
 }
 
-fn test_valid_query_followed_by_garbage(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
+fn test_valid_query_followed_by_garbage(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
-    let endpoint = util::get_random_node_endpoint(handle, &mut rng);
+    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
     util::block_on(endpoint.assert_ready(ctx));
     let client = reqwest::blocking::Client::new();
 
@@ -148,9 +154,10 @@ fn test_valid_query_followed_by_garbage(handle: &IcHandle, ctx: &ic_fondue::pot:
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
 
-fn test_valid_update_followed_by_garbage(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
+fn test_valid_update_followed_by_garbage(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
-    let endpoint = util::get_random_node_endpoint(handle, &mut rng);
+    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
     util::block_on(endpoint.assert_ready(ctx));
     let client = reqwest::blocking::Client::new();
 

@@ -20,15 +20,15 @@ Not Covered:: Ledger archives, Timestamps, Mint & Burn, Subaccounts
 
 end::catalog[] */
 
-use crate::nns::NnsExt;
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::util::{
     create_agent, get_random_nns_node_endpoint, get_random_non_root_node_endpoint, runtime_from_url,
 };
 use slog::info;
 
 use crate::driver::ic::InternetComputer;
-use ic_fondue::{self, ic_manager::IcHandle};
-
 use async_recursion::async_recursion;
 use canister_test::{Canister, Runtime};
 use dfn_candid::{candid, candid_one};
@@ -60,20 +60,31 @@ use rand::{Rng, SeedableRng};
 /// A test runs within a given IC configuration. Later on, we really want to
 /// combine tests that are being run in similar environments. Please, keep this
 /// in mind when writing your tests!
-pub fn config() -> InternetComputer {
+pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // Install NNS canisters
-    ctx.install_nns_canisters(&handle, true);
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+    info!(logger, "Installing NNS canisters...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
 
     // create a testing plan
     let mut rng = ctx.rng.clone();
     let plan = create_plan(&mut rng);
-    info!(ctx.logger, "plan is {:?}", plan);
+    info!(logger, "plan is {:?}", plan);
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
@@ -102,14 +113,14 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             &mut rng,
         )
         .await;
-        info!(ctx.logger, "populated plan is {:?}", plan);
+        info!(logger, "populated plan is {:?}", plan);
 
         // convert the test plan to actions
         let mut actions: Vec<Action> = Vec::new();
         actions_from_plan(&mut actions, &plan);
 
         // run the actions
-        info!(ctx.logger, "running these actions now: {:?}", actions);
+        info!(logger, "running these actions now: {:?}", actions);
         run_actions(&nns, &rt, &actions).await;
     });
 }

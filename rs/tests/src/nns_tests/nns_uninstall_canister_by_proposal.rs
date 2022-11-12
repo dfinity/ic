@@ -19,25 +19,43 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::util::{assert_create_agent, delay, runtime_from_url, UniversalCanister};
 use crate::{
-    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt},
+    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     types::CanisterIdRecord,
     util::{assert_endpoints_health, block_on, EndpointsStatus},
 };
 use ic_agent::{export::Principal, Agent};
-use ic_fondue::ic_manager::IcHandle;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use slog::info;
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(Subnet::fast_single_node(SubnetType::System))
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // Setup: install all necessary NNS canisters (including Governance).
-    ctx.install_nns_canisters(&handle, true);
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+
+    info!(logger, "Installing NNS canisters on the root subnet...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+    info!(&logger, "NNS canisters installed successfully.");
+
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
+
     // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
     let mut rng = ctx.rng.clone();
     let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();

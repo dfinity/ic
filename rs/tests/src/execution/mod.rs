@@ -14,15 +14,20 @@ pub mod request_signature_test;
 pub mod system_api_security_test;
 pub mod upgraded_pots;
 
-use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::{
+    ic::{InternetComputer, Subnet},
+    test_env::TestEnv,
+};
 use ic_fondue::ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet};
 use ic_registry_subnet_type::SubnetType;
 
-pub fn config_system_verified_application_subnets() -> InternetComputer {
+pub fn config_system_verified_application_subnets(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 pub fn legacy_config_system_verified_application_subnets() -> LegacyInternetComputer {
@@ -34,10 +39,12 @@ pub fn legacy_config_system_verified_application_subnets() -> LegacyInternetComp
         .add_subnet(LegacySubnet::fast_single_node(SubnetType::Application))
 }
 
-pub fn config_system_verified_subnets() -> InternetComputer {
+pub fn config_system_verified_subnets(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 pub fn legacy_config_system_verified_subnets() -> LegacyInternetComputer {
@@ -77,7 +84,9 @@ pub fn legacy_config_memory_capacity() -> LegacyInternetComputer {
 
 // A special configuration for testing the maximum number of canisters on a
 // subnet. The value is set to 3 for the tests.
-pub fn config_max_number_of_canisters() -> InternetComputer {
+pub fn config_max_number_of_canisters(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System).with_max_number_of_canisters(3))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }

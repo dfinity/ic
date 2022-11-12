@@ -1,9 +1,13 @@
-use crate::{types::RejectCode, util::*};
-use ic_fondue::ic_manager::IcHandle;
+use crate::{
+    driver::{pot_dsl::get_ic_handle_and_ctx, test_env::TestEnv},
+    types::RejectCode,
+    util::*,
+};
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::ManagementCanister;
 
-pub fn can_access_big_stable_memory(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn can_access_big_stable_memory(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -44,7 +48,8 @@ pub fn can_access_big_stable_memory(handle: IcHandle, ctx: &ic_fondue::pot::Cont
     })
 }
 
-pub fn can_handle_out_of_bounds_access(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn can_handle_out_of_bounds_access(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -85,10 +90,8 @@ pub fn can_handle_out_of_bounds_access(handle: IcHandle, ctx: &ic_fondue::pot::C
     })
 }
 
-pub fn can_handle_overflows_when_indexing_stable_memory(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn can_handle_overflows_when_indexing_stable_memory(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -129,7 +132,8 @@ pub fn can_handle_overflows_when_indexing_stable_memory(
     })
 }
 
-pub fn can_access_big_heap_and_big_stable_memory(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -229,10 +233,8 @@ pub fn can_access_big_heap_and_big_stable_memory(handle: IcHandle, ctx: &ic_fond
     })
 }
 
-pub fn canister_traps_if_32_bit_api_used_on_big_memory(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn canister_traps_if_32_bit_api_used_on_big_memory(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({

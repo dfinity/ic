@@ -1,11 +1,13 @@
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::types::*;
 use crate::util::*;
 use assert_matches::assert_matches;
 use ic_agent::AgentError;
-use ic_fondue::ic_manager::IcHandle;
 use ic_universal_canister::{call_args, wasm};
 
-pub fn is_called_if_reply_traps(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn is_called_if_reply_traps(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -49,7 +51,8 @@ pub fn is_called_if_reply_traps(handle: IcHandle, ctx: &ic_fondue::pot::Context)
     });
 }
 
-pub fn is_called_if_reject_traps(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn is_called_if_reject_traps(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -88,7 +91,8 @@ pub fn is_called_if_reject_traps(handle: IcHandle, ctx: &ic_fondue::pot::Context
     });
 }
 
-pub fn changes_are_discarded_if_trapped(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn changes_are_discarded_if_trapped(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -136,7 +140,8 @@ pub fn changes_are_discarded_if_trapped(handle: IcHandle, ctx: &ic_fondue::pot::
     });
 }
 
-pub fn changes_are_discarded_in_query(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn changes_are_discarded_in_query(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -199,7 +204,8 @@ pub fn changes_are_discarded_in_query(handle: IcHandle, ctx: &ic_fondue::pot::Co
     });
 }
 
-pub fn is_called_in_query(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn is_called_in_query(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({

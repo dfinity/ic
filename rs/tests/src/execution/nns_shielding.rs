@@ -2,6 +2,8 @@
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use candid::{Decode, Encode, Principal};
 use ic_agent::AgentError;
@@ -45,7 +47,8 @@ const MINT_CYCLES: &str = r#"(module
                   (export "memory" (memory $memory))
               )"#;
 
-pub fn mint_cycles_not_supported_on_system_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn mint_cycles_not_supported_on_system_subnet(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
@@ -86,11 +89,9 @@ pub fn mint_cycles_not_supported_on_system_subnet(handle: IcHandle, ctx: &ic_fon
     });
 }
 
-pub fn mint_cycles_not_supported_on_application_subnet(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
     let initial_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
@@ -140,7 +141,8 @@ pub fn mint_cycles_not_supported_on_application_subnet(
     });
 }
 
-pub fn no_cycle_balance_limit_on_nns_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
@@ -407,8 +409,9 @@ pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(
 
 /// Tests whether a call to `setup_initial_dkg` is rejected when called from a
 /// canister installed on an application subnet.
-pub fn app_canister_attempt_initiating_dkg_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn app_canister_attempt_initiating_dkg_fails(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
 
     rt.block_on(async move {

@@ -28,10 +28,12 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession, ADMIN};
+use crate::driver::test_env_api::{
+    HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, SshSession, ADMIN,
+};
 use crate::nns::{
     await_proposal_execution, submit_external_proposal_with_test_id,
-    vote_execute_proposal_assert_executed, NnsExt,
+    vote_execute_proposal_assert_executed,
 };
 use crate::util::{self, block_on, get_random_nns_node_endpoint};
 use candid::CandidType;
@@ -72,10 +74,19 @@ pub fn config(env: TestEnv) {
 pub fn override_firewall_rules_with_priority(env: TestEnv) {
     let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
 
-    let log = ctx.logger.clone();
+    let log = env.logger();
     let mut rng = ctx.rng.clone();
 
-    ctx.install_nns_canisters(&handle, true);
+    info!(log, "Installing NNS canisters on the root subnet...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+    info!(&log, "NNS canisters installed successfully.");
+
     let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
     let app_endpoints: Vec<_> = handle
         .as_permutation(&mut rng)

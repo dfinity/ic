@@ -26,10 +26,12 @@ NotCovered:
 
 end::catalog[] */
 
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
 
 use crate::driver::ic::InternetComputer;
-use ic_fondue::ic_manager::IcHandle;
 
 use ic_nns_governance::pb::v1::{
     governance_error::ErrorType,
@@ -38,7 +40,6 @@ use ic_nns_governance::pb::v1::{
     ManageNeuronResponse, Neuron, NnsFunction, Proposal, ProposalInfo, Tally, Topic, Vote,
 };
 
-use crate::nns::NnsExt;
 use canister_test::Canister;
 use dfn_candid::{candid, candid_one};
 use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID};
@@ -55,12 +56,27 @@ use rand::Rng;
 use slog::info;
 use std::collections::HashSet;
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_fast_single_node_subnet(SubnetType::System)
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_fast_single_node_subnet(SubnetType::System)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    ctx.install_nns_canisters(&handle, true);
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+
+    info!(logger, "Installing NNS canisters on the root subnet...");
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
+    info!(&logger, "NNS canisters installed successfully.");
+
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
 
     let mut rng = ctx.rng.clone();
 

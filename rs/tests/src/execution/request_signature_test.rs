@@ -1,13 +1,14 @@
 /* tag::catalog[]
 end::catalog[] */
 use crate::driver::ic::InternetComputer;
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::util::{
     agent_with_identity, assert_create_agent, delay, get_random_node_endpoint,
     random_ed25519_identity, UniversalCanister,
 };
 use ic_agent::export::Principal;
 use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
-use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
@@ -16,11 +17,15 @@ use ic_universal_canister::wasm;
 use slog::{debug, info};
 use std::time::{Duration, SystemTime};
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_fast_single_node_subnet(SubnetType::System)
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_fast_single_node_subnet(SubnetType::System)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");

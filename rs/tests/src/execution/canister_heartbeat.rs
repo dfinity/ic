@@ -3,8 +3,9 @@ end::catalog[] */
 
 use std::time::{Duration, Instant};
 
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
 use crate::util;
-use ic_fondue::ic_manager::IcHandle;
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_universal_canister::{call_args, wasm};
 use ic_utils::call::AsyncCall;
@@ -12,10 +13,8 @@ use ic_utils::interfaces::ManagementCanister;
 
 const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(40);
 
-pub fn canister_heartbeat_is_called_at_regular_intervals(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn canister_heartbeat_is_called_at_regular_intervals(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -63,10 +62,8 @@ pub fn canister_heartbeat_is_called_at_regular_intervals(
     });
 }
 
-pub fn stopping_a_canister_with_a_heartbeat_succeeds(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn stopping_a_canister_with_a_heartbeat_succeeds(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -88,10 +85,8 @@ pub fn stopping_a_canister_with_a_heartbeat_succeeds(
     });
 }
 
-pub fn canister_heartbeat_can_call_another_canister(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn canister_heartbeat_can_call_another_canister(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -139,10 +134,8 @@ pub fn canister_heartbeat_can_call_another_canister(
     });
 }
 
-pub fn canister_heartbeat_can_call_multiple_canisters_xnet(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn canister_heartbeat_can_call_multiple_canisters_xnet(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -222,7 +215,8 @@ pub fn canister_heartbeat_can_call_multiple_canisters_xnet(
     });
 }
 
-pub fn canister_heartbeat_cannot_reply(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn canister_heartbeat_cannot_reply(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
@@ -256,7 +250,8 @@ pub fn canister_heartbeat_cannot_reply(handle: IcHandle, ctx: &ic_fondue::pot::C
 /// Creates canister C without a wasm module. Canister A keeps sending requests
 /// to canister C from its heartbeat execution. While A is sending C messages, a
 /// wasm module is installed on C.  We try to stop A and it should stop.
-pub fn canister_heartbeat_can_stop(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn canister_heartbeat_can_stop(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
