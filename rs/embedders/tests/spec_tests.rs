@@ -14,16 +14,9 @@ use wast::{
 /// Tests shouldn't be run on these files.
 ///
 /// `names.wast`: `wast` itself seems to hit an error reading this file.
-/// `linking.wast`: The wast module Id's aren't yet properly handled.
-/// `exports.wast`: The wast module Id's aren't yet properly handled.
 /// `simd_i64x2_cmp.wast`: There is a bug in wasm-encoder that incorrectly
 /// encodes the LeS instruction and causes this test to fail.
-const FILES_TO_SKIP: &[&str] = &[
-    "names.wast",
-    "linking.wast",
-    "exports.wast",
-    "simd_i64x2_cmp.wast",
-];
+const FILES_TO_SKIP: &[&str] = &["names.wast", "simd_i64x2_cmp.wast"];
 
 /// Conversions between wast and wasmtime types.
 mod convert {
@@ -305,20 +298,12 @@ fn define_spectest_exports(linker: &mut Linker<()>, mut store: &mut Store<()>) {
     linker.define("spectest", "memory", memory).unwrap();
 }
 
-/// The last module that was loaded from the wast file.
-enum CurrentModule<'a> {
-    Unregistered(Result<(Instance, Option<Id<'a>>), anyhow::Error>),
-    /// If the module has been registered, this is it's index in the registerd
-    /// modules vector.
-    Registered(usize),
-    None,
-}
-
 struct TestState<'a> {
-    /// The latest module.
-    current: CurrentModule<'a>,
-    /// Collection of modules which have been registered.
-    registered: Vec<(String, Option<Id<'a>>, Instance)>,
+    /// The index of the latest module in the `created` vec if it was
+    /// successfully instantiated.
+    current: Result<usize, String>,
+    /// Collection of modules which have been created.
+    created: Vec<(Option<Id<'a>>, Instance)>,
     store: Store<()>,
     linker: Linker<()>,
     engine: Engine,
@@ -335,8 +320,8 @@ impl<'a> TestState<'a> {
         let mut linker = Linker::new(&engine);
         define_spectest_exports(&mut linker, &mut store);
         Self {
-            current: CurrentModule::None,
-            registered: vec![],
+            current: Err("No instances created".to_string()),
+            created: vec![],
             store,
             linker,
             engine,
@@ -348,26 +333,35 @@ impl<'a> TestState<'a> {
         self.linker.instantiate(&mut self.store, &module)
     }
 
-    fn update_module(&mut self, wasm: &[u8], id: Option<Id<'a>>) {
-        let instance = self.try_create_instance(wasm).map(|i| (i, id));
-        self.current = CurrentModule::Unregistered(instance);
+    fn create_instance(&mut self, wasm: &[u8], id: Option<Id<'a>>) {
+        match self.try_create_instance(wasm) {
+            Ok(instance) => {
+                let index = self.created.len();
+                self.current = Ok(index);
+                self.created.push((id, instance));
+            }
+            Err(e) => self.current = Err(e.to_string()),
+        }
+    }
+
+    fn get_instance(&self, id: Option<Id<'a>>) -> Instance {
+        match id {
+            None => self.created[*self.current.as_ref().unwrap()].1,
+            Some(id) => {
+                self.created
+                    .iter()
+                    .find(|(next_id, _)| *next_id == Some(id))
+                    .unwrap_or_else(|| panic!("Unable to find module matching id {:?}", id))
+                    .1
+            }
+        }
     }
 
     fn register(&mut self, name: String, id: Option<Id<'a>>) {
-        let index = self.registered.len();
-        match std::mem::replace(&mut self.current, CurrentModule::Registered(index)) {
-            CurrentModule::Registered(_) => panic!("Can't register the same module twice"),
-            CurrentModule::Unregistered(Ok((instance, _))) => {
-                self.linker
-                    .instance(&mut self.store, &name, instance)
-                    .unwrap();
-                self.registered.push((name, id, instance));
-            }
-            CurrentModule::Unregistered(Err(e)) => {
-                panic!("Last module could not be instantiated: {}", e)
-            }
-            CurrentModule::None => panic!("There is no current module to register"),
-        }
+        let instance = self.get_instance(id);
+        self.linker
+            .instance(&mut self.store, &name, instance)
+            .unwrap();
     }
 
     fn run_with_wasmtime(
@@ -376,44 +370,7 @@ impl<'a> TestState<'a> {
         params: &[wasmtime::Val],
         id: Option<Id<'a>>,
     ) -> Result<Vec<wasmtime::Val>, String> {
-        let instance = match id {
-            None => match &mut self.current {
-                CurrentModule::Unregistered(Ok((i, _))) => i,
-                CurrentModule::Registered(inx) => {
-                    let (_, _, i) = self.registered.get_mut(*inx).unwrap();
-                    i
-                }
-                CurrentModule::Unregistered(Err(e)) => {
-                    return Err(format!(
-                        "Current module had error {} before running {:?}:{} with params {:?}",
-                        e, id, name, params
-                    ))
-                }
-                CurrentModule::None => {
-                    return Err(format!(
-                        "No current module when trying to run {:?}:{} with params {:?}",
-                        id, name, params
-                    ))
-                }
-            },
-            Some(id) => {
-                if let Some((_, _, instance)) = self
-                    .registered
-                    .iter_mut()
-                    .find(|(_, registered_id, _)| *registered_id == Some(id))
-                {
-                    instance
-                } else if let CurrentModule::Unregistered(Ok((i, current_id))) = &mut self.current {
-                    if *current_id == Some(id) {
-                        i
-                    } else {
-                        panic!("Couldn't find module with id {:?}", id);
-                    }
-                } else {
-                    panic!("Couldn't find module with id {:?}", id)
-                }
-            }
-        };
+        let instance = self.get_instance(id);
         let function = instance.get_func(&mut self.store, name).unwrap();
         let result_count = function.ty(&mut self.store).results().count();
         let mut results = vec![wasmtime::Val::FuncRef(None); result_count];
@@ -513,7 +470,7 @@ fn run_directive<'a>(
             }
             let wasm = parse_and_encode(&mut wat, text, path)?;
             validate_with_wasmtime(&wasm, &wat, text, path)?;
-            test_state.update_module(&wasm, wat_id(&wat));
+            test_state.create_instance(&wasm, wat_id(&wat));
             Ok(())
         }
         // wasm-transform itself should throw an error when trying to parse these modules.
@@ -593,38 +550,46 @@ fn run_directive<'a>(
             span,
             exec,
             message,
-        } => match exec {
-            wast::WastExecute::Invoke(invoke) => {
-                let result = test_state.run(invoke.name, invoke.args, invoke.module);
-                match result {
-                    Ok(_) => Err(format!(
-                        "Should not have been able to execute assert_trap of type {} at {}",
-                        message,
-                        span_location(span, text, path)
-                    )),
-                    Err(e) => {
-                        // There seemes to be one case in `bulk.wast` where the
-                        // error message contains extra information.
-                        let message = if message.starts_with("uninitialized element") {
-                            "uninitialized element"
-                        } else {
+        } => {
+            let error = match exec {
+                wast::WastExecute::Invoke(invoke) => test_state
+                    .run(invoke.name, invoke.args, invoke.module)
+                    .map(|_| ()),
+                wast::WastExecute::Wat(Wat::Module(mut wat)) => test_state
+                    .try_create_instance(&wat.encode().unwrap())
+                    .map(|_| ())
+                    .map_err(|e| e.to_string()),
+                wast::WastExecute::Wat(Wat::Component(_)) | wast::WastExecute::Get { .. } => {
+                    return Ok(())
+                }
+            };
+            match error {
+                Ok(_) => Err(format!(
+                    "Should not have been able to execute assert_trap of type {} at {}",
+                    message,
+                    span_location(span, text, path)
+                )),
+                Err(e) => {
+                    // There seemes to be one case in `bulk.wast` where the
+                    // error message contains extra information.
+                    let message = if message.starts_with("uninitialized element") {
+                        "uninitialized element"
+                    } else {
+                        message
+                    };
+                    if e.contains(message) {
+                        Ok(())
+                    } else {
+                        Err(format!(
+                            "Error for assert_trap at {}: {} did not contain trap message {}",
+                            span_location(span, text, path),
+                            e,
                             message
-                        };
-                        if e.contains(message) {
-                            Ok(())
-                        } else {
-                            Err(format!(
-                                "Error for assert_trap at {}: {} did not contain trap message {}",
-                                span_location(span, text, path),
-                                e,
-                                message
-                            ))
-                        }
+                        ))
                     }
                 }
             }
-            wast::WastExecute::Wat(_) | wast::WastExecute::Get { .. } => Ok(()),
-        },
+        }
         WastDirective::AssertExhaustion {
             span,
             call: invoke,
