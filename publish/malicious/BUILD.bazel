@@ -1,0 +1,25 @@
+load("//bazel:transitions.bzl", "malicious_binary")
+load("//bazel:defs.bzl", "gzip_compress")
+load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+
+malicious_binary(
+    name = "replica",
+    binary = "//rs/replica",
+    visibility = ["//ic-os/guestos/dev-malicious:__pkg__"],
+)
+
+gzip_compress(
+    name = "replica.gz",
+    srcs = [":replica"],
+)
+
+filegroup(
+    name = "malicious_binaries",
+    srcs = [":replica.gz"],
+)
+
+upload_artifacts(
+    name = "upload",
+    inputs = [":malicious_binaries"],
+    remote_subdir = "release-malicious-bazel",
+)

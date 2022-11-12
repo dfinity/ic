@@ -9,7 +9,7 @@ from ci import sh
 
 
 def run(
-    target: str = "//:binaries",
+    target: str = "//publish/binaries:binaries_raw",
     artifact_ext: str = "",
     after_script: Optional[Callable[[], None]] = None,
 ):
