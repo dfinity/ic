@@ -40,18 +40,18 @@ def _image_deps(mode, malicious = False):
             ":rootfs-tree.tar": "/",
 
             # additional files to install
-            "//:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
-            "//:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
-            "//:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
-            "//:ic-canister-http-adapter": "/opt/ic/bin/ic-canister-http-adapter:0755",
-            "//:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
-            "//:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
-            "//:ic-recovery": "/opt/ic/bin/ic-recovery:0755",
-            "//:orchestrator": "/opt/ic/bin/orchestrator:0755",
-            ("//:malicious_replica" if malicious else "//:replica"): "/opt/ic/bin/replica:0755",
-            "//:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
-            "//:state-tool": "/opt/ic/bin/state-tool:0755",
-            "//:vsock_agent": "/opt/ic/bin/vsock_agent:0755",
+            "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
+            "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
+            "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
+            "//publish/binaries:ic-canister-http-adapter": "/opt/ic/bin/ic-canister-http-adapter:0755",
+            "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
+            "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
+            "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",
+            "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",
+            ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",
+            "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
+            "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
+            "//publish/binaries:vsock_agent": "/opt/ic/bin/vsock_agent:0755",
             "//ic-os/guestos/src:infogetty": "/opt/ic/bin/infogetty:0755",
             "//ic-os/guestos/src:prestorecon": "/opt/ic/bin/prestorecon:0755",
         },
@@ -292,13 +292,14 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         remote_subdir = "guest-os/disk-img" + upload_suffix,
     )
 
-    upload_artifacts(
-        name = "upload_update-img",
-        inputs = [
-            ":upgrade.tar_zst",
-        ],
-        remote_subdir = "guest-os/update-img" + upload_suffix,
-    )
+    # TODO: Re-enable this after we verify the Bazel built update images.
+    #    upload_artifacts(
+    #        name = "upload_update-img",
+    #        inputs = [
+    #            ":upgrade.tar_zst",
+    #        ],
+    #        remote_subdir = "guest-os/update-img" + upload_suffix,
+    #    )
 
     native.filegroup(
         name = "hash_and_upload_disk-img",

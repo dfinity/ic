@@ -31,6 +31,7 @@
       --ic_version="${CI_COMMIT_SHA}"
       ${BAZEL_EXTRA_ARGS}
       ${BAZEL_TARGETS}
+      ${BAZEL_UPLOAD_TARGETS:+$(bazel query "kind(upload_artifacts, $BAZEL_UPLOAD_TARGETS)")}
       2>&1 |
       perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'
   after_script:
@@ -50,7 +51,8 @@ bazel-test-all:
     - .bazel-test-all
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going"
-    BAZEL_TARGETS: "//... //:upload_sdk //publish/canisters:upload //ic-os/guestos/dev:upload_disk-img //ic-os/guestos/prod:upload_disk-img //ic-os/guestos/dev-malicious:upload_disk-img"
+    BAZEL_TARGETS: "//..."
+    BAZEL_UPLOAD_TARGETS: "//..."
 
 bazel-config-check-all-rebuild:
   extends:
@@ -86,7 +88,8 @@ bazel-test-all-macos:
   variables:
     BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
     BAZEL_COMMAND: "build"
-    BAZEL_TARGETS: "//rs/... //:upload_sdk"
+    BAZEL_TARGETS: "//rs/..."
+    BAZEL_UPLOAD_TARGETS: "//publish/sdk/..."
     BAZEL_EXTRA_ARGS: "--config dev"
 
 bazel-cache-perf-test-macos:
