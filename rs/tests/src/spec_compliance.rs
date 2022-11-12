@@ -166,7 +166,7 @@ pub fn with_endpoint(
     excluded_tests: Vec<&str>,
 ) {
     let status = Command::new("ic-ref-test")
-        .arg("-j16")
+        .arg("-j8")
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests))
         .arg("--endpoint")
