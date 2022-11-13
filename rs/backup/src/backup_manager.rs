@@ -14,9 +14,9 @@ use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 use slog::{error, info, Logger};
 
-use crate::backup_helper::BackupHelper;
 use crate::config::Config;
 use crate::util::sleep_secs;
+use crate::{backup_helper::BackupHelper, notification_client::NotificationClient};
 
 const STATE_FILE_NAME: &str = "backup_manager_state.json5";
 
@@ -88,6 +88,12 @@ impl BackupManager {
                 |sub| sub.replica_version.clone(),
                 s.replica_version,
             );
+            let notification_client = NotificationClient {
+                backup_instance: config.backup_instance.clone(),
+                slack_token: config.slack_token.clone(),
+                subnet: s.subnet_id.to_string(),
+                log: log.clone(),
+            };
             let backup_helper = BackupHelper {
                 replica_version,
                 subnet_id: s.subnet_id,
@@ -95,6 +101,7 @@ impl BackupManager {
                 root_dir: config.root_dir.clone(),
                 ssh_credentials: ssh_credentials_file.clone(),
                 registry_client: registry_client.clone(),
+                notification_client,
                 log: log.clone(),
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
@@ -141,7 +148,7 @@ impl BackupManager {
                 state.subnet_states.insert(b.backup_helper.subnet_id, s);
             }
             for b in &mut self.subnet_backups {
-                if b.sync_last_time + b.sync_period < Instant::now() {
+                if b.sync_last_time.elapsed() > b.sync_period {
                     match b.backup_helper.collect_subnet_nodes() {
                         Ok(nodes) => {
                             let mut shuf_nodes = nodes;
@@ -166,7 +173,7 @@ impl BackupManager {
                         Err(e) => error!(self.log, "Error fetching subnet node list: {:?}", e),
                     }
                 }
-                if b.replay_last_time + b.replay_period < Instant::now() {
+                if b.replay_last_time.elapsed() > b.replay_period {
                     b.backup_helper.replay();
                     b.replay_last_time = Instant::now();
                     // save the updated state

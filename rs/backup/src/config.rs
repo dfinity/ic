@@ -16,9 +16,11 @@ pub struct SubnetConfig {
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct Config {
+    pub backup_instance: String,
     pub root_dir: PathBuf,
     pub nns_url: String,
     pub ssh_credentials: PathBuf,
+    pub slack_token: String,
     pub subnets: Vec<SubnetConfig>,
 }
 
