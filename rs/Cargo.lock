@@ -6509,6 +6509,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-protobuf-generator",
  "ic-protobuf",
+ "ic-sns-root",
  "ic-sns-swap",
  "ic-sns-wasm",
  "ic-test-utilities-compare-dirs",

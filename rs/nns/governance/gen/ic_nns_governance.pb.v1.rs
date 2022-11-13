@@ -1565,6 +1565,42 @@ pub struct ProposalData {
     /// operation in the execution of an OpenSnsTokenSwap proposal.
     #[prost(enumeration = "::ic_sns_swap::pb::v1::Lifecycle", optional, tag = "19")]
     pub sns_token_swap_lifecycle: ::core::option::Option<i32>,
+    #[prost(message, optional, tag = "20")]
+    pub swap_background_information: ::core::option::Option<SwapBackgroundInformation>,
+}
+/// Additional information about the SNS that's being "swapped".
+///
+/// This data is fetched from other canisters. Currently, the swap canister
+/// itself, and the root canister are queried, but additional canisters could be
+/// queried later. In particular, the ID of the root canister is discovered via
+/// the swap canister.
+///
+/// (See Governance::fetch_swap_background_information for how this is compiled.)
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SwapBackgroundInformation {
+    /// Primary SNS canisters.
+    #[prost(message, optional, tag = "1")]
+    pub sns_root_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "2")]
+    pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "3")]
+    pub sns_ledger_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Secondary SNS canisters.
+    #[prost(message, optional, tag = "4")]
+    pub sns_ledger_index_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "5")]
+    pub sns_ledger_archive_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "6")]
+    pub dapp_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "7")]
+    pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
 /// Stores data relevant to the "wait for quiet" implementation.
 #[derive(

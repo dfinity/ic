@@ -1228,6 +1228,30 @@ message ProposalData {
   // enter that state when we call its open Candid method, which is the main
   // operation in the execution of an OpenSnsTokenSwap proposal.
   optional ic_sns_swap.pb.v1.Lifecycle sns_token_swap_lifecycle = 19;
+
+  SwapBackgroundInformation swap_background_information = 20;
+}
+
+// Additional information about the SNS that's being "swapped".
+//
+// This data is fetched from other canisters. Currently, the swap canister
+// itself, and the root canister are queried, but additional canisters could be
+// queried later. In particular, the ID of the root canister is discovered via
+// the swap canister.
+//
+// (See Governance::fetch_swap_background_information for how this is compiled.)
+message SwapBackgroundInformation {
+  // Primary SNS canisters.
+  ic_base_types.pb.v1.PrincipalId sns_root_canister_id = 1;
+  ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 2;
+  ic_base_types.pb.v1.PrincipalId sns_ledger_canister_id = 3;
+
+  // Secondary SNS canisters.
+  ic_base_types.pb.v1.PrincipalId sns_ledger_index_canister_id = 4;
+  repeated ic_base_types.pb.v1.PrincipalId sns_ledger_archive_canister_ids = 5;
+
+  repeated ic_base_types.pb.v1.PrincipalId dapp_canister_ids = 6;
+  repeated ic_base_types.pb.v1.PrincipalId fallback_controller_principal_ids = 7;
 }
 
 // Stores data relevant to the "wait for quiet" implementation.

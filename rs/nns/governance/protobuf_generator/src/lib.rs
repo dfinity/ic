@@ -34,6 +34,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.extern_path(".ic_sns_swap.pb.v1", "::ic-sns-swap::pb::v1");
 
     config.type_attribute(
+        "ic_nns_governance.pb.v1.SwapBackgroundInformation",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.SettleCommunityFundParticipation",
         "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
     );

@@ -14,6 +14,8 @@ use ic_nns_governance::{
         NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
     },
 };
+use ic_sns_root::pb::v1 as sns_root_pb;
+use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use lazy_static::lazy_static;
@@ -30,7 +32,20 @@ use std::sync::Mutex;
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
 lazy_static! {
-    pub static ref SWAP_CANISTER_ID: CanisterId = CanisterId::from(978554);
+    pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
+    pub(crate) static ref SNS_GOVERNANCE_CANISTER_ID: PrincipalId =
+        PrincipalId::new_user_test_id(127565);
+    pub(crate) static ref SNS_LEDGER_CANISTER_ID: PrincipalId =
+        PrincipalId::new_user_test_id(315611);
+    pub(crate) static ref SNS_LEDGER_ARCHIVE_CANISTER_ID: PrincipalId =
+        PrincipalId::new_user_test_id(864704);
+    pub(crate) static ref SNS_LEDGER_INDEX_CANISTER_ID: PrincipalId =
+        PrincipalId::new_user_test_id(450226);
+    pub(crate) static ref TARGET_SWAP_CANISTER_ID: PrincipalId =
+        PrincipalId::new_user_test_id(129844);
+    pub(crate) static ref DAPP_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(504845);
+    pub(crate) static ref DEVELOPER_PRINCIPAL_ID: PrincipalId =
+        PrincipalId::new_user_test_id(739631);
 }
 
 #[derive(Clone, Debug)]
@@ -329,13 +344,68 @@ impl Environment for FakeDriver {
 
             return Ok(Encode!(&ListDeployedSnsesResponse {
                 instances: vec![DeployedSns {
-                    swap_canister_id: Some((*SWAP_CANISTER_ID).into()),
+                    swap_canister_id: Some(*TARGET_SWAP_CANISTER_ID),
                     // Not realistic, but sufficient for test(s) that use this.
                     ..Default::default()
                 }],
             })
             .unwrap());
         }
+
+        if method_name == "get_state" {
+            assert_eq!(PrincipalId::from(target), *TARGET_SWAP_CANISTER_ID);
+
+            let request = Decode!(&request, sns_swap_pb::GetStateRequest).unwrap();
+            assert_eq!(request, sns_swap_pb::GetStateRequest {});
+
+            return Ok(Encode!(&sns_swap_pb::GetStateResponse {
+                swap: Some(sns_swap_pb::Swap {
+                    init: Some(sns_swap_pb::Init {
+                        nns_governance_canister_id: GOVERNANCE_CANISTER_ID.to_string(),
+                        sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
+                        sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
+                        icp_ledger_canister_id: LEDGER_CANISTER_ID.to_string(),
+                        sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
+
+                        fallback_controller_principal_ids: vec![DEVELOPER_PRINCIPAL_ID.to_string()],
+
+                        transaction_fee_e8s: Some(0xDEAD_BEEF),
+                        neuron_minimum_stake_e8s: Some(0xDEAD_BEEF),
+                    }),
+                    ..Default::default() // Not realistic, but sufficient for tests.
+                }),
+                ..Default::default() // Ditto previous comment.
+            })
+            .unwrap());
+        }
+
+        if method_name == "list_sns_canisters" {
+            assert_eq!(PrincipalId::from(target), *SNS_ROOT_CANISTER_ID);
+
+            let request = Decode!(&request, sns_root_pb::ListSnsCanistersRequest).unwrap();
+            assert_eq!(request, sns_root_pb::ListSnsCanistersRequest {});
+
+            return Ok(Encode!(&sns_root_pb::ListSnsCanistersResponse {
+                root: Some(*SNS_ROOT_CANISTER_ID),
+                governance: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                ledger: Some(*SNS_LEDGER_CANISTER_ID),
+                swap: Some(*TARGET_SWAP_CANISTER_ID),
+                dapps: vec![*DAPP_CANISTER_ID],
+                archives: vec![*SNS_LEDGER_ARCHIVE_CANISTER_ID],
+                index: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
+            })
+            .unwrap());
+        }
+
+        println!(
+            "WARNING: Unexpected canister call:\n\
+             ..target = {}\n\
+             ..method_name = {}\n\
+             ..request.len() = {}",
+            target,
+            method_name,
+            request.len(),
+        );
 
         Ok(vec![])
     }

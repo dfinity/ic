@@ -30,6 +30,8 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
+    "//rs/sns/root",
+    "//rs/sns/swap",
     "//rs/types/base_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
@@ -103,7 +105,6 @@ rust_library(
     version = "0.8.0",
     deps = DEPENDENCIES + [
         ":build_script",
-        "//rs/sns/swap",
     ],
 )
 

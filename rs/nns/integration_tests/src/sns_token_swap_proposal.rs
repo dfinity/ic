@@ -14,7 +14,7 @@ use ic_nns_governance::pb::v1::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    sns_wasm::{add_dummy_wasms_to_sns_wasms, deploy_new_sns},
+    sns_wasm::{add_real_wasms_to_sns_wasms, deploy_new_sns},
     state_test_helpers::{
         nns_governance_make_proposal, set_up_universal_canister, setup_nns_canisters,
     },
@@ -54,7 +54,7 @@ fn test_only_one_sns_token_swap_proposal_can_be_open() {
         .with_sns_wasm_allowed_principals(vec![wallet_canister_id.into()])
         .build();
     setup_nns_canisters(&state_machine, nns_init_payload);
-    add_dummy_wasms_to_sns_wasms(&state_machine);
+    add_real_wasms_to_sns_wasms(&state_machine);
 
     // Step 1.2: Tell sns-wasm to create an SNS.
     let cycle_count = EXPECTED_SNS_CREATION_FEE;
