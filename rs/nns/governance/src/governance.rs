@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::ops::RangeInclusive;
+use std::str::FromStr;
 use std::string::ToString;
 
 use crate::pb::v1::governance::neuron_in_flight_command::SyncCommand;
@@ -28,8 +29,8 @@ use crate::pb::v1::{
     MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
     NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData, ProposalInfo,
     ProposalRewardStatus, ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders,
-    SetSnsTokenSwapOpenTimeWindow, SettleCommunityFundParticipation, Tally, Topic,
-    UpdateNodeProvider, Vote,
+    SetSnsTokenSwapOpenTimeWindow, SettleCommunityFundParticipation, SwapBackgroundInformation,
+    Tally, Topic, UpdateNodeProvider, Vote,
 };
 
 use async_trait::async_trait;
@@ -43,6 +44,7 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
+use ic_sns_root::pb::v1 as sns_root_pb;
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
@@ -5532,6 +5534,35 @@ impl Governance {
         // Validate proposal
         self.validate_proposal(proposal).await?;
 
+        // Gather additional information for OpenSnsTokenSwap.
+        let mut swap_background_information = None;
+        if let Some(Action::OpenSnsTokenSwap(open_sns_token_swap)) = &proposal.action {
+            swap_background_information = Some(
+                // This makes some canister calls. In general, we have to be
+                // careful, because if we call an untrusted canister, it might
+                // never reply. Waiting for reply would block us from
+                // upgrading. In this case, it's ok, because validate_proposal
+                // has made sure that we are calling a trusted canister. One of
+                // the things it does is consult the sns-wasm canister to make
+                // sure we are talking to a known swap canister.
+                fetch_swap_background_information(
+                    &mut *self.env,
+                    open_sns_token_swap
+                        .target_swap_canister_id
+                        .expect("target_swap_canister_id field empty.")
+                        .try_into()
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "Unable to convert target_swap_canister_id {:?} \
+                                 into a CanisterId: {:?}",
+                                open_sns_token_swap.target_swap_canister_id, err,
+                            )
+                        }),
+                )
+                .await?,
+            );
+        }
+
         if let Some(proposal::Action::ManageNeuron(m)) = &proposal.action {
             assert_eq!(topic, Topic::NeuronManagement);
             return self.make_manage_neuron_proposal(
@@ -5687,6 +5718,7 @@ impl Governance {
             proposal_timestamp_seconds: now_seconds,
             ballots: electoral_roll,
             original_total_community_fund_maturity_e8s_equivalent,
+            swap_background_information,
             ..Default::default()
         };
 
@@ -7747,6 +7779,151 @@ impl settle_community_fund_participation::Committed {
             )),
         }
     }
+}
+
+async fn fetch_swap_background_information(
+    env: &mut dyn Environment,
+    target_swap_canister_id: CanisterId,
+) -> Result<SwapBackgroundInformation, GovernanceError> {
+    // Call the swap canister's `get_state` method.
+    let swap_get_state_result = env
+        .call_canister_method(
+            target_swap_canister_id,
+            "get_state",
+            Encode!(&sns_swap_pb::GetStateRequest {}).expect("Unable to encode a GetStateRequest."),
+        )
+        .await;
+    let swap_get_state_response = match swap_get_state_result {
+        Err(err) => {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "get_state call to swap {} to failed: {:?}",
+                    target_swap_canister_id, err,
+                ),
+            ));
+        }
+        Ok(reply_bytes) => Decode!(&reply_bytes, sns_swap_pb::GetStateResponse)
+            .expect("Unable to decode GetStateResponse."),
+    };
+    let swap_init = swap_get_state_response
+        .swap
+        .expect("`swap` field is not set in GetStateResponse.")
+        .init
+        .expect("`init` field is not set in GetStateResponse.swap.");
+
+    // Call the SNS root canister's `list_sns_canisters` method.
+    let sns_root_canister_id = swap_init.sns_root();
+    let list_sns_canisters_result = env
+        .call_canister_method(
+            sns_root_canister_id,
+            "list_sns_canisters",
+            Encode!(&sns_root_pb::ListSnsCanistersRequest {})
+                .expect("Unable to encode a ListSnsCanistersRequest."),
+        )
+        .await;
+    let list_sns_canisters_response = match list_sns_canisters_result {
+        Err(err) => {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "list_sns_canisters call to root {} to failed: {:?}",
+                    sns_root_canister_id, err,
+                ),
+            ));
+        }
+
+        Ok(reply_bytes) => Decode!(&reply_bytes, sns_root_pb::ListSnsCanistersResponse)
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Unable to decode {} bytes into a ListSnsCanistersResponse: {:?}",
+                    reply_bytes.len(),
+                    err,
+                )
+            }),
+    };
+
+    // Extract fields from swap_init. Prefix with swap_, because we'll do
+    // something similar with list_sns_canisters_response.
+    let sns_swap_pb::Init {
+        sns_governance_canister_id: swap_sns_governance_canister_id,
+        sns_ledger_canister_id: swap_sns_ledger_canister_id,
+        sns_root_canister_id: swap_sns_root_canister_id,
+
+        fallback_controller_principal_ids,
+
+        nns_governance_canister_id: _,
+        icp_ledger_canister_id: _,
+        transaction_fee_e8s: _,
+        neuron_minimum_stake_e8s: _,
+    } = swap_init;
+
+    // Extract fields from list_sns_canisters_response.
+    let sns_root_pb::ListSnsCanistersResponse {
+        root: root_sns_root_canister_id,
+        governance: root_sns_governance_canister_id,
+        ledger: root_sns_ledger_canister_id,
+
+        dapps: dapp_canister_ids,
+        archives: sns_ledger_archive_canister_ids,
+        index: sns_ledger_index_canister_id,
+
+        swap: _,
+    } = list_sns_canisters_response;
+    let root_sns_root_canister_id =
+        root_sns_root_canister_id.expect("`root` field in ListSnsCanistersResponse is empty.");
+    let root_sns_governance_canister_id = root_sns_governance_canister_id
+        .expect("`governance` field in ListSnsCanistersResponse is empty.");
+    let root_sns_ledger_canister_id =
+        root_sns_ledger_canister_id.expect("`ledger` field in ListSnsCanistersResponse is empty.");
+
+    // Double check that swap and root agree on IDs of sister canisters. This
+    // should never be a problem; we are just being extra defensive here.
+    let canister_ids_match = (
+        &swap_sns_root_canister_id,
+        &swap_sns_governance_canister_id,
+        &swap_sns_ledger_canister_id,
+    ) == (
+        &root_sns_root_canister_id.to_string(),
+        &root_sns_governance_canister_id.to_string(),
+        &root_sns_ledger_canister_id.to_string(),
+    );
+    if !canister_ids_match {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::External,
+            format!(
+                "root: {} vs. {}\n\
+                 governance: {} vs. {}\n\
+                 ledger: {} vs. {}",
+                swap_sns_root_canister_id,
+                root_sns_root_canister_id,
+                swap_sns_governance_canister_id,
+                root_sns_governance_canister_id,
+                swap_sns_ledger_canister_id,
+                root_sns_ledger_canister_id,
+            ),
+        ));
+    }
+
+    // Repackage everything we just fetched into a deduplicated form.
+    Ok(SwapBackgroundInformation {
+        sns_root_canister_id: Some(root_sns_root_canister_id),
+        sns_governance_canister_id: Some(root_sns_governance_canister_id),
+        sns_ledger_canister_id: Some(root_sns_ledger_canister_id),
+
+        sns_ledger_index_canister_id,
+        sns_ledger_archive_canister_ids,
+
+        dapp_canister_ids,
+        fallback_controller_principal_ids: fallback_controller_principal_ids
+            .iter()
+            .map(|string| {
+                PrincipalId::from_str(string).unwrap_or_else(|err| {
+                    panic!("Could not parse {:?} as a PrincipalId: {:?}", string, err)
+                })
+            })
+            .collect(),
+    })
 }
 
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).

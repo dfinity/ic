@@ -19,14 +19,17 @@ use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
 };
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
+};
 #[cfg(feature = "test")]
 use ic_nns_governance::{
     governance::governance_minting_account,
     pb::v1::{
         governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange,
         proposal::ActionDesc, BallotChange, BallotInfoChange, GovernanceChange, NeuronChange,
-        ProposalChange, ProposalDataChange, TallyChange, WaitForQuietStateDesc,
+        ProposalChange, ProposalDataChange, SwapBackgroundInformation, TallyChange,
+        WaitForQuietStateDesc,
     },
 };
 use ic_nns_governance::{
@@ -72,6 +75,7 @@ use ic_nns_governance::{
         UpdateNodeProvider, Vote,
     },
 };
+use ic_sns_root::pb::v1 as sns_root_pb;
 use ic_sns_swap::pb::v1::{
     self as sns_swap_pb, params::NeuronBasketConstructionParameters, Params,
 };
@@ -88,6 +92,12 @@ use std::convert::{TryFrom, TryInto};
 use std::iter::{self, once};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+
+use crate::fake::{
+    DAPP_CANISTER_ID, DEVELOPER_PRINCIPAL_ID, SNS_GOVERNANCE_CANISTER_ID,
+    SNS_LEDGER_ARCHIVE_CANISTER_ID, SNS_LEDGER_CANISTER_ID, SNS_LEDGER_INDEX_CANISTER_ID,
+    SNS_ROOT_CANISTER_ID, TARGET_SWAP_CANISTER_ID,
+};
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
@@ -7047,7 +7057,7 @@ fn test_default_followees() {
         &voter_pid,
         &voter_neuron,
         proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
-            target_swap_canister_id: Some((*fake::SWAP_CANISTER_ID).into()),
+            target_swap_canister_id: Some(*TARGET_SWAP_CANISTER_ID),
             params: Some(Params {
                 min_participants: 100,
                 min_icp_e8s: 1,
@@ -10775,7 +10785,18 @@ impl Environment for MockEnvironment<'_> {
 type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
 
 lazy_static! {
-    static ref TARGET_SWAP_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(129844);
+    static ref INIT: sns_swap_pb::Init = sns_swap_pb::Init {
+        nns_governance_canister_id: GOVERNANCE_CANISTER_ID.to_string(),
+        sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
+        sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
+        icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
+        sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
+
+        fallback_controller_principal_ids: vec![DEVELOPER_PRINCIPAL_ID.to_string()],
+
+        transaction_fee_e8s: Some(0xDEAD_BEEF),
+        neuron_minimum_stake_e8s: Some(0xDEAD_BEEF),
+    };
 
     static ref SWAP_PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
         sns_token_e8s: 1_000_000,
@@ -10881,6 +10902,41 @@ lazy_static! {
         .unwrap()),
     );
 
+    static ref EXPECTED_SWAP_GET_STATE_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
+        ExpectedCallCanisterMethodCallArguments {
+            target: CanisterId::try_from(*TARGET_SWAP_CANISTER_ID).unwrap(),
+            method_name: "get_state",
+            request: Encode!(&sns_swap_pb::GetStateRequest {}).unwrap(),
+        },
+        Ok(Encode!(&sns_swap_pb::GetStateResponse {
+            swap: Some(sns_swap_pb::Swap {
+                init: Some(INIT.clone()),
+                ..Default::default() // Not realistic, but good enough for tests, which only use Init.
+            }),
+            ..Default::default() // Ditto previous comment.
+        })
+        .unwrap()),
+    );
+
+    static ref EXPECTED_SNS_ROOT_LIST_SNS_CANISTERS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
+        ExpectedCallCanisterMethodCallArguments {
+            target: (*SNS_ROOT_CANISTER_ID).try_into().unwrap(),
+            method_name: "list_sns_canisters",
+            request: Encode!(&sns_root_pb::ListSnsCanistersRequest {}).unwrap(),
+        },
+        Ok(Encode!(&sns_root_pb::ListSnsCanistersResponse {
+            root: Some(*SNS_ROOT_CANISTER_ID),
+            governance: Some(*SNS_GOVERNANCE_CANISTER_ID),
+            ledger: Some(*SNS_LEDGER_CANISTER_ID),
+            swap: Some(*TARGET_SWAP_CANISTER_ID),
+
+            dapps: vec![*DAPP_CANISTER_ID],
+            archives: vec![*SNS_LEDGER_ARCHIVE_CANISTER_ID],
+            index: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
+        })
+        .unwrap()),
+    );
+
     static ref EXPECTED_SWAP_OPEN_CALL: ExpectedCallCanisterMethodCallArguments<'static> = ExpectedCallCanisterMethodCallArguments {
         target: CanisterId::try_from(*TARGET_SWAP_CANISTER_ID).unwrap(),
         method_name: "open",
@@ -10907,7 +10963,7 @@ lazy_static! {
 const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 61;
 
 #[tokio::test]
-async fn test_open_sns_token_swap_proposal() {
+async fn test_open_sns_token_swap_proposal_happy() {
     // Step 1: Prepare the world.
     let governance_proto = GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
@@ -10918,6 +10974,8 @@ async fn test_open_sns_token_swap_proposal() {
     let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
         [
             EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
+            EXPECTED_SWAP_GET_STATE_CALL.clone(),
+            EXPECTED_SNS_ROOT_LIST_SNS_CANISTERS_CALL.clone(),
             (
                 EXPECTED_SWAP_OPEN_CALL.clone(),
                 Ok(Encode!(&sns_swap_pb::OpenResponse {}).unwrap()),
@@ -10984,6 +11042,20 @@ async fn test_open_sns_token_swap_proposal() {
     );
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
+    assert_eq!(
+        proposal.swap_background_information,
+        Some(SwapBackgroundInformation {
+            sns_root_canister_id: Some(*SNS_ROOT_CANISTER_ID),
+            sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+            sns_ledger_canister_id: Some(*SNS_LEDGER_CANISTER_ID),
+
+            sns_ledger_index_canister_id: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
+            sns_ledger_archive_canister_ids: vec![*SNS_LEDGER_ARCHIVE_CANISTER_ID],
+
+            dapp_canister_ids: vec![*DAPP_CANISTER_ID],
+            fallback_controller_principal_ids: vec![*DEVELOPER_PRINCIPAL_ID],
+        }),
+    );
 }
 
 #[tokio::test]
@@ -10998,6 +11070,8 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
     let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
         [
             EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
+            EXPECTED_SWAP_GET_STATE_CALL.clone(),
+            EXPECTED_SNS_ROOT_LIST_SNS_CANISTERS_CALL.clone(),
             (
                 EXPECTED_SWAP_OPEN_CALL.clone(),
                 Err((
@@ -11074,6 +11148,20 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
             proposal,
         );
     }
+    assert_eq!(
+        proposal.swap_background_information,
+        Some(SwapBackgroundInformation {
+            sns_root_canister_id: Some(*SNS_ROOT_CANISTER_ID),
+            sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+            sns_ledger_canister_id: Some(*SNS_LEDGER_CANISTER_ID),
+
+            sns_ledger_index_canister_id: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
+            sns_ledger_archive_canister_ids: vec![*SNS_LEDGER_ARCHIVE_CANISTER_ID],
+
+            dapp_canister_ids: vec![*DAPP_CANISTER_ID],
+            fallback_controller_principal_ids: vec![*DEVELOPER_PRINCIPAL_ID],
+        }),
+    );
 
     // Step 3.3: Assert that neurons were restored. In particular, their
     // maturity is back to what it was originally.
