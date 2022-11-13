@@ -1,3 +1,4 @@
+use crate::notification_client::NotificationClient;
 use crate::util::{block_on, sleep_secs};
 use ic_recovery::command_helper::exec_cmd;
 use ic_recovery::file_sync_helper::download_binary;
@@ -11,6 +12,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::time::Instant;
 
 const RETRIES_RSYNC_HOST: u64 = 5;
 const RETRIES_BINARY_DOWNLOAD: u64 = 3;
@@ -22,6 +24,7 @@ pub struct BackupHelper {
     pub root_dir: PathBuf,
     pub ssh_credentials: String,
     pub registry_client: Arc<RegistryClientImpl>,
+    pub notification_client: NotificationClient,
     pub log: Logger,
 }
 
@@ -102,6 +105,8 @@ impl BackupHelper {
             sleep_secs(10);
         }
         // Without the binaries we can't replay...
+        self.notification_client
+            .report_failure_slack(format!("Couldn't download: {}", binary_name));
         panic!(
             "Binary {} is required for the replica {}",
             binary_name, self.replica_version
@@ -131,6 +136,8 @@ impl BackupHelper {
             sleep_secs(60);
         }
         warn!(self.log, "Didn't sync at all with host: {}", node_ip);
+        self.notification_client
+            .report_failure_slack("Couldn't pull artefacts from the nodes!".to_string());
     }
 
     fn rsync_config(&self, node_ip: &IpAddr) {
@@ -155,6 +162,8 @@ impl BackupHelper {
             sleep_secs(60);
         }
         warn!(self.log, "Didn't sync any config from host: {}", node_ip);
+        self.notification_client
+            .report_failure_slack("Couldn't pull ic.json5 from the nodes!".to_string());
     }
 
     fn rsync_cmd(
@@ -181,6 +190,8 @@ impl BackupHelper {
     }
 
     pub fn sync(&self, nodes: &Vec<&IpAddr>) {
+        let start_time = Instant::now();
+
         if !self.spool_dir().exists() {
             std::fs::create_dir_all(self.spool_dir()).expect("Failure creating a directory");
         }
@@ -194,6 +205,9 @@ impl BackupHelper {
         for n in nodes {
             self.rsync_node_backup(n);
         }
+        let duration = start_time.elapsed();
+        let minutes = duration.as_secs() / 60;
+        self.notification_client.push_metrics_sync_time(minutes);
     }
 
     pub fn collect_subnet_nodes(&self) -> Result<Vec<IpAddr>, String> {
@@ -257,6 +271,8 @@ impl BackupHelper {
 
     pub fn replay(&mut self) {
         let start_height = self.last_checkpoint();
+        let start_time = Instant::now();
+
         if !self.state_dir().exists() {
             std::fs::create_dir_all(self.state_dir()).expect("Failure creating a directory");
         }
@@ -264,13 +280,30 @@ impl BackupHelper {
         while let Ok(ReplayResult::UpgradeRequired(upgrade_version)) = self.replay_current_version()
         {
             info!(self.log, "Upgrade detected to: '{:?}'", upgrade_version);
+            self.notification_client.message_slack(format!(
+                "Replica version upgrade detected (current: {} new: {}): upgrading the ic-replay tool to retry... 🤞",
+                self.replica_version, upgrade_version
+            ));
             self.replica_version = upgrade_version;
         }
 
-        if self.last_checkpoint() > start_height {
+        let finish_height = self.last_checkpoint();
+        if finish_height > start_height {
             info!(self.log, "Replay was successful!");
+            self.notification_client.message_slack(format!(
+                "✅ Successfully restored the state at height *{}*",
+                finish_height
+            ));
+            let duration = start_time.elapsed();
+            let minutes = duration.as_secs() / 60;
+            self.notification_client.push_metrics_replay_time(minutes);
+            self.notification_client
+                .push_metrics_restored_height(finish_height);
         } else {
             warn!(self.log, "No progress in the replay!");
+            self.notification_client.report_failure_slack(
+                "No height progress after the last recovery detected!".to_string(),
+            );
         }
     }
 
@@ -324,7 +357,7 @@ impl BackupHelper {
         }
     }
 
-    pub fn check_upgrade_request(&self, stdout: String) -> Option<String> {
+    fn check_upgrade_request(&self, stdout: String) -> Option<String> {
         let prefix = "Please use the replay tool of version";
         let suffix = "to continue backup recovery from height";
         let min_version_len = 8;

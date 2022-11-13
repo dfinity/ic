@@ -5,9 +5,11 @@ use slog::{o, Drain};
 // Here is an example config file:
 //
 // {
+//     "backup_instance": "zh1-spm34",
 //     "root_dir": "./backup",
 //     "nns_url": "https://smallXYZ.testnet.dfinity.network",
 //     "ssh_credentials": "/home/my_user/.ssh/id_ed25519_backup",
+//     "slack_token": "ABCD1234"
 //     "subnets": [
 //       {
 //         "subnet_id": "ziu2q-il6zl-3654z-zcdg2-nbtx3-u2ba3-7yzey-flpky-aam7n-x53ip-uqe",
