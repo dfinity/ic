@@ -110,6 +110,7 @@ impl ExecutionServices {
             logger.clone(),
             Arc::clone(&cycles_account_manager),
             scheduler_config.dirty_page_overhead,
+            scheduler_config.query_execution_threads,
         ));
 
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
@@ -141,7 +142,7 @@ impl ExecutionServices {
             Arc::clone(&cycles_account_manager),
         ));
         let threadpool = threadpool::Builder::new()
-            .num_threads(config.query_execution_threads)
+            .num_threads(scheduler_config.query_execution_threads)
             .thread_name("query_execution".into())
             .thread_stack_size(8_192_000)
             .build();
@@ -149,7 +150,7 @@ impl ExecutionServices {
         let threadpool = Arc::new(Mutex::new(threadpool));
 
         let concurrency_buffer = GlobalConcurrencyLimitLayer::new(
-            config.query_execution_threads * MAX_INFLIGHT_QUERIES_PER_THREAD,
+            scheduler_config.query_execution_threads * MAX_INFLIGHT_QUERIES_PER_THREAD,
         );
         // Creating the async services require that a tokio runtime context is available.
 
