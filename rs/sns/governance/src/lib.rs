@@ -5,7 +5,7 @@ pub mod ledger;
 pub mod neuron;
 pub mod pb;
 pub mod proposal;
-mod reward;
+pub mod reward;
 pub mod sns_upgrade;
 pub mod types;
 

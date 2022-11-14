@@ -2,7 +2,7 @@ use crate::unit_helpers;
 use anyhow::anyhow;
 use clap::Parser;
 use ic_sns_governance::{
-    pb::v1::{governance::SnsMetadata, NervousSystemParameters},
+    pb::v1::{governance::SnsMetadata, NervousSystemParameters, VotingRewardsParameters},
     types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
 };
 use ic_sns_init::{
@@ -249,6 +249,104 @@ impl Default for SnsCliInitConfig {
 }
 
 impl SnsCliInitConfig {
+    fn initial_reward_rate_basis_points(&self) -> anyhow::Result<u64> {
+        let initial_reward_rate_percentage = self
+            .sns_governance
+            .initial_reward_rate_percentage
+            .ok_or_else(|| anyhow!("initial_reward_rate_percentage must be specified"))?;
+
+        let initial_reward_rate_basis_points =
+            unit_helpers::percentage_to_basis_points(initial_reward_rate_percentage);
+
+        if initial_reward_rate_basis_points
+            > VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING
+        {
+            return Err(anyhow!(
+                "Error: initial_reward_rate_percentage must be less than or equal to {}, but it is {initial_reward_rate_percentage}",
+                unit_helpers::basis_points_to_percentage(VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING)
+            ));
+        }
+
+        Ok(initial_reward_rate_basis_points)
+    }
+
+    fn final_reward_rate_basis_points(&self) -> anyhow::Result<u64> {
+        let final_reward_rate_percentage = self
+            .sns_governance
+            .final_reward_rate_percentage
+            .ok_or_else(|| anyhow!("final_reward_rate_percentage must be specified"))?;
+        let initial_reward_rate_percentage = self
+            .sns_governance
+            .initial_reward_rate_percentage
+            .ok_or_else(|| anyhow!("initial_reward_rate_percentage must be specified"))?;
+
+        if final_reward_rate_percentage > initial_reward_rate_percentage {
+            return Err(anyhow!(
+                "Error: final_reward_rate_percentage must be less than or equal to initial_reward_rate_percentage, but they are {final_reward_rate_percentage} and {initial_reward_rate_percentage}.",
+            ));
+        }
+
+        let final_reward_rate_basis_points =
+            unit_helpers::percentage_to_basis_points(final_reward_rate_percentage);
+
+        Ok(final_reward_rate_basis_points)
+    }
+
+    fn max_dissolve_delay_bonus_percentage(&self) -> anyhow::Result<u64> {
+        let max_dissolve_delay_bonus_multiplier = self
+            .sns_governance
+            .max_dissolve_delay_bonus_multiplier
+            .ok_or_else(|| anyhow!("max_dissolve_delay_bonus_multiplier must be specified"))?;
+
+        let max_dissolve_delay_bonus_percentage =
+            unit_helpers::multiplier_to_percentage_increase(
+                max_dissolve_delay_bonus_multiplier,
+            ).ok_or_else(|| {
+                anyhow!(
+                    "max_dissolve_delay_bonus_multiplier must be greater than or equal to 1.0, but it is {max_dissolve_delay_bonus_multiplier}"
+                )
+            })?;
+
+        if max_dissolve_delay_bonus_percentage
+            > NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING
+        {
+            return Err(anyhow!(
+                "max_dissolve_delay_bonus_multiplier must be less than or equal to {}, but it is {max_dissolve_delay_bonus_multiplier}", 
+                unit_helpers::percentage_increase_to_multiplier(NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING)
+            ));
+        }
+
+        Ok(max_dissolve_delay_bonus_percentage)
+    }
+
+    fn max_age_bonus_percentage(&self) -> anyhow::Result<u64> {
+        let max_age_bonus_multiplier = self
+            .sns_governance
+            .max_age_bonus_multiplier
+            .ok_or_else(|| anyhow!("max_age_bonus_multiplier must be specified"))?;
+
+        let max_age_bonus_percentage =
+        unit_helpers::multiplier_to_percentage_increase(
+            max_age_bonus_multiplier,
+        ).ok_or_else(|| {
+            anyhow!(
+                "max_age_bonus_multiplier must be greater than or equal to 1.0, but it is {max_age_bonus_multiplier}"
+            )
+        })?;
+
+        if max_age_bonus_percentage > NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING {
+            return Err(anyhow!(
+                "max_age_bonus_multiplier must be less than or equal to {}, but it is {}",
+                max_age_bonus_multiplier,
+                unit_helpers::percentage_increase_to_multiplier(
+                    NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING
+                )
+            ));
+        }
+
+        Ok(max_age_bonus_percentage)
+    }
+
     /// A SnsCliInitConfig is valid if it can convert to an SnsInitPayload and have the generated
     /// struct pass its validation.
     fn validate(&self) -> anyhow::Result<()> {
@@ -333,38 +431,13 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             Some(ref logo_path) => Some(load_logo(logo_path)?),
         };
 
-        let max_dissolve_delay_bonus_percentage = if let Some(max_dissolve_delay_bonus_multiplier) =
-            sns_cli_init_config
-                .sns_governance
-                .max_dissolve_delay_bonus_multiplier
-        {
-            Some(unit_helpers::multiplier_to_percentage_increase(
-                max_dissolve_delay_bonus_multiplier,
-            ).ok_or_else(|| {
-                anyhow!(
-                    "max_dissolve_delay_bonus_multiplier must be greater than or equal to 1.0, but it is {}",
-                    max_dissolve_delay_bonus_multiplier
-                )
-            })?)
-        } else {
-            None
-        };
-
-        let max_age_bonus_percentage = if let Some(max_age_bonus_multiplier) =
-            sns_cli_init_config.sns_governance.max_age_bonus_multiplier
-        {
-            Some(
-                unit_helpers::multiplier_to_percentage_increase(max_age_bonus_multiplier)
-                    .ok_or_else(|| {
-                        anyhow!(
-                    "max_age_bonus_multiplier must be greater than or equal to 1.0, but it is {}",
-                    max_age_bonus_multiplier
-                )
-                    })?,
-            )
-        } else {
-            None
-        };
+        let max_dissolve_delay_bonus_percentage =
+            sns_cli_init_config.max_dissolve_delay_bonus_percentage()?;
+        let max_age_bonus_percentage = sns_cli_init_config.max_age_bonus_percentage()?;
+        let initial_reward_rate_basis_points =
+            sns_cli_init_config.initial_reward_rate_basis_points()?;
+        let final_reward_rate_basis_points =
+            sns_cli_init_config.final_reward_rate_basis_points()?;
 
         Ok(SnsInitPayload {
             sns_initialization_parameters: Some(get_config_file_contents(
@@ -388,14 +461,8 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             initial_token_distribution: sns_cli_init_config
                 .initial_token_distribution
                 .initial_token_distribution,
-            initial_reward_rate_basis_points: sns_cli_init_config
-                .sns_governance
-                .initial_reward_rate_percentage
-                .map(unit_helpers::percentage_to_basis_points),
-            final_reward_rate_basis_points: sns_cli_init_config
-                .sns_governance
-                .final_reward_rate_percentage
-                .map(unit_helpers::percentage_to_basis_points),
+            initial_reward_rate_basis_points: Some(initial_reward_rate_basis_points),
+            final_reward_rate_basis_points: Some(final_reward_rate_basis_points),
             reward_rate_transition_duration_seconds: sns_cli_init_config
                 .sns_governance
                 .reward_rate_transition_duration_seconds,
@@ -405,8 +472,8 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             max_neuron_age_seconds_for_age_bonus: sns_cli_init_config
                 .sns_governance
                 .max_neuron_age_seconds_for_age_bonus,
-            max_dissolve_delay_bonus_percentage,
-            max_age_bonus_percentage,
+            max_dissolve_delay_bonus_percentage: Some(max_dissolve_delay_bonus_percentage),
+            max_age_bonus_percentage: Some(max_age_bonus_percentage),
             initial_voting_period_seconds: sns_cli_init_config
                 .sns_governance
                 .initial_voting_period_seconds,
@@ -910,6 +977,70 @@ mod test {
     use std::fs::File;
     use std::io::{BufReader, Read};
 
+    impl SnsLedgerConfig {
+        pub fn with_test_values() -> Self {
+            let mut logo_path =
+                std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            logo_path.push("test.png");
+
+            Self {
+                transaction_fee_e8s: Some(1),
+                token_name: Some("ServiceNervousSystem".to_string()),
+                token_symbol: Some("SNS".to_string()),
+            }
+        }
+    }
+
+    impl SnsGovernanceConfig {
+        pub fn with_test_values() -> Self {
+            let mut logo_path =
+                std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            logo_path.push("test.png");
+
+            Self {
+                proposal_reject_cost_e8s: Some(2),
+                neuron_minimum_stake_e8s: Some(3),
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
+                fallback_controller_principal_ids: vec![
+                    "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe".to_string(),
+                ],
+                logo: Some(logo_path.clone()),
+                url: Some("https://internetcomputer.org".to_string()),
+                name: Some("Name".to_string()),
+                description: Some("Description".to_string()),
+                initial_reward_rate_percentage: Some(31.0),
+                final_reward_rate_percentage: Some(27.0),
+                reward_rate_transition_duration_seconds: Some(100_000),
+                max_dissolve_delay_seconds: Some(8 * ONE_MONTH_SECONDS),
+                max_neuron_age_seconds_for_age_bonus: Some(11 * ONE_MONTH_SECONDS),
+                max_dissolve_delay_bonus_multiplier: Some(
+                    unit_helpers::percentage_increase_to_multiplier(
+                        NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING,
+                    ),
+                ),
+                max_age_bonus_multiplier: Some(unit_helpers::percentage_increase_to_multiplier(
+                    NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING,
+                )),
+                initial_voting_period_seconds: Some(ONE_MONTH_SECONDS),
+                wait_for_quiet_deadline_increase_seconds: Some(ONE_DAY_SECONDS),
+            }
+        }
+    }
+
+    impl SnsInitialTokenDistributionConfig {
+        pub fn with_test_values() -> Self {
+            let mut logo_path =
+                std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            logo_path.push("test.png");
+
+            Self {
+                initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
+                    ..Default::default()
+                })),
+            }
+        }
+    }
+
     impl SnsCliInitConfig {
         pub fn with_test_values() -> Self {
             let mut logo_path =
@@ -917,38 +1048,9 @@ mod test {
             logo_path.push("test.png");
 
             Self {
-                sns_ledger: SnsLedgerConfig {
-                    transaction_fee_e8s: Some(1),
-                    token_name: Some("ServiceNervousSystem".to_string()),
-                    token_symbol: Some("SNS".to_string()),
-                },
-                sns_governance: SnsGovernanceConfig {
-                    proposal_reject_cost_e8s: Some(2),
-                    neuron_minimum_stake_e8s: Some(3),
-                    neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
-                    fallback_controller_principal_ids: vec![
-                        "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe"
-                            .to_string(),
-                    ],
-                    logo: Some(logo_path.clone()),
-                    url: Some("https://internetcomputer.org".to_string()),
-                    name: Some("Name".to_string()),
-                    description: Some("Description".to_string()),
-                    initial_reward_rate_percentage: Some(31.0),
-                    final_reward_rate_percentage: Some(27.0),
-                    reward_rate_transition_duration_seconds: Some(100_000),
-                    max_dissolve_delay_seconds: Some(8 * ONE_MONTH_SECONDS),
-                    max_neuron_age_seconds_for_age_bonus: Some(11 * ONE_MONTH_SECONDS),
-                    max_dissolve_delay_bonus_multiplier: Some(8.0),
-                    max_age_bonus_multiplier: Some(25.0),
-                    initial_voting_period_seconds: Some(ONE_MONTH_SECONDS),
-                    wait_for_quiet_deadline_increase_seconds: Some(ONE_DAY_SECONDS),
-                },
-                initial_token_distribution: SnsInitialTokenDistributionConfig {
-                    initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
-                        ..Default::default()
-                    })),
-                },
+                sns_ledger: SnsLedgerConfig::with_test_values(),
+                sns_governance: SnsGovernanceConfig::with_test_values(),
+                initial_token_distribution: SnsInitialTokenDistributionConfig::with_test_values(),
             }
         }
     }
@@ -1198,5 +1300,81 @@ wait_for_quiet_deadline_increase_seconds: 1000
         };
 
         assert!(sns_init_payload.logo.is_none(), "Expected logo to be None");
+    }
+
+    #[test]
+    fn test_initial_reward_rate_percentage_validation() {
+        let sns_cli_init_config = SnsCliInitConfig {
+            sns_governance: SnsGovernanceConfig {
+                initial_reward_rate_percentage: Some(
+                    unit_helpers::basis_points_to_percentage(
+                        VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING,
+                    ) + 1.0,
+                ),
+                ..SnsGovernanceConfig::with_test_values()
+            },
+            ..SnsCliInitConfig::with_test_values()
+        };
+
+        assert!(sns_cli_init_config
+            .initial_reward_rate_basis_points()
+            .is_err());
+        assert!(SnsInitPayload::try_from(sns_cli_init_config).is_err());
+    }
+
+    #[test]
+    fn final_initial_reward_rate_percentage_validation() {
+        let sns_cli_init_config = SnsCliInitConfig {
+            sns_governance: SnsGovernanceConfig {
+                // Final must be <= initial, so this should cause a panic
+                initial_reward_rate_percentage: Some(0.0),
+                final_reward_rate_percentage: Some(1.0),
+                ..SnsGovernanceConfig::with_test_values()
+            },
+            ..SnsCliInitConfig::with_test_values()
+        };
+
+        assert!(sns_cli_init_config
+            .final_reward_rate_basis_points()
+            .is_err());
+        assert!(SnsInitPayload::try_from(sns_cli_init_config).is_err());
+    }
+
+    #[test]
+    fn max_dissolve_delay_bonus_multiplier_validation() {
+        let sns_cli_init_config = SnsCliInitConfig {
+            sns_governance: SnsGovernanceConfig {
+                max_dissolve_delay_bonus_multiplier: Some(
+                    unit_helpers::percentage_increase_to_multiplier(
+                        NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING,
+                    ) + 1.0,
+                ),
+                ..SnsGovernanceConfig::with_test_values()
+            },
+            ..SnsCliInitConfig::with_test_values()
+        };
+
+        assert!(sns_cli_init_config
+            .max_dissolve_delay_bonus_percentage()
+            .is_err());
+        assert!(SnsInitPayload::try_from(sns_cli_init_config).is_err());
+    }
+
+    #[test]
+    fn max_age_bonus_multiplier_validation() {
+        let sns_cli_init_config = SnsCliInitConfig {
+            sns_governance: SnsGovernanceConfig {
+                max_age_bonus_multiplier: Some(
+                    unit_helpers::percentage_increase_to_multiplier(
+                        NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING,
+                    ) + 1.0,
+                ),
+                ..SnsGovernanceConfig::with_test_values()
+            },
+            ..SnsCliInitConfig::with_test_values()
+        };
+
+        assert!(sns_cli_init_config.max_age_bonus_percentage().is_err());
+        assert!(SnsInitPayload::try_from(sns_cli_init_config).is_err());
     }
 }
