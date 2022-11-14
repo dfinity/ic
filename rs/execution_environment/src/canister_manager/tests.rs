@@ -204,6 +204,7 @@ impl CanisterManagerBuilder {
             no_op_logger(),
             Arc::clone(&cycles_account_manager),
             SchedulerConfig::application_subnet().dirty_page_overhead,
+            SchedulerConfig::application_subnet().query_execution_threads,
         );
         let hypervisor = Arc::new(hypervisor);
         CanisterManager::new(
