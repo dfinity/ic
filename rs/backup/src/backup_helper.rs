@@ -6,6 +6,7 @@ use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{ReplicaVersion, SubnetId};
+
 use slog::{error, info, warn, Logger};
 use std::ffi::OsStr;
 use std::net::IpAddr;
@@ -22,7 +23,8 @@ pub struct BackupHelper {
     pub subnet_id: SubnetId,
     pub nns_url: String,
     pub root_dir: PathBuf,
-    pub ssh_credentials: String,
+    pub excluded_dirs: Vec<String>,
+    pub ssh_private_key: String,
     pub registry_client: Arc<RegistryClientImpl>,
     pub notification_client: NotificationClient,
     pub log: Logger,
@@ -69,6 +71,11 @@ impl BackupHelper {
 
     fn state_dir(&self) -> PathBuf {
         self.data_dir().join("ic_state")
+    }
+
+    fn archive_dir(&self, last_height: u64) -> PathBuf {
+        self.root_dir
+            .join(format!("archive/{}/{}", self.subnet_id, last_height))
     }
 
     fn username(&self) -> String {
@@ -176,7 +183,7 @@ impl BackupHelper {
         cmd.arg("-e");
         cmd.arg(format!(
             "ssh -o StrictHostKeyChecking=no -i {}",
-            self.ssh_credentials
+            self.ssh_private_key
         ));
         cmd.arg("--timeout=600");
         cmd.args(arguments);
@@ -279,7 +286,6 @@ impl BackupHelper {
 
         while let Ok(ReplayResult::UpgradeRequired(upgrade_version)) = self.replay_current_version()
         {
-            info!(self.log, "Upgrade detected to: '{:?}'", upgrade_version);
             self.notification_client.message_slack(format!(
                 "Replica version upgrade detected (current: {} new: {}): upgrading the ic-replay tool to retry... 🤞",
                 self.replica_version, upgrade_version
@@ -290,15 +296,17 @@ impl BackupHelper {
         let finish_height = self.last_checkpoint();
         if finish_height > start_height {
             info!(self.log, "Replay was successful!");
-            self.notification_client.message_slack(format!(
-                "✅ Successfully restored the state at height *{}*",
-                finish_height
-            ));
-            let duration = start_time.elapsed();
-            let minutes = duration.as_secs() / 60;
-            self.notification_client.push_metrics_replay_time(minutes);
-            self.notification_client
-                .push_metrics_restored_height(finish_height);
+            if self.archive_state(finish_height).is_ok() {
+                self.notification_client.message_slack(format!(
+                    "✅ Successfully restored the state at height *{}*",
+                    finish_height
+                ));
+                let duration = start_time.elapsed();
+                let minutes = duration.as_secs() / 60;
+                self.notification_client.push_metrics_replay_time(minutes);
+                self.notification_client
+                    .push_metrics_restored_height(finish_height);
+            }
         } else {
             warn!(self.log, "No progress in the replay!");
             self.notification_client.report_failure_slack(
@@ -370,5 +378,37 @@ impl BackupHelper {
             }
         }
         None
+    }
+    fn archive_state(&self, last_height: u64) -> Result<(), String> {
+        let state_dir = self.data_dir().join(".");
+        let archive_dir = self.archive_dir(last_height);
+        info!(
+            self.log,
+            "Archiving: {} to: {}",
+            state_dir.to_string_lossy(),
+            archive_dir.to_string_lossy()
+        );
+        if !archive_dir.exists() {
+            std::fs::create_dir_all(archive_dir.clone())
+                .unwrap_or_else(|e| panic!("Failure creating archive directory: {}", e));
+        }
+
+        let mut cmd = Command::new("rsync");
+        cmd.arg("-a");
+        cmd.arg("--info=progress2");
+        for dir in &self.excluded_dirs {
+            cmd.arg("--exclude").arg(dir);
+        }
+        cmd.arg(state_dir).arg(archive_dir);
+        info!(self.log, "Will execute: {:?}", cmd);
+        if let Err(e) = exec_cmd(&mut cmd) {
+            error!(self.log, "Error: {}", e);
+            self.notification_client
+                .report_failure_slack("Couldn't backup the recovered state!".to_string());
+            Err(e.to_string())
+        } else {
+            info!(self.log, "State archived!");
+            Ok(())
+        }
     }
 }
