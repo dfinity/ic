@@ -38,6 +38,7 @@ pub struct Orchestrator {
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
+    registration: Option<NodeRegistration>,
     // A flag used to communicate to async tasks, that their job is done.
     exit_sender: Sender<bool>,
     exit_signal: Receiver<bool>,
@@ -226,6 +227,7 @@ impl Orchestrator {
             firewall: Some(firewall),
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
+            registration: Some(registration),
             exit_sender,
             exit_signal,
             subnet_id,
@@ -268,6 +270,29 @@ impl Orchestrator {
                 warn!(log, "{}", e);
             }
             info!(log, "Shut down the replica process");
+        }
+
+        async fn tecdsa_key_rotation_check(
+            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            registration: NodeRegistration,
+            mut exit_signal: Receiver<bool>,
+            log: ReplicaLogger,
+        ) {
+            while !*exit_signal.borrow() {
+                if let Some(subnet_id) = *maybe_subnet_id.read().await {
+                    if registration.is_tecdsa_subnet(subnet_id) {
+                        registration
+                            .check_all_keys_registered_otherwise_register()
+                            .await;
+                    }
+                }
+
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = exit_signal.changed() => {}
+                };
+            }
+            info!(log, "Shut down the tECDSA key rotation loop");
         }
 
         async fn ssh_key_and_firewall_rules_checks(
@@ -333,6 +358,16 @@ impl Orchestrator {
                 self.exit_signal.clone(),
                 self.logger.clone(),
             )));
+        }
+        if let Some(registration) = self.registration.take() {
+            info!(self.logger, "Spawning the tECDSA key rotation loop");
+            self.task_handles
+                .push(tokio::spawn(tecdsa_key_rotation_check(
+                    Arc::clone(&self.subnet_id),
+                    registration,
+                    self.exit_signal.clone(),
+                    self.logger.clone(),
+                )));
         }
     }
 
