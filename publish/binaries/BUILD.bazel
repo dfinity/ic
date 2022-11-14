@@ -1,16 +1,20 @@
-load("//bazel:transitions.bzl", "opt_debug_binary")
+load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
-BINARIES = {
+NOSTRIP_BINARIES = {
+    "canister_sandbox": "//rs/canister_sandbox",
+    "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
+    "replica": "//rs/replica",
+}
+
+STRIP_BINARIES = {
     "boundary-node-control-plane": "//rs/boundary_node/control_plane:boundary-node-control-plane",
     "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
-    "canister_sandbox": "//rs/canister_sandbox",
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
     "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
-    "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
     "ic-canister-http-adapter": "//rs/canister_http/adapter:ic-canister-http-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
@@ -27,7 +31,6 @@ BINARIES = {
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
     "orchestrator": "//rs/orchestrator",
     "prod-test-driver": "//rs/tests:prod-test-driver",
-    "replica": "//rs/replica",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
     "sns": "//rs/sns/cli:sns",
     "state-tool": "//rs/state_tool:state-tool",
@@ -35,38 +38,49 @@ BINARIES = {
     "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
 }
 
-[opt_debug_binary(
+[release_nostrip_binary(
     name = name,
-    binary = BINARIES[name],
+    binary = NOSTRIP_BINARIES[name],
     visibility = [
         "//ic-os/guestos/dev:__pkg__",
         "//ic-os/guestos/dev-malicious:__pkg__",
         "//ic-os/guestos/prod:__pkg__",
     ],
-) for name in BINARIES]
+) for name in NOSTRIP_BINARIES]
+
+[release_strip_binary(
+    name = name,
+    binary = STRIP_BINARIES[name],
+    visibility = [
+        "//ic-os/guestos/dev:__pkg__",
+        "//ic-os/guestos/dev-malicious:__pkg__",
+        "//ic-os/guestos/prod:__pkg__",
+    ],
+) for name in STRIP_BINARIES]
 
 [
     gzip_compress(
         name = name + ".gz",
-        srcs = [target],
+        srcs = [name],
     )
-    for (name, target) in BINARIES.items()
+    for name in NOSTRIP_BINARIES
 ]
 
-# Temporary workaround to support legacy pipeline.
-# IDX-2541 remove with relevant job deprecation in cargo-pipeline
-filegroup(
-    name = "binaries_raw",
-    srcs = [name for name in BINARIES],
-)
+[
+    gzip_compress(
+        name = name + ".gz",
+        srcs = [name],
+    )
+    for name in STRIP_BINARIES
+]
 
 filegroup(
     name = "binaries",
-    srcs = [name + ".gz" for name in BINARIES],
+    srcs = [name + ".gz" for name in NOSTRIP_BINARIES] + [name + ".gz" for name in STRIP_BINARIES],
 )
 
 upload_artifacts(
     name = "upload",
     inputs = [":binaries"],
-    remote_subdir = "release-bazel",
+    remote_subdir = "release",
 )

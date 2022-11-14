@@ -4,15 +4,15 @@ For example, you might want to build some targets with optimizations enabled
 no matter what the current Bazel flags are.
 """
 
-def _opt_debug_transition(_settings, _attr):
+def _release_nostrip_transition(_settings, _attr):
     return {
         "//command_line_option:compilation_mode": "opt",
         "//command_line_option:strip": "never",
         "@rules_rust//:extra_rustc_flags": ["-Cdebug-assertions=off"],
     }
 
-opt_debug_transition = transition(
-    implementation = _opt_debug_transition,
+release_nostrip_transition = transition(
+    implementation = _release_nostrip_transition,
     inputs = [],
     outputs = [
         "//command_line_option:compilation_mode",
@@ -21,7 +21,7 @@ opt_debug_transition = transition(
     ],
 )
 
-def _opt_debug_impl(ctx):
+def _release_nostrip_impl(ctx):
     bin = ctx.attr.binary[0]
     info = bin[DefaultInfo]
 
@@ -32,14 +32,53 @@ def _opt_debug_impl(ctx):
         DefaultInfo(files = info.files, runfiles = info.default_runfiles, executable = executable),
     ]
 
-opt_debug_binary = rule(
-    implementation = _opt_debug_impl,
+release_nostrip_binary = rule(
+    implementation = _release_nostrip_impl,
     executable = True,
     attrs = {
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
-        "binary": attr.label(mandatory = True, cfg = opt_debug_transition, allow_single_file = True),
+        "binary": attr.label(mandatory = True, cfg = release_nostrip_transition, allow_single_file = True),
+    },
+)
+
+def _release_strip_transition(_settings, _attr):
+    return {
+        "//command_line_option:compilation_mode": "opt",
+        "//command_line_option:strip": "always",
+        "@rules_rust//:extra_rustc_flags": ["-Cdebug-assertions=off"],
+    }
+
+release_strip_transition = transition(
+    implementation = _release_strip_transition,
+    inputs = [],
+    outputs = [
+        "//command_line_option:compilation_mode",
+        "//command_line_option:strip",
+        "@rules_rust//:extra_rustc_flags",
+    ],
+)
+
+def _release_strip_impl(ctx):
+    bin = ctx.attr.binary[0]
+    info = bin[DefaultInfo]
+
+    executable = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.symlink(output = executable, target_file = ctx.file.binary)
+
+    return [
+        DefaultInfo(files = info.files, runfiles = info.default_runfiles, executable = executable),
+    ]
+
+release_strip_binary = rule(
+    implementation = _release_strip_impl,
+    executable = True,
+    attrs = {
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
+        "binary": attr.label(mandatory = True, cfg = release_strip_transition, allow_single_file = True),
     },
 )
 
@@ -61,7 +100,7 @@ malicious_code_enabled_transition = transition(
 )
 
 malicious_binary = rule(
-    implementation = _opt_debug_impl,
+    implementation = _release_nostrip_impl,
     executable = True,
     attrs = {
         "_allowlist_function_transition": attr.label(

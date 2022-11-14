@@ -43,7 +43,7 @@ if [ -e /var/run/docker.sock ]; then
 fi
 
 # if i'm not withing docker already, bind mount the source
-if [ ! -e /.dockerenv ] && [[ "$IMAGE" != "ic-build-bd:"* ]]; then
+if [ ! -e /.dockerenv ] && ! [[ "$IMAGE" =~ ic-build.*-bd ]]; then
     mkdir -p "${REPO_ROOT}/rs/target"
     mkdir -p "${HOME}/.cache/bazel"
     mkdir -p "${HOME}/.aws"

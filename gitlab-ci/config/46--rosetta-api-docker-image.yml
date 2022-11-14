@@ -4,7 +4,7 @@ rosetta-api-docker-image:
     - .rules-protected-branch-manual
   stage: guest-os-build
   needs:
-    - job: cargo-build-release-linux-native
+    - job: wait-for-bazel-test-all
       artifacts: false
   script:
     - |

@@ -8,7 +8,6 @@ cargo-build-debug-linux:
   variables:
     BUILD_COMMAND: "cargo build"
 
-# Warning! If you rename this job, you update ALL `gitlab-artifacts-download` invocations.
 cargo-build-release-linux:
   extends: 
   - .cargo-build-docker
@@ -27,32 +26,6 @@ cargo-build-release-darwin:
   variables:
     BUILD_COMMAND: "cargo build --release"
     BUILD_COMMAND_POST: "cd ${CI_PROJECT_DIR}/gitlab-ci/src && python3 -m artifacts.collect_build_binaries artifacts/nix-release; cd ${CI_PROJECT_DIR} && gitlab-ci/src/artifacts/rclone_upload.py --version='$CI_COMMIT_SHA' 'artifacts/nix-release' nix-release/x86_64-darwin"
-
-cargo-build-release-linux-native:
-  extends:
-    - .bazel-build-k8s
-    - .rules-parent-pipeline-autorun-on-trigger
-  stage: cargo-build
-  needs: []
-  variables:
-    ARTIFACT_EXT: ""
-  artifacts:
-    paths:
-      - "artifacts/release${ARTIFACT_EXT}/*"
-      - bazel-build-log*.json*
-  script:
-    - |
-      "${CI_PROJECT_DIR}/gitlab-ci/tools/job-driver.py" "${CI_JOB_NAME}"
-
-      cd "${CI_PROJECT_DIR}"
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-        gitlab-ci/src/artifacts/rclone_upload.py --version="$CI_COMMIT_SHA" \
-        "artifacts/release${ARTIFACT_EXT}" "release${ARTIFACT_EXT}"
-
-cargo-build-release-linux-native-malicious:
-  extends: cargo-build-release-linux-native
-  variables:
-    ARTIFACT_EXT: "-malicious"
 
 dfx-build-release-darwin:
   extends: .cargo-build-macos

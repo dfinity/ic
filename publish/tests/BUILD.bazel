@@ -1,12 +1,12 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel:transitions.bzl", "opt_debug_binary")
+load("//publish:defs.bzl", "release_nostrip_binary")
 
 rust_binary(
     name = "debug_assertions_on",
     srcs = ["src/main.rs"],
 )
 
-opt_debug_binary(
+release_nostrip_binary(
     name = "debug_assertions_off",
     binary = ":debug_assertions_on",
 )

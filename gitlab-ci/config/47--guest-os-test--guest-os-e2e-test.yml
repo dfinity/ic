@@ -78,6 +78,37 @@
     # we need debug-level logs from the following components for IC policy monitoring
     LOG_DEBUG_OVERRIDES: "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors,ic_consensus::consensus,ic_transport::control_plane"
 
+legacy-system-tests:
+  extends:
+    - .system-tests
+  artifacts:
+    paths:
+      - replica-logs/
+      - junit_data/
+      - coredumps/
+      - test-results.json
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: test_report.xml
+  variables:
+      BLOCKING: "blocking"
+      TEST_RUNNER_ARGS: "--experimental --jobs 6 --timeout 720s --ready-timeout 90s --result-file ${CI_PROJECT_DIR}/test-results.json --tee-replica-logs-base-dir ${CI_PROJECT_DIR}/replica-logs --skip staging -v"
+      RUST_BACKTRACE: 1
+  script:
+    - |
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
+          --out="artifacts/release"
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="$CI_COMMIT_SHA" --remote-path="release-malicious" \
+          --out="artifacts/release-malicious"
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="$CI_COMMIT_SHA" --remote-path="canisters" \
+          --out="artifacts/canisters"
+      "${CI_PROJECT_DIR}/gitlab-ci/src/job_scripts/system-tests.sh"
+
+
 system-tests-pre-master:
   extends: .system-tests
   variables:
@@ -170,8 +201,6 @@ subnet-recovery-pre-master:
 upgrade-compatibility-pre-master:
   extends: .system-tests
   needs:
-    - job: cargo-build-release-linux-native
-      artifacts: false
     - job: wait-for-bazel-test-all
       artifacts: false
     - job: guest-os-updateimg-build
@@ -254,50 +283,3 @@ test-monpoly-docker:
     - *build-and-test-monpoly-docker-e2e
   needs:
     - create-subnet-pre-master  # Use the logs produced by this system test in e2e tests of monpoly_pipeline
-
-legacy-system-tests:
-  extends:
-    - .ubuntu-nix-docker-pinned-dc
-    - .rules-parent-pipeline
-  # System tests are very flaky due to replica non-determinism.
-  retry: 2
-  stage: guest-os-test
-  needs:
-    - job: cargo-build-release-linux-native
-      artifacts: false
-    - job: cargo-build-release-linux-native-malicious
-      artifacts: false
-    - job: wait-for-bazel-test-all
-      artifacts: false
-    - job: boundary-os-diskimg
-      artifacts: false
-    - job: boundary-os-diskimg-dev
-      artifacts: false
-    - job: boundary-os-diskimg-snp-dev
-      artifacts: false
-  artifacts:
-    paths:
-      - replica-logs/
-      - junit_data/
-      - coredumps/
-      - test-results.json
-    when: always
-    expire_in: 1 week
-    reports:
-      junit: test_report.xml
-  variables:
-      BLOCKING: "blocking"
-      TEST_RUNNER_ARGS: "--experimental --jobs 6 --timeout 720s --ready-timeout 90s --result-file ${CI_PROJECT_DIR}/test-results.json --tee-replica-logs-base-dir ${CI_PROJECT_DIR}/replica-logs --skip staging -v"
-      RUST_BACKTRACE: 1
-  script:
-    - |
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
-          --out="artifacts/release"
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="$CI_COMMIT_SHA" --remote-path="release-malicious" \
-          --out="artifacts/release-malicious"
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="$CI_COMMIT_SHA" --remote-path="canisters" \
-          --out="artifacts/canisters"
-      "${CI_PROJECT_DIR}/gitlab-ci/src/job_scripts/system-tests.sh"

@@ -50,8 +50,6 @@ include:
     - .rules-parent-pipeline
   stage: cargo-test
   needs:
-    - job: cargo-build-release-linux-native
-      artifacts: false
     - job: wait-for-bazel-test-all
       artifacts: false
   artifacts:
@@ -126,8 +124,6 @@ include:
   extends: .cargo-crate-test
   stage: cargo-test
   needs:
-    - job: cargo-build-release-linux-native
-      artifacts: false
     - job: wait-for-bazel-test-all
       artifacts: false
   script:

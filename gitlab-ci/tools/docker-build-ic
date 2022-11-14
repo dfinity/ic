@@ -2,6 +2,51 @@
 
 set -euo pipefail
 
+usage() {
+    echo "by default, this script builds everything including the Binaries, Canisters and the IC OS Image."
+    echo " "
+    echo "options:"
+    echo "-h, --help                    show brief help"
+    echo "-a, --artifacts=\"b,c,i\"     chose which artifacts you want to build separated by a comma"
+    echo "                              options: b or binaries, c or canisters, i or image"
+    exit 0
+}
+
+BUILD_BINARIES=true
+BUILD_CANISTERS=true
+BUILD_IMAGES=true
+
+# Process flags
+while test $# -gt 0; do
+    case "$1" in
+        -h | --help) usage ;;
+        -a* | --artifacts*)
+            if [[ "$1" == *"="* ]]; then
+                value=$(echo "$1" | sed -e 's/^[^=]*=//g')
+            else
+                shift
+                value="$1"
+            fi
+
+            BUILD_BINARIES=false
+            BUILD_CANISTERS=false
+            BUILD_IMAGES=false
+
+            # Iterate through the given artificats and sets the states
+            IFS=',' read -ra options <<<"$value"
+            for option in "${options[@]}"; do
+                case "$option" in
+                    b | binaries) BUILD_BINARIES=true ;;
+                    c | canisters) BUILD_CANISTERS=true ;;
+                    i | image) BUILD_IMAGES=true ;;
+                esac
+            done
+
+            shift
+            ;;
+    esac
+done
+
 not_supported_prompt() {
     echo "$1"
     read -t 7 -r -s -p $'Press ENTER to continue the build anyway...\n'
@@ -27,17 +72,6 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 TAG=$(openssl rand -hex 4)
 DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
 
-echo "Pulling dfinity/ic-build:$DOCKER_IMG_VERSION docker image"
-if ! docker pull dfinity/ic-build:"$DOCKER_IMG_VERSION"; then
-    # dfinity/ic-build:<tag> is not yet in dockerhub
-    # handle the case when Dockerfile is updated in a MR
-    echo "Image 'dfinity/ic-build:$DOCKER_IMG_VERSION' not in DockerHub"
-    echo "Building 'dfinity/ic-build:$DOCKER_IMG_VERSION' image (--no-cache)"
-    export DOCKER_BUILD_ARGS='--no-cache'
-    "$REPO_ROOT"/gitlab-ci/docker/docker-build-image.sh
-    unset DOCKER_BUILD_ARGS
-fi
-
 if [ -e /.dockerenv ]; then
     ARTIFACTS_VOLUME="ic-artifacts${CI_JOB_ID:-}"
 else
@@ -47,15 +81,51 @@ fi
 
 git clean -ffdx
 
-GIT_REV=$(git rev-parse HEAD)
-docker image build --no-cache -t ic-build-bd:$TAG -f- . <<EOF
-FROM dfinity/ic-build:$DOCKER_IMG_VERSION
+setup_docker_image() {
+    echo "Pulling dfinity/$1:$DOCKER_IMG_VERSION docker image"
+    if ! docker pull dfinity/ic-build:"$DOCKER_IMG_VERSION"; then
+        # dfinity/ic-build:<tag> is not yet in dockerhub
+        # handle the case when Dockerfile is updated in a MR
+        echo "Image 'dfinity/$1:$DOCKER_IMG_VERSION' not in DockerHub"
+        echo "Building 'dfinity/$1:$DOCKER_IMG_VERSION' image (--no-cache)"
+        export DOCKER_BUILD_ARGS='--no-cache'
+        "$REPO_ROOT"/gitlab-ci/docker/docker-build-image.sh
+        unset DOCKER_BUILD_ARGS
+    fi
+
+    docker image build --no-cache -t "$1-bd:$TAG" -f- . <<EOF
+FROM dfinity/$1:$DOCKER_IMG_VERSION
 COPY --chown=ubuntu:ubuntu . /ic
 RUN sudo mkdir -p /ic/artifacts && sudo chown -R ubuntu:ubuntu /ic/artifacts
 EOF
 
-export IMAGE=ic-build-bd:$TAG
-"$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic "${1:--a=b,c,i}"
+    export IMAGE="$1-bd:$TAG"
+}
+
+if [ "$BUILD_BINARIES" == "true" ] || [ "$BUILD_CANISTERS" == "true" ]; then
+    setup_docker_image ic-build-bazel
+
+    CMD_OPTS=()
+    if [ "$BUILD_BINARIES" == "true" ]; then
+        CMD_OPTS+=("b")
+    fi
+    if [ "$BUILD_CANISTERS" == "true" ]; then
+        CMD_OPTS+=("c")
+    fi
+    CMD_ARGS="-a="
+    CMD_ARGS+=$(
+        IFS=,
+        echo "${CMD_OPTS[*]}"
+    )
+
+    "$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic "$CMD_ARGS"
+fi
+
+if [ "$BUILD_IMAGES" == "true" ]; then
+    setup_docker_image ic-build
+
+    "$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic -a=i
+fi
 
 if docker volume inspect "$ARTIFACTS_VOLUME" 2>/dev/null; then
     mkdir -p artifacts
