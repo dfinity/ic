@@ -9,12 +9,11 @@ use std::time::Duration;
 
 pub(crate) fn store_message(url: &Url, effective_canister_id: PrincipalId, msg: &str) -> Principal {
     block_on(async {
-        let bytes = msg.as_bytes();
         let agent = assert_create_agent(url.as_str()).await;
-        let ucan = UniversalCanister::new(&agent, effective_canister_id).await;
+        let mcan = MessageCanister::new(&agent, effective_canister_id).await;
         // send an update call to it
-        ucan.store_to_stable(0, bytes).await;
-        ucan.canister_id()
+        mcan.store_msg(msg.to_string()).await;
+        mcan.canister_id()
     })
 }
 
@@ -25,9 +24,8 @@ pub(crate) fn store_message_with_retries(
     log: &Logger,
 ) -> Principal {
     block_on(async {
-        let bytes = msg.as_bytes();
         let agent = assert_create_agent(url.as_str()).await;
-        let ucan = UniversalCanister::new_with_retries(
+        let mcan = MessageCanister::new_with_retries(
             &agent,
             effective_canister_id,
             log,
@@ -36,21 +34,20 @@ pub(crate) fn store_message_with_retries(
         )
         .await;
         // send an update call to it
-        ucan.store_to_stable(0, bytes).await;
-        ucan.canister_id()
+        mcan.store_msg(msg.to_string()).await;
+        mcan.canister_id()
     })
 }
 
 /// Try to store the given message within the next 30 seconds, return true if successful
 pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
-    let bytes = msg.as_bytes();
     block_on(async {
         match create_agent(url.as_str()).await {
             Ok(agent) => {
                 debug!(log, "Try to get canister reference");
-                let ucan = UniversalCanister::from_canister_id(&agent, canister_id);
+                let mcan = MessageCanister::from_canister_id(&agent, canister_id);
                 debug!(log, "Success, will try to write next");
-                ucan.try_store_to_stable(0, bytes, create_delay(500, 30))
+                mcan.try_store_msg(msg.to_string(), create_delay(500, 30))
                     .await
                     .is_ok()
             }
@@ -95,15 +92,14 @@ async fn can_read_msg_impl(
     msg: &str,
     retries: usize,
 ) -> bool {
-    let bytes = msg.as_bytes();
     for i in 0..retries + 1 {
         debug!(log, "Try to create agent for node {:?}...", url.as_str());
         match create_agent(url.as_str()).await {
             Ok(agent) => {
                 debug!(log, "Try to get canister reference");
-                let ucan = UniversalCanister::from_canister_id(&agent, canister_id);
+                let mcan = MessageCanister::from_canister_id(&agent, canister_id);
                 debug!(log, "Success, will try to read next");
-                if ucan.read_stable(0, msg.len() as u32).await == Ok(bytes.to_vec()) {
+                if mcan.try_read_msg().await == Ok(Some(msg.to_string())) {
                     return true;
                 } else {
                     info!(
@@ -180,7 +176,7 @@ pub(crate) fn cert_state_makes_progress_with_retries(
     .expect("System should make progress!");
 }
 
-pub(crate) fn install_nns_and_universal_canisters(topology: TopologySnapshot) {
+pub(crate) fn install_nns_and_message_canisters(topology: TopologySnapshot) {
     check_or_init_ic(topology, true)
 }
 

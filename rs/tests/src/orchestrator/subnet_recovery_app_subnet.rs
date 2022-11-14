@@ -27,7 +27,7 @@ Success::
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_universal_canisters;
+use super::utils::rw_message::install_nns_and_message_canisters;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
@@ -70,7 +70,7 @@ pub fn setup(app_nodes: i32, unassigned_nodes: i32, env: TestEnv) {
     ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_universal_canisters(env.topology_snapshot());
+    install_nns_and_message_canisters(env.topology_snapshot());
 }
 
 pub fn setup_same_nodes_tecdsa(env: TestEnv) {
@@ -126,7 +126,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     );
 
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let nns_canister = block_on(UniversalCanister::new(
+    let nns_canister = block_on(MessageCanister::new(
         &agent,
         nns_node.effective_canister_id(),
     ));

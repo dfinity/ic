@@ -12,7 +12,7 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_universal_canisters;
+use super::utils::rw_message::install_nns_and_message_canisters;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
@@ -43,7 +43,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_universal_canisters(env.topology_snapshot());
+    install_nns_and_message_canisters(env.topology_snapshot());
 }
 
 // Tests a downgrade of the nns subnet to the mainnet version and an upgrade back to the branch version

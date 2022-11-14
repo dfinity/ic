@@ -13,7 +13,7 @@ use crate::{
     tecdsa::tecdsa_signature_test::{
         get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
     },
-    util::{assert_create_agent, runtime_from_url, UniversalCanister},
+    util::{assert_create_agent, runtime_from_url, MessageCanister},
 };
 use candid::Encode;
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
@@ -85,8 +85,8 @@ pub(crate) async fn activate_ecdsa_signature(
     let sys_agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
 
     // Wait for key creation and verify signature (as it's done in tecdsa tests).
-    let uni_can = UniversalCanister::new(&sys_agent, sys_node.effective_canister_id()).await;
-    let public_key = get_public_key_with_logger(make_key(TEST_KEY_LOCAL), &uni_can, logger)
+    let msg_can = MessageCanister::new(&sys_agent, sys_node.effective_canister_id()).await;
+    let public_key = get_public_key_with_logger(make_key(TEST_KEY_LOCAL), &msg_can, logger)
         .await
         .unwrap();
     let message_hash = [0xabu8; 32];
@@ -94,7 +94,7 @@ pub(crate) async fn activate_ecdsa_signature(
         &message_hash,
         ECDSA_SIGNATURE_FEE,
         make_key(TEST_KEY_LOCAL),
-        &uni_can,
+        &msg_can,
         logger,
     )
     .await
