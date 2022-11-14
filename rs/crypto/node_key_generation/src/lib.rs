@@ -178,33 +178,8 @@ pub fn get_node_keys_or_generate_if_missing(
             }
             (current_node_public_keys, node_id)
         }
-        Ok(Some(mut node_pks)) => {
-            let mut csp = csp_for_config(config, tokio_runtime_handle.clone());
-            // Generate I-DKG key if it is not present yet: we generate the key
-            // purely based on whether it already exists and at the same time
-            // set the key material version to 1, so that afterwards the
-            // version will be consistent on all nodes, no matter what it was
-            // before.
-            if node_pks.idkg_dealing_encryption_pk.is_none()
-                && node_pks.idkg_dealing_encryption_pks.is_empty()
-            {
-                let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(&mut csp)
-                    .unwrap_or_else(|e| {
-                        panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
-                    });
-                node_pks.idkg_dealing_encryption_pk = Some(idkg_dealing_encryption_pk.clone());
-                node_pks.idkg_dealing_encryption_pks = vec![idkg_dealing_encryption_pk];
-                node_pks.version = 1;
-                public_key_store::store_node_public_keys(crypto_root, &node_pks)
-                    .unwrap_or_else(|_| panic!("Failed to store public key material"));
-                // Re-check the generated keys.
-                let stored_keys = check_keys_locally(config, tokio_runtime_handle)
-                    .expect("Could not read generated keys.")
-                    .expect("Newly generated keys are inconsistent.");
-                if stored_keys != node_pks {
-                    panic!("Generated keys differ from the stored ones.");
-                }
-            }
+        Ok(Some(node_pks)) => {
+            let csp = csp_for_config(config, tokio_runtime_handle);
             let node_signing_pk = node_pks
                 .node_signing_pk
                 .as_ref()

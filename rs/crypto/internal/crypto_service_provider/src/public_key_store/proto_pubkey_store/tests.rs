@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used)]
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+use crate::public_key_store::read_node_public_keys;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::read_node_public_keys;
 use crate::PUBLIC_KEY_STORE_DATA_FILENAME;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
@@ -36,8 +36,7 @@ fn should_contain_correct_keys_after_opening_existing_pubkey_store() {
     assert!(generated_keys.node_signing_pk.is_some());
     assert!(generated_keys.committee_signing_pk.is_some());
     assert!(generated_keys.dkg_dealing_encryption_pk.is_some());
-    assert!(generated_keys.idkg_dealing_encryption_pk.is_some());
-    assert!(!generated_keys.idkg_dealing_encryption_pks.is_empty());
+    assert_eq!(generated_keys.idkg_dealing_encryption_pks.len(), 1);
     assert!(generated_keys.tls_certificate.is_some());
 
     let store = ProtoPublicKeyStore::open(crypto_root.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
@@ -406,12 +405,7 @@ fn generate_node_keys_in_temp_dir() -> (NodePublicKeys, TempDir) {
     assert!(keys_from_disk.committee_signing_pk.is_some());
     assert!(keys_from_disk.tls_certificate.is_some());
     assert!(keys_from_disk.dkg_dealing_encryption_pk.is_some());
-    assert!(keys_from_disk.idkg_dealing_encryption_pk.is_some());
     assert_eq!(keys_from_disk.idkg_dealing_encryption_pks.len(), 1,);
-    assert_eq!(
-        keys_from_disk.idkg_dealing_encryption_pk.as_ref(),
-        keys_from_disk.idkg_dealing_encryption_pks.first()
-    );
     (keys_from_disk, temp_dir)
 }
 

@@ -397,7 +397,7 @@ impl NodeConfiguration {
             node_path: PathBuf::from(node_path.as_ref()),
             node_config: self,
             dkg_dealing_encryption_pubkey: node_pks.dkg_dealing_encryption_pk.unwrap(),
-            idkg_mega_encryption_pubkey: node_pks.idkg_dealing_encryption_pk,
+            idkg_mega_encryption_pubkey: node_pks.idkg_dealing_encryption_pks.last().cloned(),
         })
     }
 }
