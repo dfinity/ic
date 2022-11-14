@@ -15,9 +15,10 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{messages::MessageId, NodeId};
+use ic_types::{messages::MessageId, NodeId, SubnetId};
 use prost::Message;
 use rand::prelude::*;
 use registry_canister::mutations::do_update_node_directly::UpdateNodeDirectlyPayload;
@@ -177,19 +178,19 @@ impl NodeRegistration {
         }
     }
 
-    /// Checks if the nodes additional key is properly registered and if it
-    /// isn't try to register it.
+    /// Checks if the nodes keys are properly registered and if there are some
+    /// that aren't, try to register them.
     ///
     /// Return true means all is done.
     /// Return false means we will need to check it again later. Also we might
     /// try to register it now, but will need to check the registration later.
-    pub async fn check_additional_key_registered_otherwise_register(&self) -> bool {
+    pub async fn check_all_keys_registered_otherwise_register(&self) -> bool {
         let registry_version = self.registry_client.get_latest_version();
         match tokio::task::block_in_place(|| {
             self.key_handler.check_keys_with_registry(registry_version)
         }) {
             Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key)) => {
-                self.try_to_register_additional_key(key).await
+                self.try_to_register_key(key).await
             }
             Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys) => {
                 todo!(
@@ -198,7 +199,7 @@ impl NodeRegistration {
                 )
             }
             Ok(PublicKeyRegistrationStatus::AllKeysRegistered) => {
-                return true; // key is properly registered, we are all good
+                return true; // keys are properly registered, we are all good
             }
             Err(e) => {
                 warn!(self.log, "Registry error: {:?}", e);
@@ -207,7 +208,7 @@ impl NodeRegistration {
         false
     }
 
-    async fn try_to_register_additional_key(&self, idkg_pk: PublicKey) {
+    async fn try_to_register_key(&self, idkg_pk: PublicKey) {
         let nns_url = match self.get_random_nns_url().await {
             Some(url) => url,
             None => return,
@@ -298,6 +299,14 @@ impl NodeRegistration {
                 );
                 false
             }
+        }
+    }
+
+    pub(crate) fn is_tecdsa_subnet(&self, subnet_id: SubnetId) -> bool {
+        let version = self.registry_client.get_latest_version();
+        match self.registry_client.get_ecdsa_config(subnet_id, version) {
+            Ok(Some(config)) => !config.key_ids.is_empty(),
+            _ => false,
         }
     }
 
