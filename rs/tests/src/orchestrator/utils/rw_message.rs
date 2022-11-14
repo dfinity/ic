@@ -156,25 +156,26 @@ pub(crate) fn cert_state_makes_progress_with_retries(
     timeout: Duration,
     backoff: Duration,
 ) {
-    info!(logger, "Performing read_state request...");
-    let mut t = None;
+    let mut current_timestamp: Option<u64> = None;
     retry(logger.clone(), timeout, backoff, || {
         info!(logger, "Performing read_state request...");
-        match cert_state_makes_progress(url, effective_canister_id) {
-            Ok(nt) => match t {
-                None => {
-                    t = Some(nt);
-                    bail!("Initial time-stamp recorded!");
-                }
-                Some(t) if t < nt => {
-                    info!(logger, "Time-stamp advanced!");
-                    Ok(())
-                }
-                _ => bail!("Time-stamp did not advance!"),
-            },
-            Err(e) => {
-                bail!("Cannot perform read_state request: {}", e);
-            }
+        let next_timestamp = {
+            let timestamp = cert_state_makes_progress(url, effective_canister_id);
+            if let Err(err) = timestamp {
+                bail!("Cannot perform read_state request: {}", err);
+            };
+            timestamp.ok()
+        };
+        // Set initial timestamp, if not yet set.
+        if current_timestamp == None {
+            info!(logger, "Initial timestamp recorded!");
+            current_timestamp = next_timestamp;
+        };
+        if next_timestamp > current_timestamp {
+            info!(logger, "Timestamp advanced!");
+            Ok(())
+        } else {
+            bail!("Timestamp hasn't advance yet!");
         }
     })
     .expect("System should make progress!");
