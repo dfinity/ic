@@ -9,7 +9,6 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 pub use ic_types::{CanisterId, PrincipalId};
 use slog::info;
-use std::env;
 use std::fs;
 use std::net::Ipv6Addr;
 use std::time::Duration;
@@ -17,6 +16,59 @@ use std::time::Duration;
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
+
+const CA_ROOT: &str = "
+-----BEGIN CERTIFICATE-----
+MIIDSzCCAjOgAwIBAgIIfdwd7TYMCCkwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgN2RkYzFkMCAXDTIyMDYyODIxMDAxOVoYDzIxMjIw
+NjI4MjEwMDE5WjAgMR4wHAYDVQQDExVtaW5pY2Egcm9vdCBjYSA3ZGRjMWQwggEi
+MA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDF5HCazG92S/PJBPqOQnxP3/Ti
+tSRv2kFc+LNRm3wEGVueVrktkqvt2A2wLD665YATFzubsAMd+mTHP1Mihv2NfN2N
+95R0CHXcMkV1G+eqYlZ4cZqEO1Z+WwtrZ3N2k/KICPEHTlsaB984DDz3iz1jmyO4
+oshnDEup2cHpNxHHju5H4Lilsc7lO77iLR91YxZ4bDqHj9NCCvYk4H/4k2kKTj5Z
+B1ufnY0Pxre2LO2DwSVFRU3ViCdYE+3y1pVHk3ZARuYAiw94C03SaThCqtMConVW
+hH1BdsvhHu5G1MMpImvWr461zQznIe3lki/mo9rRLUsCsRDebMJTetsVTX7RAgMB
+AAGjgYYwgYMwDgYDVR0PAQH/BAQDAgKEMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggr
+BgEFBQcDAjASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBQQK5SoJdlP+3f4
+LMg/f3s4BxhlgzAfBgNVHSMEGDAWgBQQK5SoJdlP+3f4LMg/f3s4BxhlgzANBgkq
+hkiG9w0BAQsFAAOCAQEATiBesgZbQgXShaL9jFuwn//O9i0gClgRc4/QWDFxzwPy
+HrHcpzOV97VLuYZ/bAROGDd+9kdvRd+m8/SKHuFl626LdCSne/MJ0u+jtCfqJJU6
+DVBvn+2WWx2t25xuhHXTuKYrq6Eg5MtQsE7XbzYCgg3gpENf1wWjpEetmR7byrJ6
+ypaYPJ6kR/LRQAxhXOs3fK+2QkoJxNeulLUrAD35/DHJemPT5MiQd44rd2P2FMJr
+Y9z+Xfy5b87JC97Cn8bcUqeUtpKRv3Vkzu7lm1aH2+HTs1KwR8QPOHzsyB/d2UUO
++e6SF6GSf544d3UGyNVJsvKnUkJf61t/Ar/IqIfFGA==
+-----END CERTIFICATE-----
+";
+
+const CA_ROOT_KEY: &str = "
+-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAxeRwmsxvdkvzyQT6jkJ8T9/04rUkb9pBXPizUZt8BBlbnla5
+LZKr7dgNsCw+uuWAExc7m7ADHfpkxz9TIob9jXzdjfeUdAh13DJFdRvnqmJWeHGa
+hDtWflsLa2dzdpPyiAjxB05bGgffOAw894s9Y5sjuKLIZwxLqdnB6TcRx47uR+C4
+pbHO5Tu+4i0fdWMWeGw6h4/TQgr2JOB/+JNpCk4+WQdbn52ND8a3tiztg8ElRUVN
+1YgnWBPt8taVR5N2QEbmAIsPeAtN0mk4QqrTAqJ1VoR9QXbL4R7uRtTDKSJr1q+O
+tc0M5yHt5ZIv5qPa0S1LArEQ3mzCU3rbFU1+0QIDAQABAoIBACH5FMfOfvgtE94X
+x7fyfAruZMki1e2J55zBaW+CJOlDPTJSqxnCy1datwbeoapOSg18+JPCxNY5rWFz
+Yp9T02Wd4R9FOKwu46T40GnJb50VosisoB1BXpj0omI+8ViTD5kBB/f8ILG4Vj72
+AuVwdwqJkLla4NKoDrlLE/oopRnAB1aJ4k0lkELMmL50IkjkhSmXGOs61lIt/lRn
+qgilRFX83zUf+RG4DEtwocxnvTv5yaYvZ7fsTmdTMf6gZk92xBtp4fDH/5Z4ucvR
+p1bje1F1ZvCNkmVLMd+93THhXpGnREi1MJpsC3oI0GO+5dPNCvpaofwxBQW8iqry
+ijVVyO0CgYEA9r7f2ElykucYxagqNFamu9r9Y4ujz3bimLghCG6ZqST9ijq015FB
+x5LGsDYPM5M8wkCCpPZpDIC0/cQZDh79pIDgeeoiei771+xO0sXQwCap+NGnLCPS
+OdpIqzHgpKC+NGbbNw9a03TaMccURUus3R8PtiQ+DrVGAWtv0aEji+cCgYEAzVCA
+WGhDkizDCEP68Bo8KMg/y/DwAcSknELQNBz6tKZUKF3HH4+M5WCsczzSWiGBRzEP
+bqkao0HSLXY+5+6y0Sy7JfgC3dAeRFoc9seIc7jvw0LA/WiaMOSwmzwfUWi+u0V5
+b1hurVnhvm1fL6V62k4Tvojfg+JaMKkf93VkiIcCgYEAyQrgrAO8HMG6x2GrcZWg
+qLNXfgJK6EE/g5uTHqGvBcgj5LrMmk+6Pvfyd6S0Yht3h/az++Dh2tQLpDBhEcZi
+d+SiAfOpP9CEVnwuBUI0Qju+hgOcqDRPl9+pEgPDu59VGrErsAMMx/oPxjsk4wkz
+wb8LOCbzgVxlu8ZkB3O52MUCgYA7SP+Gh7TbRKmcfWS8aBbu/8PMM+pZ2Fpf9LsC
+EUwjVdP/Q/T3nA/nPB8Pt4RWGk6mK/h0z8etVJhIIFjRyA9Cb1QrBo5tVmcm/Y5X
+hA5WvBQfoerwQYAkliSY7qdsbn6EvO7vw+1RiR6ySgquS25KEzmITyWbg4TfgDaG
+0hMRiQKBgANPaPcb1Fe5g4o4ORxlKkvue6fHkUkpjSoO27bjiNWXZwKxp2dOVoQo
+Bm1zzKM2Xx7M7y4/F3bkK5tyFhsfEJ0qyDujWXsqeJS1CsELEfD460BmVRb1Ij65
+mrqGpnFXHV4xz5FqtPpCX7KBozwJWJr+D4EfIY4ik2Qvpw2OiCQL
+-----END RSA PRIVATE KEY-----
+";
 
 pub enum PemType {
     PemCert,
@@ -88,19 +140,9 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn get_pem_content(typ: &PemType) -> String {
-    // The environment variable could be a regular variable, or could be a file variable.
-    // For regular variable, we just directly read the value of the variable.
-    // For file variable, the variable's value is address to a file. In this case,
-    // we return the content of the file.
-    let name = match typ {
-        PemType::PemCert => "DEV_ROOT_CA",
-        PemType::PemKey => "DEV_ROOT_CA_KEY",
-    };
-    let dev_root_ca_value = env::var(name)
-        .unwrap_or_else(|_| panic!("Expected environment variable {} not found!", name));
-    match fs::read_to_string(dev_root_ca_value.clone()) {
-        Ok(content) => content,
-        Err(_) => dev_root_ca_value,
+    match typ {
+        PemType::PemCert => CA_ROOT.to_string(),
+        PemType::PemKey => CA_ROOT_KEY.to_string(),
     }
 }
 
