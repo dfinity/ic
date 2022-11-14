@@ -1628,6 +1628,11 @@ impl ExecutionTestBuilder {
                 .max_instructions_per_composite_query_call,
             ..Config::default()
         };
+        let subnet_config = match self.subnet_type {
+            SubnetType::Application => SchedulerConfig::application_subnet(),
+            SubnetType::System => SchedulerConfig::system_subnet(),
+            SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+        };
         let hypervisor = Hypervisor::new(
             config.clone(),
             &metrics_registry,
@@ -1635,15 +1640,8 @@ impl ExecutionTestBuilder {
             self.subnet_type,
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
-            match self.subnet_type {
-                SubnetType::Application => {
-                    SchedulerConfig::application_subnet().dirty_page_overhead
-                }
-                SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
-                SubnetType::VerifiedApplication => {
-                    SchedulerConfig::verified_application_subnet().dirty_page_overhead
-                }
-            },
+            subnet_config.dirty_page_overhead,
+            subnet_config.query_execution_threads,
         );
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer =

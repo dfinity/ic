@@ -18,7 +18,7 @@ pub(crate) const MAX_CUSTOM_SECTIONS: usize = 16;
 // The size should not exceed 1MiB.
 pub(crate) const MAX_CUSTOM_SECTIONS_SIZE: NumBytes = NumBytes::new(1048576);
 /// The number of threads to use for query execution.
-pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
+pub(crate) const QUERY_EXECUTION_THREADS: usize = 4;
 
 /// In terms of execution time, compiling 1 WASM instructions takes as much time
 /// as actually executing 6_000 instructions. Only public for use in tests.
