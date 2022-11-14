@@ -12,12 +12,23 @@ from typing import Optional
 
 import input
 import requests
-from termcolor import colored
+
+
+class Colors:
+    RED = "\x1b[31m"
+    GREEN = "\x1b[32m"
+    NC = "\x1b[0m"
+
 
 NODE_LOGS = "/app/kibana#/discover?_g=(time:(from:now-1y,to:now))&_a=(columns:!(_source),index:c8cf8e20-593f-11ec-9f11-0fb8445c6897,interval:auto,query:(language:kuery,query:'tags:%22{}%22'),sort:!(!('@timestamp',desc)))"
 KIBANA_BASE_URL = "https://kibana.testnet.dfinity.systems"
 TAB_SIZE = 2
 MAX_DISPLAY_ERROR_SIZE = 300
+
+
+def colored(text: str, color: str) -> str:
+    """Turn text string into colored string."""
+    return f"{color}{text}{Colors.NC}"
 
 
 def format_error(s: str) -> str:
@@ -70,7 +81,7 @@ def summarize(root, working_dir: str, pot_setup_file: str, pot_setup_result_file
 
 def pot_summary(p, group_name: str, pot_setup_failure_msg: Optional[str]):
     pot_result, _ = input.format_node_result(p.result)
-    result_to_color = {"Failed": "red", "Passed": "green", "Skipped": "white"}
+    result_to_color = {"Failed": Colors.RED, "Passed": Colors.GREEN, "Skipped": Colors.NC}
     print(
         colored(
             "Pot '{}' (duration: {}s) contains {} test(s):".format(p.name, p.duration.secs, len(p.children)),
@@ -81,11 +92,12 @@ def pot_summary(p, group_name: str, pot_setup_failure_msg: Optional[str]):
         # Pot setup failed, thus tests within this pot didn't even start.
         print(
             colored(
-                f"\t* Pot setup failed with error: '{format_error(pot_setup_failure_msg)}'".expandtabs(TAB_SIZE), "red"
+                f"\t* Pot setup failed with error: '{format_error(pot_setup_failure_msg)}'".expandtabs(TAB_SIZE),
+                Colors.RED,
             )
         )
     else:
-        print(colored("\t* Pot setup succeeded".expandtabs(TAB_SIZE), "green"))
+        print(colored("\t* Pot setup succeeded".expandtabs(TAB_SIZE), Colors.GREEN))
         for t in p.children:
             test_result, test_result_msg = input.format_node_result(t.result)
             print(
