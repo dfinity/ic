@@ -16,15 +16,19 @@ use std::collections::{BTreeMap, HashSet};
 pub enum LoadTranscriptResult {
     /// The keys associated with the transcript could be decrypted
     SigningKeyAvailable,
-    /// The keys associated with the transcript could not be decrypted
-    /// as this node never had access to the associated forward-secure
-    /// encryption keys
+    /// The signing key associated with the transcript could not be decrypted
+    /// as the node does not have the required forward-secure decryption key
     SigningKeyUnavailable,
     /// The keys associated with the transcript could not be decrypted
     /// because this node has subseqently called retain_only_active_keys
     /// and discarded the forward-secure keys that would be needed to
     /// decrypt the keys in the transcript
     SigningKeyUnavailableDueToDiscard,
+    /// The keys associated with the transcript could not be decrypted
+    /// because this node is not part of the current DKG committee.
+    /// This could be the case because the node is currently joining the
+    /// network or because the node is replaying.
+    NodeNotInCommittee,
 }
 
 /// The building blocks to perform non-interactive distributed key generation

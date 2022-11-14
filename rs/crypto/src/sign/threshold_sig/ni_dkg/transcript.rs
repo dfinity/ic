@@ -297,7 +297,7 @@ mod loading {
         } else {
             // If our node ID is not listed in the transcript then we
             // certainly do not have access to the associated key
-            Ok(LoadTranscriptResult::SigningKeyUnavailable)
+            Ok(LoadTranscriptResult::NodeNotInCommittee)
         }
     }
 
