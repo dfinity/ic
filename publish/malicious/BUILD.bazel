@@ -1,4 +1,4 @@
-load("//bazel:transitions.bzl", "malicious_binary")
+load("//publish:defs.bzl", "malicious_binary")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
@@ -21,5 +21,5 @@ filegroup(
 upload_artifacts(
     name = "upload",
     inputs = [":malicious_binaries"],
-    remote_subdir = "release-malicious-bazel",
+    remote_subdir = "release-malicious",
 )

@@ -5,7 +5,7 @@ guest-os-updateimg-build:
   retry: 1
   stage: guest-os-build
   needs:
-    - job: cargo-build-release-linux-native
+    - job: wait-for-bazel-test-all
       artifacts: false
   variables:
       BUILD_EXTRA_ARGS: ""

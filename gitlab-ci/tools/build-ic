@@ -89,9 +89,12 @@ if [ "$BUILD_IMAGES" == "true" ] && uname -s | grep Darwin; then
     exit 0
 fi
 
+BINARIES_DIR=/ic/artifacts/release
 if [ "$BUILD_BINARIES" == "true" ]; then
     echo "Building Binaries"
-    gitlab-ci/tools/job-driver.py cargo-build-release-linux-native
+    mkdir -p "${BINARIES_DIR}"
+    bazel build --config=local //publish/binaries
+    bazel cquery --output=files //publish/binaries | xargs -I {} cp {} "${BINARIES_DIR}"
 fi
 if [ "$BUILD_CANISTERS" == "true" ]; then
     echo "Building Canisters"
@@ -106,14 +109,14 @@ fi
 
 if [ "$BUILD_BINARIES" == "true" ]; then
     echo "Release Binaries"
-    cd /ic/artifacts/release
+    cd "${BINARIES_DIR}"
     # shellcheck disable=SC2035
     sha256sum -b *.gz
 fi
 
 if [ "$BUILD_CANISTERS" == "true" ]; then
     echo "Canister Binaries"
-    cd /ic/artifacts/canisters
+    cd "${CANISTERS_DIR}"
     # shellcheck disable=SC2035
     sha256sum -b *.gz
 fi

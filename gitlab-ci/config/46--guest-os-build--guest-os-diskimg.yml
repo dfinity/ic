@@ -4,7 +4,7 @@ boundary-os-diskimg:
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   needs:
-    - job: cargo-build-release-linux-native
+    - job: wait-for-bazel-test-all
       artifacts: false
     - pipeline: $PARENT_PIPELINE_ID
       job: boundary-node-service-worker
@@ -24,7 +24,7 @@ boundary-os-diskimg:
           --git-rev="$CI_COMMIT_SHA" --remote="service-worker" \
           --out="artifacts/service-worker"
 
-      # artifacts/release dir with binaries come from cargo-build-release-linux-native
+      # artifacts/release dir with binaries come from bazel-test-all
       cd "${CI_PROJECT_DIR}"/ic-os/boundary-guestos
 
       BUILD_OUT="build-out/disk-img${BUILD_EXTRA_SUFFIX}"

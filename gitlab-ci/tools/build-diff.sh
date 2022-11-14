@@ -3,8 +3,8 @@
 # Script for comparing artifacts in AWS S3 that are produced from our CI
 #
 # We build and push artifacts to S3:
-# * canister                         -> ic/<sha256>/canisters
-# * cargo-build-release-linux-native -> ic/<sha256>/binaries
+# * [bazel] //publish/canister       -> ic/<sha256>/canisters
+# * [bazel] //publish/binaries        -> ic/<sha256>/binaries
 # * guest-os-updateimg               -> ic/<sha256>/guest-os/update-img
 # We build the same set of artifacts:
 # * docker-build-ic                  -> ic/<sha256>/docker-build-ic/canisters
@@ -123,9 +123,11 @@ cat $SHA256SUMS0
 echo "$PATH1/SHA256SUMS:"
 cat $SHA256SUMS1
 
-# XXX(marko): we ignore panics and sns-test-dapp-canister
-# XXX(jude): ic-rosetta-api is not deterministic, but does not get included in the guestos image
-sed -i -e '/panics.wasm/d' -e '/ic-rosetta-api/d' $SHA256SUMS0 $SHA256SUMS1
+echo "Full diff before dropping artifacts allowed non-determinism"
+diff -u "$SHA256SUMS0" "$SHA256SUMS1" || true
+
+# TODO(IDX-2542)
+sed -i -e '/panics.wasm/d' -e '/ic-rosetta-api/d' -e '/system-tests/d' -e'/prod-test-driver/d' $SHA256SUMS0 $SHA256SUMS1
 
 if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
     set +x
