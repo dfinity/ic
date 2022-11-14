@@ -366,11 +366,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         par(vec![
                             sys_t(
                                 "minter_get_btc_address",
-                                ckbtc::minter::test_get_btc_address
+                                ckbtc::minter::test_get_btc_address::test_get_btc_address
                             ),
                             sys_t(
                                 "minter_get_withdrawal_account",
-                                ckbtc::minter::test_get_withdrawal_account
+                                ckbtc::minter::test_get_withdrawal_account::test_get_withdrawal_account
                             ),
                         ]),
                         sys_t("ckbtc_minter_agent", ckbtc::agent::test_ckbtc_minter_agent),
@@ -381,7 +381,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ckbtc::lib::config,
                     seq!(sys_t(
                         "minter_update_balance",
-                        ckbtc::minter::test_update_balance
+                        ckbtc::minter::test_update_balance::test_update_balance
                     ),),
                 ),
                 pot_with_setup(
@@ -389,7 +389,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ckbtc::lib::config,
                     seq!(sys_t(
                         "minter_retrieve_btc",
-                        ckbtc::minter::test_retrieve_btc
+                        ckbtc::minter::test_retrieve_btc::test_retrieve_btc
                     ),),
                 ),
             ],
