@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedSender as USender;
 use futures::channel::oneshot::{self, Sender as OSender};
 use ic_base_types::CanisterId;
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
 use std::sync::atomic;
 use std::sync::atomic::Ordering as AOrdering;
 
@@ -32,7 +32,7 @@ pub type LedgerObserver = USender<LedgerControlMessage>;
 
 /// A mock ledger to test interleavings of governance method calls.
 pub struct InterleavingTestLedger {
-    underlying: Box<dyn Ledger>,
+    underlying: Box<dyn IcpLedger>,
     observer: LedgerObserver,
 }
 
@@ -44,7 +44,7 @@ impl InterleavingTestLedger {
     /// underlying ledger, or, alternatively, return an error. This is done
     /// through a one-shot channel, the sender side of which is sent to the
     /// observer.
-    pub fn new(underlying: Box<dyn Ledger>, observer: LedgerObserver) -> Self {
+    pub fn new(underlying: Box<dyn IcpLedger>, observer: LedgerObserver) -> Self {
         InterleavingTestLedger {
             underlying,
             observer,
@@ -62,7 +62,7 @@ impl InterleavingTestLedger {
 }
 
 #[async_trait]
-impl Ledger for InterleavingTestLedger {
+impl IcpLedger for InterleavingTestLedger {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,

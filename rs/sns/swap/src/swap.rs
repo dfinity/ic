@@ -20,7 +20,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::i2d;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_sns_governance::{
-    ledger::Ledger,
+    ledger::ICRC1Ledger,
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters, governance, ClaimSwapNeuronsRequest,
         ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
@@ -235,7 +235,7 @@ impl Swap {
     pub async fn open(
         &mut self,
         this_canister: CanisterId,
-        sns_ledger: &dyn Ledger,
+        sns_ledger: &dyn ICRC1Ledger,
         now_seconds: u64,
         req: OpenRequest,
     ) -> Result<OpenResponse, String> {
@@ -481,7 +481,7 @@ impl Swap {
     /// pre-decentralization token holders.
     async fn get_sns_tokens(
         this_canister: CanisterId,
-        sns_ledger: &dyn Ledger,
+        sns_ledger: &dyn ICRC1Ledger,
     ) -> Result<Tokens, String> {
         // Look for the token balance of 'this' canister.
         let account = Account {
@@ -525,7 +525,7 @@ impl Swap {
         &mut self,
         buyer: PrincipalId,
         this_canister: CanisterId,
-        icp_ledger: &dyn Ledger,
+        icp_ledger: &dyn ICRC1Ledger,
     ) -> Result<RefreshBuyerTokensResponse, String> {
         if self.lifecycle() != Lifecycle::Open {
             return Err(
@@ -662,8 +662,8 @@ impl Swap {
         now_fn: fn(bool) -> u64,
         sns_root_client: &mut impl SnsRootClient,
         sns_governance_client: &mut impl SnsGovernanceClient,
-        icp_ledger: &dyn Ledger,
-        sns_ledger: &dyn Ledger,
+        icp_ledger: &dyn ICRC1Ledger,
+        sns_ledger: &dyn ICRC1Ledger,
         nns_governance_client: &mut impl NnsGovernanceClient,
     ) -> FinalizeSwapResponse {
         let lifecycle = self.lifecycle();
@@ -876,7 +876,7 @@ impl Swap {
         &self,
         self_canister_id: CanisterId,
         request: &ErrorRefundIcpRequest,
-        icp_ledger: &dyn Ledger,
+        icp_ledger: &dyn ICRC1Ledger,
     ) -> ErrorRefundIcpResponse {
         // Fail if the request is premature.
         if !(self.lifecycle() == Lifecycle::Aborted || self.lifecycle() == Lifecycle::Committed) {
@@ -988,7 +988,7 @@ impl Swap {
     pub async fn sweep_icp(
         &mut self,
         now_fn: fn(bool) -> u64,
-        icp_ledger: &dyn Ledger,
+        icp_ledger: &dyn ICRC1Ledger,
     ) -> SweepResult {
         let lifecycle = self.lifecycle();
         assert!(lifecycle == Lifecycle::Committed || lifecycle == Lifecycle::Aborted);
@@ -1010,6 +1010,7 @@ impl Swap {
             };
             let subaccount = principal_to_subaccount(&principal);
             let dst = if lifecycle == Lifecycle::Committed {
+                // This Account should be given a name, such as SNS ICP Treasury...
                 Account {
                     owner: sns_governance.get(),
                     subaccount: None,
@@ -1061,7 +1062,7 @@ impl Swap {
     pub async fn sweep_sns(
         &mut self,
         now_fn: fn(bool) -> u64,
-        sns_ledger: &dyn Ledger,
+        sns_ledger: &dyn ICRC1Ledger,
     ) -> SweepResult {
         assert!(self.lifecycle() == Lifecycle::Committed);
         let sns_governance = self.init().sns_governance();
@@ -1588,7 +1589,7 @@ impl TransferableAmount {
         fee: Tokens,
         subaccount: Option<Subaccount>,
         dst: &Account,
-        ledger: &dyn Ledger,
+        ledger: &dyn ICRC1Ledger,
     ) -> TransferResult {
         let amount = Tokens::from_e8s(self.amount_e8s);
         if amount <= fee {

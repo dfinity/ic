@@ -19,7 +19,7 @@ use futures::future::FutureExt;
 use std::convert::TryFrom;
 
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::governance::{Environment, Governance, HeapGrowthPotential, CMC};
 
@@ -83,7 +83,7 @@ impl Environment for MockEnvironment {
 struct MockLedger {}
 
 #[async_trait]
-impl Ledger for MockLedger {
+impl IcpLedger for MockLedger {
     async fn transfer_funds(
         &self,
         _amount_e8s: u64,

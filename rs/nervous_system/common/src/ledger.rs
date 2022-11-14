@@ -4,26 +4,28 @@ use dfn_core::api::PrincipalId;
 use dfn_core::{call, CanisterId};
 use dfn_protobuf::protobuf;
 use ic_crypto_sha::Sha256;
+use ic_icrc1::{Account, Subaccount};
+use ic_ledger_core::block::BlockIndex;
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
-    TotalSupplyArgs,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs,
+    Subaccount as IcpSubaccount, Tokens, TotalSupplyArgs,
 };
 
-pub struct LedgerCanister {
+pub struct IcpLedgerCanister {
     // TODO This field should be private and requires the icrc1 trait implementation
     // of this struct to be moved to this crate.
     pub id: CanisterId,
 }
 
-impl LedgerCanister {
+impl IcpLedgerCanister {
     pub fn new(id: CanisterId) -> Self {
-        LedgerCanister { id }
+        IcpLedgerCanister { id }
     }
 }
 
-/// A trait defining common patterns for accessing the Ledger canister.
+/// A trait defining common patterns for accessing the ICRC1 Ledger canister.
 #[async_trait]
-pub trait Ledger: Send + Sync {
+pub trait ICRC1Ledger: Send + Sync {
     /// Transfers funds from one of this canister's subaccount to
     /// the provided account.
     ///
@@ -33,6 +35,33 @@ pub trait Ledger: Send + Sync {
         amount_e8s: u64,
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
+        to: Account,
+        memo: u64,
+    ) -> Result<BlockIndex, NervousSystemError>;
+
+    /// Gets the total supply of tokens from the sum of all accounts except for the
+    /// minting canister's.
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError>;
+
+    /// Gets the account balance in Tokens of the given AccountIdentifier in the Ledger.
+    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError>;
+
+    /// Returns the CanisterId of the Ledger being accessed.
+    fn canister_id(&self) -> CanisterId;
+}
+
+/// A trait defining common patterns for accessing the Ledger canister.
+#[async_trait]
+pub trait IcpLedger: Send + Sync {
+    /// Transfers funds from one of this canister's subaccount to
+    /// the provided account.
+    ///
+    /// Returns the block height at which the transfer was recorded.
+    async fn transfer_funds(
+        &self,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<IcpSubaccount>,
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError>;
@@ -51,13 +80,55 @@ pub trait Ledger: Send + Sync {
     fn canister_id(&self) -> CanisterId;
 }
 
+fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
+    AccountIdentifier::new(account.owner, account.subaccount.map(IcpSubaccount))
+}
+
 #[async_trait]
-impl Ledger for LedgerCanister {
+impl ICRC1Ledger for IcpLedgerCanister {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
+        to: Account,
+        memo: u64,
+    ) -> Result<BlockIndex, NervousSystemError> {
+        <IcpLedgerCanister as IcpLedger>::transfer_funds(
+            self,
+            amount_e8s,
+            fee_e8s,
+            from_subaccount.map(IcpSubaccount),
+            icrc1_account_to_icp_accountidentifier(to),
+            memo,
+        )
+        .await
+    }
+
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        <IcpLedgerCanister as IcpLedger>::total_supply(self).await
+    }
+
+    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
+        <IcpLedgerCanister as IcpLedger>::account_balance(
+            self,
+            icrc1_account_to_icp_accountidentifier(account),
+        )
+        .await
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        self.id
+    }
+}
+
+#[async_trait]
+impl IcpLedger for IcpLedgerCanister {
+    async fn transfer_funds(
+        &self,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<IcpSubaccount>,
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
@@ -153,10 +224,10 @@ pub fn compute_neuron_staking_subaccount_bytes(controller: PrincipalId, nonce: u
 
 /// Computes the subaccount to which neuron staking transfers are made. This
 /// function must be kept in sync with the Nervous System UI equivalent.
-pub fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
+pub fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> IcpSubaccount {
     // The equivalent function in the NNS UI is
     // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
-    Subaccount(compute_neuron_staking_subaccount_bytes(controller, nonce))
+    IcpSubaccount(compute_neuron_staking_subaccount_bytes(controller, nonce))
 }
 
 /// Computes the subaccount to which locked token distributions are initialized to.
@@ -173,6 +244,6 @@ pub fn compute_distribution_subaccount_bytes(principal_id: PrincipalId, nonce: u
 }
 
 /// Computes the subaccount to which locked token distributions are initialized to.
-pub fn compute_distribution_subaccount(principal_id: PrincipalId, nonce: u64) -> Subaccount {
-    Subaccount(compute_distribution_subaccount_bytes(principal_id, nonce))
+pub fn compute_distribution_subaccount(principal_id: PrincipalId, nonce: u64) -> IcpSubaccount {
+    IcpSubaccount(compute_distribution_subaccount_bytes(principal_id, nonce))
 }

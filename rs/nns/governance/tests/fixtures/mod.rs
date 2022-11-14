@@ -11,7 +11,7 @@ use comparable::Comparable;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
@@ -396,7 +396,7 @@ impl NNSFixture {
 }
 
 #[async_trait]
-impl Ledger for NNSFixture {
+impl IcpLedger for NNSFixture {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -828,7 +828,7 @@ impl NNS {
 }
 
 #[async_trait]
-impl Ledger for NNS {
+impl IcpLedger for NNS {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -894,7 +894,7 @@ impl Environment for NNS {
     }
 }
 
-pub type LedgerTransform = Box<dyn FnOnce(Box<dyn Ledger>) -> Box<dyn Ledger>>;
+pub type LedgerTransform = Box<dyn FnOnce(Box<dyn IcpLedger>) -> Box<dyn IcpLedger>>;
 /// The NNSBuilder permits the declarative construction of an NNS fixture. All
 /// of the methods concern setting or querying what this initial state will
 /// be. Therefore, `get_account_balance` on a builder object will only tell
@@ -935,7 +935,7 @@ impl NNSBuilder {
             ledger: self.ledger_builder.create(),
         });
         let cmc: Box<dyn CMC> = Box::new(fixture.clone());
-        let mut ledger: Box<dyn Ledger> = Box::new(fixture.clone());
+        let mut ledger: Box<dyn IcpLedger> = Box::new(fixture.clone());
         for t in self.ledger_transforms {
             ledger = t(ledger);
         }

@@ -6,6 +6,8 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/rosetta-api/icp_ledger",
+    "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",

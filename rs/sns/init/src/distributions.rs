@@ -11,6 +11,7 @@ use ic_nervous_system_common::ledger::{
     compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount,
     compute_neuron_staking_subaccount_bytes,
 };
+use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
 use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
 use ic_sns_governance::pb::v1::{
     neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
@@ -21,9 +22,6 @@ use std::collections::BTreeMap;
 
 /// The static MEMO used when calculating subaccounts of neurons available at genesis.
 pub const DEFAULT_NEURON_STAKING_NONCE: u64 = 0;
-
-/// The static MEMO used when calculating the SNS Treasury subaccount.
-pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
 
 /// The static MEMO used when calculating the subaccount of future token swaps.
 pub const SWAP_SUBACCOUNT_NONCE: u64 = 1;
@@ -541,7 +539,7 @@ impl NeuronDistribution {
 
 #[cfg(test)]
 mod test {
-    use crate::distributions::{SWAP_SUBACCOUNT_NONCE, TREASURY_SUBACCOUNT_NONCE};
+    use crate::distributions::SWAP_SUBACCOUNT_NONCE;
     use crate::pb::v1::{
         AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
         NeuronDistribution, SwapDistribution, TreasuryDistribution,
@@ -555,6 +553,7 @@ mod test {
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
     };
+    use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
     use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
     use ic_sns_governance::pb::v1::neuron::DissolveState;
     use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};

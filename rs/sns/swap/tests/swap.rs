@@ -12,7 +12,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
 };
 use ic_sns_governance::{
-    ledger::Ledger,
+    ledger::ICRC1Ledger,
     pb::v1::{
         governance,
         manage_neuron_response::{self, ClaimOrRefreshResponse},
@@ -192,7 +192,7 @@ impl MockLedger {
 }
 
 #[async_trait]
-impl Ledger for MockLedger {
+impl ICRC1Ledger for MockLedger {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -1155,7 +1155,7 @@ impl SpyLedger {
     }
 }
 #[async_trait]
-impl Ledger for SpyLedger {
+impl ICRC1Ledger for SpyLedger {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,

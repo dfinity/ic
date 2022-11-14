@@ -3,11 +3,14 @@ use crate::common::{
     build_lifeline_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
     NnsInitPayloads,
 };
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Nat};
 use canister_test::Wasm;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs, UpdateSettingsArgs};
+use ic_icrc1::endpoints::{TransferArg, TransferError};
+use ic_icrc1::Account;
+use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_constants::{
     memory_allocation_of, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID,
@@ -22,6 +25,7 @@ use ic_test_utilities::universal_canister::{
 };
 use ic_types::ingress::WasmResult;
 use ic_types::Cycles;
+use num_traits::ToPrimitive;
 use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;
 use std::convert::TryInto;
@@ -36,6 +40,11 @@ use ic_nns_governance::pb::v1::{
     manage_neuron::{self},
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Proposal,
 };
+use ic_sns_governance::pb::v1;
+use ic_sns_governance::pb::v1 as sns_pb;
+use ic_sns_governance::pb::v1::manage_neuron_response::Command as SnsCommandResponse;
+use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
+use icp_ledger::{BlockIndex, Tokens};
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
 pub fn reduce_state_machine_logging_unless_env_set() {
@@ -274,7 +283,7 @@ pub fn try_call_with_cycles_via_universal_canister(
     update(machine, sender, "update", universal_canister_payload)
 }
 /// Converts a canisterID to a u64 by relying on an implementation detail.
-fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
+pub fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
     let bytes: [u8; 8] = canister_id.get().to_vec()[0..8]
         .try_into()
         .expect("Could not convert vector to [u8; 8]");
@@ -505,4 +514,274 @@ pub fn list_neurons(state_machine: &mut StateMachine, sender: PrincipalId) -> Li
     };
 
     Decode!(&result, ListNeuronsResponse).unwrap()
+}
+
+pub fn sns_stake_neuron(
+    machine: &StateMachine,
+    governance_canister_id: CanisterId,
+    ledger_canister_id: CanisterId,
+    sender: PrincipalId,
+    amount: Tokens,
+    nonce: u64,
+) -> BlockIndex {
+    // Compute neuron staking subaccount
+    let to_subaccount = compute_neuron_staking_subaccount(sender, nonce);
+
+    icrc1_transfer(
+        machine,
+        ledger_canister_id,
+        sender,
+        TransferArg {
+            from_subaccount: None,
+            to: Account {
+                owner: governance_canister_id.get(),
+                subaccount: Some(to_subaccount.0),
+            },
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(amount.get_e8s()),
+        },
+    )
+    .unwrap()
+}
+
+pub fn icrc1_balance(machine: &StateMachine, ledger_id: CanisterId, account: Account) -> Tokens {
+    let result = query(
+        machine,
+        ledger_id,
+        "icrc1_balance_of",
+        Encode!(&account).unwrap(),
+    )
+    .unwrap();
+    Tokens::from_e8s(Decode!(&result, Nat).unwrap().0.to_u64().unwrap())
+}
+
+pub fn icrc1_transfer(
+    machine: &StateMachine,
+    ledger_id: CanisterId,
+    sender: PrincipalId,
+    args: TransferArg,
+) -> Result<BlockIndex, String> {
+    let result: Result<Result<Nat, TransferError>, String> = update_with_sender(
+        machine,
+        ledger_id,
+        "icrc1_transfer",
+        candid_one,
+        args,
+        sender,
+    );
+
+    let result = result.unwrap();
+    match result {
+        Ok(n) => Ok(n.0.to_u64().unwrap()),
+        Err(e) => Err(format!("{:?}", e)),
+    }
+}
+
+/// Claim a staked neuron for an SNS StateMachine test
+// Note: Should be moved to sns/test_helpers/state_test_helpers.rs when dependency graph is cleaned up
+pub fn sns_claim_staked_neuron(
+    machine: &StateMachine,
+    governance_canister_id: CanisterId,
+    sender: PrincipalId,
+    nonce: u64,
+    dissolve_delay: Option<u32>,
+) -> sns_pb::NeuronId {
+    // Find the neuron staked
+    let to_subaccount = compute_neuron_staking_subaccount(sender, nonce);
+
+    // Claim the neuron on the governance canister.
+    let claim_response: sns_pb::ManageNeuronResponse = update_with_sender(
+        machine,
+        governance_canister_id,
+        "manage_neuron",
+        candid_one,
+        v1::ManageNeuron {
+            subaccount: to_subaccount.to_vec(),
+            command: Some(sns_pb::manage_neuron::Command::ClaimOrRefresh(
+                sns_pb::manage_neuron::ClaimOrRefresh {
+                    by: Some(
+                        sns_pb::manage_neuron::claim_or_refresh::By::MemoAndController(
+                            sns_pb::manage_neuron::claim_or_refresh::MemoAndController {
+                                memo: nonce,
+                                controller: None,
+                            },
+                        ),
+                    ),
+                },
+            )),
+        },
+        sender,
+    )
+    .expect("Error calling the manage_neuron API.");
+
+    let neuron_id = match claim_response.command.unwrap() {
+        SnsCommandResponse::ClaimOrRefresh(response) => {
+            println!("User {} successfully claimed neuron", sender);
+
+            response.refreshed_neuron_id.unwrap()
+        }
+        SnsCommandResponse::Error(error) => panic!(
+            "Unexpected error when claiming neuron for user {}: {}",
+            sender, error
+        ),
+        _ => panic!(
+            "Unexpected command response when claiming neuron for user {}.",
+            sender
+        ),
+    };
+
+    // Increase dissolve delay
+    if let Some(dissolve_delay) = dissolve_delay {
+        sns_increase_dissolve_delay(
+            machine,
+            governance_canister_id,
+            sender,
+            &to_subaccount.0,
+            dissolve_delay,
+        );
+    }
+
+    neuron_id
+}
+
+/// Increase neuron's dissolve delay on an SNS
+// Note: Should be moved to sns/test_helpers/state_test_helpers.rs when dependency graph is cleaned up
+pub fn sns_increase_dissolve_delay(
+    machine: &StateMachine,
+    governance_canister_id: CanisterId,
+    sender: PrincipalId,
+    subaccount: &[u8],
+    dissolve_delay: u32,
+) {
+    let payload = sns_pb::ManageNeuron {
+        subaccount: subaccount.to_vec(),
+        command: Some(sns_pb::manage_neuron::Command::Configure(
+            sns_pb::manage_neuron::Configure {
+                operation: Some(
+                    sns_pb::manage_neuron::configure::Operation::IncreaseDissolveDelay(
+                        sns_pb::manage_neuron::IncreaseDissolveDelay {
+                            additional_dissolve_delay_seconds: dissolve_delay,
+                        },
+                    ),
+                ),
+            },
+        )),
+    };
+    let increase_response: sns_pb::ManageNeuronResponse = update_with_sender(
+        machine,
+        governance_canister_id,
+        "manage_neuron",
+        candid_one,
+        payload,
+        sender,
+    )
+    .expect("Error calling the manage_neuron API.");
+
+    match increase_response.command.unwrap() {
+        SnsCommandResponse::Configure(_) => (),
+        SnsCommandResponse::Error(error) => panic!(
+            "Unexpected error when increasing dissolve delay for user {}: {}",
+            sender, error
+        ),
+        _ => panic!(
+            "Unexpected command response when increasing dissolve delay for user {}.",
+            sender
+        ),
+    };
+}
+
+/// Make a Governance proposal on an SNS
+// Note: Should be moved to sns/test_helpers/state_test_helpers.rs when dependency graph is cleaned up
+pub fn sns_make_proposal(
+    machine: &StateMachine,
+    sns_governance_canister_id: CanisterId,
+    sender: PrincipalId,
+    // subaccount: &[u8],
+    neuron_id: sns_pb::NeuronId,
+    proposal: v1::Proposal,
+) -> Result<sns_pb::ProposalId, sns_pb::GovernanceError> {
+    let sub_account = neuron_id.subaccount().unwrap();
+
+    let manage_neuron_response: sns_pb::ManageNeuronResponse = update_with_sender(
+        machine,
+        sns_governance_canister_id,
+        "manage_neuron",
+        candid_one,
+        sns_pb::ManageNeuron {
+            subaccount: sub_account.to_vec(),
+            command: Some(sns_pb::manage_neuron::Command::MakeProposal(proposal)),
+        },
+        sender,
+    )
+    .expect("Error calling manage_neuron");
+
+    match manage_neuron_response.command.unwrap() {
+        SnsCommandResponse::Error(e) => Err(e),
+        SnsCommandResponse::MakeProposal(make_proposal_response) => {
+            Ok(make_proposal_response.proposal_id.unwrap())
+        }
+        _ => panic!("Unexpected MakeProposal response"),
+    }
+}
+
+/// Get a proposal from an SNS
+// Note: Should be moved to sns/test_helpers/state_test_helpers.rs when dependency graph is cleaned up
+pub fn sns_get_proposal(
+    machine: &StateMachine,
+    governance_canister_id: CanisterId,
+    proposal_id: sns_pb::ProposalId,
+) -> Result<sns_pb::ProposalData, String> {
+    let get_proposal_response = query(
+        machine,
+        governance_canister_id,
+        "get_proposal",
+        Encode!(&sns_pb::GetProposal {
+            proposal_id: Some(proposal_id),
+        })
+        .unwrap(),
+    )
+    .map_err(|e| format!("Error calling get_proposal: {}", e))?;
+
+    let get_proposal_response =
+        Decode!(&get_proposal_response, sns_pb::GetProposalResponse).unwrap();
+    match get_proposal_response
+        .result
+        .expect("Empty get_proposal_response")
+    {
+        sns_pb::get_proposal_response::Result::Error(e) => {
+            panic!("get_proposal error: {}", e);
+        }
+        sns_pb::get_proposal_response::Result::Proposal(proposal) => Ok(proposal),
+    }
+}
+
+/// Wait for an SNS proposal to be executed
+// Note: Should be moved to sns/test_helpers/state_test_helpers.rs when dependency graph is cleaned up
+pub fn sns_wait_for_proposal_execution(
+    machine: &StateMachine,
+    governance: CanisterId,
+    proposal_id: sns_pb::ProposalId,
+) {
+    // We create some blocks until the proposal has finished executing (machine.tick())
+    let mut attempt_count = 0;
+    let mut proposal_executed = false;
+    while !proposal_executed {
+        attempt_count += 1;
+        machine.tick();
+
+        let proposal = sns_get_proposal(machine, governance, proposal_id);
+        assert!(
+            attempt_count < 50,
+            "proposal {:?} not executed after {} attempts",
+            proposal_id,
+            attempt_count
+        );
+
+        if let Ok(p) = proposal {
+            proposal_executed = p.executed_timestamp_seconds != 0;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
 }
