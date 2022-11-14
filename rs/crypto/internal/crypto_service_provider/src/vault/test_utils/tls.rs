@@ -201,7 +201,7 @@ pub fn should_fail_to_sign_if_secret_key_not_found(csp_vault: Arc<dyn CspVault>)
 
 pub fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Arc<dyn CspVault>) {
     let wrong_csp_pub_key = csp_vault
-        .gen_key_pair(AlgorithmId::Ed25519)
+        .gen_node_signing_key_pair()
         .expect("failed to generate keys");
     let msg = random_message();
 

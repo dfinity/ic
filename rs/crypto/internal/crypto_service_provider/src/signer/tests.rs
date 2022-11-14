@@ -490,12 +490,11 @@ mod multi {
     #[test]
     fn pop_verification_fails_gracefully_on_incompatible_public_key() {
         let algorithm = AlgorithmId::MultiBls12_381;
-        let incompatible_algorithm = AlgorithmId::Ed25519;
         let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
         let (_public_key, pop) = csp
             .gen_key_pair_with_pop(algorithm)
             .expect("PoP creation failed");
-        let incompatible_public_key = csp.gen_key_pair(incompatible_algorithm).unwrap();
+        let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
         let verifier = Csp::of(
             ChaCha20Rng::seed_from_u64(69),
             secret_key_store_panicking_on_usage(),
@@ -548,9 +547,9 @@ mod multi {
         let incompatible_algorithm = AlgorithmId::Ed25519;
         let message = b"Three turtle doves";
         let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(69));
-        let public_key = csp.gen_key_pair(algorithm).unwrap();
+        let (public_key, _pop) = csp.gen_key_pair_with_pop(algorithm).unwrap();
         let incompatible_signature = {
-            let incompatible_public_key = csp.gen_key_pair(incompatible_algorithm).unwrap();
+            let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
             let incompatible_key_id = KeyId::from(&incompatible_public_key);
             csp.sign(incompatible_algorithm, message, incompatible_key_id)
                 .expect("Signing failed")
@@ -567,11 +566,10 @@ mod multi {
     #[test]
     fn individual_signature_verification_fails_for_incompatible_public_key() {
         let algorithm = AlgorithmId::MultiBls12_381;
-        let incompatible_algorithm = AlgorithmId::Ed25519;
         let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
-        let public_key = csp.gen_key_pair(algorithm).unwrap();
+        let (public_key, _pop) = csp.gen_key_pair_with_pop(algorithm).unwrap();
         let key_id = KeyId::from(&public_key);
-        let incompatible_public_key = csp.gen_key_pair(incompatible_algorithm).unwrap();
+        let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
         let message = b"Three turtle doves";
         let signature = csp
             .sign(algorithm, message, key_id)

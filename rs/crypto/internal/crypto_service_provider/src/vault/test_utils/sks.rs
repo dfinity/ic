@@ -5,7 +5,6 @@ use crate::types::CspSecretKey;
 use crate::vault::api::CspVault;
 use crate::{KeyId, SecretKeyStore};
 use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
-use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::node_test_id;
 use openssl::pkey::PKey;
 use std::sync::Arc;
@@ -27,7 +26,7 @@ pub fn sks_should_contain_keys_only_after_generation(
     csp_vault2: Arc<dyn CspVault>,
 ) {
     let public_key1 = csp_vault1
-        .gen_key_pair(AlgorithmId::Ed25519)
+        .gen_node_signing_key_pair()
         .expect("Test setup failed: Failed to generate keys");
     let key_id1 = KeyId::from(&public_key1);
     assert!(
@@ -40,7 +39,7 @@ pub fn sks_should_contain_keys_only_after_generation(
     );
 
     let public_key2 = csp_vault2
-        .gen_key_pair(AlgorithmId::Ed25519)
+        .gen_node_signing_key_pair()
         .expect("Test setup failed: Failed to generate keys");
     let key_id2 = KeyId::from(&public_key2);
     assert_ne!(

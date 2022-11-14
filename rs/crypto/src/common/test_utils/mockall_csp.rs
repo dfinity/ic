@@ -97,7 +97,7 @@ mock! {
     }
 
     pub trait CspKeyGenerator {
-        fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<CspPublicKey, CryptoError>;
+        fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CryptoError>;
 
         fn gen_key_pair_with_pop(
             &self,

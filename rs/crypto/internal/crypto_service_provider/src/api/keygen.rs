@@ -6,17 +6,21 @@ use ic_types::NodeId;
 
 /// A trait that can be used to generate cryptographic key pairs
 pub trait CspKeyGenerator {
-    /// Generate a public/private key pair.
+    /// Generate a node signing public/private key pair.
     ///
-    /// # Arguments
-    /// * `alg_id` specifies the algorithm to be used
     /// # Returns
-    /// The key ID and the public key of the keypair
+    /// The public key of the keypair
     /// # Errors
-    /// * `CryptoError::InvalidArgument` if the algorithm is not supported by
-    ///   the trait implementation. (Note: Currently only BLS12-381 and Ed25519
-    ///   are supported by implementations of this trait)
-    fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<CspPublicKey, CryptoError>;
+    /// * `CryptoError::InternalError` if there is an internal
+    ///   error (e.g., the public key in the public key store is already set).
+    /// * `CryptoError::TransientInternalError` if there is a transient
+    ///   internal error, e.g,. an IO error when writing a key to disk, or an
+    ///   RPC error when calling a remote CSP vault.
+    /// # Panics
+    /// If there already exists a secret key in the store for the secret key ID
+    /// derived from the public part of the randomly generated key pair. This
+    /// error most likely indicates a bad randomness source.
+    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CryptoError>;
 
     /// Generate a public/private key pair with proof of possession.
     ///

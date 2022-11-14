@@ -3,9 +3,10 @@
 // TODO(CRP-1255): add tests with multiple clients.
 // TODO(CRP-1259): add tests with timeouts.
 
+use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
-use crate::secret_key_store::test_utils::TempSecretKeyStore;
+use crate::secret_key_store::test_utils::{MockSecretKeyStore, TempSecretKeyStore};
 use crate::vault::api::CspVault;
 use crate::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use crate::vault::test_utils;
@@ -17,6 +18,7 @@ use crate::RemoteCspVault;
 use crate::SecretKeyStore;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::setup_listener;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
+use rand::SeedableRng;
 use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 use std::time::Duration;
@@ -93,28 +95,98 @@ mod timeout {
 
 mod basic_sig {
     use super::*;
+    use crate::public_key_store::PublicKeySetOnceError;
+    use mockall::Sequence;
+    use rand_chacha::ChaCha20Rng;
+    use std::io;
 
     #[test]
-    fn should_generate_ed25519_key_pair() {
+    fn should_generate_node_signing_key_pair_and_store_pubkey() {
         let tokio_rt = new_tokio_runtime();
         let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::basic_sig::should_generate_ed25519_key_pair(csp_vault);
+        test_utils::basic_sig::should_generate_node_signing_key_pair_and_store_pubkey(csp_vault);
     }
 
     #[test]
-    fn should_fail_to_generate_key_for_wrong_algorithm_id() {
+    fn should_store_node_signing_secret_key_before_public_key() {
+        let local_vault = {
+            let mut seq = Sequence::new();
+            let mut sks = MockSecretKeyStore::new();
+            sks.expect_insert()
+                .times(1)
+                .returning(|_key, _key_id, _scope| Ok(()))
+                .in_sequence(&mut seq);
+            let mut pks = MockPublicKeyStore::new();
+            pks.expect_set_once_node_signing_pubkey()
+                .times(1)
+                .returning(|_key| Ok(()))
+                .in_sequence(&mut seq);
+
+            let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+            LocalCspVault::new_for_test(dummy_rng, sks, pks)
+        };
         let tokio_rt = new_tokio_runtime();
-        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::basic_sig::should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(
-            csp_vault,
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        let _ = remote_vault.gen_node_signing_key_pair();
+    }
+
+    #[test]
+    fn should_fail_with_internal_error_if_node_signing_key_already_set() {
+        let local_vault = {
+            let mut pks_returning_already_set_error = MockPublicKeyStore::new();
+            pks_returning_already_set_error
+                .expect_set_once_node_signing_pubkey()
+                .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
+
+            let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+            let temp_sks = TempSecretKeyStore::new();
+            LocalCspVault::new_for_test(dummy_rng, temp_sks, pks_returning_already_set_error)
+        };
+        let tokio_rt = new_tokio_runtime();
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        test_utils::basic_sig::should_fail_with_internal_error_if_node_signing_key_already_set(
+            remote_vault,
         );
     }
 
     #[test]
-    fn should_sign_verifiably_with_generated_key() {
+    fn should_fail_with_internal_error_if_node_signing_key_generated_more_than_once() {
+        let tokio_rt = new_tokio_runtime();
+        let vault = new_remote_csp_vault(tokio_rt.handle());
+        test_utils::basic_sig::should_fail_with_internal_error_if_node_signing_key_generated_more_than_once(vault);
+    }
+
+    #[test]
+    fn should_fail_with_transient_internal_error_if_node_signing_key_persistence_fails() {
+        let local_vault = {
+            let mut pks_returning_io_error = MockPublicKeyStore::new();
+            let io_error = io::Error::new(io::ErrorKind::Other, "oh no!");
+            pks_returning_io_error
+                .expect_set_once_node_signing_pubkey()
+                .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
+
+            let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+            let temp_sks = TempSecretKeyStore::new();
+            LocalCspVault::new_for_test(dummy_rng, temp_sks, pks_returning_io_error)
+        };
+        let tokio_rt = new_tokio_runtime();
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        test_utils::basic_sig::should_fail_with_transient_internal_error_if_node_signing_key_persistence_fails(
+            remote_vault,
+        );
+    }
+
+    #[test]
+    fn should_sign_verifiably_with_generated_node_signing_key() {
         let tokio_rt = new_tokio_runtime();
         let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::basic_sig::should_sign_and_verify_with_generated_ed25519_key_pair(csp_vault);
+        test_utils::basic_sig::should_sign_verifiably_with_generated_node_signing_key(csp_vault);
     }
 
     #[test]

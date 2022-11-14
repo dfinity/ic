@@ -37,7 +37,7 @@ pub fn derive_node_id(node_signing_pk: &PublicKeyProto) -> NodeId {
 
 pub fn generate_node_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKeyProto {
     let generated = csp
-        .gen_key_pair(AlgorithmId::Ed25519)
+        .gen_node_signing_key_pair()
         .expect("Could not generate node signing keys");
     ic_crypto_internal_csp::keygen::utils::node_signing_pk_to_proto(generated)
 }

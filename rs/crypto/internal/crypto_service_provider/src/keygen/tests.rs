@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::keygen::fixtures::multi_bls_test_vector;
+use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
@@ -12,13 +13,14 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
-mod gen_key_pair_tests {
+mod gen_node_siging_key_pair_tests {
     use super::*;
+    use crate::NodePublicKeyData;
 
     #[test]
-    fn should_correctly_generate_ed25519_keys() {
+    fn should_correctly_generate_node_signing_keys() {
         let csp = Csp::with_rng(rng());
-        let public_key = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
+        let public_key = csp.gen_node_signing_key_pair().unwrap();
         let key_id = KeyId::from(&public_key);
 
         assert_eq!(
@@ -33,31 +35,30 @@ mod gen_key_pair_tests {
                 "78eda21ba04a15e2000fe8810fe3e56741d23bb9ae44aa9d5bb21b76675ff34b"
             )
         );
+        assert_eq!(
+            csp.current_node_public_keys()
+                .node_signing_public_key
+                .expect("missing key"),
+            node_signing_pk_to_proto(public_key)
+        );
     }
 
     #[test]
-    fn should_correctly_generate_multi_bls12_381_keys() {
-        let test_vector = multi_bls_test_vector();
-        let csprng = csprng_seeded_with(test_vector.seed);
-        let csp = Csp::with_rng(csprng);
-        let public_key = csp.gen_key_pair(AlgorithmId::MultiBls12_381).unwrap();
-        let key_id = KeyId::from(&public_key);
-
-        assert_eq!(key_id, test_vector.key_id);
-        assert_eq!(public_key, test_vector.public_key);
-    }
-
-    #[test]
-    fn should_fail_generating_keys_for_unsupported_algorithms() {
-        let supported_algorithm_ids = vec![AlgorithmId::Ed25519, AlgorithmId::MultiBls12_381];
+    fn should_fail_with_internal_error_if_node_signing_public_key_already_set() {
         let csp = Csp::with_rng(rng());
 
-        for algorithm_id in all_algorithm_ids() {
-            if !supported_algorithm_ids.contains(&algorithm_id) {
-                let result = csp.gen_key_pair(algorithm_id).expect_err("expected error");
-                assert!(result.is_algorithm_not_supported())
-            }
-        }
+        assert!(csp.gen_node_signing_key_pair().is_ok());
+        let result = csp.gen_node_signing_key_pair();
+
+        assert!(matches!(result,
+            Err(CryptoError::InternalError { internal_error })
+            if internal_error.contains("node signing public key already set")
+        ));
+
+        assert!(matches!(csp.gen_node_signing_key_pair(),
+            Err(CryptoError::InternalError { internal_error })
+            if internal_error.contains("node signing public key already set")
+        ));
     }
 
     #[test]
@@ -70,7 +71,7 @@ mod gen_key_pair_tests {
             MockPublicKeyStore::new(),
         );
 
-        let _ = csp.gen_key_pair(AlgorithmId::Ed25519);
+        let _ = csp.gen_node_signing_key_pair();
     }
 }
 
