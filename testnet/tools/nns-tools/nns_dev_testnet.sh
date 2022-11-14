@@ -111,9 +111,9 @@ step --optional 6 "Upload WASMs to SNS-WASM" || time (
 # Put all useful variables into a single place
 VARS_FILE="$DIR/output_vars_nns_dev_testnet.sh"
 echo "source $DIR/output_vars_nns_state_deployment.sh" >"$VARS_FILE"
-echo "SUBNET_URL=$SUBNET_URL" >>"$VARS_FILE"
-echo "WALLET_CANISTER=$WALLET_CANISTER" >>"$VARS_FILE"
-echo "IC_ADMIN=$IC_ADMIN" >>$VARS_FILE
-echo "SNS_CLI=$SNS_CLI" >>$VARS_FILE
+echo "export SUBNET_URL=$SUBNET_URL" >>"$VARS_FILE"
+echo "export WALLET_CANISTER=$WALLET_CANISTER" >>"$VARS_FILE"
+echo "export IC_ADMIN=$IC_ADMIN" >>$VARS_FILE
+echo "export SNS_CLI=$SNS_CLI" >>$VARS_FILE
 
 echo "Variables from script stored at $VARS_FILE..."
