@@ -16,11 +16,14 @@ use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
 };
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
 
+use crate::ni_dkg::groth20_bls12_381::types::{BTENodeBytes, FsEncryptionSecretKey};
 use ic_crypto_internal_bls12_381_type::{
     G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
 };
-pub use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionCiphertextBytes;
+pub use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
+    FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
 use rand::{CryptoRng, RngCore};
@@ -136,7 +139,7 @@ pub fn epoch_from_tau_vec(tau: &[Bit]) -> Epoch {
 /// A node of a Binary Tree Encryption scheme.
 ///
 /// Notation from section 7.2.
-pub struct BTENode {
+pub(crate) struct BTENode {
     // Bit-vector, indicating a path in a binary tree.
     pub tau: Vec<Bit>,
 
@@ -174,13 +177,62 @@ impl Drop for BTENode {
     }
 }
 
+impl BTENode {
+    pub(crate) fn serialize(&self) -> BTENodeBytes {
+        BTENodeBytes {
+            tau: self.tau.iter().map(|i| *i as u8).collect(),
+            a: self.a.serialize_to::<G1Bytes>(),
+            b: self.b.serialize_to::<G2Bytes>(),
+            d_t: self
+                .d_t
+                .iter()
+                .map(|p| p.serialize_to::<G2Bytes>())
+                .collect(),
+            d_h: self
+                .d_h
+                .iter()
+                .map(|p| p.serialize_to::<G2Bytes>())
+                .collect(),
+            e: self.e.serialize_to::<G2Bytes>(),
+        }
+    }
+
+    /// Deserialize a BTENode
+    ///
+    /// Assumes inputs are trusted points. Panics if deserialization fails.
+    pub(crate) fn deserialize_unchecked(node: &BTENodeBytes) -> Self {
+        Self {
+            tau: node.tau.iter().copied().map(Bit::from).collect(),
+            a: G1Affine::deserialize_unchecked(&node.a).expect("Malformed secret key at BTENode.a"),
+            b: G2Affine::deserialize_unchecked(&node.b).expect("Malformed secret key at BTENode.b"),
+            d_t: node
+                .d_t
+                .iter()
+                .map(|g2| {
+                    G2Affine::deserialize_unchecked(&g2)
+                        .expect("Malformed secret key at BTENode.d_t")
+                })
+                .collect(),
+            d_h: node
+                .d_h
+                .iter()
+                .map(|g2| {
+                    G2Affine::deserialize_unchecked(&g2)
+                        .expect("Malformed secret key at BTENode.d_h")
+                })
+                .collect(),
+            e: G2Affine::deserialize_unchecked(&node.e).expect("Malformed secret key at BTENode.e"),
+        }
+    }
+}
+
 /// A forward-secure secret key is a list of BTE nodes.
 ///
 /// We can derive the keys of any descendant of any node in the list.
 /// We obtain forward security by maintaining the list so that we can
 /// derive current and future private keys, but none of the past keys.
 pub struct SecretKey {
-    pub bte_nodes: LinkedList<BTENode>,
+    bte_nodes: LinkedList<BTENode>,
 }
 
 /// A public key and its associated proof of possession
@@ -198,6 +250,38 @@ impl PublicKeyWithPop {
             associated_data: associated_data.to_vec(),
         };
         verify_pop(&instance, &self.proof_data).is_ok()
+    }
+
+    /// Parse a serialized public key and PoP
+    pub fn deserialize(pk: &FsEncryptionPublicKey, pop: &FsEncryptionPop) -> Option<Self> {
+        let key_value = G1Affine::deserialize(pk.as_bytes());
+        let pop_key = G1Affine::deserialize(&pop.pop_key);
+        let challenge = Scalar::deserialize(&pop.challenge);
+        let response = Scalar::deserialize(&pop.response);
+
+        match (key_value, pop_key, challenge, response) {
+            (Ok(key_value), Ok(pop_key), Ok(challenge), Ok(response)) => Some(Self {
+                key_value,
+                proof_data: EncryptionKeyPop {
+                    pop_key,
+                    challenge,
+                    response,
+                },
+            }),
+            (_, _, _, _) => None,
+        }
+    }
+
+    /// Serialize the public key and PoP
+    pub(crate) fn serialize(&self) -> (FsEncryptionPublicKey, FsEncryptionPop) {
+        let public_key = FsEncryptionPublicKey(self.key_value.serialize_to::<G1Bytes>());
+
+        let pop = FsEncryptionPop {
+            pop_key: G1Bytes(self.proof_data.pop_key.serialize()),
+            challenge: FrBytes(self.proof_data.challenge.serialize()),
+            response: FrBytes(self.proof_data.response.serialize()),
+        };
+        (public_key, pop)
     }
 }
 
@@ -334,8 +418,22 @@ impl SecretKey {
     }
 
     /// Returns this key's  BTE-node that corresponds to the current epoch.
-    pub fn current(&self) -> Option<&BTENode> {
+    pub(crate) fn current(&self) -> Option<&BTENode> {
         self.bte_nodes.back()
+    }
+
+    /// Gets the current epoch for a secret key.
+    ///
+    /// # Panics
+    /// This will panic if the secret key has expired; in this case it has no
+    /// current epoch.
+    pub(crate) fn epoch(&self) -> Epoch {
+        epoch_from_tau_vec(&self.current().expect("No more secret keys left").tau)
+    }
+
+    /// Return if this key has been exhausted and can no longer be used
+    pub fn is_exhausted(&self) -> bool {
+        self.current().is_none()
     }
 
     /// Updates this key to the next epoch.  After an update,
@@ -478,6 +576,36 @@ impl SecretKey {
             e: e.to_affine(),
         });
         node.zeroize();
+    }
+
+    /// Serialises a forward secure secret key into the standard form.
+    pub fn serialize(&self) -> FsEncryptionSecretKey {
+        FsEncryptionSecretKey {
+            bte_nodes: self.bte_nodes.iter().map(|node| node.serialize()).collect(),
+        }
+    }
+
+    /// Parses a forward secure secret key
+    ///
+    /// # Security Note
+    ///
+    /// The provided `secret_key` is assumed to be "trusted",
+    /// meaning it was obtained from a known and trusted source.
+    /// This is because certain safety checks are NOT performed
+    /// on the members of the key.
+    ///
+    /// # Panics
+    /// Panics if the key is malformed.  Given that secret keys are created and
+    /// managed within the CSP such a failure is an error in this code or a
+    /// corruption of the secret key store.
+    pub fn deserialize(secret_key: &FsEncryptionSecretKey) -> Self {
+        Self {
+            bte_nodes: secret_key
+                .bte_nodes
+                .iter()
+                .map(|node| BTENode::deserialize_unchecked(node))
+                .collect(),
+        }
     }
 }
 

@@ -9,10 +9,7 @@ use crate::api::ni_dkg_errors::CspDkgVerifyDealingError;
 use crate::api::ni_dkg_errors::{
     DecryptError, EncryptAndZKProveError, MalformedPublicKeyError, SizeError,
 };
-use conversions::{
-    epoch_from_miracl_secret_key, plaintext_from_bytes, plaintext_to_bytes, public_key_from_miracl,
-    secret_key_from_miracl, Tau,
-};
+use conversions::{plaintext_from_bytes, plaintext_to_bytes, Tau};
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
@@ -35,8 +32,8 @@ pub(crate) mod conversions;
 mod crypto {
     pub use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
-        dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, verify_ciphertext_integrity, BTENode,
-        Bit, EncryptionWitness, FsEncryptionCiphertext, PublicKeyWithPop, SecretKey, SysParam,
+        dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, verify_ciphertext_integrity, Bit,
+        EncryptionWitness, FsEncryptionCiphertext, PublicKeyWithPop, SecretKey, SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
@@ -45,6 +42,8 @@ mod crypto {
         prove_sharing, verify_sharing, ProofSharing, SharingInstance, SharingWitness,
     };
 }
+
+pub use crypto::SecretKey;
 
 #[cfg(test)]
 mod tests;
@@ -63,8 +62,8 @@ pub fn create_forward_secure_key_pair(
     let mut rng = seed.into_rng();
     let (lib_public_key_with_pop, lib_secret_key) =
         crypto::kgen(associated_data, crypto::SysParam::global(), &mut rng);
-    let (public_key, pop) = public_key_from_miracl(&lib_public_key_with_pop);
-    let secret_key = secret_key_from_miracl(&lib_secret_key);
+    let (public_key, pop) = lib_public_key_with_pop.serialize();
+    let secret_key = lib_secret_key.serialize();
     FsEncryptionKeySetWithPop {
         public_key,
         pop,
@@ -87,7 +86,7 @@ pub fn create_forward_secure_key_pair(
 pub fn update_key_inplace_to_epoch(secret_key: &mut crypto::SecretKey, epoch: Epoch, seed: Seed) {
     let mut rng = seed.into_rng();
     let tau = Tau::from(epoch);
-    if epoch_from_miracl_secret_key(secret_key) < epoch {
+    if secret_key.epoch() < epoch {
         secret_key.update_to(&tau.0, crypto::SysParam::global(), &mut rng);
     }
 }
@@ -238,10 +237,11 @@ pub fn decrypt(
             node_index,
         });
     }
-    if epoch < epoch_from_miracl_secret_key(secret_key) {
+    let current_epoch = secret_key.epoch();
+    if epoch < current_epoch {
         return Err(DecryptError::EpochTooOld {
             ciphertext_epoch: epoch,
-            secret_key_epoch: epoch_from_miracl_secret_key(secret_key),
+            secret_key_epoch: current_epoch,
         });
     }
     let ciphertext = crypto::FsEncryptionCiphertext::deserialize(ciphertext)

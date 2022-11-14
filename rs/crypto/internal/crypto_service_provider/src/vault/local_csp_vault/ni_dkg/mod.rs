@@ -10,9 +10,7 @@ use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsSc
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as ni_dkg_clib;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
-    secret_key_from_miracl, trusted_secret_key_into_miracl,
-};
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::SecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -219,12 +217,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     .expect("If key generation is correct, it should be impossible to retrieve a key of the wrong type.");
 
                 // Update secret key to new epoch (deserialize key first)
-                let mut secret_key = trusted_secret_key_into_miracl(&key_set.secret_key);
+                let mut secret_key = SecretKey::deserialize(&key_set.secret_key);
                 let seed = Seed::from_rng(&mut *self.rng_write_lock());
                 ni_dkg_clib::update_key_inplace_to_epoch(&mut secret_key, epoch, seed);
 
                 // Replace secret key in key set (serialize key first)
-                key_set.secret_key = secret_key_from_miracl(&secret_key);
+                key_set.secret_key = secret_key.serialize();
 
                 // Generalise:
                 Ok(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set))
@@ -371,7 +369,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                             specialise::fs_key_set(key_set).expect("Not a forward secure secret key; it should be impossible to retrieve a key of the wrong type.")
                         ).expect("If key generation is correct, it should be impossible to retrieve a key of the wrong type.");
 
-                    trusted_secret_key_into_miracl(&raw_fs_key_set.secret_key)
+                    SecretKey::deserialize(&raw_fs_key_set.secret_key)
                 };
 
                 let csp_secret_key = ni_dkg_clib::compute_threshold_signing_key(

@@ -1,4 +1,7 @@
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::Epoch;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
+    forward_secure::{PublicKeyWithPop, SecretKey},
+    Epoch,
+};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
     types::FsEncryptionSecretKey, *,
 };
@@ -20,7 +23,7 @@ fn test_can_parse_deserialized_pk_and_pop() {
     )
     .unwrap();
 
-    let pk = public_key_into_miracl((&pk, &pop)).expect("Unable to decode PK/PoP");
+    let pk = PublicKeyWithPop::deserialize(&pk, &pop).expect("Unable to decode PK/PoP");
 
     assert!(pk.verify(b"ic-crypto-kgen-assoc-data"));
 }
@@ -32,7 +35,7 @@ fn test_can_parse_deserialized_sk() {
     )
     .unwrap();
 
-    let _sk = trusted_secret_key_into_miracl(&sk);
+    let _sk = SecretKey::deserialize(&sk);
 }
 
 #[test]

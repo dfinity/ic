@@ -24,19 +24,19 @@ mod tests;
 /// strategic decisions regarding CBOR and protobufs.
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct FsEncryptionSecretKey {
-    pub bte_nodes: Vec<BTENode>,
+    pub bte_nodes: Vec<BTENodeBytes>,
 }
 
 impl fmt::Debug for FsEncryptionSecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // this prints no secret key parts since Debug for BTENode is redacted:
+        // this prints no secret key parts since Debug for BTENodeBytes is redacted:
         write!(f, "bte_nodes: {:?}", self.bte_nodes)
     }
 }
 
 /// Library-independent representation of binary tree encryption leaf keys.
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
-pub struct BTENode {
+pub struct BTENodeBytes {
     // Notation from section 7.2.
     #[serde(with = "serde_bytes")]
     #[zeroize(skip)] // tau is public and does not need to be zeroized
@@ -48,7 +48,7 @@ pub struct BTENode {
     pub e: G2Bytes,
 }
 
-impl fmt::Debug for BTENode {
+impl fmt::Debug for BTENodeBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

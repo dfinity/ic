@@ -1,4 +1,5 @@
 use ic_crypto_internal_seed::Seed;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::SecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::Epoch;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
     types::FsEncryptionSecretKey, *,
@@ -55,13 +56,13 @@ fn test_updating_fs_secret_key_is_stable() {
     let seed = Seed::from_bytes(b"ic-crypto-kgen-seed");
     let key_and_pop = create_forward_secure_key_pair(seed, b"ic-crypto-kgen-assoc-data");
 
-    let mut sk = trusted_secret_key_into_miracl(&key_and_pop.secret_key);
+    let mut sk = SecretKey::deserialize(&key_and_pop.secret_key);
 
     let seed = Seed::from_bytes(b"ic-crypto-update-key-seed");
     update_key_inplace_to_epoch(&mut sk, Epoch::from(2), seed);
 
     assert_sha256_cbor_is(
-        &secret_key_from_miracl(&sk),
+        &sk.serialize(),
         "f70143bdd1fad70ac7d24cda1f5141b6e730841361fc4c8e5059ddc0a1514e15",
     );
 }
@@ -160,7 +161,7 @@ fn test_create_dealings_and_transcript_without_resharing_secret_is_stable() {
     ];
 
     for receiver in 0..nodes {
-        let sk = trusted_secret_key_into_miracl(receiver_sk.get(&receiver).unwrap());
+        let sk = SecretKey::deserialize(receiver_sk.get(&receiver).unwrap());
 
         let key = compute_threshold_signing_key(&transcript, receiver, &sk, epoch)
             .expect("Unable to compute threshold key");
@@ -234,7 +235,7 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
     ];
 
     for receiver in 0..nodes {
-        let sk = trusted_secret_key_into_miracl(receiver_sk.get(&receiver).unwrap());
+        let sk = SecretKey::deserialize(receiver_sk.get(&receiver).unwrap());
 
         let key = compute_threshold_signing_key(&transcript, receiver, &sk, epoch)
             .expect("Unable to compute threshold key");

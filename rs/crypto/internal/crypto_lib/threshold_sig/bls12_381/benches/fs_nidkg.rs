@@ -2,7 +2,7 @@ use criterion::*;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::Epoch;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
-    create_forward_secure_key_pair, trusted_secret_key_into_miracl, update_key_inplace_to_epoch,
+    create_forward_secure_key_pair, update_key_inplace_to_epoch, SecretKey,
 };
 
 fn fs_key_generation(c: &mut Criterion) {
@@ -15,7 +15,7 @@ fn fs_key_generation(c: &mut Criterion) {
         b.iter(|| create_forward_secure_key_pair(Seed::from_rng(&mut rng), b"assoc-data"));
     });
 
-    let mut kpair = trusted_secret_key_into_miracl(
+    let mut kpair = SecretKey::deserialize(
         &create_forward_secure_key_pair(Seed::from_rng(&mut rng), b"assoc-data").secret_key,
     );
 
