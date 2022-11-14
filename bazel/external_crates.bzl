@@ -173,6 +173,16 @@ def external_crates_repository(name, annotations):
                     "derive",
                 ],
             ),
+            "clap_4_0_0": crate.spec(
+                package = "clap",
+                version = "^4.0.0",
+                features = [
+                    "derive",
+                ],
+            ),
+            "cloudflare": crate.spec(
+                version = "^0.9.1",
+            ),
             "colored": crate.spec(
                 version = "^2.0.0",
             ),
@@ -399,6 +409,9 @@ def external_crates_repository(name, annotations):
             "insta": crate.spec(
                 version = "=1.8.0",
             ),
+            "instant-acme": crate.spec(
+                version = "^0.1.0",
+            ),
             "intmap": crate.spec(
                 version = "^1.1.0",
                 features = ["serde"],
@@ -541,8 +554,16 @@ def external_crates_repository(name, annotations):
             "opentelemetry": crate.spec(
                 version = "^0.17.0",
             ),
+            "opentelemetry_0_18_0": crate.spec(
+                package = "opentelemetry",
+                version = "^0.18.0",
+            ),
             "opentelemetry-prometheus": crate.spec(
                 version = "^0.10.0",
+            ),
+            "opentelemetry_prometheus_0_11_0": crate.spec(
+                package = "opentelemetry-prometheus",
+                version = "^0.11.0",
             ),
             "p256": crate.spec(
                 version = "^0.10",
@@ -623,13 +644,13 @@ def external_crates_repository(name, annotations):
                 version = "^0.3.0",
             ),
             "prost": crate.spec(
-                version = "^0.11.0",
+                version = "=0.11.0",
             ),
             "prost-build": crate.spec(
-                version = "^0.11.0",
+                version = "=0.11.1",
             ),
             "prost-derive": crate.spec(
-                version = "^0.11",
+                version = "=0.11.0",
             ),
             "protobuf": crate.spec(
                 version = "^2.27.1",
@@ -663,6 +684,16 @@ def external_crates_repository(name, annotations):
             ),
             "rayon": crate.spec(
                 version = "^1.5.1",
+            ),
+            "rcgen": crate.spec(
+                version = "^0.10.0",
+            ),
+            "redis": crate.spec(
+                version = "^0.22.1",
+                features = [
+                    "tokio-comp",
+                    "connection-manager",
+                ],
             ),
             "regex": crate.spec(
                 version = "^1.3.9",
@@ -969,6 +1000,9 @@ def external_crates_repository(name, annotations):
                     "json",
                 ],
             ),
+            "trust-dns-resolver": crate.spec(
+                version = "^0.22.0",
+            ),
             "url": crate.spec(
                 version = "^2.1.1",
                 features = [
@@ -979,6 +1013,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.8.1",
                 features = [
                     "v4",
+                    "serde",
                 ],
             ),
             "vsock": crate.spec(

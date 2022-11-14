@@ -1,0 +1,32 @@
+[package]
+name = "certificate-issuance"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.66"
+async-trait = "0.1.58"
+axum = { version = "0.5.17", features = ["json"] }
+candid = "0.8.3"
+chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
+clap = { version = "4.0.18", features = ["derive"] }
+cloudflare = "0.9.1"
+futures = "0.3.25"
+hyper = { version = "0.14.20", features = ["full"] }
+hyper-rustls = "0.23.0"
+instant-acme = "0.1.0"
+itertools = "0.10.5"
+opentelemetry = "0.18.0"
+opentelemetry-prometheus = "0.11.0"
+prometheus = "0.13.3"
+rcgen = "0.10.0"
+redis = { version = "0.22.1", features = ["tokio-comp", "connection-manager"] }
+serde = { version = "1.0.147", features = ["serde_derive"] }
+serde_json = "1.0.87"
+thiserror = "1.0.37"
+tokio = { version = "1.21.2", features = ["full"] }
+tower = { version = "0.4.13", features = ["full"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.16", features = ["json"] }
+trust-dns-resolver = "0.22.0"
+uuid = { version = "1.2.1", features = ["v4", "serde"] }

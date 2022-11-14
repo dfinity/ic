@@ -1,0 +1,57 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:anyhow",
+    "@crate_index//:axum",
+    "@crate_index//:candid",
+    "@crate_index//:chrono",
+    "@crate_index//:clap_4_0_0",
+    "@crate_index//:cloudflare",
+    "@crate_index//:futures",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-rustls",
+    "@crate_index//:instant-acme",
+    "@crate_index//:itertools",
+    "@crate_index//:opentelemetry_0_18_0",
+    "@crate_index//:opentelemetry_prometheus_0_11_0",
+    "@crate_index//:prometheus",
+    "@crate_index//:rcgen",
+    "@crate_index//:redis",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
+    "@crate_index//:tower",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
+    "@crate_index//:trust-dns-resolver",
+    "@crate_index//:uuid",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+ALIASES = {}
+
+rust_binary(
+    name = "certificate-issuer",
+    srcs = glob(["src/bin/certificate-issuer/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "boundary_node_certificate_issuer",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "certificate-syncer",
+    srcs = glob(["src/bin/certificate-syncer/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "boundary_node_certificate_syncer",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
