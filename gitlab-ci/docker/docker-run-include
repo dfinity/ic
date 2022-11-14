@@ -66,6 +66,11 @@ if [ ! -e /.dockerenv ] && [[ "$IMAGE" != "ic-build-bd:"* ]]; then
         --mount type=volume,source="ic-cargo-${USER}",destination=/cargo
         # destination must match RUSTUP_HOME.
         --mount type=volume,source="ic-rustup-${USER}",destination=/opt/rustup
+
+        # To achieve reproducibility we need to build disk images on a filesystem
+        # with a known block size (the tmpfs filesystem uses 4K blocks).
+        # See get_tmpdir_checking_block_size in checked_tmpdir.py for details.
+        --mount type=tmpfs,destination=/var/sysimage
     )
 elif [ -e /.dockerenv ]; then
     DOCKER_RUN_ARGS+=(

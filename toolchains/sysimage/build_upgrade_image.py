@@ -6,11 +6,12 @@
 #   build_upgrade_image -o upgrade.tar.gz -b boot.img.tar -r root.img.tar -v version.txt -c gzip
 #
 import argparse
-import atexit
 import shutil
 import subprocess
 import sys
-import tempfile
+
+from reproducibility import get_tmpdir_checking_block_size
+from reproducibility import print_artifact_info
 
 COMPRESSOR_PROGRAMS = {
     "gz": ["--use-compress-program=gzip"],
@@ -36,13 +37,12 @@ def main():
     version_file = args.versionfile
     compression = args.compression
 
-    tmpdir = tempfile.mkdtemp()
-    atexit.register(lambda: shutil.rmtree(tmpdir))
+    tmpdir = get_tmpdir_checking_block_size()
 
     subprocess.run(["tar", "xf", boot_image, "--transform=s/partition.img/boot.img/", "-C", tmpdir], check=True)
 
     subprocess.run(["tar", "xf", root_image, "--transform=s/partition.img/root.img/", "-C", tmpdir], check=True)
-    shutil.copy(version_file, tmpdir + "/VERSION.TXT", follow_symlinks=False)
+    shutil.copy(version_file, tmpdir + "/VERSION.TXT", follow_symlinks=True)
     subprocess.run(
         [
             "tar",
@@ -62,6 +62,8 @@ def main():
         ],
         check=True,
     )
+
+    print_artifact_info(out_file)
 
 
 if __name__ == "__main__":

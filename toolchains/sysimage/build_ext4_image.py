@@ -8,12 +8,13 @@
 #   build_ext4_image -s 10M -o partition.img.tar -p boot -i dockerimg.tar -S file_contexts
 #
 import argparse
-import atexit
 import os
 import shutil
 import subprocess
 import sys
-import tempfile
+
+from reproducibility import get_tmpdir_checking_block_size
+from reproducibility import print_artifact_info
 
 
 def parse_size(s):
@@ -236,8 +237,7 @@ def main():
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
 
-    tmpdir = tempfile.mkdtemp()
-    atexit.register(lambda: shutil.rmtree(tmpdir))
+    tmpdir = get_tmpdir_checking_block_size()
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()
@@ -293,6 +293,8 @@ def main():
         ],
         check=True,
     )
+
+    print_artifact_info(out_file)
 
 
 if __name__ == "__main__":

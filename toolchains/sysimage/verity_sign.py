@@ -4,13 +4,13 @@
 # and outputs root hash to a separate file.
 #
 import argparse
-import atexit
 import os
 import re
-import shutil
 import subprocess
 import sys
-import tempfile
+
+from reproducibility import get_tmpdir_checking_block_size
+from reproducibility import print_artifact_info
 
 root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 
@@ -40,8 +40,7 @@ def main():
 
     args = parser.parse_args(sys.argv[1:])
 
-    tmpdir = tempfile.mkdtemp()
-    atexit.register(lambda: shutil.rmtree(tmpdir))
+    tmpdir = get_tmpdir_checking_block_size()
 
     subprocess.run(
         [
@@ -103,6 +102,8 @@ def main():
         ],
         check=True,
     )
+
+    print_artifact_info(args.output)
 
 
 if __name__ == "__main__":
