@@ -85,8 +85,12 @@ impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicK
             logger,
         )
     }
+}
 
-    pub fn new_in_temp_dir() -> (Self, TempDir) {
+impl<R: Rng + CryptoRng>
+    LocalCspVault<R, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>
+{
+    pub fn new_in_temp_dir(rng: R) -> (Self, TempDir) {
         let temp_dir = tempfile::Builder::new()
             .prefix("ic_crypto_")
             .tempdir()
@@ -105,7 +109,8 @@ impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicK
         let canister_sks = ProtoSecretKeyStore::open(temp_dir.path(), canister_sks_file, None);
         let public_key_store = ProtoPublicKeyStore::open(temp_dir.path(), public_key_store_file);
 
-        let vault = Self::new(
+        let vault = Self::new_internal(
+            rng,
             sks,
             canister_sks,
             public_key_store,
