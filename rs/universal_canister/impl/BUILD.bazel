@@ -1,0 +1,18 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:hex-literal",
+    "@crate_index//:serde",
+]
+
+rust_library(
+    name = "lib",
+    srcs = glob(["src/*.rs"]),
+    crate_name = "universal_canister",
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)

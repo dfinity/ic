@@ -7,6 +7,7 @@ edition = "2021"
 candid = "0.8.1"
 hex-literal = "0.2.1"
 serde = "1.0.115"
+universal-canister = { path = "../impl" }
 
 [dev-dependencies]
 ic-crypto-sha = { path = "../../crypto/sha" }

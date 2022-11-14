@@ -331,7 +331,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
             error: Some(SnsWasmError {
                 message: "Error installing Governance WASM: Failed to install WASM on canister qvhpv-4qaaa-aaaaa-aaagq-cai: \
                 error code 5: Canister qvhpv-4qaaa-aaaaa-aaagq-cai trapped explicitly: \
-                unknown op 68"
+                did not find blob on stack"
                     .to_string()
             })
         }

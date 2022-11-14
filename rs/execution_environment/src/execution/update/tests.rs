@@ -76,7 +76,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .call_with_cycles(
             b_id.get(),
             "update",
@@ -180,7 +180,7 @@ fn dts_update_concurrent_cycles_change_fails() {
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .call_with_cycles(
             b_id.get(),
             "update",
@@ -272,7 +272,7 @@ fn dirty_pages_are_free_on_system_subnet() {
         let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
         let a = wasm()
             .stable_grow(1)
-            .stable64_write(0, 0, 1)
+            .stable64_fill(0, 0, 1)
             .message_payload()
             .append_and_reply()
             .build();
@@ -329,8 +329,8 @@ fn dts_update_resume_fails_due_to_cycles_change() {
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .build();
 
     let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
@@ -385,8 +385,8 @@ fn dts_update_resume_fails_due_to_call_context_change() {
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .build();
 
     let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
@@ -444,8 +444,8 @@ fn dts_update_does_not_expire_while_executing() {
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .push_bytes(&[42])
         .append_and_reply()
         .build();
@@ -520,8 +520,8 @@ fn dts_abort_of_call_works() {
 
     let b = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .accept_cycles128(transferred_cycles.into_parts())
         .push_bytes(&[42])
         .append_and_reply()
@@ -603,8 +603,8 @@ fn dts_cycles_debit_is_applied_on_aborts() {
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .push_bytes(&[42])
         .append_and_reply()
         .build();
@@ -657,10 +657,10 @@ fn dts_uninstall_with_aborted_update() {
 
     let wasm_payload = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .build();
 
     let (message_id, _) = test.ingress_raw(canister_id, "update", wasm_payload);

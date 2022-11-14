@@ -1039,7 +1039,7 @@ fn dts_long_running_install_and_update() {
     for i in 0..30 {
         let work = wasm()
             .stable64_grow(1)
-            .stable64_write(0, 0, 10_000)
+            .stable64_fill(0, 0, 10_000)
             .message_payload()
             .append_and_reply()
             .build();
@@ -1130,7 +1130,7 @@ fn dts_long_running_calls() {
     for i in 0..30 {
         let work = wasm()
             .stable64_grow(1)
-            .stable64_write(0, 0, 10_000)
+            .stable64_fill(0, 0, 10_000)
             .message_payload()
             .append_and_reply()
             .build();
@@ -1512,16 +1512,16 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
 
     let b = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .message_payload()
         .append_and_reply()
         .build();
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_write(0, 0, 10_000)
-        .stable64_write(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000)
         .call_simple(b_id, "update", call_args().other_side(b))
         .build();
 

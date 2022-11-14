@@ -22,6 +22,8 @@ mod ic0 {
         pub fn msg_reject_code() -> u32;
         pub fn msg_reject_msg_copy(dst: u32, offset: u32, size: u32) -> ();
         pub fn msg_reject_msg_size() -> u32;
+        pub fn msg_method_name_copy(dst: u32, offset: u32, size: u32) -> ();
+        pub fn msg_method_name_size() -> u32;
         pub fn msg_reply() -> ();
         pub fn msg_reply_data_append(offset: u32, size: u32) -> ();
         pub fn msg_cycles_available() -> u64;
@@ -62,6 +64,7 @@ mod ic0 {
         pub fn data_certificate_copy(dst: u32, offset: u32, size: u32) -> ();
 
         pub fn time() -> u64;
+        pub fn performance_counter(_type: u32) -> u64;
         pub fn global_timer_set(timestamp: u64) -> u64;
     }
 }
@@ -328,6 +331,19 @@ pub fn data_certificate() -> Vec<u8> {
 
 pub fn time() -> u64 {
     unsafe { ic0::time() }
+}
+
+pub fn performance_counter(_type: u32) -> u64 {
+    unsafe { ic0::performance_counter(_type) }
+}
+
+pub fn method_name() -> Vec<u8> {
+    let len: u32 = unsafe { ic0::msg_method_name_size() };
+    let mut bytes = vec![0; len as usize];
+    unsafe {
+        ic0::msg_method_name_copy(bytes.as_mut_ptr() as u32, 0, len);
+    }
+    bytes
 }
 
 pub fn global_timer_set(timestamp: u64) -> u64 {
