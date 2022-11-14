@@ -141,7 +141,7 @@ pub struct Module<'a> {
 }
 
 impl<'a> Module<'a> {
-    pub fn parse(wasm: &'a [u8]) -> Result<Self, Error> {
+    pub fn parse(wasm: &'a [u8], enable_multi_memory: bool) -> Result<Self, Error> {
         let parser = Parser::new(0);
         let mut imports = vec![];
         let mut types = vec![];
@@ -271,11 +271,13 @@ impl<'a> Module<'a> {
                             });
                         }
                     }
-                    if instructions.iter().any(|i| match i {
-                        Operator::MemoryGrow { mem_byte, .. }
-                        | Operator::MemorySize { mem_byte, .. } => *mem_byte != 0x00,
-                        _ => false,
-                    }) {
+                    if !enable_multi_memory
+                        && instructions.iter().any(|i| match i {
+                            Operator::MemoryGrow { mem_byte, .. }
+                            | Operator::MemorySize { mem_byte, .. } => *mem_byte != 0x00,
+                            _ => false,
+                        })
+                    {
                         return Err(Error::InvalidMemoryReservedByte {
                             func_range: body.range(),
                         });

@@ -241,7 +241,7 @@ pub(super) fn instrument(
     wasm: &BinaryEncodedWasm,
     cost_to_compile_wasm_instruction: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
-    let mut module = Module::parse(wasm.as_slice()).map_err(|err| {
+    let mut module = Module::parse(wasm.as_slice(), false).map_err(|err| {
         WasmInstrumentationError::ParityDeserializeError(ParityWasmError::new(err.to_string()))
     })?;
 

@@ -17,7 +17,7 @@ fn round_trip(testname: &str, folder: &str) {
     let buff = wabt::wat2wasm_with_features(content, features.clone())
         .expect("couldn't convert the input wat to Wasm");
 
-    let module = Module::parse(&buff).unwrap();
+    let module = Module::parse(&buff, false).unwrap();
     let result = module.encode().unwrap();
     let out = wabt::wasm2wat_with_features(result, features.clone())
         .expect("couldn't translated Wasm to wat");
