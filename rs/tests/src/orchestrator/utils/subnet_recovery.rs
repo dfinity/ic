@@ -1,4 +1,6 @@
-use crate::orchestrator::utils::rw_message::{can_install_canister_with_retries, can_store_msg};
+use crate::orchestrator::utils::rw_message::{
+    can_store_msg, cert_state_makes_progress_with_retries,
+};
 use crate::orchestrator::utils::ssh_access::execute_bash_command;
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::tecdsa::tecdsa_signature_test::{
@@ -146,7 +148,7 @@ pub(crate) fn assert_subnet_is_healthy(
     let node = &subnet[0];
     node.await_status_is_healthy().unwrap();
     // make sure that state sync is completed
-    can_install_canister_with_retries(
+    cert_state_makes_progress_with_retries(
         &node.get_public_url(),
         node.effective_canister_id(),
         logger,

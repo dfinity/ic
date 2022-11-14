@@ -28,7 +28,7 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
-    can_install_canister_with_retries, can_read_msg, cannot_store_msg, store_message,
+    can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use crate::util::block_on;
 use ic_recovery::file_sync_helper;
@@ -263,7 +263,7 @@ pub fn test(env: TestEnv) {
     upload_node.await_status_is_healthy().unwrap();
 
     info!(logger, "Wait for state sync to complete");
-    can_install_canister_with_retries(
+    cert_state_makes_progress_with_retries(
         &upload_node.get_public_url(),
         upload_node.effective_canister_id(),
         &logger,

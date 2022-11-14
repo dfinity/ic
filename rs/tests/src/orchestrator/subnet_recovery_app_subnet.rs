@@ -32,7 +32,7 @@ use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_P
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
-    can_install_canister_with_retries, can_read_msg, store_message,
+    can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use crate::orchestrator::utils::subnet_recovery::*;
 use crate::util::*;
@@ -174,7 +174,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     info!(logger, "app node URL: {}", app_node.get_public_url());
 
     info!(logger, "Ensure app subnet is functional");
-    can_install_canister_with_retries(
+    cert_state_makes_progress_with_retries(
         &app_node.get_public_url(),
         app_node.effective_canister_id(),
         &logger,

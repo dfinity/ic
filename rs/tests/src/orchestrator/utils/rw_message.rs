@@ -127,35 +127,57 @@ async fn can_read_msg_impl(
     false
 }
 
-pub(crate) fn can_install_canister(
+pub(crate) fn cert_state_makes_progress(
     url: &url::Url,
     effective_canister_id: PrincipalId,
-) -> Result<(), String> {
+) -> Result<u64, String> {
+    use ic_agent::lookup_value;
     block_on(async {
+        let path = vec!["time".into()];
+        let paths = vec![path.clone()];
         let agent = assert_create_agent(url.as_str()).await;
-        UniversalCanister::try_new(&agent, effective_canister_id)
+        match agent
+            .read_state_raw(paths.clone(), effective_canister_id.into())
             .await
-            .map(|_| ())
+        {
+            Ok(cert) => match lookup_value(&cert, path.clone()) {
+                Ok(mut t) => Ok(leb128::read::unsigned(&mut t).unwrap()),
+                Err(err) => Err(err.to_string()),
+            },
+            Err(err) => Err(err.to_string()),
+        }
     })
 }
 
-pub(crate) fn can_install_canister_with_retries(
+pub(crate) fn cert_state_makes_progress_with_retries(
     url: &url::Url,
     effective_canister_id: PrincipalId,
     logger: &slog::Logger,
     timeout: Duration,
     backoff: Duration,
 ) {
+    info!(logger, "Performing read_state request...");
+    let mut t = None;
     retry(logger.clone(), timeout, backoff, || {
-        info!(logger, "Try to install canister...");
-        if let Err(e) = can_install_canister(url, effective_canister_id) {
-            bail!("Cannot install canister: {}", e);
-        } else {
-            info!(logger, "Installing canister is possible.");
-            Ok(())
+        info!(logger, "Performing read_state request...");
+        match cert_state_makes_progress(url, effective_canister_id) {
+            Ok(nt) => match t {
+                None => {
+                    t = Some(nt);
+                    bail!("Initial time-stamp recorded!");
+                }
+                Some(t) if t < nt => {
+                    info!(logger, "Time-stamp advanced!");
+                    Ok(())
+                }
+                _ => bail!("Time-stamp did not advance!"),
+            },
+            Err(e) => {
+                bail!("Cannot perform read_state request: {}", e);
+            }
         }
     })
-    .expect("Canister installation should work!");
+    .expect("System should make progress!");
 }
 
 pub(crate) fn install_nns_and_universal_canisters(topology: TopologySnapshot) {
@@ -184,7 +206,7 @@ fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
                     .expect("Timeout while waiting for all subnets to be healthy");
                 // make sure the node is participating in a subnet
                 if install_canisters {
-                    can_install_canister_with_retries(
+                    cert_state_makes_progress_with_retries(
                         &node.get_public_url(),
                         node.effective_canister_id(),
                         &logger,
