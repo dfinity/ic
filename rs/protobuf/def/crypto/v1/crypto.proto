@@ -26,6 +26,6 @@ message NodePublicKeys {
     registry.crypto.v1.PublicKey committee_signing_pk = 3;
     registry.crypto.v1.X509PublicKeyCert tls_certificate = 4;
     registry.crypto.v1.PublicKey dkg_dealing_encryption_pk = 5;
-    registry.crypto.v1.PublicKey idkg_dealing_encryption_pk = 6;
+    reserved 6;
     repeated registry.crypto.v1.PublicKey idkg_dealing_encryption_pks = 7;
 }

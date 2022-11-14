@@ -28,9 +28,6 @@ pub struct NodePublicKeys {
     #[prost(message, optional, tag = "5")]
     pub dkg_dealing_encryption_pk:
         ::core::option::Option<super::super::registry::crypto::v1::PublicKey>,
-    #[prost(message, optional, tag = "6")]
-    pub idkg_dealing_encryption_pk:
-        ::core::option::Option<super::super::registry::crypto::v1::PublicKey>,
     #[prost(message, repeated, tag = "7")]
     pub idkg_dealing_encryption_pks:
         ::prost::alloc::vec::Vec<super::super::registry::crypto::v1::PublicKey>,

@@ -762,9 +762,7 @@ impl From<CurrentNodePublicKeys> for NodePublicKeys {
             dkg_dealing_encryption_pk: current_node_public_keys.dkg_dealing_encryption_public_key,
             idkg_dealing_encryption_pks: current_node_public_keys
                 .idkg_dealing_encryption_public_key
-                .clone()
                 .map_or(vec![], |public_key| vec![public_key]),
-            idkg_dealing_encryption_pk: current_node_public_keys.idkg_dealing_encryption_public_key,
         }
     }
 }

@@ -243,47 +243,6 @@ fn should_fail_check_keys_locally_if_no_matching_dkg_dealing_encryption_secret_k
 }
 
 #[test]
-fn should_fail_check_keys_locally_for_migrated_node_if_no_matching_idkg_dealing_encryption_secret_key_is_present(
-) {
-    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::all(),
-    );
-    let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
-    let different_idkg_dealing_enc_pk = {
-        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
-            empty_fake_registry(),
-            node_test_id(2),
-            NodeKeysToGenerate::only_idkg_dealing_encryption_key(),
-        );
-        node_keys2.idkg_dealing_encryption_pk
-    };
-    assert_ne!(
-        node_keys.idkg_dealing_encryption_pk,
-        different_idkg_dealing_enc_pk
-    );
-    store_public_keys(
-        crypto_root.as_path(),
-        &NodePublicKeys {
-            idkg_dealing_encryption_pk: different_idkg_dealing_enc_pk.clone(),
-            idkg_dealing_encryption_pks: vec![
-                different_idkg_dealing_enc_pk.expect("idkg dealing enc key is none")
-            ],
-            ..node_keys
-        },
-    );
-
-    let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
-
-    assert!(matches!(
-        result,
-        Err(CryptoError::SecretKeyNotFound { algorithm, .. })
-        if algorithm == AlgorithmId::MegaSecp256k1
-    ));
-}
-
-#[test]
 fn should_fail_check_keys_locally_for_new_node_if_no_matching_idkg_dealing_encryption_secret_key_is_present(
 ) {
     let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
@@ -298,19 +257,23 @@ fn should_fail_check_keys_locally_for_new_node_if_no_matching_idkg_dealing_encry
             node_test_id(2),
             NodeKeysToGenerate::only_idkg_dealing_encryption_key(),
         );
-        node_keys2.idkg_dealing_encryption_pk
+        node_keys2
+            .idkg_dealing_encryption_pks
+            .first()
+            .expect("no idkg dealing encryption key")
+            .clone()
     };
     assert_ne!(
-        node_keys.idkg_dealing_encryption_pk,
-        different_idkg_dealing_enc_pk
+        node_keys
+            .idkg_dealing_encryption_pks
+            .first()
+            .expect("no idkg dealing encryption key"),
+        &different_idkg_dealing_enc_pk
     );
     store_public_keys(
         crypto_root.as_path(),
         &NodePublicKeys {
-            idkg_dealing_encryption_pk: None,
-            idkg_dealing_encryption_pks: vec![
-                different_idkg_dealing_enc_pk.expect("idkg dealing enc key is none")
-            ],
+            idkg_dealing_encryption_pks: vec![different_idkg_dealing_enc_pk],
             ..node_keys
         },
     );
@@ -368,7 +331,6 @@ fn should_fail_check_keys_locally_if_idkg_dealing_encryption_public_key_is_missi
     store_public_keys(
         crypto_root.as_path(),
         &NodePublicKeys {
-            idkg_dealing_encryption_pk: None,
             idkg_dealing_encryption_pks: vec![],
             ..node_keys
         },

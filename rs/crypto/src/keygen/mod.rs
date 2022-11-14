@@ -246,7 +246,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         Ok(())
     }
 
-    fn compare_local_and_registry_public_keys_and_certificates<T: PartialEq>(
+    fn compare_local_and_registry_public_keys_and_certificates<T: PartialEq + std::fmt::Debug>(
         &self,
         maybe_local_public_obj: Option<&T>,
         registry_public_obj: &T,
@@ -267,10 +267,13 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                     warn!(
                         self.logger,
                         "{} mismatch between local and registry copies \
-                         for node {}, for registry version {}",
+                         for node {}, for registry version {} \
+                         (local key: {:?}, registry key: {:?}",
                         obj_type,
                         self.node_id,
-                        registry_version
+                        registry_version,
+                        local_public_obj,
+                        registry_public_obj,
                     )
                 }
             }

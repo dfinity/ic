@@ -194,7 +194,6 @@ mod current_node_public_keys {
             NodePublicKeys {
                 committee_signing_pk: None,
                 tls_certificate: None,
-                idkg_dealing_encryption_pk: None,
                 idkg_dealing_encryption_pks: vec![],
                 ..all_node_public_keys()
             }
@@ -209,7 +208,6 @@ mod current_node_public_keys {
             committee_signing_pk: None,
             tls_certificate: None,
             dkg_dealing_encryption_pk: None,
-            idkg_dealing_encryption_pk: None,
             idkg_dealing_encryption_pks: vec![],
         };
         let empty_current_node_public_keys = CurrentNodePublicKeys {
@@ -234,7 +232,6 @@ mod current_node_public_keys {
             committee_signing_pk: Some(valid_committee_signing_public_key()),
             tls_certificate: Some(valid_tls_certificate()),
             dkg_dealing_encryption_pk: Some(valid_dkg_dealing_encryption_public_key()),
-            idkg_dealing_encryption_pk: Some(valid_idkg_dealing_enc_pk.clone()),
             idkg_dealing_encryption_pks: vec![valid_idkg_dealing_enc_pk],
         }
     }
