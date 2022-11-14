@@ -98,7 +98,7 @@ pub fn should_not_multi_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn Cs
 
 pub fn should_not_multi_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Arc<dyn CspVault>) {
     let wrong_csp_pub_key = csp_vault
-        .gen_key_pair(AlgorithmId::Ed25519)
+        .gen_node_signing_key_pair()
         .expect("failed to generate keys");
 
     let msg = [31; 41];

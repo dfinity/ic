@@ -151,16 +151,13 @@ impl BasicSignatureCspVault for RemoteCspVault {
         })
     }
 
-    fn gen_key_pair(
-        &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
+    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
         self.tokio_block_on(
             self.tarpc_csp_client
-                .gen_key_pair(context_with_timeout(self.rpc_timeout), algorithm_id),
+                .gen_node_signing_key_pair(context_with_timeout(self.rpc_timeout)),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspBasicSignatureKeygenError::InternalError {
+            Err(CspBasicSignatureKeygenError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })

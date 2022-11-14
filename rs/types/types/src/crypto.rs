@@ -560,9 +560,9 @@ impl fmt::Debug for CryptoError {
                 message, not_after
             ),
             CryptoError::InternalError { internal_error } =>
-                write!(f, "Internal error {}", internal_error),
+                write!(f, "Internal error: {}", internal_error),
             CryptoError::TransientInternalError { internal_error: transient_internal_error } =>
-                write!(f, "Transient internal error {}", transient_internal_error),
+                write!(f, "Transient internal error: {}", transient_internal_error),
         }
     }
 }

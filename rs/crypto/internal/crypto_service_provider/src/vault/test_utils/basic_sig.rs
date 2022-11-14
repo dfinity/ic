@@ -1,3 +1,4 @@
+use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::types::{CspPublicKey, CspSignature};
 use crate::vault::api::{CspBasicSignatureError, CspBasicSignatureKeygenError, CspVault};
 use crate::KeyId;
@@ -7,30 +8,62 @@ use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
-pub fn should_generate_ed25519_key_pair(csp_vault: Arc<dyn CspVault>) {
+pub fn should_generate_node_signing_key_pair_and_store_pubkey(csp_vault: Arc<dyn CspVault>) {
     let gen_key_result = csp_vault
-        .gen_key_pair(AlgorithmId::Ed25519)
+        .gen_node_signing_key_pair()
         .expect("failed creating key pair");
 
     assert!(matches!(gen_key_result, CspPublicKey::Ed25519(_)));
+    assert_eq!(
+        csp_vault
+            .current_node_public_keys()
+            .expect("missing public keys")
+            .node_signing_public_key
+            .expect("missing node signing key"),
+        node_signing_pk_to_proto(gen_key_result)
+    );
 }
 
-pub fn should_fail_to_generate_basic_sig_key_for_wrong_algorithm_id(csp_vault: Arc<dyn CspVault>) {
-    for algorithm_id in AlgorithmId::iter() {
-        if algorithm_id != AlgorithmId::Ed25519 {
-            assert_eq!(
-                csp_vault.gen_key_pair(algorithm_id).unwrap_err(),
-                CspBasicSignatureKeygenError::UnsupportedAlgorithm {
-                    algorithm: algorithm_id,
-                }
-            );
-        }
-    }
+// The given `csp_vault` is expected to return an AlreadySet error on set_once_node_signing_pubkey
+pub fn should_fail_with_internal_error_if_node_signing_key_already_set(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let result = csp_vault.gen_node_signing_key_pair();
+
+    assert!(matches!(result,
+        Err(CspBasicSignatureKeygenError::InternalError { internal_error })
+        if internal_error.contains("node signing public key already set")
+    ));
 }
 
-pub fn should_sign_and_verify_with_generated_ed25519_key_pair(csp_vault: Arc<dyn CspVault>) {
+pub fn should_fail_with_internal_error_if_node_signing_key_generated_more_than_once(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    assert!(csp_vault.gen_node_signing_key_pair().is_ok());
+
+    let result = csp_vault.gen_node_signing_key_pair();
+
+    assert!(matches!(result,
+        Err(CspBasicSignatureKeygenError::InternalError { internal_error })
+        if internal_error.contains("node signing public key already set")
+    ));
+}
+
+// The given `csp_vault` is expected to return an IO error on set_once_node_signing_pubkey
+pub fn should_fail_with_transient_internal_error_if_node_signing_key_persistence_fails(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let result = csp_vault.gen_node_signing_key_pair();
+
+    assert!(matches!(result,
+        Err(CspBasicSignatureKeygenError::TransientInternalError { internal_error })
+        if internal_error.contains("IO error")
+    ));
+}
+
+pub fn should_sign_verifiably_with_generated_node_signing_key(csp_vault: Arc<dyn CspVault>) {
     let csp_pk = csp_vault
-        .gen_key_pair(AlgorithmId::Ed25519)
+        .gen_node_signing_key_pair()
         .expect("failed to generate keys");
     let pk_bytes = match csp_pk {
         CspPublicKey::Ed25519(pk_bytes) => pk_bytes,
@@ -53,7 +86,7 @@ pub fn should_sign_and_verify_with_generated_ed25519_key_pair(csp_vault: Arc<dyn
 
 pub fn should_not_basic_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn CspVault>) {
     let public_key = csp_vault
-        .gen_key_pair(AlgorithmId::Ed25519)
+        .gen_node_signing_key_pair()
         .expect("failed to generate keys");
 
     let msg = "sample message";

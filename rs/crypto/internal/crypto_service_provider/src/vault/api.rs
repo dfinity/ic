@@ -48,9 +48,9 @@ pub enum CspBasicSignatureError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspBasicSignatureKeygenError {
-    UnsupportedAlgorithm { algorithm: AlgorithmId },
     InternalError { internal_error: String },
     DuplicateKeyId { key_id: KeyId },
+    TransientInternalError { internal_error: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -192,16 +192,21 @@ pub trait BasicSignatureCspVault {
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError>;
 
-    /// Generates a public/private key pair.
+    /// Generates a node signing public/private key pair.
     ///
-    /// # Arguments
-    /// * `algorithm_id` specifies the signature algorithm
     /// # Returns
     /// The key ID and the public key of the keypair
-    fn gen_key_pair(
-        &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
+    /// # Errors
+    /// * `CspBasicSignatureKeygenError::InternalError` if there is an internal
+    ///   error (e.g., the public key in the public key store is already set).
+    /// * `CspBasicSignatureKeygenError::DuplicateKeyId` if there already
+    ///   exists a secret key in the store for the secret key ID derived from
+    ///   the public part of the randomly generated key pair. This error
+    ///   most likely indicates a bad randomness source.
+    /// * `CspBasicSignatureKeygenError::TransientInternalError` if there is a
+    ///   transient internal error, e.g,. an IO error when writing a key to
+    ///   disk, or an RPC error when calling a remote CSP vault.
+    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
 }
 
 /// Operations of `CspVault` related to multi-signatures

@@ -58,10 +58,8 @@ pub trait TarpcCspVault {
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError>;
 
-    // Corresponds to `BasicSignatureCspVault.gen_key_pair()`.
-    async fn gen_key_pair(
-        algorithm_id: AlgorithmId,
-    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
+    // Corresponds to `BasicSignatureCspVault.gen_node_signing_key_pair()`.
+    async fn gen_node_signing_key_pair() -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
 
     // Corresponds to `MultiSignatureCspVault.multi_sign()`.
     async fn multi_sign(

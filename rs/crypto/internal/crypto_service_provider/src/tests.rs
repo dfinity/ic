@@ -186,7 +186,7 @@ mod csp_tests {
 
     #[test]
     fn should_contain_newly_generated_secret_key_from_store() {
-        let (csp, public_key) = csp_with_key_pair();
+        let (csp, public_key) = csp_with_node_signing_key_pair();
         let key_id = KeyId::from(&public_key);
 
         let is_contained_in_sks_store = csp
@@ -198,7 +198,7 @@ mod csp_tests {
 
     #[test]
     fn should_sign_and_verify_with_newly_generated_secret_key_from_store() {
-        let (csp, public_key) = csp_with_key_pair();
+        let (csp, public_key) = csp_with_node_signing_key_pair();
         let key_id = KeyId::from(&public_key);
         let message = "Hello world!".as_bytes();
 
@@ -239,10 +239,10 @@ mod csp_tests {
         assert!(verification.is_ok());
     }
 
-    fn csp_with_key_pair() -> (Csp, CspPublicKey) {
+    fn csp_with_node_signing_key_pair() -> (Csp, CspPublicKey) {
         let csp = Csp::with_rng(csprng());
         let public_key = csp
-            .gen_key_pair(AlgorithmId::Ed25519)
+            .gen_node_signing_key_pair()
             .expect("error generating public/private key pair");
         (csp, public_key)
     }
