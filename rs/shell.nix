@@ -59,6 +59,7 @@ in
       nativeBuildInputs = [
         # same tools for linux and darwin
         pkgs.coreutils
+        pkgs.curl
         pkgs.nc
 
         # for vulnerability audit
