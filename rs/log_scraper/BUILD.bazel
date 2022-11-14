@@ -1,0 +1,54 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/async_utils",
+    "//rs/config",
+    "//rs/ic_p8s_service_discovery/log",
+    "//rs/service_discovery",
+    "//rs/monitoring/metrics",
+    "//rs/http_endpoints/metrics",
+    "//rs/types/types",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:crossbeam",
+    "@crate_index//:crossbeam-channel",
+    "@crate_index//:futures-util",
+    "@crate_index//:humantime",
+    "@crate_index//:humantime-serde",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-term",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:slog_derive",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "log_scraper",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "log_scraper",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "log_scraper_test",
+    aliases = ALIASES,
+    crate = ":log_scraper",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

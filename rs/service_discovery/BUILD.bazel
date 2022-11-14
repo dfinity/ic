@@ -1,0 +1,71 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/async_utils",
+    "//rs/config",
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/monitoring/metrics",
+    "//rs/http_endpoints/metrics",
+    "//rs/protobuf",
+    "//rs/registry/client",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/local_registry",
+    "//rs/registry/local_store",
+    "//rs/registry/local_store/artifacts",
+    "//rs/registry/nns_data_provider",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:anyhow",
+    "@crate_index//:crossbeam",
+    "@crate_index//:crossbeam-channel",
+    "@crate_index//:futures-util",
+    "@crate_index//:humantime",
+    "@crate_index//:humantime-serde",
+    "@crate_index//:hyper",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-term",
+    "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:slog_derive",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities",
+    "@crate_index//:itertools",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "service_discovery",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "service_discovery",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "service_discovery_test",
+    aliases = ALIASES,
+    crate = ":service_discovery",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

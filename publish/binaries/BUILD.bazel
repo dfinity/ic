@@ -33,6 +33,7 @@ BINARIES = {
     "state-tool": "//rs/state_tool:state-tool",
     "system-tests": "//rs/tests:system-tests",
     "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
+    "log-scraper": "//rs/log_scraper:log_scraper",
 }
 
 [opt_debug_binary(

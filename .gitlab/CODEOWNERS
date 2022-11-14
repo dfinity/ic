@@ -226,6 +226,8 @@
 /rs/validator/                          @dfinity-lab/teams/execution-owners
 /rs/workload_generator/                 @dfinity-lab/teams/runtime-owners
 /rs/xnet/                               @dfinity-lab/teams/message-routing-owners
+/rs/log_scraper                         @dfinity-lab/teams/release-team
+/rs/service_discovery                   @dfinity-lab/teams/release-team
 
 # Scalability suite is currently owned by both node-team and networking team
 # Most individual benchmarks are owned by individual teams
