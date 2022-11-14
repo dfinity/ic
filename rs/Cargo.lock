@@ -13752,6 +13752,7 @@ dependencies = [
  "json5",
  "k256",
  "lazy_static",
+ "leb128",
  "lifeline",
  "maplit",
  "nix 0.23.0",

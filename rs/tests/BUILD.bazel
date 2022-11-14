@@ -100,6 +100,7 @@ DEPENDENCIES = [
     "@crate_index//:json5",
     "@crate_index//:k256",
     "@crate_index//:lazy_static",
+    "@crate_index//:leb128",
     "@crate_index//:maplit",
     "@crate_index//:nix",
     "@crate_index//:openssh-keys",
