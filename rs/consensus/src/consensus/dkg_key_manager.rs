@@ -353,11 +353,22 @@ impl DkgKeyManager {
                             break result;
                         }
 
+                        Ok(LoadTranscriptResult::NodeNotInCommittee) => {
+                            info!(
+                                logger,
+                                "Finished loading public parts of transcript with id {:?} \
+                                (signing key unavailable since this node is not part of the committee)", 
+                                dkg_id
+                            );
+                            break result;
+                        }
+
                         // Arguments passed to crypto are invalid, should never happen
                         Ok(val) => {
                             error!(
                                 logger,
-                                "The DKG transcript with id {:?} couldn't be loaded: {:?}",
+                                "Could only load public parts of transcript with id {:?} \
+                                (signing key unavailable: {:?})",
                                 dkg_id,
                                 val
                             );
