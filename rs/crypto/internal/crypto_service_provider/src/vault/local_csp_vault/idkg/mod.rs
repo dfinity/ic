@@ -27,6 +27,9 @@ use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
+#[cfg(test)]
+mod tests;
+
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     IDkgProtocolCspVault for LocalCspVault<R, S, C, P>
 {

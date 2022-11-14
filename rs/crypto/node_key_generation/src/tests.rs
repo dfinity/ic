@@ -97,19 +97,6 @@ fn ensure_node_keys_are_generated_correctly(node_pks: &CurrentNodePublicKeys, no
 }
 
 #[test]
-fn should_correctly_generate_idkg_dealing_encryption_key() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let mut csp = csp_for_config(&config, None);
-        let public_key = generate_idkg_dealing_encryption_keys(&mut csp)
-            .expect("error generation I-DKG dealing encryption keys");
-        assert_eq!(public_key.version, 0);
-        assert_eq!(public_key.algorithm, AlgorithmIdProto::MegaSecp256k1 as i32);
-        assert!(!public_key.key_value.is_empty());
-        assert!(public_key.proof_data.is_none());
-    })
-}
-
-#[test]
 #[should_panic(expected = "inconsistent key material")]
 fn should_panic_if_node_has_inconsistent_keys() {
     let (temp_crypto, _node_keys) = crypto_with_node_keys_generation(
@@ -527,12 +514,25 @@ mod tls {
 }
 
 mod idkg {
-    use super::generate_idkg_dealing_encryption_keys;
-    use super::local_csp_in_temp_dir;
+    use super::*;
     use crate::IDkgDealingEncryptionKeysGenerationError;
     use std::fs;
     use std::fs::Permissions;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn should_correctly_generate_idkg_dealing_encryption_key() {
+        CryptoConfig::run_with_temp_config(|config| {
+            let mut csp = csp_for_config(&config, None);
+            let public_key = generate_idkg_dealing_encryption_keys(&mut csp)
+                .expect("error generation I-DKG dealing encryption keys");
+            assert_eq!(public_key.version, 0);
+            assert_eq!(public_key.algorithm, AlgorithmIdProto::MegaSecp256k1 as i32);
+            assert!(!public_key.key_value.is_empty());
+            assert!(public_key.proof_data.is_none());
+            assert!(public_key.timestamp.is_none());
+        })
+    }
 
     #[test]
     fn should_fail_to_generate_idkg_dealing_encryption_keys_when_crypto_root_dir_write_protected() {

@@ -86,6 +86,7 @@ rust_test(
         "//rs/crypto/internal/csp_test_utils",
         "//rs/crypto/node_key_generation",
         "//rs/crypto/test_utils",
+        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/types/types_test_utils",
         "@crate_index//:lazy_static",
         "@crate_index//:mockall_0_7_2",

@@ -5001,6 +5001,7 @@ dependencies = [
  "ic-crypto-secrets-containers",
  "ic-crypto-sha",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
  "ic-logger",

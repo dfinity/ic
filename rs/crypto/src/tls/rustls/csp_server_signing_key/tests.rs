@@ -114,6 +114,6 @@ fn local_csp_server() -> (
     Arc<LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>>,
     TempDir,
 ) {
-    let (vault, temp_dir) = LocalCspVault::new_in_temp_dir();
+    let (vault, temp_dir) = LocalCspVault::new_in_temp_dir(OsRng);
     (Arc::new(vault), temp_dir)
 }

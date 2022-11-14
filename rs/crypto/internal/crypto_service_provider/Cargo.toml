@@ -40,7 +40,7 @@ parking_lot = "0.12.1"
 prost = "0.11.0"
 rand = "0.8"
 rand_chacha = "0.3"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { version = "1.0.99", features = ["derive"] }
 serde_cbor = "0.11.1"
 simple_asn1 = "0.6.1"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
@@ -60,6 +60,7 @@ ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
 ic-crypto-internal-csp-protobuf-generator = { path = "./protobuf_generator" }
 ic-crypto-node-key-generation = { path = "../../node_key_generation" }
 ic-crypto-test-utils = { path = "../../test_utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 lazy_static = "1.4.0"
