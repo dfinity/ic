@@ -542,7 +542,7 @@ fn dts_works_in_cleanup_callback() {
                 .other_side(b)
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_code().reject_message().reject())
-                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1000)),
+                .on_cleanup(wasm().stable_grow(1).stable64_fill(0, 0, 1000)),
             (0, 1000),
         )
         .build();
@@ -622,7 +622,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
                 .on_reply(
                     wasm()
                         .stable_grow(1280)
-                        .stable64_write(0, 0, 1000)
+                        .stable64_fill(0, 0, 1000)
                         .message_payload()
                         .append_and_reply(),
                 ),
@@ -723,7 +723,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
                 .other_side(b)
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_code().reject_message().reject())
-                .on_cleanup(wasm().stable_grow(1280).stable64_write(0, 0, 1000)),
+                .on_cleanup(wasm().stable_grow(1280).stable64_fill(0, 0, 1000)),
             (0, 1000),
         )
         .build();
@@ -917,7 +917,7 @@ fn dts_abort_works_in_cleanup_callback() {
                 .other_side(b)
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_code().reject_message().reject())
-                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1000)),
+                .on_cleanup(wasm().stable_grow(1).stable64_fill(0, 0, 1000)),
             (0, 1000),
         )
         .build();
@@ -1002,7 +1002,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
                 .on_reply(
                     wasm()
                         .stable_grow(1)
-                        .stable64_write(0, 0, 1)
+                        .stable64_fill(0, 0, 1)
                         .message_payload()
                         .append_and_reply(),
                 ),
@@ -1046,11 +1046,11 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
                 .on_reply(
                     wasm()
                         .stable_grow(1)
-                        .stable64_write(0, 0, 1)
+                        .stable64_fill(0, 0, 1)
                         .reply_data_append()
                         .trap(),
                 )
-                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1)),
+                .on_cleanup(wasm().stable_grow(1).stable64_fill(0, 0, 1)),
             (0, transferred_cycles),
         )
         .build();
@@ -1105,11 +1105,11 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
                 .on_reply(
                     wasm()
                         .stable_grow(1)
-                        .stable64_write(0, 0, 1)
+                        .stable64_fill(0, 0, 1)
                         .reply_data_append()
                         .trap(),
                 )
-                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1).trap()),
+                .on_cleanup(wasm().stable_grow(1).stable64_fill(0, 0, 1).trap()),
             (0, transferred_cycles),
         )
         .build();
@@ -1271,7 +1271,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
             call_args().other_side(b.clone()).on_reply(
                 wasm()
                     .stable64_grow(1)
-                    .stable64_write(0, 0, 10_000)
+                    .stable64_fill(0, 0, 10_000)
                     .call_with_cycles(
                         b_id.get(),
                         "update",
@@ -1389,7 +1389,7 @@ fn dts_response_concurrent_cycles_change_fails() {
             call_args().other_side(b.clone()).on_reply(
                 wasm()
                     .stable64_grow(1)
-                    .stable64_write(0, 0, 10_000)
+                    .stable64_fill(0, 0, 10_000)
                     .call_with_cycles(
                         b_id.get(),
                         "update",
@@ -1528,7 +1528,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
                 .on_reply(
                     wasm()
                         .stable64_grow(1)
-                        .stable64_write(0, 0, 10_000)
+                        .stable64_fill(0, 0, 10_000)
                         .call_with_cycles(
                             b_id.get(),
                             "update",
@@ -1536,7 +1536,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
                             transferred_cycles.into_parts(),
                         ),
                 )
-                .on_cleanup(wasm().stable64_grow(2).stable64_write(0, 0, 10_000)),
+                .on_cleanup(wasm().stable64_grow(2).stable64_fill(0, 0, 10_000)),
         )
         .build();
 
@@ -1701,10 +1701,10 @@ fn dts_uninstall_with_aborted_response() {
                 .on_reply(
                     wasm()
                         .stable64_grow(1)
-                        .stable64_write(0, 0, 10_000)
-                        .stable64_write(0, 0, 10_000)
-                        .stable64_write(0, 0, 10_000)
-                        .stable64_write(0, 0, 10_000),
+                        .stable64_fill(0, 0, 10_000)
+                        .stable64_fill(0, 0, 10_000)
+                        .stable64_fill(0, 0, 10_000)
+                        .stable64_fill(0, 0, 10_000),
                 ),
         )
         .build();

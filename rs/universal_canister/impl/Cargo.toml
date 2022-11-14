@@ -1,9 +1,10 @@
 [package]
-name = "universal_canister"
+name = "universal-canister"
 version = "0.8.0"
 edition = "2021"
 
 [dependencies]
+candid = "0.8.1"
+serde = "1"
 wee_alloc = "0.4.3"
 lazy_static = "1.4.0"
-ic-universal-canister = { path = "../../universal_canister/lib" }

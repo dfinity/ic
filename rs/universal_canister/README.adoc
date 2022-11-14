@@ -13,14 +13,14 @@ To make modifications to the universal canister:
     cargo install ic-cdk-optimizer
 
     # Reduce the Wasm binary size
-    ic-cdk-optimizer target/wasm32-unknown-unknown/release/universal_canister.wasm --output universal_canister.wasm
+    ic-cdk-optimizer target/wasm32-unknown-unknown/release/universal-canister.wasm --output universal-canister.wasm
 
     # Move reduced wasm into the /lib directory.
-    mv universal_canister.wasm ../lib/src/universal_canister.wasm
+    mv universal-canister.wasm ../lib/src/universal-canister.wasm
 
     # When done making changes and you're ready to push a change,
     # you need to update the checksum in /lib.
-    sha256sum ../lib/src/universal_canister.wasm
+    sha256sum ../lib/src/universal-canister.wasm
 
     # Take the output of the command above and paste it as the value of UNIVERSAL_CANISTER_WASM_SHA256
     # in lib/src/lib.rs

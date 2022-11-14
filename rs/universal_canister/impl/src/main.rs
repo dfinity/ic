@@ -1,7 +1,43 @@
-use ic_universal_canister::Ops;
+/* TODO(VER-1997): enable this code
+use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+*/
+use candid::Principal;
 use std::convert::TryInto;
+use universal_canister::Ops;
 
 mod api;
+
+/* TODO(VER-1997): enable this code
+// Canister http_request types
+
+#[derive(CandidType, Deserialize)]
+pub struct HttpHeader {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct HttpResponse {
+    pub status: u128,
+    pub headers: Vec<HttpHeader>,
+    pub body: Vec<u8>,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct TransformArg {
+    pub response: HttpResponse,
+    pub context: Vec<u8>,
+}
+
+fn http_reply_with_body(body: &Vec<u8>) -> Vec<u8> {
+    Encode!(&HttpResponse {
+        status: 200 as u128,
+        headers: vec![],
+        body: body.clone(),
+    })
+    .unwrap()
+}
+*/
 
 // A simple dynamically typed stack
 
@@ -226,13 +262,9 @@ fn eval(ops_bytes: OpsBytes) {
                 stack.push_blob(api::stable64_read(offset, size))
             }
             Ops::StableWrite64 => {
-                let length = stack.pop_int64();
-                let byte = stack.pop_int64();
+                let data = stack.pop_blob();
                 let offset = stack.pop_int64();
-
-                let data = vec![byte as u8; length as usize];
-
-                api::stable64_write(offset, &data);
+                api::stable64_write(offset, &data)
             }
             Ops::CyclesAvailable128 => stack.push_blob(api::cycles_available128()),
             Ops::CyclesBalance128 => stack.push_blob(api::balance128()),
@@ -275,6 +307,35 @@ fn eval(ops_bytes: OpsBytes) {
                 *GLOBAL_COUNTER.lock().unwrap() = c;
             }
             Ops::GetGlobalCounter => stack.push_int64(*GLOBAL_COUNTER.lock().unwrap()),
+            Ops::GetPerformanceCounter => {
+                let _type = stack.pop_int();
+                stack.push_int64(api::performance_counter(_type))
+            }
+            Ops::MsgMethodName => stack.push_blob(api::method_name()),
+            Ops::ParsePrincipal => {
+                let arg = stack.pop_blob();
+                stack.push_blob(Principal::from_slice(&arg).to_string().as_bytes().to_vec())
+            }
+            Ops::SetTransform => set_transform(stack.pop_blob()),
+            /* TODO(VER-1997): enable this code
+            Ops::GetHttpReplyWithBody => {
+                let body = stack.pop_blob();
+                stack.push_blob(http_reply_with_body(&body));
+            }
+            Ops::GetHttpTransformContext => {
+                let arg = Decode!(stack.pop_blob().as_ref(), TransformArg).unwrap();
+                stack.push_blob(arg.context);
+            }
+            */
+            Ops::StableFill64 => {
+                let length = stack.pop_int64();
+                let byte = stack.pop_int64();
+                let offset = stack.pop_int64();
+
+                let data = vec![byte as u8; length as usize];
+
+                api::stable64_write(offset, &data);
+            }
         }
     }
 }
@@ -288,6 +349,12 @@ fn update() {
 fn query() {
     setup();
     eval(&api::arg_data());
+}
+
+#[export_name = "canister_query transform"]
+fn transform() {
+    setup();
+    eval(&get_transform());
 }
 
 #[export_name = "canister_init"]
@@ -373,6 +440,16 @@ fn set_global_timer_method(data: Vec<u8>) {
 }
 fn get_global_timer_method() -> Vec<u8> {
     GLOBAL_TIMER_METHOD.lock().unwrap().clone()
+}
+
+lazy_static! {
+    static ref TRANSFORM: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+}
+fn set_transform(data: Vec<u8>) {
+    *TRANSFORM.lock().unwrap() = data;
+}
+fn get_transform() -> Vec<u8> {
+    TRANSFORM.lock().unwrap().clone()
 }
 
 /* A variable to store what to execute in canister_inspect_message */

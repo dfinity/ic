@@ -34,7 +34,7 @@ pub fn can_access_big_stable_memory(env: TestEnv) {
             let size = 1024;
             // Write 1KiB of 42s to an index above 4GiB, should succeed.
             canister
-                .update(wasm().stable64_write(big_offset, data, size).reply())
+                .update(wasm().stable64_fill(big_offset, data, size).reply())
                 .await
                 .unwrap();
 
@@ -77,7 +77,7 @@ pub fn can_handle_out_of_bounds_access(env: TestEnv) {
             let size = 1024;
             // Write 1KiB of 42s to an index above 10GiB, should fail.
             let res = canister
-                .update(wasm().stable64_write(big_offset, data, size).reply())
+                .update(wasm().stable64_fill(big_offset, data, size).reply())
                 .await;
             assert_reject(res, RejectCode::CanisterError);
 
@@ -119,7 +119,7 @@ pub fn can_handle_overflows_when_indexing_stable_memory(env: TestEnv) {
             let size = 1024;
             // Write 1KiB of 42s to an offset that can't fit in 64 bits, should fail.
             let res = canister
-                .update(wasm().stable64_write(big_offset, data, size).reply())
+                .update(wasm().stable64_fill(big_offset, data, size).reply())
                 .await;
             assert_reject(res, RejectCode::CanisterError);
 
@@ -275,7 +275,7 @@ pub fn canister_traps_if_32_bit_api_used_on_big_memory(env: TestEnv) {
                 .unwrap();
 
             canister
-                .update(wasm().stable64_write(10, 42, 1024).reply())
+                .update(wasm().stable64_fill(10, 42, 1024).reply())
                 .await
                 .unwrap();
 
