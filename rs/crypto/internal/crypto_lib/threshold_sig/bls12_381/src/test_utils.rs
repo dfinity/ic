@@ -1,5 +1,5 @@
 //! Utilities for testing BLS12-381 threshold signing and key generation.
-use crate::ni_dkg::groth20_bls12_381::types::BTENode;
+use crate::ni_dkg::groth20_bls12_381::types::BTENodeBytes;
 use ic_crypto_internal_seed::Seed;
 use ic_types::NumberOfNodes;
 use rand::seq::IteratorRandom;
@@ -43,9 +43,9 @@ pub fn malformed_secret_threshold_key_test_vectors() -> Vec<([u8; 32], bool, Str
     ]
 }
 
-/// Check that components of a BTENode struct aren't logged
+/// Check that components of a BTENodeBytes struct aren't logged
 /// in a given debug string.
-pub fn assert_bte_node_components_are_redacted(node: &BTENode, debug_str: &str) {
+pub fn assert_bte_node_components_are_redacted(node: &BTENodeBytes, debug_str: &str) {
     let a_str = format!("{:?}", node.a);
     assert!(!debug_str.contains(&a_str));
 

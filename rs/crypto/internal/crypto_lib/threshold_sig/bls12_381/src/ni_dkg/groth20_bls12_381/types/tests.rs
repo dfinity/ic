@@ -3,7 +3,7 @@ use crate::test_utils::assert_bte_node_components_are_redacted;
 
 #[test]
 fn should_redact_bte_node_debug() {
-    let node = BTENode {
+    let node = BTENodeBytes {
         tau: vec![1, 2, 3],
         a: G1Bytes([1; G1Bytes::SIZE]),
         b: G2Bytes([1; G2Bytes::SIZE]),
@@ -22,7 +22,7 @@ fn should_redact_bte_node_debug() {
 
 #[test]
 fn should_redact_fs_encryption_secret_key_debug() {
-    let node = BTENode {
+    let node = BTENodeBytes {
         tau: vec![1, 2, 3],
         a: G1Bytes([1; G1Bytes::SIZE]),
         b: G2Bytes([1; G2Bytes::SIZE]),

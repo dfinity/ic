@@ -18,12 +18,12 @@ proptest! {
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
 
         let (_pk, mut sk) = kgen(&associated_data, sys, &mut rng);
-        assert!(sk.current().is_some());
+        assert!(!sk.is_exhausted());
 
         for i in 0..100 {
             let next_epoch = tau_from_epoch(Epoch::from(i));
             sk.update_to(&next_epoch, sys, &mut rng);
-            assert!(sk.current().is_some());
+            assert!(!sk.is_exhausted());
         }
     }
     #[test]
@@ -36,14 +36,14 @@ proptest! {
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
 
         let (_pk, mut sk) = kgen(&associated_data, sys, &mut rng);
-        assert!(sk.current().is_some());
+        assert!(!sk.is_exhausted());
 
         let mut sorted_epochs : Vec<u32>= epochs;
         sorted_epochs.sort_unstable();
         for epoch in sorted_epochs{
             let tau = tau_from_epoch(Epoch::from(epoch));
             sk.update_to(&tau, sys, &mut rng);
-            assert!(sk.current().is_some());
+            assert!(!sk.is_exhausted());
         }
     }
     #[test]
@@ -54,15 +54,15 @@ proptest! {
 
         let (_pk, mut sk) = kgen(&associated_data, sys, &mut rng);
 
-        assert!(sk.current().is_some());
+        assert!(!sk.is_exhausted());
         for i in (0..100).rev() {
             let next_epoch = tau_from_epoch(Epoch::from(MAXIMUM_EPOCH - i));
             sk.update_to(&next_epoch, sys, &mut rng);
-            assert!(sk.current().is_some());
+            assert!(!sk.is_exhausted());
         }
         // The key should be at the last epoch, the next update should erase the secret key.
         sk.update(sys, &mut rng);
-        assert!(sk.current().is_none());
+        assert!(sk.is_exhausted());
     }
 
 }

@@ -14,8 +14,8 @@ mod clib {
     pub use crate::api::keygen as threshold_keygen;
     pub use crate::types::SecretKeyBytes as ThresholdSecretKeyBytes;
 }
-use super::conversions::{public_key_into_miracl, trusted_secret_key_into_miracl};
 use super::*;
+use crate::ni_dkg::fs_ni_dkg::forward_secure::{PublicKeyWithPop, SecretKey};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPop;
 use internal_types::Epoch;
 
@@ -46,7 +46,7 @@ fn epoch_of_a_new_key_should_be_zero() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 3u8, 0u8, 6u8];
     let key_set =
         create_forward_secure_key_pair(Seed::from_bytes(&[12u8; 32]), KEY_GEN_ASSOCIATED_DATA);
-    let epoch = epoch_from_miracl_secret_key(&trusted_secret_key_into_miracl(&key_set.secret_key));
+    let epoch = SecretKey::deserialize(&key_set.secret_key).epoch();
     assert_eq!(epoch.get(), 0);
 }
 
@@ -56,9 +56,7 @@ fn single_stepping_a_key_should_increment_current_epoch() {
 
     let key_with_pop =
         create_forward_secure_key_pair(Seed::from_bytes(&[89u8; 32]), KEY_GEN_ASSOCIATED_DATA);
-    let secret_key = key_with_pop.secret_key.clone();
-
-    let mut secret_key = trusted_secret_key_into_miracl(&secret_key);
+    let mut secret_key = SecretKey::deserialize(&key_with_pop.secret_key);
     for epoch in 4..8 {
         let secret_key_epoch = Epoch::from(epoch);
         update_key_inplace_to_epoch(
@@ -66,7 +64,7 @@ fn single_stepping_a_key_should_increment_current_epoch() {
             secret_key_epoch,
             Seed::from_bytes(&[9u8; 32]),
         );
-        let key_epoch = epoch_from_miracl_secret_key(&secret_key).get();
+        let key_epoch = secret_key.epoch().get();
         assert_eq!(
             key_epoch, epoch,
             "Deleted epoch {} but key epoch is {}\n",
@@ -220,7 +218,7 @@ fn encrypted_messages_should_decrypt() {
 
     let secret_keys = forward_secure_keys
         .iter()
-        .map(|key| trusted_secret_key_into_miracl(&key.secret_key));
+        .map(|key| SecretKey::deserialize(&key.secret_key));
     let messages = key_message_pairs.iter().map(|key_message| &key_message.1);
     for ((secret_key, message), node_index) in secret_keys.zip(messages).zip(0..) {
         let plaintext_maybe = decrypt(
@@ -291,7 +289,7 @@ fn decryption_should_fail_below_epoch() {
 
     let secret_keys = forward_secure_keys
         .iter()
-        .map(|key| trusted_secret_key_into_miracl(&key.secret_key));
+        .map(|key| SecretKey::deserialize(&key.secret_key));
     let messages = key_message_pairs.iter().map(|key_message| &key_message.1);
     #[allow(clippy::iter_next_loop)] // We test just one of the receivers
     for ((mut secret_key, message), node_index) in secret_keys.zip(messages).zip(0..).next() {
@@ -460,7 +458,8 @@ fn verify_forward_secure_key(
     pop: &FsEncryptionPop,
     associated_data: &[u8],
 ) -> Result<(), ()> {
-    let crypto_public_key_with_pop = public_key_into_miracl((public_key, pop))?;
+    let crypto_public_key_with_pop = PublicKeyWithPop::deserialize(public_key, pop).ok_or(())?;
+
     if crypto_public_key_with_pop.verify(associated_data) {
         Ok(())
     } else {

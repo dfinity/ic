@@ -9,7 +9,7 @@ use ic_crypto_internal_test_vectors::ed25519::{
 use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_1_PK;
 use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::{
-    BTENode, FsEncryptionKeySet, FsEncryptionSecretKey,
+    BTENodeBytes, FsEncryptionKeySet, FsEncryptionSecretKey,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -100,7 +100,7 @@ fn should_redact_csp_secret_key_fs_encryption_debug() {
             public_key: FsEncryptionPublicKey(G1Bytes([1u8; G1Bytes::SIZE])),
             secret_key: FsEncryptionSecretKey {
                 bte_nodes: vec![
-                    BTENode {
+                    BTENodeBytes {
                         tau: vec![1, 2, 3],
                         a: G1Bytes([1; G1Bytes::SIZE]),
                         b: G2Bytes([1; G2Bytes::SIZE]),

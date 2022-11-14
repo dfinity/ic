@@ -1,7 +1,4 @@
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::{
-    fs_ni_dkg::forward_secure::PublicKeyWithPop as ClibFsNiDkgPublicKey,
-    groth20_bls12_381::public_key_into_miracl,
-};
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::PublicKeyWithPop as ClibFsNiDkgPublicKey;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPop;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -37,7 +34,7 @@ fn clib_fs_ni_dkg_pubkey_from_csp_pubkey_with_pop(
         (
             CspFsEncryptionPublicKey::Groth20_Bls12_381(pubkey),
             CspFsEncryptionPop::Groth20WithPop_Bls12_381(pop),
-        ) => public_key_into_miracl((pubkey, pop)),
+        ) => ClibFsNiDkgPublicKey::deserialize(pubkey, pop).ok_or(()),
         _ => Err(()),
     }
 }
