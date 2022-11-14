@@ -1,0 +1,45 @@
+[package]
+name = "service-discovery"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ic-interfaces = { path = "../interfaces" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-local-registry = { path = "../registry/local_registry" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
+ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
+ic-registry-local-store = { path = "../registry/local_store" }
+ic-registry-local-store-artifacts = { path = "../registry/local_store/artifacts" }
+ic-types = { path = "../types/types" }
+thiserror = "1.0"
+ic-metrics = { path = "../monitoring/metrics" }
+ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
+prometheus = { version = "0.12.0", features = [ "process" ] }
+hyper = { version ="0.14.18", features = ["full"] }
+anyhow = "1.0.31"
+slog = { version = "2.5.2", features = ["nested-values"] }
+slog-async = { version = "2.5", features = ["nested-values"] }
+slog-term = "2.6.0"
+slog_derive = "0.2.0"
+serde = { version = "1.0.115", features = ["derive"] }
+serde_json = "1.0.54"
+ic-utils = { path = "../utils/" }
+ic-registry-keys = { path = "../registry/keys" }
+tokio = { version = "1.15.0", features = ["full"] }
+crossbeam = "0.8.0"
+crossbeam-channel = "0.5.5"
+ic-async-utils = { path = "../async_utils" }
+futures-util = "0.3.5"
+humantime = "2.0"
+humantime-serde = "1.0"
+ic-config = { path = "../config" }
+tempfile = "3.1.0"
+
+[dev-dependencies]
+ic-test-utilities = { path = "../test_utilities" }
+itertools = "0.10.0"

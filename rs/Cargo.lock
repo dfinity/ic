@@ -9809,6 +9809,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a94d21414c1f4a51209ad204c1776a3d0765002c76c6abcb602a6f09f1e881c7"
 
 [[package]]
+name = "log-scraper"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 3.2.14",
+ "crossbeam 0.8.2",
+ "crossbeam-channel 0.5.6",
+ "futures-util",
+ "humantime 2.1.0",
+ "humantime-serde",
+ "ic-async-utils",
+ "ic-config",
+ "ic-http-endpoints-metrics",
+ "ic-metrics",
+ "ic-p8s-service-discovery-log",
+ "ic-types",
+ "service-discovery",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "slog_derive",
+ "tokio",
+]
+
+[[package]]
 name = "log4rs"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12744,6 +12769,47 @@ dependencies = [
  "quote 1.0.17",
  "rustversion",
  "syn 1.0.96",
+]
+
+[[package]]
+name = "service-discovery"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossbeam 0.8.2",
+ "crossbeam-channel 0.5.6",
+ "futures-util",
+ "humantime 2.1.0",
+ "humantime-serde",
+ "hyper",
+ "ic-async-utils",
+ "ic-config",
+ "ic-http-endpoints-metrics",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-local-registry",
+ "ic-registry-local-store",
+ "ic-registry-local-store-artifacts",
+ "ic-registry-nns-data-provider",
+ "ic-test-utilities",
+ "ic-types",
+ "ic-utils 0.8.0",
+ "itertools 0.10.3",
+ "prometheus 0.12.0",
+ "serde",
+ "serde_json",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "slog_derive",
+ "tempfile",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
