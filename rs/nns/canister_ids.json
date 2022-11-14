@@ -35,7 +35,9 @@
     "small01": "renrk-eyaaa-aaaaa-aaada-cai"
   },
   "sns-wasm": {
-    "local": "qaa6y-5yaaa-aaaaa-aaafa-cai"
+    "local": "qaa6y-5yaaa-aaaaa-aaafa-cai",
+    "mainnet": "qaa6y-5yaaa-aaaaa-aaafa-cai",
+    "small01": "qaa6y-5yaaa-aaaaa-aaafa-cai"
   },
   "identity": {
     "local": "rdmx6-jaaaa-aaaaa-aaadq-cai",
