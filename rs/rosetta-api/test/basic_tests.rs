@@ -448,13 +448,17 @@ fn verify_balances(scribe: &Scribe, blocks: &Blocks, start_idx: usize) {
         }
     }
     let mut sum_icpt = Tokens::ZERO;
+    let latest = blocks.get_latest_verified_hashed_block().unwrap();
     for amount in scribe.balance_history.back().unwrap().values() {
         sum_icpt += *amount;
     }
-    assert_eq!(
-        (Tokens::MAX - sum_icpt).unwrap(),
-        blocks.balance_book.token_pool
-    );
+    let accounts = blocks.get_all_accounts().unwrap();
+    let mut total = Tokens::ZERO;
+    for account in accounts {
+        let amount = blocks.get_account_balance(&account, &latest.index).unwrap();
+        total += amount;
+    }
+    assert_eq!(sum_icpt, total);
 }
 
 async fn query_search_transactions(
@@ -622,9 +626,7 @@ async fn load_from_store_test() {
 
     drop(req_handler);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
-    blocks.load_from_store().unwrap();
-
+    let blocks = Blocks::new_persistent(location).unwrap();
     assert!(blocks.is_verified_by_idx(&10).unwrap());
     assert!(blocks.get_account_balance(&some_acc, &10).is_ok());
     assert!(!blocks.is_verified_by_idx(&20).unwrap());
@@ -637,8 +639,6 @@ async fn load_from_store_test() {
     drop(blocks);
 
     let mut blocks = Blocks::new_persistent(location).unwrap();
-    blocks.load_from_store().unwrap();
-
     verify_balances(&scribe, &blocks, 0);
 
     // now load pruned
@@ -657,9 +657,7 @@ async fn load_from_store_test() {
 
     drop(req_handler);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
-    blocks.load_from_store().unwrap();
-
+    let blocks = Blocks::new_persistent(location).unwrap();
     verify_balances(&scribe, &blocks, 10);
 
     let ledger = Arc::new(TestLedger::from_blockchain(blocks));
@@ -710,8 +708,7 @@ async fn load_unverified_test() {
 
     drop(blocks);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
-    blocks.load_from_store().unwrap();
+    let blocks = Blocks::new_persistent(location).unwrap();
     let last_verified = (scribe.blockchain.len() - 1) as u64;
     blocks.set_hashed_block_to_verified(&last_verified).unwrap();
 
