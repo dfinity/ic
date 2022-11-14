@@ -123,7 +123,7 @@ impl Upgrade {
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
         // recovery scenario. Check if we're in an NNS subnet recovery case and download
         // the new registry if needed.
-        if cup.cup.signature.signature.clone().get().0.is_empty() {
+        if cup.cup.signature.signature.get_ref().0.is_empty() {
             info!(
                 self.logger,
                 "The latest CUP (registry version={}, height={}) is unsigned: a subnet genesis/recovery is in progress",
@@ -302,7 +302,7 @@ impl Upgrade {
         cup: &CatchUpPackage,
         old_cup_height: Option<Height>,
     ) {
-        let is_unsigned_cup = cup.signature.signature.clone().get().0.is_empty();
+        let is_unsigned_cup = cup.signature.signature.get_ref().0.is_empty();
         let new_height = cup.content.height();
         if is_unsigned_cup && old_cup_height.is_some() && Some(new_height) > old_cup_height {
             info!(
