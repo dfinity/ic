@@ -310,12 +310,8 @@ struct TestState<'a> {
 }
 
 impl<'a> TestState<'a> {
-    fn new() -> Self {
-        // Note that the tests should pass with or without
-        // `cranelift_nan_canonicalization`. But we only use `wasmtime` with
-        // this feature enabled, so it's better to test the case we actually
-        // use.
-        let engine = Engine::new(Config::new().cranelift_nan_canonicalization(true)).unwrap();
+    fn new(config: &Config) -> Self {
+        let engine = Engine::new(config).unwrap();
         let mut store = Store::new(&engine, ());
         let mut linker = Linker::new(&engine);
         define_spectest_exports(&mut linker, &mut store);
@@ -393,6 +389,22 @@ impl<'a> TestState<'a> {
         let params: Vec<_> = params.into_iter().map(Option::unwrap).collect();
         self.run_with_wasmtime(name, &params, id)
     }
+
+    fn validate_with_wasmtime(
+        &self,
+        wasm: &[u8],
+        wat: &QuoteWat,
+        text: &str,
+        path: &PathBuf,
+    ) -> Result<(), String> {
+        wasmtime::Module::validate(&self.engine, wasm).map_err(|e| {
+            format!(
+                "Failed to validate module with wasmtime: {} in {}",
+                e,
+                location(wat, text, path)
+            )
+        })
+    }
 }
 
 fn is_component(wat: &QuoteWat) -> bool {
@@ -423,7 +435,12 @@ fn location(wat: &QuoteWat, text: &str, path: &PathBuf) -> String {
     span_location(span, text, path)
 }
 
-fn parse_and_encode(wat: &mut QuoteWat, text: &str, path: &PathBuf) -> Result<Vec<u8>, String> {
+fn parse_and_encode(
+    wat: &mut QuoteWat,
+    text: &str,
+    path: &PathBuf,
+    enable_multi_memory: bool,
+) -> Result<Vec<u8>, String> {
     let wasm = wat.encode().map_err(|e| {
         format!(
             "Error encoding wat from wast: {} in {}",
@@ -431,27 +448,13 @@ fn parse_and_encode(wat: &mut QuoteWat, text: &str, path: &PathBuf) -> Result<Ve
             location(wat, text, path)
         )
     })?;
-    let module = wasm_transform::Module::parse(&wasm)
+    let module = wasm_transform::Module::parse(&wasm, enable_multi_memory)
         .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))?;
     module
         .encode()
         .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))
-}
-
-fn validate_with_wasmtime(
-    wasm: &[u8],
-    wat: &QuoteWat,
-    text: &str,
-    path: &PathBuf,
-) -> Result<(), String> {
-    let engine = wasmtime::Engine::new(&wasmtime::Config::default()).unwrap();
-    wasmtime::Module::validate(&engine, wasm).map_err(|e| {
-        format!(
-            "Failed to validate module with wasmtime: {} in {}",
-            e,
-            location(wat, text, path)
-        )
-    })
+        .unwrap();
+    Ok(wasm)
 }
 
 fn run_directive<'a>(
@@ -459,6 +462,7 @@ fn run_directive<'a>(
     text: &str,
     path: &PathBuf,
     test_state: &mut TestState<'a>,
+    multi_memory_enabled: bool,
 ) -> Result<(), String> {
     match directive {
         // Here we check that an example module can be parsed and encoded with
@@ -468,8 +472,8 @@ fn run_directive<'a>(
             if is_component(&wat) {
                 return Ok(());
             }
-            let wasm = parse_and_encode(&mut wat, text, path)?;
-            validate_with_wasmtime(&wasm, &wat, text, path)?;
+            let wasm = parse_and_encode(&mut wat, text, path, multi_memory_enabled)?;
+            test_state.validate_with_wasmtime(&wasm, &wat, text, path)?;
             test_state.create_instance(&wasm, wat_id(&wat));
             Ok(())
         }
@@ -480,8 +484,11 @@ fn run_directive<'a>(
             module: mut wat,
             message,
         } => {
-            if let Ok(wasm) = parse_and_encode(&mut wat, text, path) {
-                if validate_with_wasmtime(&wasm, &wat, text, path).is_ok() {
+            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled) {
+                if test_state
+                    .validate_with_wasmtime(&wasm, &wat, text, path)
+                    .is_ok()
+                {
                     return Err(format!(
                         "Should not have been able to validate malformed module ({}) {}",
                         message,
@@ -501,8 +508,11 @@ fn run_directive<'a>(
             module: mut wat,
             message,
         } => {
-            if let Ok(wasm) = parse_and_encode(&mut wat, text, path) {
-                if validate_with_wasmtime(&wasm, &wat, text, path).is_ok() {
+            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled) {
+                if test_state
+                    .validate_with_wasmtime(&wasm, &wat, text, path)
+                    .is_ok()
+                {
                     return Err(format!(
                         "Should not have been able to validate invalid module ({}) {}",
                         message,
@@ -635,8 +645,8 @@ fn run_directive<'a>(
             message,
         } => {
             let mut wat = QuoteWat::Wat(module);
-            let wasm = parse_and_encode(&mut wat, text, path)?;
-            validate_with_wasmtime(&wasm, &wat, text, path)?;
+            let wasm = parse_and_encode(&mut wat, text, path, multi_memory_enabled)?;
+            test_state.validate_with_wasmtime(&wasm, &wat, text, path)?;
             match test_state.try_create_instance(&wasm) {
                 Ok(_) => Err(format!(
                     "Should not have been able to link assert_unlinkable at {} of type {}",
@@ -660,15 +670,25 @@ fn run_directive<'a>(
     }
 }
 
-fn test_spec_file(path: &PathBuf) -> Result<(), String> {
+fn test_spec_file(
+    path: &PathBuf,
+    config: &Config,
+    parsing_multi_memory_enabled: bool,
+) -> Result<(), String> {
     let contents = fs::read_to_string(&path).unwrap();
     let buf = ParseBuffer::new(&contents).unwrap();
 
     let wast = wast::parser::parse::<Wast>(&buf).unwrap();
     let mut error_string = String::new();
-    let mut test_state = TestState::new();
+    let mut test_state = TestState::new(config);
     for directive in wast.directives {
-        if let Err(e) = run_directive(directive, &contents, path, &mut test_state) {
+        if let Err(e) = run_directive(
+            directive,
+            &contents,
+            path,
+            &mut test_state,
+            parsing_multi_memory_enabled,
+        ) {
             writeln!(error_string, "{}", e).unwrap();
         }
     }
@@ -679,15 +699,8 @@ fn test_spec_file(path: &PathBuf) -> Result<(), String> {
     }
 }
 
-/// This test runs on data from the WebAssembly spec testsuite. The suite is not
-/// incuded in our repo, but is imported by Bazel using the `new_git_repository`
-/// rule in `WORKSPACE.bazel`.
-///
-/// If you need to look at the test `wast` files directly they can be found in
-/// `bazel-ic/external/wasm_spec_testsuite/` after building this test.
-#[test]
-fn spec_testsuite() {
-    let dir_path = "./external/wasm_spec_testsuite".to_string();
+fn run_testsuite(subdirectory: &str, config: &Config, parsing_multi_memory_enabled: bool) {
+    let dir_path = format!("./external/wasm_spec_testsuite/{}", subdirectory);
     let directory = std::fs::read_dir(dir_path).unwrap();
     let mut test_files = vec![];
     for entry in directory {
@@ -704,7 +717,7 @@ fn spec_testsuite() {
     let mut errors = vec![];
     for path in test_files {
         println!("Running tests on file {:?}", path);
-        if let Err(e) = test_spec_file(&path) {
+        if let Err(e) = test_spec_file(&path, config, parsing_multi_memory_enabled) {
             errors.push(e);
         }
     }
@@ -712,4 +725,45 @@ fn spec_testsuite() {
     if !errors.is_empty() {
         panic!("Errors from spec tests: {}", errors.join("\n"));
     }
+}
+
+/// Note that the tests should pass with or without
+/// `cranelift_nan_canonicalization`. But we only use `wasmtime` with
+/// this feature enabled, so it's better to test the case we actually
+/// use.
+fn default_config() -> Config {
+    let mut config = Config::default();
+    config.cranelift_nan_canonicalization(true);
+    config
+}
+
+/// These tests run on data from the WebAssembly spec testsuite. The suite is not
+/// incuded in our repo, but is imported by Bazel using the `new_git_repository`
+/// rule in `WORKSPACE.bazel`.
+///
+/// If you need to look at the test `wast` files directly they can be found in
+/// `bazel-ic/external/wasm_spec_testsuite/` after building this test.
+#[test]
+fn spec_testsuite() {
+    run_testsuite("", &default_config(), false)
+}
+
+#[test]
+fn multi_memory_testsuite() {
+    run_testsuite(
+        "proposals/multi-memory",
+        default_config().wasm_multi_memory(true),
+        true,
+    )
+}
+
+#[test]
+fn memory64_testsuite() {
+    let mut config = Config::default();
+    config.wasm_memory64(true);
+    run_testsuite(
+        "proposals/memory64",
+        default_config().wasm_memory64(true),
+        false,
+    )
 }

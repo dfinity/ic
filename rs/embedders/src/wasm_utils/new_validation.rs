@@ -1174,7 +1174,7 @@ pub(super) fn validate_wasm_binary(
     config: &EmbeddersConfig,
 ) -> Result<WasmValidationDetails, WasmValidationError> {
     can_compile(wasm)?;
-    let module = Module::parse(wasm.as_slice())
+    let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
     let imports_details = validate_import_section(&module)?;
     let reserved_exports = validate_export_section(&module)?;
