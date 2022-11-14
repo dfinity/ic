@@ -407,8 +407,8 @@ fn now_seconds() -> u64 {
 /// Returns a real ledger stub that communicates with the specified
 /// canister, which is assumed to be the ICP production ledger or a
 /// canister that implements that same interface.
-fn create_real_icp_ledger(id: CanisterId) -> ic_nervous_system_common::ledger::LedgerCanister {
-    ic_nervous_system_common::ledger::LedgerCanister::new(id)
+fn create_real_icp_ledger(id: CanisterId) -> ic_nervous_system_common::ledger::IcpLedgerCanister {
+    ic_nervous_system_common::ledger::IcpLedgerCanister::new(id)
 }
 
 /// Returns a real ledger stub that communicates with the specified

@@ -117,7 +117,7 @@ use fixtures::{prorated_neuron_age, LedgerBuilder, NNSStateChange, ProposalNeuro
 pub mod common;
 
 use common::increase_dissolve_delay_raw;
-use ic_nervous_system_common::ledger::Ledger;
+use ic_nervous_system_common::ledger::IcpLedger;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 

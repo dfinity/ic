@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use candid::{Decode, Encode};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
@@ -178,7 +178,7 @@ impl FakeDriver {
     }
 
     /// Constructs a `Ledger` that interacts with this driver.
-    pub fn get_fake_ledger(&self) -> Box<dyn Ledger> {
+    pub fn get_fake_ledger(&self) -> Box<dyn IcpLedger> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
         })
@@ -237,7 +237,7 @@ impl FakeDriver {
 }
 
 #[async_trait]
-impl Ledger for FakeDriver {
+impl IcpLedger for FakeDriver {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,

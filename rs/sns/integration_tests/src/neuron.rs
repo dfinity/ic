@@ -15,7 +15,7 @@ use ic_sns_governance::pb::v1::governance::SnsMetadata;
 use ic_sns_governance::pb::v1::manage_neuron::StakeMaturity;
 use ic_sns_governance::{
     governance::Governance,
-    ledger::Ledger,
+    ledger::ICRC1Ledger,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
     pb::v1::{
         governance,
@@ -763,8 +763,12 @@ fn test_disburse_maturity_to_different_account() {
             .await;
         let expected_balance =
             (balance_before_disbursal + Tokens::from_e8s(response.amount_disbursed_e8s)).unwrap();
-        // Neuron should now have 50% of what it has earned
-        assert_eq!(neuron.maturity_e8s_equivalent, earned_maturity_e8s / 2);
+        // Neuron should now have 50% of what it has earned.  We calculate this via subtraction of what was disbursed
+        // to handle cases with odd numbers.
+        assert_eq!(
+            earned_maturity_e8s - response.amount_disbursed_e8s,
+            neuron.maturity_e8s_equivalent
+        );
         assert_eq!(expected_balance, balance_after_disbursal);
 
         Ok(())
@@ -1058,7 +1062,7 @@ async fn zero_total_reward_shares() {
 
     struct EmptyLedger {}
     #[async_trait]
-    impl Ledger for EmptyLedger {
+    impl ICRC1Ledger for EmptyLedger {
         async fn transfer_funds(
             &self,
             _amount_e8s: u64,
@@ -1173,6 +1177,7 @@ async fn zero_total_reward_shares() {
         proto.try_into().unwrap(),
         Box::new(environment),
         Box::new(EmptyLedger {}),
+        Box::new(EmptyLedger {}),
     );
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;
@@ -1225,7 +1230,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     // Has nonzero supply, but does not support transfers.
     struct StubLedger {}
     #[async_trait]
-    impl Ledger for StubLedger {
+    impl ICRC1Ledger for StubLedger {
         async fn transfer_funds(
             &self,
             _amount_e8s: u64,
@@ -1385,6 +1390,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     let mut governance = Governance::new(
         proto.try_into().unwrap(),
         Box::new(environment),
+        Box::new(StubLedger {}),
         Box::new(StubLedger {}),
     );
     // Prevent gc.

@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     governance::{Environment, Governance, CMC},
@@ -61,7 +61,7 @@ impl Environment for DegradedEnv {
 }
 
 #[async_trait]
-impl Ledger for DegradedEnv {
+impl IcpLedger for DegradedEnv {
     async fn transfer_funds(
         &self,
         _: u64,

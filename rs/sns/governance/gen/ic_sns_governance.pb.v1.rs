@@ -326,6 +326,57 @@ pub struct UpgradeSnsControlledCanister {
     #[prost(bytes = "vec", tag = "2")]
     pub new_canister_wasm: ::prost::alloc::vec::Vec<u8>,
 }
+/// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
+/// target principal.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TransferSnsTreasuryFunds {
+    #[prost(enumeration = "transfer_sns_treasury_funds::TransferFrom", tag = "1")]
+    pub from_treasury: i32,
+    /// The amount to transfer, in e8s.
+    #[prost(uint64, tag = "2")]
+    pub amount_e8s: u64,
+    /// An optional memo to use for the transfer.
+    #[prost(uint64, optional, tag = "3")]
+    pub memo: ::core::option::Option<u64>,
+    /// The principal to transfer the funds to.
+    #[prost(message, optional, tag = "4")]
+    pub to_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// An (optional) Subaccount of the principal to transfer the funds to.
+    #[prost(message, optional, tag = "5")]
+    pub to_subaccount: ::core::option::Option<Subaccount>,
+}
+/// Nested message and enum types in `TransferSnsTreasuryFunds`.
+pub mod transfer_sns_treasury_funds {
+    /// Whether to make the transfer from the NNS ledger (in ICP) or
+    /// to make the transfer from the SNS ledger (in SNS tokens).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum TransferFrom {
+        Unspecified = 0,
+        IcpTreasury = 1,
+        SnsTokenTreasury = 2,
+    }
+    impl TransferFrom {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                TransferFrom::Unspecified => "TRANSFER_FROM_UNSPECIFIED",
+                TransferFrom::IcpTreasury => "TRANSFER_FROM_ICP_TREASURY",
+                TransferFrom::SnsTokenTreasury => "TRANSFER_FROM_SNS_TOKEN_TREASURY",
+            }
+        }
+    }
+}
 /// A proposal function to change the values of SNS metadata.
 /// Fields with None values will remain unchanged.
 #[derive(
@@ -388,7 +439,7 @@ pub struct Proposal {
     ///
     /// See `impl From<&Action> for u64` in src/types.rs for the implementation
     /// of this mapping.
-    #[prost(oneof = "proposal::Action", tags = "4, 5, 6, 7, 8, 9, 10, 11, 12")]
+    #[prost(oneof = "proposal::Action", tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13")]
     pub action: ::core::option::Option<proposal::Action>,
 }
 /// Nested message and enum types in `Proposal`.
@@ -461,6 +512,10 @@ pub mod proposal {
         /// Id = 8
         #[prost(message, tag = "12")]
         ManageSnsMetadata(super::ManageSnsMetadata),
+        /// Transfer SNS treasury funds (ICP or SNS token) to an account.
+        /// Id = 9.
+        #[prost(message, tag = "13")]
+        TransferSnsTreasuryFunds(super::TransferSnsTreasuryFunds),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]

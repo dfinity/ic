@@ -1,13 +1,3 @@
-use std::cmp::Ordering;
-use std::collections::btree_map::{BTreeMap, Entry};
-use std::collections::btree_set::BTreeSet;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::ops::Bound::{Excluded, Unbounded};
-use std::str::FromStr;
-use std::string::ToString;
-
 use crate::account_from_proto;
 use crate::canister_control::{
     get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -33,8 +23,8 @@ use crate::pb::v1::{
     ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
     NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
     NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-    ProposalRewardStatus, RewardEvent, Tally, UpgradeSnsControlledCanister,
-    UpgradeSnsToNextVersion, Vote,
+    ProposalRewardStatus, RewardEvent, Tally, TransferSnsTreasuryFunds,
+    UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
 };
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Account, Subaccount};
@@ -44,12 +34,21 @@ use lazy_static::lazy_static;
 use maplit::hashset;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::cmp::Ordering;
+use std::collections::btree_map::{BTreeMap, Entry};
+use std::collections::btree_set::BTreeSet;
+use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
+use std::convert::TryInto;
+use std::ops::Bound::{Excluded, Unbounded};
+use std::str::FromStr;
+use std::string::ToString;
 use strum::IntoEnumIterator;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-use crate::ledger::Ledger;
+use crate::ledger::ICRC1Ledger;
 use crate::neuron::{
     NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
     MAX_LIST_NEURONS_RESULTS,
@@ -67,15 +66,18 @@ use crate::proposal::{
 
 use crate::pb::v1::governance::{SnsMetadata, UpgradeInProgress, Version};
 use crate::pb::v1::manage_neuron_response::StakeMaturityResponse;
+use crate::pb::v1::transfer_sns_treasury_funds::TransferFrom;
 use crate::sns_upgrade::{
     get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, UpgradeSnsParams,
 };
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
 use dfn_core::api::{id, spawn, CanisterId};
+use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use ic_nervous_system_common::{ledger, NervousSystemError};
 use ic_nervous_system_root::ChangeCanisterProposal;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 
 lazy_static! {
     pub static ref NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER: NervousSystemFunction =
@@ -104,6 +106,15 @@ pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
 /// Prefixes each log line for this canister.
 pub fn log_prefix() -> String {
     "[Governance] ".into()
+}
+/// The static MEMO used when calculating the SNS Treasury subaccount.
+pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
+
+/// Converts bytes to a subaccount
+pub fn bytes_to_subaccount(bytes: &[u8]) -> Result<ic_icrc1::Subaccount, GovernanceError> {
+    bytes.try_into().map_err(|_| {
+        GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Invalid subaccount")
+    })
 }
 
 impl NeuronPermissionType {
@@ -533,7 +544,10 @@ pub struct Governance {
     pub env: Box<dyn Environment>,
 
     /// Implementation of the interface with the SNS ledger canister.
-    ledger: Box<dyn Ledger>,
+    ledger: Box<dyn ICRC1Ledger>,
+
+    // Implementation of the interface pointing to the NNS's ICP ledger canister
+    nns_ledger: Box<dyn ICRC1Ledger>,
 
     /// Cached data structure that (for each proposal function_id) maps a followee to
     /// the set of its followers. It is the inverse of the mapping from follower
@@ -589,7 +603,8 @@ impl Governance {
     pub fn new(
         proto: ValidGovernanceProto,
         env: Box<dyn Environment>,
-        ledger: Box<dyn Ledger>,
+        ledger: Box<dyn ICRC1Ledger>,
+        nns_ledger: Box<dyn ICRC1Ledger>,
     ) -> Self {
         let mut proto = proto.into_inner();
 
@@ -621,6 +636,7 @@ impl Governance {
             proto,
             env,
             ledger,
+            nns_ledger,
             function_followee_index: BTreeMap::new(),
             principal_to_neuron_ids_index: BTreeMap::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
@@ -731,13 +747,6 @@ impl Governance {
                 memo
             ),
         )
-    }
-
-    /// Converts bytes to a subaccount
-    fn bytes_to_subaccount(bytes: &[u8]) -> Result<ic_icrc1::Subaccount, GovernanceError> {
-        bytes.try_into().map_err(|_| {
-            GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Invalid subaccount")
-        })
     }
 
     /// Locks a given neuron, signaling there is an ongoing neuron operation.
@@ -1926,6 +1935,9 @@ impl Governance {
             proposal::Action::ManageSnsMetadata(manage_sns_metadata) => {
                 self.perform_manage_sns_metadata(manage_sns_metadata)
             }
+            proposal::Action::TransferSnsTreasuryFunds(transfer) => {
+                self.perform_transfer_sns_treasury_funds(transfer).await
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             proposal::Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -2283,6 +2295,68 @@ impl Governance {
         );
 
         Ok(())
+    }
+
+    async fn perform_transfer_sns_treasury_funds(
+        &mut self,
+        transfer: TransferSnsTreasuryFunds,
+    ) -> Result<(), GovernanceError> {
+        let to = Account {
+            owner: transfer
+                .to_principal
+                .expect("Expected transfer to have a target principal"),
+            subaccount: transfer.to_subaccount.as_ref().map(|s| {
+                bytes_to_subaccount(&s.subaccount[..])
+                    .expect("Couldn't transform transfer.subaccount to Subaccount")
+            }),
+        };
+        match transfer.from_treasury() {
+            TransferFrom::IcpTreasury => self
+                .nns_ledger
+                .transfer_funds(
+                    transfer.amount_e8s,
+                    NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
+                    None,
+                    to,
+                    transfer.memo.unwrap_or(0),
+                )
+                .await
+                .map(|_| ())
+                .map_err(|e| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Error making ICP treasury transfer: {}", e),
+                    )
+                }),
+            TransferFrom::SnsTokenTreasury => {
+                let transaction_fee_e8s = self.transaction_fee_e8s();
+                // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
+                let treasury_subaccount = compute_distribution_subaccount_bytes(
+                    self.env.canister_id().get(),
+                    TREASURY_SUBACCOUNT_NONCE,
+                );
+                self.ledger
+                    .transfer_funds(
+                        transfer.amount_e8s,
+                        transaction_fee_e8s,
+                        Some(treasury_subaccount),
+                        to,
+                        transfer.memo.unwrap_or(0),
+                    )
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| {
+                        GovernanceError::new_with_message(
+                            ErrorType::External,
+                            format!("Error making SNS Token treasury transfer: {}", e),
+                        )
+                    })
+            }
+            TransferFrom::Unspecified => Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Invalid 'from_treasury' in transfer.",
+            )),
+        }
     }
 
     /// Returns the nervous system parameters
@@ -4242,7 +4316,7 @@ fn get_neuron_id_from_manage_neuron(
         ));
     }
 
-    Ok(NeuronId::from(Governance::bytes_to_subaccount(
+    Ok(NeuronId::from(bytes_to_subaccount(
         &manage_neuron.subaccount,
     )?))
 }
@@ -4302,7 +4376,7 @@ mod tests {
     struct DoNothingLedger {}
 
     #[async_trait]
-    impl Ledger for DoNothingLedger {
+    impl ICRC1Ledger for DoNothingLedger {
         async fn transfer_funds(
             &self,
             _amount_e8s: u64,
@@ -4397,7 +4471,7 @@ mod tests {
         }
 
         #[async_trait]
-        impl Ledger for TestLedger {
+        impl ICRC1Ledger for TestLedger {
             async fn transfer_funds(
                 &self,
                 _amount_e8s: u64,
@@ -4468,6 +4542,7 @@ mod tests {
                         transfer_funds_arrived: transfer_funds_arrived.clone(),
                         transfer_funds_continue: transfer_funds_continue.clone(),
                     }),
+                    Box::new(DoNothingLedger {}),
                 );
 
                 // Step 2: Execute code under test.
@@ -4924,6 +4999,7 @@ mod tests {
             .unwrap(),
             Box::new(NativeEnvironment::default()),
             Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
         );
         let swap_canister_id = governance.proto.swap_canister_id_or_panic();
 
@@ -4967,6 +5043,7 @@ mod tests {
             .try_into()
             .unwrap(),
             Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
+            Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         );
 
@@ -5083,6 +5160,7 @@ mod tests {
             .try_into()
             .unwrap(),
             Box::new(NativeEnvironment::default()),
+            Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         );
 
@@ -5424,6 +5502,7 @@ mod tests {
             .unwrap(),
             Box::new(env),
             Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
         );
 
         // When we execute the proposal
@@ -5566,6 +5645,7 @@ mod tests {
             .unwrap(),
             Box::new(env),
             Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
         );
 
         assert_eq!(
@@ -5642,6 +5722,7 @@ mod tests {
             .unwrap(),
             Box::new(env),
             Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
         );
 
         assert_eq!(
@@ -5717,6 +5798,7 @@ mod tests {
             .try_into()
             .unwrap(),
             Box::new(env),
+            Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         );
 
@@ -5825,6 +5907,7 @@ mod tests {
             .try_into()
             .unwrap(),
             Box::new(env),
+            Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         );
 
@@ -6034,6 +6117,7 @@ mod tests {
             .unwrap(),
             Box::new(env),
             Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
         );
 
         let valid = NervousSystemFunction {
@@ -6058,6 +6142,7 @@ mod tests {
                 .try_into()
                 .expect("Failed validating governance proto"),
             Box::new(NativeEnvironment::default()),
+            Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         )
     }
@@ -6385,6 +6470,7 @@ mod tests {
             .try_into()
             .unwrap(),
             Box::new(env),
+            Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         );
 

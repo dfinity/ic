@@ -7,7 +7,7 @@ use ic_nervous_system_common::NervousSystemError;
 use ic_sns_governance::governance::{
     governance_minting_account, neuron_account_id, Governance, TimeWarp, ValidGovernanceProto,
 };
-use ic_sns_governance::ledger::Ledger;
+use ic_sns_governance::ledger::ICRC1Ledger;
 use ic_sns_governance::pb::v1::manage_neuron::MergeMaturity;
 use ic_sns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use ic_sns_governance::pb::v1::neuron::{DissolveState, Followees};
@@ -297,7 +297,7 @@ impl SNSFixture {
 }
 
 #[async_trait]
-impl Ledger for SNSFixture {
+impl ICRC1Ledger for SNSFixture {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -629,7 +629,7 @@ impl SNS {
 }
 
 #[async_trait]
-impl Ledger for SNS {
+impl ICRC1Ledger for SNS {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -694,7 +694,7 @@ impl Environment for SNS {
     }
 }
 
-pub type LedgerTransform = Box<dyn FnOnce(Box<dyn Ledger>) -> Box<dyn Ledger>>;
+pub type LedgerTransform = Box<dyn FnOnce(Box<dyn ICRC1Ledger>) -> Box<dyn ICRC1Ledger>>;
 
 /// The SNSBuilder permits the declarative construction of an SNS fixture. All
 /// of the methods concern setting or querying what this initial state will
@@ -733,7 +733,10 @@ impl SNSBuilder {
             rng: StdRng::seed_from_u64(9539),
             ledger: self.ledger_builder.create(),
         });
-        let mut ledger: Box<dyn Ledger> = Box::new(fixture.clone());
+        let mut ledger: Box<dyn ICRC1Ledger> = Box::new(fixture.clone());
+        // TODO(NNS1-1831) - currently our interactions with NNS Ledger will not do anything useful or have
+        // separate accounts, but we have no tests that use it.  Need to update this to not affect SNS ledger state
+        let nns_ledger: Box<dyn ICRC1Ledger> = Box::new(fixture.clone());
         for t in self.ledger_transforms {
             ledger = t(ledger);
         }
@@ -741,7 +744,7 @@ impl SNSBuilder {
         let valid_governance = ValidGovernanceProto::try_from(self.governance).unwrap();
         let mut sns = SNS {
             fixture: fixture.clone(),
-            governance: Governance::new(valid_governance, Box::new(fixture), ledger),
+            governance: Governance::new(valid_governance, Box::new(fixture), ledger, nns_ledger),
             initial_state: None,
         };
         sns.capture_state();

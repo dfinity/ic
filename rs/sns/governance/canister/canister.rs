@@ -28,10 +28,12 @@ use dfn_core::{
 
 use ic_base_types::CanisterId;
 use ic_ic00_types::CanisterStatusResultV2;
+use ic_nervous_system_common::ledger::IcpLedgerCanister;
 use ic_nervous_system_common::{
     get_canister_status,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
+use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     ledger::LedgerCanister,
@@ -207,6 +209,7 @@ fn canister_init_(init_payload: GovernanceProto) {
             init_payload,
             Box::new(CanisterEnv::new()),
             Box::new(LedgerCanister::new(ledger_canister_id)),
+            Box::new(IcpLedgerCanister::new(NNS_LEDGER_CANISTER_ID)),
         ));
     }
 }

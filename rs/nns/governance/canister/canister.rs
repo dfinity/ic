@@ -26,7 +26,7 @@ use rand_chacha::ChaCha20Rng;
 
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{
-    ledger::LedgerCanister,
+    ledger::IcpLedgerCanister,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     MethodAuthzChange,
 };
@@ -293,7 +293,7 @@ fn canister_init_(init_payload: GovernanceProto) {
         GOVERNANCE = Some(Governance::new(
             init_payload,
             Box::new(CanisterEnv::new()),
-            Box::new(LedgerCanister::new(LEDGER_CANISTER_ID)),
+            Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
             Box::new(CMCCanister::new()),
         ));
     }

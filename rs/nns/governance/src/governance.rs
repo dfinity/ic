@@ -62,7 +62,9 @@ use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
 use dfn_core::api::spawn;
 use ic_crypto_sha::Sha256;
-use ic_nervous_system_common::{ledger, ledger::Ledger, validate_proposal_url, NervousSystemError};
+use ic_nervous_system_common::{
+    ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError,
+};
 use ic_sns_swap::pb::v1::RestoreDappControllersRequest;
 use icp_ledger::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
@@ -2010,7 +2012,7 @@ pub struct Governance {
     pub env: Box<dyn Environment>,
 
     /// Implementation of the interface with the Ledger canister.
-    ledger: Box<dyn Ledger>,
+    ledger: Box<dyn IcpLedger>,
 
     /// Implementation of the interface with the CMC canister.
     cmc: Box<dyn CMC>,
@@ -2060,7 +2062,7 @@ impl Governance {
     pub fn new(
         mut proto: GovernanceProto,
         env: Box<dyn Environment>,
-        ledger: Box<dyn Ledger>,
+        ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
         if proto.genesis_timestamp_seconds == 0 {
@@ -7746,7 +7748,7 @@ impl settle_community_fund_participation::Committed {
     async fn mint_to_sns_governance(
         &self,
         proposal_data: &ProposalData,
-        ledger: &'_ dyn Ledger,
+        ledger: &'_ dyn IcpLedger,
     ) -> Result<sns_swap_pb::Lifecycle, GovernanceError> {
         let amount_e8s = sum_cf_participants_e8s(&proposal_data.cf_participants);
 

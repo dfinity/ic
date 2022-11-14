@@ -4,6 +4,7 @@ type Action = variant {
   AddGenericNervousSystemFunction : NervousSystemFunction;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
+  TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   Unspecified : record {};
   ManageSnsMetadata : ManageSnsMetadata;
@@ -342,6 +343,13 @@ type Tally = record {
   yes : nat64;
   total : nat64;
   timestamp_seconds : nat64;
+};
+type TransferSnsTreasuryFunds = record {
+  from_treasury : int32;
+  to_principal : opt principal;
+  to_subaccount : opt Subaccount;
+  memo : opt nat64;
+  amount_e8s : nat64;
 };
 type UpgradeInProgress = record {
   mark_failed_at_seconds : nat64;

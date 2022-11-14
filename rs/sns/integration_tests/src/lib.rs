@@ -36,3 +36,6 @@ mod upgrade_canister;
 
 #[cfg(test)]
 mod governance;
+
+#[cfg(test)]
+mod sns_treasury;

@@ -7,7 +7,7 @@ use ic_base_types::CanisterId;
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::NervousSystemError;
-use ic_sns_governance::ledger::Ledger;
+use ic_sns_governance::ledger::ICRC1Ledger;
 use std::sync::atomic;
 use std::sync::atomic::Ordering as AtomicOrdering;
 
@@ -32,7 +32,7 @@ pub type LedgerObserver = USender<LedgerControlMessage>;
 
 /// A mock ledger to test interleavings of governance method calls.
 pub struct InterleavingTestLedger {
-    underlying: Box<dyn Ledger>,
+    underlying: Box<dyn ICRC1Ledger>,
     observer: LedgerObserver,
 }
 
@@ -44,7 +44,7 @@ impl InterleavingTestLedger {
     /// underlying ledger, or, alternatively, return an error. This is done
     /// through a one-shot channel, the sender side of which is sent to the
     /// observer.
-    pub fn new(underlying: Box<dyn Ledger>, observer: LedgerObserver) -> Self {
+    pub fn new(underlying: Box<dyn ICRC1Ledger>, observer: LedgerObserver) -> Self {
         InterleavingTestLedger {
             underlying,
             observer,
@@ -62,7 +62,7 @@ impl InterleavingTestLedger {
 }
 
 #[async_trait]
-impl Ledger for InterleavingTestLedger {
+impl ICRC1Ledger for InterleavingTestLedger {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,

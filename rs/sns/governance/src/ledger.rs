@@ -7,11 +7,8 @@ use ic_base_types::PrincipalId;
 use ic_icrc1::{endpoints::TransferArg, Account, Memo, Subaccount};
 use ic_icrc1_client::{ICRC1Client, Runtime};
 use ic_ledger_core::{block::BlockIndex, Tokens};
-use ic_nervous_system_common::ledger::Ledger as IcpLedger;
-use ic_nervous_system_common::ledger::LedgerCanister as IcpLedgerCanister;
+pub use ic_nervous_system_common::ledger::ICRC1Ledger;
 use ic_nervous_system_common::NervousSystemError;
-use icp_ledger::AccountIdentifier;
-use icp_ledger::Subaccount as IcpSubaccount;
 
 // A ICRC1 client runtime that uses dfn_* functionalities
 struct DfnRuntime {}
@@ -40,33 +37,6 @@ impl Runtime for DfnRuntime {
     }
 }
 
-/// A trait defining common patterns for accessing the ICRC1 Ledger canister.
-#[async_trait]
-pub trait Ledger: Send + Sync {
-    /// Transfers funds from one of this canister's subaccount to
-    /// the provided account.
-    ///
-    /// Returns the block height at which the transfer was recorded.
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: Account,
-        memo: u64,
-    ) -> Result<BlockIndex, NervousSystemError>;
-
-    /// Gets the total supply of tokens from the sum of all accounts except for the
-    /// minting canister's.
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError>;
-
-    /// Gets the account balance in Tokens of the given AccountIdentifier in the Ledger.
-    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError>;
-
-    /// Returns the CanisterId of the Ledger being accessed.
-    fn canister_id(&self) -> CanisterId;
-}
-
 pub struct LedgerCanister {
     client: ICRC1Client<DfnRuntime>,
 }
@@ -83,7 +53,7 @@ impl LedgerCanister {
 }
 
 #[async_trait]
-impl Ledger for LedgerCanister {
+impl ICRC1Ledger for LedgerCanister {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -144,47 +114,5 @@ impl Ledger for LedgerCanister {
     fn canister_id(&self) -> CanisterId {
         let principal_id = PrincipalId::from(self.client.ledger_canister_id);
         CanisterId::new(principal_id).expect("Expected the Ledger's target to be a Canister")
-    }
-}
-
-fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
-    AccountIdentifier::new(account.owner, account.subaccount.map(IcpSubaccount))
-}
-
-#[async_trait]
-impl Ledger for IcpLedgerCanister {
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: Account,
-        memo: u64,
-    ) -> Result<BlockIndex, NervousSystemError> {
-        <IcpLedgerCanister as IcpLedger>::transfer_funds(
-            self,
-            amount_e8s,
-            fee_e8s,
-            from_subaccount.map(IcpSubaccount),
-            icrc1_account_to_icp_accountidentifier(to),
-            memo,
-        )
-        .await
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        <IcpLedgerCanister as IcpLedger>::total_supply(self).await
-    }
-
-    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
-        <IcpLedgerCanister as IcpLedger>::account_balance(
-            self,
-            icrc1_account_to_icp_accountidentifier(account),
-        )
-        .await
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        self.id
     }
 }
