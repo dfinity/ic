@@ -50,16 +50,16 @@ pub fn test_threshold_ecdsa_complaint(handle: IcHandle, ctx: &ic_fondue::pot::Co
         .await;
 
         let agent = assert_create_agent(endpoint.url.as_str()).await;
-        let uni_can = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+        let msg_can = MessageCanister::new(&agent, endpoint.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+        let public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
             .await
             .unwrap();
         let signature = get_signature(
             &message_hash,
             Cycles::zero(),
             make_key(KEY_ID1),
-            &uni_can,
+            &msg_can,
             ctx,
         )
         .await

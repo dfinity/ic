@@ -22,7 +22,7 @@ Success:: nodes can be added/killed to/within the existing subnet.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_universal_canisters;
+use super::utils::rw_message::install_nns_and_message_canisters;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
@@ -36,9 +36,9 @@ use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::info;
 
-const UPDATE_MSG_1: &[u8] = b"This beautiful prose should be persisted for future generations";
-const UPDATE_MSG_2: &[u8] = b"And this beautiful prose should be persisted for future generations";
-const UPDATE_MSG_3: &[u8] = b"However this prose will NOT be persisted for future generations";
+const UPDATE_MSG_1: &str = "This beautiful prose should be persisted for future generations";
+const UPDATE_MSG_2: &str = "And this beautiful prose should be persisted for future generations";
+const UPDATE_MSG_3: &str = "However this prose will NOT be persisted for future generations";
 const UNASSIGNED_NODES_COUNT: usize = 3; // must be >= 3, currently tested for X=3, f=1 and N=4
 
 pub fn config(env: TestEnv) {
@@ -57,7 +57,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_universal_canisters(env.topology_snapshot());
+    install_nns_and_message_canisters(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
@@ -129,7 +129,7 @@ pub fn test(env: TestEnv) {
     // `update` messages).
     info!(logger, "Creating a canister using selected app node");
     let agent = block_on(assert_create_agent(app_node.get_public_url().as_str()));
-    let universal_canister = block_on(UniversalCanister::new(
+    let message_canister = block_on(MessageCanister::new(
         &agent,
         app_node.effective_canister_id(),
     ));
@@ -137,11 +137,11 @@ pub fn test(env: TestEnv) {
     // Assert that `update` call to the canister succeeds.
     info!(logger, "Assert that update call to the canister succeeds");
     let delay = create_delay(500, 300);
-    block_on(universal_canister.try_store_to_stable(0, UPDATE_MSG_1, delay.clone()))
+    block_on(message_canister.try_store_msg(UPDATE_MSG_1, delay.clone()))
         .expect("Update canister call failed.");
     assert_eq!(
-        block_on(universal_canister.try_read_stable(0, UPDATE_MSG_1.len() as u32)),
-        UPDATE_MSG_1.to_vec()
+        block_on(message_canister.try_read_msg()),
+        Ok(Some(UPDATE_MSG_1.to_string()))
     );
 
     // Kill floor(X/3) nodes.
@@ -161,11 +161,11 @@ pub fn test(env: TestEnv) {
         logger,
         "Assert that update call to the canister still succeeds"
     );
-    block_on(universal_canister.try_store_to_stable(0, UPDATE_MSG_2, delay.clone()))
+    block_on(message_canister.try_store_msg(UPDATE_MSG_2, delay.clone()))
         .expect("Update canister call failed.");
     assert_eq!(
-        block_on(universal_canister.try_read_stable(0, UPDATE_MSG_2.len() as u32)),
-        UPDATE_MSG_2.to_vec()
+        block_on(message_canister.try_read_msg()),
+        Ok(Some(UPDATE_MSG_2.to_string()))
     );
 
     // Kill one more node and break consensus.
@@ -178,5 +178,5 @@ pub fn test(env: TestEnv) {
 
     // Assert that `update` call to the canister now fails.
     info!(logger, "Assert that update call to the canister now fails");
-    assert!(block_on(universal_canister.try_store_to_stable(0, UPDATE_MSG_3, delay)).is_err());
+    assert!(block_on(message_canister.try_store_msg(UPDATE_MSG_3, delay)).is_err());
 }

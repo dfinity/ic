@@ -101,11 +101,11 @@ pub fn test(env: TestEnv) {
     info!(log, "Initial run to get public key.");
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let (canister_id, public_key) = block_on(async {
-        let uni_can = UniversalCanister::new(&agent, nns_node.effective_canister_id()).await;
-        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+        let msg_can = MessageCanister::new(&agent, nns_node.effective_canister_id()).await;
+        let public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
             .await
             .unwrap();
-        (uni_can.canister_id(), public_key)
+        (msg_can.canister_id(), public_key)
     });
     info!(
         log,
@@ -144,8 +144,8 @@ pub fn test(env: TestEnv) {
         );
         info!(log, "Run through ecdsa signature test.");
         let message_hash = [0xabu8; 32];
-        let uni_can = UniversalCanister::from_canister_id(&agent, canister_id);
-        let public_key_ = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+        let msg_can = MessageCanister::from_canister_id(&agent, canister_id);
+        let public_key_ = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
             .await
             .unwrap();
         assert_eq!(public_key, public_key_);
@@ -153,7 +153,7 @@ pub fn test(env: TestEnv) {
             &message_hash,
             Cycles::zero(),
             make_key(KEY_ID1),
-            &uni_can,
+            &msg_can,
             ctx,
         )
         .await

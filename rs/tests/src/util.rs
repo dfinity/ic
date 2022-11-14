@@ -13,6 +13,7 @@ use ic_config::ConfigOptional;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
+use ic_message::ForwardParams;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
@@ -47,6 +48,8 @@ pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// A short wasm module that is a legal canister binary.
 pub(crate) const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
+/// The following definition is a temporary work-around. Please do not copy!
+pub(crate) const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub(crate) const CFG_TEMPLATE_BYTES: &[u8] =
     include_bytes!("../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
@@ -389,6 +392,183 @@ impl<'a> UniversalCanister<'a> {
             .with_arg(payload.into())
             .call_and_wait(delay())
             .await
+    }
+}
+
+/// Provides an abstraction to the message canister.
+#[derive(Clone)]
+pub struct MessageCanister<'a> {
+    agent: &'a Agent,
+    canister_id: Principal,
+}
+
+impl<'a> MessageCanister<'a> {
+    /// Initializes a [MessageCanister] using the provided [Agent].
+    pub async fn new(agent: &'a Agent, effective_canister_id: PrincipalId) -> MessageCanister<'a> {
+        Self::new_with_params(agent, effective_canister_id, None, None)
+            .await
+            .expect("Could not create message canister.")
+    }
+
+    pub async fn try_new(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+    ) -> Result<MessageCanister<'a>, String> {
+        Self::new_with_params(agent, effective_canister_id, None, None).await
+    }
+
+    pub async fn new_with_retries(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        log: &slog::Logger,
+        timeout: Duration,
+        backoff: Duration,
+    ) -> MessageCanister<'a> {
+        retry_async(log, timeout, backoff, || async {
+            match Self::new_with_params(agent, effective_canister_id, None, None).await {
+                Ok(c) => Ok(c),
+                Err(e) => anyhow::bail!(e),
+            }
+        })
+        .await
+        .expect("Could not create message canister.")
+    }
+
+    pub async fn new_with_params(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        compute_allocation: Option<u64>,
+        cycles: Option<u128>,
+    ) -> Result<MessageCanister<'a>, String> {
+        // Create a canister.
+        let mgr = ManagementCanister::create(agent);
+        let canister_id = mgr
+            .create_canister()
+            .with_optional_compute_allocation(compute_allocation)
+            .as_provisional_create_with_amount(cycles)
+            .with_effective_canister_id(effective_canister_id)
+            .call_and_wait(delay())
+            .await
+            .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
+            .0;
+
+        // Install the universal canister.
+        mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
+            .call_and_wait(delay())
+            .await
+            .map_err(|err| format!("Couldn't install message canister: {}", err))?;
+        Ok(Self { agent, canister_id })
+    }
+
+    pub async fn new_with_cycles<C: Into<u128>>(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        cycles: C,
+    ) -> MessageCanister<'a> {
+        // Create a canister.
+        let mgr = ManagementCanister::create(agent);
+        let canister_id = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(Some(cycles.into()))
+            .with_effective_canister_id(effective_canister_id)
+            .call_and_wait(delay())
+            .await
+            .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+            .0;
+
+        // Install the universal canister.
+        mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
+            .call_and_wait(delay())
+            .await
+            .unwrap_or_else(|err| panic!("Couldn't install message canister: {}", err));
+
+        Self { agent, canister_id }
+    }
+
+    pub fn canister_id(&self) -> Principal {
+        self.canister_id
+    }
+
+    /// Initializes a message canister wrapper from a canister id. Does /NOT/
+    /// perform any installation operation on the runtime.
+    pub fn from_canister_id(agent: &'a Agent, canister_id: Principal) -> MessageCanister<'a> {
+        Self { agent, canister_id }
+    }
+
+    /// Forwards a message to the `receiver` that calls
+    /// `receiver.method(payload)` along with the specified amount of cycles
+    /// and returns the result.
+    pub async fn forward_with_cycles_to(
+        &self,
+        receiver: &Principal,
+        method: &str,
+        payload: Vec<u8>,
+        cycles: Cycles,
+    ) -> Result<Vec<u8>, AgentError> {
+        let params = ForwardParams {
+            receiver: Principal::from_slice(receiver.as_slice()),
+            method: method.to_string(),
+            cycles: cycles.get(),
+            payload,
+        };
+        self.agent
+            .update(&self.canister_id, "forward")
+            .with_arg(&Encode!(&params).unwrap())
+            .call_and_wait(delay())
+            .await
+            .map(|bytes| Decode!(&bytes, Vec<u8>).unwrap())
+    }
+
+    /// Forwards a message to the `receiver` that calls
+    /// `receiver.method(payload)` and returns the result.
+    pub async fn forward_to(
+        &self,
+        receiver: &Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<Vec<u8>, AgentError> {
+        self.forward_with_cycles_to(
+            receiver,
+            method,
+            payload,
+            Cycles::zero(), /* no cycles */
+        )
+        .await
+    }
+
+    pub async fn try_store_msg<P: Into<String>>(
+        &self,
+        msg: P,
+        delay: garcon::Delay,
+    ) -> Result<(), AgentError> {
+        self.agent
+            .update(&self.canister_id, "store")
+            .with_arg(&Encode!(&msg.into()).unwrap())
+            .call_and_wait(delay)
+            .await
+            .map(|_| ())
+    }
+
+    pub async fn store_msg<P: Into<String>>(&self, msg: P) {
+        self.try_store_msg(msg, delay())
+            .await
+            .unwrap_or_else(|err| panic!("Could not store message: {}", err))
+    }
+
+    pub async fn try_read_msg(&self) -> Result<Option<String>, String> {
+        self.agent
+            .query(&self.canister_id, "read")
+            .with_arg(&Encode!(&()).unwrap())
+            .call()
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| Decode!(r.as_slice(), Option<String>).map_err(|e| e.to_string()))
+    }
+
+    pub async fn read_msg(&self) -> Option<String> {
+        self.try_read_msg()
+            .await
+            .unwrap_or_else(|err| panic!("Could not read message: {}", err))
     }
 }
 

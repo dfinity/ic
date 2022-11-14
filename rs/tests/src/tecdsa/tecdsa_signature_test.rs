@@ -237,15 +237,15 @@ fn get_endpoints(handle: &IcHandle) -> Endpoints {
 
 pub(crate) async fn get_public_key(
     key_id: EcdsaKeyId,
-    uni_can: &UniversalCanister<'_>,
+    msg_can: &MessageCanister<'_>,
     ctx: &ic_fondue::pot::Context,
 ) -> Result<VerifyingKey, AgentError> {
-    get_public_key_with_logger(key_id, uni_can, &ctx.logger).await
+    get_public_key_with_logger(key_id, msg_can, &ctx.logger).await
 }
 
 pub(crate) async fn get_public_key_with_logger(
     key_id: EcdsaKeyId,
-    uni_can: &UniversalCanister<'_>,
+    msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<VerifyingKey, AgentError> {
     let public_key_request = ECDSAPublicKeyArgs {
@@ -256,7 +256,7 @@ pub(crate) async fn get_public_key_with_logger(
 
     let mut count = 0;
     let public_key = loop {
-        let res = uni_can
+        let res = msg_can
             .forward_to(
                 &Principal::management_canister(),
                 "ecdsa_public_key",
@@ -327,17 +327,17 @@ pub(crate) async fn get_signature(
     message_hash: &[u8; 32],
     cycles: Cycles,
     key_id: EcdsaKeyId,
-    uni_can: &UniversalCanister<'_>,
+    msg_can: &MessageCanister<'_>,
     ctx: &ic_fondue::pot::Context,
 ) -> Result<Signature, AgentError> {
-    get_signature_with_logger(message_hash, cycles, key_id, uni_can, &ctx.logger).await
+    get_signature_with_logger(message_hash, cycles, key_id, msg_can, &ctx.logger).await
 }
 
 pub(crate) async fn get_signature_with_logger(
     message_hash: &[u8; 32],
     cycles: Cycles,
     key_id: EcdsaKeyId,
-    uni_can: &UniversalCanister<'_>,
+    msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<Signature, AgentError> {
     let signature_request = SignWithECDSAArgs {
@@ -349,7 +349,7 @@ pub(crate) async fn get_signature_with_logger(
     let mut count = 0;
     let signature = loop {
         // Ask for a signature.
-        let res = uni_can
+        let res = msg_can
             .forward_with_cycles_to(
                 &Principal::management_canister(),
                 "sign_with_ecdsa",
@@ -502,16 +502,16 @@ pub fn test_threshold_ecdsa_signature_same_subnet(handle: IcHandle, ctx: &ic_fon
         )
         .await;
         let agent = assert_create_agent(app_endpoint.url.as_str()).await;
-        let uni_can = UniversalCanister::new(&agent, app_endpoint.effective_canister_id()).await;
+        let msg_can = MessageCanister::new(&agent, app_endpoint.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+        let public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
             .await
             .unwrap();
         let signature = get_signature(
             &message_hash,
             ECDSA_SIGNATURE_FEE,
             make_key(KEY_ID1),
-            &uni_can,
+            &msg_can,
             ctx,
         )
         .await
@@ -548,16 +548,16 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(
         let endpoint = endpoints.app_endpoint_2.unwrap();
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
-        let uni_can = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+        let msg_can = MessageCanister::new(&agent, endpoint.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx)
+        let public_key = get_public_key(make_key(KEY_ID2), &msg_can, ctx)
             .await
             .unwrap();
         let signature = get_signature(
             &message_hash,
             ECDSA_SIGNATURE_FEE,
             make_key(KEY_ID2),
-            &uni_can,
+            &msg_can,
             ctx,
         )
         .await
@@ -593,11 +593,11 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
         let endpoint = endpoints.app_endpoint_2.unwrap();
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
-        let uni_can = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+        let msg_can = MessageCanister::new(&agent, endpoint.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
 
         info!(ctx.logger, "Getting the public key to make sure the subnet has the latest registry changes and routing of ECDSA messages is working");
-        let _public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+        let _public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
             .await
             .unwrap();
 
@@ -606,7 +606,7 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
             &message_hash,
             ECDSA_SIGNATURE_FEE - Cycles::from(1u64),
             make_key(KEY_ID1),
-            &uni_can,
+            &msg_can,
             ctx,
         )
         .await
@@ -649,16 +649,16 @@ pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(
         .await;
 
         let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
-        let uni_can = UniversalCanister::new(&agent, nns_endpoint.effective_canister_id()).await;
+        let msg_can = MessageCanister::new(&agent, nns_endpoint.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx)
+        let public_key = get_public_key(make_key(KEY_ID2), &msg_can, ctx)
             .await
             .unwrap();
         let signature = get_signature(
             &message_hash,
             Cycles::zero(),
             make_key(KEY_ID2),
-            &uni_can,
+            &msg_can,
             ctx,
         )
         .await
@@ -680,7 +680,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
           .find(|s| s.subnet_type() == SubnetType::Application)
           .expect("Could not find application subnet.");
         let agent = assert_create_agent(nns_endpoint.get_public_url().as_str()).await;
-        let uni_can = UniversalCanister::new(&agent, nns_endpoint.effective_canister_id()).await;
+        let msg_can = MessageCanister::new(&agent, nns_endpoint.effective_canister_id()).await;
 
         info!(
             log,
@@ -689,7 +689,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
 
         let message_hash = [0xabu8; 32];
         assert_eq!(
-            get_public_key_with_logger(make_key(KEY_ID2), &uni_can, log)
+            get_public_key_with_logger(make_key(KEY_ID2), &msg_can, log)
                 .await
                 .unwrap_err(),
             AgentError::ReplicaError {
@@ -702,7 +702,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 &message_hash,
                 ECDSA_SIGNATURE_FEE,
                 make_key(KEY_ID2),
-                &uni_can,
+                &msg_can,
                 log,
             )
             .await
@@ -724,14 +724,14 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         )
         .await;
 
-        let public_key = get_public_key_with_logger(make_key(KEY_ID2), &uni_can, log)
+        let public_key = get_public_key_with_logger(make_key(KEY_ID2), &msg_can, log)
             .await
             .unwrap();
         let signature = get_signature_with_logger(
             &message_hash,
             ECDSA_SIGNATURE_FEE,
             make_key(KEY_ID2),
-            &uni_can,
+            &msg_can,
             log,
         )
         .await
@@ -790,7 +790,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 &message_hash,
                 ECDSA_SIGNATURE_FEE,
                 make_key(KEY_ID2),
-                &uni_can,
+                &msg_can,
                 log,
             )
             .await;
@@ -805,7 +805,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 &message_hash,
                 ECDSA_SIGNATURE_FEE,
                 make_key(KEY_ID2),
-                &uni_can,
+                &msg_can,
                 log,
             )
             .await
@@ -829,7 +829,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         let new_subnet = topology_snapshot.subnets().find(|s| s.subnet_id == new_subnet_id).expect("Could not find newly created subnet.");
         new_subnet.nodes().for_each(|node| node.await_status_is_healthy().unwrap());
 
-        let new_public_key = get_public_key_with_logger(make_key(KEY_ID2), &uni_can, log)
+        let new_public_key = get_public_key_with_logger(make_key(KEY_ID2), &msg_can, log)
             .await
             .unwrap();
         assert_eq!(public_key, new_public_key);
@@ -837,7 +837,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             &message_hash,
             ECDSA_SIGNATURE_FEE,
             make_key(KEY_ID2),
-            &uni_can,
+            &msg_can,
             log,
         )
         .await
@@ -866,17 +866,17 @@ pub fn test_threshold_ecdsa_signature_timeout(handle: IcHandle, ctx: &ic_fondue:
         )
         .await;
         let agent = assert_create_agent(app_endpoint.url.as_str()).await;
-        let uni_can = UniversalCanister::new(&agent, app_endpoint.effective_canister_id()).await;
+        let msg_can = MessageCanister::new(&agent, app_endpoint.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
         // Get the public key first to make sure ECDSA is working
-        let _public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+        let _public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
             .await
             .unwrap();
         let error = get_signature(
             &message_hash,
             ECDSA_SIGNATURE_FEE,
             make_key(KEY_ID1),
-            &uni_can,
+            &msg_can,
             ctx,
         )
         .await

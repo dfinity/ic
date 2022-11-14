@@ -221,7 +221,7 @@ pub(crate) fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
 /// Enable ECDSA key and signing on the root subnet using the given NNS node.
 pub(crate) fn enable_ecdsa_on_nns(
     nns_node: &IcNodeSnapshot,
-    canister: &UniversalCanister,
+    canister: &MessageCanister,
     root_subnet_id: SubnetId,
     logger: &Logger,
 ) -> VerifyingKey {
@@ -242,7 +242,7 @@ pub(crate) fn enable_ecdsa_on_nns(
 /// Enables ECDSA signing on the given subnet and returns a public key for the given canister.
 pub(crate) fn enable_ecdsa_on_app_subnet(
     nns_node: &IcNodeSnapshot,
-    canister: &UniversalCanister,
+    canister: &MessageCanister,
     subnet_id: SubnetId,
     logger: &Logger,
 ) -> VerifyingKey {
@@ -271,7 +271,7 @@ pub(crate) fn enable_ecdsa_on_app_subnet(
 pub(crate) fn enable_ecdsa_on_new_subnet(
     env: &TestEnv,
     nns_node: &IcNodeSnapshot,
-    canister: &UniversalCanister,
+    canister: &MessageCanister,
     subnet_size: usize,
     replica_version: ReplicaVersion,
     logger: &Logger,
@@ -332,7 +332,7 @@ pub(crate) fn enable_ecdsa_on_new_subnet(
 pub(crate) fn disable_ecdsa_on_subnet(
     nns_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
-    canister: &UniversalCanister,
+    canister: &MessageCanister,
     logger: &Logger,
 ) {
     let nns_runtime = runtime_from_url(nns_node.get_public_url());
@@ -368,7 +368,7 @@ pub(crate) fn disable_ecdsa_on_subnet(
 }
 
 /// Get the ECDSA public key of the given canister
-pub(crate) fn get_ecdsa_pub_key(canister: &UniversalCanister, logger: &Logger) -> VerifyingKey {
+pub(crate) fn get_ecdsa_pub_key(canister: &MessageCanister, logger: &Logger) -> VerifyingKey {
     info!(logger, "Getting ecdsa public key.");
     let public_key = block_on(get_public_key_with_logger(
         make_key(KEY_ID1),
@@ -383,7 +383,7 @@ pub(crate) fn get_ecdsa_pub_key(canister: &UniversalCanister, logger: &Logger) -
 /// The signature test consists of getting the given canister's ECDSA key, comparing it to the existing key
 /// to ensure it hasn't changed, sending a sign request, and verifying the signature
 pub(crate) fn run_ecdsa_signature_test(
-    canister: &UniversalCanister,
+    canister: &MessageCanister,
     logger: &Logger,
     existing_key: VerifyingKey,
 ) {

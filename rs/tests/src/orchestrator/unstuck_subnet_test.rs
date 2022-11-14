@@ -13,7 +13,7 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_universal_canisters;
+use super::utils::rw_message::install_nns_and_message_canisters;
 use super::utils::ssh_access::execute_bash_command;
 use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
 use crate::orchestrator::utils::rw_message::{
@@ -50,7 +50,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_universal_canisters(env.topology_snapshot());
+    install_nns_and_message_canisters(env.topology_snapshot());
 }
 
 pub fn test(test_env: TestEnv) {

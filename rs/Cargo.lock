@@ -6352,6 +6352,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-message"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+ "ic-cdk",
+ "ic-cdk-macros",
+ "serde",
+]
+
+[[package]]
 name = "ic-messaging"
 version = "0.8.0"
 dependencies = [
@@ -13850,6 +13862,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-core",
+ "ic-message",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-root",

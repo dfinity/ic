@@ -3,7 +3,10 @@ load(":system_tests.bzl", "symlink_dir", "system_test")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["src/cow_safety.wasm"])
+exports_files([
+    "src/cow_safety.wasm",
+    "src/message.wasm",
+])
 
 DEPENDENCIES = [
     "//rs/artifact_pool",
@@ -66,6 +69,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/rust_canisters/proxy_canister:lib",
     "//rs/rust_canisters/xnet_test",
+    "//rs/tests/test_canisters/message:lib",
     "//rs/test_utilities",
     "//rs/test_utilities/identity",
     "//rs/tree_deserializer",
@@ -149,6 +153,7 @@ rust_library(
     compile_data = [
         "//ic-os/guestos:rootfs/opt/ic/share/ic.json5.template",
         "src/consensus/cow_safety.wasm",
+        "src/message.wasm",
         "src/counter.wat",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],

@@ -5,7 +5,7 @@ Goal:: Verify that nodes can be removed from a subnet and later assigned to a di
 
 Runbook::
 . Set up two subnets with four nodes each
-. Install a universal canister in both
+. Install a message canister in both
 . Verify that the canisters can be updated and the modifications queried
 . Reassign 2 nodes from nns to app subnet
 . Verify that these two nodes have the state of the app subnet
@@ -25,7 +25,7 @@ Coverage::
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_universal_canisters;
+use super::utils::rw_message::install_nns_and_message_canisters;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{add_nodes_to_subnet, change_subnet_membership, remove_nodes_via_endpoint};
@@ -55,7 +55,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_universal_canisters(env.topology_snapshot());
+    install_nns_and_message_canisters(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {

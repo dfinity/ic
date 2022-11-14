@@ -1,0 +1,10 @@
+service : {
+    "store": (text) -> ();
+    "read": () -> (opt text) query;
+    "forward": (record {
+        receiver: principal;
+        method: text;
+        cycles: nat;
+        payload: blob;
+    }) -> (blob);
+}
