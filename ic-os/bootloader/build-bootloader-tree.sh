@@ -24,12 +24,15 @@ trap "rm -rf ${TMPDIR}" exit
 mkdir -p "${TMPDIR}"/boot/grub
 cp -r /usr/lib/grub/x86_64-efi "${TMPDIR}"/boot/grub
 mkdir -p "${TMPDIR}"/boot/efi/EFI/Boot
+grub-mkimage --version
 faketime "1970-1-1 0" grub-mkimage -p "(,gpt2)/" -O x86_64-efi -o "${TMPDIR}"/boot/efi/EFI/Boot/bootx64.efi \
     boot linux search normal configfile \
     part_gpt btrfs ext2 fat iso9660 loopback \
     test keystatus gfxmenu regexp probe \
     efi_gop efi_uga all_video gfxterm font \
     echo read ls cat png jpeg halt reboot loadenv
+
+find "$TMPDIR/boot" -exec sha256sum {} \; | sed "s|$TMPDIR||"
 
 tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
 

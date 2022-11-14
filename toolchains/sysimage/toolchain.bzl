@@ -5,17 +5,18 @@ Tools for building IC OS image.
 def _docker_tar_impl(ctx):
     in_dir = ctx.files.src[0]
     tool = ctx.files._build_docker_save_tool[0]
-    out = ctx.actions.declare_file(ctx.label.name)
+    tar_file = ctx.actions.declare_file(ctx.label.name)
+    hash_list_file = ctx.actions.declare_file(ctx.label.name + ".hash-list")
 
     ctx.actions.run(
         executable = tool.path,
-        arguments = ["-o", out.path] + ctx.attr.extra_args_before + ["--", in_dir.path] + ctx.attr.extra_args_after,
+        arguments = ["-o", tar_file.path] + ctx.attr.extra_args_before + ["--", in_dir.path] + ctx.attr.extra_args_after,
         inputs = [in_dir] + ctx.files.dep,
-        outputs = [out],
+        outputs = [tar_file, hash_list_file],
         tools = [tool],
     )
 
-    return [DefaultInfo(files = depset([out]))]
+    return [DefaultInfo(files = depset([tar_file, hash_list_file]))]
 
 docker_tar = rule(
     implementation = _docker_tar_impl,

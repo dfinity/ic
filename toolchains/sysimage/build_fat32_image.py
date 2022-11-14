@@ -8,13 +8,13 @@
 #   build_fat32_image -s 10M -o partition.img.tar -p boot/efi -i dockerimg.tar
 #
 import argparse
-import atexit
 import os
-import shutil
 import subprocess
 import sys
 import tarfile
-import tempfile
+
+from reproducibility import get_tmpdir_checking_block_size
+from reproducibility import print_artifact_info
 
 
 def untar_to_fat32(tf, fs_basedir, out_file, path_transform):
@@ -115,8 +115,7 @@ def main():
     limit_prefix = args.path
     extra_files = args.extra_files
 
-    tmpdir = tempfile.mkdtemp()
-    atexit.register(lambda: shutil.rmtree(tmpdir))
+    tmpdir = get_tmpdir_checking_block_size()
 
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)
@@ -157,6 +156,8 @@ def main():
         ],
         check=True,
     )
+
+    print_artifact_info(out_file)
 
 
 if __name__ == "__main__":

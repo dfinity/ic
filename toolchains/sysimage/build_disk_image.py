@@ -11,13 +11,13 @@
 #   build_disk_image -p partitions.csv -o disk.img.tar part1.tar part2.tar ...
 #
 import argparse
-import atexit
 import os
-import shutil
 import subprocess
 import sys
 import tarfile
-import tempfile
+
+from reproducibility import get_tmpdir_checking_block_size
+from reproducibility import print_artifact_info
 
 
 def read_partition_description(data):
@@ -136,8 +136,7 @@ def main():
         gpt_entries = read_partition_description(f.read())
     validate_partition_table(gpt_entries)
 
-    tmpdir = tempfile.mkdtemp()
-    atexit.register(lambda: shutil.rmtree(tmpdir))
+    tmpdir = get_tmpdir_checking_block_size()
 
     disk_image = os.path.join(tmpdir, "disk.img")
     prepare_diskimage(gpt_entries, disk_image)
@@ -164,6 +163,8 @@ def main():
         ],
         check=True,
     )
+
+    print_artifact_info(out_file)
 
 
 if __name__ == "__main__":

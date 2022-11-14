@@ -12,6 +12,7 @@
 #
 import argparse
 import atexit
+import hashlib
 import io
 import json
 import os
@@ -20,6 +21,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+
+from reproducibility import print_artifact_info
 
 image_hash_re = re.compile("((Successfully built )|(.*writing image sha256:))([0-9a-f]+).*")
 
@@ -192,6 +195,21 @@ class FS:
     def ls(self):
         self.ls_dir(self.root)
 
+    def write_hashes(self, output, dir=None, prefix="/"):
+        if dir is None:
+            dir = self.root
+        for key in sorted(dir.entries.keys()):
+            output.write(prefix)
+            entry = dir.entries[key]
+            if type(entry) is DirInode:
+                output.write(f"{key}/\n")
+                self.write_hashes(output, entry, f"  {prefix}{key}/")
+            elif type(entry) is LinkInode:
+                output.write(f"{key} -> {entry.target}\n")
+            elif type(entry) is RegInode:
+                hash = hashlib.sha256(entry.contents).hexdigest()
+                output.write(f"{key} sha256#{hash}\n")
+
 
 def _process_layer(layer, fs):
     tf = tarfile.open(fileobj=io.BytesIO(layer), mode="r")
@@ -328,6 +346,41 @@ def make_argparser():
     return parser
 
 
+def diff_hash_lists(out_file, build_args, fs):
+    """
+    If the expected.hash-list file exists, this function will output a list of
+    hashes for the in-memory filesystem. It is intended to be used to figure out
+    why a CI build produces a different tar to a local build:
+
+    # Create an empty file to enable this functionality:
+    touch ic-os/guestos/rootfs/expected.hash-list
+
+    # Run Bazel to produce a hash listing for your local environment:
+    bazel build //ic-os/guestos/dev:rootfs-tree.tar --disk_cache= --remote_cache=
+
+    # Copy hash listing produced by Bazel to expected.hash-list:
+    cp bazel-bin/ic-os/guestos/dev/rootfs-tree.tar.hash-list ic-os/guestos/rootfs/expected.hash-list
+
+    # Commit and push expected.hash-list, then check CI logs to see the diff:
+    git add ic-os/guestos/rootfs/expected.hash-list && git commit -m "Debugging (NOT TO BE MERGED)"
+    """
+    actual_hash_list = f"{out_file}.hash-list"
+    with open(actual_hash_list, "w") as file:
+        if len(build_args) == 0:
+            return
+
+        expected_hash_list = os.path.join(build_args[0], "expected.hash-list")
+        if not os.path.isfile(expected_hash_list):
+            return
+
+        fs.write_hashes(file)
+        file.flush()
+
+        diff_cmd = ["diff", expected_hash_list, actual_hash_list]
+        print(f"running: {diff_cmd}", file=sys.stderr)
+        subprocess.run(diff_cmd)
+
+
 def main():
     args = make_argparser().parse_args(sys.argv[1:])
 
@@ -369,6 +422,11 @@ def main():
 
     # Export the filesystem tree as a tar file.
     tar_fs(fs, open(out_file, "wb"))
+
+    # Diff filesystem against an expected hash list if one is provided.
+    diff_hash_lists(out_file, build_args, fs)
+
+    print_artifact_info(out_file)
 
 
 if __name__ == "__main__":
