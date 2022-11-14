@@ -73,7 +73,7 @@ impl BackupManager {
         let state_file = config.root_dir.join(STATE_FILE_NAME);
         let manager_state = BackupManager::load_state(&state_file);
         info!(log, "Loaded manager state: {:?}", manager_state);
-        let ssh_credentials_file = match config.ssh_credentials.into_os_string().into_string() {
+        let ssh_credentials_file = match config.ssh_private_key.into_os_string().into_string() {
             Ok(f) => f,
             Err(e) => panic!("Bad file name for ssh credentials: {:?}", e),
         };
@@ -86,7 +86,7 @@ impl BackupManager {
                 &manager_state,
                 &s.subnet_id,
                 |sub| sub.replica_version.clone(),
-                s.replica_version,
+                s.initial_replica_version,
             );
             let notification_client = NotificationClient {
                 backup_instance: config.backup_instance.clone(),
@@ -99,7 +99,8 @@ impl BackupManager {
                 subnet_id: s.subnet_id,
                 nns_url: config.nns_url.clone(),
                 root_dir: config.root_dir.clone(),
-                ssh_credentials: ssh_credentials_file.clone(),
+                excluded_dirs: config.excluded_dirs.clone(),
+                ssh_private_key: ssh_credentials_file.clone(),
                 registry_client: registry_client.clone(),
                 notification_client,
                 log: log.clone(),

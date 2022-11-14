@@ -32,6 +32,8 @@ impl NotificationClient {
     }
 
     pub fn message_slack(&self, message: String) {
+        info!(self.log, "{}", message);
+
         let url = format!(
             "https://hooks.slack.com/services/T43F9UHS5/B027BHAQ1HQ/{}",
             self.slack_token
@@ -43,8 +45,6 @@ impl NotificationClient {
             message
         );
         let content_type = "Content-type: application/json".to_string();
-
-        info!(self.log, "Slack: {}", data_str);
 
         NotificationClient::curl_post_request(url, content_type, data_str)
     }
@@ -63,8 +63,6 @@ impl NotificationClient {
             self.backup_instance
         );
         let content_type = "Content-type: application/octet-stream".to_string();
-
-        info!(self.log, "Metrics: \n{}", message);
 
         NotificationClient::curl_post_request(url, content_type, message);
     }
