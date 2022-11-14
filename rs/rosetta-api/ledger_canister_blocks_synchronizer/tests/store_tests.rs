@@ -7,9 +7,9 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::{
 };
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::{balances::BalancesStore, block::BlockType, Tokens};
-use icp_ledger::{apply_operation, AccountIdentifier, Block, BlockIndex, Operation};
+use icp_ledger::{apply_operation, AccountIdentifier, Block, Operation};
 use rusqlite::params;
-use std::{collections::BTreeMap, path::Path};
+use std::path::Path;
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
     Blocks::new_persistent(path).unwrap()
 }
@@ -69,17 +69,19 @@ async fn store_coherance_test() {
     }
     drop(con);
     for hb in &scribe.blockchain {
-        assert_eq!(store.get_at(hb.index).unwrap(), *hb);
+        assert_eq!(store.get_hashed_block(&hb.index).unwrap(), *hb);
         assert_eq!(store.get_transaction_hash(&hb.index).unwrap(), None);
+        assert!(store.get_all_accounts().unwrap().is_empty());
     }
     let store = sqlite_on_disk_store(location);
     for hb in &scribe.blockchain {
-        assert_eq!(store.get_at(hb.index).unwrap(), *hb);
+        assert_eq!(store.get_hashed_block(&hb.index).unwrap(), *hb);
         assert_eq!(
             store.get_transaction_hash(&hb.index).unwrap(),
             Some(Block::decode(hb.block.clone()).unwrap().transaction.hash())
         );
     }
+    assert_eq!(store.get_all_accounts().unwrap().len(), 10);
 }
 
 #[actix_rt::test]
@@ -148,6 +150,7 @@ async fn store_prune_test() {
 
     for hb in &scribe.blockchain {
         store.push(hb).unwrap();
+        store.set_hashed_block_to_verified(&hb.index).unwrap();
     }
 
     prune(&scribe, &mut store, 10);
@@ -189,6 +192,7 @@ async fn store_prune_first_balance_test() {
 
     for hb in &scribe.blockchain {
         store.push(hb).unwrap();
+        store.set_hashed_block_to_verified(&hb.index).unwrap();
     }
 
     prune(&scribe, &mut store, 10);
@@ -210,6 +214,7 @@ async fn store_prune_and_load_test() {
 
     for hb in &scribe.blockchain {
         store.push(hb).unwrap();
+        store.set_hashed_block_to_verified(&hb.index).unwrap();
     }
 
     prune(&scribe, &mut store, 10);
@@ -237,31 +242,10 @@ async fn store_prune_and_load_test() {
     verify_balance_snapshot(&scribe, &mut store, 30);
 }
 
-pub(crate) fn to_balances(
-    balances: BTreeMap<AccountIdentifier, Tokens>,
-    index: BlockIndex,
-) -> BalanceBook {
-    let mut balance_book = BalanceBook::default();
-    for (acc, amount) in balances {
-        balance_book.token_pool -= amount;
-        balance_book.store.insert(acc, index, amount);
-    }
-    balance_book
-}
-
 fn prune(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     let oldest_idx = prune_at;
     let oldest_block = scribe.blockchain.get(oldest_idx as usize).unwrap();
-    let oldest_balance = to_balances(
-        scribe
-            .balance_history
-            .get(oldest_idx as usize)
-            .unwrap()
-            .clone(),
-        oldest_idx,
-    );
-
-    store.prune(oldest_block, &oldest_balance).unwrap();
+    store.prune(oldest_block).unwrap();
 }
 
 fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
@@ -270,11 +254,17 @@ fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
 
     if after_last_idx > 1 {
         // Genesis block (at idx 0) should still be accessible
-        assert_eq!(store.get_at(0).unwrap(), *scribe.blockchain.get(0).unwrap());
+        assert_eq!(
+            store.get_hashed_block(&0).unwrap(),
+            *scribe.blockchain.get(0).unwrap()
+        );
     }
 
     for i in 1..oldest_idx {
-        assert_eq!(store.get_at(i).unwrap_err(), BlockStoreError::NotFound(i));
+        assert_eq!(
+            store.get_hashed_block(&i).unwrap_err(),
+            BlockStoreError::NotFound(i)
+        );
         assert_eq!(
             store.get_transaction(&i).unwrap_err(),
             BlockStoreError::NotFound(i)
@@ -290,7 +280,7 @@ fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
 
     for i in oldest_idx..after_last_idx {
         assert_eq!(
-            store.get_at(i).unwrap(),
+            store.get_hashed_block(&i).unwrap(),
             *scribe.blockchain.get(i as usize).unwrap()
         );
     }
@@ -304,31 +294,36 @@ fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     }
 
     for i in after_last_idx..=scribe.blockchain.len() as u64 {
-        assert_eq!(store.get_at(i).unwrap_err(), BlockStoreError::NotFound(i));
+        assert_eq!(
+            store.get_hashed_block(&i).unwrap_err(),
+            BlockStoreError::NotFound(i)
+        );
     }
 }
 
 fn verify_balance_snapshot(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     let oldest_idx = prune_at as usize;
-    let (oldest_block, balances) = store.first_snapshot().unwrap();
+    let oldest_block = store.get_first_hashed_block().unwrap();
     assert_eq!(oldest_block, *scribe.blockchain.get(oldest_idx).unwrap());
 
     let scribe_balances = scribe.balance_history.get(oldest_idx).unwrap().clone();
-
-    assert_eq!(balances.store.acc_to_hist.len(), scribe_balances.len());
-    for (acc, hist) in &balances.store.acc_to_hist {
-        assert_eq!(
-            balances.store.get_at(*acc, prune_at).unwrap(),
-            *scribe_balances.get(acc).unwrap()
-        );
-        if let Some(last_entry) = hist.get_history(None).last().map(|x| x.0) {
-            assert_eq!(last_entry, prune_at);
-        }
+    for (acc, tokens) in scribe_balances {
+        let balance = store
+            .get_account_balance(&acc, &(oldest_idx as u64))
+            .unwrap();
+        assert_eq!(balance, tokens);
     }
-
     let mut sum_icpt = Tokens::ZERO;
     for amount in scribe.balance_history.get(oldest_idx).unwrap().values() {
         sum_icpt += *amount;
     }
-    assert_eq!((Tokens::MAX - sum_icpt).unwrap(), balances.token_pool);
+    let accounts = store.get_all_accounts().unwrap();
+    let mut total = Tokens::ZERO;
+    for account in accounts {
+        let amount = store
+            .get_account_balance(&account, &(oldest_idx as u64))
+            .unwrap();
+        total += amount;
+    }
+    assert_eq!(sum_icpt, total);
 }

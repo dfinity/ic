@@ -3,24 +3,26 @@ use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Arc;
 
 use core::ops::Deref;
+use std::time::Instant;
 
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use icp_ledger::{Block, TipOfChainRes};
 use log::{debug, error, info, trace, warn};
 use tokio::sync::RwLock;
 
-use crate::blocks::Blocks;
-use crate::blocks::{BlockStoreError, HashedBlock};
+use crate::blocks::BlockStoreError;
+use crate::blocks::{Blocks, HashedBlock};
 use crate::blocks_access::BlocksAccess;
 use crate::certification::{verify_block_hash, VerificationInfo};
 use crate::errors::Error;
 
 // If pruning is enabled, instead of pruning after each new block
 // we'll wait for PRUNE_DELAY blocks to accumulate and prune them in one go
-const PRUNE_DELAY: u64 = 10000;
+const PRUNE_DELAY: u64 = 100000;
 
 const PRINT_SYNC_PROGRESS_THRESHOLD: u64 = 1000;
 
+const DATABASE_WRITE_BLOCKS_BATCH_SIZE: u64 = 500000;
 // Max number of retry in case of query failure while retrieving blocks.
 const MAX_RETRY: u8 = 5;
 
@@ -77,21 +79,23 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         }
 
         info!("Loading blocks from store");
-        let num_loaded = blocks.load_from_store()?;
+        let first_block = blocks.get_first_hashed_block();
+        let last_block = blocks.get_latest_hashed_block();
+        if let (Ok(first), Ok(last)) = (&first_block, &last_block) {
+            info!(
+                "Ledger client is up. Loaded {} blocks from store. First block at {}, last at {}",
+                (last.index - first.index).to_string(),
+                first.index.to_string(),
+                last.index.to_string()
+            );
+        } else {
+            info!(
+                "Ledger client is up. Loaded {} blocks from store. First block at {}, last at {}",
+                0, "None", "None"
+            );
+        }
 
-        info!(
-            "Ledger client is up. Loaded {} blocks from store. First block at {}, last at {}",
-            num_loaded,
-            blocks
-                .get_first_hashed_block()
-                .map(|x| format!("{}", x.index))
-                .unwrap_or_else(|_| "None".to_string()),
-            blocks
-                .get_latest_hashed_block()
-                .map(|x| format!("{}", x.index))
-                .unwrap_or_else(|_| "None".to_string())
-        );
-        if let Ok(x) = blocks.get_latest_hashed_block() {
+        if let Ok(x) = last_block {
             metrics.set_synced_height(x.index);
         }
         if let Ok(x) = blocks.get_latest_verified_hashed_block() {
@@ -293,6 +297,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         certification: Option<Vec<u8>>,
         blockchain: &mut Blocks,
     ) -> Result<(), Error> {
+        let t_total = Instant::now();
         if range.is_empty() {
             return Ok(());
         }
@@ -310,6 +315,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         let canister = self.blocks_access.as_ref().unwrap();
         let mut i = range.start;
         let mut last_block_hash = first_block_parent_hash;
+        let mut block_batch: Vec<HashedBlock> = Vec::new();
         while i < range.end {
             if stopped.load(Relaxed) {
                 return Err(Error::InternalError("Interrupted".to_string()));
@@ -345,9 +351,6 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     i, range.end
                 )));
             }
-
-            let mut hashed_batch = Vec::new();
-            hashed_batch.reserve_exact(batch.len());
             for raw_block in batch {
                 let block = Block::decode(raw_block.clone())
                     .map_err(|err| Error::InternalError(format!("Cannot decode block: {}", err)))?;
@@ -367,18 +370,20 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     }
                 }
                 last_block_hash = Some(hb.hash);
-                hashed_batch.push(hb);
+                block_batch.push(hb);
                 i += 1;
             }
-
-            blockchain.push_batch(hashed_batch)?;
             self.metrics.set_synced_height(i - 1);
-
-            if print_progress && (i - range.start) % 10000 == 0 {
-                info!("Synced up to {}", i - 1);
+            if (i - range.start) % DATABASE_WRITE_BLOCKS_BATCH_SIZE == 0 {
+                blockchain.push_batch(block_batch)?;
+                if print_progress {
+                    info!("Synced up to {}", i - 1);
+                }
+                block_batch = Vec::new();
             }
         }
-
+        blockchain.push_batch(block_batch)?;
+        info!("Synced took {} seconds", t_total.elapsed().as_secs_f64());
         blockchain.set_hashed_block_to_verified(&(range.end - 1))?;
         self.metrics.set_verified_height(range.end - 1);
         Ok(())
