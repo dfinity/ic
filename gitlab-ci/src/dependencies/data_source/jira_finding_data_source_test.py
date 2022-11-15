@@ -181,8 +181,8 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
     }
     issue = Mock()
     issue.get_field.side_effect = lambda x: issue_data[x]
-    issue.permalink.return_value = "https://dfinity.atlassian.net/browse/SVM1-4"
-    issue.id = "SVM1-4"
+    issue.permalink.return_value = "https://dfinity.atlassian.net/browse/SCAVM-4"
+    issue.id = "SCAVM-4"
     jira_lib_mock.search_issues.return_value = [issue]
 
     res = jira_ds.get_open_finding("repo", "scanner", "https://crates.io/crates/chrono", "0.4.19")
@@ -220,9 +220,9 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
     assert res.risk == SecurityRisk.CRITICAL
     assert res.patch_responsible == [User(user3.accountId, user3.displayName)]
     assert res.due_date == 1671840000
-    assert res.more_info == "https://dfinity.atlassian.net/browse/SVM1-4"
+    assert res.more_info == "https://dfinity.atlassian.net/browse/SCAVM-4"
     assert res.score == 100
-    assert res.jira_issue_id == "SVM1-4"
+    assert res.jira_issue_id == "SCAVM-4"
 
     jira_lib_mock.search_issues.assert_called_once()
 
@@ -273,7 +273,7 @@ def test_get_open_finding_raise_error_if_primary_key_of_finding_not_matching(jir
     }
     issue = Mock()
     issue.get_field.side_effect = lambda x: issue_data[x]
-    issue.permalink.return_value = "https://dfinity.atlassian.net/browse/SVM1-4"
+    issue.permalink.return_value = "https://dfinity.atlassian.net/browse/SCAVM-4"
     jira_lib_mock.search_issues.return_value = [issue]
 
     with pytest.raises(RuntimeError, match=r"primary key"):
