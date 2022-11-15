@@ -44,7 +44,7 @@ pub fn generate_node_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKeyP
 
 pub fn generate_committee_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKeyProto {
     let generated = csp
-        .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+        .gen_committee_signing_key_pair()
         .expect("Could not generate committee signing keys");
     ic_crypto_internal_csp::keygen::utils::committee_signing_pk_to_proto(generated)
 }

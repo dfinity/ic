@@ -464,35 +464,75 @@ mod multi {
 
     #[test]
     fn pop_verifies() {
-        let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
-        let (public_key, pop) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+        let csp0 = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
+        let (public_key0, pop0) = csp0
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        assert!(csp
-            .verify_pop(&pop, AlgorithmId::MultiBls12_381, public_key)
+        assert!(csp0
+            .verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key0)
             .is_ok());
     }
 
     #[test]
-    fn pop_verification_fails_for_mismatched_public_key() {
-        let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
-        let (public_key1, _pop1) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+    fn pop_verifies_using_any_csp() {
+        // in other words, pop verification doesn't depend on the state of the CSP
+        let csp0 = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
+        let (public_key0, pop0) = csp0
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let (_public_key2, pop2) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+
+        let csp1 = Csp::with_rng(ChaCha20Rng::seed_from_u64(53));
+        let (public_key1, pop1) = csp1
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        match csp.verify_pop(&pop2, AlgorithmId::MultiBls12_381, public_key1) {
-            Err(CryptoError::PopVerification { .. }) => (),
-            other => panic!("Incorrect response: {:?}", other),
-        }
+
+        assert!(csp0
+            .verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key1)
+            .is_ok());
+        assert!(csp1
+            .verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key0)
+            .is_ok());
     }
+
+    #[test]
+    fn pop_verification_fails_for_mismatched_public_key_or_pop() {
+        let csp0 = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
+        let (public_key0, pop0) = csp0
+            .gen_committee_signing_key_pair()
+            .expect("Failed to generate key pair with PoP");
+
+        let csp1 = Csp::with_rng(ChaCha20Rng::seed_from_u64(53));
+        let (public_key1, pop1) = csp1
+            .gen_committee_signing_key_pair()
+            .expect("Failed to generate key pair with PoP");
+
+        // mismathced public key
+        assert!(matches!(
+            csp0.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key1.clone()),
+            Err(CryptoError::PopVerification { .. })
+        ));
+        assert!(matches!(
+            csp1.verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key0.clone()),
+            Err(CryptoError::PopVerification { .. })
+        ));
+
+        // mismathced PoP
+        assert!(matches!(
+            csp0.verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key0),
+            Err(CryptoError::PopVerification { .. })
+        ));
+        assert!(matches!(
+            csp1.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key1),
+            Err(CryptoError::PopVerification { .. })
+        ));
+    }
+
     #[test]
     fn pop_verification_fails_gracefully_on_incompatible_public_key() {
         let algorithm = AlgorithmId::MultiBls12_381;
         let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
         let (_public_key, pop) = csp
-            .gen_key_pair_with_pop(algorithm)
+            .gen_committee_signing_key_pair()
             .expect("PoP creation failed");
         let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
         let verifier = Csp::of(
@@ -505,11 +545,10 @@ mod multi {
     }
     #[test]
     fn pop_verification_fails_gracefully_on_incompatible_algorithm_id() {
-        let algorithm = AlgorithmId::MultiBls12_381;
         let incompatible_algorithm = AlgorithmId::Ed25519;
         let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
         let (public_key, pop) = csp
-            .gen_key_pair_with_pop(algorithm)
+            .gen_committee_signing_key_pair()
             .expect("PoP creation failed");
         let verifier = Csp::of(
             ChaCha20Rng::seed_from_u64(69),
@@ -524,7 +563,7 @@ mod multi {
     fn individual_signatures_verify() {
         let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(69));
         let (public_key, _pop) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
         let message = b"Three turtle doves";
         let key_id = KeyId::from(&public_key);
@@ -547,7 +586,7 @@ mod multi {
         let incompatible_algorithm = AlgorithmId::Ed25519;
         let message = b"Three turtle doves";
         let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(69));
-        let (public_key, _pop) = csp.gen_key_pair_with_pop(algorithm).unwrap();
+        let (public_key, _pop) = csp.gen_committee_signing_key_pair().unwrap();
         let incompatible_signature = {
             let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
             let incompatible_key_id = KeyId::from(&incompatible_public_key);
@@ -567,7 +606,7 @@ mod multi {
     fn individual_signature_verification_fails_for_incompatible_public_key() {
         let algorithm = AlgorithmId::MultiBls12_381;
         let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
-        let (public_key, _pop) = csp.gen_key_pair_with_pop(algorithm).unwrap();
+        let (public_key, _pop) = csp.gen_committee_signing_key_pair().unwrap();
         let key_id = KeyId::from(&public_key);
         let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
         let message = b"Three turtle doves";
@@ -596,11 +635,11 @@ mod multi {
 
         // The signatories need keys:
         let (public_key1, _pop1) = csp1
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
         let key_id1 = KeyId::from(&public_key1);
         let (public_key2, _pop2) = csp2
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
         let key_id2 = KeyId::from(&public_key2);
 
@@ -645,11 +684,11 @@ mod multi {
 
         // The signatories need keys:
         let (public_key1, _pop1) = csp1
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
         let key_id1 = KeyId::from(&public_key1);
         let (public_key2, _pop2) = csp2
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
         let key_id2 = KeyId::from(&public_key2);
 
@@ -692,7 +731,7 @@ mod multi {
 
         // The signatories need keys:
         let (public_key1, _pop1) = csp1
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
         let key_id1 = KeyId::from(&public_key1);
 

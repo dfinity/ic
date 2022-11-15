@@ -5,6 +5,7 @@ use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
+use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::X509NameEntries;
 use openssl::{asn1::Asn1Time, bn::BigNum, nid::Nid, x509::X509};
@@ -76,36 +77,28 @@ mod gen_node_siging_key_pair_tests {
 }
 
 mod gen_key_pair_with_pop_tests {
+    use crate::{api::NodePublicKeyData, keygen::utils::committee_signing_pk_to_proto};
+
     use super::*;
 
     #[test]
-    fn should_correctly_generate_multi_bls12_381_keys() {
+    fn should_correctly_generate_committee_signing_keys() {
         let test_vector = multi_bls_test_vector();
         let csprng = csprng_seeded_with(test_vector.seed);
         let csp = Csp::with_rng(csprng);
-        let (public_key, pop) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
-            .unwrap();
+        let (public_key, pop) = csp.gen_committee_signing_key_pair().unwrap();
         let key_id = KeyId::from(&public_key);
 
         assert_eq!(key_id, test_vector.key_id);
         assert_eq!(public_key, test_vector.public_key);
         assert_eq!(pop, test_vector.proof_of_possession);
-    }
 
-    #[test]
-    fn should_fail_generating_keys_for_unsupported_algorithms() {
-        let supported_algorithm_ids = vec![AlgorithmId::MultiBls12_381];
-        let csp = Csp::with_rng(rng());
-
-        for algorithm_id in all_algorithm_ids() {
-            if !supported_algorithm_ids.contains(&algorithm_id) {
-                let result = csp
-                    .gen_key_pair_with_pop(algorithm_id)
-                    .expect_err("expected error");
-                assert!(result.is_algorithm_not_supported())
-            }
-        }
+        assert_eq!(
+            csp.current_node_public_keys()
+                .committee_signing_public_key
+                .expect("missing key"),
+            committee_signing_pk_to_proto((public_key, pop))
+        );
     }
 
     #[test]
@@ -118,7 +111,22 @@ mod gen_key_pair_with_pop_tests {
             MockPublicKeyStore::new(),
         );
 
-        let _ = csp.gen_key_pair_with_pop(AlgorithmId::MultiBls12_381);
+        let _ = csp.gen_committee_signing_key_pair();
+    }
+
+    #[test]
+    fn should_fail_with_internal_error_if_committee_signing_public_key_already_set() {
+        let csp = Csp::with_rng(rng());
+
+        assert!(csp.gen_committee_signing_key_pair().is_ok());
+
+        // the attemtps after the first one should fail
+        for _ in 0..5 {
+            assert!(matches!(csp.gen_committee_signing_key_pair(),
+                Err(CryptoError::InvalidArgument { message })
+                if message.contains("committee signing public key already set")
+            ));
+        }
     }
 }
 

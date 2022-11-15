@@ -73,9 +73,6 @@ pub enum CspMultiSignatureError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspMultiSignatureKeygenError {
-    UnsupportedAlgorithm {
-        algorithm: AlgorithmId,
-    },
     MalformedPublicKey {
         algorithm: AlgorithmId,
         key_bytes: Option<Vec<u8>>,
@@ -86,6 +83,9 @@ pub enum CspMultiSignatureKeygenError {
     },
     DuplicateKeyId {
         key_id: KeyId,
+    },
+    TransientInternalError {
+        internal_error: String,
     },
 }
 
@@ -232,15 +232,23 @@ pub trait MultiSignatureCspVault {
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError>;
 
-    /// Generates a public/private key pair, with a proof-of-possession.
+    /// Generates a public/private key pair, with a proof of possession.
     ///
-    /// # Arguments
-    /// * `algorithm_id` specifies the signature algorithm
     /// # Returns
-    /// The key ID, the public key of the keypair, and the proof-of-possession.
-    fn gen_key_pair_with_pop(
+    /// The public key of the keypair and the proof of possession.
+    ///
+    /// # Errors
+    /// * `CspMultiignatureKeygenError::InternalError` if there is an internal
+    ///   error (e.g., the public key in the public key store is already set).
+    /// * `CspMultiSignatureKeygenError::DuplicateKeyId` if there already
+    ///   exists a secret key in the store for the secret key ID derived from
+    ///   the public part of the randomly generated key pair. This error
+    ///   most likely indicates a bad randomness source.
+    /// * `CspMultiSignatureKeygenError::TransientInternalError` if there is a
+    ///   transient internal error, e.g,. an IO error when writing a key to
+    ///   disk, or an RPC error when calling a remote CSP vault.
+    fn gen_committee_signing_key_pair(
         &self,
-        algorithm_id: AlgorithmId,
     ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
 }
 

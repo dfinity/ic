@@ -168,13 +168,12 @@ impl<
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 
-    async fn gen_key_pair_with_pop(
+    async fn gen_committee_signing_key_pair(
         self,
         _: context::Context,
-        algorithm_id: AlgorithmId,
     ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.gen_key_pair_with_pop(algorithm_id);
+        let job = move || vault.gen_committee_signing_key_pair();
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 
