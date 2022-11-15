@@ -191,33 +191,5 @@ pub fn test_retrieve_btc(env: TestEnv) {
 
         // Verify that a burn transaction occurred.
         assert_burn_transaction(&ledger_agent, &logger, 2, &withdrawal_account, 35_000_000).await;
-
-        // Testing maximum amount of concurrent requests
-        // NB: remove this test once heartbeat is done.
-        debug!(&logger, "Testing transfers up to max concurrency");
-        for i in 1..100 {
-            let retrieve_result = minter_agent
-                .retrieve_btc(RetrieveBtcArgs {
-                    amount: 70_000,
-                    address: btc_address2.to_string(),
-                })
-                .await
-                .expect("Error while calling retrieve_btc")
-                .expect("Error in retrieve_btc");
-            assert_eq!(i + 2, retrieve_result.block_index);
-        }
-        // One additional transfer should trigger an error.
-        debug!(&logger, "Testing one more transfer");
-        let retrieve_result = minter_agent
-            .retrieve_btc(RetrieveBtcArgs {
-                amount: 70_000,
-                address: btc_address2.to_string(),
-            })
-            .await
-            .expect("Error while calling retrieve_btc");
-        assert_eq!(
-            Err(RetrieveBtcError::TooManyConcurrentRequests),
-            retrieve_result
-        );
     });
 }

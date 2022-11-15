@@ -350,7 +350,7 @@ proptest! {
         let total_value = utxos.iter().map(|u| u.value).sum::<u64>();
 
         let target = total_value / 2;
-        let unsigned_tx = build_unsigned_transaction(
+        let (unsigned_tx, _) = build_unsigned_transaction(
             &mut utxos,
             BitcoinAddress::WitnessV0(dst_pkhash),
             BitcoinAddress::WitnessV0(main_pkhash),
@@ -385,7 +385,7 @@ proptest! {
             .map(|utxo| (utxo.outpoint.clone(), utxo.value))
             .collect();
 
-        let unsigned_tx = build_unsigned_transaction(
+        let (unsigned_tx, _) = build_unsigned_transaction(
             &mut utxos,
             BitcoinAddress::WitnessV0(dst_pkhash),
             BitcoinAddress::WitnessV0(main_pkhash),
@@ -437,8 +437,6 @@ proptest! {
             ).expect_err("build transaction should fail because the amount is too high"),
             BuildTxError::NotEnoughFunds
         );
-        prop_assert_eq!(&utxos_copy, &utxos);
-
         prop_assert_eq!(&utxos_copy, &utxos);
 
         prop_assert_eq!(

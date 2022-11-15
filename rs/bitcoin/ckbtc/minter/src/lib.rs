@@ -1,5 +1,6 @@
+use crate::address::BitcoinAddress;
 use candid::{CandidType, Deserialize};
-use ic_btc_types::{Satoshi, Utxo};
+use ic_btc_types::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_icrc1::Account;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -24,16 +25,255 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
+struct SignTxRequest {
+    key_name: String,
+    network: Network,
+    ecdsa_public_key: ECDSAPublicKey,
+    unsigned_tx: tx::UnsignedTransaction,
+    outpoint_account: BTreeMap<OutPoint, Account>,
+    /// The original request that we keep around to place it back to the queue
+    /// if the signature fails.
+    original_request: state::RetrieveBtcRequest,
+    /// The list of UTXOs we use as transaction inputs.
+    utxos: Vec<Utxo>,
+}
+
+/// Undoes changes we make to the ckBTC state when we construct a pending transaction.
+/// We call this function if we fail to sign or send a Bitcoin transaction.
+fn undo_sign_request(req: state::RetrieveBtcRequest, utxos: Vec<Utxo>) {
+    state::mutate_state(|s| {
+        for utxo in utxos {
+            assert!(s.available_utxos.insert(utxo));
+        }
+        s.pending_retrieve_btc_requests.push_back(req);
+    })
+}
+
+/// Updates the UTXOs for the main account of the minter to pick up change from
+/// previous retrieve BTC requests.
+async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress) {
+    let (btc_network, min_confirmations) =
+        state::read_state(|s| (s.btc_network, s.min_confirmations));
+
+    let utxos = match management::get_utxos(
+        btc_network,
+        &main_address.display(btc_network),
+        min_confirmations,
+    )
+    .await
+    {
+        Ok(utxos) => utxos,
+        Err(e) => {
+            ic_cdk::print(format!(
+                "[heartbeat]: failed to fetch UTXOs for the main address {}: {}",
+                main_address.display(btc_network),
+                e
+            ));
+            return;
+        }
+    };
+
+    let new_utxos = state::read_state(|s| match s.utxos_state_addresses.get(main_account) {
+        Some(known_utxos) => utxos
+            .into_iter()
+            .filter(|u| !known_utxos.contains(u))
+            .collect(),
+        None => utxos,
+    });
+
+    state::mutate_state(|s| s.add_utxos(main_account.clone(), new_utxos));
+}
+
+/// Returns an estimate for transaction fees in millisatoshi per vbyte.  Returns
+/// None if the bitcoin canister is unavailable or does not have enough data for
+/// an estimate yet.
+async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
+    /// The default fee we use on regtest networks if there are not enough data
+    /// to compute the median fee.
+    const DEFAULT_FEE: MillisatoshiPerByte = 5_000;
+
+    let btc_network = state::read_state(|s| s.btc_network);
+    match management::get_current_fees(btc_network).await {
+        Ok(fees) => {
+            if fees.len() >= 100 {
+                Some(fees[49])
+            } else if btc_network == Network::Regtest {
+                Some(DEFAULT_FEE)
+            } else {
+                ic_cdk::print(format!(
+                    "[heartbeat]: not enough data points ({}) to compute the fee",
+                    fees.len()
+                ));
+                None
+            }
+        }
+        Err(err) => {
+            ic_cdk::print(format!(
+                "[heartbeat]: failed to get median fee per vbyte: {}",
+                err
+            ));
+            None
+        }
+    }
+}
+
+/// Constructs and sends out signed bitcoin transactions for pending retrieve
+/// requests.
+async fn submit_pending_requests() {
+    if state::read_state(|s| s.pending_retrieve_btc_requests.is_empty()) {
+        return;
+    }
+
+    let main_account = Account {
+        owner: ic_cdk::id().into(),
+        subaccount: None,
+    };
+
+    let (main_address, ecdsa_public_key) = match state::read_state(|s| {
+        s.ecdsa_public_key.clone().map(|key| {
+            (
+                address::account_to_bitcoin_address(&key, &main_account),
+                key,
+            )
+        })
+    }) {
+        Some((key, address)) => (key, address),
+        None => {
+            ic_cdk::print(
+                "unreachable: have retrieve BTC requests but the ECDSA key is not initialized",
+            );
+            return;
+        }
+    };
+
+    let fee_millisatoshi_per_vbyte = match estimate_fee_per_vbyte().await {
+        Some(fee) => fee,
+        None => return,
+    };
+
+    fetch_main_utxos(&main_account, &main_address).await;
+
+    let maybe_sign_request = state::mutate_state(|s| {
+        match s.pending_retrieve_btc_requests.pop_front() {
+            Some(req) => {
+                match build_unsigned_transaction(
+                    &mut s.available_utxos,
+                    req.address.clone(),
+                    main_address,
+                    req.amount,
+                    fee_millisatoshi_per_vbyte,
+                ) {
+                    Ok((unsigned_tx, utxos)) => Some(SignTxRequest {
+                        key_name: s.ecdsa_key_name.clone(),
+                        ecdsa_public_key,
+                        outpoint_account: filter_output_accounts(s, &unsigned_tx),
+                        network: s.btc_network,
+                        unsigned_tx,
+                        original_request: req,
+                        utxos,
+                    }),
+                    Err(BuildTxError::AmountTooLow) => {
+                        ic_cdk::print(format!(
+                            "[heartbeat]: dropping a request for BTC amount {} to {} too low to cover the fees",
+                            req.amount,
+                            req.address.display(s.btc_network)
+                        ));
+                        // There is no point in retrying the request because the
+                        // amount is too low anyway.
+                        None
+                    }
+                    Err(BuildTxError::NotEnoughFunds) => {
+                        ic_cdk::print(format!(
+                            "[heartbeat]: not enough funds to unsigned transaction for request {:?}",
+                            req
+                        ));
+                        // Push the transaction to the end of the queue so that
+                        // we have a chance to handle other requests.
+                        s.pending_retrieve_btc_requests.push_back(req);
+                        None
+                    }
+                }
+            }
+            None => None,
+        }
+    });
+
+    if let Some(req) = maybe_sign_request {
+        ic_cdk::print(format!(
+            "[heartbeat]: signing a new transaction: {}",
+            hex::encode(tx::encode_into(&req.unsigned_tx, Vec::new()))
+        ));
+
+        match sign_transaction(
+            req.key_name,
+            &req.ecdsa_public_key,
+            &req.outpoint_account,
+            req.unsigned_tx,
+        )
+        .await
+        {
+            Ok(signed_tx) => {
+                ic_cdk::print(format!(
+                    "[heartbeat]: sending a signed transaction {}",
+                    hex::encode(tx::encode_into(&signed_tx, Vec::new()))
+                ));
+                match management::send_transaction(&signed_tx, req.network).await {
+                    Ok(()) => {
+                        ic_cdk::print(format!(
+                            "[heartbeat]: successfully sent transaction {}",
+                            hex::encode(signed_tx.wtxid())
+                        ));
+                    }
+                    Err(err) => {
+                        ic_cdk::print(format!(
+                            "[heartbeat]: failed to send a bitcoin transaction: {}",
+                            err
+                        ));
+                        undo_sign_request(req.original_request, req.utxos);
+                    }
+                }
+            }
+            Err(err) => {
+                ic_cdk::print(format!(
+                    "[heartbeat]: failed to sign a BTC transaction: {}",
+                    err
+                ));
+                undo_sign_request(req.original_request, req.utxos);
+            }
+        }
+    }
+}
+
 pub async fn heartbeat() {
     let _heartbeat_guard = match guard::HeartbeatGuard::new() {
         Some(guard) => guard,
         None => return,
     };
 
-    // Do Stuff
+    submit_pending_requests().await;
 }
 
-#[allow(dead_code)]
+/// Builds the minimal OutPoint -> Account map required to sign a transaction.
+fn filter_output_accounts(
+    state: &state::CkBtcMinterState,
+    unsigned_tx: &tx::UnsignedTransaction,
+) -> BTreeMap<OutPoint, Account> {
+    unsigned_tx
+        .inputs
+        .iter()
+        .map(|input| {
+            (
+                input.previous_output.clone(),
+                state
+                    .outpoint_account
+                    .get(&input.previous_output)
+                    .unwrap()
+                    .clone(),
+            )
+        })
+        .collect()
+}
+
 /// Selects a subset of UTXOs with the specified total target value and removes
 /// the selected UTXOs from the available set.
 ///
@@ -183,11 +423,11 @@ pub enum BuildTxError {
 ///
 pub fn build_unsigned_transaction(
     minter_utxos: &mut BTreeSet<Utxo>,
-    dst_address: address::BitcoinAddress,
-    main_address: address::BitcoinAddress,
+    dst_address: BitcoinAddress,
+    main_address: BitcoinAddress,
     amount: Satoshi,
     fee_per_vbyte: u64,
-) -> Result<tx::UnsignedTransaction, BuildTxError> {
+) -> Result<(tx::UnsignedTransaction, Vec<Utxo>), BuildTxError> {
     const DUST_THRESHOLD: Satoshi = 300;
 
     let input_utxos = greedy(amount, minter_utxos);
@@ -240,9 +480,9 @@ pub fn build_unsigned_transaction(
     };
 
     let tx_len = signed_transaction_length(&unsigned_tx);
-    let expected_fee = (tx_len as u64 * fee_per_vbyte) / 1000;
+    let fee = (tx_len as u64 * fee_per_vbyte) / 1000;
 
-    if expected_fee > amount {
+    if fee > amount {
         for utxo in input_utxos {
             minter_utxos.insert(utxo);
         }
@@ -251,7 +491,7 @@ pub fn build_unsigned_transaction(
 
     // NB. The receiver (always the first output) pays the fee.
     debug_assert_eq!(&unsigned_tx.outputs[0].address, &dst_address);
-    unsigned_tx.outputs[0].value -= expected_fee;
+    unsigned_tx.outputs[0].value -= fee;
 
-    Ok(unsigned_tx)
+    Ok((unsigned_tx, input_utxos))
 }
