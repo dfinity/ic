@@ -238,14 +238,10 @@ pub struct ExportModuleData {
 /// Returns an [`InstrumentationOutput`] or an error if the input binary could
 /// not be instrumented.
 pub(super) fn instrument(
-    wasm: &BinaryEncodedWasm,
+    module: Module<'_>,
     cost_to_compile_wasm_instruction: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
-    let mut module = Module::parse(wasm.as_slice(), false).map_err(|err| {
-        WasmInstrumentationError::ParityDeserializeError(ParityWasmError::new(err.to_string()))
-    })?;
-
-    module = inject_helper_functions(module);
+    let mut module = inject_helper_functions(module);
     module = export_table(module);
     module = export_memory(module);
 
