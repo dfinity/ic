@@ -1,7 +1,7 @@
 use super::super::types::{CspPop, CspPublicKey};
 use crate::key_id::KeyId;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
+use ic_types::crypto::{CryptoError, CurrentNodePublicKeys};
 use ic_types::NodeId;
 
 /// A trait that can be used to generate cryptographic key pairs
@@ -18,24 +18,27 @@ pub trait CspKeyGenerator {
     ///   RPC error when calling a remote CSP vault.
     /// # Panics
     /// If there already exists a secret key in the store for the secret key ID
-    /// derived from the public part of the randomly generated key pair. This
-    /// error most likely indicates a bad randomness source.
+    /// derived from the public key. This error most likely indicates a bad
+    /// randomness source.
     fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CryptoError>;
 
-    /// Generate a public/private key pair with proof of possession.
+    /// Generates a committee signing public/private key pair.
     ///
-    /// # Arguments
-    /// * `alg_id` specifies the algorithm to be used
     /// # Returns
-    /// The key ID referring to the secret key, the public key, and the PoP
+    /// The public key and the proof of possession (PoP) of the keypair
+    ///
     /// # Errors
-    /// * `CryptoError::InvalidArgument` if the algorithm is not supported by
-    ///   the trait implementation. (Note: Currently only BLS12-381 is supported
-    ///   by implementations of this trait)
-    fn gen_key_pair_with_pop(
-        &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<(CspPublicKey, CspPop), CryptoError>;
+    /// * `CryptoError::InternalError` if there is an internal
+    ///   error (e.g., the public key in the public key store is already set).
+    /// * `CryptoError::TransientInternalError` if there is a transient
+    ///   internal error, e.g,. an IO error when writing a key to disk, or an
+    ///   RPC error when calling a remote CSP vault.
+    ///
+    /// # Panics
+    /// If there already exists a secret key in the store for the secret key ID
+    /// derived from the public key. This error most likely indicates a bad
+    /// randomness source.
+    fn gen_committee_signing_key_pair(&self) -> Result<(CspPublicKey, CspPop), CryptoError>;
 
     /// Generates TLS key material for node with ID `node_id`.
     ///

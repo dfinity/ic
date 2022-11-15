@@ -7,7 +7,7 @@ use crate::types::{CspPop, CspPublicKey};
 use crate::vault::api::CspTlsKeygenError;
 use crate::Csp;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::CryptoError;
 use ic_types::NodeId;
 
 #[cfg(test)]
@@ -20,11 +20,8 @@ impl CspKeyGenerator for Csp {
         Ok(self.csp_vault.gen_node_signing_key_pair()?)
     }
 
-    fn gen_key_pair_with_pop(
-        &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<(CspPublicKey, CspPop), CryptoError> {
-        Ok(self.csp_vault.gen_key_pair_with_pop(algorithm_id)?)
+    fn gen_committee_signing_key_pair(&self) -> Result<(CspPublicKey, CspPop), CryptoError> {
+        Ok(self.csp_vault.gen_committee_signing_key_pair()?)
     }
 
     fn gen_tls_key_pair(

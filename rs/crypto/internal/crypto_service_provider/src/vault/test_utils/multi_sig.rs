@@ -1,4 +1,5 @@
 use crate::api::CspSigner;
+use crate::keygen::utils::committee_signing_pk_to_proto;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::CspPublicKey;
@@ -18,30 +19,63 @@ fn multi_sig_verifier() -> impl CspSigner {
     Csp::of(csprng, dummy_secret_key_store, dummy_public_key_store)
 }
 
-pub fn should_generate_multi_bls12_381_key_pair(csp_vault: Arc<dyn CspVault>) {
-    let (pk, _pop) = csp_vault
-        .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+pub fn should_generate_committee_signing_key_pair_and_store_pubkey(csp_vault: Arc<dyn CspVault>) {
+    let (pk, pop) = csp_vault
+        .gen_committee_signing_key_pair()
         .expect("Failure generating key pair with pop");
 
     assert!(matches!(pk, CspPublicKey::MultiBls12_381(_)));
+
+    assert_eq!(
+        csp_vault
+            .current_node_public_keys()
+            .expect("missing public keys")
+            .committee_signing_public_key
+            .expect("missing node signing key"),
+        committee_signing_pk_to_proto((pk, pop))
+    );
 }
 
-pub fn should_fail_to_generate_multi_sig_key_for_wrong_algorithm_id(csp_vault: Arc<dyn CspVault>) {
-    for algorithm_id in AlgorithmId::iter() {
-        if algorithm_id != AlgorithmId::MultiBls12_381 {
-            assert_eq!(
-                csp_vault.gen_key_pair_with_pop(algorithm_id).unwrap_err(),
-                CspMultiSignatureKeygenError::UnsupportedAlgorithm {
-                    algorithm: algorithm_id,
-                }
-            );
-        }
-    }
+// The given `csp_vault` is expected to return an AlreadySet error on set_once_committee_signing_pubkey
+pub fn should_fail_with_internal_error_if_committee_signing_key_already_set(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let result = csp_vault.gen_committee_signing_key_pair();
+
+    assert!(matches!(result,
+        Err(CspMultiSignatureKeygenError::InternalError { internal_error })
+        if internal_error.contains("committee signing public key already set")
+    ));
+}
+
+pub fn should_fail_with_internal_error_if_committee_signing_key_generated_more_than_once(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    assert!(csp_vault.gen_committee_signing_key_pair().is_ok());
+
+    let result = csp_vault.gen_committee_signing_key_pair();
+
+    assert!(matches!(result,
+        Err(CspMultiSignatureKeygenError::InternalError { internal_error })
+        if internal_error.contains("committee signing public key already set")
+    ));
+}
+
+// The given `csp_vault` is expected to return an IO error on set_once_node_signing_pubkey
+pub fn should_fail_with_transient_internal_error_if_committee_signing_key_persistence_fails(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let result = csp_vault.gen_committee_signing_key_pair();
+
+    assert!(matches!(result,
+        Err(CspMultiSignatureKeygenError::TransientInternalError { internal_error })
+        if internal_error.contains("IO error")
+    ));
 }
 
 pub fn should_generate_verifiable_pop(csp_vault: Arc<dyn CspVault>) {
     let (public_key, pop) = csp_vault
-        .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+        .gen_committee_signing_key_pair()
         .expect("Failed to generate key pair with PoP");
 
     let verifier = multi_sig_verifier();
@@ -52,7 +86,7 @@ pub fn should_generate_verifiable_pop(csp_vault: Arc<dyn CspVault>) {
 
 pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: Arc<dyn CspVault>) {
     let (csp_pub_key, csp_pop) = csp_vault
-        .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+        .gen_committee_signing_key_pair()
         .expect("failed to generate keys");
     let key_id = KeyId::from(&csp_pub_key);
 
@@ -76,7 +110,7 @@ pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: Arc<dyn CspVau
 
 pub fn should_not_multi_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn CspVault>) {
     let (csp_pub_key, _csp_pop) = csp_vault
-        .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+        .gen_committee_signing_key_pair()
         .expect("failed to generate keys");
     let key_id = KeyId::from(&csp_pub_key);
 

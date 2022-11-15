@@ -18,7 +18,7 @@ pub fn should_retrieve_current_public_keys(csp_vault: Arc<dyn CspVault>) {
         .gen_node_signing_key_pair()
         .expect("Could not generate node signing keys");
     let committee_signing_public_key = csp_vault
-        .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+        .gen_committee_signing_key_pair()
         .expect("Could not generate committee signing keys");
     let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)

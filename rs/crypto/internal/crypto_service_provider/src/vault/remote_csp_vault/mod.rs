@@ -68,9 +68,8 @@ pub trait TarpcCspVault {
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError>;
 
-    // Corresponds to `MultiSignatureCspVault.gen_key_pair_with_pop()`.
-    async fn gen_key_pair_with_pop(
-        algorithm_id: AlgorithmId,
+    // Corresponds to `MultiSignatureCspVault.gen_committee_signing_key_pair()`.
+    async fn gen_committee_signing_key_pair(
     ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
 
     // Corresponds to `ThresholdSignatureCspVault.threshold_sign()`.
