@@ -1,14 +1,16 @@
-//! [`Chunkable`] Artifact Trait.
+//! The module contains [`Chunkable`] and [`ChunkableArtifact`] traits.
+//! All artifact types delivered by P2P must implement both traits.
 //!
-//! A de facto trait for P2P assembled/downloadable artifacts. A
-//! chunkable artifact lends itself to be downloaded by the P2P layer.
-//! This trait has functions that abstract functionality of chunk
-//! management for various artifact variants.  P2P needs generic
-//! interfaces to perform the following functions:
+//! To better understand the traits, here are some of the requirements imposed by
+//! users (state sync) of P2P:
 //!
-//! - Create Adverts for Artifacts
-//! - Create under-construction object stubs on the receive side
-//! - Iterate/Request/Receive/Collate chunks
+//! - Artifacts don't necessary fit into memory.
+//! - Peers may need only some small parts of an artifact but
+//!   not the full one. In order to save bandwidth transferring
+//!   the full artifact that doesn't fit in memory doesn't make sense.
+//!
+//! For more context please check https://youtu.be/WaNJINjGleg
+//!
 use crate::{artifact::Artifact, crypto::CryptoHash};
 use bincode::{deserialize, serialize};
 use ic_protobuf::p2p::v1 as pb;
