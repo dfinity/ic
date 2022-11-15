@@ -27,7 +27,7 @@ FINDING_WITH_RISK_YES_PATCH_YES = Finding(
     [],
     None,
     -1,
-    "https://dfinity.atlassian.net/browse/SVM1-5",
+    "https://dfinity.atlassian.net/browse/SCAVM-5",
 )
 
 FINDING_WITH_RISK_YES_PATCH_NO = Finding(
@@ -42,7 +42,7 @@ FINDING_WITH_RISK_YES_PATCH_NO = Finding(
     [],
     None,
     -1,
-    "https://dfinity.atlassian.net/browse/SVM1-5",
+    "https://dfinity.atlassian.net/browse/SCAVM-5",
 )
 
 FINDING_WITH_RISK_NO_PATCH_YES = Finding(
@@ -57,7 +57,7 @@ FINDING_WITH_RISK_NO_PATCH_YES = Finding(
     [],
     None,
     -1,
-    "https://dfinity.atlassian.net/browse/SVM1-5",
+    "https://dfinity.atlassian.net/browse/SCAVM-5",
 )
 
 FINDING_WITH_RISK_NO_PATCH_NO = Finding(
@@ -72,7 +72,7 @@ FINDING_WITH_RISK_NO_PATCH_NO = Finding(
     [],
     None,
     -1,
-    "https://dfinity.atlassian.net/browse/SVM1-5",
+    "https://dfinity.atlassian.net/browse/SCAVM-5",
 )
 
 
