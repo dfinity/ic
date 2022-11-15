@@ -257,8 +257,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[tokio::test]
     async fn test_within_response_limit() {
-        // Check if response with higher than allowed response limit is rejected.
-        let response_limit: u64 = 512;
+        let response_size: u64 = 512;
         let server_config = Config {
             ..Default::default()
         };
@@ -270,8 +269,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             url: format!("https://{}/size", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
-            body: format!("{}", response_limit).as_bytes().to_vec(),
-            max_response_size_bytes: response_limit,
+            body: format!("{}", response_size).as_bytes().to_vec(),
+            max_response_size_bytes: response_size * 2,
         });
 
         let response = client.canister_http_send(request).await;

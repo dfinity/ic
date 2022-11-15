@@ -1,7 +1,7 @@
 use crate::metrics::{
     AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_BODY_RECEIVE_TIMEOUT, LABEL_CONNECT,
-    LABEL_DOWNLOAD, LABEL_HTTP_METHOD, LABEL_HTTP_SCHEME, LABEL_REQUEST_HEADERS,
-    LABEL_RESPONSE_HEADERS, LABEL_UPLOAD, LABEL_URL_PARSE,
+    LABEL_DOWNLOAD, LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_HTTP_SCHEME,
+    LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS, LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use byte_unit::Byte;
 use core::convert::TryFrom;
@@ -149,8 +149,10 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             .iter()
             .map(|(k, v)| {
                 let name = k.to_string();
+                // Use the header value in bytes for the size.
+                // It is possible that bytes.len() > str.len().
+                headers_size_bytes += name.len() + v.len();
                 let value = v.to_str()?.to_string();
-                headers_size_bytes += name.len() + value.len();
                 Ok(HttpHeader { name, value })
             })
             .collect::<Result<Vec<_>, ToStrError>>()
@@ -169,7 +171,24 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
         // We don't need a timeout here because there is a global timeout on the entire request.
         let body_bytes = receive_body_without_timeout(
             http_resp.into_body(),
-            Byte::from(req.max_response_size_bytes),
+            // Account for size of headers.
+            Byte::from(
+                req.max_response_size_bytes
+                    .checked_sub(headers_size_bytes as u64)
+                    .ok_or_else(|| {
+                        self.metrics
+                            .request_errors
+                            .with_label_values(&[LABEL_HEADER_RECEIVE_SIZE])
+                            .inc();
+                        Status::new(
+                            tonic::Code::OutOfRange,
+                            format!(
+                                "Header size exceeds specified response size limit {}",
+                                req.max_response_size_bytes
+                            ),
+                        )
+                    })?,
+            ),
         )
         .await
         .map_err(|err| {
