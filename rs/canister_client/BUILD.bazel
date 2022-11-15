@@ -1,6 +1,21 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    "//rs/canister_client/sender:__pkg__",
+    "//rs/cup_explorer:__pkg__",
+    "//rs/monitoring/prober:__pkg__",
+    "//rs/nns/init:__pkg__",
+    "//rs/orchestrator:__pkg__",
+    "//rs/registry/admin:__pkg__",
+    "//rs/registry/nns_data_provider:__pkg__",
+    "//rs/replay:__pkg__",
+    "//rs/rosetta-api:__subpackages__",
+    "//rs/rust_canisters/canister_test:__pkg__",
+    "//rs/scenario_tests:__pkg__",
+    "//rs/sns/integration_tests:__pkg__",
+    "//rs/tests:__pkg__",
+    "//rs/workload_generator:__pkg__",
+])
 
 DEPENDENCIES = [
     "//rs/canister_client/sender",
