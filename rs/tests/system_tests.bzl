@@ -55,12 +55,13 @@ run_system_test = rule(
     },
 )
 
-def system_test(name, runtime_deps = [], test_timeout = "long", **kwargs):
+def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", **kwargs):
     """Declares a system-test.
 
     Args:
       name: base name to use for the binary and test rules.
       runtime_deps: dependencies to make available to the test when it runs.
+      tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
@@ -76,7 +77,7 @@ def system_test(name, runtime_deps = [], test_timeout = "long", **kwargs):
         name = name,
         src = bin_name,
         runtime_deps = runtime_deps,
-        tags = ["requires-network", "system_test"],
+        tags = tags + ["requires-network", "system_test"],
         timeout = test_timeout,
     )
 

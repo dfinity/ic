@@ -230,6 +230,12 @@ rust_binary(
     deps = DEPENDENCIES + [":tests"],
 )
 
+py_binary(
+    name = "post_processing",
+    srcs = ["bin/bazel_test_postprocessing.py"],
+    main = ":bin/bazel_test_postprocessing.py",
+)
+
 rust_test(
     name = "test_e2e_scenarios",
     srcs = ["tests/test_driver_tests.rs"],
@@ -240,6 +246,10 @@ rust_test(
 system_test(
     name = "basic_health_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "external",
+        "manual",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
