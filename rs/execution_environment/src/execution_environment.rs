@@ -63,7 +63,8 @@ use ic_types::{
         extract_effective_canister_id, AnonymousQuery, Payload, RejectContext, Request, Response,
         SignedIngressContent, StopCanisterContext,
     },
-    CanisterId, CanisterTimer, Cycles, NumBytes, NumInstructions, SubnetId, Time,
+    CanisterId, CanisterTimer, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId,
+    Time,
 };
 use ic_types::{messages::MessageId, methods::SystemMethod, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
@@ -2110,6 +2111,10 @@ impl ExecutionEnvironment {
                 })
                 .collect();
             canister.apply_priority_credit();
+            // Aborting a long-running execution moves the canister to the
+            // default execution mode because the canister does not have a
+            // pending execution anymore.
+            canister.scheduler_state.long_execution_mode = LongExecutionMode::default();
             let canister_id = canister.canister_id();
             canister.system_state.apply_cycles_debit(canister_id, log);
         };
