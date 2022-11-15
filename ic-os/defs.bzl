@@ -292,14 +292,13 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         remote_subdir = "guest-os/disk-img" + upload_suffix,
     )
 
-    # TODO: Re-enable this after we verify the Bazel built update images.
-    #    upload_artifacts(
-    #        name = "upload_update-img",
-    #        inputs = [
-    #            ":upgrade.tar_zst",
-    #        ],
-    #        remote_subdir = "guest-os/update-img" + upload_suffix,
-    #    )
+    upload_artifacts(
+        name = "upload_update-img",
+        inputs = [
+            ":upgrade.tar_zst",
+        ],
+        remote_subdir = "guest-os/bazel-update-img" + upload_suffix,
+    )
 
     native.filegroup(
         name = "hash_and_upload_disk-img",
