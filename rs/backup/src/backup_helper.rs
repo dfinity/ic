@@ -7,6 +7,8 @@ use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{ReplicaVersion, SubnetId};
 
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use slog::{error, info, warn, Logger};
 use std::ffi::OsStr;
 use std::net::IpAddr;
@@ -284,12 +286,32 @@ impl BackupHelper {
             std::fs::create_dir_all(self.state_dir()).expect("Failure creating a directory");
         }
 
+        // replay the current version once, but if there is upgrade do it again
         while let Ok(ReplayResult::UpgradeRequired(upgrade_version)) = self.replay_current_version()
         {
             self.notification_client.message_slack(format!(
                 "Replica version upgrade detected (current: {} new: {}): upgrading the ic-replay tool to retry... 🤞",
                 self.replica_version, upgrade_version
             ));
+            // collect nodes from which we will fetch the config
+            match self.collect_subnet_nodes() {
+                Ok(nodes) => {
+                    let mut shuf_nodes = nodes;
+                    shuf_nodes.shuffle(&mut thread_rng());
+                    // fetch the ic.json5 file from the first node
+                    // TODO: fetch from another f nodes and compare them
+                    if let Some(node_ip) = shuf_nodes.get(0) {
+                        self.rsync_config(node_ip)
+                    } else {
+                        error!(self.log, "Error getting first node.");
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!(self.log, "Error fetching subnet node list: {:?}", e);
+                    break;
+                }
+            }
             self.replica_version = upgrade_version;
         }
 
