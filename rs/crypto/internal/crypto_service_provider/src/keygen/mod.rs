@@ -48,6 +48,9 @@ impl CspKeyGenerator for Csp {
                 CspTlsKeygenError::DuplicateKeyId { key_id } => {
                     panic_due_to_duplicated_key_id(key_id)
                 }
+                CspTlsKeygenError::TransientInternalError { internal_error } => {
+                    CryptoError::TransientInternalError { internal_error }
+                }
             })?;
         Ok(cert)
     }

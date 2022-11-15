@@ -1,6 +1,6 @@
 //! TLS handshake operations provided by the CSP vault
 use crate::key_id::KeyId;
-use crate::public_key_store::PublicKeyStore;
+use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
@@ -30,13 +30,11 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
         not_after: &str,
     ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         let start_time = self.metrics.now();
-        let result = self.gen_tls_key_pair_internal(node, not_after);
-        if let Ok(cert) = &result {
-            //TODO CRP-1751: do proper error handling and add corresponding unit tests
-            let _store_result = self
-                .public_key_store_write_lock()
-                .set_once_tls_certificate(cert.clone().to_proto());
-        }
+        let (sk, cert) = self.gen_tls_key_pair_internal(node, not_after)?;
+        let result = self
+            .store_tls_secret_key(&cert, sk)
+            .and_then(|_key_id| self.store_tls_certificate(&cert).map(|()| cert));
+
         self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
             MetricsScope::Local,
@@ -113,11 +111,25 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         Ok(key_id)
     }
 
+    fn store_tls_certificate(&self, cert: &TlsPublicKeyCert) -> Result<(), CspTlsKeygenError> {
+        self.public_key_store_write_lock()
+            .set_once_tls_certificate(cert.clone().to_proto())
+            .map_err(|e| match e {
+                PublicKeySetOnceError::AlreadySet => CspTlsKeygenError::InternalError {
+                    internal_error: "TLS certificate already set".to_string(),
+                },
+                PublicKeySetOnceError::Io(io_error) => CspTlsKeygenError::TransientInternalError {
+                    internal_error: format!("IO error: {}", io_error),
+                },
+            })?;
+        Ok(())
+    }
+
     fn gen_tls_key_pair_internal(
         &self,
         node: NodeId,
         not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+    ) -> Result<(TlsEd25519SecretKeyDerBytes, TlsPublicKeyCert), CspTlsKeygenError> {
         let common_name = &node.get().to_string()[..];
         let not_after_asn1 = Asn1Time::from_str_x509(not_after).map_err(|_| {
             CspTlsKeygenError::InvalidNotAfterDate {
@@ -139,8 +151,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");
-        let _key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key)?;
-        Ok(x509_pk_cert)
+        Ok((secret_key, x509_pk_cert))
     }
 
     fn tls_sign_internal(

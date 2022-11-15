@@ -112,6 +112,7 @@ pub enum CspTlsKeygenError {
     InvalidNotAfterDate { message: String, not_after: String },
     InternalError { internal_error: String },
     DuplicateKeyId { key_id: KeyId },
+    TransientInternalError { internal_error: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

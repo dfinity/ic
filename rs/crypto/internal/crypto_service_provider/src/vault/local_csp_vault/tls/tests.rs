@@ -1,24 +1,38 @@
 #![allow(clippy::unwrap_used)]
+use std::sync::Arc;
+
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
+use crate::secret_key_store::SecretKeyStore;
+use crate::vault::api::CspVault;
 use crate::vault::test_utils;
 use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_encoding;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
+use crate::LocalCspVault;
 use ic_types_test_utils::ids::node_test_id;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 
 mod keygen {
     use super::*;
     use crate::key_id::KeyId;
+    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+    use crate::public_key_store::PublicKeySetOnceError;
+    use crate::secret_key_store::test_utils::MockSecretKeyStore;
     use crate::vault::api::CspTlsKeygenError;
     use crate::vault::local_csp_vault::LocalCspVault;
     use crate::vault::test_utils::local_csp_vault::{
         new_local_csp_vault, new_local_csp_vault_with_secret_key_store,
     };
+    use mockall::Sequence;
     use std::sync::Arc;
 
+    const NOT_AFTER: &str = "25670102030405Z";
+
     #[test]
-    fn should_insert_secret_key_into_key_store() {
-        test_utils::tls::should_insert_secret_key_into_key_store(new_local_csp_vault());
+    fn should_generate_tls_key_pair_and_store_certificate() {
+        test_utils::tls::should_generate_tls_key_pair_and_store_certificate(new_local_csp_vault());
     }
 
     #[test]
@@ -78,7 +92,7 @@ mod keygen {
     #[test]
     fn should_set_different_serial_numbers_for_multiple_certs() {
         test_utils::tls::should_set_different_serial_numbers_for_multiple_certs(
-            new_local_csp_vault(),
+            &new_local_csp_vault,
         );
     }
 
@@ -111,6 +125,53 @@ mod keygen {
             matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
                 if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
             )
+        );
+    }
+
+    #[test]
+    fn should_store_tls_secret_key_before_certificate() {
+        let mut seq = Sequence::new();
+        let mut sks = MockSecretKeyStore::new();
+        sks.expect_insert()
+            .times(1)
+            .returning(|_key, _key_id, _scope| Ok(()))
+            .in_sequence(&mut seq);
+        let mut pks = MockPublicKeyStore::new();
+        pks.expect_set_once_tls_certificate()
+            .times(1)
+            .returning(|_key| Ok(()))
+            .in_sequence(&mut seq);
+        let vault = vault_with_node_secret_key_store_and_public_key_store(sks, pks);
+
+        let _ = vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), NOT_AFTER);
+    }
+
+    #[test]
+    fn should_fail_with_internal_error_if_tls_certificate_already_set() {
+        let mut pks_returning_already_set_error = MockPublicKeyStore::new();
+        pks_returning_already_set_error
+            .expect_set_once_tls_certificate()
+            .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
+        let vault = vault_with_public_key_store(pks_returning_already_set_error);
+        test_utils::tls::should_fail_with_internal_error_if_tls_certificate_already_set(vault);
+    }
+
+    #[test]
+    fn should_fail_with_internal_error_if_tls_certificate_generated_more_than_once() {
+        let vault = new_local_csp_vault();
+        test_utils::tls::should_fail_with_internal_error_if_tls_certificate_generated_more_than_once(vault);
+    }
+
+    #[test]
+    fn should_fail_with_transient_internal_error_if_tls_keygen_persistance_fails() {
+        let mut pks_returning_io_error = MockPublicKeyStore::new();
+        let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+        pks_returning_io_error
+            .expect_set_once_tls_certificate()
+            .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
+        let vault = vault_with_public_key_store(pks_returning_io_error);
+        test_utils::tls::should_fail_with_transient_internal_error_if_tls_keygen_persistance_fails(
+            vault,
         );
     }
 }
@@ -166,4 +227,25 @@ mod sign {
             key_id, csp_vault,
         );
     }
+}
+
+fn vault_with_public_key_store<P: PublicKeyStore + 'static>(
+    public_key_store: P,
+) -> Arc<dyn CspVault> {
+    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+    let temp_sks = TempSecretKeyStore::new();
+    let vault = LocalCspVault::new_for_test(dummy_rng, temp_sks, public_key_store);
+    Arc::new(vault)
+}
+
+fn vault_with_node_secret_key_store_and_public_key_store<
+    S: SecretKeyStore + 'static,
+    P: PublicKeyStore + 'static,
+>(
+    node_secret_key_store: S,
+    public_key_store: P,
+) -> Arc<dyn CspVault> {
+    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+    let vault = LocalCspVault::new_for_test(dummy_rng, node_secret_key_store, public_key_store);
+    Arc::new(vault)
 }

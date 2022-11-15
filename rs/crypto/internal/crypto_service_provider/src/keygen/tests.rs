@@ -372,12 +372,10 @@ mod tls {
 
     #[test]
     fn should_set_different_serial_numbers_for_multiple_certs() {
-        let csp = Csp::with_rng(rng());
-
         const SAMPLE_SIZE: usize = 20;
         let mut serial_samples = BTreeSet::new();
-        for _i in 0..SAMPLE_SIZE {
-            let cert = csp
+        for i in 0..SAMPLE_SIZE {
+            let cert = Csp::with_rng(csprng_seeded_with(i as u64))
                 .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
                 .expect("error generating TLS certificate");
             serial_samples.insert(serial_number(&cert));
@@ -429,6 +427,24 @@ mod tls {
 
     fn serial_number(cert: &TlsPublicKeyCert) -> BigNum {
         cert.as_x509().serial_number().to_bn().unwrap()
+    }
+
+    #[test]
+    fn should_fail_with_internal_error_if_tls_public_key_certificate_already_set() {
+        let csp = Csp::with_rng(rng());
+
+        assert!(csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .is_ok());
+
+        // the attemtps after the first one should fail
+        for _ in 0..5 {
+            assert!(matches!(csp
+                .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER),
+                Err(CryptoError::InternalError { internal_error })
+                if internal_error.contains("TLS certificate already set")
+            ));
+        }
     }
 }
 

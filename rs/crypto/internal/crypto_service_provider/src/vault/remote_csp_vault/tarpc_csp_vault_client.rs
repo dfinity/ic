@@ -388,7 +388,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
             not_after.to_string(),
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspTlsKeygenError::InternalError {
+            Err(CspTlsKeygenError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
