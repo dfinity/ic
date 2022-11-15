@@ -12,6 +12,15 @@ pub enum BitcoinAddress {
     WitnessV0([u8; 20]),
 }
 
+impl BitcoinAddress {
+    /// Converts the address to the textual representation.
+    pub fn display(&self, network: Network) -> String {
+        match self {
+            Self::WitnessV0(pkhash) => network_and_pkhash_to_p2wpkh(network, pkhash),
+        }
+    }
+}
+
 /// Returns the derivation path that should be used to sign a message from a
 /// specified account.
 pub fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
@@ -53,6 +62,15 @@ pub fn account_to_p2wpkh_address(
         network,
         &derive_public_key(ecdsa_public_key, account).public_key,
     )
+}
+
+/// Constructs the bitcoin address corresponding to the specified account.
+pub fn account_to_bitcoin_address(
+    ecdsa_public_key: &ECDSAPublicKey,
+    account: &Account,
+) -> BitcoinAddress {
+    let pk = derive_public_key(ecdsa_public_key, account).public_key;
+    BitcoinAddress::WitnessV0(crate::tx::hash160(&pk))
 }
 
 pub fn network_and_pkhash_to_p2wpkh(network: Network, pkhash: &[u8; 20]) -> String {
