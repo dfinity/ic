@@ -53,11 +53,8 @@ impl Registry {
                     .as_bytes()
                     .to_vec(),
                 value: encode_or_panic(&ReplicaVersionRecord {
-                    release_package_url: payload.release_package_url.clone(),
                     release_package_sha256_hex: payload.release_package_sha256_hex,
-                    release_package_urls: payload
-                        .release_package_urls
-                        .unwrap_or_else(|| vec![payload.release_package_url]),
+                    release_package_urls: payload.release_package_urls.unwrap(),
                 }),
             },
             // Bless the new version (that is, update the list of blessed versions)

@@ -39,24 +39,12 @@ pub(crate) fn check_replica_version_invariants(
     versions.extend(blessed_version_ids);
     versions.dedup();
 
-    // Check whether release package URLs (iso image) and corresponding
-    // hash is well-formed. As file-based URLs are only used in
-    // test-deployments, we disallow file:/// URLs.
+    // Check whether release package URLs (iso image) and corresponding hash is well-formed.
+    // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
     if strict {
         for version in versions {
             let r = get_replica_version_record(snapshot, version);
-
-            // An entry where all URLs are unspecified is invalid.
-            if r.release_package_url.is_empty() || r.release_package_urls.is_empty() {
-                return Err(InvariantCheckError {
-                    msg: "Either `release_package_url` or `release_package_urls` must be set"
-                        .to_string(),
-                    source: None,
-                });
-            }
-
             assert_valid_urls_and_hash(
-                &r.release_package_url,
                 &r.release_package_urls,
                 &r.release_package_sha256_hex,
                 false, // allow_file_url
@@ -101,30 +89,19 @@ fn assert_sha256(s: &str) {
     }
 }
 
-fn assert_valid_urls_and_hash(url: &str, urls: &[String], hash: &str, allow_file_url: bool) {
+fn assert_valid_urls_and_hash(urls: &[String], hash: &str, allow_file_url: bool) {
     assert!(!hash.is_empty(), "release_package_hash cannot be empty");
-
-    // Either `release_package_url` or `release_package_urls` must be set
-    if url.is_empty() && urls.iter().any(|url| url.is_empty()) {
-        panic!("Either `release_package_url` or `release_package_urls` must contain URLs");
-    }
-
+    assert!(!urls.is_empty(), "`release_package_urls` cannot be empty");
     assert_sha256(hash);
 
-    // File URLs are used in test deployments. We only disallow non-ASCII.
-    if allow_file_url && url.starts_with("file://") {
-        if !url.is_ascii() {
-            panic!("file-URL contains non-ASCII characters.");
+    urls.iter().for_each(|url|
+        // File URLs are used in test deployments. We only disallow non-ASCII.
+        if allow_file_url && url.starts_with("file://") {
+            assert!(url.is_ascii(), "file-URL {} contains non-ASCII characters.", url);
         }
-        return;
-    }
-
-    // If `release_package_url` does not contain a valid URL, `release_package_urls` must contain valid URLs.
-    if Url::parse(url).is_err() {
-        for url in urls.iter() {
-            if let Err(e) = Url::parse(url) {
-                panic!("Release package URL {} is not valid: {}", url, e);
-            }
+        // if it's not a file URL, it should be a valid URL.
+        else if let Err(e) = Url::parse(url) {
+            panic!("Release package URL {} is not valid: {}", url, e);
         }
-    }
+    );
 }

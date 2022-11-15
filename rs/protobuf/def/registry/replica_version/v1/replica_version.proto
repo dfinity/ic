@@ -18,9 +18,10 @@ message ReplicaVersionRecord {
     // The URL against which a HTTP GET request will return a release package
     // that corresponds to this version
     // DEPRECATED in favor of `release_package_urls`
-    string release_package_url = 5;
+    reserved "release_package_url";
+    reserved 5;
 
-    // The hex-formatted SHA-256 hash of the archive file served by 'release_package_url'
+    // The hex-formatted SHA-256 hash of the archive file served by 'release_package_urls'
     string release_package_sha256_hex = 6;
 
     // The URLs against which a HTTP GET request will return a release package

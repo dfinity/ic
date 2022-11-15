@@ -381,18 +381,10 @@ impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
         &self,
         version: &ReplicaVersion,
     ) -> UpgradeResult<(Vec<String>, Option<String>)> {
-        let mut record = self
+        let record = self
             .registry
             .get_replica_version_record(version.clone(), self.registry.get_latest_version())
             .map_err(UpgradeError::from)?;
-
-        // OR-253 shall remove this statement along with `release_package_url`.
-        // Until then, we need to remain compatible with older replica version records
-        // that contain only a single URL in `release_package_url`. This would duplicate
-        // the first URL in newer blessed versions, which is temporarily accepted.
-        record
-            .release_package_urls
-            .push(record.release_package_url.clone());
 
         Ok((
             record.release_package_urls,

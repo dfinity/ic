@@ -445,7 +445,6 @@ impl IcConfig {
 
         let initial_replica_version = self.initial_replica_version_id.to_string();
         let replica_version_record = ReplicaVersionRecord {
-            release_package_url: opturl_to_string(self.initial_release_package_url.clone()),
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: vec![opturl_to_string(self.initial_release_package_url)],
         };

@@ -65,7 +65,7 @@ fn test_submit_and_accept_bless_retire_replica_version_proposal() {
             node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
-            release_package_urls: None,
+            release_package_urls: Some(vec!["".to_string()]),
         };
         let retire_version_payload = |ids: Vec<&str>| RetireReplicaVersionPayload {
             replica_version_ids: ids.iter().map(|id| id.to_string()).collect(),

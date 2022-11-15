@@ -855,11 +855,7 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
-            release_package_url: self
-                .release_package_urls
-                .get(0)
-                .expect("Release package url is required")
-                .clone(),
+            release_package_url: "".into(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: Some(self.release_package_urls.clone()),
         }
@@ -910,7 +906,7 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
-            release_package_url: release_package_url.clone(),
+            release_package_url: "".into(),
             release_package_sha256_hex: self
                 .release_package_sha256_hex
                 .clone()
@@ -3348,10 +3344,13 @@ async fn main() {
             // Download the IC-OS upgrade, do not check sha256 yet, we will do that
             // explicitly later
             let file_downloader = FileDownloader::new(None);
-            file_downloader
-                .download_file(&version.release_package_url, &tmp_file, None)
-                .await
-                .expect("Download of release package failed.");
+            if version.release_package_urls.iter().all(|url| {
+                tokio::runtime::Handle::current()
+                    .block_on(file_downloader.download_file(url, &tmp_file, None))
+                    .is_err()
+            }) {
+                panic!("Download of release package failed.");
+            }
 
             println!("OK   Download success");
 
