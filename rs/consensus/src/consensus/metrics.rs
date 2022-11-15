@@ -150,6 +150,7 @@ pub struct BatchStats {
     pub ingress_ids: Vec<ic_types::artifact::IngressMessageId>,
     pub canister_http_success_delivered: usize,
     pub canister_http_timeouts_delivered: usize,
+    pub canister_http_divergences_delivered: usize,
 }
 
 impl From<&Batch> for BatchStats {
@@ -162,6 +163,11 @@ impl From<&Batch> for BatchStats {
             ingress_ids: batch.payload.ingress.message_ids(),
             canister_http_success_delivered: batch.payload.canister_http.responses.len(),
             canister_http_timeouts_delivered: batch.payload.canister_http.timeouts.len(),
+            canister_http_divergences_delivered: batch
+                .payload
+                .canister_http
+                .divergence_responses
+                .len(),
         }
     }
 }
@@ -232,6 +238,7 @@ pub struct FinalizerMetrics {
     // canister http payload metrics
     pub canister_http_success_delivered: IntCounter,
     pub canister_http_timeouts_delivered: IntCounter,
+    pub canister_http_divergences_delivered: IntCounter,
 }
 
 impl FinalizerMetrics {
@@ -304,6 +311,10 @@ impl FinalizerMetrics {
                 "canister_http_timeouts_delivered",
                 "Total number of canister http messages delivered as timeouts",
             ),
+            canister_http_divergences_delivered: metrics_registry.int_counter(
+                "canister_http_divergences_delivered", 
+                "Total number of canister http messages delivered as divergences",
+            ),
         }
     }
 
@@ -323,6 +334,8 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http_success_delivered as u64);
         self.canister_http_timeouts_delivered
             .inc_by(batch_stats.canister_http_timeouts_delivered as u64);
+        self.canister_http_divergences_delivered
+            .inc_by(batch_stats.canister_http_divergences_delivered as u64);
         if let Some(ecdsa) = &block_stats.ecdsa_stats {
             self.ecdsa_key_transcript_created
                 .inc_by(ecdsa.key_transcript_created);
