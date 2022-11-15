@@ -15,25 +15,7 @@
     BAZEL_COMMAND: "test"
     BAZEL_TARGETS: "//..."
   script:
-    - set -eufo pipefail
-    - bazel version
-    - AWS_CREDS="${HOME}/.aws/credentials"
-    - mkdir -p "$(dirname "${AWS_CREDS}")"
-    - ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
-    - ln -fs "${DEV_ROOT_CA}" ic-os/guestos/dev-root-ca.crt # https://gitlab.com/dfinity-lab/public/ic/-/blob/master/ic-os/defs.bzl#L85
-    - "# shellcheck disable=SC2086 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
-    - >
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel
-      ${BAZEL_STARTUP_ARGS}
-      ${BAZEL_COMMAND}
-      --config ci
-      --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})"
-      --ic_version="${CI_COMMIT_SHA}"
-      ${BAZEL_EXTRA_ARGS}
-      ${BAZEL_TARGETS}
-      ${BAZEL_UPLOAD_TARGETS:+$(bazel query "kind(upload_artifacts, $BAZEL_UPLOAD_TARGETS)")}
-      2>&1 |
-      perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'
+    - ./gitlab-ci/src/bazel-ci/main.sh
   after_script:
     - | 
       set +e # Do not fail in the after_script, try to do as much as possible instead.
