@@ -1,11 +1,13 @@
 mod common;
 
 use common::{
-    create_mock_event_handler, get_free_localhost_port,
-    temp_crypto_component_with_tls_keys_in_registry, RegistryAndDataProvider, REG_V1,
+    create_mock_event_handler, get_free_localhost_port, setup_peer_up_ack_event_handler,
+    setup_test_peer, temp_crypto_component_with_tls_keys_in_registry, RegistryAndDataProvider,
+    REG_V1,
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
+use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
     TransportPayload,
@@ -319,28 +321,49 @@ fn test_drain_send_queue_impl(use_h2: bool) {
     });
 }
 
-// helper functions
+// [Incomplete]
+/*
+Test connection and message sending at a larger scale:
+Creates peer A and connect it to 4 other peers (B-E)
+Send a high volume of messages from all nodes to A
+*/
+#[test]
+fn test_multiple_connections_to_single_peer() {
+    let use_h2 = false; // TO DO - fix
 
-fn setup_peer_up_ack_event_handler(
-    rt: tokio::runtime::Handle,
-    connected: Sender<bool>,
-) -> TransportEventHandler {
-    let (event_handler, mut handle) = create_mock_event_handler();
-    rt.spawn(async move {
-        loop {
-            if let Some(req) = handle.next_request().await {
-                let (event, rsp) = req;
-                if let TransportEvent::PeerUp(_) = event {
-                    connected
-                        .try_send(true)
-                        .expect("Channel capacity should not be reached");
-                }
-                rsp.send_response(());
-            }
-        }
+    let registry_version = REG_V1;
+    with_test_replica_logger(|logger| {
+        // Setup registry and crypto component
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut registry_and_data = RegistryAndDataProvider::new();
+        registry_and_data.registry.update_to_latest_version();
+
+        let crypto_factory = |registry_and_data: &mut RegistryAndDataProvider, node_id: NodeId| {
+            Arc::new(temp_crypto_component_with_tls_keys_in_registry(
+                registry_and_data,
+                node_id,
+            )) as Arc<dyn TlsHandshake + Send + Sync>
+        };
+
+        let (peer_a_sender, _peer_a_receiver) = channel(10);
+        let event_handler_1 = setup_peer_up_ack_event_handler(rt.handle().clone(), peer_a_sender);
+
+        let (_peer, _addr) = setup_test_peer(
+            logger,
+            rt.handle().clone(),
+            NODE_ID_1,
+            get_free_localhost_port().expect("Failed to get free localhost port"),
+            registry_version,
+            &mut registry_and_data,
+            crypto_factory,
+            event_handler_1,
+            use_h2,
+        );
+        // TODO - complete rest of test
     });
-    event_handler
 }
+
+// helper functions
 
 fn setup_message_ack_event_handler(
     rt: tokio::runtime::Handle,
