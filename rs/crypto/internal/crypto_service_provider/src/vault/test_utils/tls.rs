@@ -23,13 +23,21 @@ pub const NODE_1: u64 = 4241;
 pub const FIXED_SEED: u64 = 42;
 pub const NOT_AFTER: &str = "25670102030405Z";
 
-pub fn should_insert_secret_key_into_key_store(csp_vault: Arc<dyn CspVault>) {
+pub fn should_generate_tls_key_pair_and_store_certificate(csp_vault: Arc<dyn CspVault>) {
     let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
     let key_id = KeyId::from(&cert);
 
     assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
+    assert_eq!(
+        csp_vault
+            .current_node_public_keys()
+            .expect("missing public keys")
+            .tls_certificate
+            .expect("missing tls certificate"),
+        cert.to_proto()
+    );
 }
 
 pub fn should_fail_if_secret_key_insertion_yields_duplicate_error(
@@ -122,11 +130,13 @@ pub fn should_set_random_cert_serial_number(csp_vault: Arc<dyn CspVault>) {
     assert_eq!(expected_serial, cert_serial);
 }
 
-pub fn should_set_different_serial_numbers_for_multiple_certs(csp_vault: Arc<dyn CspVault>) {
+pub fn should_set_different_serial_numbers_for_multiple_certs(
+    csp_vault_factory: &dyn Fn() -> Arc<dyn CspVault>,
+) {
     const SAMPLE_SIZE: usize = 20;
     let mut serial_samples = BTreeSet::new();
     for _i in 0..SAMPLE_SIZE {
-        let cert = csp_vault
+        let cert = csp_vault_factory()
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
         serial_samples.insert(serial_number(&cert));
@@ -273,4 +283,48 @@ fn random_message() -> Vec<u8> {
     let mut rng = thread_rng();
     let msg_len: usize = rng.gen_range(0..1024);
     (0..msg_len).map(|_| rng.gen::<u8>()).collect()
+}
+
+// The given `csp_vault` is expected to return an AlreadySet error on set_once_tls_certificate
+pub fn should_fail_with_internal_error_if_tls_certificate_already_set(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    // with the same and a different node id
+    for node_id in [NODE_1, NODE_1 + 1] {
+        let result = csp_vault.gen_tls_key_pair(node_test_id(node_id), NOT_AFTER);
+
+        assert!(matches!(result,
+            Err(CspTlsKeygenError::InternalError { internal_error })
+            if internal_error.contains("TLS certificate already set")
+        ));
+    }
+}
+
+pub fn should_fail_with_internal_error_if_tls_certificate_generated_more_than_once(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    assert!(csp_vault
+        .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+        .is_ok());
+
+    for node_id in [NODE_1, NODE_1 + 1, NODE_1 + 2] {
+        let result = csp_vault.gen_tls_key_pair(node_test_id(node_id), NOT_AFTER);
+
+        assert!(matches!(result,
+            Err(CspTlsKeygenError::InternalError { internal_error })
+            if internal_error.contains("TLS certificate already set")
+        ));
+    }
+}
+
+// The given `csp_vault` is expected to return an IO error on set_once_node_signing_pubkey
+pub fn should_fail_with_transient_internal_error_if_tls_keygen_persistance_fails(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let result = csp_vault.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+
+    assert!(matches!(result,
+        Err(CspTlsKeygenError::TransientInternalError { internal_error })
+        if internal_error.contains("IO error")
+    ));
 }

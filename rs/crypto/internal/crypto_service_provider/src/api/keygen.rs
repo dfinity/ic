@@ -51,12 +51,14 @@ pub trait CspKeyGenerator {
     /// * validity ending at `not_after`, which must be specified according to
     ///   section 4.1.2.5 in RFC 5280.
     ///
-    /// Returns the public key certificate.
+    /// # Returns
+    /// The public key certificate.
     ///
     /// # Errors
     /// * if `not_after` is not specified according to RFC 5280 or if
     /// `not_after` is in the past
     /// * if a malformed X509 certificate is generated
+    /// * if this function is called more than once
     fn gen_tls_key_pair(
         &self,
         node_id: NodeId,

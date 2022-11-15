@@ -470,16 +470,24 @@ mod ni_dkg {
 }
 
 mod tls_keygen {
+    use std::io;
+
     use super::*;
+    use crate::public_key_store::PublicKeySetOnceError;
     use crate::vault::test_utils::local_csp_vault::new_local_csp_vault_with_secret_key_store;
     use crate::KeyId;
     use ic_types_test_utils::ids::node_test_id;
+    use mockall::Sequence;
+    use rand_chacha::ChaCha20Rng;
+
+    /// Date in the past
+    const NOT_AFTER: &str = "20211004235959Z";
 
     #[test]
-    fn should_insert_secret_key_into_key_store() {
+    fn should_generate_tls_key_pair_and_store_certificate() {
         let tokio_rt = new_tokio_runtime();
         let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::tls::should_insert_secret_key_into_key_store(csp_vault);
+        test_utils::tls::should_generate_tls_key_pair_and_store_certificate(csp_vault);
     }
 
     #[test]
@@ -554,8 +562,8 @@ mod tls_keygen {
     #[test]
     fn should_set_different_serial_numbers_for_multiple_certs() {
         let tokio_rt = new_tokio_runtime();
-        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::tls::should_set_different_serial_numbers_for_multiple_certs(csp_vault);
+        let csp_vault_factory = || new_remote_csp_vault(tokio_rt.handle());
+        test_utils::tls::should_set_different_serial_numbers_for_multiple_certs(&csp_vault_factory);
     }
 
     #[test]
@@ -585,6 +593,81 @@ mod tls_keygen {
         let result =
             csp_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), date_in_the_past);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn should_store_tls_secret_key_before_certificate() {
+        let local_vault = {
+            let mut seq = Sequence::new();
+            let mut sks = MockSecretKeyStore::new();
+            sks.expect_insert()
+                .times(1)
+                .returning(|_key, _key_id, _scope| Ok(()))
+                .in_sequence(&mut seq);
+            let mut pks = MockPublicKeyStore::new();
+            pks.expect_set_once_tls_certificate()
+                .times(1)
+                .returning(|_key| Ok(()))
+                .in_sequence(&mut seq);
+
+            let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+            LocalCspVault::new_for_test(dummy_rng, sks, pks)
+        };
+        let tokio_rt = new_tokio_runtime();
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        let _ = remote_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), NOT_AFTER);
+    }
+
+    #[test]
+    fn should_fail_with_internal_error_if_node_signing_key_already_set() {
+        let local_vault = {
+            let mut pks_returning_already_set_error = MockPublicKeyStore::new();
+            pks_returning_already_set_error
+                .expect_set_once_tls_certificate()
+                .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
+
+            let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+            let temp_sks = TempSecretKeyStore::new();
+            LocalCspVault::new_for_test(dummy_rng, temp_sks, pks_returning_already_set_error)
+        };
+        let tokio_rt = new_tokio_runtime();
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        test_utils::tls::should_fail_with_internal_error_if_tls_certificate_already_set(
+            remote_vault,
+        );
+    }
+
+    #[test]
+    fn should_fail_with_internal_error_if_node_signing_key_generated_more_than_once() {
+        let tokio_rt = new_tokio_runtime();
+        let vault = new_remote_csp_vault(tokio_rt.handle());
+        test_utils::tls::should_fail_with_internal_error_if_tls_certificate_generated_more_than_once(vault);
+    }
+
+    #[test]
+    fn should_fail_with_transient_internal_error_if_node_signing_key_persistence_fails() {
+        let local_vault = {
+            let mut pks_returning_io_error = MockPublicKeyStore::new();
+            let io_error = io::Error::new(io::ErrorKind::Other, "oh no!");
+            pks_returning_io_error
+                .expect_set_once_tls_certificate()
+                .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
+
+            let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+            let temp_sks = TempSecretKeyStore::new();
+            LocalCspVault::new_for_test(dummy_rng, temp_sks, pks_returning_io_error)
+        };
+        let tokio_rt = new_tokio_runtime();
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        test_utils::tls::should_fail_with_transient_internal_error_if_tls_keygen_persistance_fails(
+            remote_vault,
+        );
     }
 }
 
