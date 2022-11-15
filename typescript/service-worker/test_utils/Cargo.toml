@@ -13,12 +13,11 @@ ic-crypto-utils-threshold-sig-der = { path = "../../../rs/crypto/utils/threshold
 ic-types = { path = "../../../rs/types/types" }
 ic-base-types = { path = "../../../rs/types/base_types" }
 
-ic-certified-map = { git = "https://github.com/dfinity/cdk-rs", rev = "2112e912e156b271389a51777680de542bb43980" }
-
 serde = { version = "1.0", features = ['derive'] }
 serde_cbor = "0.11"
 serde_json = "1.0.86"
 hex = "0.4"
+ic-certified-map = "0.3.1"
 rand = "0.8"
 base64 = "0.13"
 sha256 = "1.0"

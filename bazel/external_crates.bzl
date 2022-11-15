@@ -376,8 +376,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.6.0",
             ),
             "ic-certified-map": crate.spec(
-                git = "https://github.com/dfinity/cdk-rs",
-                rev = "2112e912e156b271389a51777680de542bb43980",
+                version = "^0.3.1",
             ),
             "ic-identity-hsm": crate.spec(
                 version = "=0.22.0",

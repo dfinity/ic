@@ -1392,12 +1392,13 @@ dependencies = [
 
 [[package]]
 name = "ic-certified-map"
-version = "0.2.0"
-source = "git+https://github.com/dfinity/cdk-rs?rev=2112e912e156b271389a51777680de542bb43980#2112e912e156b271389a51777680de542bb43980"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ea6b4530bf4e304ba870da9f58f6e10a84c74fe2fdec574ec7a316f031c37fd"
 dependencies = [
  "serde",
  "serde_bytes",
- "sha2 0.9.9",
+ "sha2 0.10.6",
 ]
 
 [[package]]
@@ -1666,6 +1667,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tarpc",
+ "tempfile",
  "threadpool",
  "tokio",
  "tokio-openssl",
