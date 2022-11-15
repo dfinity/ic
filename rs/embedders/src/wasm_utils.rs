@@ -179,9 +179,10 @@ fn validate_and_instrument(
 ) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
     let (wasm_validation_details, instrumentation_output) =
         if config.feature_flags.new_wasm_transform_lib == FlagStatus::Enabled {
+            let (validation, module) = new_validation::validate_wasm_binary(wasm, config)?;
             (
-                new_validation::validate_wasm_binary(wasm, config)?,
-                new_instrumentation::instrument(wasm, config.cost_to_compile_wasm_instruction)?,
+                validation,
+                new_instrumentation::instrument(module, config.cost_to_compile_wasm_instruction)?,
             )
         } else {
             (

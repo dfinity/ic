@@ -1169,10 +1169,10 @@ fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
 /// * CustomSections
 ///
 /// Additionally, it ensures that the wasm binary can actually compile.
-pub(super) fn validate_wasm_binary(
-    wasm: &BinaryEncodedWasm,
+pub(super) fn validate_wasm_binary<'a>(
+    wasm: &'a BinaryEncodedWasm,
     config: &EmbeddersConfig,
-) -> Result<WasmValidationDetails, WasmValidationError> {
+) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
     can_compile(wasm)?;
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
@@ -1183,10 +1183,13 @@ pub(super) fn validate_wasm_binary(
     validate_function_section(&module, config.max_functions)?;
     let largest_function_instruction_count = validate_code_section(&module)?;
     let wasm_metadata = validate_custom_section(&module, config)?;
-    Ok(WasmValidationDetails {
-        reserved_exports,
-        imports_details,
-        wasm_metadata,
-        largest_function_instruction_count,
-    })
+    Ok((
+        WasmValidationDetails {
+            reserved_exports,
+            imports_details,
+            wasm_metadata,
+            largest_function_instruction_count,
+        },
+        module,
+    ))
 }
