@@ -242,7 +242,6 @@ where
         log.clone(),
         Arc::clone(&cycles_account_manager),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        SchedulerConfig::application_subnet().query_execution_threads,
     ));
     let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> = Arc::new(
         IngressHistoryWriterImpl::new(config.clone(), log.clone(), &metrics_registry),
