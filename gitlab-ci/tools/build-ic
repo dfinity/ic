@@ -116,9 +116,18 @@ fi
 
 if [ "$BUILD_CANISTERS" == "true" ]; then
     echo "Canister Binaries"
-    cd "${CANISTERS_DIR}"
+    # Neuron voters need to verify against the unzipped sha256sum.
+    # Therefore automate their workflow here.
+    tmp="$(mktemp -d)"
+    pushd "$tmp"
     # shellcheck disable=SC2035
-    sha256sum -b *.gz
+    cp "${CANISTERS_DIR}"/*.gz .
+    # shellcheck disable=SC2035
+    gunzip *
+    # shellcheck disable=SC2035
+    sha256sum *
+    popd
+    rm -fr "$tmp"
 fi
 
 if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD_CANISTERS" == "true" ]; then
