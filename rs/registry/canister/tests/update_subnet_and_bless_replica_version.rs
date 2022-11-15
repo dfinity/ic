@@ -170,9 +170,9 @@ fn test_accepted_proposal_mutates_the_registry() {
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
-            release_package_url: "http://release_package.tar.gz".into(),
+            release_package_url: "".into(),
             release_package_sha256_hex: MOCK_HASH.into(),
-            release_package_urls: None,
+            release_package_urls: Some(vec!["http://release_package.tar.gz".into()]),
         };
         assert!(
             forward_call_via_universal_canister(
@@ -223,7 +223,6 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await,
             ReplicaVersionRecord {
-                release_package_url: release_package_url.clone(),
                 release_package_sha256_hex: MOCK_HASH.into(),
                 release_package_urls: vec![release_package_url.clone()],
             }

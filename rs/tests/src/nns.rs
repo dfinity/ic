@@ -833,7 +833,7 @@ pub async fn submit_bless_replica_version_proposal(
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
-            release_package_url: upgrade_urls[0].clone(),
+            release_package_url: "".into(),
             release_package_sha256_hex: sha256.clone(),
             release_package_urls: Some(upgrade_urls),
         },

@@ -223,7 +223,6 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let release_package_url = "http://release_package.tar.gz".to_string();
     let replica_version = ReplicaVersionRecord {
-        release_package_url: release_package_url.clone(),
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
     };
@@ -324,7 +323,6 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let release_package_url = "http://release_package.tar.gz".to_string();
     let replica_version = ReplicaVersionRecord {
-        release_package_url: release_package_url.clone(),
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
     };

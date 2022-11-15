@@ -1,12 +1,7 @@
 /// Information about a Replica version
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct ReplicaVersionRecord {
-    /// The URL against which a HTTP GET request will return a release package
-    /// that corresponds to this version
-    /// DEPRECATED in favor of `release_package_urls`
-    #[prost(string, tag = "5")]
-    pub release_package_url: ::prost::alloc::string::String,
-    /// The hex-formatted SHA-256 hash of the archive file served by 'release_package_url'
+    /// The hex-formatted SHA-256 hash of the archive file served by 'release_package_urls'
     #[prost(string, tag = "6")]
     pub release_package_sha256_hex: ::prost::alloc::string::String,
     /// The URLs against which a HTTP GET request will return a release package
