@@ -7,8 +7,8 @@ source "$SCRIPT_DIR/functions.sh"
 help() {
     echo "
 Usage: $0 <LAST_DEPLOYED_VERSION> <TARGET_VERSION> <CANISTER_NAME> (<OUTPUT_FILE>)
-  LAST_DEPLOYED_VERSION: Last Version to be deployed to production
-  TARGET_VERSION: Version to be deployed
+  LAST_DEPLOYED_VERSION: Git hash of last version deployed to production
+  TARGET_VERSION: Git hash of version to be deployed to production
   CANISTER_NAME: Canister name to be deployed (from rs/nns/canister_ids.json)
   OUTPUT_FILE: File to write contents to (otherwise stdout is used)
 

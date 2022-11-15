@@ -39,6 +39,11 @@ check_or_set_dfx_hsm_pin() {
     fi
 }
 
+extract_previous_version() {
+    local FILE=$1
+    cat $FILE | grep "git log" | sed 's/.*\([0-9a-f]\{40\}\)\.\.[0-9a-f]\{40\}.*/\1/'
+}
+
 submit_proposal_mainnet() {
     ensure_variable_set IC_ADMIN
 
@@ -93,7 +98,7 @@ submit_proposal_mainnet() {
         --proposer=$NEURON_ID)
 
     echo "Going to run command: "
-    echo ${cmd[@]} | sed 's/pin=[0-9]*/pin=\*\*\*\*\*\*/' | fold -w 100 -s | sed -e "s|^|\t|g"
+    echo ${cmd[@]} | sed 's/pin=[0-9]*/pin=\*\*\*\*\*\*/' | fold -w 100 -s | sed -e "s|^|     |g"
 
     echo "Type 'yes' to confirm, anything else, or Ctrl+C to cancel"
     read CONFIRM
@@ -105,5 +110,15 @@ submit_proposal_mainnet() {
 
     "${cmd[@]}"
 }
+
+# We download a verison of IC_ADMIN compatible with the previous release
+if ! is_variable_set IC_ADMIN; then
+    if [ ! -f "$MY_DOWNLOAD_DIR/ic-admin" ]; then
+        PREVIOUS_VERSION=$(extract_previous_version "$PROPOSAL_FILE")
+        echo $PREVIOUS_VERSION
+        install_binary ic-admin "$PREVIOUS_VERSION" "$MY_DOWNLOAD_DIR"
+    fi
+    IC_ADMIN=$MY_DOWNLOAD_DIR/ic-admin
+fi
 
 submit_proposal_mainnet $PROPOSAL_FILE $NEURON_ID

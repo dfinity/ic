@@ -5,14 +5,25 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 source "$SCRIPT_DIR/../lib.sh"
 
+# Needed because otherwise we get conflicts between two users running scripts on same machine (tmp directory is shared)
+MY_DOWNLOAD_DIR="/tmp/$(whoami)_deploy_scripts"
+mkdir -p $MY_DOWNLOAD_DIR
+
 repo_root() {
     git rev-parse --show-toplevel
+}
+
+is_variable_set() {
+    if [ -z "${!1}" ]; then
+        return 1
+    fi
+    return 0
 }
 
 ensure_variable_set() {
     set +u
     while [ $# -gt 0 ]; do
-        if [ -z "${!1}" ]; then
+        if ! is_variable_set $1; then
             echo "\$$1 was empty or unset.  Aborting."
             exit 1
         fi
@@ -118,7 +129,9 @@ propose_upgrade_canister_wasm_file_pem() {
 
     CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
 
-    echo "Testnet $CANISTER_NAME upgrade" >/tmp/testnet_upgrade_proposal.txt
+    # See note at variable declaration
+    PROPOSAL="$MY_DOWNLOAD_DIR"/testnet_upgrade_proposal.txt
+    echo "Testnet $CANISTER_NAME upgrade" >$PROPOSAL
 
     local WASM_SHA=$(sha_256 "$WASM_FILE")
 
@@ -130,6 +143,7 @@ propose_upgrade_canister_wasm_file_pem() {
         --summary-file /tmp/testnet_upgrade_proposal.txt \
         --proposer "$NEURON_ID"
 
+    rm -rf $PROPOSAL
 }
 
 generate_release_notes_template() {
@@ -359,7 +373,8 @@ _download_canister_gz() {
     DOWNLOAD_NAME=$1
     GIT_HASH=$2
 
-    OUTPUT_FILE="/tmp/$DOWNLOAD_NAME-$GIT_HASH.wasm.gz"
+    # See note at variable declaration
+    OUTPUT_FILE="$MY_DOWNLOAD_DIR/$DOWNLOAD_NAME-$GIT_HASH.wasm.gz"
 
     curl --silent "https://download.dfinity.systems/ic/$GIT_HASH/canisters/$DOWNLOAD_NAME.wasm.gz" \
         --output "$OUTPUT_FILE"
