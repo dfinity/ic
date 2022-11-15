@@ -285,6 +285,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     sys_t(
                         "boundary_nodes_canister_allowlist_test",
                         boundary_nodes_integration::boundary_nodes::canister_allowlist_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_reboot_test",
+                        boundary_nodes_integration::boundary_nodes::reboot_test,
                     )
                 ),
             )],

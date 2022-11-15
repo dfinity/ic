@@ -22,7 +22,7 @@ use crate::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasWasm, IcNodeContainer,
+            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
             NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
         },
@@ -1996,6 +1996,61 @@ pub fn seo_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes reboot test
+
+Goal:: Reboot a boundary node
+
+Runbook:
+Start a boundary node and reboot it.
+
+Success:: The boundary node reboots and continues to answer requests.
+
+Coverage:: boundary nodes survive reboots
+
+end::catalog[] */
+
+pub fn reboot_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    info!(&logger, "Rebooting the boundary node VM.");
+    boundary_node_vm.vm().reboot();
+
+    info!(
+        &logger,
+        "Waiting for the boundary node to get an IPv4 address."
+    );
+    info!(
+        &logger,
+        "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?}",
+        boundary_node_vm.block_on_ipv4().unwrap()
+    );
+
+    info!(&logger, "Waiting for routes file");
+    let sleep_command = "until [ -f /var/cache/ic_routes/* ]; do sleep 5; done";
+    let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, sleep_command).unwrap();
+    info!(
+        logger,
+        "{BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'. Exit status = {exit_status}",
+        cmd_output.trim(),
+    );
+
+    info!(&logger, "Checking BN health");
+    boundary_node_vm
+        .await_status_is_healthy()
+        .expect("Boundary node did not come up healthy.");
 
     panic_handler.disable();
 }
