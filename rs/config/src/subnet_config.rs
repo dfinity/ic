@@ -3,9 +3,7 @@
 
 use std::time::Duration;
 
-use crate::{
-    embedders::QUERY_EXECUTION_THREADS, execution_environment::SUBNET_HEAP_DELTA_CAPACITY,
-};
+use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, NumInstructions};
@@ -215,9 +213,6 @@ pub struct SchedulerConfig {
 
     /// Cost for each newly created dirty page in stable memory.
     pub dirty_page_overhead: NumInstructions,
-
-    /// The number of query execution threads.
-    pub query_execution_threads: usize,
 }
 
 impl SchedulerConfig {
@@ -241,8 +236,6 @@ impl SchedulerConfig {
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
-            // TODO(RUN-473): Change this number to `QUERY_EXECUTION_THREADS` like in other subnet types.
-            query_execution_threads: 2,
         }
     }
 
@@ -276,7 +269,6 @@ impl SchedulerConfig {
             // rate-limiting for the system subnets.
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
             dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
-            query_execution_threads: QUERY_EXECUTION_THREADS,
         }
     }
 
@@ -300,7 +292,6 @@ impl SchedulerConfig {
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
-            query_execution_threads: QUERY_EXECUTION_THREADS,
         }
     }
 
