@@ -30,8 +30,8 @@ slog-term = "2.6.0"
 wasmtime = { version = "1.0.1", default_features = false, features = ['cranelift', 'parallel-compilation', 'posix-signals-on-macos'] }
 wasmtime-environ = "1.0.1"
 wasmtime-runtime =  "1.0.1"
-wasm-encoder = "0.18.0"
-wasmparser = "0.92.0"
+wasm-encoder = "0.19.1"
+wasmparser = "0.94.0"
 rayon = "1.5.1"
 
 

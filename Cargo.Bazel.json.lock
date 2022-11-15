@@ -1,5 +1,5 @@
 {
-  "checksum": "cc202fdd88fc4141aeb374590162c5161bccf6eedd287de7efdfead679848e80",
+  "checksum": "86d1c04650d473085ea6aaa16ab6eb58dffad46c8aa7f8c5505f347e56c2eb33",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10625,7 +10625,7 @@
         "deps": {
           "common": [
             {
-              "id": "uuid 1.2.1",
+              "id": "uuid 1.2.2",
               "target": "uuid"
             }
           ],
@@ -12391,11 +12391,11 @@
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-encoder 0.18.0",
+              "id": "wasm-encoder 0.19.1",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.92.0",
+              "id": "wasmparser 0.94.0",
               "target": "wasmparser"
             },
             {
@@ -40976,7 +40976,7 @@
               "target": "stable_deref_trait"
             },
             {
-              "id": "uuid 1.2.1",
+              "id": "uuid 1.2.2",
               "target": "uuid"
             }
           ],
@@ -46452,13 +46452,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "uuid 1.2.1": {
+    "uuid 1.2.2": {
       "name": "uuid",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/uuid/1.2.1/download",
-          "sha256": "feb41e78f93363bb2df8b0e86a2ca30eed7806ea16ea0c790d757cf93f79be83"
+          "url": "https://crates.io/api/v1/crates/uuid/1.2.2/download",
+          "sha256": "422ee0de9031b5b948b97a8fc04e3aa35230001a722ddd27943e0be31564ce4c"
         }
       },
       "targets": [
@@ -46485,7 +46485,7 @@
           "std"
         ],
         "edition": "2018",
-        "version": "1.2.1"
+        "version": "1.2.2"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -46688,18 +46688,6 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -46714,6 +46702,18 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -47590,48 +47590,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "wasm-encoder 0.18.0": {
-      "name": "wasm-encoder",
-      "version": "0.18.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.18.0/download",
-          "sha256": "c64ac98d5d61192cc45c701b7e4bd0b9aff91e2edfc7a088406cfe2288581e2c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasm_encoder",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasm_encoder",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.18.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception"
-    },
     "wasm-encoder 0.19.1": {
       "name": "wasm-encoder",
       "version": "0.19.1",
@@ -47749,13 +47707,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmparser 0.92.0": {
+    "wasmparser 0.94.0": {
       "name": "wasmparser",
-      "version": "0.92.0",
+      "version": "0.94.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmparser/0.92.0/download",
-          "sha256": "7da34cec2a8c23db906cdf8b26e988d7a7f0d549eb5d51299129647af61a1b37"
+          "url": "https://crates.io/api/v1/crates/wasmparser/0.94.0/download",
+          "sha256": "cdac7e1d98d70913ae3b4923dd7419c8ea7bdfd4c44a240a0ba305d929b7f191"
         }
       },
       "targets": [
@@ -47787,7 +47745,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.92.0"
+        "version": "0.94.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },

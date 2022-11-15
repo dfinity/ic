@@ -14,9 +14,7 @@ use wast::{
 /// Tests shouldn't be run on these files.
 ///
 /// `names.wast`: `wast` itself seems to hit an error reading this file.
-/// `simd_i64x2_cmp.wast`: There is a bug in wasm-encoder that incorrectly
-/// encodes the LeS instruction and causes this test to fail.
-const FILES_TO_SKIP: &[&str] = &["names.wast", "simd_i64x2_cmp.wast"];
+const FILES_TO_SKIP: &[&str] = &["names.wast"];
 
 /// Conversions between wast and wasmtime types.
 mod convert {
