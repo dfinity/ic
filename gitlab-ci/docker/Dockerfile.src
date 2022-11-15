@@ -23,8 +23,12 @@ RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${b
 ARG motoko_version=0.5.10
 RUN curl -fsSL https://download.dfinity.systems/motoko/${motoko_version}/x86_64-linux/motoko-${motoko_version}.tar.gz | tar -xz -C /opt/bin && chmod +x /opt/bin/moc
 
-ARG sdk_version=0.8.0
-RUN curl -fsSL https://download.dfinity.systems/sdk/dfx/${sdk_version}/x86_64-linux/dfx-${sdk_version}.tar.gz | tar -xz -C /opt/bin && chmod +x /opt/bin/dfx
+ARG sdk_version=0.12.0
+ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
+RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
+    echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
+    tar -zxf /tmp/sdk/dfx.tar.gz -C /opt/bin && \
+    chmod +x /opt/bin/dfx
 
 ARG idl2json_sha=bcb27ac567eba7a7c14c9d70aedd3fb777af281b
 RUN curl -fsSL https://download.dfinity.systems/idl2json/bcb27ac567eba7a7c14c9d70aedd3fb777af281b/idl2json-linux-amd64.gz | gunzip > /opt/bin/idl2json && chmod +x /opt/bin/idl2json
