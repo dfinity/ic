@@ -25,6 +25,7 @@ mkdir -p "${TMPDIR}"/boot/grub
 cp -r /usr/lib/grub/x86_64-efi "${TMPDIR}"/boot/grub
 mkdir -p "${TMPDIR}"/boot/efi/EFI/Boot
 grub-mkimage --version
+apt list --installed | grep grub
 faketime "1970-1-1 0" grub-mkimage -p "(,gpt2)/" -O x86_64-efi -o "${TMPDIR}"/boot/efi/EFI/Boot/bootx64.efi \
     boot linux search normal configfile \
     part_gpt btrfs ext2 fat iso9660 loopback \
