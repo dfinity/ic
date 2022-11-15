@@ -15,7 +15,7 @@
 //! defined in the chunkable module.
 use crate::{
     canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
-    chunkable::{ArtifactChunk, ArtifactChunkData, ChunkId, ChunkableArtifact},
+    chunkable::{ArtifactChunk, ChunkId, ChunkableArtifact},
     consensus::{certification::CertificationMessageHash, ConsensusMessageHash},
     crypto::{CryptoHash, CryptoHashOf},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
@@ -521,7 +521,7 @@ pub struct StateSyncMessage {
 }
 
 impl ChunkableArtifact for StateSyncMessage {
-    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+    fn get_chunk(self: Box<Self>, _chunk_id: ChunkId) -> Option<ArtifactChunk> {
         #[cfg(not(target_family = "unix"))]
         {
             panic!("This method should only be used when the target OS family is unix.");
@@ -529,6 +529,7 @@ impl ChunkableArtifact for StateSyncMessage {
 
         #[cfg(target_family = "unix")]
         {
+            use crate::chunkable::ArtifactChunkData;
             use std::os::unix::fs::FileExt;
 
             let get_single_chunk = |chunk_index: usize| -> Option<Vec<u8>> {
@@ -543,21 +544,21 @@ impl ChunkableArtifact for StateSyncMessage {
             };
 
             let mut payload: Vec<u8> = Vec::new();
-            if chunk_id == crate::state_sync::MANIFEST_CHUNK {
+            if _chunk_id == crate::state_sync::MANIFEST_CHUNK {
                 payload = crate::state_sync::encode_manifest(&self.manifest);
-            } else if chunk_id.get() < FILE_GROUP_CHUNK_ID_OFFSET
-                || self.state_sync_file_group.get(&chunk_id.get()).is_none()
+            } else if _chunk_id.get() < FILE_GROUP_CHUNK_ID_OFFSET
+                || self.state_sync_file_group.get(&_chunk_id.get()).is_none()
             {
-                payload = get_single_chunk((chunk_id.get() - 1) as usize)?;
+                payload = get_single_chunk((_chunk_id.get() - 1) as usize)?;
             } else {
-                let chunk_table_indices = self.state_sync_file_group.get(&chunk_id.get())?;
+                let chunk_table_indices = self.state_sync_file_group.get(&_chunk_id.get())?;
                 for chunk_table_index in chunk_table_indices {
                     payload.extend(get_single_chunk(*chunk_table_index as usize)?);
                 }
             }
 
             Some(ArtifactChunk {
-                chunk_id,
+                chunk_id: _chunk_id,
                 witness: Vec::new(),
                 artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(payload),
             })
