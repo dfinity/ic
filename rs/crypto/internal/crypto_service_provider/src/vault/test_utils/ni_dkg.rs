@@ -1,6 +1,7 @@
 pub mod fixtures;
 
 use crate::key_id::KeyId;
+use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
 use crate::vault::test_utils;
@@ -9,12 +10,17 @@ use crate::vault::test_utils::ni_dkg::fixtures::{
     StateWithTranscript, StateWithVerifiedDealings,
 };
 use ic_crypto_internal_seed::Seed;
+use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
+use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateFsKeyError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateReshareDealingError;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
+    CspFsEncryptionPop, CspFsEncryptionPublicKey,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
+use ic_types_test_utils::ids::NODE_42;
 use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -420,4 +426,66 @@ impl StateWithConfig {
         let values = map.iter().map(|(_, value)| (*value).clone());
         incorrect_indices.into_iter().zip(values).collect()
     }
+}
+
+pub fn should_generate_dealing_encryption_key_pair_and_store_keys(csp_vault: Arc<dyn CspVault>) {
+    let (public_key, pop) = csp_vault
+        .gen_dealing_encryption_key_pair(NODE_42)
+        .expect("failed creating key pair");
+
+    assert!(matches!(
+        public_key,
+        CspFsEncryptionPublicKey::Groth20_Bls12_381(_)
+    ));
+    assert!(matches!(
+        pop,
+        CspFsEncryptionPop::Groth20WithPop_Bls12_381(_)
+    ));
+    assert!(csp_vault.sks_contains(&KeyId::from(&public_key)).is_ok());
+    assert_eq!(
+        csp_vault
+            .current_node_public_keys()
+            .expect("missing public keys")
+            .dkg_dealing_encryption_public_key
+            .expect("missing ni-dkg dealing encryption key"),
+        dkg_dealing_encryption_pk_to_proto(public_key, pop)
+    );
+}
+
+// The given `csp_vault` is expected to return an AlreadySet error on set_once_ni_dkg_dealing_encryption_pubkey
+pub fn should_fail_with_internal_error_if_ni_dkg_dealing_encryption_key_already_set(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let result = csp_vault.gen_dealing_encryption_key_pair(NODE_42);
+
+    assert!(matches!(result,
+        Err(CspDkgCreateFsKeyError::InternalError(InternalError{internal_error}))
+        if internal_error.contains("ni-dkg dealing encryption public key already set")
+    ));
+}
+
+pub fn should_fail_with_internal_error_if_dkg_dealing_encryption_key_generated_more_than_once(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let node = NODE_42;
+    assert!(csp_vault.gen_dealing_encryption_key_pair(node).is_ok());
+
+    let result = csp_vault.gen_dealing_encryption_key_pair(node);
+
+    assert!(matches!(result,
+        Err(CspDkgCreateFsKeyError::InternalError(InternalError{internal_error}))
+        if internal_error.contains("ni-dkg dealing encryption public key already set")
+    ));
+}
+
+// The given `csp_vault` is expected to return an IO error on set_once_ni_dkg_dealing_encryption_pubkey
+pub fn should_fail_with_transient_internal_error_if_dkg_dealing_encryption_key_persistence_fails(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let result = csp_vault.gen_dealing_encryption_key_pair(NODE_42);
+
+    assert!(matches!(result,
+        Err(CspDkgCreateFsKeyError::TransientInternalError(internal_error))
+        if internal_error.contains("error persisting ni-dkg dealing encryption public key")
+    ));
 }

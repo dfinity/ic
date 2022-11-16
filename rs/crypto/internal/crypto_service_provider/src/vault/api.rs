@@ -206,7 +206,7 @@ pub trait BasicSignatureCspVault {
     ///   the public part of the randomly generated key pair. This error
     ///   most likely indicates a bad randomness source.
     /// * `CspBasicSignatureKeygenError::TransientInternalError` if there is a
-    ///   transient internal error, e.g,. an IO error when writing a key to
+    ///   transient internal error, e.g., an IO error when writing a key to
     ///   disk, or an RPC error when calling a remote CSP vault.
     fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
 }
@@ -316,17 +316,20 @@ pub trait ThresholdSignatureCspVault {
 
 /// Operations of `CspVault` related to NI-DKG (cf. `NiDkgCspClient`).
 pub trait NiDkgCspVault {
-    /// Generates a forward-secure key pair used to encrypt threshold key shares
+    /// Generates a forward-secure dealing encryption key pair used to encrypt threshold key shares
     /// in transmission.
     ///
-    /// # Arguments
-    /// * `algorithm_id` specifies the forward-secure encryption algorithm
     /// # Returns
     /// The public key and the corresponding proof-of-possession.
-    fn gen_forward_secure_key_pair(
+    /// # Errors
+    /// * `ni_dkg_errors::CspDkgCreateFsKeyError::InternalError` if there is an internal
+    ///   error (e.g., the public key in the public key store is already set).
+    /// * `ni_dkg_errors::CspDkgCreateFsKeyError::TransientInternalError` if there is a transient
+    ///   internal error, e.g., an IO error when writing a key to disk, or an
+    ///   RPC error when calling a remote CSP vault.
+    fn gen_dealing_encryption_key_pair(
         &self,
         node_id: NodeId,
-        algorithm_id: AlgorithmId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>;
 
     /// Updates the forward-secure secret key determined by the key id,

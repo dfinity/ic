@@ -195,7 +195,7 @@ pub trait ThresholdSignatureCspClient {
 ///
 /// TODO(CRP-564): Remove the csp_ prefix from argument names.
 pub trait NiDkgCspClient {
-    /// Generates a forward secure key pair used to encrypt threshold key shares
+    /// Generates a forward secure dealing encryption key pair used to encrypt threshold key shares
     /// in transmission.
     ///
     /// Note: FS keys are NOT threshold keys.
@@ -209,14 +209,18 @@ pub trait NiDkgCspClient {
     ///
     /// # Arguments
     /// * `node_id` is the identity of the node generating the public key.
-    /// # Panics
-    /// This method MUST panic if it is unable to store the secret key.
     /// # Errors
-    /// This method is infallible.  An error structure is included in the
-    /// signature only for future use.
-    fn create_forward_secure_key_pair(
+    /// * `CspDkgCreateFsKeyError::InternalError` if there is an internal
+    ///   error (e.g., the public key in the public key store is already set).
+    /// * `CspDkgCreateFsKeyError::DuplicateKeyId` if there already
+    ///   exists a secret key in the store for the secret key ID derived from
+    ///   the public part of the randomly generated key pair. This error
+    ///   most likely indicates a bad randomness source.
+    /// * `CspDkgCreateFsKeyError::TransientInternalError` if there is a transient
+    ///   internal error, e.g., an IO error when writing a key to disk, or an
+    ///   RPC error when calling a remote CSP vault.
+    fn gen_dealing_encryption_key_pair(
         &self,
-        algorithm_id: AlgorithmId,
         node_id: NodeId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>;
 

@@ -4,7 +4,6 @@ use crate::keygen::utils::{
 };
 use crate::vault::api::CspVault;
 use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
-use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types_test_utils::ids::node_test_id;
 use std::sync::Arc;
@@ -24,7 +23,7 @@ pub fn should_retrieve_current_public_keys(csp_vault: Arc<dyn CspVault>) {
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
     let (nidkg_public_key, nidkg_pop) = csp_vault
-        .gen_forward_secure_key_pair(node_test_id(NODE_1), AlgorithmId::NiDkg_Groth20_Bls12_381)
+        .gen_dealing_encryption_key_pair(node_test_id(NODE_1))
         .expect("Failed to generate DKG dealing encryption keys");
     let idkg_public_key = generate_idkg_dealing_encryption_key_pair(&csp_vault);
 

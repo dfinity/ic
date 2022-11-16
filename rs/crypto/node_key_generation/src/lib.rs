@@ -59,7 +59,7 @@ pub fn generate_dkg_dealing_encryption_keys(
     node_id: NodeId,
 ) -> PublicKeyProto {
     let (pubkey, pop) = csp
-        .create_forward_secure_key_pair(AlgorithmId::NiDkg_Groth20_Bls12_381, node_id)
+        .gen_dealing_encryption_key_pair(node_id)
         .expect("Failed to generate DKG dealing encryption keys");
     ic_crypto_internal_csp::keygen::utils::dkg_dealing_encryption_pk_to_proto(pubkey, pop)
 }

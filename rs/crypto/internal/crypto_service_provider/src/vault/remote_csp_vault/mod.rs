@@ -86,10 +86,9 @@ pub trait TarpcCspVault {
         signatory_eligibility: Vec<bool>,
     ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError>;
 
-    // Corresponds to `NiDkgCspVault.gen_forward_secure_key_pair()`.
-    async fn gen_forward_secure_key_pair(
+    // Corresponds to `NiDkgCspVault.gen_dealing_encryption_key_pair()`.
+    async fn gen_dealing_encryption_key_pair(
         node_id: NodeId,
-        algorithm_id: AlgorithmId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>;
 
     // Corresponds to `NiDkgCspVault.update_forward_secure_epoch()`.

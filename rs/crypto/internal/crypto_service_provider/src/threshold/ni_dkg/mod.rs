@@ -37,15 +37,13 @@ pub const NIDKG_FS_SCOPE: Scope = Scope::Const(ConstScope::NiDkgFsEncryptionKeys
 impl NiDkgCspClient for Csp {
     /// Creates a key pair for encrypting threshold key shares in transmission
     /// from dealers to receivers.
-    fn create_forward_secure_key_pair(
+    fn gen_dealing_encryption_key_pair(
         &self,
-        algorithm_id: AlgorithmId,
         node_id: NodeId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>
     {
-        debug!(self.logger; crypto.method_name => "create_forward_secure_key_pair");
-        self.csp_vault
-            .gen_forward_secure_key_pair(node_id, algorithm_id)
+        debug!(self.logger; crypto.method_name => "gen_dealing_encryption_key_pair");
+        self.csp_vault.gen_dealing_encryption_key_pair(node_id)
     }
 
     /// Erases forward secure secret keys before a given epoch
