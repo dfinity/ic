@@ -850,6 +850,26 @@ fn certified_response(tree: HashTree<'_>) -> CertifiedResponse {
     }
 }
 
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    w.encode_gauge(
+        "registry_stable_memory_size_bytes",
+        ic_nervous_system_common::stable_memory_size_bytes() as f64,
+        "Size of the stable memory allocated by this canister measured in bytes.",
+    )?;
+    w.encode_gauge(
+        "registry_total_memory_size_bytes",
+        ic_nervous_system_common::total_memory_size_bytes() as f64,
+        "Size of the total memory allocated by this canister measured in bytes.",
+    )?;
+
+    Ok(())
+}
+
+#[export_name = "canister_query http_request"]
+fn http_request() {
+    dfn_http_metrics::serve_metrics(encode_metrics);
+}
+
 // This makes this Candid service self-describing, so that for example Candid
 // UI, but also other tools, can seamlessly integrate with it.
 // The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
