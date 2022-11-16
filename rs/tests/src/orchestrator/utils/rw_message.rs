@@ -123,7 +123,7 @@ async fn can_read_msg_impl(
     false
 }
 
-pub(crate) fn cert_state_makes_progress(
+pub(crate) fn get_cert_time(
     url: &url::Url,
     effective_canister_id: PrincipalId,
 ) -> Result<u64, String> {
@@ -156,7 +156,7 @@ pub(crate) fn cert_state_makes_progress_with_retries(
     retry(logger.clone(), timeout, backoff, || {
         info!(logger, "Performing read_state request...");
         let next_timestamp = {
-            let timestamp = cert_state_makes_progress(url, effective_canister_id);
+            let timestamp = get_cert_time(url, effective_canister_id);
             if let Err(err) = timestamp {
                 bail!("Cannot perform read_state request: {}", err);
             };
@@ -166,15 +166,47 @@ pub(crate) fn cert_state_makes_progress_with_retries(
         if current_timestamp == None {
             info!(logger, "Initial timestamp recorded!");
             current_timestamp = next_timestamp;
-        };
-        if next_timestamp > current_timestamp {
+            bail!("Timestamp hasn't advanced yet!");
+        } else if next_timestamp > current_timestamp {
             info!(logger, "Timestamp advanced!");
             Ok(())
         } else {
-            bail!("Timestamp hasn't advance yet!");
+            bail!("Timestamp hasn't advanced yet!");
         }
     })
     .expect("System should make progress!");
+}
+
+pub(crate) fn cert_state_makes_no_progress_with_retries(
+    url: &url::Url,
+    effective_canister_id: PrincipalId,
+    logger: &slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+) {
+    let mut current_timestamp: Option<u64> = None;
+    retry(logger.clone(), timeout, backoff, || {
+        info!(logger, "Performing read_state request...");
+        let next_timestamp = {
+            let timestamp = get_cert_time(url, effective_canister_id);
+            if timestamp.is_err() {
+                return Ok(());
+            };
+            timestamp.ok()
+        };
+        // Set initial timestamp, if not yet set.
+        if current_timestamp == None {
+            info!(logger, "Initial timestamp recorded!");
+            current_timestamp = next_timestamp;
+            bail!("Timestamp hasn't advanced yet!");
+        } else if next_timestamp > current_timestamp {
+            bail!("Timestamp advanced!");
+        } else {
+            info!(logger, "Timestamp hasn't advanced!");
+            Ok(())
+        }
+    })
+    .expect("System shouldn't make progress!");
 }
 
 pub(crate) fn install_nns_and_message_canisters(topology: TopologySnapshot) {

@@ -17,7 +17,8 @@ use super::utils::rw_message::install_nns_and_message_canisters;
 use super::utils::ssh_access::execute_bash_command;
 use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
 use crate::orchestrator::utils::rw_message::{
-    can_read_msg_with_retries, cert_state_makes_progress, store_message_with_retries,
+    can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
+    store_message_with_retries,
 };
 use crate::orchestrator::utils::upgrade::UpdateImageType;
 use crate::util::block_on;
@@ -99,17 +100,14 @@ pub fn test(test_env: TestEnv) {
     })
     .expect("No hash missmatch in the logs");
 
-    info!(logger, "Check that creation of canisters is impossible...");
-    retry(test_env.logger(), secs(600), secs(10), || {
-        if cert_state_makes_progress(&nns_node.get_public_url(), nns_node.effective_canister_id())
-            .is_ok()
-        {
-            bail!("Waiting for a failure creating a canister!")
-        } else {
-            Ok(())
-        }
-    })
-    .expect("Error: a canister can still be created");
+    info!(logger, "Check that system does not make progress");
+    cert_state_makes_no_progress_with_retries(
+        &nns_node.get_public_url(),
+        nns_node.effective_canister_id(),
+        &logger,
+        secs(600),
+        secs(10),
+    );
 
     info!(logger, "Stopping orchestrator...");
     for n in &nodes {
