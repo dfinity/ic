@@ -8708,7 +8708,6 @@ dependencies = [
  "ic-error-types",
  "ic-ic00-types",
  "ic-protobuf",
- "ic-registry-transport",
  "ic-utils 0.8.0",
  "maplit",
  "num-traits",

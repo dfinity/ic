@@ -20,7 +20,6 @@ ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-error-types = { path = "../error_types" }
 ic-ic00-types = { path = "../ic00_types" }
 ic-protobuf = { path = "../../protobuf" }
-ic-registry-transport = { path = "../../registry/transport" }
 ic-utils = { path = "../../utils" }
 maplit = "1.0.2"
 num-traits = "0.2.12"
