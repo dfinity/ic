@@ -23,6 +23,9 @@ use crate::{Height, Randomness, RegistryVersion};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 
+/// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
+pub type PseudoRandomId = [u8; 32];
+
 /// RequestId is used for two purposes:
 /// 1. to identify the matching request in sign-with_ecdas_contexts.
 /// 2. to identify which quadruple the request is matched to.
@@ -35,7 +38,7 @@ use ic_protobuf::types::v1 as pb;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct RequestId {
     pub quadruple_id: QuadrupleId,
-    pub pseudo_random_id: [u8; 32],
+    pub pseudo_random_id: PseudoRandomId,
     pub height: Height,
 }
 

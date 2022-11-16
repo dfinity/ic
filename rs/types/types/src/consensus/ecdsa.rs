@@ -11,10 +11,11 @@ use strum_macros::EnumIter;
 pub use crate::consensus::ecdsa_refs::{
     unpack_reshare_of_unmasked_params, EcdsaBlockReader, IDkgTranscriptAttributes,
     IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript,
-    PreSignatureQuadrupleRef, QuadrupleId, QuadrupleInCreation, RandomTranscriptParams, RequestId,
-    ReshareOfMaskedParams, ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsError,
-    ThresholdEcdsaSigInputsRef, TranscriptAttributes, TranscriptCastError, TranscriptLookupError,
-    TranscriptParamsError, TranscriptRef, UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    PreSignatureQuadrupleRef, PseudoRandomId, QuadrupleId, QuadrupleInCreation,
+    RandomTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
+    ThresholdEcdsaSigInputsError, ThresholdEcdsaSigInputsRef, TranscriptAttributes,
+    TranscriptCastError, TranscriptLookupError, TranscriptParamsError, TranscriptRef,
+    UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::BasicSignature;
 use crate::crypto::canister_threshold_sig::error::IDkgTranscriptIdError;
@@ -50,7 +51,7 @@ pub enum CompletedSignature {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaPayload {
     /// Collection of completed signatures.
-    pub signature_agreements: BTreeMap<RequestId, CompletedSignature>,
+    pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
 
     /// The `RequestIds` for which we are currently generating signatures.
     pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
@@ -126,11 +127,7 @@ impl EcdsaPayload {
     /// Return an iterator of all request ids that is used in the payload.
     /// Note that it doesn't guarantee any ordering.
     pub fn iter_request_ids(&self) -> Box<dyn Iterator<Item = &RequestId> + '_> {
-        Box::new(
-            self.signature_agreements
-                .keys()
-                .chain(self.ongoing_signatures.keys()),
-        )
+        Box::new(self.ongoing_signatures.keys())
     }
 
     /// Return an iterator of all ids of quadruples in the payload.
@@ -143,8 +140,12 @@ impl EcdsaPayload {
         )
     }
     /// Return an iterator of all unassigned quadruple ids that is used in the payload.
-    /// A quadruple id is assigned if it already paired with a signature request (i.e.
-    /// there exists a request id that contains this quadruple id).
+    /// A quadruple id is assigned if it already paired with a signature request i.e.
+    /// there exists a request id (in ongoing signatures) that contains this quadruple id.
+    ///
+    /// Note that under proper payload construction, the quadruples paired with requests
+    /// in ongoing_signatures should always be disjoint with the set of available and
+    /// ongoing quadruples. This function is offered here as a safer alternative.
     pub fn unassigned_quadruple_ids(&self) -> Box<dyn Iterator<Item = QuadrupleId> + '_> {
         let assigned = self
             .iter_request_ids()
@@ -1080,13 +1081,14 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
     fn from(summary: &EcdsaPayload) -> Self {
         // signature_agreements
         let mut signature_agreements = Vec::new();
-        for (request_id, completed) in &summary.signature_agreements {
+        for (pseudo_random_id, completed) in &summary.signature_agreements {
             let unreported = match completed {
                 CompletedSignature::Unreported(response) => Some(response.into()),
                 CompletedSignature::ReportedToExecution => None,
             };
             signature_agreements.push(pb::CompletedSignature {
-                request_id: Some((*request_id).into()),
+                request_id: None, // To be removed after upgrade
+                pseudo_random_id: pseudo_random_id.to_vec(),
                 unreported,
             });
         }
@@ -1193,11 +1195,21 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
         // signature_agreements
         let mut signature_agreements = BTreeMap::new();
         for completed_signature in &summary.signature_agreements {
+            // NOTE: We still look at the request_id for compatibility reasons,
+            // which should be removed from protobuf after upgrading deployment.
             let request_id = completed_signature
                 .request_id
                 .as_ref()
                 .ok_or("pb::EcdsaSummaryPayload:: Missing completed_signature request Id")
-                .and_then(RequestId::try_from)?;
+                .and_then(RequestId::try_from);
+            let pseudo_random_id = request_id.map(|x| x.pseudo_random_id).or_else(|_| {
+                if completed_signature.pseudo_random_id.len() != 32 {
+                    return Err("Expects 32 bytes of pseudo_random_id".to_string());
+                }
+                let mut x = [0; 32];
+                x.copy_from_slice(&completed_signature.pseudo_random_id);
+                Ok(x)
+            })?;
             let signature = if let Some(unreported) = &completed_signature.unreported {
                 let response = crate::messages::Response::try_from(unreported.clone())
                     .map_err(|err| format!("{:?}", err))?;
@@ -1205,7 +1217,7 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
             } else {
                 CompletedSignature::ReportedToExecution
             };
-            signature_agreements.insert(request_id, signature);
+            signature_agreements.insert(pseudo_random_id, signature);
         }
 
         // ongoing_signatures

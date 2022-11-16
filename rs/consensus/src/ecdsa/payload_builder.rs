@@ -865,7 +865,7 @@ pub(crate) fn get_signing_requests<'a>(
     let known_random_ids_completed = ecdsa_payload
         .signature_agreements
         .keys()
-        .map(|id| id.pseudo_random_id)
+        .cloned()
         .collect::<BTreeSet<_>>();
     let known_random_ids_ongoing = ecdsa_payload
         .ongoing_signatures
@@ -880,7 +880,7 @@ pub(crate) fn get_signing_requests<'a>(
     // of their keys, which is the callback_id. Therefore we are
     // traversing the requests in the order they were created.
     for (callback_id, context) in sign_with_ecdsa_contexts.iter() {
-        if known_random_ids_completed.contains(context.pseudo_random_id.as_slice()) {
+        if known_random_ids_completed.contains(&context.pseudo_random_id) {
             continue;
         };
 
@@ -919,9 +919,10 @@ pub(crate) fn get_signing_requests<'a>(
                         message: "Signature request expired".to_string(),
                     }),
                 };
-                ecdsa_payload
-                    .signature_agreements
-                    .insert(request_id, ecdsa::CompletedSignature::Unreported(response));
+                ecdsa_payload.signature_agreements.insert(
+                    request_id.pseudo_random_id,
+                    ecdsa::CompletedSignature::Unreported(response),
+                );
                 // Also remove from other structures
                 ecdsa_payload.ongoing_signatures.remove(&request_id);
                 ecdsa_payload
@@ -962,9 +963,10 @@ pub(crate) fn get_signing_requests<'a>(
                     message: format!("Invalid key_id in signature request: {:?}", context.key_id),
                 }),
             };
-            ecdsa_payload
-                .signature_agreements
-                .insert(request_id, ecdsa::CompletedSignature::Unreported(response));
+            ecdsa_payload.signature_agreements.insert(
+                request_id.pseudo_random_id,
+                ecdsa::CompletedSignature::Unreported(response),
+            );
         }
     }
     new_requests
@@ -988,9 +990,9 @@ pub(crate) fn update_signature_agreements(
     let mut new_agreements = BTreeMap::new();
     let mut old_agreements = BTreeMap::new();
     std::mem::swap(&mut payload.signature_agreements, &mut old_agreements);
-    for (request_id, _) in old_agreements.into_iter() {
-        if all_random_ids.get(&request_id.pseudo_random_id).is_some() {
-            new_agreements.insert(request_id, ecdsa::CompletedSignature::ReportedToExecution);
+    for (random_id, _) in old_agreements.into_iter() {
+        if all_random_ids.get(&random_id).is_some() {
+            new_agreements.insert(random_id, ecdsa::CompletedSignature::ReportedToExecution);
         }
     }
     payload.signature_agreements = new_agreements;
@@ -1028,7 +1030,9 @@ pub(crate) fn update_signature_agreements(
 
     for (request_id, signature) in completed {
         payload.ongoing_signatures.remove(&request_id);
-        payload.signature_agreements.insert(request_id, signature);
+        payload
+            .signature_agreements
+            .insert(request_id.pseudo_random_id, signature);
     }
 }
 
@@ -2173,8 +2177,7 @@ mod tests {
         assert_eq!(result.len(), 0);
         assert_eq!(ecdsa_payload.ongoing_signatures.len(), 0);
         assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
-        let (request_id, response) = ecdsa_payload.signature_agreements.iter().next().unwrap();
-        assert_eq!(request_id.quadruple_id, quadruple_id);
+        let (_, response) = ecdsa_payload.signature_agreements.iter().next().unwrap();
         if let ecdsa::CompletedSignature::Unreported(response) = response {
             assert!(matches!(
                 response.response_payload,
@@ -2621,27 +2624,18 @@ mod tests {
                 },
             );
         let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
-        let height = Height::from(10);
+
         let all_requests = &state
             .metadata
             .subnet_call_context_manager
             .sign_with_ecdsa_contexts;
 
-        let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
         ecdsa_payload.signature_agreements.insert(
-            ecdsa::RequestId {
-                quadruple_id: quadruple_id_1,
-                pseudo_random_id: [1; 32],
-                height,
-            },
+            [1; 32],
             ecdsa::CompletedSignature::Unreported(empty_response()),
         );
         ecdsa_payload.signature_agreements.insert(
-            ecdsa::RequestId {
-                quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
-                pseudo_random_id: [0; 32],
-                height,
-            },
+            [0; 32],
             ecdsa::CompletedSignature::Unreported(empty_response()),
         );
         let signature_builder = TestEcdsaSignatureBuilder::new();
@@ -2650,13 +2644,8 @@ mod tests {
         update_signature_agreements(all_requests, &signature_builder, &mut ecdsa_payload);
         assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
         assert_eq!(
-            ecdsa_payload
-                .signature_agreements
-                .keys()
-                .next()
-                .unwrap()
-                .quadruple_id,
-            quadruple_id_1
+            ecdsa_payload.signature_agreements.keys().next().unwrap(),
+            &[1; 32],
         );
         assert!(matches!(
             ecdsa_payload.signature_agreements.values().next().unwrap(),
@@ -3577,20 +3566,11 @@ mod tests {
             .unwrap();
             assert_eq!(result.len(), 1);
 
+            ecdsa_payload
+                .signature_agreements
+                .insert([2; 32], ecdsa::CompletedSignature::ReportedToExecution);
             ecdsa_payload.signature_agreements.insert(
-                ecdsa::RequestId {
-                    quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
-                    pseudo_random_id: [2; 32],
-                    height: payload_height_1,
-                },
-                ecdsa::CompletedSignature::ReportedToExecution,
-            );
-            ecdsa_payload.signature_agreements.insert(
-                ecdsa::RequestId {
-                    quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
-                    pseudo_random_id: [3; 32],
-                    height: payload_height_1,
-                },
+                [3; 32],
                 ecdsa::CompletedSignature::Unreported(empty_response()),
             );
             ecdsa_payload.xnet_reshare_agreements.insert(
@@ -3674,10 +3654,30 @@ mod tests {
 
             // Convert to proto format and back
             let new_summary_height = Height::new(parent_block_height.get() + 1234);
-            let summary_proto: pb::EcdsaSummaryPayload = (&summary).into();
+            let mut summary_proto: pb::EcdsaSummaryPayload = (&summary).into();
             let summary_from_proto = (&summary_proto, new_summary_height).try_into().unwrap();
             summary.update_refs(new_summary_height); // expected
             assert_eq!(summary, summary_from_proto);
+
+            // Check signature_agreement upgrade compatiblity
+            summary_proto
+                .signature_agreements
+                .push(pb::CompletedSignature {
+                    request_id: Some(pb::RequestId {
+                        pseudo_random_id: vec![4; 32],
+                        quadruple_id: 1000,
+                        height: 100,
+                    }),
+                    pseudo_random_id: vec![0; 32],
+                    unreported: None,
+                });
+            let summary_from_proto: ecdsa::EcdsaPayload =
+                (&summary_proto, new_summary_height).try_into().unwrap();
+            // Make sure the previous RequestId record can be retrieved by its pseudo_random_id.
+            assert!(summary_from_proto
+                .signature_agreements
+                .get(&[4; 32])
+                .is_some());
         })
     }
 }

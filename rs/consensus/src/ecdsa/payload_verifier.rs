@@ -89,8 +89,8 @@ pub enum PermanentError {
     NewTranscriptMiscount(u64),
     NewTranscriptMissingParams(IDkgTranscriptId),
     NewTranscriptHeightMismatch(IDkgTranscriptId),
-    NewSignatureUnexpected(ecdsa::RequestId),
-    NewSignatureMissingInput(ecdsa::RequestId),
+    NewSignatureUnexpected(ecdsa::PseudoRandomId),
+    NewSignatureMissingInput(ecdsa::PseudoRandomId),
     XNetReshareAgreementWithoutRequest(ecdsa::EcdsaReshareRequest),
     XNetReshareRequestDisappeared(ecdsa::EcdsaReshareRequest),
     DecodingError(String),
@@ -391,7 +391,7 @@ pub fn validate_data_payload(
 struct CachedBuilder {
     transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     dealings: BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>,
-    signatures: BTreeMap<ecdsa::RequestId, ThresholdEcdsaCombinedSignature>,
+    signatures: BTreeMap<ecdsa::PseudoRandomId, ThresholdEcdsaCombinedSignature>,
 }
 
 impl EcdsaTranscriptBuilder for CachedBuilder {
@@ -412,7 +412,7 @@ impl EcdsaSignatureBuilder for CachedBuilder {
         &self,
         request_id: &ecdsa::RequestId,
     ) -> Option<ThresholdEcdsaCombinedSignature> {
-        self.signatures.get(request_id).cloned()
+        self.signatures.get(&request_id.pseudo_random_id).cloned()
     }
 }
 
@@ -521,10 +521,11 @@ fn validate_new_signature_agreements(
     block_reader: &dyn EcdsaBlockReader,
     prev_payload: &ecdsa::EcdsaPayload,
     curr_payload: &ecdsa::EcdsaPayload,
-) -> Result<BTreeMap<ecdsa::RequestId, ThresholdEcdsaCombinedSignature>, EcdsaValidationError> {
+) -> Result<BTreeMap<ecdsa::PseudoRandomId, ThresholdEcdsaCombinedSignature>, EcdsaValidationError>
+{
     use PermanentError::*;
     let mut new_signatures = BTreeMap::new();
-    for (request_id, completed) in curr_payload.signature_agreements.iter() {
+    for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let ecdsa::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.response_payload {
                 use ic_ic00_types::{Payload, SignWithECDSAReply};
@@ -533,20 +534,27 @@ fn validate_new_signature_agreements(
                 let signature = ThresholdEcdsaCombinedSignature {
                     signature: reply.signature,
                 };
-                if prev_payload.signature_agreements.get(request_id).is_some() {
-                    return Err(PermanentError::NewSignatureUnexpected(*request_id).into());
+                if prev_payload.signature_agreements.get(random_id).is_some() {
+                    return Err(PermanentError::NewSignatureUnexpected(*random_id).into());
                 }
 
                 let input = prev_payload
                     .ongoing_signatures
-                    .get(request_id)
-                    .ok_or(NewSignatureMissingInput(*request_id))?
+                    .iter()
+                    .find_map(|(request_id, sig_input_ref)| {
+                        if request_id.pseudo_random_id == *random_id {
+                            Some(sig_input_ref)
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(NewSignatureMissingInput(*random_id))?
                     .translate(block_reader)
                     .map_err(PermanentError::from)?;
                 crypto
                     .verify_combined_sig(&input, &signature)
                     .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
-                new_signatures.insert(*request_id, signature.clone());
+                new_signatures.insert(*random_id, signature.clone());
             }
         }
     }
