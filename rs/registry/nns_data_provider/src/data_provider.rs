@@ -66,7 +66,9 @@ impl RegistryDataProvider for NnsDataProvider {
 
                             Ok(changes)
                         }
-                        Err(source) => Err(RegistryDataProviderError::Transfer { source }),
+                        Err(source) => Err(RegistryDataProviderError::Transfer {
+                            source: source.to_string(),
+                        }),
                     }
                 }
             })
@@ -102,7 +104,9 @@ impl RegistryDataProvider for CertifiedNnsDataProvider {
                     registry_canister
                         .get_certified_changes_since(version.get(), &nns_public_key)
                         .await
-                        .map_err(|source| RegistryDataProviderError::Transfer { source })
+                        .map_err(|source| RegistryDataProviderError::Transfer {
+                            source: source.to_string(),
+                        })
                 }
             })
         })?;

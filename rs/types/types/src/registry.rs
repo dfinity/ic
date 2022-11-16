@@ -126,9 +126,7 @@ pub enum RegistryDataProviderError {
     /// canister.
     Timeout,
     /// Error when using registry transfer
-    Transfer {
-        source: ic_registry_transport::Error,
-    },
+    Transfer { source: String },
 }
 
 impl std::error::Error for RegistryDataProviderError {}

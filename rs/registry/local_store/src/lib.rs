@@ -203,10 +203,7 @@ impl RegistryDataProvider for LocalStoreImpl {
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
         let changelog = self.get_changelog_since_version(version).map_err(|e| {
             RegistryDataProviderError::Transfer {
-                source: ic_registry_transport::Error::MalformedMessage(format!(
-                    "Error when reading changelog from local storage: {:?}",
-                    e
-                )),
+                source: format!("Error when reading changelog from local storage: {:?}", e),
             }
         })?;
         let res: Vec<_> = changelog

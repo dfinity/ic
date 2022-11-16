@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/phantom_newtype",
     "//rs/protobuf",
-    "//rs/registry/transport",
     "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/ic00_types",
