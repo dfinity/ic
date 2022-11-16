@@ -15,7 +15,7 @@ use ic_protobuf::{
     state::{
         ingress::v1 as pb_ingress,
         queues::v1 as pb_queues,
-        system_metadata::v1::{self as pb_metadata, TimeOfLastAllocationCharge},
+        system_metadata::v1::{self as pb_metadata},
     },
     types::v1 as pb_types,
 };
@@ -125,14 +125,6 @@ pub struct SystemMetadata {
     /// always be <= this field + (the maximum delta capacity of the subnet /
     /// 2).
     pub heap_delta_estimate: NumBytes,
-
-    /// The last time when canisters were charged for compute and storage
-    /// allocation.
-    ///
-    /// Charging for compute and storage is done periodically, so this is
-    /// needed to calculate how much time should be charged for when charging
-    /// does occur.
-    pub time_of_last_allocation_charge: Time,
 
     pub subnet_metrics: SubnetMetrics,
 
@@ -476,11 +468,6 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
             own_subnet_features: Some(item.own_subnet_features.into()),
-            time_of_last_allocation_charge_nanos: Some(TimeOfLastAllocationCharge {
-                time_of_last_allocation_charge_nanos: item
-                    .time_of_last_allocation_charge
-                    .as_nanos_since_unix_epoch(),
-            }),
             subnet_metrics: Some((&item.subnet_metrics).into()),
             bitcoin_get_successors_follow_up_responses: item
                 .bitcoin_get_successors_follow_up_responses
@@ -583,12 +570,6 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             },
 
             heap_delta_estimate: NumBytes::from(item.heap_delta_estimate),
-            time_of_last_allocation_charge: match item.time_of_last_allocation_charge_nanos {
-                Some(last_charge) => Time::from_nanos_since_unix_epoch(
-                    last_charge.time_of_last_allocation_charge_nanos,
-                ),
-                None => Time::from_nanos_since_unix_epoch(item.batch_time_nanos),
-            },
             subnet_metrics: match item.subnet_metrics {
                 Some(subnet_metrics) => subnet_metrics.try_into()?,
                 None => SubnetMetrics::default(),
@@ -625,7 +606,6 @@ impl SystemMetadata {
             // hard-to-track bugs in state manager.
             certification_version: CertificationVersion::V0,
             heap_delta_estimate: NumBytes::from(0),
-            time_of_last_allocation_charge: UNIX_EPOCH,
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),

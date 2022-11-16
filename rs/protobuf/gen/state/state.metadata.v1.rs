@@ -224,11 +224,6 @@ pub struct SubnetCallContextManager {
         ::prost::alloc::vec::Vec<BitcoinSendTransactionInternalContextTree>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TimeOfLastAllocationCharge {
-    #[prost(uint64, tag = "1")]
-    pub time_of_last_allocation_charge_nanos: u64,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetMetrics {
     #[prost(message, optional, tag = "1")]
     pub consumed_cycles_by_deleted_canisters:
@@ -283,9 +278,6 @@ pub struct SystemMetadata {
     #[prost(message, optional, tag = "13")]
     pub own_subnet_features:
         ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
-    /// TODO(EXC-1214): This field is deprecated.
-    #[prost(message, optional, tag = "14")]
-    pub time_of_last_allocation_charge_nanos: ::core::option::Option<TimeOfLastAllocationCharge>,
     #[prost(message, optional, tag = "15")]
     pub subnet_metrics: ::core::option::Option<SubnetMetrics>,
     #[prost(message, repeated, tag = "18")]

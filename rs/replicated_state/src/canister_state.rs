@@ -87,6 +87,15 @@ impl Default for SchedulerState {
     }
 }
 
+impl SchedulerState {
+    pub fn new(time: Time) -> Self {
+        Self {
+            time_of_last_allocation_charge: time,
+            ..Default::default()
+        }
+    }
+}
+
 /// The full state of a single canister.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CanisterState {
@@ -136,34 +145,19 @@ impl CanisterState {
     }
 
     /// Returns the difference in time since the canister was last charged for resource allocations.
-    pub fn duration_since_last_allocation_charge(
-        &self,
-        metadata_time_of_last_allocation_charge: Time,
-        current_time: Time,
-    ) -> Duration {
+    pub fn duration_since_last_allocation_charge(&self, current_time: Time) -> Duration {
         debug_assert!(
             current_time >= self.scheduler_state.time_of_last_allocation_charge,
             "Expect the time of the current batch to be >= the time of the previous batch"
         );
 
-        let time_of_last_charge =
-            if self.scheduler_state.time_of_last_allocation_charge == UNIX_EPOCH {
-                metadata_time_of_last_allocation_charge
-            } else {
-                self.scheduler_state.time_of_last_allocation_charge
-            };
-
-        // If the time of the previous block is `UNIX_EPOCH`, then this must be the first block
-        // being handled and hence `Duration::from_secs(0)` is returned.
-        if time_of_last_charge == UNIX_EPOCH {
-            Duration::from_secs(0)
-        } else {
-            Duration::from_nanos(
-                current_time
-                    .as_nanos_since_unix_epoch()
-                    .saturating_sub(time_of_last_charge.as_nanos_since_unix_epoch()),
-            )
-        }
+        Duration::from_nanos(
+            current_time.as_nanos_since_unix_epoch().saturating_sub(
+                self.scheduler_state
+                    .time_of_last_allocation_charge
+                    .as_nanos_since_unix_epoch(),
+            ),
+        )
     }
 
     /// See `SystemState::push_input` for documentation.

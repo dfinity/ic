@@ -124,7 +124,7 @@ pub struct CanisterStateBits {
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
     pub task_queue: Vec<ExecutionTask>,
-    pub time_of_last_allocation_charge_nanos: Option<u64>,
+    pub time_of_last_allocation_charge_nanos: u64,
     pub global_timer_nanos: Option<u64>,
 }
 
@@ -1271,7 +1271,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
-            time_of_last_allocation_charge_nanos: item.time_of_last_allocation_charge_nanos,
+            time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
             task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
             global_timer_nanos: item.global_timer_nanos,
         }
@@ -1355,8 +1355,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             time_of_last_allocation_charge_nanos: try_from_option_field(
                 value.time_of_last_allocation_charge_nanos,
                 "CanisterStateBits::time_of_last_allocation_charge_nanos",
-            )
-            .ok(),
+            )?,
             task_queue,
             global_timer_nanos: value.global_timer_nanos,
         })
@@ -1752,9 +1751,12 @@ mod test {
 
     use ic_ic00_types::IC_00;
     use ic_interfaces::messages::{CanisterInputMessage, RequestOrIngress};
-    use ic_test_utilities::types::{
-        ids::canister_test_id,
-        messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
+    use ic_test_utilities::{
+        mock_time,
+        types::{
+            ids::canister_test_id,
+            messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
+        },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
@@ -1782,7 +1784,7 @@ mod test {
             stable_memory_size: NumWasmPages::from(0),
             heap_delta_debit: NumBytes::from(0),
             install_code_debit: NumInstructions::from(0),
-            time_of_last_allocation_charge_nanos: None,
+            time_of_last_allocation_charge_nanos: mock_time().as_nanos_since_unix_epoch(),
             task_queue: vec![],
             global_timer_nanos: None,
         }

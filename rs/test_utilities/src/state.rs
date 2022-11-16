@@ -50,7 +50,6 @@ pub struct ReplicatedStateBuilder {
     subnet_type: SubnetType,
     subnet_id: SubnetId,
     batch_time: Time,
-    time_of_last_allocation_charge: Time,
     subnet_features: SubnetFeatures,
     bitcoin_state: BitcoinState,
     bitcoin_adapter_requests: Vec<BitcoinAdapterRequestWrapper>,
@@ -78,11 +77,6 @@ impl ReplicatedStateBuilder {
 
     pub fn with_time(mut self, time: Time) -> Self {
         self.batch_time = time;
-        self
-    }
-
-    pub fn with_time_of_last_allocation(mut self, time: Time) -> Self {
-        self.time_of_last_allocation_charge = time;
         self
     }
 
@@ -123,7 +117,6 @@ impl ReplicatedStateBuilder {
         state.metadata.network_topology.routing_table = Arc::new(routing_table);
 
         state.metadata.batch_time = self.batch_time;
-        state.metadata.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
         state.metadata.own_subnet_features = self.subnet_features;
         state.put_bitcoin_state(self.bitcoin_state);
 
@@ -142,7 +135,6 @@ impl Default for ReplicatedStateBuilder {
             subnet_type: SubnetType::Application,
             subnet_id: subnet_test_id(1),
             batch_time: mock_time(),
-            time_of_last_allocation_charge: mock_time(),
             subnet_features: SubnetFeatures::default(),
             bitcoin_state: BitcoinState::default(),
             bitcoin_adapter_requests: Vec::new(),
