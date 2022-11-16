@@ -24,7 +24,7 @@ def _ic_version_or_git_sha_imtpl(ctx):
         inputs = [ctx.version_file],
         outputs = [out],
         env = {
-            "VERSION": ctx.attr._ic_version[BuildSettingInfo].value,
+            "VERSION": ctx.attr.ic_version[BuildSettingInfo].value,
         },
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -32,7 +32,7 @@ def _ic_version_or_git_sha_imtpl(ctx):
 ic_version_or_git_sha = rule(
     implementation = _ic_version_or_git_sha_imtpl,
     attrs = {
-        "_ic_version": attr.label(default = ":ic_version"),
+        "ic_version": attr.label(default = ":ic_version"),
         "_ic_version_or_git_sha_sh": attr.label(executable = True, cfg = "exec", default = ":ic_version_or_git_sha_sh"),
     },
 )
