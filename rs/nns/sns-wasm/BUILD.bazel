@@ -79,7 +79,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_sns_wasm",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
+    version = "1.0.0",
     deps = DEPENDENCIES,
 )
 
