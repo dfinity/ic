@@ -46,7 +46,7 @@
 /gitlab-ci/config/00--benchmark-test-child-pipeline.yml                 @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml      @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
 
-# [Typescript]    
+# [Typescript]
 /typescript/                 @dfinity-lab/teams/owners-owners
 /typescript/service-worker/  @dfinity-lab/teams/trust-team
 
@@ -189,6 +189,12 @@
 /rs/test_utilities/src/wasm_instance.rs         @dfinity-lab/teams/runtime-owners
 /rs/tests/                              @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/prod_test_driver.rs       @dfinity-lab/teams/ic-testing-verification
+/rs/tests/bin/basic_health_test.rs        @dfinity-lab/teams/ic-testing-verification
+/rs/tests/bin/btc_get_balance_test.rs     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
+/rs/tests/bin/ckbtc_minter_basics_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
+/rs/tests/bin/icrc1_agent_test.rs         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
+/rs/tests/bin/rosetta_test.rs             @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
+/rs/tests/bin/tecdsa_add_nodes_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 /rs/tests/src/basic_health_test.rs      @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_integration/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/btc_integration/          @dfinity-lab/teams/execution-owners
