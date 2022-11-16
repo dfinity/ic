@@ -122,6 +122,7 @@
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -168,6 +169,7 @@ pub struct Swap {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -211,6 +213,7 @@ pub struct Init {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -229,6 +232,7 @@ pub struct CfNeuron {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -247,6 +251,7 @@ pub struct CfParticipant {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -319,6 +324,7 @@ pub mod params {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -342,6 +348,7 @@ pub mod params {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -358,6 +365,7 @@ pub struct TransferableAmount {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -393,6 +401,7 @@ pub struct BuyerState {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -407,6 +416,7 @@ pub struct DirectInvestment {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -421,6 +431,7 @@ pub struct CfInvestment {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Copy,
     Clone,
@@ -436,6 +447,7 @@ pub struct TimeWindow {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -456,6 +468,7 @@ pub mod sns_neuron_recipe {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -477,6 +490,7 @@ pub mod sns_neuron_recipe {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -496,6 +510,7 @@ pub mod sns_neuron_recipe {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -515,6 +530,7 @@ pub struct OpenRequest {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -524,6 +540,7 @@ pub struct OpenResponse {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -534,6 +551,7 @@ pub struct GetCanisterStatusRequest {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -543,6 +561,7 @@ pub struct GetStateRequest {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -557,6 +576,7 @@ pub struct GetStateResponse {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -570,6 +590,7 @@ pub struct GetBuyerStateRequest {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -582,6 +603,7 @@ pub struct GetBuyerStateResponse {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -591,6 +613,7 @@ pub struct GetBuyersTotalRequest {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -604,6 +627,7 @@ pub struct GetBuyersTotalResponse {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -619,6 +643,7 @@ pub struct DerivedState {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -635,6 +660,7 @@ pub struct SetOpenTimeWindowRequest {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -648,6 +674,7 @@ pub struct SetOpenTimeWindowResponse {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -661,6 +688,7 @@ pub struct RefreshBuyerTokensRequest {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -677,6 +705,7 @@ pub struct RefreshBuyerTokensResponse {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -686,6 +715,7 @@ pub struct FinalizeSwapRequest {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -709,6 +739,7 @@ pub struct FinalizeSwapResponse {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -726,6 +757,7 @@ pub struct SweepResult {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -740,6 +772,7 @@ pub mod set_mode_call_result {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -755,6 +788,7 @@ pub mod set_mode_call_result {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -766,6 +800,7 @@ pub struct RestoreDappControllersRequest {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -783,6 +818,7 @@ pub mod restore_dapp_controllers_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -801,6 +837,7 @@ pub mod restore_dapp_controllers_response {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -815,6 +852,7 @@ pub mod set_dapp_controllers_call_result {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -832,6 +870,7 @@ pub mod set_dapp_controllers_call_result {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -850,6 +889,7 @@ pub mod settle_community_fund_participation_result {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -863,6 +903,7 @@ pub mod settle_community_fund_participation_result {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -883,6 +924,7 @@ pub mod settle_community_fund_participation_result {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -895,6 +937,7 @@ pub struct SetDappControllersRequest {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -909,6 +952,7 @@ pub mod set_dapp_controllers_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -925,6 +969,7 @@ pub mod set_dapp_controllers_response {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -941,6 +986,7 @@ pub mod governance_error {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         Copy,
@@ -1045,6 +1091,7 @@ pub mod governance_error {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -1070,6 +1117,7 @@ pub mod settle_community_fund_participation {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1086,6 +1134,7 @@ pub mod settle_community_fund_participation {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1097,6 +1146,7 @@ pub mod settle_community_fund_participation {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1114,6 +1164,7 @@ pub mod settle_community_fund_participation {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -1131,6 +1182,7 @@ pub struct CanisterCallError {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -1145,6 +1197,7 @@ pub struct ErrorRefundIcpRequest {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -1160,6 +1213,7 @@ pub mod error_refund_icp_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1174,6 +1228,7 @@ pub mod error_refund_icp_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1190,6 +1245,7 @@ pub mod error_refund_icp_response {
         #[derive(
             candid::CandidType,
             candid::Deserialize,
+            serde::Serialize,
             comparable::Comparable,
             Clone,
             Copy,
@@ -1236,6 +1292,7 @@ pub mod error_refund_icp_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1253,6 +1310,7 @@ pub mod error_refund_icp_response {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     Copy,
