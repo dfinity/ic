@@ -20,7 +20,7 @@
     - |
       while true; do
         curl --output jobs.json --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
-             "https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/pipelines/${PARENT_PIPELINE_ID}/jobs?include_retried=true"
+             "https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/pipelines/${PARENT_PIPELINE_ID}/jobs?include_retried=true&per_page=100"
         jq ".[] | select (.name == \"${JOB_NAME}\") | .status" jobs.json > states.lst
 
         if ! grep -qF '' states.lst ; then
