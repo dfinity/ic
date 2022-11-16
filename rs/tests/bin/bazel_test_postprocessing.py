@@ -16,6 +16,7 @@ CI_COMMIT_SHA = os.getenv("CI_COMMIT_SHA", default="")
 CI_COMMIT_SHORT_SHA = os.getenv("CI_COMMIT_SHORT_SHA", default="")
 SLACK_FILE = "slack_alert.json"
 SLACK_ALERT_CHANNEL = "#test-failure-alerts"
+HONEYCOMB_DATASET = "bazel-system-tests-scheduled"
 
 RED = "\x1b[31m"
 GREEN = "\x1b[32m"
@@ -70,6 +71,23 @@ def make_request(url, headers=None, data=None):
         return "", str(exception)
 
 
+def send_event_to_honeycomb(honeycomb_api_key: str, event_data: List[Dict]):
+    json_string = json.dumps(event_data)
+    post_data = json_string.encode("utf-8")
+    body, response = make_request(
+        url=f"https://api.honeycomb.io/1/batch/{HONEYCOMB_DATASET}",
+        data=post_data,
+        headers={"X-Honeycomb-Team": honeycomb_api_key},
+    )
+    if hasattr(response, "status"):
+        if response.status == 200:
+            logger.debug(f"Successfully queued Honeycomb event, status_code={response.status}, message={body}.")
+        else:
+            logger.error(f"Failed to queue Honeycomb event, status_code={response.status}, error={body}.")
+    else:
+        logger.error(f"Failed to queue Honeycomb event, error={body}.")
+
+
 def send_slack_alert(webhook_url: str, channel: str, message: str) -> None:
     post_dict = {"text": message, "channel": channel}
     json_string = json.dumps(post_dict)
@@ -110,12 +128,12 @@ def save_slack_alert(filename: str, test_name: str, slack_channels: List[str]):
 
 class Config:
     def __init__(
-        self, output_dir: str, build_event_json_path: str, slack_webhook_url: str, with_slack_alert: bool
+        self, output_dir: str, build_event_json_path: str, slack_webhook_url: str, honeycomb_api_token: str
     ) -> None:
         self.build_event_json_path = build_event_json_path
         self.output_dir = output_dir
-        self.with_slack_alert = with_slack_alert
         self.slack_webhook_url = slack_webhook_url
+        self.honeycomb_api_token = honeycomb_api_token
 
 
 def find_first_key_in_dict(d: Dict, search_key: str) -> Optional[str]:
@@ -144,8 +162,10 @@ def process_bazel_results(file_path: str) -> Tuple[str, str]:
                 status = status_value
             if not test_target and test_target_value is not None:
                 test_target = test_target_value["label"]  # type: ignore
+    # When e.g. Bazel build fails, the test execution status field (called "overallStatus" in BEP)
+    # is simply absent, as the test didn't start. We define such test as failed.
     if not status:
-        Exception(f"Bazel test status couldn't be extracted from {file_path}")
+        status = "FAILED"
     if not test_target:
         Exception(f"Bazel test target couldn't be extracted from {file_path}")
     return (status, test_target)
@@ -153,22 +173,28 @@ def process_bazel_results(file_path: str) -> Tuple[str, str]:
 
 def main(config: Config) -> None:
     test_exec_status, test_target_name = process_bazel_results(config.build_event_json_path)
+    if config.honeycomb_api_token:
+        event_data = [
+            {"data": {"test_target": test_target_name, "execution_result": test_exec_status, "job_url": CI_JOB_URL}}
+        ]
+        send_event_to_honeycomb(honeycomb_api_key=config.honeycomb_api_token, event_data=event_data)
     slack_filename = f"{config.output_dir}/{SLACK_FILE}"
-    if test_exec_status != "PASSED":
+    if test_exec_status == "PASSED":
+        logger.info(f"Test target {test_target_name} was executed successfully.")
+    else:
         logger.error(f"Test target {test_target_name} has failed.")
         save_slack_alert(filename=slack_filename, test_name=test_target_name, slack_channels=[SLACK_ALERT_CHANNEL])
-        if config.with_slack_alert:
+        if config.slack_webhook_url:
             send_slack_alerts_from_file(webhook_url=config.slack_webhook_url, filename=slack_filename)
-    else:
-        logger.info(f"Test target {test_target_name} was executed successfully.")
 
 
 if __name__ == "__main__":
     # Get slack webhook from the env variable.
     slack_webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "")
+    # Get Honeycomb token from the env variable.
+    honeycomb_api_token = os.environ.get("HONEYCOMB_API_TOKEN", "")
     build_event_json_path = os.environ.get("BUILD_EVENT_JSON_PATH", "")
     logging.debug(f"BUILD_EVENT_JSON_PATH={build_event_json_path}")
-    with_slack_alerts = bool(os.environ.get("WITH_SLACK_ALERTS", "False"))
     output_dir = os.environ.get("OUTPUT_DIR", "")
     logging.debug(f"OUTPUT_DIR={output_dir}")
     if not build_event_json_path:
@@ -177,13 +203,17 @@ if __name__ == "__main__":
     if not output_dir:
         logger.error("OUTPUT_DIR variable is not defined.")
         exit(1)
-    if not with_slack_alerts:
-        logger.warning("Slack alerts are turned off. Use --with_slack_alerts flag to send alerts.")
+    if not slack_webhook_url:
+        logger.warning("Slack alerts are turned off. Provide SLACK_WEBHOOK_URL env var to send alerts.")
+    if not honeycomb_api_token:
+        logger.warning(
+            "Honeycomb notifications are turned off. Provide HONEYCOMB_API_TOKEN env var to send notifications."
+        )
     # Assemble config.
     config = Config(
         output_dir=output_dir,
         build_event_json_path=build_event_json_path,
         slack_webhook_url=slack_webhook_url,
-        with_slack_alert=with_slack_alerts,
+        honeycomb_api_token=honeycomb_api_token,
     )
     main(config)
