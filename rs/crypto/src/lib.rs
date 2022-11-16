@@ -32,6 +32,7 @@ use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_generation::derive_node_id;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::crypto::{BasicSigner, KeyManager, ThresholdSigVerifierByPublicKey};
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -100,6 +101,8 @@ pub struct CryptoComponentFatClient<C: CryptoServiceProvider> {
     node_id: NodeId,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
+    #[allow(unused)]
+    time_source: Arc<dyn TimeSource>,
 }
 
 /// A `ThresholdSigDataStore` that is wrapped by a `RwLock`.
@@ -166,6 +169,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             node_id,
             logger,
             metrics: Arc::new(CryptoMetrics::none()),
+            time_source: Arc::new(SysTimeSource::new()),
         }
     }
 }
@@ -261,6 +265,7 @@ impl CryptoComponentFatClient<Csp> {
             node_id,
             logger,
             metrics,
+            time_source: Arc::new(SysTimeSource::new()),
         };
         crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
         crypto_component
@@ -277,6 +282,7 @@ impl CryptoComponentFatClient<Csp> {
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
         logger: ReplicaLogger,
+        time_source: Arc<dyn TimeSource>,
     ) -> Self {
         let metrics = Arc::new(CryptoMetrics::none());
         CryptoComponentFatClient {
@@ -286,6 +292,7 @@ impl CryptoComponentFatClient<Csp> {
             node_id,
             logger,
             metrics,
+            time_source,
         }
     }
 

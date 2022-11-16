@@ -16,6 +16,7 @@ use ic_types_test_utils::ids::node_test_id;
 use std::sync::Arc;
 
 use ic_crypto_test_utils::ed25519_utils::ed25519_signature_and_public_key;
+use ic_interfaces::time_source::SysTimeSource;
 use openssl::ec::{EcGroup, EcKey};
 use openssl::ecdsa::EcdsaSig;
 use openssl::nid::Nid;
@@ -381,5 +382,6 @@ fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
         Arc::new(dummy_registry),
         node_test_id(42),
         no_op_logger(),
+        Arc::new(SysTimeSource::new()),
     )
 }
