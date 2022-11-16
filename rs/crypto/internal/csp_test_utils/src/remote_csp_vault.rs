@@ -38,6 +38,21 @@ pub fn start_new_remote_csp_vault_server_for_test(rt_handle: &tokio::runtime::Ha
     });
     socket_path
 }
+pub fn start_new_remote_csp_vault_server_in_temp_dir(
+    rt_handle: &tokio::runtime::Handle,
+) -> (TempDir, PathBuf) {
+    let (socket_path, sks_dir, listener) = setup_listener(rt_handle);
+    let server = ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl::new(
+        sks_dir.path(),
+        listener,
+        no_op_logger(),
+        Arc::new(CryptoMetrics::none()),
+    );
+    rt_handle.spawn(async move {
+        server.run().await;
+    });
+    (sks_dir, socket_path)
+}
 
 pub fn setup_listener(rt_handle: &tokio::runtime::Handle) -> (PathBuf, TempDir, UnixListener) {
     let socket_path = get_temp_file_path();

@@ -143,40 +143,25 @@ pub fn get_node_keys_or_generate_if_missing(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,
 ) -> (CurrentNodePublicKeys, NodeId) {
-    let crypto_root = config.crypto_root.as_path();
     match check_keys_locally(config, tokio_runtime_handle.clone()) {
         Ok(None) => {
             // Generate new keys.
             let mut csp = csp_for_config(config, tokio_runtime_handle.clone());
             let node_signing_public_key = generate_node_signing_keys(&csp);
             let node_id = derive_node_id(&node_signing_public_key);
-            let committee_signing_public_key = generate_committee_signing_keys(&csp);
-            let tls_certificate = generate_tls_keys(&mut csp, node_id).to_proto();
-            let dkg_dealing_encryption_public_key =
+            let _committee_signing_public_key = generate_committee_signing_keys(&csp);
+            let _tls_certificate = generate_tls_keys(&mut csp, node_id);
+            let _dkg_dealing_encryption_public_key =
                 generate_dkg_dealing_encryption_keys(&mut csp, node_id);
-            let idkg_dealing_encryption_public_key =
+            let _idkg_dealing_encryption_public_key =
                 generate_idkg_dealing_encryption_keys(&mut csp).unwrap_or_else(|e| {
                     panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
                 });
-            let current_node_public_keys = CurrentNodePublicKeys {
-                node_signing_public_key: Some(node_signing_public_key),
-                committee_signing_public_key: Some(committee_signing_public_key),
-                tls_certificate: Some(tls_certificate),
-                dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_public_key),
-                idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_public_key),
-            };
-            //TODO CRP-1723: delete the block below. CSP will write the public keys directly on disk.
-            let node_public_keys = NodePublicKeys::from(current_node_public_keys.clone());
-            public_key_store::store_node_public_keys(crypto_root, &node_public_keys)
-                .unwrap_or_else(|_| panic!("Failed to store public key material"));
-            // Re-check the generated keys.
-            let stored_keys = check_keys_locally(config, tokio_runtime_handle)
+            let _check_again_generated_keys = check_keys_locally(config, tokio_runtime_handle)
                 .expect("Could not read generated keys.")
                 .expect("Newly generated keys are inconsistent.");
-            if stored_keys != node_public_keys {
-                panic!("Generated keys differ from the stored ones.");
-            }
-            (current_node_public_keys, node_id)
+
+            (csp.current_node_public_keys(), node_id)
         }
         Ok(Some(node_pks)) => {
             let csp = csp_for_config(config, tokio_runtime_handle);
