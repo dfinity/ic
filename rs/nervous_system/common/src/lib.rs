@@ -25,6 +25,10 @@ pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 // Useful as a piece of realistic test data.
 pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1641016800;
 
+// The size of a WASM page in bytes, as defined by the WASM specification
+#[cfg(any(target_arch = "wasm32"))]
+const WASM_PAGE_SIZE_BYTES: usize = 65536;
+
 #[macro_export]
 macro_rules! assert_is_ok {
     ($result: expr) => {
@@ -343,4 +347,26 @@ pub fn validate_proposal_url(
     }
 
     Ok(())
+}
+
+/// Returns the total amount of memory (heap, stable memory, etc) that the calling canister has allocated.
+#[cfg(any(target_arch = "wasm32"))]
+pub fn total_memory_size_bytes() -> usize {
+    core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn total_memory_size_bytes() -> usize {
+    0
+}
+
+/// Returns the amount of stable memory that the calling canister has allocated.
+#[cfg(any(target_arch = "wasm32"))]
+pub fn stable_memory_size_bytes() -> usize {
+    dfn_core::api::stable_memory_size_in_pages() as usize * WASM_PAGE_SIZE_BYTES
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn stable_memory_size_bytes() -> usize {
+    0
 }

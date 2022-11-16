@@ -460,6 +460,17 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "The number of SNSes that SNS-WASM has deployed",
     )?;
 
+    w.encode_gauge(
+        "sns_wasm_stable_memory_size_bytes",
+        ic_nervous_system_common::stable_memory_size_bytes() as f64,
+        "Size of the stable memory allocated by this canister measured in bytes.",
+    )?;
+    w.encode_gauge(
+        "sns_wasm_total_memory_size_bytes",
+        ic_nervous_system_common::total_memory_size_bytes() as f64,
+        "Size of the total memory allocated by this canister measured in bytes.",
+    )?;
+
     Ok(())
 }
 

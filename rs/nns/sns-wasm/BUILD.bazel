@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/monitoring/metrics_encoder",
     "//rs/nns/constants",
+    "//rs/nervous_system/common",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http_metrics",
@@ -39,7 +40,6 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/nervous_system/common",
     "//rs/nns/sns-wasm/proto_generator:lib",
     "//rs/nns/test_utils",
     "//rs/registry/helpers",
