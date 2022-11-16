@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -121,7 +121,7 @@ rust_binary(
 )
 
 rust_canister(
-    name = "sns-swap-canister-raw",
+    name = "sns-swap-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -129,11 +129,6 @@ rust_canister(
         ":build_script",
         ":swap",
     ],
-)
-
-optimized_canister(
-    name = "sns-swap-canister",
-    wasm = ":sns-swap-canister-raw",
 )
 
 rust_test(
@@ -146,7 +141,7 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_sns-swap-canister-raw",
+    crate = ":_wasm_sns-swap-canister",
     data = ["canister/swap.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/swap",

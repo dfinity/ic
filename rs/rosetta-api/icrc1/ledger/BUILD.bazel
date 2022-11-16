@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -38,7 +38,7 @@ rust_library(
 )
 
 rust_canister(
-    name = "ledger_canister_raw",
+    name = "ledger_canister",
     srcs = ["src/main.rs"],
     crate_name = "ic_icrc1_ledger_canister",
     proc_macro_deps = [
@@ -59,14 +59,9 @@ rust_canister(
     ],
 )
 
-optimized_canister(
-    name = "ledger_canister",
-    wasm = ":ledger_canister_raw",
-)
-
 rust_test(
     name = "ledger_canister_test",
-    crate = ":_wasm_ledger_canister_raw",
+    crate = ":_wasm_ledger_canister",
     data = [
         ":icrc1.did",
         ":txlog.did",

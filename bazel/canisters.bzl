@@ -66,16 +66,14 @@ def rust_canister(name, **kwargs):
     )
 
     wasm_rust_binary_rule(
-        name = name,
+        name = name + ".raw",
         binary = ":" + wasm_name,
     )
 
-def optimized_canister(name, wasm):
-    """Invokes canister WebAssembly module optimizer.
-    """
+    # Invokes canister WebAssembly module optimizer.
     native.genrule(
         name = name + ".opt",
-        srcs = [wasm],
+        srcs = [name + ".raw"],
         outs = [name + ".opt.wasm"],
         message = "Shrinking canister " + name,
         exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],

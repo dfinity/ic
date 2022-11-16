@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -28,14 +28,9 @@ rust_library(
 )
 
 rust_canister(
-    name = "memory_test_canister_raw",
+    name = "memory_test_canister",
     srcs = ["src/main.rs"],
     deps = DEPENDENCIES,
-)
-
-optimized_canister(
-    name = "memory_test_canister",
-    wasm = "memory_test_canister_raw",
 )
 
 rust_test(

@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -28,16 +28,11 @@ rust_binary(
 )
 
 rust_canister(
-    name = "pmap_canister_raw",
+    name = "pmap_canister",
     srcs = ["canister/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
-)
-
-optimized_canister(
-    name = "pmap_canister",
-    wasm = ":pmap_canister_raw",
 )
 
 rust_test(

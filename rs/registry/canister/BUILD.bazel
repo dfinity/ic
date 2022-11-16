@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:prost.bzl", "generated_files_check")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
@@ -105,7 +105,7 @@ rust_library(
 )
 
 rust_canister(
-    name = "registry-canister-raw",
+    name = "registry-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/registry.did"],
@@ -163,11 +163,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canister"],
-)
-
-optimized_canister(
-    name = "registry-canister",
-    wasm = ":registry-canister-raw",
 )
 
 generated_files_check(
