@@ -159,22 +159,11 @@ pub(crate) struct SendStreamWrapper<'a> {
 }
 
 impl<'a> SendStreamWrapper<'a> {
-    pub fn new(send_stream: &'a mut SendStream<Bytes>) -> Self {
-        Self {
-            send_stream,
-            data: vec![],
-        }
-    }
+    pub fn new(send_stream: &'a mut SendStream<Bytes>, data: Vec<PayloadData>) -> Self {
+        let capacity_needed = data.iter().map(|p| p.header.len() + p.body.len()).sum();
+        send_stream.reserve_capacity(capacity_needed);
 
-    // Store the data to send and reserve capacity.  The poll function manages the actual send component
-    pub fn prepare_send_data(&mut self, data_to_send: Vec<PayloadData>) {
-        self.data = data_to_send;
-        let capacity_needed = self
-            .data
-            .iter()
-            .map(|p| p.header.len() + p.body.len())
-            .sum();
-        self.send_stream.reserve_capacity(capacity_needed);
+        Self { send_stream, data }
     }
 }
 
@@ -198,9 +187,8 @@ impl Future for SendStreamWrapper<'_> {
         // Send header and body as separate frames
         for payload in self.data.clone() {
             if !payload.header.is_empty() {
-                // TODO: do not use Bytes::copy_from_slice since it will do a copy
                 self.send_stream
-                    .send_data(Bytes::copy_from_slice(&payload.header), false)
+                    .send_data(Bytes::from(payload.header.into_boxed_slice()), false)
                     .map_err(|err| {
                         err.into_io().unwrap_or_else(|| {
                             std::io::Error::new(std::io::ErrorKind::Other, "failed to send header")
@@ -209,9 +197,8 @@ impl Future for SendStreamWrapper<'_> {
             }
 
             if !payload.body.is_empty() {
-                // TODO: do not use Bytes::copy_from_slice since it will do a copy
                 self.send_stream
-                    .send_data(Bytes::copy_from_slice(&payload.body), false)
+                    .send_data(Bytes::from(payload.body.into_boxed_slice()), false)
                     .map_err(|err| {
                         err.into_io().unwrap_or_else(|| {
                             std::io::Error::new(std::io::ErrorKind::Other, "failed to send body")
