@@ -5,7 +5,6 @@ use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
-use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::X509NameEntries;
 use openssl::{asn1::Asn1Time, bn::BigNum, nid::Nid, x509::X509};
@@ -146,29 +145,10 @@ mod idkg_create_mega_key_pair_tests {
         let csprng = csprng_seeded_with(test_vector.seed);
         let csp = Csp::with_rng(csprng);
         let public_key = csp
-            .idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1)
+            .idkg_gen_dealing_encryption_key_pair()
             .expect("failed creating MEGa key pair");
 
         assert_eq!(public_key, test_vector.public_key);
-    }
-
-    #[test]
-    fn should_fail_generating_keys_for_unsupported_algorithms() {
-        let supported_algorithm_ids = vec![AlgorithmId::ThresholdEcdsaSecp256k1];
-        let csp = Csp::with_rng(rng());
-
-        for algorithm_id in all_algorithm_ids() {
-            if !supported_algorithm_ids.contains(&algorithm_id) {
-                let result = csp
-                    .idkg_create_mega_key_pair(algorithm_id)
-                    .expect_err("expected error");
-
-                assert!(matches!(
-                    result,
-                    CspCreateMEGaKeyError::UnsupportedAlgorithm { .. }
-                ))
-            }
-        }
     }
 
     #[test]
@@ -180,7 +160,7 @@ mod idkg_create_mega_key_pair_tests {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let result = csp.idkg_gen_dealing_encryption_key_pair();
 
         assert!(matches!(
             result,
@@ -196,7 +176,7 @@ mod idkg_create_mega_key_pair_tests {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let result = csp.idkg_gen_dealing_encryption_key_pair();
 
         assert!(matches!(
             result,
@@ -212,7 +192,7 @@ mod idkg_create_mega_key_pair_tests {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let result = csp.idkg_gen_dealing_encryption_key_pair();
 
         assert!(matches!(
             result,
@@ -450,28 +430,4 @@ mod tls {
 
 fn rng() -> impl CryptoRng + Rng {
     csprng_seeded_with(42)
-}
-
-fn all_algorithm_ids() -> Vec<AlgorithmId> {
-    let algorithm_ids = vec![
-        AlgorithmId::Placeholder,
-        AlgorithmId::MultiBls12_381,
-        AlgorithmId::ThresBls12_381,
-        AlgorithmId::SchnorrSecp256k1,
-        AlgorithmId::StaticDhSecp256k1,
-        AlgorithmId::HashSha256,
-        AlgorithmId::Tls,
-        AlgorithmId::Ed25519,
-        AlgorithmId::Secp256k1,
-        AlgorithmId::Groth20_Bls12_381,
-        AlgorithmId::NiDkg_Groth20_Bls12_381,
-        AlgorithmId::EcdsaP256,
-        AlgorithmId::EcdsaSecp256k1,
-        AlgorithmId::IcCanisterSignature,
-        AlgorithmId::RsaSha256,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        AlgorithmId::MegaSecp256k1,
-    ];
-    assert_eq!(algorithm_ids.len(), 17);
-    algorithm_ids
 }
