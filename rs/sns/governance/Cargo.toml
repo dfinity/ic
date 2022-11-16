@@ -10,6 +10,14 @@ path = "canister/canister.rs"
 [lib]
 path = "src/lib.rs"
 
+[[test]]
+name = "governance-test"
+path = "tests/governance.rs"
+
+[[test]]
+name = "governance-interleaving-test"
+path = "tests/interleaving_tests.rs"
+
 [dependencies]
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!
 build-info = { version = "0.0.26", default-features = false, features = [] }
@@ -83,6 +91,7 @@ pretty_assertions = "1.0"
 proptest = "1.0"
 tempfile = "3.1.0"
 tokio = { version = "1.18.0", features = ["full"] }
+tokio-test = "0.4.2"
 
 [features]
 test = []

@@ -72,7 +72,7 @@ use crate::sns_upgrade::{
 };
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
-use dfn_core::api::{id, spawn, CanisterId};
+use dfn_core::api::{spawn, CanisterId};
 use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
 use ic_nervous_system_common::{ledger, NervousSystemError};
 use ic_nervous_system_root::ChangeCanisterProposal;
@@ -580,25 +580,6 @@ pub struct Governance {
     pub latest_gc_num_proposals: usize,
 }
 
-/// Returns the ledger account identifier of the minting account on the ledger canister
-/// (currently an account controlled by the governance canister).
-/// TODO - if we later allow to set the minting account more flexibly, this method should be renamed
-pub fn governance_minting_account() -> Account {
-    Account {
-        owner: id().get(),
-        subaccount: None,
-    }
-}
-
-/// Returns the ledger account identifier of a given neuron, where the neuron is specified by
-/// its subaccount.
-pub fn neuron_account_id(subaccount: Subaccount) -> Account {
-    Account {
-        owner: id().get(),
-        subaccount: Some(subaccount),
-    }
-}
-
 impl Governance {
     pub fn new(
         proto: ValidGovernanceProto,
@@ -1077,7 +1058,7 @@ impl Governance {
                     fees_amount_e8s,
                     0, // Burning transfers don't pay a fee.
                     Some(from_subaccount),
-                    governance_minting_account(),
+                    self.governance_minting_account(),
                     self.env.now(),
                 )
                 .await?;
@@ -1250,7 +1231,7 @@ impl Governance {
                 staked_amount,
                 transaction_fee_e8s,
                 Some(from_subaccount),
-                neuron_account_id(to_subaccount),
+                self.neuron_account_id(to_subaccount),
                 split.memo,
             )
             .await;
@@ -1350,7 +1331,7 @@ impl Governance {
                 maturity_to_merge,
                 0, // Minting transfer don't pay a fee
                 None, // This is a minting transfer, no 'from' account is needed
-                neuron_account_id(subaccount), // The account of the neuron on the ledger
+                self.neuron_account_id(subaccount), // The account of the neuron on the ledger
                 self.env.random_u64(), // Random memo(nonce) for the ledger's transaction
             )
             .await?;
@@ -3066,7 +3047,7 @@ impl Governance {
     async fn refresh_neuron(&mut self, nid: &NeuronId) -> Result<(), GovernanceError> {
         let now = self.env.now();
         let subaccount = nid.subaccount()?;
-        let account = neuron_account_id(subaccount);
+        let account = self.neuron_account_id(subaccount);
 
         // Get the balance of the neuron from the ledger canister.
         let balance = self.ledger.account_balance(account.clone()).await?;
@@ -3170,7 +3151,7 @@ impl Governance {
 
         // Get the balance of the neuron's subaccount from ledger canister.
         let subaccount = neuron_id.subaccount()?;
-        let account = neuron_account_id(subaccount);
+        let account = self.neuron_account_id(subaccount);
         let balance = self.ledger.account_balance(account).await?;
         let min_stake = self
             .nervous_system_parameters()
@@ -4245,6 +4226,24 @@ impl Governance {
     ) -> GetSnsInitializationParametersResponse {
         GetSnsInitializationParametersResponse {
             sns_initialization_parameters: self.proto.sns_initialization_parameters.clone(),
+        }
+    }
+
+    /// Returns the ledger account identifier of the minting account on the ledger canister
+    /// (currently an account controlled by the governance canister).
+    pub fn governance_minting_account(&self) -> Account {
+        Account {
+            owner: self.env.canister_id().get(),
+            subaccount: None,
+        }
+    }
+
+    /// Returns the ledger account identifier of a given neuron, where the neuron is specified by
+    /// its subaccount.
+    pub fn neuron_account_id(&self, subaccount: Subaccount) -> Account {
+        Account {
+            owner: self.env.canister_id().get(),
+            subaccount: Some(subaccount),
         }
     }
 }

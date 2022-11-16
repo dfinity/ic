@@ -1124,6 +1124,15 @@ impl SnsMetadata {
         }
         Ok(())
     }
+
+    pub fn with_default_values_for_testing() -> Self {
+        SnsMetadata {
+            logo: Some("data:image/png;base64,".to_string()),
+            url: Some("https://dfinity.org".to_string()),
+            name: Some("SNS-Name".to_string()),
+            description: Some("SNS-Description".to_string()),
+        }
+    }
 }
 
 impl Action {
