@@ -219,13 +219,12 @@ EOF
 }
 
 function setup_cgi() {
-    local -r IP="$(ip -brief -family inet address show scope global | grep -w UP | grep -o -m1 "[0-9]*\.[0-9*\.[0-9]*\.[0-9]*")"
     cat >"/run/ic-node/etc/nginx/conf.d/cgi.conf" <<EOF
-# setup server for the cgi
+# Setup server for the cgi
 server {
-	listen ${IP}:80;
-
-	# Fast cgi support from fcgiwrap
+  listen 80;
+  listen [::]:80;
+  # Fast cgi support from fcgiwrap
   include /etc/nginx/fcgiwrap.conf;
 }
 EOF
