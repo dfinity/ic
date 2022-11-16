@@ -338,11 +338,11 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #       developer_neurons:
 #         - controller: x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae
 #           stake_e8s: 1500000000
-#           memo: 0,
+#           memo: 0
 #           dissolve_delay_seconds: 15780000 # 6 months
 #         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
 #           stake_e8s: 1500000000
-#           memo: 1,
+#           memo: 1
 #           dissolve_delay_seconds: 31560000 # 1 year
 #     treasury_distribution:
 #       total_e8s: 5000000000
@@ -353,7 +353,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #       airdrop_neurons:
 #         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
 #           stake_e8s: 500000000
-#           memo: 0,
+#           memo: 0
 #           dissolve_delay_seconds: 15780000 # 6 months
 #"##
             .to_string(),
