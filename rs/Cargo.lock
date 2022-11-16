@@ -7831,7 +7831,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -8178,7 +8178,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-wasm"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "build-info",
