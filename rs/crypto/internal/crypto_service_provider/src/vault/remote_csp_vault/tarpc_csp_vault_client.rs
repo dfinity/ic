@@ -528,13 +528,10 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         })
     }
 
-    fn idkg_gen_mega_key_pair(
-        &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
+    fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         self.tokio_block_on(
             self.tarpc_csp_client
-                .idkg_gen_mega_key_pair(context_with_timeout(self.rpc_timeout), algorithm_id),
+                .idkg_gen_dealing_encryption_key_pair(context_with_timeout(self.rpc_timeout)),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspCreateMEGaKeyError::TransientInternalError {

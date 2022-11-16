@@ -469,6 +469,75 @@ mod ni_dkg {
     }
 }
 
+mod idkg {
+    use super::*;
+    use mockall::Sequence;
+    use rand_chacha::ChaCha20Rng;
+
+    #[test]
+    fn should_generate_and_store_dealing_encryption_key_pair_multiple_times() {
+        let tokio_rt = new_tokio_runtime();
+        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
+        test_utils::idkg::should_generate_and_store_dealing_encryption_key_pair_multiple_times(
+            csp_vault,
+        );
+    }
+
+    #[test]
+    fn should_store_idkg_secret_key_before_public_key() {
+        let local_vault = {
+            let mut seq = Sequence::new();
+            let mut sks = MockSecretKeyStore::new();
+            sks.expect_insert()
+                .times(1)
+                .returning(|_key, _key_id, _scope| Ok(()))
+                .in_sequence(&mut seq);
+            let mut pks = MockPublicKeyStore::new();
+            let empty_idkg_public_keys = Vec::new();
+            pks.expect_idkg_dealing_encryption_pubkeys()
+                .times(1)
+                .return_const(empty_idkg_public_keys)
+                .in_sequence(&mut seq);
+            pks.expect_set_idkg_dealing_encryption_pubkeys()
+                .times(1)
+                .returning(|_keys| Ok(()))
+                .in_sequence(&mut seq);
+            let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+            LocalCspVault::new_for_test(dummy_rng, sks, pks)
+        };
+
+        let tokio_rt = new_tokio_runtime();
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        assert!(remote_vault.idkg_gen_dealing_encryption_key_pair().is_ok())
+    }
+
+    #[test]
+    fn should_fail_with_transient_internal_error_if_storing_idkg_public_key_fails() {
+        let local_vault = {
+            let mut pks_returning_io_error = MockPublicKeyStore::new();
+            let empty_idkg_public_keys = Vec::new();
+            pks_returning_io_error
+                .expect_idkg_dealing_encryption_pubkeys()
+                .times(1)
+                .return_const(empty_idkg_public_keys);
+            let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+            pks_returning_io_error
+                .expect_set_idkg_dealing_encryption_pubkeys()
+                .return_once(|_keys| Err(io_error));
+            let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+            let temp_sks = TempSecretKeyStore::new();
+            LocalCspVault::new_for_test(dummy_rng, temp_sks, pks_returning_io_error)
+        };
+        let tokio_rt = new_tokio_runtime();
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        test_utils::idkg::should_fail_with_transient_internal_error_if_storing_idkg_public_key_fails(remote_vault);
+    }
+}
+
 mod tls_keygen {
     use std::io;
 

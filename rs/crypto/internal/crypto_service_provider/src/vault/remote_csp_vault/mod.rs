@@ -185,10 +185,8 @@ pub trait TarpcCspVault {
         active_key_ids: BTreeSet<KeyId>,
     ) -> Result<(), IDkgRetainThresholdKeysError>;
 
-    // Corresponds to `IDkgProtocolCspVault.idkg_gen_mega_key_pair`
-    async fn idkg_gen_mega_key_pair(
-        algorithm_id: AlgorithmId,
-    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+    // Corresponds to `IDkgProtocolCspVault.idkg_gen_dealing_encryption_key_pair`
+    async fn idkg_gen_dealing_encryption_key_pair() -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_open_dealing`
     async fn idkg_open_dealing(

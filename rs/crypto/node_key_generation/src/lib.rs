@@ -77,7 +77,7 @@ pub fn generate_idkg_dealing_encryption_keys(
     csp: &mut dyn CryptoServiceProvider,
 ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeysGenerationError> {
     let pubkey = csp
-        .idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1)
+        .idkg_gen_dealing_encryption_key_pair()
         .map_err(|e| match e {
             CspCreateMEGaKeyError::TransientInternalError { internal_error } => {
                 IDkgDealingEncryptionKeysGenerationError::TransientInternalError(internal_error)

@@ -327,7 +327,7 @@ mock! {
             active_keys: &std::collections::BTreeSet<IDkgTranscriptInternal>
         ) -> Result<(), IDkgRetainThresholdKeysError>;
 
-        fn idkg_create_mega_key_pair(&self, algorithm_id: AlgorithmId) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+        fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 
         fn idkg_verify_complaint(
             &self,

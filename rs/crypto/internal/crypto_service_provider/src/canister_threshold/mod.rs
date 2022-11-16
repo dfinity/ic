@@ -199,13 +199,10 @@ impl CspIDkgProtocol for Csp {
         )
     }
 
-    fn idkg_create_mega_key_pair(
-        &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
-        debug!(self.logger; crypto.method_name => "idkg_create_mega_key_pair");
+    fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
+        debug!(self.logger; crypto.method_name => "idkg_gen_dealing_encryption_key_pair");
 
-        self.csp_vault.idkg_gen_mega_key_pair(algorithm_id)
+        self.csp_vault.idkg_gen_dealing_encryption_key_pair()
     }
 
     fn idkg_verify_complaint(

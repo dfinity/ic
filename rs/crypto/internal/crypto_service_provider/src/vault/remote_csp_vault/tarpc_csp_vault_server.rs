@@ -433,13 +433,12 @@ impl<
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 
-    async fn idkg_gen_mega_key_pair(
+    async fn idkg_gen_dealing_encryption_key_pair(
         self,
         _: context::Context,
-        algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.idkg_gen_mega_key_pair(algorithm_id);
+        let job = move || vault.idkg_gen_dealing_encryption_key_pair();
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

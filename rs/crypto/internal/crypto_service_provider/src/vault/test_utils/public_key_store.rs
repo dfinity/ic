@@ -76,6 +76,6 @@ pub fn should_retrieve_last_idkg_public_key(csp_vault: Arc<dyn CspVault>) {
 
 fn generate_idkg_dealing_encryption_key_pair(csp_vault: &Arc<dyn CspVault>) -> MEGaPublicKey {
     csp_vault
-        .idkg_gen_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1)
+        .idkg_gen_dealing_encryption_key_pair()
         .expect("Failed to generate IDkg dealing encryption keys")
 }

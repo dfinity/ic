@@ -196,7 +196,8 @@ pub trait BasicSignatureCspVault {
     /// Generates a node signing public/private key pair.
     ///
     /// # Returns
-    /// The key ID and the public key of the keypair
+    /// Generated public key.
+    ///
     /// # Errors
     /// * `CspBasicSignatureKeygenError::InternalError` if there is an internal
     ///   error (e.g., the public key in the public key store is already set).
@@ -509,7 +510,7 @@ pub trait IDkgProtocolCspVault {
         transcript: &IDkgTranscriptInternal,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
-    /// See [`CspIDkgProtocol::idkg_load_transcript_with_openings`].
+    /// See [`crate::api::CspIDkgProtocol::idkg_load_transcript_with_openings`].
     fn idkg_load_transcript_with_openings(
         &self,
         dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
@@ -521,10 +522,9 @@ pub trait IDkgProtocolCspVault {
     ) -> Result<(), IDkgLoadTranscriptError>;
 
     /// Generate a MEGa keypair, for encrypting/decrypting IDkg dealing shares.
-    fn idkg_gen_mega_key_pair(
-        &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+    ///
+    /// See [`crate::api::CspIDkgProtocol::idkg_gen_dealing_encryption_key_pair`].
+    fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 
     /// Opens the dealing from dealer specified by `dealer_index`.
     fn idkg_open_dealing(
