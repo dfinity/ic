@@ -176,6 +176,7 @@ pub fn get_node_keys_or_generate_if_missing(
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MEGaPublicKeyFromProtoError {
     UnsupportedAlgorithm {
         algorithm_id: Option<AlgorithmIdProto>,

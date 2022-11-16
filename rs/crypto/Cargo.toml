@@ -82,6 +82,7 @@ ic-crypto-test-utils-threshold-sigs = { path = "test_utils/threshold_sigs" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "test_utils/canister_threshold_sigs" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-registry-client = { path = "../registry/client" }
+ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 maplit = "1.0.2"

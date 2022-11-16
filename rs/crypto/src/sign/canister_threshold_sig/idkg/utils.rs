@@ -6,6 +6,7 @@ pub use errors::*;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, MEGaPublicKey};
 use ic_crypto_node_key_generation::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
 use ic_interfaces_registry::RegistryClient;
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyOpeningError,
@@ -40,13 +41,11 @@ pub fn get_mega_pubkey(
     registry: &Arc<dyn RegistryClient>,
     registry_version: RegistryVersion,
 ) -> Result<MEGaPublicKey, MegaKeyFromRegistryError> {
-    let pk_proto = registry
-        .get_crypto_key_for_node(*node_id, KeyPurpose::IDkgMEGaEncryption, registry_version)
-        .map_err(MegaKeyFromRegistryError::RegistryError)?
-        .ok_or(MegaKeyFromRegistryError::PublicKeyNotFound {
-            registry_version,
-            node_id: *node_id,
-        })?;
+    let pk_proto = fetch_idkg_dealing_encryption_public_key_from_registry(
+        node_id,
+        registry,
+        registry_version,
+    )?;
     let mega_pubkey = mega_public_key_from_proto(&pk_proto).map_err(|e| match e {
         MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { algorithm_id } => {
             MegaKeyFromRegistryError::UnsupportedAlgorithm { algorithm_id }
@@ -59,6 +58,20 @@ pub fn get_mega_pubkey(
         }
     })?;
     Ok(mega_pubkey)
+}
+
+pub fn fetch_idkg_dealing_encryption_public_key_from_registry(
+    node_id: &NodeId,
+    registry: &Arc<dyn RegistryClient>,
+    registry_version: RegistryVersion,
+) -> Result<PublicKey, MegaKeyFromRegistryError> {
+    registry
+        .get_crypto_key_for_node(*node_id, KeyPurpose::IDkgMEGaEncryption, registry_version)
+        .map_err(MegaKeyFromRegistryError::RegistryError)?
+        .ok_or(MegaKeyFromRegistryError::PublicKeyNotFound {
+            registry_version,
+            node_id: *node_id,
+        })
 }
 
 pub enum IDkgDealingExtractionError {
