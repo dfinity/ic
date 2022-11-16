@@ -170,19 +170,14 @@ fn tip_can_be_recovered_if_no_checkpoint_exists() {
     // Post multiple checkpoint tip contains the latest checkpoint
 
     state_manager_restart_test(|state_manager, restart_fn| {
-        let test_dir = state_manager
-            .state_layout()
-            .tip_path()
-            .join("should_get_deleted");
+        let tip_path = state_manager.tip_handler().lock().unwrap().tip_path();
+        let test_dir = tip_path.join("should_get_deleted");
         std::fs::create_dir_all(test_dir.as_path()).unwrap();
         assert!(test_dir.exists());
 
-        let state_manager = restart_fn(state_manager, None);
+        restart_fn(state_manager, None);
 
-        let test_dir = state_manager
-            .state_layout()
-            .tip_path()
-            .join("should_get_deleted");
+        let test_dir = tip_path.join("should_get_deleted");
         assert!(!test_dir.exists());
     });
 }
