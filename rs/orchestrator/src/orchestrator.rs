@@ -280,11 +280,9 @@ impl Orchestrator {
         ) {
             while !*exit_signal.borrow() {
                 if let Some(subnet_id) = *maybe_subnet_id.read().await {
-                    if registration.is_tecdsa_subnet(subnet_id) {
-                        registration
-                            .check_all_keys_registered_otherwise_register()
-                            .await;
-                    }
+                    registration
+                        .check_all_keys_registered_otherwise_register(subnet_id)
+                        .await;
                 }
 
                 tokio::select! {

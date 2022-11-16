@@ -15,18 +15,29 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{
+    crypto::CryptoRegistry,
+    node_operator::ConnectionEndpoint,
+    subnet::{SubnetRegistry, SubnetTransportRegistry},
+};
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{messages::MessageId, NodeId, SubnetId};
+use ic_types::{
+    crypto::KeyPurpose, messages::MessageId, registry::IDKG_KEY_UPDATE_FREQUENCY_SECS, NodeId,
+    RegistryVersion, SubnetId,
+};
 use prost::Message;
 use rand::prelude::*;
 use registry_canister::mutations::do_update_node_directly::UpdateNodeDirectlyPayload;
 use registry_canister::mutations::node_management::do_add_node::AddNodePayload;
-use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use std::{net::IpAddr, str::FromStr};
 use url::Url;
+
+/// When calculating Gamma (frequency at which the registry accepts key updates from the subnet as a whole)
+/// we use a 15% time buffer compensating for a potential delay of the previous node.
+const DELAY_COMPENSATION: f64 = 0.85;
 
 /// Subcomponent used to register this node with the provided NNS.
 pub(crate) struct NodeRegistration {
@@ -116,7 +127,7 @@ impl NodeRegistration {
                 pub_key: hsm_pub_key.clone(),
                 sign: Arc::new(sign_cmd),
             };
-            let nns_url = match self.get_random_nns_url().await {
+            let nns_url = match self.get_random_nns_url_from_config() {
                 Some(url) => url,
                 None => continue,
             };
@@ -184,19 +195,29 @@ impl NodeRegistration {
     /// Return true means all is done.
     /// Return false means we will need to check it again later. Also we might
     /// try to register it now, but will need to check the registration later.
-    pub async fn check_all_keys_registered_otherwise_register(&self) -> bool {
+    pub async fn check_all_keys_registered_otherwise_register(&self, subnet_id: SubnetId) -> bool {
         let registry_version = self.registry_client.get_latest_version();
+        if !self.is_tecdsa_and_time_to_rotate(registry_version, subnet_id) {
+            return true;
+        }
         match tokio::task::block_in_place(|| {
             self.key_handler.check_keys_with_registry(registry_version)
         }) {
             Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key)) => {
-                self.try_to_register_key(key).await
+                // Try to register a key that was previously rotated but is not yet registered.
+                self.try_to_register_key(registry_version, key).await
             }
             Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys) => {
-                todo!(
-                    "TODO OR-278: call crypto to rotate IDKG dealing encryption keys\
-                (functionality implemented with CRP-1727)"
-                )
+                // Call cypto to rotate the keys and try to register the new key.
+                // In case registration of the new key fails, we will enter the branch above
+                // during the next call and retry registration.
+                match self
+                    .key_handler
+                    .rotate_idkg_dealing_encryption_keys(registry_version)
+                {
+                    Ok(key) => self.try_to_register_key(registry_version, key).await,
+                    Err(e) => warn!(self.log, "Key rotation error: {:?}", e),
+                }
             }
             Ok(PublicKeyRegistrationStatus::AllKeysRegistered) => {
                 return true; // keys are properly registered, we are all good
@@ -208,12 +229,73 @@ impl NodeRegistration {
         false
     }
 
-    async fn try_to_register_key(&self, idkg_pk: PublicKey) {
-        let nns_url = match self.get_random_nns_url().await {
+    fn is_tecdsa_and_time_to_rotate(
+        &self,
+        registry_version: RegistryVersion,
+        subnet_id: SubnetId,
+    ) -> bool {
+        if !self.is_tecdsa_subnet(subnet_id) {
+            warn!(self.log, "Node not part of tECDSA subnet.");
+            return false;
+        }
+
+        let own_key_timestamp = self
+            .registry_client
+            .get_crypto_key_for_node(
+                self.node_id,
+                KeyPurpose::IDkgMEGaEncryption,
+                registry_version,
+            )
+            .unwrap_or_default()
+            .and_then(|pk| pk.timestamp);
+
+        // A node can register its key if there is no previous timestamp set, regardless of Gamma
+        if own_key_timestamp.is_none() {
+            return true;
+        }
+
+        let node_ids = match self
+            .registry_client
+            .get_node_ids_on_subnet(subnet_id, registry_version)
+        {
+            Ok(Some(ids)) if !ids.is_empty() => ids,
+            err => {
+                warn!(self.log, "Failed to get node ids from subnet: {:?}", err);
+                return false;
+            }
+        };
+
+        let subnet_size = node_ids.len();
+
+        let node_key_timestamps = node_ids
+            .into_iter()
+            .filter_map(|nid| {
+                self.registry_client
+                    .get_crypto_key_for_node(nid, KeyPurpose::IDkgMEGaEncryption, registry_version)
+                    .unwrap_or_default()
+            })
+            .filter_map(|pk| pk.timestamp)
+            .map(|ts| SystemTime::UNIX_EPOCH + Duration::from_millis(ts))
+            .collect();
+
+        if !is_time_to_rotate(subnet_size, node_key_timestamps) {
+            warn!(self.log, "To early to register new key, aborting.");
+            return false;
+        }
+
+        true
+    }
+
+    async fn try_to_register_key(&self, registry_version: RegistryVersion, idkg_pk: PublicKey) {
+        let node_id = self.node_id;
+
+        let nns_url = match self
+            .get_random_nns_url()
+            .or_else(|| self.get_random_nns_url_from_config())
+        {
             Some(url) => url,
             None => return,
         };
-        let node_id = self.node_id;
 
         let node_pub_key = if let Some(pk) = self
             .key_handler
@@ -227,7 +309,6 @@ impl NodeRegistration {
         };
 
         let key_handler = self.key_handler.clone();
-        let registry_version = self.registry_client.get_latest_version();
         let sign_cmd = move |msg: &MessageId| {
             tokio::task::block_in_place(|| {
                 key_handler
@@ -265,7 +346,7 @@ impl NodeRegistration {
     }
 
     // Returns one random NNS url from the node config.
-    async fn get_random_nns_url(&self) -> Option<Url> {
+    fn get_random_nns_url_from_config(&self) -> Option<Url> {
         let mut urls = self.node_config.registration.nns_url.as_ref().map(|v| {
             v.split(',')
                 .flat_map(|s| match Url::parse(s) {
@@ -284,6 +365,68 @@ impl NodeRegistration {
         let mut rng = thread_rng();
         urls.shuffle(&mut rng);
         urls.pop()
+    }
+
+    // Returns one random NNS url from registry.
+    fn get_random_nns_url(&self) -> Option<Url> {
+        let version = self.registry_client.get_latest_version();
+        let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
+            Ok(Some(id)) => id,
+            err => {
+                warn!(self.log, "Failed to get root subnet id: {:?}", err);
+                return None;
+            }
+        };
+
+        let t_infos = match self
+            .registry_client
+            .get_subnet_transport_infos(root_subnet_id, version)
+        {
+            Ok(Some(infos)) => infos,
+            err => {
+                warn!(self.log, "Failed to get transport infos: {:?}", err);
+                return None;
+            }
+        };
+
+        let mut urls: Vec<Url> = t_infos
+            .iter()
+            .filter_map(|(_nid, n_record)| {
+                n_record
+                    .http
+                    .as_ref()
+                    .and_then(|h| self.http_endpoint_to_url(h))
+            })
+            .collect();
+
+        let mut rng = thread_rng();
+        urls.shuffle(&mut rng);
+        urls.pop()
+    }
+
+    fn http_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
+        let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
+            Ok(v) => {
+                if v.is_ipv6() {
+                    format!("[{}]", v)
+                } else {
+                    v.to_string()
+                }
+            }
+            Err(_) => {
+                // assume hostname
+                http.ip_addr.clone()
+            }
+        };
+
+        let url = format!("http://{}:{}/", host_str, http.port);
+        match Url::parse(&url) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                warn!(self.log, "Invalid url: {}: {:?}", url, e);
+                None
+            }
+        }
     }
 
     fn is_node_registered(&self) -> bool {
@@ -321,6 +464,18 @@ impl NodeRegistration {
             warn!(self.log, "Could not create ejection file: {:?}", e);
         }
     }
+}
+
+pub(crate) fn is_time_to_rotate(subnet_size: usize, timestamps: Vec<SystemTime>) -> bool {
+    let delta = Duration::from_secs(IDKG_KEY_UPDATE_FREQUENCY_SECS);
+    // gamma determines the frequency at which the registry accepts key updates from the subnet as a whole
+    let gamma = delta
+        .div_f64(subnet_size as f64)
+        .mul_f64(DELAY_COMPENSATION);
+    let now = SystemTime::now();
+    timestamps
+        .iter()
+        .all(|ts| now.duration_since(*ts).map_or(false, |d| d >= gamma))
 }
 
 pub(crate) fn http_config_to_endpoint(
@@ -476,5 +631,21 @@ mod tests {
         .with_input(input);
 
         assert_eq!(utility_command.execute().unwrap(), expected);
+    }
+
+    #[test]
+    fn test_is_time_to_rotate() {
+        let subnet_size = 12;
+        let hours = |hrs: u64| Duration::from_secs(hrs * 60 * 60);
+        let now = SystemTime::now();
+        let empty = vec![];
+        let valid = vec![now - hours(25), now - hours(36), now - hours(48)];
+        let too_recent = vec![now - hours(23), now - hours(25), now - hours(36)];
+        let in_future = vec![now - hours(25), now - hours(36), now + hours(1)];
+
+        assert!(is_time_to_rotate(subnet_size, empty));
+        assert!(is_time_to_rotate(subnet_size, valid));
+        assert!(!is_time_to_rotate(subnet_size, too_recent));
+        assert!(!is_time_to_rotate(subnet_size, in_future));
     }
 }
