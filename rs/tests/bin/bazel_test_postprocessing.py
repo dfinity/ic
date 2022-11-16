@@ -5,8 +5,7 @@ import os
 import urllib.request
 from typing import Dict
 from typing import List
-from typing import Optional
-from typing import Tuple
+from typing import Set
 from urllib.error import HTTPError
 from urllib.error import URLError
 
@@ -14,7 +13,6 @@ CI_JOB_URL = os.getenv("CI_JOB_URL", default="")
 CI_PROJECT_URL = os.getenv("CI_PROJECT_URL", default="")
 CI_COMMIT_SHA = os.getenv("CI_COMMIT_SHA", default="")
 CI_COMMIT_SHORT_SHA = os.getenv("CI_COMMIT_SHORT_SHA", default="")
-SLACK_FILE = "slack_alert.json"
 SLACK_ALERT_CHANNEL = "#test-failure-alerts"
 HONEYCOMB_DATASET = "bazel-system-tests-scheduled"
 
@@ -136,56 +134,72 @@ class Config:
         self.honeycomb_api_token = honeycomb_api_token
 
 
-def find_first_key_in_dict(d: Dict, search_key: str) -> Optional[str]:
-    for key, value in d.items():
-        if key == search_key:
-            return value
-        elif isinstance(value, dict):
-            value = find_first_key_in_dict(value, search_key)
-            if value is not None:
-                return value
-    return None
-
-
-def process_bazel_results(file_path: str) -> Tuple[str, str]:
-    status = ""
-    test_target = ""
-    # build_event_json_file is not a JSON, but a line-delimited JSON file.
-    # To extract test execution status and test target name, we parse each line
-    # into a dict and search recursively for keys: "overallStatus" and "targetConfigured".
+def find_system_test_targets_in_BEP(file_path: str) -> Set[str]:
+    system_test_targets = set()
+    # This value (keyword) determines, if a given target is a system_test target.
+    system_test__needle = "run_system_test rule"
+    # We search for all occurrences of this needle in the BEP file.
     with open(file_path) as file:
         for line in file:
             line_dict = json.loads(line)
-            status_value = find_first_key_in_dict(line_dict, "overallStatus")
-            test_target_value = find_first_key_in_dict(line_dict, "targetConfigured")
-            if not status and status_value is not None:
-                status = status_value
-            if not test_target and test_target_value is not None:
-                test_target = test_target_value["label"]  # type: ignore
-    # When e.g. Bazel build fails, the test execution status field (called "overallStatus" in BEP)
-    # is simply absent, as the test didn't start. We define such test as failed.
-    if not status:
-        status = "FAILED"
-    if not test_target:
-        Exception(f"Bazel test target couldn't be extracted from {file_path}")
-    return (status, test_target)
+            if "id" in line_dict and "targetConfigured" in line_dict["id"]:
+                target = line_dict["id"]["targetConfigured"]["label"]
+                if (
+                    "configured" in line_dict
+                    and "targetKind" in line_dict["configured"]
+                    and line_dict["configured"]["targetKind"] == system_test__needle
+                ):
+                    system_test_targets.add(target)
+    return system_test_targets
+
+
+def extract_execution_results_for_targets_in_BEP(file_path: str, targets: Set) -> Dict[str, str]:
+    results = dict.fromkeys(targets, "FAILED")
+    with open(file_path) as file:
+        for line in file:
+            line_dict = json.loads(line)
+            if (
+                "id" in line_dict
+                and "testSummary" in line_dict["id"]
+                and line_dict["id"]["testSummary"]["label"] in targets
+            ):
+                if "testSummary" in line_dict:
+                    results[line_dict["id"]["testSummary"]["label"]] = line_dict["testSummary"]["overallStatus"]
+    return results
+
+
+def process_bazel_results(file_path: str) -> Dict[str, str]:
+    # build_event_json_file is not a JSON, but a line-delimited JSON file.
+    # To extract test target names and their execution statuses, we parse each file line
+    # into a dict and process it.
+    test_targets = find_system_test_targets_in_BEP(file_path)
+    test_targets_results = extract_execution_results_for_targets_in_BEP(file_path, test_targets)
+    return test_targets_results
 
 
 def main(config: Config) -> None:
-    test_exec_status, test_target_name = process_bazel_results(config.build_event_json_path)
+    test_targets_results = process_bazel_results(config.build_event_json_path)
+    honeycomb_events = []
+    slack_alert_files = []
+    for test_target_name, execution_status in test_targets_results.items():
+        honeycomb_events.append(
+            {"data": {"test_target": test_target_name, "execution_result": execution_status, "job_url": CI_JOB_URL}}
+        )
+        if execution_status == "PASSED":
+            logger.info(f"Test target {test_target_name} was executed successfully.")
+        else:
+            logger.error(f"Test target {test_target_name} has failed.")
+            test_name = test_target_name.replace("/", "_").replace(":", "_")
+            slack_filename = f"{config.output_dir}/{test_name}_slack_alert.json"
+            slack_alert_files.append(slack_filename)
+            save_slack_alert(filename=slack_filename, test_name=test_target_name, slack_channels=[SLACK_ALERT_CHANNEL])
+    # Send all slack alerts
+    if config.slack_webhook_url:
+        for file in slack_alert_files:
+            send_slack_alerts_from_file(webhook_url=config.slack_webhook_url, filename=file)
+    # Send all Honeycomb notifications.
     if config.honeycomb_api_token:
-        event_data = [
-            {"data": {"test_target": test_target_name, "execution_result": test_exec_status, "job_url": CI_JOB_URL}}
-        ]
-        send_event_to_honeycomb(honeycomb_api_key=config.honeycomb_api_token, event_data=event_data)
-    slack_filename = f"{config.output_dir}/{SLACK_FILE}"
-    if test_exec_status == "PASSED":
-        logger.info(f"Test target {test_target_name} was executed successfully.")
-    else:
-        logger.error(f"Test target {test_target_name} has failed.")
-        save_slack_alert(filename=slack_filename, test_name=test_target_name, slack_channels=[SLACK_ALERT_CHANNEL])
-        if config.slack_webhook_url:
-            send_slack_alerts_from_file(webhook_url=config.slack_webhook_url, filename=slack_filename)
+        send_event_to_honeycomb(honeycomb_api_key=config.honeycomb_api_token, event_data=honeycomb_events)
 
 
 if __name__ == "__main__":
