@@ -20,6 +20,7 @@ use ic_interfaces::crypto::{
     ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
     ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
@@ -128,6 +129,7 @@ pub struct TempCryptoBuilder {
     connected_remote_vault: Option<Arc<TempCspVaultServer>>,
     temp_dir_source: Option<PathBuf>,
     logger: Option<ReplicaLogger>,
+    time_source: Option<Arc<dyn TimeSource>>,
 }
 
 impl TempCryptoBuilder {
@@ -200,6 +202,11 @@ impl TempCryptoBuilder {
     pub fn with_existing_remote_vault(mut self, vault_server: Arc<TempCspVaultServer>) -> Self {
         self.connected_remote_vault = Some(vault_server);
         self.start_remote_vault = false;
+        self
+    }
+
+    pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
+        self.time_source = Some(time_source);
         self
     }
 
@@ -321,12 +328,16 @@ impl TempCryptoBuilder {
             .as_ref()
             .map(|data| data.vault_client_runtime.handle().clone());
         let logger = self.logger.unwrap_or_else(no_op_logger);
+        let time_source = self
+            .time_source
+            .unwrap_or_else(|| Arc::new(SysTimeSource::new()));
         let crypto_component = CryptoComponent::new_with_fake_node_id(
             &config,
             opt_vault_client_runtime_handle,
             registry_client,
             node_id,
             logger,
+            time_source,
         );
 
         TempCryptoComponent {
@@ -421,6 +432,7 @@ impl TempCryptoComponent {
             connected_remote_vault: None,
             temp_dir_source: None,
             logger: None,
+            time_source: None,
         }
     }
 

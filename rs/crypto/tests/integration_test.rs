@@ -14,6 +14,7 @@ use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
+use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{LoggerImpl, ReplicaLogger};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -46,6 +47,7 @@ fn should_successfully_construct_crypto_component_with_default_config() {
             Arc::new(registry_client),
             node_test_id(42),
             no_op_logger(),
+            Arc::new(SysTimeSource::new()),
         );
     })
 }
@@ -64,6 +66,7 @@ fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
         Arc::new(registry_client),
         node_test_id(42),
         no_op_logger(),
+        Arc::new(SysTimeSource::new()),
     );
 }
 
@@ -82,6 +85,7 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
         Arc::new(registry_client),
         node_test_id(42),
         no_op_logger(),
+        Arc::new(SysTimeSource::new()),
     );
 }
 

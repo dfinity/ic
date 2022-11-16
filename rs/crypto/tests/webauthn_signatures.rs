@@ -6,6 +6,7 @@ use ic_crypto::{
 };
 use ic_crypto_internal_test_vectors::test_data;
 use ic_interfaces::crypto::BasicSigVerifierByPublicKey;
+use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -155,5 +156,6 @@ fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
         Arc::new(dummy_registry),
         node_test_id(42),
         no_op_logger(),
+        Arc::new(SysTimeSource::new()),
     )
 }
