@@ -2,6 +2,7 @@
 use crate::secret_key_store::{SecretKeyStoreError, SecretKeyStorePersistenceError};
 use crate::KeyId;
 use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaError;
+use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
 use serde::{Deserialize, Serialize};
 
 /// Errors encountered during generation of a MEGa encryption key pair.
@@ -69,5 +70,11 @@ impl From<SecretKeyStoreError> for CspCreateMEGaKeyError {
                 ),
             },
         }
+    }
+}
+
+impl From<CspCreateMEGaKeyError> for IDkgDealingEncryptionKeyRotationError {
+    fn from(error: CspCreateMEGaKeyError) -> Self {
+        IDkgDealingEncryptionKeyRotationError::KeyGenerationError(format!("{:?}", error))
     }
 }

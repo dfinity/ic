@@ -1,5 +1,6 @@
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::{CryptoResult, CurrentNodePublicKeys};
+use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 
 /// Methods for checking and retrieving key material.
@@ -72,4 +73,6 @@ pub enum PublicKeyRegistrationStatus {
 #[derive(Clone, Debug)]
 pub enum IDkgDealingEncryptionKeyRotationError {
     LatestLocalRotationTooRecent,
+    KeyGenerationError(String),
+    RegistryError(RegistryClientError),
 }
