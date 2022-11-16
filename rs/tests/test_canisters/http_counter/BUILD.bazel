@@ -1,4 +1,4 @@
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -16,7 +16,7 @@ MACRO_DEPENDENCIES = [
 ALIASES = {}
 
 rust_canister(
-    name = "http_counter-raw",
+    name = "http_counter",
     srcs = [
         "src/canister.rs",
     ],
@@ -25,9 +25,4 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
-)
-
-optimized_canister(
-    name = "http_counter",
-    wasm = ":http_counter-raw",
 )

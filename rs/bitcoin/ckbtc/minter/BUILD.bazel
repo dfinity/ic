@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -50,7 +50,7 @@ alias(
 )
 
 rust_canister(
-    name = "ckbtc_minter_raw",
+    name = "ckbtc_minter",
     srcs = ["src/main.rs"],
     crate_name = "ic_ckbtc_minter_canister",
     proc_macro_deps = [
@@ -65,11 +65,6 @@ rust_canister(
     ],
 )
 
-optimized_canister(
-    name = "ckbtc_minter",
-    wasm = ":ckbtc_minter_raw",
-)
-
 rust_test(
     name = "ckbtc_minter_lib_unit_tests",
     crate = ":ckbtc_minter_lib",
@@ -82,7 +77,7 @@ rust_test(
 
 rust_test(
     name = "ckbtc_unit_tests",
-    crate = ":_wasm_ckbtc_minter_raw",
+    crate = ":_wasm_ckbtc_minter",
     data = [":ckbtc_minter.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",

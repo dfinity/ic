@@ -1,10 +1,10 @@
 load("@rules_rust//rust:defs.bzl", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
 rust_canister(
-    name = "archive_canister_raw",
+    name = "archive_canister",
     srcs = ["src/main.rs"],
     crate_name = "ic_icrc1_archive",
     proc_macro_deps = [
@@ -23,14 +23,9 @@ rust_canister(
     ],
 )
 
-optimized_canister(
-    name = "archive_canister",
-    wasm = ":archive_canister_raw",
-)
-
 rust_test(
     name = "archive_test",
-    crate = ":_wasm_archive_canister_raw",
+    crate = ":_wasm_archive_canister",
     data = [
         ":archive.did",
     ],

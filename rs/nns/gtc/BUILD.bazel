@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -96,7 +96,7 @@ rust_binary(
 )
 
 rust_canister(
-    name = "genesis-token-canister-raw",
+    name = "genesis-token-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -104,11 +104,6 @@ rust_canister(
         ":build_script",
         ":gtc",
     ],
-)
-
-optimized_canister(
-    name = "genesis-token-canister",
-    wasm = "genesis-token-canister-raw",
 )
 
 rust_test(
@@ -121,7 +116,7 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_genesis-token-canister-raw",
+    crate = ":_wasm_genesis-token-canister",
     data = ["canister/gtc.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/gtc",

@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -64,7 +64,7 @@ rust_library(
 )
 
 rust_canister(
-    name = "cycles-minting-canister-raw",
+    name = "cycles-minting-canister",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -74,11 +74,6 @@ rust_canister(
     ],
 )
 
-optimized_canister(
-    name = "cycles-minting-canister",
-    wasm = "cycles-minting-canister-raw",
-)
-
 rust_test(
     name = "cmc_test",
     crate = ":cmc",
@@ -86,7 +81,7 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_cycles-minting-canister-raw",
+    crate = ":_wasm_cycles-minting-canister",
     data = ["cmc.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/cmc",

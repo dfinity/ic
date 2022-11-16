@@ -1,6 +1,6 @@
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -31,7 +31,7 @@ cargo_build_script(
 )
 
 rust_canister(
-    name = "test_canister_raw",
+    name = "test_canister",
     srcs = glob(["src/**"]),
     crate_name = "ic_nervous_system_common_test_canister",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -39,14 +39,9 @@ rust_canister(
     deps = DEPENDENCIES + [":build_script"],
 )
 
-optimized_canister(
-    name = "test_canister",
-    wasm = ":test_canister_raw",
-)
-
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_test_canister_raw",
+    crate = ":_wasm_test_canister",
     data = [":interface.did"],
     env = {"CARGO_MANIFEST_DIR": "rs/nervous_system/common/test_canister"},
 )

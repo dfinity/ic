@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
@@ -81,7 +81,7 @@ rust_library(
 )
 
 rust_canister(
-    name = "sns-test-dapp-canister-raw",
+    name = "sns-test-dapp-canister",
     srcs = ["test_canisters/test_dapp_canister.rs"],
     deps = [
         "//rs/rust_canisters/dfn_candid",
@@ -89,13 +89,8 @@ rust_canister(
     ],
 )
 
-optimized_canister(
-    name = "sns-test-dapp-canister",
-    wasm = "sns-test-dapp-canister-raw",
-)
-
 rust_canister(
-    name = "sns-governance-mem-test-canister-raw",
+    name = "sns-governance-mem-test-canister",
     srcs = ["test_canisters/sns_governance_mem_test_canister.rs"],
     deps = [
         "//rs/nervous_system/common",
@@ -107,11 +102,6 @@ rust_canister(
         "@crate_index//:prost",
         "@crate_index//:rand_0_8_4",
     ],
-)
-
-optimized_canister(
-    name = "sns-governance-mem-test-canister",
-    wasm = "sns-governance-mem-test-canister-raw",
 )
 
 rust_test_suite_with_extra_srcs(

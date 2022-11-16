@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test_suite")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -64,81 +64,51 @@ sh_binary(
 )
 
 rust_canister(
-    name = "json_raw",
+    name = "json",
     srcs = ["src/json.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
-optimized_canister(
-    name = "json",
-    wasm = "json_raw",
-)
-
 rust_canister(
-    name = "inter_canister_error_handling_raw",
+    name = "inter_canister_error_handling",
     srcs = ["src/inter_canister_error_handling.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
-optimized_canister(
-    name = "inter_canister_error_handling",
-    wasm = "inter_canister_error_handling_raw",
-)
-
 rust_canister(
-    name = "nan_canonicalized_raw",
+    name = "nan_canonicalized",
     srcs = ["src/nan_canonicalized.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
-optimized_canister(
-    name = "nan_canonicalized",
-    wasm = "nan_canonicalized_raw",
-)
-
 rust_canister(
-    name = "stable_raw",
+    name = "stable",
     srcs = ["src/stable.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
-optimized_canister(
-    name = "stable",
-    wasm = "stable_raw",
-)
-
 rust_canister(
-    name = "time_raw",
+    name = "time",
     srcs = ["src/time.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
-optimized_canister(
-    name = "time",
-    wasm = "time_raw",
-)
-
 rust_canister(
-    name = "panics_raw",
+    name = "panics",
     srcs = ["src/panics.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
-)
-
-optimized_canister(
-    name = "panics",
-    wasm = "panics_raw",
 )
 
 rust_test_suite(

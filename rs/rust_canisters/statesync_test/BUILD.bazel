@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -33,15 +33,10 @@ rust_binary(
 )
 
 rust_canister(
-    name = "statesync_test_canister-raw",
+    name = "statesync_test_canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
-)
-
-optimized_canister(
-    name = "statesync_test_canister",
-    wasm = ":statesync_test_canister-raw",
 )
 
 rust_test(

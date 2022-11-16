@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -133,7 +133,7 @@ rust_binary(
 )
 
 rust_canister(
-    name = "sns-governance-canister-raw",
+    name = "sns-governance-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
@@ -144,24 +144,14 @@ rust_canister(
     ],
 )
 
-optimized_canister(
-    name = "sns-governance-canister",
-    wasm = ":sns-governance-canister-raw",
-)
-
 rust_canister(
-    name = "sns-governance-canister-test-raw",
+    name = "sns-governance-canister-test",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
     crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":governance"] + [":build_script"],
-)
-
-optimized_canister(
-    name = "sns-governance-canister-test",
-    wasm = ":sns-governance-canister-test-raw",
 )
 
 rust_test(
@@ -174,7 +164,7 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_sns-governance-canister-raw",
+    crate = ":_wasm_sns-governance-canister",
     data = ["canister/governance.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/governance",

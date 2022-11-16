@@ -1,10 +1,10 @@
 load("@rules_rust//rust:defs.bzl", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
 rust_canister(
-    name = "ledger-archive-node-canister-wasm-raw",
+    name = "ledger-archive-node-canister-wasm",
     srcs = ["src/main.rs"],
     compile_data = [
         "//rs/rosetta-api/icp_ledger:ledger_archive.did",
@@ -32,14 +32,9 @@ rust_canister(
     ],
 )
 
-optimized_canister(
-    name = "ledger-archive-node-canister-wasm",
-    wasm = "ledger-archive-node-canister-wasm-raw",
-)
-
 rust_test(
     name = "ledger_archive_node_test",
-    crate = "_wasm_ledger-archive-node-canister-wasm-raw",
+    crate = "_wasm_ledger-archive-node-canister-wasm",
     data = [
         "//rs/rosetta-api/icp_ledger:ledger_archive.did",
     ],

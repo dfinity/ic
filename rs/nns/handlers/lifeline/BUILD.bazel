@@ -1,10 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister")
 
 package(default_visibility = ["//visibility:public"])
 
 genrule(
-    name = "lifeline_actor_raw",
+    name = "lifeline_actor",
     srcs = [
         "lifeline.mo",
         "//rs/nns/governance:canister/governance.did",
@@ -24,11 +23,6 @@ genrule(
     cp lifeline.wasm $@
 """,
     exec_tools = ["@build_bazel_rules_motoko_toolchain//:moc"],
-)
-
-optimized_canister(
-    name = "lifeline_actor",
-    wasm = ":lifeline_actor_raw",
 )
 
 rust_library(

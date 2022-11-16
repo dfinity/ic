@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -148,29 +148,19 @@ rust_library(
 )
 
 rust_canister(
-    name = "mem-utils-test-canister-raw",
+    name = "mem-utils-test-canister",
     srcs = ["test_canisters/mem_utils_test.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":integration_tests"],
 )
 
-optimized_canister(
-    name = "mem-utils-test-canister",
-    wasm = "mem-utils-test-canister-raw",
-)
-
 rust_canister(
-    name = "governance-mem-test-canister-raw",
+    name = "governance-mem-test-canister",
     srcs = ["test_canisters/governance_mem_test_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":integration_tests"],
-)
-
-optimized_canister(
-    name = "governance-mem-test-canister",
-    wasm = "governance-mem-test-canister-raw",
 )
 
 rust_test_suite_with_extra_srcs(

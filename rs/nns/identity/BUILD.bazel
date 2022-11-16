@@ -1,4 +1,4 @@
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,14 +9,9 @@ MACRO_DEPENDENCIES = []
 ALIASES = {}
 
 rust_canister(
-    name = "identity-canister-raw",
+    name = "identity-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
-)
-
-optimized_canister(
-    name = "identity-canister",
-    wasm = ":identity-canister-raw",
 )

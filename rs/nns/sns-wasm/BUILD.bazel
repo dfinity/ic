@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -92,7 +92,7 @@ rust_binary(
 )
 
 rust_canister(
-    name = "sns-wasm-canister-raw",
+    name = "sns-wasm-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/sns-wasm.did"],
@@ -100,14 +100,9 @@ rust_canister(
     deps = DEPENDENCIES + [":sns-wasm"],
 )
 
-optimized_canister(
-    name = "sns-wasm-canister",
-    wasm = "sns-wasm-canister-raw",
-)
-
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_sns-wasm-canister-raw",
+    crate = ":_wasm_sns-wasm-canister",
     data = ["canister/sns-wasm.did"],
     env = {"CARGO_MANIFEST_DIR": "rs/nns/sns-wasm"},
 )

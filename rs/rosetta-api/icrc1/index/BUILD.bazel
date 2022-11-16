@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -35,17 +35,12 @@ rust_library(
 )
 
 rust_canister(
-    name = "index_canister_raw",
+    name = "index_canister",
     srcs = ["src/main.rs"],
     crate_name = "ic_icrc1_index_canister",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":index"] + DEPENDENCIES,
-)
-
-optimized_canister(
-    name = "index_canister",
-    wasm = ":index_canister_raw",
 )
 
 rust_test(
@@ -59,7 +54,7 @@ rust_test(
 
 rust_test(
     name = "index_canister_test",
-    crate = ":_wasm_index_canister_raw",
+    crate = ":_wasm_index_canister",
     data = [":index.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/index",

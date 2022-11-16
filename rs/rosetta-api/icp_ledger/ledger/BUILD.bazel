@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -74,7 +74,7 @@ LEDGER_CANISTER_RUSTC_ENV = {
 }
 
 rust_canister(
-    name = "ledger-canister-wasm-raw",
+    name = "ledger-canister-wasm",
     srcs = ["src/main.rs"],
     compile_data = LEDGER_CANISTER_DATA,
     data = LEDGER_CANISTER_DATA,
@@ -82,13 +82,8 @@ rust_canister(
     deps = LEDGER_CANISTER_DEPS,
 )
 
-optimized_canister(
-    name = "ledger-canister-wasm",
-    wasm = "ledger-canister-wasm-raw",
-)
-
 rust_canister(
-    name = "ledger-canister-wasm-notify-method-raw",
+    name = "ledger-canister-wasm-notify-method",
     srcs = ["src/main.rs"],
     compile_data = LEDGER_CANISTER_DATA,
     crate_features = ["notify-method"],
@@ -100,15 +95,10 @@ rust_canister(
 rust_test(
     name = "ledger_canister_unit_test",
     compile_data = LEDGER_CANISTER_DATA,
-    crate = ":_wasm_ledger-canister-wasm-raw",
+    crate = ":_wasm_ledger-canister-wasm",
     data = LEDGER_CANISTER_DATA,
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/ledger",
     },
     rustc_env = LEDGER_CANISTER_RUSTC_ENV,
-)
-
-optimized_canister(
-    name = "ledger-canister-wasm-notify-method",
-    wasm = "ledger-canister-wasm-notify-method-raw",
 )
