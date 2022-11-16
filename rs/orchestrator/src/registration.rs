@@ -143,7 +143,8 @@ impl NodeRegistration {
     }
 
     fn assemble_add_node_message(&self) -> AddNodePayload {
-        let node_pub_keys = self.key_handler.current_node_public_keys();
+        let node_pub_keys =
+            tokio::task::block_in_place(|| self.key_handler.current_node_public_keys());
 
         AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...
@@ -215,11 +216,11 @@ impl NodeRegistration {
         };
         let node_id = self.node_id;
 
-        let node_pub_key = if let Some(pk) = self
-            .key_handler
-            .current_node_public_keys()
-            .node_signing_public_key
-        {
+        let node_pub_key = if let Some(pk) = tokio::task::block_in_place(|| {
+            self.key_handler
+                .current_node_public_keys()
+                .node_signing_public_key
+        }) {
             pk
         } else {
             warn!(self.log, "Missing node signing key.");
