@@ -844,7 +844,6 @@ impl SchedulerImpl {
         subnet_size: usize,
     ) {
         let state_time = state.time();
-        let metadata_time_of_last_allocation_charge = state.metadata.time_of_last_allocation_charge;
         let mut all_rejects = Vec::new();
         for canister in state.canisters_iter_mut() {
             // Postpone charging for resources when a canister has a paused execution
@@ -852,11 +851,6 @@ impl SchedulerImpl {
             if canister.has_paused_execution() || canister.has_paused_install_code() {
                 continue;
             }
-
-            let duration_since_last_charge = canister.duration_since_last_allocation_charge(
-                metadata_time_of_last_allocation_charge,
-                state_time,
-            );
 
             if state_time
                 < canister.scheduler_state.time_of_last_allocation_charge
@@ -868,36 +862,38 @@ impl SchedulerImpl {
                 // since the last charge happened.
                 continue;
             } else {
+                self.observe_canister_metrics(canister);
+                let duration_since_last_charge =
+                    canister.duration_since_last_allocation_charge(state_time);
                 canister.scheduler_state.time_of_last_allocation_charge = state_time;
-            }
+                if self
+                    .cycles_account_manager
+                    .charge_canister_for_resource_allocation_and_usage(
+                        &self.log,
+                        canister,
+                        duration_since_last_charge,
+                        subnet_size,
+                    )
+                    .is_err()
+                {
+                    all_rejects.push(uninstall_canister(&self.log, canister, state_time));
+                    canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
+                    canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
+                    // Burn the remaining balance of the canister.
+                    let remaining_cycles = canister.system_state.balance_mut().take();
+                    canister
+                        .system_state
+                        .canister_metrics
+                        .consumed_cycles_since_replica_started +=
+                        NominalCycles::from(remaining_cycles);
 
-            self.observe_canister_metrics(canister);
-            if self
-                .cycles_account_manager
-                .charge_canister_for_resource_allocation_and_usage(
-                    &self.log,
-                    canister,
-                    duration_since_last_charge,
-                    subnet_size,
-                )
-                .is_err()
-            {
-                all_rejects.push(uninstall_canister(&self.log, canister, state_time));
-                canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
-                canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
-                // Burn the remaining balance of the canister.
-                let remaining_cycles = canister.system_state.balance_mut().take();
-                canister
-                    .system_state
-                    .canister_metrics
-                    .consumed_cycles_since_replica_started += NominalCycles::from(remaining_cycles);
-
-                info!(
-                    self.log,
-                    "Uninstalling canister {} because it ran out of cycles",
-                    canister.canister_id()
-                );
-                self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
+                    info!(
+                        self.log,
+                        "Uninstalling canister {} because it ran out of cycles",
+                        canister.canister_id()
+                    );
+                    self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
+                }
             }
         }
 

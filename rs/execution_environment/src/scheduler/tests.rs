@@ -1658,7 +1658,16 @@ fn can_record_metrics_for_a_round() {
     // For allocation violation to happen, the canister age should be more than `100/9 = 11 rounds`
     test.advance_to_round(ExecutionRound::from(12));
 
-    test.state_mut().metadata.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
+    for canister in test.state_mut().canister_states.values_mut() {
+        canister.scheduler_state.time_of_last_allocation_charge =
+            UNIX_EPOCH + Duration::from_secs(1);
+    }
+    test.state_mut().metadata.batch_time = UNIX_EPOCH
+        + Duration::from_secs(1)
+        + test
+            .scheduler()
+            .cycles_account_manager
+            .duration_between_allocation_charges();
     test.set_time(
         UNIX_EPOCH
             + Duration::from_secs(1)
@@ -2890,7 +2899,9 @@ fn simulate_one_gib_per_second_cost(
     // Charging handles time=0 as a special case, so it should be set to some non-zero time.
     let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
     test.set_time(initial_time);
-    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
+    for canister in test.state_mut().canister_states.values_mut() {
+        canister.scheduler_state.time_of_last_allocation_charge = initial_time;
+    }
 
     let duration_between_allocation_charges = test
         .scheduler()
@@ -2967,8 +2978,11 @@ fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size
         .with_subnet_size(subnet_size)
         .build();
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+
     test.set_time(initial_time);
-    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
+    for canister in test.state_mut().canister_states.values_mut() {
+        canister.scheduler_state.time_of_last_allocation_charge = initial_time;
+    }
     let canister_id = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
