@@ -59,8 +59,18 @@ pub(crate) const MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL: u64 = 5_000_000_000;
 /// This would allow 100 calls with the current MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL
 pub(crate) const INSTRUCTION_OVERHEAD_PER_QUERY_CALL: u64 = 50_000_000;
 
-// The ID of the Bitcoin testnet canister in production.
+// The ID of the Bitcoin testnet canister.
 const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
+
+// The ID of the Bitcoin mainnet canister.
+const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
+
+// The ID of the "soft launch" Bitcoin mainnet canister.
+// This is a canister that will be used to run the bitcoin mainnet state pre-launch
+// for final validation. Once the validation is complete, this canister will be uninstalled
+// in favour of the "real" Bitcoin mainnet canister defined above.
+// TODO(EXC-1298): Uninstall this canister once the bitcoin mainnet canister is live.
+const BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID: &str = "gsvzx-syaaa-aaaan-aaabq-cai";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
@@ -149,6 +159,13 @@ impl Default for Config {
         let bitcoin_testnet_canister_id = CanisterId::from_str(BITCOIN_TESTNET_CANISTER_ID)
             .expect("bitcoin testnet canister id must be a valid principal");
 
+        let bitcoin_mainnet_canister_id = CanisterId::from_str(BITCOIN_MAINNET_CANISTER_ID)
+            .expect("bitcoin mainnet canister id must be a valid principal");
+
+        let bitcoin_mainnet_soft_launch_canister_id =
+            CanisterId::from_str(BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID)
+                .expect("bitcoin mainnet soft-launch canister id must be a valid principal");
+
         Self {
             create_funds_whitelist: String::default(),
             max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
@@ -182,9 +199,13 @@ impl Default for Config {
             deterministic_time_slicing: FlagStatus::Enabled,
             cost_to_compile_wasm_instruction: embedders::DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             bitcoin: BitcoinConfig {
-                privileged_access: vec![bitcoin_testnet_canister_id],
+                privileged_access: vec![
+                    bitcoin_testnet_canister_id,
+                    bitcoin_mainnet_canister_id,
+                    bitcoin_mainnet_soft_launch_canister_id,
+                ],
                 testnet_canister_id: Some(bitcoin_testnet_canister_id),
-                mainnet_canister_id: None,
+                mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
             },
         }
     }
