@@ -35,7 +35,9 @@ use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, page_map::PersistenceError, PageIndex, PageMap,
     ReplicatedState,
 };
-use ic_state_layout::{error::LayoutError, AccessPolicy, CheckpointLayout, StateLayout};
+use ic_state_layout::{
+    error::LayoutError, AccessPolicy, CheckpointLayout, StateLayout, TipHandler,
+};
 use ic_types::{
     artifact::StateSyncArtifactId,
     chunkable::Chunkable,
@@ -657,6 +659,7 @@ pub struct StateManagerImpl {
     log: ReplicaLogger,
     metrics: StateManagerMetrics,
     state_layout: StateLayout,
+    tip_handler: Arc<Mutex<TipHandler>>,
     /// The main metadata. Different threads will need to access this field.
     ///
     /// To avoid the risk of deadlocks, this lock should be held as short a time
@@ -713,6 +716,7 @@ fn initialize_tip(
     #[cfg(debug_assertions)] lock: &Arc<Mutex<()>>,
     log: &ReplicaLogger,
     state_layout: &StateLayout,
+    tip_handler: &mut TipHandler,
     snapshot: &Snapshot,
     checkpoint_ref: &CheckpointRef,
 ) -> ReplicatedState {
@@ -750,8 +754,8 @@ fn initialize_tip(
 
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
 
-    state_layout
-        .reset_tip_to(snapshot.height, Some(&mut thread_pool))
+    tip_handler
+        .reset_tip_to(state_layout, snapshot.height, Some(&mut thread_pool))
         .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err));
 
     ReplicatedState::clone(&snapshot.state)
@@ -1261,6 +1265,7 @@ impl StateManagerImpl {
         let starting_time = Instant::now();
         let state_layout = StateLayout::try_new(log.clone(), config.state_root())
             .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
+        let mut tip_handler = state_layout.capture_tip_handler();
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
@@ -1442,6 +1447,7 @@ impl StateManagerImpl {
                     &initialize_tip_guard,
                     &log,
                     &state_layout,
+                    &mut tip_handler,
                     snapshot,
                     checkpoint_ref,
                 );
@@ -1544,6 +1550,7 @@ impl StateManagerImpl {
             log: log.clone(),
             metrics,
             state_layout,
+            tip_handler: Arc::new(Mutex::new(tip_handler)),
             states,
             verifier,
             own_subnet_id,
@@ -1565,6 +1572,12 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
+    }
+
+    /// Returns `TipHandler` pointing to the Tip folder managed by this
+    /// StateManager.
+    pub fn tip_handler(&self) -> &Mutex<TipHandler> {
+        &self.tip_handler
     }
 
     /// Returns requested state as a Chunkable artifact for StateSync.
@@ -1967,8 +1980,8 @@ impl StateManagerImpl {
     /// Flushes to disk all the canister heap deltas accumulated in memory
     /// during one round of execution.
     fn flush_page_maps(&self, tip_state: &mut ReplicatedState, height: Height) {
-        let tip_layout = self
-            .state_layout
+        let mut tip_handler = self.tip_handler.lock().expect("Failed to lock TipHandler");
+        let tip_layout = tip_handler
             .tip(height)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to access @TIP: {}", err));
 
@@ -2468,6 +2481,7 @@ impl StateManager for StateManagerImpl {
             &self.initialize_tip_guard,
             &self.log,
             &self.state_layout,
+            &mut self.tip_handler.lock().expect("Failed to lock TipHandler"),
             &target_snapshot,
             &checkpoint_ref,
         );
@@ -2893,6 +2907,7 @@ impl StateManager for StateManagerImpl {
                         &state,
                         height,
                         &self.state_layout,
+                        &mut self.tip_handler.lock().expect("Failed to lock TipHandler"),
                         &self.log,
                         &self.metrics.checkpoint_metrics,
                         &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),

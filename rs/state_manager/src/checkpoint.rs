@@ -15,7 +15,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{
     BitcoinStateBits, BitcoinStateLayout, CanisterLayout, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, ReadOnly, ReadPolicy, RwPolicy, StateLayout,
+    ExecutionStateBits, ReadOnly, ReadPolicy, RwPolicy, StateLayout, TipHandler,
 };
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
 use ic_utils::fs::defrag_file_partially;
@@ -47,12 +47,13 @@ const DEFRAG_SAMPLE: usize = 100;
 pub fn make_checkpoint(
     state: &ReplicatedState,
     height: Height,
-    layout: &StateLayout,
+    state_layout: &StateLayout,
+    tip_handler: &mut TipHandler,
     log: &ReplicaLogger,
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<ReplicatedState, CheckpointError> {
-    let tip = layout.tip(height)?;
+    let tip = tip_handler.tip(height)?;
 
     {
         let _timer = metrics
@@ -81,7 +82,7 @@ pub fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["filter_canisters"])
             .start_timer();
-        layout.filter_tip_canisters(height, &state.canister_states.keys().collect())?;
+        tip_handler.filter_tip_canisters(height, &state.canister_states.keys().collect())?;
     }
 
     let cp = {
@@ -89,7 +90,7 @@ pub fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["tip_to_checkpoint"])
             .start_timer();
-        layout.tip_to_checkpoint(tip, Some(thread_pool))?
+        tip_handler.tip_to_checkpoint(state_layout, tip, Some(thread_pool))?
     };
 
     let state = {
@@ -728,11 +729,13 @@ mod tests {
         state: &ReplicatedState,
         height: Height,
         layout: &StateLayout,
+        tip_handler: &mut TipHandler,
     ) -> ReplicatedState {
         make_checkpoint(
             state,
             height,
             layout,
+            tip_handler,
             log,
             &checkpoint_metrics(),
             &mut thread_pool(),
@@ -746,6 +749,7 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -758,7 +762,8 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
-            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+            let _state =
+                make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout, &mut tip_handler);
 
             // Ensure that checkpoint data is now available via layout API.
             assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
@@ -801,6 +806,7 @@ mod tests {
             let root = tmp.path().to_path_buf();
             let checkpoints_dir = root.join("checkpoints");
             let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -821,6 +827,7 @@ mod tests {
                 &state,
                 HEIGHT,
                 &layout,
+                &mut tip_handler,
                 &log,
                 &checkpoint_metrics(),
                 &mut thread_pool(),
@@ -842,6 +849,7 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -873,7 +881,8 @@ mod tests {
             let own_subnet_type = SubnetType::Application;
             let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
-            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+            let _state =
+                make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout, &mut tip_handler);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -932,6 +941,7 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
             let own_subnet_type = SubnetType::Application;
@@ -941,6 +951,7 @@ mod tests {
                 &ReplicatedState::new(subnet_test_id(1), own_subnet_type),
                 HEIGHT,
                 &layout,
+                &mut tip_handler,
             );
 
             let recovered_state = load_checkpoint(
@@ -1006,6 +1017,7 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1033,7 +1045,8 @@ mod tests {
             let own_subnet_type = SubnetType::Application;
             let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
-            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+            let _state =
+                make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout, &mut tip_handler);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -1062,6 +1075,7 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1081,7 +1095,8 @@ mod tests {
             let own_subnet_type = SubnetType::Application;
             let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
-            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+            let _state =
+                make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout, &mut tip_handler);
 
             let loaded_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -1104,6 +1119,7 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1123,7 +1139,8 @@ mod tests {
             let own_subnet_type = SubnetType::Application;
             let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
             state.put_canister_state(canister_state);
-            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+            let _state =
+                make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout, &mut tip_handler);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -1146,6 +1163,7 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1163,7 +1181,8 @@ mod tests {
             );
 
             let original_state = state.clone();
-            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+            let _state =
+                make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout, &mut tip_handler);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -1190,6 +1209,7 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1214,7 +1234,8 @@ mod tests {
                 .unwrap();
 
             let original_state = state.clone();
-            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+            let _state =
+                make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout, &mut tip_handler);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -1234,6 +1255,7 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let mut tip_handler = layout.capture_tip_handler();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1247,7 +1269,8 @@ mod tests {
             state.bitcoin_mut().utxo_set.address_outpoints = PageMap::from(&[9, 10, 11, 12][..]);
 
             let original_state = state.clone();
-            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+            let _state =
+                make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout, &mut tip_handler);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -1268,6 +1291,7 @@ mod tests {
             let root = tmp.path().to_path_buf();
             let tip = StateLayout::try_new(log, root)
                 .unwrap()
+                .capture_tip_handler()
                 .tip(Height::new(42))
                 .unwrap();
 
