@@ -212,10 +212,10 @@ impl NodeRegistration {
                 // Call cypto to rotate the keys and try to register the new key.
                 // In case registration of the new key fails, we will enter the branch above
                 // during the next call and retry registration.
-                match self
-                    .key_handler
-                    .rotate_idkg_dealing_encryption_keys(registry_version)
-                {
+                match tokio::task::block_in_place(|| {
+                    self.key_handler
+                        .rotate_idkg_dealing_encryption_keys(registry_version)
+                }) {
                     Ok(key) => self.try_to_register_key(registry_version, key).await,
                     Err(e) => warn!(self.log, "Key rotation error: {:?}", e),
                 }
