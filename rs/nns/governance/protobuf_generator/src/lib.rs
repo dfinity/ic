@@ -56,7 +56,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     config.type_attribute(
         "ic_nns_governance.pb.v1.OpenSnsTokenSwap",
-        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize)]",
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.SetSnsTokenSwapOpenTimeWindow",

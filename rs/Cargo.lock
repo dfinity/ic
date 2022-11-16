@@ -3794,6 +3794,7 @@ dependencies = [
 name = "ic-admin"
 version = "0.8.0"
 dependencies = [
+ "anyhow",
  "assert_matches",
  "async-trait",
  "base64 0.13.1",
@@ -3835,6 +3836,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-registry-transport",
+ "ic-sns-swap",
  "ic-sns-wasm",
  "ic-types",
  "lazy_static",

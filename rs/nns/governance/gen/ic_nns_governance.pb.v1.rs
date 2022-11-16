@@ -1805,6 +1805,7 @@ pub struct KnownNeuronData {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    serde::Serialize,
     Clone,
     PartialEq,
     ::prost::Message,
