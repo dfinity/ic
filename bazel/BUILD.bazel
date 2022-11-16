@@ -20,10 +20,26 @@ string_flag(
     visibility = ["//visibility:public"],
 )
 
+string_flag(
+    name = "ic_version_rc_only",
+    build_setting_default = "redacted",
+    visibility = ["//visibility:public"],
+)
+
 # Generates version.txt file that contains the value of `--ic_version` flag if set, otherwise git sha if the working tree is clean, otherwise <git sha>-<timestamp>.
 # It has to be tagged as `no-cache` as bazel treats version_file as never changing.
 ic_version_or_git_sha(
     name = "version.txt",
+    ic_version = ":ic_version",
+    tags = ["no-cache"],
+    visibility = ["//visibility:public"],
+)
+
+# Similar to the above target, but use the `ic_version_rc_only` flag. The intention is to set this flag to a dummy value on MR pipelines to preserve caching
+# but on master and release candidate branches set to the current git commit sha.
+ic_version_or_git_sha(
+    name = "rc_only_version.txt",
+    ic_version = ":ic_version_rc_only",
     tags = ["no-cache"],
     visibility = ["//visibility:public"],
 )

@@ -74,28 +74,34 @@ def optimized_canister(name, wasm):
     """Invokes canister WebAssembly module optimizer.
     """
     native.genrule(
-        name = name,
+        name = name + ".opt",
         srcs = [wasm],
-        outs = [name + ".wasm"],
+        outs = [name + ".opt.wasm"],
         message = "Shrinking canister " + name,
         exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
         cmd_bash = "$(location @crate_index//:ic-wasm__ic-wasm) $< -o $@ shrink",
     )
 
-def inject_version_into_wasm(*, name, src_wasm, visibility = None):
+    inject_version_into_wasm(
+        name = name,
+        src_wasm = name + ".opt",
+        version_file = "//bazel:rc_only_version.txt",
+    )
+
+def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.txt", visibility = None):
     """Generates an output file named `name + '.wasm'`.
 
     The output file is almost identical to the input (i.e. `src_wasm`), except
     that it has an additional piece of metadata attached to in the form of a
     WASM custom section named `icp:public git_commit_id` (no quotes, of course),
-    whose value is the contents of //bazel:version.txt (minus the trailing
+    whose value is the contents of version_file (minus the trailing
     newline character).
     """
     native.genrule(
         name = name,
         srcs = [
             src_wasm,
-            "//bazel:version.txt",
+            version_file,
         ],
         outs = [name + ".wasm"],
         message = "Injecting version into wasm.",
@@ -111,8 +117,8 @@ def inject_version_into_wasm(*, name, src_wasm, visibility = None):
             "git_commit_id",
             "--visibility public",
 
-            # Get value to inject from version.txt.
-            "--data $$(cat $(location //bazel:version.txt))",
+            # Get value to inject from version_file.
+            "--data $$(cat $(location " + version_file + "))",
         ]),
         visibility = visibility,
     )
