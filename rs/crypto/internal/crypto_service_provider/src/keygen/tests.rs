@@ -41,6 +41,7 @@ mod gen_node_siging_key_pair_tests {
                 .expect("missing key"),
             node_signing_pk_to_proto(public_key)
         );
+        assert!(csp.sks_contains(&key_id).is_ok());
     }
 
     #[test]

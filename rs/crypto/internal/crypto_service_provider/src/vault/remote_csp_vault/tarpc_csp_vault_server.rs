@@ -205,14 +205,13 @@ impl<
     }
 
     // `NiDkgCspVault`-methods.
-    async fn gen_forward_secure_key_pair(
+    async fn gen_dealing_encryption_key_pair(
         self,
         _: context::Context,
         node_id: NodeId,
-        algorithm_id: AlgorithmId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.gen_forward_secure_key_pair(node_id, algorithm_id);
+        let job = move || vault.gen_dealing_encryption_key_pair(node_id);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

@@ -151,18 +151,17 @@ mock! {
     }
 
     pub trait NiDkgCspClient {
-    fn create_forward_secure_key_pair(
-        &self,
-        _algorithm_id: AlgorithmId,
-        _node_id: NodeId,
-    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError>;
+        fn gen_dealing_encryption_key_pair(
+            &self,
+            _node_id: NodeId,
+        ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError>;
 
-    /// Erases forward secure secret keys at and before a given epoch
-    fn update_forward_secure_epoch(
-        &self,
-        _algorithm_id: AlgorithmId,
-        _epoch: Epoch,
-    ) -> Result<(), CspDkgUpdateFsEpochError>;
+        /// Erases forward secure secret keys at and before a given epoch
+        fn update_forward_secure_epoch(
+          &self,
+         _algorithm_id: AlgorithmId,
+         _epoch: Epoch,
+        ) -> Result<(), CspDkgUpdateFsEpochError>;
 
         fn create_dealing(
             &self,

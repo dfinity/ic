@@ -8,12 +8,15 @@ use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
-pub fn should_generate_node_signing_key_pair_and_store_pubkey(csp_vault: Arc<dyn CspVault>) {
+pub fn should_generate_node_signing_key_pair_and_store_keys(csp_vault: Arc<dyn CspVault>) {
     let gen_key_result = csp_vault
         .gen_node_signing_key_pair()
         .expect("failed creating key pair");
 
     assert!(matches!(gen_key_result, CspPublicKey::Ed25519(_)));
+    assert!(csp_vault
+        .sks_contains(&KeyId::from(&gen_key_result))
+        .is_ok());
     assert_eq!(
         csp_vault
             .current_node_public_keys()

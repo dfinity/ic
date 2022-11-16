@@ -120,10 +120,7 @@ impl MockNetwork {
                 let (id, (pubkey, _pop)) = (
                     *node_id,
                     node.csp
-                        .create_forward_secure_key_pair(
-                            AlgorithmId::NiDkg_Groth20_Bls12_381,
-                            *node_id,
-                        )
+                        .gen_dealing_encryption_key_pair(*node_id)
                         .unwrap_or_else(|_| {
                             panic!(
                                 "Failed to create forward secure encryption key for NodeId {}",

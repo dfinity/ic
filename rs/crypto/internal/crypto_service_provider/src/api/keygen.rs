@@ -14,7 +14,7 @@ pub trait CspKeyGenerator {
     /// * `CryptoError::InternalError` if there is an internal
     ///   error (e.g., the public key in the public key store is already set).
     /// * `CryptoError::TransientInternalError` if there is a transient
-    ///   internal error, e.g,. an IO error when writing a key to disk, or an
+    ///   internal error, e.g., an IO error when writing a key to disk, or an
     ///   RPC error when calling a remote CSP vault.
     /// # Panics
     /// If there already exists a secret key in the store for the secret key ID

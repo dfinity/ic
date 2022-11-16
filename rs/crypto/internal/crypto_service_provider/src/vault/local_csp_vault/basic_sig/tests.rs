@@ -20,8 +20,8 @@ use std::io;
 use std::sync::Arc;
 
 #[test]
-fn should_generate_node_signing_key_pair_and_store_pubkey() {
-    test_utils::basic_sig::should_generate_node_signing_key_pair_and_store_pubkey(
+fn should_generate_node_signing_key_pair_and_store_keys() {
+    test_utils::basic_sig::should_generate_node_signing_key_pair_and_store_keys(
         new_local_csp_vault(),
     );
 }
@@ -41,7 +41,7 @@ fn should_store_node_signing_secret_key_before_public_key() {
         .in_sequence(&mut seq);
     let vault = vault_with_node_secret_key_store_and_public_key_store(sks, pks);
 
-    let _ = vault.gen_node_signing_key_pair();
+    assert!(vault.gen_node_signing_key_pair().is_ok());
 }
 
 #[test]

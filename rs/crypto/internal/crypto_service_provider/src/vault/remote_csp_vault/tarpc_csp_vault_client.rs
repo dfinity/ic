@@ -268,20 +268,18 @@ impl PublicKeyStoreCspVault for RemoteCspVault {
 }
 
 impl NiDkgCspVault for RemoteCspVault {
-    fn gen_forward_secure_key_pair(
+    fn gen_dealing_encryption_key_pair(
         &self,
         node_id: NodeId,
-        algorithm_id: AlgorithmId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError> {
-        self.tokio_block_on(self.tarpc_csp_client.gen_forward_secure_key_pair(
-            context_with_timeout(self.rpc_timeout),
-            node_id,
-            algorithm_id,
-        ))
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .gen_dealing_encryption_key_pair(context_with_timeout(self.rpc_timeout), node_id),
+        )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspDkgCreateFsKeyError::InternalError(InternalError {
-                internal_error: rpc_error.to_string(),
-            }))
+            Err(CspDkgCreateFsKeyError::TransientInternalError(
+                rpc_error.to_string(),
+            ))
         })
     }
 

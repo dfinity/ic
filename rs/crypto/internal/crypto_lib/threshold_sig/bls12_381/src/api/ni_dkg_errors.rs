@@ -47,10 +47,9 @@ impl From<MisnumberedReceiverError> for CspDkgVerifyDealingError {
 /// Creation of a forward-secure keypair during DKG failed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CspDkgCreateFsKeyError {
-    /// Precondition error: The AlgorithmId does not correspond to a NiDkg
-    /// variant.
-    UnsupportedAlgorithmId(AlgorithmId),
     InternalError(InternalError),
+    DuplicateKeyId(String),
+    TransientInternalError(String),
 }
 
 /// Verification of a DKG forward-secure key failed.

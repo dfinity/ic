@@ -1,4 +1,5 @@
-use crate::public_key_store::PublicKeyStore;
+use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
+use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
 use crate::threshold::ni_dkg::specialise;
 use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
@@ -31,57 +32,60 @@ mod tests;
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore> NiDkgCspVault
     for LocalCspVault<R, S, C, P>
 {
-    fn gen_forward_secure_key_pair(
+    fn gen_dealing_encryption_key_pair(
         &self,
         node_id: NodeId,
-        algorithm_id: AlgorithmId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>
     {
-        debug!(self.logger; crypto.method_name => "gen_forward_secure_key_pair");
+        debug!(self.logger; crypto.method_name => "gen_dealing_encryption_key_pair");
 
         // Get state
         let seed = Seed::from_rng(&mut *self.rng_write_lock());
-        // Specialise
-        let result = match algorithm_id {
-            AlgorithmId::NiDkg_Groth20_Bls12_381 => {
-                // Call lib:
-                let key_set =
-                    ni_dkg_clib::create_forward_secure_key_pair(seed, node_id.get().as_slice());
+        // Call lib:
+        let key_set = ni_dkg_clib::create_forward_secure_key_pair(seed, node_id.get().as_slice());
 
-                // Generalise over fs key variants:
-                let public_key = CspFsEncryptionPublicKey::Groth20_Bls12_381(key_set.public_key);
-                let pop = CspFsEncryptionPop::Groth20WithPop_Bls12_381(key_set.pop);
-                let key_set = CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set);
-                Ok((public_key, pop, key_set))
-            }
-            other => Err(ni_dkg_errors::CspDkgCreateFsKeyError::UnsupportedAlgorithmId(other)),
-        };
-        let (public_key, pop, key_set) = result?;
+        // Generalise over fs key variants:
+        let public_key = CspFsEncryptionPublicKey::Groth20_Bls12_381(key_set.public_key);
+        let pop = CspFsEncryptionPop::Groth20WithPop_Bls12_381(key_set.pop);
+        let key_set = CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set);
 
         // Update state:
-        let key_id = KeyId::from(&public_key);
-        let result = self.sks_write_lock().insert(
-            key_id,
+        self.store_secret_key(
             CspSecretKey::FsEncryption(key_set),
-            Some(NIDKG_FS_SCOPE),
-        );
-        if let Err(err) = result {
-            match err {
-                SecretKeyStoreError::DuplicateKeyId(_key_id) =>
-                    panic!(
-                        "Could not insert key as the KeyId is already in use.  This suggests an insecure RNG."
-                    ),
-                SecretKeyStoreError::PersistenceError(e) => {
-                    panic!("Error persisting secret key store while generating forward-secure key pair: {}", e)
-                }
-            };
-        };
-        //TODO CRP-1752: do proper error handling and add corresponding unit tests
-        let _store_result = self
-            .public_key_store_write_lock()
-            .set_once_ni_dkg_dealing_encryption_pubkey(
-                crate::keygen::utils::dkg_dealing_encryption_pk_to_proto(public_key, pop),
-            );
+            KeyId::from(&public_key),
+        )
+        .map_err(|e| match e {
+            SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                ni_dkg_errors::CspDkgCreateFsKeyError::DuplicateKeyId(
+                    format!("duplicate ni-dkg dealing encryption secret key id: {}", key_id))
+            },
+            SecretKeyStoreError::PersistenceError(io_error) => {
+                ni_dkg_errors::CspDkgCreateFsKeyError::TransientInternalError(
+                    format!("error persisting ni-dkg dealing encryption secret key: {}", io_error),
+                )
+            }
+        })
+        .and_then(|()| {
+            self.public_key_store_write_lock()
+                .set_once_ni_dkg_dealing_encryption_pubkey(dkg_dealing_encryption_pk_to_proto(
+                    public_key,
+                    pop,
+                ))
+                .map_err(|e| match e {
+                    PublicKeySetOnceError::AlreadySet => {
+                        ni_dkg_errors::CspDkgCreateFsKeyError::InternalError(
+                            ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError {
+                            internal_error: "ni-dkg dealing encryption public key already set"
+                                .to_string(),
+                        })
+                    }
+                    PublicKeySetOnceError::Io(io_error) => {
+                        ni_dkg_errors::CspDkgCreateFsKeyError::TransientInternalError(
+                            format!("error persisting ni-dkg dealing encryption public key: {}", io_error),
+                        )
+                    }
+                })
+        })?;
         // FIN:
         Ok((public_key, pop))
     }
