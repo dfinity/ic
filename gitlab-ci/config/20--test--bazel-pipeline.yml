@@ -47,12 +47,14 @@ bazel-test-basic-health:
     when: always
     paths:
       - output_dir/
+      - build_event_file.json
   after_script:
     - |
       mkdir output_dir
       export OUTPUT_DIR="$PWD/output_dir"
       export BUILD_EVENT_JSON_PATH="$PWD/build_event_file.json"
       export SLACK_WEBHOOK_URL
+      export HONEYCOMB_API_TOKEN
       bazel run //rs/tests:post_processing # currently consumes build_event_file of a single test target
     - !reference [after_script]
 
