@@ -135,7 +135,8 @@ message CompletedSignature {
   RequestId request_id = 1;
   reserved 2;
   state.queues.v1.Response unreported = 3;
-}
+  bytes pseudo_random_id = 4;
+ }
 
 message EcdsaReshareRequest {
   reserved 1;
