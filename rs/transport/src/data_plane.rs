@@ -219,9 +219,7 @@ async fn write_one_message(
         }
         ChannelWriter::H2SendStream(send_stream) => {
             // Use SendStreamWrapper to manage capacity and send data as capacity becomes available
-            let mut send_stream_wrapper = SendStreamWrapper::new(send_stream);
-            send_stream_wrapper.prepare_send_data(data);
-            send_stream_wrapper.await
+            SendStreamWrapper::new(send_stream, data).await
         }
     }
 }
