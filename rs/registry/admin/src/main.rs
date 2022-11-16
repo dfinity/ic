@@ -4685,7 +4685,7 @@ async fn propose_to_open_sns_token_swap(
         }
 
         let title = cmd
-            .summary
+            .proposal_title
             .clone()
             .ok_or_else(|| anyhow!("Please specify a proposal title"))?;
         let summary = cmd
