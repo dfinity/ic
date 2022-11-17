@@ -5,6 +5,7 @@ use ic_icrc1::{
     Account,
 };
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use num_traits::cast::ToPrimitive;
 
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
 use crate::{
@@ -32,37 +33,36 @@ pub struct RetrieveBtcOk {
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub enum RetrieveBtcError {
-    /// There is another request for this principle
+    /// There is another request for this principal.
     AlreadyProcessing,
 
-    /// The amount to withdraw is too low
+    /// The withdrawal amount is too low.
     AmountTooLow(u64),
 
-    /// The burn call to the Ledger failed
-    LedgerConnectionError(i32, String),
-
-    /// The Ledger rejected the burn operation
-    LedgerError(TransferError),
-
-    /// The bitcoin address is not valid
+    /// The bitcoin address is not valid.
     MalformedAddress(String),
 
-    /// There are too many concurrent requests, retry later
-    TooManyConcurrentRequests,
+    /// The withdrawal account does not hold the requested ckBTC amount.
+    InsufficientFunds { balance: u64 },
+
+    /// There are too many concurrent requests, retry later.
+    TemporarilyUnavailable(String),
+
+    /// A generic error reserved for future extensions.
+    GenericError {
+        error_message: String,
+        error_code: u64,
+    },
 }
 
 impl From<GuardError> for RetrieveBtcError {
     fn from(e: GuardError) -> Self {
         match e {
             GuardError::AlreadyProcessing => Self::AlreadyProcessing,
-            GuardError::TooManyConcurrentRequests => Self::TooManyConcurrentRequests,
+            GuardError::TooManyConcurrentRequests => {
+                Self::TemporarilyUnavailable("too many concurrent requests".to_string())
+            }
         }
-    }
-}
-
-impl From<TransferError> for RetrieveBtcError {
-    fn from(e: TransferError) -> Self {
-        Self::LedgerError(e)
     }
 }
 
@@ -82,7 +82,9 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     }
     let parsed_address = crate::address::parse_address(&args.address, btc_network)?;
     if read_state(|s| s.pending_retrieve_btc_requests.len() >= MAX_CONCURRENT_PENDING_REQUESTS) {
-        return Err(RetrieveBtcError::TooManyConcurrentRequests);
+        return Err(RetrieveBtcError::TemporarilyUnavailable(
+            "too many pending retrieve_btc requests".to_string(),
+        ));
     }
 
     let block_index = burn_ckbtcs(caller, args.amount).await?;
@@ -102,7 +104,7 @@ async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcErr
     };
     let minter = PrincipalId(ic_cdk::id());
     let from_subaccount = compute_subaccount(PrincipalId(user), 0);
-    let block_index = client
+    let result = client
         .transfer(TransferArg {
             from_subaccount: Some(from_subaccount),
             to: Account {
@@ -115,6 +117,46 @@ async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcErr
             amount: Nat::from(amount),
         })
         .await
-        .map_err(|(code, msg)| RetrieveBtcError::LedgerConnectionError(code, msg))??;
-    Ok(block_index)
+        .map_err(|(code, msg)| {
+            RetrieveBtcError::TemporarilyUnavailable(format!(
+                "cannot enqueue a burn transaction: {} (reject_code = {})",
+                msg, code
+            ))
+        })?;
+
+    match result {
+        Ok(block_index) => Ok(block_index),
+        Err(TransferError::InsufficientFunds { balance }) => Err(RetrieveBtcError::InsufficientFunds {
+            balance: balance.0.to_u64().expect("unreachable: ledger balance does not fit into u64")
+        }),
+        Err(TransferError::TemporarilyUnavailable) => {
+            Err(RetrieveBtcError::TemporarilyUnavailable(
+                "cannot burn ckBTC: the ledger is busy".to_string(),
+            ))
+        }
+        Err(TransferError::GenericError { error_code, message }) => {
+            Err(RetrieveBtcError::TemporarilyUnavailable(format!(
+                "cannot burn ckBTC: the ledger fails with: {} (error code {})", message, error_code
+            )))
+        }
+        Err(TransferError::BadFee { expected_fee }) => ic_cdk::trap(&format!(
+            "unreachable: the ledger demands the fee of {} even though the fee field is unset",
+            expected_fee
+        )),
+        Err(TransferError::Duplicate{ duplicate_of }) => ic_cdk::trap(&format!(
+            "unreachable: the ledger reports duplicate ({}) even though the create_at_time field is unset",
+            duplicate_of
+        )),
+        Err(TransferError::CreatedInFuture{..}) => ic_cdk::trap(
+            "unreachable: the ledger reports CreatedInFuture even though the create_at_time field is unset"
+        ),
+        Err(TransferError::TooOld) => ic_cdk::trap(
+            "unreachable: the ledger reports TooOld even though the create_at_time field is unset"
+        ),
+        Err(TransferError::BadBurn { min_burn_amount }) => ic_cdk::trap(&format!(
+            "the minter is misconfigured: retrieve_btc_min_amount {} is less than ledger's min_burn_amount {}",
+            read_state(|s| s.retrieve_btc_min_amount),
+            min_burn_amount
+        )),
+    }
 }

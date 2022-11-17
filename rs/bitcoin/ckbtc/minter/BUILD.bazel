@@ -22,6 +22,7 @@ LIB_DEPS = [
     "@crate_index//:hex",
     "@crate_index//:ic-cdk",
     "@crate_index//:lazy_static",
+    "@crate_index//:num-traits",
     "@crate_index//:ripemd",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
