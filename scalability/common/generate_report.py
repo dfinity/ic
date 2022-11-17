@@ -38,6 +38,13 @@ gflags.DEFINE_string("asset_root", "", "Path to the root of the asset canister")
 gflags.DEFINE_boolean("strict", False, "Fail generating reports if something is missing")
 
 
+# When failure rate is below this level, we consider the experiment successful.
+ALLOWABLE_FAILURE_RATE = 0.2
+
+# When median latency is below this level, we consider the experiment successful.
+ALLOWABLE_LATENCY = 5000
+
+
 def add_plot(name: str, xlabel: str, ylabel: str, x: [str], plots: [([str], str)]):
     """Return a dictionary representing the given plot for templating."""
     plot_data = []
@@ -119,6 +126,16 @@ def parse_experiment_json(base_path, data):
         exit(1)
 
 
+def update_rps_max(prev_rps_max, evaluated_summaries, duration):
+    rps_max = prev_rps_max
+    avg_succ_rate = evaluated_summaries.get_avg_success_rate(duration)
+    latency = evaluated_summaries.percentiles[95] if evaluated_summaries.num_success > 0 else sys.float_info.max
+    if evaluated_summaries.failure_rate < ALLOWABLE_FAILURE_RATE and latency < ALLOWABLE_LATENCY:
+        if avg_succ_rate > prev_rps_max:
+            rps_max = avg_succ_rate
+    return rps_max
+
+
 def generate_report(base, githash, timestamp):
     """Generate report for the given measurement."""
     source = open("templates/experiment.html.hb", mode="r").read()
@@ -137,6 +154,7 @@ def generate_report(base, githash, timestamp):
     finalization_rates = []
 
     experiment = parse_experiment_json(base, data)
+    rps_max = 0
 
     # Parse data for each iteration
     # --------------------------------------------------
@@ -174,10 +192,9 @@ def generate_report(base, githash, timestamp):
                 ) = evaluated_summaries.convert_tuple()
                 wg_summary_files.append(files)
 
-                if "target_duration" in experiment["experiment_details"]:
-                    aggregated_rates += evaluated_summaries.get_avg_success_rate(
-                        experiment["experiment_details"]["target_duration"]
-                    )
+                aggregated_rates += evaluated_summaries.get_avg_success_rate(
+                    experiment["experiment_details"]["target_duration"]
+                )
 
                 from statistics import mean
 
@@ -185,6 +202,9 @@ def generate_report(base, githash, timestamp):
                 t_average_agg = max(t_average)
                 t_max_agg = max(t_max)
                 t_min_agg = max(t_min)
+                rps_max = update_rps_max(
+                    rps_max, evaluated_summaries, experiment["experiment_details"]["target_duration"]
+                )
 
                 iter_data.update(
                     {
@@ -312,11 +332,16 @@ def generate_report(base, githash, timestamp):
 
     experiment_template = compiler.compile(experiment_source)
     experiment_data = data["experiment"]
-    experiment_data["experiment_details"]["rps_max"] = (
-        "{:.1f}".format(experiment_data["experiment_details"]["rps_max"])
-        if "rps_max" in experiment_data["experiment_details"]
-        else "n.a."
-    )
+    experiment_data["experiment_details"]["rps_max"] = "{:.1f}".format(rps_max)
+
+    # Update experiment.json with rps_max needed by notify_dashboard and verify_perf
+    with open(os.path.join(base, "experiment.json"), "r") as experiment_file:
+        j = json.loads(experiment_file.read())
+        j["experiment_details"]["rps_max"] = experiment_data["experiment_details"]["rps_max"]
+        updated = json.dumps(j, indent=4)
+    with open(os.path.join(base, "experiment.json"), "w") as experiment_file:
+        experiment_file.write(updated)
+
     experiment_data.update(add_toml_files(base))
 
     print("Rendering experiment details with: ", json.dumps(experiment_data, indent=2))
@@ -336,78 +361,62 @@ def generate_report(base, githash, timestamp):
         [fname.split("/")[-1].replace("summary_machine_", "") for fname in fnames] for fnames in wg_summary_files
     ]
 
-    plots = []
-    if "rps_base" in exp["experiment_details"]:
-        assert "failure_rate" in exp["experiment_details"]
-        assert "labels" in exp["experiment_details"]
-        for idx, failure_rate in enumerate(exp["experiment_details"]["failure_rate"]):
-            plots.append((failure_rate, exp["experiment_details"]["labels"][idx]))
-    else:
-        if len(wg_failure_rates) > 0:
+    if len(wg_failure_rates) > 0:
 
-            # Generate one plot for the failure rate of each workload generator
-            # For each of the failure rates, we need to find out which workload generator this failure rate is from.
-            # The order in which they are stored in the list should be the same in each round thanks for
-            # sorting the workload generators summaries for each round.
-            num_workload_generators = len(wg_failure_rates[0])
-            for workload_generator_id in range(num_workload_generators):
-                workload_generators_idx_in_iterations = [
-                    list_of_hosts[workload_generator_id] for list_of_hosts in wg_summaries
-                ]
-                counts = Counter(workload_generators_idx_in_iterations)
-                # Each of those should have only one entry, otherwise, the order of failure rates
-                # for the workload generators isn't the same in each iteration!
-                assert len(counts) == 1
+        # Generate one plot for the failure rate of each workload generator
+        # For each of the failure rates, we need to find out which workload generator this failure rate is from.
+        # The order in which they are stored in the list should be the same in each round thanks for
+        # sorting the workload generators summaries for each round.
+        num_workload_generators = len(wg_failure_rates[0])
+        for workload_generator_id in range(num_workload_generators):
+            workload_generators_idx_in_iterations = [
+                list_of_hosts[workload_generator_id] for list_of_hosts in wg_summaries
+            ]
+            counts = Counter(workload_generators_idx_in_iterations)
+            # Each of those should have only one entry, otherwise, the order of failure rates
+            # for the workload generators isn't the same in each iteration!
+            assert len(counts) == 1
 
-                # With that, we can then also determine the label:
-                workload_generator_label = list(counts.elements())[0]
+            # With that, we can then also determine the label:
+            workload_generator_label = list(counts.elements())[0]
 
-                plots.append(
-                    (
-                        [x[workload_generator_id] * 100.0 for x in wg_failure_rates],
-                        f"{workload_generator_label}",
-                    )
+            plots.append(
+                (
+                    [x[workload_generator_id] * 100.0 for x in wg_failure_rates],
+                    f"{workload_generator_label}",
                 )
-            plots.append((wg_failure_rate, "aggregated failure rate"))
+            )
+        plots.append((wg_failure_rate, "aggregated failure rate"))
 
     data.update(add_plot("wg-failure-rate", exp["xtitle"], "failure rate [%]", exp["xlabels"], plots))
 
     plots = []
-    if "rps_base" in exp["experiment_details"]:
-        assert "latency" in exp["experiment_details"]
-        assert "labels" in exp["experiment_details"]
-        for idx, latency in enumerate(exp["experiment_details"]["latency"]):
-            plots.append((list(filter(lambda x: x > 0, latency)), exp["experiment_details"]["labels"][idx]))
+    if len(wg_http_latency) > 0:
 
-    else:
-        # We should absolutely make sure that the order of wg generator results is the SAME in each
-        # iteration, otherwise we will get really strange results in the plots
-        if len(wg_http_latency) > 0:
+        num_workload_generators = len(wg_http_latency[0])
+        for workload_generator_id in range(num_workload_generators):
+            workload_generators_idx_in_iterations = [host[workload_generator_id] for host in wg_summaries]
+            counts = Counter(workload_generators_idx_in_iterations)
+            # Each of those should have only one entry
+            assert len(counts) == 1
 
-            num_workload_generators = len(wg_http_latency[0])
-            for workload_generator_id in range(num_workload_generators):
-                workload_generators_idx_in_iterations = [host[workload_generator_id] for host in wg_summaries]
-                counts = Counter(workload_generators_idx_in_iterations)
-                # Each of those should have only one entry
-                assert len(counts) == 1
+            # With that, we can then also determine the label:
+            workload_generator_label = list(counts.elements())[0]
 
-                # With that, we can then also determine the label:
-                workload_generator_label = list(counts.elements())[0]
+            # This seems to be used in the workload generator for invalid requests?
+            # Need to be careful with floating point arithmetic when comparing int to float
+            def filter_or_minus_one(x):
+                INVALID = 18446744073709552000000
+                return -1 if abs(x - INVALID) < 0.0000001 else x
 
-                # This seems to be used in the workload generator for invalid requests?
-                # Need to be careful with floating point arithmetic when comparing int to float
-                def filter_or_minus_one(x):
-                    INVALID = 18446744073709552000000
-                    return -1 if abs(x - INVALID) < 0.0000001 else x
-
-                plots.append(
-                    (
-                        [filter_or_minus_one(x[workload_generator_id]) for x in wg_http_latency],
-                        f"median {workload_generator_label}",
-                    )
+            plots.append(
+                (
+                    [filter_or_minus_one(x[workload_generator_id]) for x in wg_http_latency],
+                    f"median {workload_generator_label}",
                 )
+            )
 
-        plots.append((wg_http_latency_99, "mean 99th percentile of all"))
+    plots.append((wg_http_latency_99, "mean 99th percentile of all"))
     data.update(add_plot("wg-http-latency", exp["xtitle"], "latency [ms]", exp["xlabels"], plots))
 
     if len(finalization_rates) == len(exp["xlabels"]):

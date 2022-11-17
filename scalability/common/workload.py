@@ -1,4 +1,5 @@
 import codecs
+import json
 import os
 import threading
 import time
@@ -8,6 +9,13 @@ from typing import NamedTuple
 
 from common import misc
 from common import ssh
+
+
+class BytesEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, bytes):
+            return obj.decode("utf-8")
+        return json.JSONEncoder.default(self, obj)
 
 
 class WorkloadDescription(NamedTuple):
@@ -66,6 +74,7 @@ class Workload(threading.Thread):
         load_generators: [str],
         target_machines: [str],
         workload: WorkloadDescription,
+        workload_idx: int,
         outdir: str,
         f_stdout: str,
         f_stderr: str,
@@ -76,6 +85,7 @@ class Workload(threading.Thread):
         self.load_generators = load_generators
         self.target_machines = target_machines
         self.workload = workload
+        self.workload_idx = workload_idx
         self.outdir = outdir
         self.f_stdout = f_stdout
         self.f_stderr = f_stderr
@@ -156,6 +166,32 @@ class Workload(threading.Thread):
             except FileExistsError:
                 print(f"Failed to open - file already exists: {filename}")
 
+    def __update_summary_map_file(self, destinations):
+        summary_file_dir = os.path.join(self.outdir, "workload_command_summary_map.json")
+
+        workload_command_summary_map = {}
+        if os.path.exists(summary_file_dir):
+            with open(summary_file_dir, "r") as map_file:
+                # dictionary of type: dict[str] = (workload.Workload, str)
+                workload_command_summary_map = json.loads(map_file.read())
+
+        commands = self.get_commands()
+        assert len(commands) == len(destinations)
+
+        workload_command_summary_map[self.workload_idx] = {
+            "workload_description": json.dumps(self.workload, cls=BytesEncoder, indent=4),
+            "load_generators": [
+                {
+                    "command": command,
+                    "summary_file": destination,
+                }
+                for command, destination in zip(commands, destinations)
+            ],
+        }
+
+        with open(summary_file_dir, "w") as map_file:
+            map_file.write(json.dumps(workload_command_summary_map, cls=BytesEncoder, indent=4))
+
     def run(self):
         """Start running the given workloads as a thread."""
         time.sleep(self.workload.start_delay)
@@ -169,7 +205,7 @@ class Workload(threading.Thread):
         assert len(self.uuids) == len(self.load_generators)
         destinations = [
             "{}/summary_workload_{}_{}_machine_{}".format(
-                self.outdir, self.uuids[idx], idx, load_generator.replace(":", "_")
+                self.outdir, self.workload_idx, idx, load_generator.replace(":", "_")
             )
             for idx, load_generator in enumerate(self.load_generators)
         ]
@@ -179,5 +215,7 @@ class Workload(threading.Thread):
         # If workload generators fail, the result of the experiment is invalid anyway.
         # Just abort in such a case.
         assert rc == [0 for _ in range(len(destinations))], "Workload generator failed, aborting"
+
+        self.__update_summary_map_file(destinations)
 
         return destinations
