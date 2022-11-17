@@ -556,7 +556,7 @@ const GB: u64 = 1024 * 1024 * 1024;
 /// The upper limit on the stable memory size.
 /// This constant is used by other crates to define other constants, that's why
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
-pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 32 * GB;
+pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 48 * GB;
 
 /// The upper limit on the Wasm memory size.
 /// This constant is used by other crates to define other constants, that's why

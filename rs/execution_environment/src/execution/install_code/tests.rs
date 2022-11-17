@@ -69,7 +69,7 @@ fn install_code_fails_on_invalid_memory_allocation() {
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert_eq!(
-        "MemoryAllocation expected to be in the range [0..38_654_705_664], got 18_446_744_073_709_551_615",
+        "MemoryAllocation expected to be in the range [0..55_834_574_848], got 18_446_744_073_709_551_615",
         err.description()
     );
 }
