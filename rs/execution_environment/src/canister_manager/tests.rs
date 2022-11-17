@@ -59,8 +59,8 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, StopCanisterContext},
     nominal_cycles::NominalCycles,
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    QueryAllocation, SubnetId, UserId,
+    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    NumInstructions, QueryAllocation, SubnetId, UserId,
 };
 use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
@@ -3221,11 +3221,15 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
-    // Verify the system state is preserved.
-    assert_eq!(
-        state.canister_state(&canister_id).unwrap().system_state,
-        original_canister.system_state
-    );
+    // Verify the system state is preserved except for global timer.
+    let mut new_state = state
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .clone();
+    assert_eq!(new_state.global_timer, CanisterTimer::Inactive);
+    new_state.global_timer = original_canister.system_state.global_timer;
+    assert_eq!(new_state, original_canister.system_state);
 
     // Verify the scheduler state is preserved.
     assert_eq!(
@@ -3256,12 +3260,15 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
-
-    // Verify the system state is preserved.
-    assert_eq!(
-        state.canister_state(&canister_id).unwrap().system_state,
-        original_canister.system_state
-    );
+    // Verify the system state is preserved except for global timer.
+    let mut new_state = state
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .clone();
+    assert_eq!(new_state.global_timer, CanisterTimer::Inactive);
+    new_state.global_timer = original_canister.system_state.global_timer;
+    assert_eq!(new_state, original_canister.system_state);
 
     // Verify the scheduler state is preserved.
     assert_eq!(
@@ -3291,12 +3298,15 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
-
-    // Verify the system state is preserved.
-    assert_eq!(
-        state.canister_state(&canister_id).unwrap().system_state,
-        original_canister.system_state
-    );
+    // Verify the system state is preserved except for global timer.
+    let mut new_state = state
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .clone();
+    assert_eq!(new_state.global_timer, CanisterTimer::Inactive);
+    new_state.global_timer = original_canister.system_state.global_timer;
+    assert_eq!(new_state, original_canister.system_state);
 
     // Verify the scheduler state is preserved.
     assert_eq!(
