@@ -53,7 +53,6 @@ class MultiMonitor:
                     self._timeout_exception = mon.global_timeout(
                         f"hard timeout reached after {self._hard_timeout} seconds"
                     )
-                    self._timeout_exception
                 else:
                     # no more running Monpoly threads -- return
                     return
