@@ -34,6 +34,7 @@ DOCKER_RUN_ARGS=(
     -e CI_JOB_NAME=${CI_JOB_NAME:-""}
     -e SHELL_WRAPPER="${SHELL_WRAPPER:-/usr/bin/time}"
     -e VERSION=${VERSION:-"$(git rev-parse HEAD)"}
+    -e CI_COMMIT_REF_PROTECTED="${CI_COMMIT_REF_PROTECTED:-true}"
 )
 
 if [ -e /var/run/docker.sock ]; then
