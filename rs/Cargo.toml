@@ -122,7 +122,6 @@ members = [
   "monitoring/metrics",
   "monitoring/metrics_encoder",
   "monitoring/pprof",
-  "monitoring/prober",
   "nervous_system/common",
   "nervous_system/common/build_metadata",
   "nervous_system/common/test_canister",
