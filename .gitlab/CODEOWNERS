@@ -42,9 +42,9 @@
 /gitlab-ci/src/std-fs-check/                                            @dfinity-lab/teams/node-team
 /gitlab-ci/src/dependencies/                                            @dfinity-lab/teams/prodsec
 /gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity-lab/teams/idx @dfinity-lab/teams/ic-testing-verification
-/gitlab-ci/config/47--guest-os-test--e2e-scalability.yml                @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
-/gitlab-ci/config/00--benchmark-test-child-pipeline.yml                 @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
-/gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml      @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
+/gitlab-ci/config/47--guest-os-test--e2e-scalability.yml                @dfinity-lab/teams/runtime-owners
+/gitlab-ci/config/00--benchmark-test-child-pipeline.yml                 @dfinity-lab/teams/runtime-owners
+/gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml      @dfinity-lab/teams/runtime-owners
 
 # [Typescript]
 /typescript/                 @dfinity-lab/teams/owners-owners
@@ -238,11 +238,11 @@
 # Scalability suite is currently owned by both node-team and networking team
 # Most individual benchmarks are owned by individual teams
 # [Scalability]
-/scalability/                                                       @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
+/scalability/                                                       @dfinity-lab/teams/runtime-owners
 /scalability/experiments/max_capacity_large_memory.py               @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_large_memory_experiment.py             @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_gossip_experiment.py                   @dfinity-lab/teams/networking-team
-/scalability/experiments/run_sns_experiment.py                      @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
+/scalability/experiments/run_sns_experiment.py                      @dfinity-lab/teams/runtime-owners
 
 # [Nix]
 *.nix                     @dfinity-lab/teams/idx
