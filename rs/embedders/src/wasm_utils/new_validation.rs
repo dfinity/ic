@@ -15,8 +15,8 @@ use std::{
 };
 use wasmtime::Config;
 
-use crate::wasm_utils::wasm_transform::Module;
-use wasmparser::{Data, DataKind, ExternalKind, Operator, Type, TypeRef, ValType};
+use crate::wasm_utils::wasm_transform::{DataSegment, DataSegmentKind, Module};
+use wasmparser::{ExternalKind, Operator, Type, TypeRef, ValType};
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
@@ -884,29 +884,23 @@ fn validate_export_section(module: &Module) -> Result<usize, WasmValidationError
 
 // Checks that offset-expressions in data sections consist of only one constant
 // expression. Required because of OP. See also:
-// src/hypervisor/metering_injector/mod.rs
+// instrumentation.rs
 fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
-    fn validate_segment(s: &Data) -> Result<(), WasmValidationError> {
-        match s.kind {
-            DataKind::Passive => Err(WasmValidationError::InvalidDataSection(
+    fn validate_segment(s: &DataSegment) -> Result<(), WasmValidationError> {
+        match &s.kind {
+            DataSegmentKind::Passive => Err(WasmValidationError::InvalidDataSection(
                 "Empty offset in data segment.".to_string(),
             )),
-            DataKind::Active {
+            DataSegmentKind::Active {
                 memory_index: _,
                 offset_expr,
-            } => {
-                let ops = offset_expr
-                    .get_operators_reader()
-                    .into_iter()
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|err| WasmValidationError::InvalidDataSection(format!("{}", err)))?;
-                match &ops.as_slice() {
-                    [Operator::I32Const { .. }, Operator::End] => Ok(()),
-                    _ => Err(WasmValidationError::InvalidDataSection(
-                        "Invalid offset expression in data segment.".to_string(),
-                    )),
-                }
-            }
+            } => match offset_expr {
+                Operator::I32Const { .. } => Ok(()),
+                _ => Err(WasmValidationError::InvalidDataSection(format!(
+                    "Invalid offset expression in data segment: {:?}",
+                    offset_expr
+                ))),
+            },
         }
     }
 

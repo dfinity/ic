@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use wasmparser::{
-    BinaryReaderError, Data, Element, ElementItem, ElementKind, Export, Global, Import, MemoryType,
-    Operator, Parser, Payload, TableType, Type, ValType,
+    BinaryReaderError, DataKind, Element, ElementItem, ElementKind, Export, Global, Import,
+    MemoryType, Operator, Parser, Payload, TableType, Type, ValType,
 };
 
 mod convert;
@@ -22,6 +22,51 @@ pub enum ElementItems {
     ConstExprs(Vec<wasm_encoder::ConstExpr>),
 }
 
+pub struct DataSegment<'a> {
+    /// The kind of data segment.
+    pub kind: DataSegmentKind<'a>,
+    /// The data of the data segment.
+    pub data: &'a [u8],
+}
+
+/// The kind of data segment.
+#[derive(Debug, Clone)]
+pub enum DataSegmentKind<'a> {
+    /// The data segment is passive.
+    Passive,
+    /// The data segment is active.
+    Active {
+        /// The memory index for the data segment.
+        memory_index: u32,
+        /// The initialization operator for the data segment.
+        offset_expr: Operator<'a>,
+    },
+}
+
+impl<'a> DataSegmentKind<'a> {
+    pub fn from_data_kind(kind: DataKind<'a>) -> Result<Self, Error> {
+        Ok(match kind {
+            DataKind::Passive => DataSegmentKind::Passive,
+            DataKind::Active {
+                memory_index,
+                offset_expr,
+            } => {
+                let ops: Vec<_> = offset_expr
+                    .get_operators_reader()
+                    .into_iter()
+                    .collect::<Result<_, _>>()?;
+                match ops.as_slice() {
+                    [_, Operator::End] => DataSegmentKind::Active {
+                        memory_index,
+                        offset_expr: ops[0].clone(),
+                    },
+                    _ => return Err(Error::InvalidConstExpr),
+                }
+            }
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Error {
     BinaryReaderError(BinaryReaderError),
@@ -36,6 +81,7 @@ pub enum Error {
         declared_count: usize,
         actual_count: usize,
     },
+    InvalidConstExpr,
     IncorrectCodeCounts {
         function_section_count: usize,
         code_section_declared_count: usize,
@@ -91,6 +137,9 @@ impl std::fmt::Display for Error {
                     declared_count, actual_count
                 )
             }
+            Error::InvalidConstExpr => {
+                write!(f, "Invalid ConstExpr")
+            }
             Error::IncorrectCodeCounts {
                 function_section_count,
                 code_section_declared_count,
@@ -130,7 +179,7 @@ pub struct Module<'a> {
     pub tables: Vec<TableType>,
     pub memories: Vec<MemoryType>,
     pub globals: Vec<Global<'a>>,
-    pub data: Vec<Data<'a>>,
+    pub data: Vec<DataSegment<'a>>,
     pub data_count_section_exists: bool,
     pub exports: Vec<Export<'a>>,
     // Index of the start function.
@@ -169,7 +218,17 @@ impl<'a> Module<'a> {
                     types = type_section_reader.into_iter().collect::<Result<_, _>>()?;
                 }
                 Payload::DataSection(data_section_reader) => {
-                    data = data_section_reader.into_iter().collect::<Result<_, _>>()?;
+                    data = data_section_reader
+                        .into_iter()
+                        .map(|sec| {
+                            sec.map_err(Error::from).and_then(|sec| {
+                                Ok(DataSegment {
+                                    kind: DataSegmentKind::from_data_kind(sec.kind)?,
+                                    data: sec.data,
+                                })
+                            })
+                        })
+                        .collect::<Result<_, _>>()?;
                 }
                 Payload::TableSection(table_section_reader) => {
                     tables = table_section_reader.into_iter().collect::<Result<_, _>>()?;
