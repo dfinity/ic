@@ -79,6 +79,17 @@ pub trait CspSecretKeyStoreChecker {
 /// A trait that exposes the information about node public keys and key
 /// identifiers.
 pub trait NodePublicKeyData {
+    /// Checks whether the local public key store contains the provided public keys.
+    ///
+    /// # Returns
+    /// `true` if all the provided public keys exist in the local public key store,
+    /// `false` if one or more of the provided public keys do not exist in the local
+    /// public key store
+    ///
+    /// # Errors
+    /// * `CryptoError::TransientInternalError` if there is a transient
+    ///   internal error, e.g., an RPC error when calling a remote CSP vault.
+    fn pks_contains(&self, public_keys: CurrentNodePublicKeys) -> Result<bool, CryptoError>;
     /// Returns the node's current public keys.
     fn current_node_public_keys(&self) -> CurrentNodePublicKeys;
     /// Returns the id of the dkg dealing encryption key.

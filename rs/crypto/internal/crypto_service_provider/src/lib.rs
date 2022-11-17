@@ -34,12 +34,12 @@ use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspPublicKey;
-use crate::vault::api::CspVault;
+use crate::vault::api::{CspPublicKeyStoreError, CspVault};
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
-use ic_types::crypto::CurrentNodePublicKeys;
+use ic_types::crypto::{CryptoError, CurrentNodePublicKeys};
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use rand::{CryptoRng, Rng};
@@ -258,6 +258,14 @@ impl Csp {
 }
 
 impl NodePublicKeyData for Csp {
+    fn pks_contains(&self, public_keys: CurrentNodePublicKeys) -> Result<bool, CryptoError> {
+        self.csp_vault.pks_contains(public_keys).map_err(
+            |CspPublicKeyStoreError::TransientInternalError(internal_error)| {
+                CryptoError::TransientInternalError { internal_error }
+            },
+        )
+    }
+
     fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
         self.csp_vault
             .current_node_public_keys()

@@ -427,6 +427,20 @@ pub trait SecretKeyStoreCspVault {
 
 /// Operations of `CspVault` related to querying the public key store.
 pub trait PublicKeyStoreCspVault {
+    /// Checks whether the local public key store contains the provided public keys.
+    ///
+    /// # Returns
+    /// `true` if all the provided public keys exist in the local public key store,
+    /// `false` if one or more of the provided public keys do not exist in the local
+    /// public key store
+    ///
+    /// # Errors
+    /// * `CspPublicKeyStoreError::TransientInternalError` if there is a transient
+    ///   internal error, e.g., an RPC error when calling a remote CSP vault.
+    fn pks_contains(
+        &self,
+        public_keys: CurrentNodePublicKeys,
+    ) -> Result<bool, CspPublicKeyStoreError>;
     /// Returns the node's current public keys.
     ///
     /// For keys that are periodically rotated (such as the iDKG dealing encryption key pair) only
