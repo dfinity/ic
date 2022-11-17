@@ -14,10 +14,11 @@ pub struct SubnetConfig {
     pub replay_period_secs: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     pub backup_instance: String,
-    pub nns_url: String,
+    pub nns_url: Option<Url>,
+    pub nns_pem: PathBuf,
     pub root_dir: PathBuf,
     pub excluded_dirs: Vec<String>,
     pub ssh_private_key: PathBuf,
@@ -27,7 +28,9 @@ pub struct Config {
 
 impl ConfigValidate for Config {
     fn validate(self) -> Result<Self, String> {
-        Url::parse(&self.nns_url).map_err(|e| format!("Unable to parse NNS Url {:?}", e))?;
+        if self.nns_url.is_none() {
+            return Err("NNS Url is required!".to_string());
+        }
         if !self.ssh_private_key.exists() {
             return Err(format!(
                 "Missing ssh credentials file: {:?}",

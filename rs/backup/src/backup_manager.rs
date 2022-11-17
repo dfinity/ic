@@ -7,15 +7,20 @@ use std::{
     time::{Duration, Instant},
 };
 
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_logger::ReplicaLogger;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
+use ic_registry_replicator::RegistryReplicator;
 use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 use slog::{error, info, Logger};
+use tokio::runtime::Handle;
+use url::Url;
 
 use crate::config::Config;
-use crate::util::sleep_secs;
+use crate::util::{block_on, sleep_secs};
 use crate::{backup_helper::BackupHelper, notification_client::NotificationClient};
 
 const STATE_FILE_NAME: &str = "backup_manager_state.json5";
@@ -30,7 +35,10 @@ pub struct SubnetBackup {
 }
 pub struct BackupManager {
     pub root_dir: PathBuf,
-    pub nns_url: String,
+    pub nns_url: Url,
+    pub local_store: Arc<LocalStoreImpl>,
+    pub registry_client: Arc<RegistryClientImpl>,
+    pub registry_replicator: Arc<RegistryReplicator>,
     pub subnet_backups: Vec<SubnetBackup>,
     pub log: Logger,
 }
@@ -67,7 +75,7 @@ fn fetch_value_or_default<T>(
 }
 
 impl BackupManager {
-    pub fn new(config_file: PathBuf, log: Logger) -> BackupManager {
+    pub fn new(config_file: PathBuf, rt: &Handle, log: Logger) -> Self {
         let config = Config::load_config(config_file).expect("Updated config file can't be loaded");
         // Load the manager state
         let state_file = config.root_dir.join(STATE_FILE_NAME);
@@ -77,9 +85,43 @@ impl BackupManager {
             Ok(f) => f,
             Err(e) => panic!("Bad file name for ssh credentials: {:?}", e),
         };
+        let nns_url = config.nns_url.expect("Missing NNS Url");
         let local_store_dir = config.root_dir.join("ic_registry_local_store");
-        let data_provider = Arc::new(LocalStoreImpl::new(local_store_dir));
+        let data_provider = Arc::new(LocalStoreImpl::new(local_store_dir.clone()));
         let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
+
+        let local_store = Arc::new(LocalStoreImpl::new(local_store_dir));
+        let replica_logger = ReplicaLogger::from(log.clone());
+        let registry_replicator = Arc::new(RegistryReplicator::new_with_clients(
+            replica_logger,
+            local_store.clone(),
+            registry_client.clone(),
+            Duration::from_secs(30),
+        ));
+        let nns_public_key =
+            parse_threshold_sig_key(&config.nns_pem).expect("Missing NNS public key");
+        let nns_urls = vec![nns_url.clone()];
+        let registry_replicator2 = registry_replicator.clone();
+
+        info!(log.clone(), "Starting the registry replicator");
+        block_on(async {
+            rt.spawn(async move {
+                registry_replicator2
+                    .start_polling(nns_urls, Some(nns_public_key))
+                    .await
+                    .expect("Failed to start registry replicator");
+            })
+            .await
+            .expect("Task spawned in Tokio executor panicked")
+        });
+        info!(log.clone(), "Fetch and start polling");
+        if let Err(err) = registry_client.fetch_and_start_polling() {
+            error!(
+                log.clone(),
+                "Error fetching registry by the client: {}", err
+            );
+        }
+
         let mut backups = Vec::new();
         for s in config.subnets {
             let replica_version = fetch_value_or_default(
@@ -97,7 +139,7 @@ impl BackupManager {
             let backup_helper = BackupHelper {
                 replica_version,
                 subnet_id: s.subnet_id,
-                nns_url: config.nns_url.clone(),
+                nns_url: nns_url.to_string(),
                 root_dir: config.root_dir.clone(),
                 excluded_dirs: config.excluded_dirs.clone(),
                 ssh_private_key: ssh_credentials_file.clone(),
@@ -129,8 +171,11 @@ impl BackupManager {
             });
         }
         BackupManager {
-            root_dir: config.root_dir.clone(),
-            nns_url: config.nns_url,
+            root_dir: config.root_dir,
+            nns_url,
+            local_store,
+            registry_client,
+            registry_replicator, // it will be used as a background task, so keep it
             subnet_backups: backups,
             log,
         }
@@ -138,6 +183,7 @@ impl BackupManager {
 
     pub fn do_backups(&mut self) {
         let config_file = self.root_dir.join(STATE_FILE_NAME);
+
         loop {
             let mut state = BackupManagerState::default();
             for b in &self.subnet_backups {
@@ -154,7 +200,7 @@ impl BackupManager {
                         Ok(nodes) => {
                             let mut shuf_nodes = nodes;
                             shuf_nodes.shuffle(&mut thread_rng());
-                            b.backup_helper.sync(
+                            b.backup_helper.sync_files(
                                 &shuf_nodes
                                     .iter()
                                     .take(b.nodes_syncing as usize)
