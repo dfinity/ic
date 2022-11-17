@@ -1,5 +1,5 @@
 use crate::{
-    embedders::{self},
+    embedders::{self, QUERY_EXECUTION_THREADS},
     flag_status::FlagStatus,
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
 };
@@ -101,6 +101,9 @@ pub struct Config {
     /// Indicates whether canisters sandboxing is enabled or not.
     pub canister_sandboxing_flag: FlagStatus,
 
+    /// The number of threads to use for query execution.
+    pub query_execution_threads: usize,
+
     /// The maximum depth of the query call tree.
     pub max_query_call_depth: usize,
 
@@ -162,6 +165,7 @@ impl Default for Config {
             // Spec).
             max_controllers: 10,
             canister_sandboxing_flag: FlagStatus::Enabled,
+            query_execution_threads: QUERY_EXECUTION_THREADS,
             max_query_call_depth: MAX_QUERY_CALL_DEPTH,
             max_instructions_per_composite_query_call: NumInstructions::from(
                 MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL,
