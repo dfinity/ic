@@ -4,14 +4,11 @@ use serde::{Deserialize, Serialize};
 use std::io;
 use std::{convert::TryInto, mem::size_of};
 
-pub fn serialize_and_write<W: io::Write, A: Serialize>(
-    w: &mut W,
-    payload: &A,
-) -> io::Result<usize> {
+pub fn serialize_and_write<W: io::Write, A: Serialize>(w: &mut W, payload: &A) -> io::Result<()> {
     let payload = bincode::serialize(payload).unwrap();
-    let n = w.write(&(payload.len() as usize).to_be_bytes())?;
-    let m = w.write(&payload)?;
-    Ok(n + m)
+    w.write_all(&(payload.len() as usize).to_be_bytes())?;
+    w.write_all(&payload)?;
+    Ok(())
 }
 
 pub struct StreamDecoder {
