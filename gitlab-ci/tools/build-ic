@@ -13,6 +13,7 @@ VERSION="${VERSION:-$(git rev-parse HEAD)}"
 # required env variables from build scripts
 export CI_JOB_ID=${CI_JOB_ID:-""}
 export CI_JOB_NAME=${CI_JOB_NAME:-""}
+export CI_COMMIT_REF_PROTECTED="${CI_COMMIT_REF_PROTECTED:-true}"
 export ROOT_PIPELINE_ID=${ROOT_PIPELINE_ID:-""}
 export CI_PROJECT_DIR=${CI_PROJECT_DIR:-$ROOT_DIR}
 export BUILD_EXTRA_SUFFIX=${BUILD_EXTRA_SUFFIX:-""}
@@ -99,7 +100,11 @@ fi
 if [ "$BUILD_CANISTERS" == "true" ]; then
     echo "Building Canisters"
     mkdir -p "${CANISTERS_DIR}"
-    bazel build --config=local //publish/canisters
+    ic_version_rc_only="redacted"
+    if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
+        ic_version_rc_only="${VERSION}"
+    fi
+    bazel build --config=local --ic_version_rc_only="${ic_version_rc_only}" //publish/canisters
     bazel cquery --output=files //publish/canisters | xargs -I {} cp {} "${CANISTERS_DIR}"
 fi
 if [ "$BUILD_IMAGES" == "true" ]; then
