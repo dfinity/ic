@@ -12,7 +12,6 @@ use std::{
 use ic_system_api::ModificationTracking;
 use wasmtime::{unix::StoreExt, Engine, Memory, Module, Mutability, OptLevel, Store, Val, ValType};
 
-use host_memory::MmapMemoryCreator;
 pub use host_memory::WasmtimeMemoryCreator;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_interfaces::execution_environment::{
@@ -127,11 +126,9 @@ impl WasmtimeEmbedder {
         let mut config = wasmtime::Config::default();
         config.cranelift_opt_level(OptLevel::None);
         ensure_determinism(&mut config);
-        let raw_creator = MmapMemoryCreator {};
-        let mem_creator = Arc::new(WasmtimeMemoryCreator::new(
-            raw_creator,
-            Arc::clone(&self.created_memories),
-        ));
+        let mem_creator = Arc::new(WasmtimeMemoryCreator::new(Arc::clone(
+            &self.created_memories,
+        )));
         config.with_host_memory(mem_creator);
 
         config
