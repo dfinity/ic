@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = [
     "//rs/canister_client/sender:__pkg__",
     "//rs/cup_explorer:__pkg__",
-    "//rs/monitoring/prober:__pkg__",
     "//rs/nns/init:__pkg__",
     "//rs/orchestrator:__pkg__",
     "//rs/registry/admin:__pkg__",

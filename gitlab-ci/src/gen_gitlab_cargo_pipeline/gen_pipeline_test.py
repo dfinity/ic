@@ -299,7 +299,6 @@ def test_log_rdeps():
         "ic-p2p": "ic-artifact-manager",
         "ic-p8s-service-discovery": "ic-metrics",
         "ic-prep": "ic-crypto",
-        "ic-prober": "ic-canister-client",
         "ic-registry-client": "ic-config",
         "ic-registry-common": "ic-canister-client",
         "ic-registry-keys": "ic-base-types",
