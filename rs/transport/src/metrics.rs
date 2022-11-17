@@ -88,6 +88,7 @@ impl ControlPlaneMetrics {
 #[derive(Clone)]
 pub(crate) struct DataPlaneMetrics {
     pub(crate) event_handler_message_duration: HistogramVec,
+    pub(crate) read_message_duration: HistogramVec,
     pub(crate) write_bytes_total: IntCounterVec,
     pub(crate) send_message_duration: HistogramVec,
     pub(crate) read_bytes_total: IntCounterVec,
@@ -108,6 +109,15 @@ impl DataPlaneMetrics {
                 )
                 .buckets(decimal_buckets(-3, 1)),
                 &[LABEL_CHANNEL_ID, TRANSPORT_API],
+            )
+            .unwrap(),
+            read_message_duration: HistogramVec::new(
+                HistogramOpts::new(
+                    "read_message_duration_seconds",
+                    "Time spent to parse a full message.",
+                )
+                .buckets(decimal_buckets(-3, 1)),
+                &[LABEL_CHANNEL_ID, LABEL_DETAIL, TRANSPORT_API],
             )
             .unwrap(),
             write_bytes_total: metrics_registry.int_counter_vec(
