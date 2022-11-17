@@ -194,12 +194,13 @@ pub(crate) fn cert_state_makes_no_progress_with_retries(
             };
             timestamp.ok()
         };
-        // Set initial timestamp, if not yet set.
         if current_timestamp == None {
             info!(logger, "Initial timestamp recorded!");
             current_timestamp = next_timestamp;
-            bail!("Timestamp hasn't advanced yet!");
+            bail!("No timestamp to compare with!");
         } else if next_timestamp > current_timestamp {
+            info!(logger, "Current timestamp recorded!");
+            current_timestamp = next_timestamp;
             bail!("Timestamp advanced!");
         } else {
             info!(logger, "Timestamp hasn't advanced!");
