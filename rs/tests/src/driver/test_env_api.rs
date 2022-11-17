@@ -131,7 +131,9 @@
 //! better to let the user select a node.
 //!
 
-use super::cli::{bail_if_sha256_invalid, parse_journalbeat_hosts, parse_log_debug_overrides};
+use super::cli::{
+    bail_if_sha256_invalid, parse_journalbeat_hosts, parse_replica_log_debug_overrides,
+};
 use super::driver_setup::{DEFAULT_FARM_BASE_URL, SSH_AUTHORIZED_PRIV_KEYS_DIR};
 use super::test_setup::GroupSetup;
 use crate::driver::farm::{Farm, GroupSpec};
@@ -542,7 +544,7 @@ pub trait HasIcDependencies {
     fn get_farm_url(&self) -> Result<Url>;
     fn get_journalbeat_hosts(&self) -> Result<Vec<String>>;
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
-    fn get_log_debug_overrides(&self) -> Result<Vec<String>>;
+    fn get_replica_log_debug_overrides(&self) -> Result<Vec<String>>;
     fn get_ic_os_img_url(&self) -> Result<Url>;
     fn get_ic_os_img_sha256(&self) -> Result<String>;
     fn get_ic_os_update_img_url(&self) -> Result<Url>;
@@ -574,10 +576,10 @@ impl<T: HasDependencies> HasIcDependencies for T {
         Ok(ReplicaVersion::try_from(replica_ver)?)
     }
 
-    fn get_log_debug_overrides(&self) -> Result<Vec<String>> {
-        let dep_rel_path = "log_debug_overrides";
+    fn get_replica_log_debug_overrides(&self) -> Result<Vec<String>> {
+        let dep_rel_path = "replica_log_debug_overrides";
         let log_debug_overrides = self.read_dependency_to_string(dep_rel_path).ok();
-        parse_log_debug_overrides(log_debug_overrides)
+        parse_replica_log_debug_overrides(log_debug_overrides)
     }
 
     fn get_ic_os_img_url(&self) -> Result<Url> {

@@ -137,7 +137,7 @@ The journalbeat configuration can be given under any of the possible node behavi
 
 Detailed configuration for IC logger. Must be a file of key/value pairs separated by “=” (one per line) with the following possible keys:
 
-- +log_debug_overrides+: A list of fully qualified Rust module paths. For each of the listed modules, at least DEBUG logs will be produced by the node software. Primarily intended for testing.
+- +replica_log_debug_overrides+: A list of fully qualified Rust module paths. For each of the listed modules, at least DEBUG logs will be produced by the node software. Primarily intended for testing.
 +
 The list must be provided as a serialized JSON-array. The value is
 inserted into the configuration file as is. E.g.:

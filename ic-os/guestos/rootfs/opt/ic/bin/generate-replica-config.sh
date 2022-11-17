@@ -120,7 +120,7 @@ function read_log_variables() {
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "$key" in
-            "log_debug_overrides") log_debug_overrides="${value}" ;;
+            "replica_log_debug_overrides") replica_log_debug_overrides="${value}" ;;
         esac
     done <"$1"
 }
@@ -205,7 +205,7 @@ BACKUP_RETENTION_TIME_SECS="${backup_retention_time_secs:-86400}"
 # Default vlaue is 1h
 BACKUP_PURGING_INTERVAL_SECS="${backup_purging_interval_secs:-3600}"
 # Default is an empty list
-LOG_DEBUG_OVERRIDES="${log_debug_overrides:-[]}"
+REPLICA_LOG_DEBUG_OVERRIDES="${replica_log_debug_overrides:-[]}"
 # Default is null (None)
 MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
 
@@ -235,7 +235,7 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ node_index }}@${NODE_INDEX}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
-    -e "s@{{ log_debug_overrides }}@${LOG_DEBUG_OVERRIDES}@" \
+    -e "s@{{ replica_log_debug_overrides }}@${REPLICA_LOG_DEBUG_OVERRIDES}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
     "${IN_FILE}" >"${OUT_FILE}"
 

@@ -1288,7 +1288,7 @@ pub fn get_config() -> ConfigOptional {
     let cfg = cfg.replace("{{ ipv6_address }}", "::");
     let cfg = cfg.replace("{{ backup_retention_time_secs }}", "0");
     let cfg = cfg.replace("{{ backup_purging_interval_secs }}", "0");
-    let cfg = cfg.replace("{{ log_debug_overrides }}", "[]");
+    let cfg = cfg.replace("{{ replica_log_debug_overrides }}", "[]");
     let cfg = cfg.replace("{{ nns_url }}", "http://www.fakeurl.com/");
     let cfg = cfg.replace("{{ malicious_behavior }}", "null");
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
