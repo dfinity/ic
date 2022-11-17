@@ -66,6 +66,10 @@ const TRANSPORT_HEARTBEAT_SEND_INTERVAL_MS: u64 = 200;
 /// Heartbeat wait interval (timeout on receiver side)
 const TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS: u64 = 5000;
 
+const READ_RESULT_ERROR: &str = "error";
+const READ_RESULT_HEARTBEAT: &str = "heartbeat";
+const READ_RESULT_MESSAGE: &str = "message";
+
 /// Error type for read errors
 #[derive(Debug, IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
@@ -247,6 +251,7 @@ fn spawn_read_task(
                 _ => return,
             };
             // Read the next message from the socket
+            let read_message_start = Instant::now();
             let read_one_msg_result = match reader {
                 ChannelReader::Legacy(ref mut tls_reader) => read_one_message(tls_reader, heartbeat_timeout).await,
                 ChannelReader::H2RecvStream(ref mut receive_stream) => read_one_message_h2(receive_stream, heartbeat_timeout).await,
@@ -261,6 +266,10 @@ fn spawn_read_task(
                         channel_id,
                         err,
                     );
+                    arc_self.data_plane_metrics
+                        .read_message_duration
+                        .with_label_values(&[&channel_id_str, READ_RESULT_ERROR, arc_self.transport_api_label()])
+                        .observe(read_message_start.elapsed().as_secs() as f64);
 
                     arc_self.data_plane_metrics
                         .message_read_errors_total
@@ -276,8 +285,16 @@ fn spawn_read_task(
                             .heart_beats_received
                             .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
                             .inc();
+                        arc_self.data_plane_metrics
+                            .read_message_duration
+                            .with_label_values(&[&channel_id_str, READ_RESULT_HEARTBEAT, arc_self.transport_api_label()])
+                            .observe(read_message_start.elapsed().as_secs() as f64);
                         continue;
                     }
+                    arc_self.data_plane_metrics
+                        .read_message_duration
+                        .with_label_values(&[&channel_id_str, READ_RESULT_MESSAGE, arc_self.transport_api_label()])
+                        .observe(read_message_start.elapsed().as_secs() as f64);
 
                     // Pass up the received message.
                     // Errors out for unsolicited messages, decoding errors and p2p
