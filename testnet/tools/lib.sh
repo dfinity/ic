@@ -66,8 +66,14 @@ move_node_to_new_nns() {
     LOCAL_TMP=$(mktemp -d /tmp/ic_registry_local_store.XXXX)
 
     # Replace the local store on the node
-    rsync -r -e "ssh $SSH_ARGS" "admin@[$NNS_NODE_IP]:/var/lib/ic/data/ic_registry_local_store" "$LOCAL_TMP/"
-    rsync -r -e "ssh $SSH_ARGS" --rsync-path="sudo rsync" "$LOCAL_TMP/ic_registry_local_store" "admin@[$UNASSIGNED_NODE_IP]:/var/lib/ic/data/"
+    while ! rsync -r -e "ssh $SSH_ARGS" "admin@[$NNS_NODE_IP]:/var/lib/ic/data/ic_registry_local_store" "$LOCAL_TMP/"; do
+        echo "rsync failed with status code $?"
+        sleep 1
+    done
+    while ! rsync -r -e "ssh $SSH_ARGS" --rsync-path="sudo rsync" "$LOCAL_TMP/ic_registry_local_store" "admin@[$UNASSIGNED_NODE_IP]:/var/lib/ic/data/"; do
+        echo "rsync failed with status code $?"
+        sleep 1
+    done
 
     # Fix permissions
     ssh $SSH_ARGS "admin@$UNASSIGNED_NODE_IP" "sudo chown -R ic-replica:ic-registry-local-store /var/lib/ic/data/ic_registry_local_store"
