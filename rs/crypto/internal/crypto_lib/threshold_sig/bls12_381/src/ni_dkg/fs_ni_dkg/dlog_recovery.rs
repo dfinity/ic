@@ -14,7 +14,7 @@ impl HonestDealerDlogLookupTable {
     fn create() -> Self {
         let mut x = Gt::identity();
 
-        let mut table = vec![0u32; CHUNK_SIZE as usize];
+        let mut table = vec![0u32; CHUNK_SIZE];
         for i in CHUNK_MIN..=CHUNK_MAX {
             table[i as usize] = x.short_hash_for_linear_search();
             x += Gt::generator();
@@ -148,10 +148,9 @@ pub struct CheatingDealerDlogSolver {
 }
 
 impl CheatingDealerDlogSolver {
-    pub fn new(spec_n: usize, spec_m: usize) -> Self {
-        let bb_constant = CHUNK_SIZE as usize;
+    pub fn new(n: usize, m: usize) -> Self {
         let scale_range = 1 << CHALLENGE_BITS;
-        let ss = spec_n * spec_m * (bb_constant - 1) * (scale_range - 1);
+        let ss = n * m * (CHUNK_SIZE - 1) * (scale_range - 1);
         let zz = (2 * NUM_ZK_REPETITIONS * ss) as isize;
 
         let baby_giant = BabyStepGiantStep::new(Gt::generator(), 1 - zz, 2 * zz - 1);

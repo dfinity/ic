@@ -171,47 +171,8 @@ pub mod groth20_bls12_381 {
         pub response: FrBytes,
     }
 
-    /// Plaintext and ciphertext types.
-    ///
-    /// Note: Currently the only supported size if the one we currently need.
-    /// Once we have const generics we can enforce dimensional correctness with
-    /// a variable number of chunks.
-    pub type Chunk = u16;
-    pub const CHUNK_BYTES: usize = std::mem::size_of::<Chunk>();
+    pub const CHUNK_BYTES: usize = 2;
     pub const NUM_CHUNKS: usize = (FrBytes::SIZE + CHUNK_BYTES - 1) / CHUNK_BYTES;
-    #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
-    pub struct FsEncryptionPlaintext {
-        pub chunks: [Chunk; NUM_CHUNKS],
-    }
-    impl From<&FrBytes> for FsEncryptionPlaintext {
-        fn from(bytes: &FrBytes) -> FsEncryptionPlaintext {
-            let mut chunks = [0; NUM_CHUNKS];
-            for (dst, src) in chunks.iter_mut().zip(bytes.0[..].chunks_exact(CHUNK_BYTES)) {
-                // Alas slices are not (yet) sized, so we need to copy the slice into a fixed
-                // size buffer before use:
-                let mut buffer = [0u8; CHUNK_BYTES];
-                buffer.copy_from_slice(src);
-                *dst = Chunk::from_be_bytes(buffer);
-            }
-            FsEncryptionPlaintext { chunks }
-        }
-    }
-    impl From<&FsEncryptionPlaintext> for FrBytes {
-        fn from(plaintext: &FsEncryptionPlaintext) -> FrBytes {
-            let mut fr_bytes = [0u8; FrBytes::SIZE];
-            for (src, dst) in plaintext
-                .chunks
-                .iter()
-                .zip(fr_bytes[..].chunks_exact_mut(CHUNK_BYTES))
-            {
-                // Alas slices are not (yet) sized, so we need to copy the slice into a fixed
-                // size buffer before use:
-                let buffer = src.to_be_bytes();
-                dst.copy_from_slice(&buffer[..]);
-            }
-            FrBytes(fr_bytes)
-        }
-    }
 
     // Note: the spec currently has: Vec<(r,s,z)>; this could be represented more
     // strongly as [(G1,G1,G2);NUM_CHUNKS], which is equivalent to the below.

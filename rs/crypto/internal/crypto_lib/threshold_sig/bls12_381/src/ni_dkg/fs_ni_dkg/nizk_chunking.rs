@@ -197,10 +197,10 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
         .check_instance()
         .expect("The chunking proof instance is invalid");
 
-    let spec_m = instance.randomizers_r.len();
-    let spec_n = instance.public_keys.len();
+    let m = instance.randomizers_r.len();
+    let n = instance.public_keys.len();
 
-    let ss = spec_n * spec_m * ((CHUNK_SIZE as usize) - 1) * CHALLENGE_MASK;
+    let ss = n * m * (CHUNK_SIZE - 1) * CHALLENGE_MASK;
     let zz = 2 * NUM_ZK_REPETITIONS * ss;
     let range = zz - 1 + ss + 1;
     let zz_big = Scalar::from_usize(zz);
@@ -231,8 +231,7 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
 
         let first_move = FirstMoveChunking::from(&y0, &bb, &cc);
         // Verifier's challenge.
-        let first_challenge =
-            ChunksOracle::new(instance, &first_move).get_all_chunks(spec_n, spec_m);
+        let first_challenge = ChunksOracle::new(instance, &first_move).get_all_chunks(n, m);
 
         // z_s = [sum [e_ijk * s_ij | i <- [1..n], j <- [1..m]] + sigma_k | k <- [1..l]]
         let z_s: Result<Vec<Scalar>, ()> = (0..NUM_ZK_REPETITIONS)
@@ -264,7 +263,7 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     // delta <- replicate (n + 1) getRandom
     // dd = map (g1^) delta
     // Y = product [y_i^delta_i | i <- [0..n]]
-    let delta = Scalar::batch_random(rng, spec_n + 1);
+    let delta = Scalar::batch_random(rng, n + 1);
     let dd = g1.batch_mul(&delta);
 
     let yy = {
@@ -328,9 +327,9 @@ pub fn verify_chunking(
     require_eq("z_r", nizk.z_r.len(), num_receivers)?;
     require_eq("z_s", nizk.z_s.len(), NUM_ZK_REPETITIONS)?;
 
-    let spec_m = instance.randomizers_r.len();
-    let spec_n = instance.public_keys.len();
-    let ss = spec_n * spec_m * (CHUNK_SIZE as usize - 1) * CHALLENGE_MASK;
+    let m = instance.randomizers_r.len();
+    let n = instance.public_keys.len();
+    let ss = n * m * (CHUNK_SIZE - 1) * CHALLENGE_MASK;
     let zz = 2 * NUM_ZK_REPETITIONS * ss;
     let zz_big = Scalar::from_usize(zz);
 
@@ -343,7 +342,7 @@ pub fn verify_chunking(
     let first_move = FirstMoveChunking::from(&nizk.y0, &nizk.bb, &nizk.cc);
     let second_move = SecondMoveChunking::from(&nizk.z_s, &nizk.dd, &nizk.yy);
     // e_{m,n,l} = oracle(instance, y_0, bb, cc)
-    let e = ChunksOracle::new(instance, &first_move).get_all_chunks(spec_n, spec_m);
+    let e = ChunksOracle::new(instance, &first_move).get_all_chunks(n, m);
 
     // x = oracle(e, z_s, dd, yy)
     let x = chunking_proof_challenge_oracle(&e, &second_move);
@@ -404,7 +403,7 @@ pub fn verify_chunking(
                 .flatten()
                 .map(|e_ij| Scalar::from_usize(e_ij[k]))
                 .collect();
-            if c_ij_s.len() != spec_m * spec_n || e_ijk_s.len() != spec_m * spec_n {
+            if c_ij_s.len() != m * n || e_ijk_s.len() != m * n {
                 return Err(ZkProofChunkingError::InvalidProof);
             }
 
@@ -461,10 +460,10 @@ impl ChunksOracle {
             & (0..CHALLENGE_BYTES).fold(0, |state, _| (state << 8) | (self.getbyte() as usize))
     }
 
-    fn get_all_chunks(&mut self, spec_n: usize, spec_m: usize) -> Vec<Vec<Vec<usize>>> {
-        (0..spec_n)
+    fn get_all_chunks(&mut self, n: usize, m: usize) -> Vec<Vec<Vec<usize>>> {
+        (0..n)
             .map(|_| {
-                (0..spec_m)
+                (0..m)
                     .map(|_| (0..NUM_ZK_REPETITIONS).map(|_| self.get_chunk()).collect())
                     .collect()
             })

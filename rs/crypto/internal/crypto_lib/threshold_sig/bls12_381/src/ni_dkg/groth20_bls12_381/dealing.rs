@@ -11,7 +11,6 @@ use crate::{
     crypto::{keygen, keygen_with_secret},
 };
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_types::curves::bls12_381::FrBytes;
 use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -22,7 +21,7 @@ use crate::types::{SecretKey as ThresholdSecretKey, SecretKeyBytes as ThresholdS
 // "New style" internal types, used for the NiDKG:
 use super::ALGORITHM_ID;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    Dealing, FsEncryptionPlaintext, FsEncryptionPublicKey, PublicCoefficientsBytes,
+    Dealing, FsEncryptionPublicKey, PublicCoefficientsBytes,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 
@@ -114,15 +113,12 @@ pub fn create_dealing(
     let public_coefficients = PublicCoefficientsBytes::from(&public_coefficients); // Internal to CSP type conversion
 
     let (ciphertexts, zk_proof_decryptability, zk_proof_correct_sharing) = {
-        let key_message_pairs: Vec<(FsEncryptionPublicKey, FsEncryptionPlaintext)> = (0..)
+        let key_message_pairs: Vec<_> = (0..)
             .zip(&threshold_secret_key_shares)
             .map(|(index, share)| {
-                let share = match share {
-                    None => panic!("The keys should be contiguous but we have a missing entry."),
-                    Some(share) => share.clone(),
-                };
-                let share = FrBytes(share.serialize());
-                let share = FsEncryptionPlaintext::from(&share);
+                let share = (*share)
+                    .clone()
+                    .expect("The keys should be contiguous but we have a missing entry.");
                 (
                     *receiver_keys
                         .get(&index)

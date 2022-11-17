@@ -3,7 +3,7 @@
 
 //! Tests for combined forward secure encryption and ZK proofs
 
-use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Affine, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{forward_secure::*, Epoch};
 use ic_crypto_sha::Sha256;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
@@ -71,7 +71,7 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> (
     Vec<(PublicKeyWithPop, SecretKey)>,
-    Vec<Vec<isize>>,
+    Vec<Scalar>,
     FsEncryptionCiphertext,
 ) {
     let sys = SysParam::global();
@@ -86,28 +86,18 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
     }
     let pks: Vec<_> = keys.iter().map(|key| key.0.key_value.clone()).collect();
 
-    let sij = {
-        let mut sij = Vec::with_capacity(nodes);
+    let ptext = (0..nodes).map(|_| Scalar::random(rng)).collect::<Vec<_>>();
 
-        for _ in 0..nodes {
-            let mut chunks = Vec::with_capacity(NUM_CHUNKS);
-            for _ in 0..NUM_CHUNKS {
-                chunks.push(rng.gen::<u16>() as isize);
-            }
-            // this ensures that chunks is the encoding of a scalar less
-            // than the group order:
-            chunks[0] %= 0x73ee;
+    let ptext_chunks: Vec<_> = ptext
+        .iter()
+        .map(|s| PlaintextChunks::from_scalar(s))
+        .collect::<Vec<_>>();
 
-            sij.push(chunks);
-        }
-
-        sij
-    };
+    let pks_and_scalars = pks.iter().cloned().zip(ptext_chunks).collect::<Vec<_>>();
 
     let tau = tau_from_epoch(epoch);
-    let (crsz, _witness) =
-        enc_chunks(&sij[..], &pks, &tau, associated_data, sys, rng).expect("Encryption failed");
-    (keys, sij, crsz)
+    let (crsz, _witness) = enc_chunks(&pks_and_scalars, &tau, associated_data, sys, rng);
+    (keys, ptext, crsz)
 }
 
 #[test]
@@ -146,76 +136,6 @@ fn should_encrypt_with_empty_associated_data() {
     }
 }
 
-/// Encrypt chunks as a cheating dealer. This is the same as enc_chunks
-/// except that the range checks on the input are skipped
-fn enc_chunks_cheating<R: RngCore + CryptoRng>(
-    sij: &[Vec<isize>],
-    pks: &[G1Affine],
-    tau: &[Bit],
-    associated_data: &[u8],
-    sys: &SysParam,
-    rng: &mut R,
-) -> FsEncryptionCiphertext {
-    let receivers = pks.len();
-    let chunks = sij[0].len();
-
-    let g1 = G1Affine::generator();
-
-    // do
-    //   spec_r <- replicateM chunks getRandom
-    //   s <- replicateM chunks getRandom
-    //   let rr = (g1^) <$> spec_r
-    //   let ss = (g1^) <$> s
-    let mut spec_r = Vec::with_capacity(chunks);
-    let mut s = Vec::with_capacity(chunks);
-    let mut rr = Vec::with_capacity(chunks);
-    let mut ss = Vec::with_capacity(chunks);
-    for _j in 0..chunks {
-        {
-            let tmp = Scalar::random(rng);
-            spec_r.push(tmp.clone());
-            rr.push(G1Affine::from(g1 * tmp));
-        }
-        {
-            let tmp = Scalar::random(rng);
-            s.push(tmp.clone());
-            ss.push(G1Affine::from(g1 * tmp));
-        }
-    }
-
-    // cc = [[pk^spec_r * g1^s | (spec_r, s) <- zip rs si] | (pk, si) <- zip pks sij]
-    let cc = {
-        let mut cc: Vec<Vec<G1Affine>> = Vec::with_capacity(pks.len());
-
-        let g1 = G1Projective::from(g1);
-
-        for i in 0..receivers {
-            let pk = G1Projective::from(&pks[i]);
-
-            let mut enc_chunks = Vec::with_capacity(chunks);
-
-            for j in 0..chunks {
-                let s = Scalar::from_isize(sij[i][j]);
-                enc_chunks.push(G1Projective::mul2(&pk, &spec_r[j], &g1, &s).to_affine());
-            }
-
-            cc.push(enc_chunks);
-        }
-
-        cc
-    };
-
-    let extended_tau = extend_tau(&cc, &rr, &ss, tau, associated_data);
-    let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
-    let mut zz = Vec::with_capacity(chunks);
-
-    for j in 0..chunks {
-        zz.push(G2Projective::mul2(&id, &spec_r[j], &G2Projective::from(&sys.h), &s[j]).to_affine())
-    }
-
-    FsEncryptionCiphertext { cc, rr, ss, zz }
-}
-
 #[test]
 fn should_decrypt_correctly_for_cheating_dealer() {
     let epoch = Epoch::from(0);
@@ -238,12 +158,12 @@ fn should_decrypt_correctly_for_cheating_dealer() {
         let mut sij = Vec::with_capacity(nodes);
 
         for _ in 0..nodes {
-            let mut chunks = Vec::with_capacity(NUM_CHUNKS);
+            let mut chunks = [0; NUM_CHUNKS];
 
-            for _ in 0..NUM_CHUNKS {
+            for i in 0..NUM_CHUNKS {
                 // ensure that multiplying by delta pushes us out of Chunk range
                 let chunk = (0x8000 | rng.gen::<u16>()) as isize;
-                chunks.push(chunk);
+                chunks[i] = chunk;
             }
             // this ensures that chunks is the encoding of a scalar less
             // than the group order:
@@ -264,24 +184,31 @@ fn should_decrypt_correctly_for_cheating_dealer() {
     // however the new sij *is* larger than the maximum "legal" chunk
     assert!(sij[cheating_i][cheating_j] > CHUNK_MAX);
 
+    let cheating_chunks = sij
+        .iter()
+        .map(|c| PlaintextChunks::new_unchecked(*c))
+        .collect::<Vec<_>>();
+
+    let pks_and_chunks = pks
+        .iter()
+        .cloned()
+        .zip(cheating_chunks.iter().cloned())
+        .collect::<Vec<_>>();
+
     let tau = tau_from_epoch(epoch);
-    let crsz = enc_chunks_cheating(&sij[..], &pks, &tau, &associated_data, sys, &mut rng);
+    let (crsz, _witness) = enc_chunks(&pks_and_chunks, &tau, &associated_data, sys, &mut rng);
 
     // still a valid ciphertext
     assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
 
-    // account for overflow in chunk -> scalar conversions
-    let mut overflow = 0;
-    for idx in (0..=cheating_j).rev() {
-        sij[cheating_i][idx] += overflow;
-        overflow = sij[cheating_i][idx] >> 16;
-        sij[cheating_i][idx] &= 0xffff;
-    }
-
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
         let out = dec_chunks(secret_key, i, &crsz, &tau, &associated_data);
-        assert_eq!(out.unwrap(), sij[i], "Message decrypted wrongly");
+        assert_eq!(
+            out.unwrap(),
+            cheating_chunks[i].recombine_to_scalar(),
+            "Message decrypted wrongly"
+        );
     }
 }
 

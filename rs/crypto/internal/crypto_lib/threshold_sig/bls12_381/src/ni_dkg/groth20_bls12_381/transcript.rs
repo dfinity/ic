@@ -9,7 +9,6 @@ use crate::api::ni_dkg_errors;
 use crate::crypto::x_for_index;
 use crate::ni_dkg::fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use crate::types as threshold_types;
-use ic_crypto_internal_bls12_381_type::Scalar;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;
@@ -21,8 +20,8 @@ use crate::api::ni_dkg_errors::{
     CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, InvalidArgumentError,
     SizeError,
 };
+
 use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
-use ic_crypto_internal_types::curves::bls12_381::FrBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 
 /// Creates an NiDKG transcript.
@@ -261,7 +260,7 @@ pub fn compute_threshold_signing_key(
             .receiver_data
             .iter()
             .map(|(dealer_index, encrypted_shares)| {
-                let fs_plaintext = decrypt(
+                let secret_key = decrypt(
                     encrypted_shares,
                     fs_secret_key,
                     receiver_index,
@@ -285,21 +284,7 @@ pub fn compute_threshold_signing_key(
                         ni_dkg_errors::CspDkgLoadPrivateKeyError::InvalidTranscriptError(error)
                     }
                 })?;
-                let secret_key = FrBytes::from(&fs_plaintext);
-                let secret_key = Scalar::deserialize(&secret_key.0);
 
-                if secret_key.is_err() {
-                    let message = format!(
-                        "Dealing #{}: has invalid share for receiver #{}.",
-                        dealer_index, receiver_index
-                    );
-                    let error = InvalidArgumentError { message };
-                    return Err(
-                        ni_dkg_errors::CspDkgLoadPrivateKeyError::InvalidTranscriptError(error),
-                    );
-                };
-
-                let secret_key = secret_key.expect("Unwrap of None");
                 Ok((*dealer_index, secret_key))
             })
             .collect();

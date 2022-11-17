@@ -114,8 +114,7 @@ pub mod ni_dkg_groth20_bls12_381 {
     pub use super::Epoch;
     pub use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     pub use crate::encrypt::forward_secure::groth20_bls12_381::{
-        Chunk, FsEncryptionCiphertextBytes, FsEncryptionPlaintext, FsEncryptionPop,
-        FsEncryptionPublicKey, NUM_CHUNKS,
+        FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey, NUM_CHUNKS,
     };
     pub use crate::sign::eddsa::ed25519::{PublicKey, Signature};
     pub use crate::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;

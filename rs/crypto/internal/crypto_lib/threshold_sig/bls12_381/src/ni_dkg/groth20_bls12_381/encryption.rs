@@ -1,3 +1,5 @@
+#![allow(clippy::needless_range_loop)]
+
 //! Groth20 forward secure encryption API.
 //!
 //! This file translates to and from an external library that does the
@@ -9,11 +11,11 @@ use crate::api::ni_dkg_errors::CspDkgVerifyDealingError;
 use crate::api::ni_dkg_errors::{
     DecryptError, EncryptAndZKProveError, MalformedPublicKeyError, SizeError,
 };
-use conversions::{plaintext_from_bytes, plaintext_to_bytes, Tau};
+use conversions::Tau;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    FsEncryptionCiphertextBytes, FsEncryptionPlaintext, FsEncryptionPublicKey, NodeIndex,
+    FsEncryptionCiphertextBytes, FsEncryptionPublicKey, NodeIndex,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     ZKProofDec, ZKProofShare,
@@ -33,7 +35,8 @@ mod crypto {
     pub use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
         dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, verify_ciphertext_integrity, Bit,
-        EncryptionWitness, FsEncryptionCiphertext, PublicKeyWithPop, SecretKey, SysParam,
+        EncryptionWitness, FsEncryptionCiphertext, PlaintextChunks, PublicKeyWithPop, SecretKey,
+        SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
@@ -96,54 +99,58 @@ pub fn update_key_inplace_to_epoch(secret_key: &mut crypto::SecretKey, epoch: Ep
 /// # Errors
 /// This should never return an error if the protocol is followed.  Every error
 /// should be prevented by the caller validating the arguments beforehand.
-///
-/// # Panics
-/// * If the `enc_chunks` function fails. Though, this truly should never happen
-///   (cf. CRP-815).
 pub fn encrypt_and_prove(
     seed: Seed,
-    key_message_pairs: &[(FsEncryptionPublicKey, FsEncryptionPlaintext)],
+    key_message_pairs: &[(FsEncryptionPublicKey, Scalar)],
     epoch: Epoch,
     public_coefficients: &PublicCoefficientsBytes,
     associated_data: &[u8],
 ) -> Result<(FsEncryptionCiphertextBytes, ZKProofDec, ZKProofShare), EncryptAndZKProveError> {
-    let public_keys: Result<Vec<G1Affine>, EncryptAndZKProveError> = key_message_pairs
-        .as_ref()
-        .iter()
-        .zip(0..)
-        .map(|((public_key, _plaintext), receiver_index)| {
-            G1Affine::deserialize(public_key.as_bytes()).map_err(|_| {
+    let receivers = key_message_pairs.len();
+
+    let public_keys = {
+        let mut public_keys = Vec::with_capacity(receivers);
+        for receiver_index in 0..receivers {
+            let public_key_bytes = key_message_pairs[receiver_index].0.as_bytes();
+            let pk = G1Affine::deserialize(public_key_bytes).map_err(|_| {
                 EncryptAndZKProveError::MalformedFsPublicKeyError {
-                    receiver_index,
+                    receiver_index: receiver_index as u32,
                     error: MalformedPublicKeyError {
                         algorithm: AlgorithmId::NiDkg_Groth20_Bls12_381,
-                        key_bytes: Some(public_key.as_bytes().to_vec()),
+                        key_bytes: Some(public_key_bytes.to_vec()),
                         internal_error: "Could not parse public key.".to_string(),
                     },
                 }
-            })
-        })
-        .collect();
-    let public_keys = public_keys?;
+            })?;
 
-    let plaintext_chunks: Vec<_> = key_message_pairs
-        .as_ref()
+            public_keys.push(pk);
+        }
+        public_keys
+    };
+
+    let plaintext_chunks = key_message_pairs
         .iter()
-        .map(|(_public_key, plaintext)| plaintext_from_bytes(&plaintext.chunks))
-        .collect();
+        .map(|(_, s)| crypto::PlaintextChunks::from_scalar(s))
+        .collect::<Vec<_>>();
+
+    let keys_and_messages = {
+        let mut v = Vec::with_capacity(key_message_pairs.len());
+
+        for i in 0..key_message_pairs.len() {
+            v.push((public_keys[i].clone(), plaintext_chunks[i].clone()));
+        }
+
+        v
+    };
 
     let tau = Tau::from(epoch);
     let mut rng = seed.into_rng();
     let (ciphertext, encryption_witness) = crypto::enc_chunks(
-        &plaintext_chunks,
-        &public_keys,
+        &keys_and_messages,
         &tau.0[..],
         associated_data,
         crypto::SysParam::global(),
         &mut rng,
-    )
-    .expect(
-        "TODO (CRP-815): I think the result should never be None.  Can the return type be changed?",
     );
 
     let chunking_proof = prove_chunking(
@@ -225,7 +232,7 @@ pub fn decrypt(
     node_index: NodeIndex,
     epoch: Epoch,
     associated_data: &[u8],
-) -> Result<FsEncryptionPlaintext, DecryptError> {
+) -> Result<Scalar, DecryptError> {
     let index = usize::try_from(node_index).map_err(|_| {
         DecryptError::SizeError(SizeError {
             message: format!("Node index is too large for this machine: {}", node_index),
@@ -247,11 +254,7 @@ pub fn decrypt(
     let ciphertext = crypto::FsEncryptionCiphertext::deserialize(ciphertext)
         .map_err(DecryptError::MalformedCiphertext)?;
     let tau = Tau::from(epoch);
-    let decrypt_maybe =
-        crypto::dec_chunks(secret_key, index, &ciphertext, &tau.0[..], associated_data);
-
-    decrypt_maybe
-        .map(|decrypt| plaintext_to_bytes(&decrypt))
+    crypto::dec_chunks(secret_key, index, &ciphertext, &tau.0[..], associated_data)
         .map_err(|_| DecryptError::InvalidChunk)
 }
 
@@ -262,13 +265,13 @@ pub fn decrypt(
 fn prove_chunking<R: RngCore + CryptoRng>(
     public_keys: &[G1Affine],
     ciphertext: &crypto::FsEncryptionCiphertext,
-    plaintext_chunks: &[Vec<isize>],
+    plaintext_chunks: &[crypto::PlaintextChunks],
     encryption_witness: &crypto::EncryptionWitness,
     rng: &mut R,
 ) -> crypto::ProofChunking {
     let big_plaintext_chunks: Vec<Vec<Scalar>> = plaintext_chunks
         .iter()
-        .map(|chunks| chunks.iter().copied().map(Scalar::from_isize).collect())
+        .map(|chunks| chunks.chunks_as_scalars())
         .collect();
 
     let chunking_instance = crypto::ChunkingInstance::new(
@@ -278,7 +281,7 @@ fn prove_chunking<R: RngCore + CryptoRng>(
     );
 
     let chunking_witness =
-        crypto::ChunkingWitness::new(encryption_witness.spec_r.clone(), big_plaintext_chunks);
+        crypto::ChunkingWitness::new(encryption_witness.r.clone(), big_plaintext_chunks);
 
     crypto::prove_chunking(&chunking_instance, &chunking_witness, rng)
 }
@@ -288,7 +291,7 @@ fn prove_sharing<R: RngCore + CryptoRng>(
     receiver_fs_public_keys: &[G1Affine],
     public_coefficients: &[G2Affine],
     ciphertext: &crypto::FsEncryptionCiphertext,
-    plaintext_chunks: &[Vec<isize>],
+    plaintext_chunks: &[crypto::PlaintextChunks],
     encryption_witness: &crypto::EncryptionWitness,
     rng: &mut R,
 ) -> crypto::ProofSharing {
@@ -301,11 +304,11 @@ fn prove_sharing<R: RngCore + CryptoRng>(
 
     let combined_r = util::g1_from_big_endian_chunks(&ciphertext.rr);
 
-    let combined_r_scalar = util::scalar_from_big_endian_chunks(&encryption_witness.spec_r);
+    let combined_r_scalar = util::scalar_from_big_endian_chunks(&encryption_witness.r);
 
     let combined_plaintexts = plaintext_chunks
         .iter()
-        .map(|s| util::scalar_from_big_endian_chunks_isize(s))
+        .map(|chunks| chunks.recombine_to_scalar())
         .collect::<Vec<_>>();
 
     crypto::prove_sharing(
@@ -478,20 +481,6 @@ mod util {
         for term in terms {
             acc *= &factor;
             acc += term;
-        }
-
-        acc
-    }
-
-    /// Combine a big endian array of field elements (first chunk is the
-    /// most significant) into a single field element.
-    pub fn scalar_from_big_endian_chunks_isize(terms: &[isize]) -> Scalar {
-        let factor = Scalar::from_u64(1 << 16);
-
-        let mut acc = Scalar::zero();
-        for term in terms {
-            acc *= &factor;
-            acc += Scalar::from_isize(*term);
         }
 
         acc

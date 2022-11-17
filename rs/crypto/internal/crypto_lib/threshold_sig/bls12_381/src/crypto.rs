@@ -15,7 +15,6 @@ use ic_types::{
     NodeIndex, NumberOfNodes,
 };
 use std::convert::TryFrom;
-use std::ops::AddAssign;
 
 /// Domain separator for Hash-to-G1 to be used for signature generation as
 /// as specified in the Basic ciphersuite in https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-4.2.1
@@ -23,7 +22,7 @@ const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &[u8; 43] =
     b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
 
 /// Hashes `msg` to a point in `G1`.
-pub fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
+fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
     G1Projective::hash(&DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG[..], msg)
 }
 
@@ -40,7 +39,7 @@ pub fn public_key_from_secret_key(secret_key: &SecretKey) -> PublicKey {
 ///
 /// The polynomial `f(x)` is computed at a value `x` for every share of a
 /// threshold key. Shares are ordered and numbered `0...N`.
-pub fn x_for_index(index: NodeIndex) -> Scalar {
+pub(crate) fn x_for_index(index: NodeIndex) -> Scalar {
     // It is important that this is never zero and that values are unique.
     Scalar::from_u64(u64::from(index)) + Scalar::one()
 }
@@ -74,7 +73,7 @@ pub fn x_for_index(index: NodeIndex) -> Scalar {
 ///     `NumberOfNodes`.
 ///   - The number of eligible receivers is below the threshold; under these
 ///     circumstances the receivers could never generate a valid threshold key.
-pub fn keygen(
+pub(crate) fn keygen(
     seed: Seed,
     threshold: NumberOfNodes,
     share_indices: &[bool],
@@ -108,8 +107,7 @@ pub fn keygen(
 /// * The number of eligible receivers is below the threshold; under these
 ///   circumstances the receivers could never generate a valid threshold key.
 /// * The `threshold` is `0`.
-#[allow(unused)]
-pub fn keygen_with_secret(
+pub(crate) fn keygen_with_secret(
     seed: Seed,
     threshold: NumberOfNodes,
     share_indices: &[bool],
@@ -199,7 +197,7 @@ fn keygen_from_polynomial(
 
 /// Computes the public key of the `index`'th share from the given
 /// public coefficients of the polynomial.
-pub fn individual_public_key(
+pub(crate) fn individual_public_key(
     public_coefficients: &PublicCoefficients,
     index: NodeIndex,
 ) -> PublicKey {
@@ -214,7 +212,6 @@ pub fn individual_public_key(
 /// element of the public coefficients.
 ///
 /// Note: polynomial.evaluated_at(0) != polynomial.evaluated_at(x_for_index(0)).
-#[allow(unused)]
 pub fn combined_public_key(public_coefficients: &PublicCoefficients) -> PublicKey {
     PublicKey::from(public_coefficients)
 }
@@ -225,7 +222,7 @@ pub fn combined_public_key(public_coefficients: &PublicCoefficients) -> PublicKe
 /// signing large chunks of data or streaming data.  For large chunks of data
 /// it is better to hash the data separately and provide the digest to
 ///   sign_hash(digest: [u8: 32], secret_key: &SecretKey) // unimplemented.
-pub fn sign_message(message: &[u8], secret_key: &SecretKey) -> Signature {
+pub(crate) fn sign_message(message: &[u8], secret_key: &SecretKey) -> Signature {
     hash_message_to_g1(message) * secret_key
 }
 
@@ -240,7 +237,7 @@ pub fn sign_message(message: &[u8], secret_key: &SecretKey) -> Signature {
 /// # Errors
 /// * `CryptoError::InvalidArgument` if the given signature shares are lower
 ///   than the given threshold.
-pub fn combine_signatures(
+pub(crate) fn combine_signatures(
     signatures: &[Option<Signature>],
     threshold: NumberOfNodes,
 ) -> CryptoResult<Signature> {
@@ -270,7 +267,7 @@ pub fn combine_signatures(
 /// # Returns
 /// * OK, if `signature` is a valid BLS signature on `message`
 /// * Err, otherwise
-pub fn verify_individual_sig(
+pub(crate) fn verify_individual_sig(
     message: &[u8],
     signature: &IndividualSignature,
     public_key: &PublicKey,
@@ -288,7 +285,7 @@ pub fn verify_individual_sig(
 /// # Returns
 /// * OK, if `signature` is a valid BLS signature on `message`
 /// * Err, otherwise
-pub fn verify_combined_sig(
+pub(crate) fn verify_combined_sig(
     message: &[u8],
     signature: &CombinedSignature,
     public_key: &PublicKey,
@@ -315,27 +312,4 @@ fn verify(message: &[u8], signature: &Signature, public_key: &PublicKey) -> Resu
     } else {
         Err(())
     }
-}
-
-/// Verifies that a threshold secret key is consistent with the given public
-/// coefficients.
-///
-/// # Returns
-/// true iff the threshold secret key is consistent, i.e. if the public key
-/// corresponding to the secret key is on the polynomial defined by the public
-/// coefficients.
-pub fn secret_key_is_consistent(
-    secret: SecretKey,
-    public_coefficients: &PublicCoefficients,
-    index: NodeIndex,
-) -> bool {
-    // According to the public coefficients:
-    let x = x_for_index(index);
-    let mut y = public_coefficients.evaluate_at(&x);
-    // According to the secret share:
-    let neg_secret = secret.neg();
-    let neg_pub = G2Affine::generator() * neg_secret;
-    // Compare:
-    y.add_assign(&neg_pub);
-    y.is_identity()
 }
