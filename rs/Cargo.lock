@@ -8027,6 +8027,7 @@ dependencies = [
  "num-traits",
  "on_wire",
  "pretty-bytes",
+ "pretty_assertions 1.3.0",
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",

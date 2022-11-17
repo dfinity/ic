@@ -5,12 +5,13 @@ use rand_chacha::ChaCha20Rng;
 use rust_decimal::Decimal;
 use serde::Serialize;
 
+use core::ops::{Add, AddAssign, Div, Mul, Sub};
 use std::convert::TryInto;
-use std::fmt;
-use std::fmt::Formatter;
+use std::fmt::{self, Display, Formatter};
 
 use ic_base_types::PrincipalId;
 use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
+use ic_ledger_core::Tokens;
 
 use url::{Host, Url};
 
@@ -170,6 +171,131 @@ pub fn generate_random_dissolve_delay_intervals(
         })
         .collect()
 }
+
+/// A more convenient (but explosive) way to do token math. Not suitable for
+/// production use! Only for use in tests.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct ExplosiveTokens(Tokens);
+
+impl Display for ExplosiveTokens {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        write!(formatter, "{}", self.0)
+    }
+}
+
+impl From<Tokens> for ExplosiveTokens {
+    fn from(src: Tokens) -> Self {
+        Self(src)
+    }
+}
+
+impl From<ExplosiveTokens> for Tokens {
+    fn from(src: ExplosiveTokens) -> Self {
+        src.0
+    }
+}
+
+impl ExplosiveTokens {
+    pub fn from_e8s(e8s: u64) -> Self {
+        Self::from(Tokens::from_e8s(e8s))
+    }
+
+    // Same as get_e8s. This interface is more consistent with from_e8s.
+    pub fn into_e8s(self) -> u64 {
+        self.get_e8s()
+    }
+
+    // Like Tokens::get_e8s.
+    pub fn get_e8s(self) -> u64 {
+        self.0.get_e8s()
+    }
+
+    // {add,sub,mul,div)_or_die . Notice that unlike Tokens, these all return
+    // Self, not Result.
+
+    pub fn add_or_die(self, other: Self) -> Self {
+        let result = Tokens::from(self) + Tokens::from(other);
+        result.unwrap().into()
+    }
+
+    pub fn sub_or_die(self, other: Self) -> Self {
+        let result = Tokens::from(self) - Tokens::from(other);
+        result.unwrap().into()
+    }
+
+    pub fn mul_or_die(self, other: u64) -> Self {
+        let result_e8s = self.into_e8s().checked_mul(other).unwrap();
+        Self::from_e8s(result_e8s)
+    }
+
+    pub fn div_or_die(self, other: u64) -> Self {
+        let result_e8s = self.into_e8s().checked_div(other).unwrap();
+        Self::from_e8s(result_e8s)
+    }
+
+    // This is a bit special and is an interface optimization that serves a
+    // common use case: proportional scaling. E.g. Suppose you have two
+    // accounts, one with 100 ICP and aother with 200 ICP. From these two
+    // sources, you want to raise 30 ICP. If you want the accounts to be used
+    // "proportionally", then you'd source 10 ICP from the first account, and 20
+    // ICP from the second. To calculate these, you would do
+    //
+    //   let total = all_accounts.iter().map(|a| a.balance).sum();
+    //   fundraising_amount.mul_div_or_die(account.balance, total)
+    //
+    // In addition to being more convenient, this avoids the mistake of dividing
+    // first, which results in more rounding errors.
+    pub fn mul_div_or_die(self, mul: u64, div: u64) -> Self {
+        let mul = mul as u128;
+        let div = div as u128;
+
+        let result_e8s = self.get_e8s() as u128 * mul / div;
+        assert!(result_e8s <= u64::MAX as u128);
+        Self::from_e8s(result_e8s as u64)
+    }
+}
+
+// Operator Support
+
+impl Add for ExplosiveTokens {
+    type Output = Self;
+
+    fn add(self, left: Self) -> Self {
+        self.add_or_die(left)
+    }
+}
+
+impl Sub for ExplosiveTokens {
+    type Output = Self;
+
+    fn sub(self, left: Self) -> Self {
+        self.sub_or_die(left)
+    }
+}
+
+impl Mul<u64> for ExplosiveTokens {
+    type Output = Self;
+
+    fn mul(self, left: u64) -> Self {
+        self.mul_or_die(left)
+    }
+}
+
+impl Div<u64> for ExplosiveTokens {
+    type Output = Self;
+
+    fn div(self, left: u64) -> Self {
+        self.div_or_die(left)
+    }
+}
+
+impl AddAssign for ExplosiveTokens {
+    fn add_assign(&mut self, right: Self) {
+        self.0 += right.0;
+    }
+}
+
+// TODO: Implement other (Sub|Mul|Div)Assign traits. Also, std::iter::Sum.
 
 #[cfg(test)]
 mod test {
