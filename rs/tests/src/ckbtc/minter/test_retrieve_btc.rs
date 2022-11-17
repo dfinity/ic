@@ -100,7 +100,9 @@ pub fn test_retrieve_btc(env: TestEnv) {
             &btc_address0,
         )
         .await;
-        let update_result = update_balance(&minter_agent, &logger, &subaccount1).await;
+        let update_result = update_balance(&minter_agent, &logger, Some(subaccount1))
+            .await
+            .unwrap();
         assert_mint_transaction(
             &ledger_agent,
             &logger,

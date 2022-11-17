@@ -24,7 +24,10 @@ use crate::{
     driver::{test_env::TestEnv, universal_vm::UniversalVms},
     util::UniversalCanister,
 };
-use bitcoincore_rpc::{bitcoin::Address, Auth, Client, RpcApi};
+use bitcoincore_rpc::{
+    bitcoin::{Address, Amount},
+    bitcoincore_rpc_json, Auth, Client, RpcApi,
+};
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
 use ic_ckbtc_agent::CkBtcMinterAgent;
@@ -40,7 +43,7 @@ use std::time::{Duration, Instant};
 
 pub const UNIVERSAL_VM_NAME: &str = "btc-node";
 
-pub const UPDATE_BALANCE_TIMEOUT: Duration = Duration::from_secs(300);
+pub const TIMEOUT_30S: Duration = Duration::from_secs(300);
 
 /// The default value of minimum confirmations on the Bitcoin server.
 pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
@@ -74,7 +77,7 @@ pub fn generate_blocks(btc_client: &Client, logger: &Logger, nb_blocks: u64, add
 }
 
 /// Wait for the expected balance to be available at the given btc address.
-/// Timeout after UPDATE_BALANCE_TIMEOUT if the expected balance is not reached.
+/// Timeout after TIMEOUT_30S if the expected balance is not reached.
 pub async fn wait_for_bitcoin_balance<'a>(
     canister: &UniversalCanister<'a>,
     logger: &Logger,
@@ -84,7 +87,7 @@ pub async fn wait_for_bitcoin_balance<'a>(
     let mut balance = 0;
     let start = Instant::now();
     while balance != expected_balance_in_satoshis {
-        if start.elapsed() >= UPDATE_BALANCE_TIMEOUT {
+        if start.elapsed() >= TIMEOUT_30S {
             panic!("update_balance timeout");
         };
         balance = get_bitcoin_balance(canister, btc_address).await;
@@ -95,22 +98,73 @@ pub async fn wait_for_bitcoin_balance<'a>(
     }
 }
 
+/// Wait until we have a tx in btc mempool
+/// Timeout after TIMEOUT_30S if the minter doesn't successfully find a new tx in the timeframe.
+pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) {
+    let start = Instant::now();
+    loop {
+        if start.elapsed() >= TIMEOUT_30S {
+            panic!("No new utxos in mempool timeout");
+        };
+        match btc_rpc.get_raw_mempool() {
+            Ok(r) => {
+                for txid in r.clone() {
+                    info!(&logger, "Tx in mempool : {:?}", txid);
+                }
+                if !r.is_empty() {
+                    break;
+                }
+            }
+            Err(e) => {
+                info!(&logger, "Error {}", e.to_string());
+            }
+        };
+    }
+}
+
+/// Wait for the minter to find new utxos
+/// Timeout after TIMEOUT_30S if the minter doesn't find new utxos in the time limit.
+pub async fn wait_for_update_balance(
+    ckbtc_minter_agent: &CkBtcMinterAgent,
+    logger: &Logger,
+    subaccount: Option<Subaccount>,
+) {
+    debug!(logger, "Calling update balance");
+    let start = Instant::now();
+    let mut update_result = ckbtc_minter_agent
+        .update_balance(UpdateBalanceArgs { subaccount })
+        .await
+        .expect("Error while calling update_balance");
+    while update_result.is_err() {
+        if start.elapsed() >= TIMEOUT_30S {
+            panic!("update_balance timeout");
+        };
+        update_result = ckbtc_minter_agent
+            .update_balance(UpdateBalanceArgs { subaccount })
+            .await
+            .expect("Error while calling update_balance");
+    }
+}
+
 pub async fn update_balance(
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
-    subaccount: &Subaccount,
-) -> UpdateBalanceResult {
-    let result = ckbtc_minter_agent
-        .update_balance(UpdateBalanceArgs {
-            subaccount: Some(*subaccount),
-        })
+    subaccount: Option<Subaccount>,
+) -> Result<UpdateBalanceResult, UpdateBalanceError> {
+    debug!(logger, "Calling update balance");
+    ckbtc_minter_agent
+        .update_balance(UpdateBalanceArgs { subaccount })
         .await
         .expect("Error while calling update_balance")
-        .expect("Error while updating balance");
-    info!(
-        &logger,
-        "New Balance added: {} at block index {}", result.amount, result.block_index
-    );
+}
+
+pub async fn update_balance_without_subaccount(
+    ckbtc_minter_agent: &CkBtcMinterAgent,
+) -> Result<UpdateBalanceResult, UpdateBalanceError> {
+    let result = ckbtc_minter_agent
+        .update_balance(UpdateBalanceArgs { subaccount: None })
+        .await
+        .expect("Error while calling update_balance");
     result
 }
 
@@ -128,6 +182,26 @@ pub async fn get_btc_address(
     // Checking only proper format of address since ECDSA signature is non-deterministic.
     assert_eq!(ADDRESS_LENGTH, address.len());
     address.parse().unwrap()
+}
+
+pub async fn send_to_btc_address(btc_rpc: &Client, logger: &Logger, dst: &Address, amount: u64) {
+    match btc_rpc.send_to_address(
+        dst,
+        Amount::from_sat(amount),
+        None,
+        None,
+        Some(true),
+        Some(true),
+        None,
+        Some(bitcoincore_rpc_json::EstimateMode::Unset),
+    ) {
+        Ok(txid) => {
+            debug!(&logger, "txid: {:?}", txid);
+        }
+        Err(e) => {
+            panic!("bug: could not send btc to btc client : {}", e);
+        }
+    }
 }
 
 /// Create a client for bitcoind.

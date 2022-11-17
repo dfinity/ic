@@ -72,6 +72,7 @@ docker run  --name=bitcoind-node -d \
     regtest=1
     debug=1
     whitelist=[::]/0
+    fallbackfee=0.0002
 
     # Dummy credentials that are required by `bitcoin-cli`.
     rpcuser=btc-dev-preview
