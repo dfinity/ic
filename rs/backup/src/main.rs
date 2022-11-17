@@ -1,12 +1,15 @@
 use clap::Parser;
 use ic_backup::{backup_manager::BackupManager, cmd::BackupArgs};
 use slog::{o, Drain};
+use tokio::runtime::Handle;
+use tokio::task::spawn_blocking;
 
 // Here is an example config file:
 //
 // {
 //     "backup_instance": "zh1-spm34",
 //     "nns_url": "https://smallXYZ.testnet.dfinity.network",
+//     "nns_pem": "ic_public_key.pem",
 //     "root_dir": "./backup",
 //     "excluded_dirs": [
 //         "backups",
@@ -36,7 +39,8 @@ use slog::{o, Drain};
 //     ]
 // }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // initialize a logger
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
@@ -44,5 +48,11 @@ fn main() {
     let log = slog::Logger::root(drain, o!());
 
     let args = BackupArgs::parse();
-    BackupManager::new(args.config_file, log).do_backups();
+    let rt = Handle::current();
+    spawn_blocking(move || {
+        let mut bm = BackupManager::new(args.config_file, &rt, log);
+        bm.do_backups();
+    })
+    .await
+    .expect("Blocking task panicked")
 }

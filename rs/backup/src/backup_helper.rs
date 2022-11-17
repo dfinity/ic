@@ -198,7 +198,7 @@ impl BackupHelper {
         }
     }
 
-    pub fn sync(&self, nodes: &Vec<&IpAddr>) {
+    pub fn sync_files(&self, nodes: &Vec<&IpAddr>) {
         let start_time = Instant::now();
 
         if !self.spool_dir().exists() {
@@ -221,29 +221,24 @@ impl BackupHelper {
 
     pub fn collect_subnet_nodes(&self) -> Result<Vec<IpAddr>, String> {
         let subnet_id = self.subnet_id;
-        let result = block_on(async {
-            if let Err(err) = self.registry_client.try_polling_latest_version(200) {
-                return Err(format!("couldn't poll the registry: {:?}", err));
-            };
-            let version = self.registry_client.get_latest_version();
-            match self
-                .registry_client
-                .get_node_ids_on_subnet(subnet_id, version)
-            {
-                Ok(Some(node_ids)) => Ok(node_ids
-                    .into_iter()
-                    .filter_map(|node_id| {
-                        self.registry_client
-                            .get_transport_info(node_id, version)
-                            .unwrap_or_default()
-                    })
-                    .collect::<Vec<_>>()),
-                other => Err(format!(
-                    "no node ids found in the registry for subnet_id={}: {:?}",
-                    subnet_id, other
-                )),
-            }
-        })?;
+        let version = self.registry_client.get_latest_version();
+        let result = match self
+            .registry_client
+            .get_node_ids_on_subnet(subnet_id, version)
+        {
+            Ok(Some(node_ids)) => Ok(node_ids
+                .into_iter()
+                .filter_map(|node_id| {
+                    self.registry_client
+                        .get_transport_info(node_id, version)
+                        .unwrap_or_default()
+                })
+                .collect::<Vec<_>>()),
+            other => Err(format!(
+                "no node ids found in the registry for subnet_id={}: {:?}",
+                subnet_id, other
+            )),
+        }?;
         result
             .into_iter()
             .filter_map(|node_record| {
