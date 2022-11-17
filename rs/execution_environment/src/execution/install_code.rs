@@ -19,7 +19,10 @@ use ic_replicated_state::{CanisterState, ExecutionState};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
-use ic_types::{funds::Cycles, ComputeAllocation, Height, MemoryAllocation, NumInstructions, Time};
+use ic_types::{
+    funds::Cycles, CanisterTimer, ComputeAllocation, Height, MemoryAllocation, NumInstructions,
+    Time,
+};
 
 use crate::{
     canister_manager::{
@@ -100,6 +103,10 @@ impl InstallCodeHelper {
 
     pub fn canister(&self) -> &CanisterState {
         &self.canister
+    }
+
+    pub fn deactivate_global_timer(&mut self) {
+        self.canister.system_state.global_timer = CanisterTimer::Inactive;
     }
 
     pub fn execution_parameters(&self) -> &ExecutionParameters {

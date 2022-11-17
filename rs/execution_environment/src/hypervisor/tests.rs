@@ -822,6 +822,134 @@ fn ic0_global_timer_set_returns_previous_value() {
 }
 
 #[test]
+fn ic0_global_timer_deactivated() {
+    use ic_types::CanisterTimer;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let set_timer = wasm().api_global_timer_set(1).reply_int64().build();
+    let unset_timer = wasm().api_global_timer_set(0).reply_int64().build();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::Inactive
+    );
+    test.ingress(canister_id, "update", set_timer.clone())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+    test.ingress(canister_id, "update", unset_timer).unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::Inactive
+    );
+    test.ingress(canister_id, "update", set_timer.clone())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.upgrade_canister(canister_id, vec![]).unwrap_err();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::Inactive
+    );
+    test.ingress(canister_id, "update", set_timer.clone())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.uninstall_code(canister_id).unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::Inactive
+    );
+
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::Inactive
+    );
+    test.ingress(canister_id, "update", set_timer.clone())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.reinstall_canister(canister_id, vec![]).unwrap_err();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::Inactive
+    );
+    test.ingress(canister_id, "update", set_timer).unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.canister_update_allocations_settings(canister_id, None, None)
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.canister_update_allocations_settings(canister_id, Some(1000), None)
+        .unwrap_err();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.stop_canister(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.start_canister(canister_id).unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.set_controller(canister_id, canister_id.into())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+
+    test.uninstall_code(canister_id).unwrap_err();
+    assert_eq!(
+        test.canister_state(canister_id).system_state.global_timer,
+        CanisterTimer::from_nanos_since_unix_epoch(Some(1))
+    );
+}
+
+#[test]
 fn ic0_msg_arg_data_size_is_not_available_in_reject_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
