@@ -16,6 +16,7 @@ mod clib {
 }
 use super::*;
 use crate::ni_dkg::fs_ni_dkg::forward_secure::{PublicKeyWithPop, SecretKey};
+use ic_crypto_internal_bls12_381_type::Scalar;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPop;
 use internal_types::Epoch;
 
@@ -127,15 +128,16 @@ fn generate_threshold_keys(
 fn fs_key_message_pairs(
     threshold_keys: &[clib::ThresholdSecretKeyBytes],
     forward_secure_key_sets: &[FsEncryptionKeySetWithPop],
-) -> Vec<(FsEncryptionPublicKey, FsEncryptionPlaintext)> {
+) -> Vec<(FsEncryptionPublicKey, Scalar)> {
     threshold_keys
         .iter()
         .zip(forward_secure_key_sets)
         .map(
             |(threshold_key, FsEncryptionKeySetWithPop { public_key, .. })| {
-                let message = internal_types::FrBytes(threshold_key.0);
-                let message = FsEncryptionPlaintext::from(&message);
-                (*public_key, message)
+                (
+                    *public_key,
+                    Scalar::deserialize(&threshold_key.0).expect("Invalid secret key"),
+                )
             },
         )
         .collect()

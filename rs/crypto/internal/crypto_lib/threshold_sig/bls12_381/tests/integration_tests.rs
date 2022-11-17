@@ -28,6 +28,8 @@ fn potpourri() {
     let epoch10 = Epoch::from(10);
     let tau10 = tau_from_epoch(epoch10);
 
+    let associated_data = rng.gen::<[u8; 32]>();
+
     let mut keys = Vec::new();
     for i in 0..=3 {
         println!("generating key pair {}...", i);
@@ -37,14 +39,21 @@ fn potpourri() {
         .iter()
         .map(|key| key.0.key_value.clone())
         .collect::<Vec<_>>();
-    let sij: Vec<_> = vec![
-        vec![27, 18, 28],
-        vec![31415, 8192, 8224],
-        vec![99, 999, 9999],
-        vec![CHUNK_MIN, CHUNK_MAX, CHUNK_MIN],
-    ];
-    let associated_data = rng.gen::<[u8; 4]>();
-    let (crsz, _toxic) = enc_chunks(&sij, &pks, &tau10, &associated_data, sys, &mut rng).unwrap();
+
+    let ptext = Scalar::batch_random(&mut rng, keys.len());
+
+    let ptext_chunks = ptext
+        .iter()
+        .map(|p| PlaintextChunks::from_scalar(p))
+        .collect::<Vec<_>>();
+
+    let pk_and_chunks = pks
+        .iter()
+        .cloned()
+        .zip(ptext_chunks.iter().cloned())
+        .collect::<Vec<_>>();
+
+    let (crsz, _toxic) = enc_chunks(&pk_and_chunks, &tau10, &associated_data, sys, &mut rng);
 
     let dk = &mut keys[1].1;
     for _i in 0..3 {
@@ -57,12 +66,8 @@ fn potpourri() {
 
     let out = dec_chunks(dk, 1, &crsz, &tau10, &associated_data)
         .expect("It should be possible to decrypt");
-    println!("decrypted: {:?}", out);
-    let mut last3 = vec![0; 3];
-    last3[0] = out[13];
-    last3[1] = out[14];
-    last3[2] = out[15];
-    assert!(last3 == sij[1], "decrypt . encrypt == id");
+
+    assert_eq!(out, ptext[1]);
 
     for _i in 0..8 {
         println!("upgrading private key...");
@@ -94,7 +99,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     let g1 = G1Affine::generator();
     let g2 = G2Affine::generator();
 
-    let receiver_fs_keys: Vec<_> = (0u8..num_receivers)
+    let receiver_fs_keys: Vec<_> = (0..num_receivers)
         .map(|i| {
             println!("generating key pair {}...", i);
             let key_pair = kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng);
@@ -111,17 +116,13 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         .map(|key| key.key_value.clone())
         .collect();
 
-    let polynomial: Vec<_> = (0..threshold).map(|_| Scalar::random(&mut rng)).collect();
-    let polynomial_exp: Vec<_> = polynomial
-        .iter()
-        .map(|term| G2Affine::from(g2 * term))
-        .collect();
+    let polynomial = Scalar::batch_random(&mut rng, threshold);
+    let polynomial_exp = g2.batch_mul(&polynomial);
 
     // Plaintext, unchunked:
-    let plaintexts: Vec<Scalar> = (1..)
-        .zip(&receiver_fs_keys)
-        .map(|(i, _)| {
-            let ibig = Scalar::from_usize(i);
+    let plaintexts: Vec<Scalar> = (0..num_receivers)
+        .map(|i| {
+            let ibig = Scalar::from_usize(i + 1);
             let mut ipow = Scalar::one();
             let mut acc = Scalar::zero();
             for ak in &polynomial {
@@ -133,46 +134,29 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         .collect();
 
     // Plaintext, chunked:
-    let plaintext_chunks: Vec<Vec<isize>> = plaintexts
+    let plaintext_chunks: Vec<PlaintextChunks> = plaintexts
         .iter()
-        .map(|plaintext| {
-            let mut bytes = plaintext.serialize();
-            bytes.reverse(); // Make little endian.
-            let chunks = bytes[..].chunks(CHUNK_BYTES); // The last, most significant, chunk may be partial.
-            chunks
-                .map(|chunk| {
-                    chunk
-                        .iter()
-                        .rev()
-                        .fold(0, |acc, byte| (acc << 8) + (*byte as isize))
-                })
-                .rev()
-                .collect() // Convert to big endian ints
-        })
+        .map(|plaintext| PlaintextChunks::from_scalar(plaintext))
         .collect();
     println!("Messages: {:#?}", plaintext_chunks);
+
+    let keys_and_chunks = receiver_fs_public_keys
+        .iter()
+        .cloned()
+        .zip(plaintext_chunks.iter().cloned())
+        .collect::<Vec<_>>();
 
     // Encrypt
     let tau = tau_from_epoch(epoch);
     let associated_data = rng.gen::<[u8; 10]>();
-    let (crsz, encryption_witness) = enc_chunks(
-        &plaintext_chunks[..],
-        &receiver_fs_public_keys,
-        &tau,
-        &associated_data,
-        sys,
-        &mut rng,
-    )
-    .expect("Encryption failed");
+    let (crsz, encryption_witness) =
+        enc_chunks(&keys_and_chunks, &tau, &associated_data, sys, &mut rng);
 
     // Check that decryption succeeds
     let dk = &receiver_fs_keys[1].1;
     let out = dec_chunks(dk, 1, &crsz, &tau, &associated_data);
     println!("decrypted: {:?}", out);
-    assert!(
-        out.unwrap() == plaintext_chunks[1],
-        "decrypt . encrypt == id"
-    );
+    assert_eq!(out.unwrap(), plaintext_chunks[1].recombine_to_scalar(),);
 
     // chunking proof and verification
     {
@@ -181,7 +165,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         // consistent.
         let big_plaintext_chunks: Vec<Vec<_>> = plaintext_chunks
             .iter()
-            .map(|chunks| chunks.iter().copied().map(Scalar::from_isize).collect())
+            .map(|chunks| chunks.chunks_as_scalars())
             .collect();
 
         let chunking_instance = ChunkingInstance::new(
@@ -191,7 +175,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         );
 
         let chunking_witness =
-            ChunkingWitness::new(encryption_witness.spec_r.clone(), big_plaintext_chunks);
+            ChunkingWitness::new(encryption_witness.r.clone(), big_plaintext_chunks);
 
         let nizk_chunking = prove_chunking(&chunking_instance, &chunking_witness, &mut rng);
 
@@ -244,19 +228,11 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             .iter()
             .map(|s| g1_from_big_endian_chunks(s))
             .collect();
-        let combined_r = scalar_from_big_endian_chunks(&encryption_witness.spec_r);
+        let combined_r = scalar_from_big_endian_chunks(&encryption_witness.r);
         let combined_r_exp = g1_from_big_endian_chunks(&crsz.rr);
         let combined_plaintexts: Vec<Scalar> = plaintext_chunks
             .iter()
-            .map(|receiver_chunks| {
-                scalar_from_big_endian_chunks(
-                    &receiver_chunks
-                        .iter()
-                        .copied()
-                        .map(Scalar::from_isize)
-                        .collect::<Vec<_>>(),
-                )
-            })
+            .map(|receiver_chunks| receiver_chunks.recombine_to_scalar())
             .collect();
 
         // Check that the combination is correct:
