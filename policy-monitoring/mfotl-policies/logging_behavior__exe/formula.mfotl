@@ -1,0 +1,140 @@
+(*
+  Policy: The logging behavior of each relevant node is not significantly
+  different than the typical logging behavior of other relevant nodes.
+
+  §1  A node's logging behavior is determined by counting the number of log
+  messages in a sliding window of size 600000. Only messages with a valid
+  node_id and a component matching ^orchestrator::ic_execution_environment:: are counted.
+
+  §2  A node is relevant if it is assigned consistently to the same subnet for
+  the entire duration of the counting window.
+
+  §3  The typical behavior of a subnet is inferred by computing the median of
+  the counts from §1. There must be at least 3 relevant nodes in the
+  subnet. To avoid false positives, the medians of adjacent windows (up to
+  600000 in the past/future) are taken into account, too. 
+
+  §4  A node's behavior is considered to be significantly different if the ratio
+  of its message count and the (least/greatest) subnet median is less than
+  0.9 or greater than 1.1.
+
+
+  TODOs:
+
+  - tune parameters
+  - threshold for the outliers (absolute, relative to one or more metrics,
+    external black box) use relative to sample median for now
+*)
+
+(*
+  Compute the node-subnet relation from global infra and registry updates.
+*)
+LET node_added_to_subnet(node_id, subnet) =
+  EXISTS node_addr.
+    originally_in_subnet(node_id, node_addr, subnet)
+    OR
+    registry__node_added_to_subnet(node_id, node_addr, subnet)
+IN
+LET node_removed_from_subnet(node_id) =
+  EXISTS node_addr. registry__node_removed_from_subnet(node_id, node_addr)
+IN
+LET in_subnet(node_id, subnet) =
+  NOT node_removed_from_subnet(node_id)
+  SINCE node_added_to_subnet(node_id, subnet)
+IN
+
+(*
+  Exclude the time-points with the global infra from the sliding window.
+  We assume that the global infra uses (only) the first time-stamp occurring
+  in the log.
+*)
+LET is_proper_tp() = ONCE[1,*] TRUE IN
+
+(*
+  Compute the set of relevant nodes.
+*)
+LET relevant_node(node_id, subnet) =
+  in_subnet(node_id, subnet)
+  SINCE[600000,*] (in_subnet(node_id, subnet) AND is_proper_tp())
+IN
+
+(*
+  Select relevant messages and group them per origin.
+*)
+LET relevant_log(node_id, subnet, level, message, i) =
+  EXISTS host_id, component.
+    log(host_id, node_id, subnet, component, level, message)
+    AND
+    component MATCHES r"^orchestrator::ic_execution_environment::"
+    AND
+    NOT node_id = ""
+    AND
+    tp(i)
+IN
+
+(*
+  Current logging behavior of a relevant node.
+*)
+LET msg_count(node_id, subnet, count) =
+  count <- SUM c; node_id, subnet
+    (
+      (
+        (c <- CNT i; node_id, subnet
+          ONCE (*(*)[0, 600000)
+            relevant_log(node_id, subnet, level, message, i)
+        )
+        AND
+        relevant_node(node_id, subnet)
+      )
+      OR
+      relevant_node(node_id, subnet) AND c = 0
+    )
+IN
+
+(*
+  Typical logging behavior of nodes in subnet.
+*)
+LET typical_behavior(subnet, median) =
+  (median <- MED count; subnet msg_count(node_id, subnet, count))
+  AND
+  (
+    EXISTS n.
+      (n <- CNT node_id; subnet relevant_node(node_id, subnet))
+      AND
+      n >= 3
+  )
+IN
+LET typical_behaviors(subnet, median) =
+  (ONCE (*(*)[0,600000) typical_behavior(subnet, median))
+  OR
+  (EVENTUALLY (*(*)[0,600000) typical_behavior(subnet, median))
+IN
+
+(*
+  Compute the behavior and the typical behavior.
+*)
+LET compute(subnet, node_id, count, min, max) =
+  (NOT EVENTUALLY (*(*)[0,600000) end_test())
+  AND
+  (EXISTS c. msg_count(node_id, subnet, c) AND count = i2f(c))
+  AND
+  (min <- MIN m; subnet typical_behaviors(subnet, m))
+  AND
+  (max <- MAX m; subnet typical_behaviors(subnet, m))
+IN
+
+(*
+  Look for violations of the relative threshold.
+*)
+LET exceeds(subnet, node_id, count, min, max) =
+  (compute(subnet, node_id, count, min, max) AND count > max * 1.1)
+  OR
+  (compute(subnet, node_id, count, min, max) AND count < min * 0.9)
+IN
+
+(*
+  Rate limit continuous violations to once every 600000 ms.
+*)
+exceeds(subnet, node_id, count, min, max) AND NOT
+  PREVIOUS (*(*)[0,600000)
+    (EXISTS a, b, c. exceeds(subnet, node_id, a, b, c))
