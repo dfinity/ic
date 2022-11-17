@@ -224,10 +224,9 @@ impl Hypervisor {
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
-        query_execution_threads: usize,
     ) -> Self {
         let mut embedder_config = EmbeddersConfig::new();
-        embedder_config.query_execution_threads = query_execution_threads;
+        embedder_config.query_execution_threads = config.query_execution_threads;
         embedder_config.feature_flags.rate_limiting_of_debug_prints =
             config.rate_limiting_of_debug_prints;
         embedder_config.cost_to_compile_wasm_instruction = config.cost_to_compile_wasm_instruction;
