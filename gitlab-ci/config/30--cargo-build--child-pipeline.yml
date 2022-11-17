@@ -3,10 +3,12 @@ cargo-clippy-linux:
   variables:
     BUILD_COMMAND: "$CI_PROJECT_DIR/gitlab-ci/src/rust_lint/lint.sh"
 
-cargo-build-debug-linux:
+# Cargo is deprecated and will be replaced with Bazel.
+# Until the migration is complete, run a simple check for build failures.
+legacy-cargo-check:
   extends: .cargo-build-docker
   variables:
-    BUILD_COMMAND: "cargo build"
+    BUILD_COMMAND: "cargo check --tests --benches"
 
 cargo-build-release-linux:
   extends: 

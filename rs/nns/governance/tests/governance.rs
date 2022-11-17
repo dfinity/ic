@@ -28,8 +28,7 @@ use ic_nns_governance::{
     pb::v1::{
         governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange,
         proposal::ActionDesc, BallotChange, BallotInfoChange, GovernanceChange, NeuronChange,
-        ProposalChange, ProposalDataChange, SwapBackgroundInformation, TallyChange,
-        WaitForQuietStateDesc,
+        ProposalChange, ProposalDataChange, TallyChange, WaitForQuietStateDesc,
     },
 };
 use ic_nns_governance::{
@@ -71,8 +70,8 @@ use ic_nns_governance::{
         ProposalRewardStatus::{AcceptVotes, ReadyToSettle},
         ProposalStatus,
         ProposalStatus::Rejected,
-        RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees, Tally, Topic,
-        UpdateNodeProvider, Vote,
+        RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
+        SwapBackgroundInformation, Tally, Topic, UpdateNodeProvider, Vote,
     },
 };
 use ic_sns_root::pb::v1 as sns_root_pb;
