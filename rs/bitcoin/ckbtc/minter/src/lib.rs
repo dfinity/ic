@@ -429,6 +429,11 @@ pub fn build_unsigned_transaction(
     fee_per_vbyte: u64,
 ) -> Result<(tx::UnsignedTransaction, Vec<Utxo>), BuildTxError> {
     const DUST_THRESHOLD: Satoshi = 300;
+    /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
+    /// It allows us to increase the fee of a transaction already sent to the mempool.
+    /// The rbf option is used in `resubmit_retrieve_btc`.
+    /// https://github.com/bitcoin/bips/blob/master/bip-0125.mediawiki
+    const SEQUENCE_RBF_ENABLED: u32 = 0xfffffffd;
 
     let input_utxos = greedy(amount, minter_utxos);
 
@@ -472,7 +477,7 @@ pub fn build_unsigned_transaction(
             .map(|utxo| tx::UnsignedInput {
                 previous_output: utxo.outpoint.clone(),
                 value: utxo.value,
-                sequence: 0xffffffff,
+                sequence: SEQUENCE_RBF_ENABLED,
             })
             .collect(),
         outputs,
