@@ -2,8 +2,7 @@
 mod tests;
 
 use crate::sign::{
-    fetch_idkg_dealing_encryption_public_key_from_registry, get_mega_pubkey,
-    MegaKeyFromRegistryError,
+    fetch_idkg_dealing_encryption_public_key_from_registry, MegaKeyFromRegistryError,
 };
 use crate::{key_from_registry, CryptoComponentFatClient};
 use ic_crypto_internal_csp::api::CspSecretKeyStoreChecker;
@@ -21,7 +20,7 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::{
     IDkgDealingEncryptionKeyRotationError, KeyManager, PublicKeyRegistrationStatus,
 };
-use ic_logger::{error, warn};
+use ic_logger::{error, info};
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, CurrentNodePublicKeys, KeyPurpose};
@@ -36,35 +35,104 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyRegistrationStatus> {
         self.collect_and_store_key_count_metrics(registry_version);
-        self.ensure_node_signing_key_material_is_set_up(registry_version)?;
-        self.ensure_committee_signing_key_material_is_set_up(registry_version)?;
-        self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version)?;
-        self.ensure_tls_key_material_is_set_up(registry_version)?;
+        // Get the public keys from the registry, and ensure that we have the
+        // secret keys locally in the SKS.
+        let node_signing_key = self.ensure_node_signing_key_material_is_set_up(registry_version)?;
+        let committee_signing_key =
+            self.ensure_committee_signing_key_material_is_set_up(registry_version)?;
+        let dkg_dealing_encryption_key =
+            self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version)?;
+        let tls_certificate = self.ensure_tls_key_material_is_set_up(registry_version)?;
+        let idkg_dealing_encryption_key =
+            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version)?;
 
-        if let Some(pubkey) = self.unregistered_idkg_dealing_encryption_key(registry_version) {
-            return Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(pubkey));
+        // Make sure that for each public key found in the registry, we also have the public key
+        // locally in the public key store.
+        let keys_in_registry = CurrentNodePublicKeys {
+            node_signing_public_key: Some(node_signing_key),
+            committee_signing_public_key: Some(committee_signing_key),
+            tls_certificate: Some(tls_certificate),
+            dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_key),
+            idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_key.clone()),
+        };
+
+        if !self.csp.pks_contains(keys_in_registry)? {
+            // This may be due to a malicious entity registering new key(s) for this node.
+            // Some more drastic action should be taken here; at the moment, we just log and
+            // return an error.
+            error!(
+                self.logger,
+                "One or more node keys from the registry are missing locally"
+            );
+            return Err(CryptoError::PublicKeyNotFound {
+                node_id: self.node_id,
+                key_purpose: KeyPurpose::Placeholder,
+                registry_version,
+            });
         }
-        if self
+
+        // Check if the latest iDKG key we have locally still needs to be registered in the
+        // registry, or if it needs to be rotated.
+        if let Some(latest_local_idkg_dealing_encryption_key) = self
             .current_node_public_keys()
             .idkg_dealing_encryption_public_key
-            .is_none()
         {
-            warn!(
-                self.logger,
-                "iDKG dealing encryption key of node {} is missing in local public key store",
-                self.node_id
-            );
-        } else if let Err(error) =
-            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version)
-        {
-            warn!(
-                self.logger,
-                "iDKG dealing encryption key of node {} is not properly set up \
-                  in the registry for registry version {}: {}",
-                self.node_id,
-                registry_version,
-                error
-            );
+            if idkg_dealing_encryption_key
+                .equal_ignoring_timestamp(&latest_local_idkg_dealing_encryption_key)
+            {
+                match idkg_dealing_encryption_key.timestamp {
+                    None => {
+                        // The key in the registry has no timestamp, so it shall be rotated
+                        info!(
+                            self.logger,
+                            "iDKG dealing encryption key has no timestamp and needs rotating"
+                        );
+                        //////////////////////////////////////////////////////////////////
+                        // TODO: When key rotation is to be enabled as part of CRP-1787, change the
+                        //  return value to be the one commented out below, instead of
+                        //  Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
+                        //////////////////////////////////////////////////////////////////
+                        // return Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys);
+                        //////////////////////////////////////////////////////////////////
+                        return Ok(PublicKeyRegistrationStatus::AllKeysRegistered);
+                    }
+                    Some(timestamp_in_millis) => {
+                        if self.is_current_key_too_old(timestamp_in_millis) {
+                            info!(
+                                self.logger,
+                                "iDKG dealing encryption key too old and needs rotating"
+                            );
+                            //////////////////////////////////////////////////////////////////
+                            // TODO: When key rotation is to be enabled as part of CRP-1787, change the
+                            //  return value to be the one commented out below, instead of
+                            //  Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
+                            //////////////////////////////////////////////////////////////////
+                            // return Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys);
+                            //////////////////////////////////////////////////////////////////
+                            return Ok(PublicKeyRegistrationStatus::AllKeysRegistered);
+                        }
+                    }
+                }
+            } else {
+                info!(
+                    self.logger,
+                    "Local iDKG dealing encryption key needs registration"
+                );
+                //////////////////////////////////////////////////////////////////
+                // TODO: When key rotation is to be enabled as part of CRP-1787, change the
+                //  return value to be the one commented out below, instead of
+                //  Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
+                //////////////////////////////////////////////////////////////////
+                // return Ok(
+                //     PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(
+                //         latest_local_idkg_dealing_encryption_key,
+                //     ),
+                // );
+                //////////////////////////////////////////////////////////////////
+                return Ok(PublicKeyRegistrationStatus::AllKeysRegistered);
+            }
+        } else {
+            panic!("No iDKG dealing encryption key found locally");
         }
         Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
     }
@@ -103,15 +171,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
                         self.csp.idkg_gen_dealing_encryption_key_pair()?,
                     )),
                     Some(timestamp_in_millis) => {
-                        //TODO CRP-1727: get delta value from registry
-                        let two_weeks = Duration::from_secs(2 * 7 * 24 * 60 * 60);
-                        let time_of_registration = Time::from_nanos_since_unix_epoch(
-                            timestamp_in_millis
-                                .checked_mul(1_000_000)
-                                .expect("should not happen before around 580 years"),
-                        );
-                        let current_time = self.time_source.get_relative_time();
-                        if current_time > time_of_registration + two_weeks {
+                        if self.is_current_key_too_old(timestamp_in_millis) {
                             Ok(idkg_dealing_encryption_pk_to_proto(
                                 self.csp.idkg_gen_dealing_encryption_key_pair()?,
                             ))
@@ -159,11 +219,16 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             .current_node_public_keys()
             .get_pub_keys_and_cert_count();
         let reg_and_secret_key_results = vec![
-            self.ensure_node_signing_key_material_is_set_up(registry_version),
-            self.ensure_committee_signing_key_material_is_set_up(registry_version),
-            self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version),
-            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version),
-            self.ensure_tls_key_material_is_set_up(registry_version),
+            self.ensure_node_signing_key_material_is_set_up(registry_version)
+                .map(|_| ()),
+            self.ensure_committee_signing_key_material_is_set_up(registry_version)
+                .map(|_| ()),
+            self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version)
+                .map(|_| ()),
+            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version)
+                .map(|_| ()),
+            self.ensure_tls_key_material_is_set_up(registry_version)
+                .map(|_| ()),
         ];
         for r in reg_and_secret_key_results.iter() {
             match r {
@@ -186,7 +251,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
     fn ensure_node_signing_key_material_is_set_up(
         &self,
         registry_version: RegistryVersion,
-    ) -> CryptoResult<()> {
+    ) -> CryptoResult<PublicKeyProto> {
         let pk_proto = key_from_registry(
             Arc::clone(&self.registry_client),
             self.node_id,
@@ -200,104 +265,62 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 registry_version,
             });
         }
-        self.compare_local_and_registry_public_keys_and_certificates(
-            self.current_node_public_keys()
-                .node_signing_public_key
-                .as_ref(),
-            &pk_proto,
-            registry_version,
-            "node signing public key",
-        );
-        ensure_node_signing_key_material_is_set_up_correctly(pk_proto, &self.csp)?;
-        Ok(())
+        ensure_node_signing_key_material_is_set_up_correctly(pk_proto.clone(), &self.csp)?;
+        Ok(pk_proto)
     }
 
     fn ensure_committee_signing_key_material_is_set_up(
         &self,
         registry_version: RegistryVersion,
-    ) -> CryptoResult<()> {
+    ) -> CryptoResult<PublicKeyProto> {
         let pk_proto = key_from_registry(
             Arc::clone(&self.registry_client),
             self.node_id,
             KeyPurpose::CommitteeSigning,
             registry_version,
         )?;
-        self.compare_local_and_registry_public_keys_and_certificates(
-            self.current_node_public_keys()
-                .committee_signing_public_key
-                .as_ref(),
-            &pk_proto,
-            registry_version,
-            "committee signing public key",
-        );
-        ensure_committee_signing_key_material_is_set_up_correctly(pk_proto, &self.csp)?;
-        Ok(())
+        ensure_committee_signing_key_material_is_set_up_correctly(pk_proto.clone(), &self.csp)?;
+        Ok(pk_proto)
     }
 
     fn ensure_dkg_dealing_encryption_key_material_is_set_up(
         &self,
         registry_version: RegistryVersion,
-    ) -> CryptoResult<()> {
+    ) -> CryptoResult<PublicKeyProto> {
         let pk_proto = key_from_registry(
             Arc::clone(&self.registry_client),
             self.node_id,
             KeyPurpose::DkgDealingEncryption,
             registry_version,
         )?;
-        self.compare_local_and_registry_public_keys_and_certificates(
-            self.current_node_public_keys()
-                .dkg_dealing_encryption_public_key
-                .as_ref(),
-            &pk_proto,
-            registry_version,
-            "NI-DKG dealing encryption key",
-        );
-        ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(pk_proto, &self.csp)?;
-        Ok(())
-    }
-
-    fn unregistered_idkg_dealing_encryption_key(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> Option<PublicKeyProto> {
-        let result = get_mega_pubkey(&self.node_id, &self.registry_client, registry_version);
-        if let Err(MegaKeyFromRegistryError::PublicKeyNotFound { .. }) = result {
-            if let Some(idkg_dealing_enc_pk) = self
-                .current_node_public_keys()
-                .idkg_dealing_encryption_public_key
-            {
-                return Some(idkg_dealing_enc_pk);
-            }
-        }
-        None
+        ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(
+            pk_proto.clone(),
+            &self.csp,
+        )?;
+        Ok(pk_proto)
     }
 
     fn ensure_idkg_dealing_encryption_key_material_is_set_up(
         &self,
         registry_version: RegistryVersion,
-    ) -> CryptoResult<()> {
+    ) -> CryptoResult<PublicKeyProto> {
         let pk_proto = key_from_registry(
             Arc::clone(&self.registry_client),
             self.node_id,
             KeyPurpose::IDkgMEGaEncryption,
             registry_version,
         )?;
-        self.compare_local_and_registry_public_keys_and_certificates(
-            self.current_node_public_keys()
-                .idkg_dealing_encryption_public_key
-                .as_ref(),
-            &pk_proto,
-            registry_version,
-            "iDKG dealing encryption key",
-        );
-        ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(pk_proto, &self.csp)?;
-        Ok(())
+        ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(
+            pk_proto.clone(),
+            &self.csp,
+        )?;
+        Ok(pk_proto)
     }
 
     fn ensure_tls_key_material_is_set_up(
         &self,
         registry_version: RegistryVersion,
-    ) -> CryptoResult<()> {
+    ) -> CryptoResult<X509PublicKeyCert> {
         let public_key_cert = self
             .registry_client
             .get_tls_certificate(self.node_id, registry_version)?
@@ -305,48 +328,20 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 node_id: self.node_id,
                 registry_version,
             })?;
-        self.compare_local_and_registry_public_keys_and_certificates(
-            self.current_node_public_keys().tls_certificate.as_ref(),
-            &public_key_cert,
-            registry_version,
-            "TLS certificate",
-        );
-        ensure_tls_key_material_is_set_up_correctly(public_key_cert, &self.csp)?;
-        Ok(())
+        ensure_tls_key_material_is_set_up_correctly(public_key_cert.clone(), &self.csp)?;
+        Ok(public_key_cert)
     }
 
-    fn compare_local_and_registry_public_keys_and_certificates<T: PartialEq + std::fmt::Debug>(
-        &self,
-        maybe_local_public_obj: Option<&T>,
-        registry_public_obj: &T,
-        registry_version: RegistryVersion,
-        obj_type: &str,
-    ) {
-        match maybe_local_public_obj {
-            None => warn!(
-                self.logger,
-                "{} of node {} exists in the registry but not locally \
-                    for registry version {}",
-                obj_type,
-                self.node_id,
-                registry_version
-            ),
-            Some(local_public_obj) => {
-                if registry_public_obj != local_public_obj {
-                    warn!(
-                        self.logger,
-                        "{} mismatch between local and registry copies \
-                         for node {}, for registry version {} \
-                         (local key: {:?}, registry key: {:?}",
-                        obj_type,
-                        self.node_id,
-                        registry_version,
-                        local_public_obj,
-                        registry_public_obj,
-                    )
-                }
-            }
-        }
+    fn is_current_key_too_old(&self, timestamp_in_millis: u64) -> bool {
+        //TODO CRP-1727: get delta value from registry
+        let two_weeks = Duration::from_secs(2 * 7 * 24 * 60 * 60);
+        let time_of_registration = Time::from_nanos_since_unix_epoch(
+            timestamp_in_millis
+                .checked_mul(1_000_000)
+                .expect("should not happen before around 580 years"),
+        );
+        let current_time = self.time_source.get_relative_time();
+        current_time > time_of_registration + two_weeks
     }
 }
 

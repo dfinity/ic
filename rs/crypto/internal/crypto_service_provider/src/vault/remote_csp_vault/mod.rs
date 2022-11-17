@@ -126,6 +126,11 @@ pub trait TarpcCspVault {
     // Corresponds to `SecretKeyStoreCspVault.sks_contains()`.
     async fn sks_contains(key_id: KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
 
+    // Corresponds to `PublicKeyStoreCspVault.pks_contains()`.
+    async fn pks_contains(
+        public_keys: CurrentNodePublicKeys,
+    ) -> Result<bool, CspPublicKeyStoreError>;
+
     // Corresponds to `PublicKeyStoreCspVault.current_node_public_keys()`.
     async fn current_node_public_keys() -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 

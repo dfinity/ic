@@ -254,6 +254,21 @@ impl SecretKeyStoreCspVault for RemoteCspVault {
 }
 
 impl PublicKeyStoreCspVault for RemoteCspVault {
+    fn pks_contains(
+        &self,
+        public_keys: CurrentNodePublicKeys,
+    ) -> Result<bool, CspPublicKeyStoreError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .pks_contains(context_with_timeout(self.rpc_timeout), public_keys),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspPublicKeyStoreError::TransientInternalError(
+                rpc_error.to_string(),
+            ))
+        })
+    }
+
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
         self.tokio_block_on(
             self.tarpc_csp_client

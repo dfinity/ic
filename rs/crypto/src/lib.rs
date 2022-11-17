@@ -101,7 +101,6 @@ pub struct CryptoComponentFatClient<C: CryptoServiceProvider> {
     node_id: NodeId,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
-    #[allow(unused)]
     time_source: Arc<dyn TimeSource>,
 }
 
