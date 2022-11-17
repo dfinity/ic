@@ -58,9 +58,6 @@ maximum-capacity-canister-http:
 
       $SHELL_WRAPPER pipenv run python3 experiments/run_mixed_workload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --initial_rps=50 --increment_rps=50 --target_rps=150 --max_rps=400 --workload workloads/canister-http-benchmark.toml
 
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
-
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
@@ -93,9 +90,6 @@ maximum-capacity-system-baseline-query:
 
       $SHELL_WRAPPER pipenv run python3 experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=100 --increment_rps=50 --target_rps=4400 --max_rps=40000
 
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
-
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
@@ -125,9 +119,6 @@ maximum-capacity-system-baseline-update:
       $SHELL_WRAPPER pipenv install -r requirements.txt
       
       $SHELL_WRAPPER pipenv run python3 experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=100 --increment_rps=20 --target_rps=800 --max_rps=2000
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -161,9 +152,6 @@ maximum-capacity-large-memory-query:
 
       $SHELL_WRAPPER pipenv run python3 experiments/max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=20 --increment_rps=5 --target_rps=160 --max_rps=1000
 
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
-
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
@@ -193,9 +181,6 @@ maximum-capacity-large-memory-update:
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
       $SHELL_WRAPPER pipenv run python3 experiments/max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=10 --increment_rps=3 --target_rps=25 --max_rps=500
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -227,9 +212,6 @@ maximum-capacity-multiple-large-memory-update:
 
       $SHELL_WRAPPER pipenv run python3 experiments/max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=20 --increment_rps=10 --target_rps=25 --max_rps=100 --num_canisters 15 --payload_size 5000000 --use_updates=True --iter_duration 900
 
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
-
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
@@ -259,9 +241,6 @@ maximum-capacity-mixed-workloads:
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
       $SHELL_WRAPPER pipenv run python3 experiments/run_mixed_workload_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --workload workloads/mixed-query-update.toml --initial_rps=20 --increment_rps=5 --target_rps=160 --max_rps=1000
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -296,9 +275,6 @@ maximum-capacity-mixed-counter-memory:
       # Might mean that we don't need maximum-capacity-large-memory-update any longer.
       $SHELL_WRAPPER pipenv run python3 experiments/run_mixed_workload_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --workload workloads/mixed-memory-counter.toml --initial_rps=10 --increment_rps=5 --target_rps=25 --max_rps=500
 
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
-
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
@@ -328,9 +304,6 @@ maximum-capacity-qr:
 
       $SHELL_WRAPPER pipenv run experiments/run_mixed_workload_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --workload workloads/qr.toml --initial_rps=10 --increment_rps=5 --target_rps=25 --max_rps=150
 
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
-
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
@@ -359,9 +332,6 @@ maximum-capacity-sha256:
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
       $SHELL_WRAPPER pipenv run experiments/run_mixed_workload_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --workload workloads/sha256.toml --initial_rps=10 --increment_rps=5 --target_rps=25 --max_rps=150
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -393,9 +363,6 @@ benchmark-response-payload:
 
       $SHELL_WRAPPER timeout 90m pipenv run python3 experiments/max_capacity_response_payload_size.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2
 
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
-
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
@@ -426,9 +393,6 @@ benchmark-xnet:
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
       $SHELL_WRAPPER pipenv run python3 experiments/max_capacity_xnet.py --testnet $TESTNET --hosts_ini_filename=hosts_single_node_subnets.ini
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
             
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -463,9 +427,6 @@ large-subnet-gossip-experiment:
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
       $SHELL_WRAPPER pipenv run python3 experiments/max_capacity_gossip.py --testnet $TESTNET --wg_testnet $TESTNET --wg_subnet 2 --use_updates=True --hosts_ini_filename=hosts_large_unassigned.ini --target_rps=100
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
       
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -498,9 +459,6 @@ statesync-experiment:
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
       $SHELL_WRAPPER pipenv run python3 experiments/run_statesync_experiment.py --testnet $TESTNET
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -560,9 +518,6 @@ system-baseline-query-performance-test-nightly:
 
       $SHELL_WRAPPER timeout 1h pipenv run python3 experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --target_rps=600  --use_updates=False
 
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
-
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER pipenv run python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=200
@@ -596,9 +551,6 @@ system-baseline-update-performance-test-nightly:
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
       $SHELL_WRAPPER timeout 1h pipenv run python3 experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --target_rps=60 --use_updates=True
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -634,9 +586,6 @@ heavy-memory-update-performance-test-nightly:
       
       $SHELL_WRAPPER timeout 1h pipenv run python3 experiments/run_large_memory_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --target_rps=15 --use_updates=True
 
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
-
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER pipenv run python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=3300
@@ -668,9 +617,6 @@ large-response-downloading-nightly:
       $SHELL_WRAPPER pipenv install -r requirements.txt
       
       $SHELL_WRAPPER timeout 1h pipenv run python3 experiments/run_large_payload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --target_rps=15
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       
@@ -707,9 +653,6 @@ xnet-nightly:
       $SHELL_WRAPPER pipenv install -r requirements.txt
       
       $SHELL_WRAPPER timeout 1h pipenv run python3 experiments/run_xnet_experiment.py --testnet "$TESTNET" --iter_duration 300 --target_rps=500
-
-      # Critical experiment runs passed, disable strict failure mode
-      set +eo pipefail
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       

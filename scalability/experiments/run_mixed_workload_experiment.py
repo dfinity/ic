@@ -4,7 +4,6 @@ Purpose: Measure IC performance give a complex workload.
 
 The workload configuration to use is being read from a seperate workload description file.
 """
-import json
 import os
 import shutil
 import sys
@@ -16,7 +15,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import common.misc as misc  # noqa
 import common.workload_experiment as workload_experiment  # noqa
 import common.workload as workload  # noqa
-import common.report as report  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string("workload", None, "Workload description to execute")
@@ -29,13 +27,6 @@ gflags.DEFINE_integer(
 )
 
 NUM_MACHINES_PER_WORKLOAD = 1  # TODO - make configurable in toml
-
-
-class BytesEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, bytes):
-            return obj.decode("utf-8")
-        return json.JSONEncoder.default(self, obj)
 
 
 class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
@@ -63,10 +54,9 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         f_stdout = os.path.join(self.iter_outdir, "workload-generator-{}.stdout.txt")
         f_stderr = os.path.join(self.iter_outdir, "workload-generator-{}.stderr.txt")
 
-        results = {}
         threads = []  # Array of type: [workload.Workload]
         curr_workload_generator_index = 0
-        for wl in self.workload_description:
+        for wl_idx, wl in enumerate(self.workload_description):
             print(wl)
             rps = int(config["load_total"] * wl.rps_ratio)
             if wl.rps < 0:
@@ -86,6 +76,7 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                 load_generators,
                 self.target_nodes,
                 wl,
+                wl_idx,
                 self.iter_outdir,
                 f_stdout,
                 f_stderr,
@@ -93,62 +84,22 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
             load.start()
             threads.append(load)
 
-        all_destinations = []
-        # dictionary of type: dict[str] = (workload.Workload, str)
-        workload_command_summary_map = {}
-        for num, thread in enumerate(threads):
+        for thread in threads:
             thread: workload.Workload = thread
             thread.join()
-            commands = thread.get_commands()
-            destinations = thread.fetch_results()
-            assert len(commands) == len(destinations) == len(thread.uuids)
-            for command, destination, uid in zip(commands, destinations, thread.uuids):
-                workload_command_summary_map[str(uid)] = {
-                    "command": command,
-                    "workload_description": json.dumps(thread.workload, cls=BytesEncoder, indent=4),
-                    "summary_file": destination,
-                }
-
-            print("Evaluating results from machines: {}".format(destinations))
-            all_destinations += destinations
-            results[num] = report.evaluate_summaries(destinations)
-
-        with open(os.path.join(self.iter_outdir, "workload_command_summary_map.json"), "x") as map_file:
-            map_file.write(json.dumps(workload_command_summary_map, cls=BytesEncoder, indent=4))
-
-        aggregated = report.evaluate_summaries(all_destinations)
-        return (results, aggregated)
+            thread.fetch_results()
 
     def run_iterations(self, iterations=None):
         """Exercise the experiment with specified iterations."""
-        results = []
-        rps_max = 0
         for i, d in enumerate(iterations):
             print(f"🚀 Running with total load {d}")
             config = {"load_total": d, "iteration": i}
-            res, aggregated = self.run_experiment(config)
+            self.run_experiment(config)
 
-            duration = max([wl.start_delay + wl.duration for wl in self.workload_description])
-            avg_succ_rate = aggregated.get_avg_success_rate(duration)
-            latency = aggregated.percentiles[95] if aggregated.num_success > 0 else sys.float_info.max
-            if (
-                aggregated.failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE
-                and latency < workload_experiment.ALLOWABLE_LATENCY
-            ):
-                if avg_succ_rate > rps_max:
-                    rps_max = avg_succ_rate
-            results.append((config, res, aggregated))
-        data = [workloads for _, workloads, _ in results]
-        num_workloads = len(self.workload_description)
-        print(results)
         self.write_summary_file(
             "run_mixed_workload_experiment",
             {
                 "is_update": FLAGS.use_updates,
-                "rps_base": [rate for rate, _, _ in results],
-                "failure_rate": [[d[i].failure_rate for d in data] for i in range(num_workloads)],
-                "latency": [[d[i].percentiles[95] for d in data] for i in range(num_workloads)],
-                "rps_max": rps_max,
                 "labels": [
                     f"{d.get('canister', '')} - "
                     f"{d.get('rps_ratio', '')}% rps with "
@@ -156,6 +107,7 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                     f"{d.get('start_delay', 0)}s for {d.get('duration', '')}s"
                     for d in self.raw_description["workload"]
                 ],
+                "target_duration": max([d.get("duration", 0) for d in self.raw_description["workload"]]),
                 "description": self.raw_description["description"],
                 "title": self.raw_description["title"],
             },

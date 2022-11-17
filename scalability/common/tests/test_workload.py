@@ -29,6 +29,7 @@ class Test_Workload(unittest.TestCase):
                 rps_ratio=0.2,
                 subnet=1,
             ),
+            workload_idx=0,
             outdir="iter_dir",
             f_stdout="no stdout",
             f_stderr="no stderr",

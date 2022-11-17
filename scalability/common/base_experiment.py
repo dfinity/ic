@@ -575,7 +575,7 @@ class BaseExperiment:
             }
         )
         with open(os.path.join(self.out_dir, "experiment.json"), "w") as iter_file:
-            iter_file.write(json.dumps(d))
+            iter_file.write(json.dumps(d, indent=4))
 
     def get_iter_logs_from_targets(self, machines: List[str], since_time: str, outdir: str):
         """Fetch logs from target machines since the given time."""
