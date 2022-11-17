@@ -396,6 +396,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         ckbtc::minter::test_retrieve_btc::test_retrieve_btc
                     ),),
                 ),
+                pot_with_setup(
+                    "minter_pot_heartbeat",
+                    ckbtc::lib::config,
+                    seq!(sys_t(
+                        "minter_heartbeat_btc",
+                        ckbtc::minter::test_heartbeat::test_heartbeat
+                    ),),
+                ),
             ],
         )
         .with_alert(ENG_FINANCIAL_INTEGRATION),

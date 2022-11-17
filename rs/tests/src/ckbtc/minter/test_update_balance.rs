@@ -117,7 +117,9 @@ pub fn test_update_balance(env: TestEnv) {
 
         // Verify that calling update_balance on one account doesn't impact the others.
         debug!(&logger, "Calling update balance on first subaccount.");
-        let update_result = update_balance(&minter_agent, &logger, &subaccount1).await;
+        let update_result = update_balance(&minter_agent, &logger, Some(subaccount1))
+            .await
+            .unwrap();
         // The other subaccount should not be impacted.
         assert_no_new_utxo(&minter_agent, &subaccount2).await;
         assert_mint_transaction(
@@ -162,7 +164,9 @@ pub fn test_update_balance(env: TestEnv) {
             &logger,
             "Calling update balance on second subaccount with ledger started again."
         );
-        let update_result = update_balance(&minter_agent, &logger, &subaccount2).await;
+        let update_result = update_balance(&minter_agent, &logger, Some(subaccount2))
+            .await
+            .unwrap();
         // The other subaccount should not be impacted.
         assert_no_new_utxo(&minter_agent, &subaccount1).await;
         assert_mint_transaction(
