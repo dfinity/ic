@@ -2,7 +2,6 @@ use anyhow::bail;
 use wasmtime::MemoryType;
 use wasmtime_environ::{WASM32_MAX_PAGES, WASM_PAGE_SIZE};
 
-use crate::ICMemoryCreator;
 use crate::LinearMemory;
 
 use ic_sys::PAGE_SIZE;
@@ -46,30 +45,17 @@ impl Deref for MemoryPageSize {
     }
 }
 
-pub struct WasmtimeMemoryCreator<C: ICMemoryCreator>
-where
-    <C as ICMemoryCreator>::Mem: 'static,
-{
-    raw_creator: C,
+pub struct WasmtimeMemoryCreator {
     created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>,
 }
 
-impl<C: ICMemoryCreator> WasmtimeMemoryCreator<C> {
-    pub(crate) fn new(
-        raw_creator: C,
-        created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>,
-    ) -> Self {
-        Self {
-            raw_creator,
-            created_memories,
-        }
+impl WasmtimeMemoryCreator {
+    pub(crate) fn new(created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>) -> Self {
+        Self { created_memories }
     }
 }
 
-unsafe impl<C: ICMemoryCreator + Send + Sync> wasmtime::MemoryCreator for WasmtimeMemoryCreator<C>
-where
-    C::Mem: Send + Sync,
-{
+unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
     fn new_memory(
         &self,
         ty: MemoryType,
@@ -88,14 +74,12 @@ where
 
         let mem_size = reserved_size_in_bytes.unwrap_or_else(wasm_max_mem_size_in_bytes);
 
-        let mem = self
-            .raw_creator
-            .new_memory(mem_size, guard_size, 0, min, Some(max));
+        let mem = MmapMemory::new(mem_size, guard_size);
 
         match self.created_memories.lock() {
             Err(err) => Err(format!("Error locking map of created memories: {:?}", err)),
             Ok(mut created_memories) => {
-                let new_memory = WasmtimeMemory::<C::Mem>::new(mem, min, max);
+                let new_memory = WasmtimeMemory::new(mem, min, max);
                 created_memories.insert(
                     MemoryStart(wasmtime::LinearMemory::as_ptr(&new_memory) as usize),
                     MemoryPageSize(Arc::clone(&new_memory.used)),
@@ -103,22 +87,6 @@ where
                 Ok(Box::new(new_memory))
             }
         }
-    }
-}
-
-pub(crate) struct MmapMemoryCreator {}
-
-impl ICMemoryCreator for MmapMemoryCreator {
-    type Mem = MmapMemory;
-    fn new_memory(
-        &self,
-        mem_size: usize,
-        guard_size: usize,
-        _instance_heap_offset: usize,
-        _min_pages: usize,
-        _max_pages: Option<usize>,
-    ) -> MmapMemory {
-        MmapMemory::new(mem_size, guard_size)
     }
 }
 

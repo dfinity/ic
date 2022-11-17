@@ -41,19 +41,6 @@ pub trait LinearMemory {
     fn as_ptr(&self) -> *mut libc::c_void;
 }
 
-pub trait ICMemoryCreator {
-    type Mem: LinearMemory;
-
-    fn new_memory(
-        &self,
-        mem_size: usize,
-        guard_size: usize,
-        instance_heap_offset: usize,
-        min_pages: usize,
-        max_pages: Option<usize>,
-    ) -> Self::Mem;
-}
-
 /// The results of compiling a Canister which need to be passed back to the main
 /// replica process.
 #[derive(Debug, Serialize, Deserialize, Clone)]
