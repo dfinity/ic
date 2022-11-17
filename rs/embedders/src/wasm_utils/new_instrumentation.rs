@@ -102,8 +102,8 @@ use ic_wasm_types::{BinaryEncodedWasm, ParityWasmError, WasmInstrumentationError
 
 use crate::wasm_utils::wasm_transform::{self, Module};
 use wasmparser::{
-    BlockType, ConstExpr, Data, DataKind, Export, ExternalKind, FuncType, Global, GlobalType,
-    Import, Operator, Type, TypeRef, ValType,
+    BlockType, ConstExpr, Export, ExternalKind, FuncType, Global, GlobalType, Import, Operator,
+    Type, TypeRef, ValType,
 };
 
 use std::convert::TryFrom;
@@ -672,27 +672,20 @@ fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
 
 // Looks for the data section and if it is present, converts it to a vector of
 // tuples (heap offset, bytes) and then deletes the section.
-fn get_data(data_section: &mut Vec<Data>) -> Segments {
+fn get_data(data_section: &mut Vec<wasm_transform::DataSegment>) -> Segments {
     let res = data_section
         .iter()
         .map(|segment| {
-            let offset = match segment.kind {
-                DataKind::Active {
+            let offset = match &segment.kind {
+                wasm_transform::DataSegmentKind::Active {
                     memory_index: _,
                     offset_expr,
-                } => {
-                    let ops = offset_expr
-                        .get_operators_reader()
-                        .into_iter()
-                        .collect::<Result<Vec<_>, _>>()
-                        .expect("validation should have caught invalid data section const_expr");
-                    match &ops.as_slice() {
-                        [Operator::I32Const { value }, Operator::End] => *value as usize,
-                        _ => panic!(
+                } => match offset_expr {
+                    Operator::I32Const { value } => *value as usize,
+                    _ => panic!(
                         "complex initialization expressions for data segments are not supported!"
                     ),
-                    }
-                }
+                },
                 _ => panic!("no offset found for the data segment"),
             };
 

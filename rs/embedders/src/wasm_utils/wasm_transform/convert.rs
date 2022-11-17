@@ -5,8 +5,8 @@
 
 use wasm_encoder::{BlockType, DataSegment, DataSegmentMode, EntityType, Instruction};
 use wasmparser::{
-    BinaryReaderError, ConstExpr, Data, DataKind, ExternalKind, GlobalType, MemArg, MemoryType,
-    Operator, TableType, TagKind, TagType, TypeRef, ValType,
+    BinaryReaderError, ConstExpr, ExternalKind, GlobalType, MemArg, MemoryType, Operator,
+    TableType, TagKind, TagType, TypeRef, ValType,
 };
 
 use super::ElementItems;
@@ -78,6 +78,15 @@ pub(super) fn import_type(ty: TypeRef) -> EntityType {
     }
 }
 
+pub(super) fn op_to_const_expr(
+    operator: &Operator,
+) -> Result<wasm_encoder::ConstExpr, BinaryReaderError> {
+    use wasm_encoder::Encode;
+    let mut bytes: Vec<u8> = Vec::new();
+    op(operator)?.encode(&mut bytes);
+    Ok(wasm_encoder::ConstExpr::raw(bytes))
+}
+
 pub(super) fn const_expr(expr: ConstExpr) -> Result<wasm_encoder::ConstExpr, BinaryReaderError> {
     let mut reader = expr.get_binary_reader();
     let size = reader.bytes_remaining();
@@ -126,16 +135,16 @@ impl<'a> Iterator for DerefBytesIterator<'a> {
 impl<'a> ExactSizeIterator for DerefBytesIterator<'a> {}
 
 pub(super) fn data_segment<'a>(
-    segment: Data<'a>,
+    segment: super::DataSegment<'a>,
     temp_const_expr: &'a mut wasm_encoder::ConstExpr,
 ) -> Result<DataSegment<'a, DerefBytesIterator<'a>>, BinaryReaderError> {
     let mode = match segment.kind {
-        DataKind::Passive => DataSegmentMode::Passive,
-        DataKind::Active {
+        super::DataSegmentKind::Passive => DataSegmentMode::Passive,
+        super::DataSegmentKind::Active {
             memory_index,
             offset_expr,
         } => {
-            *temp_const_expr = const_expr(offset_expr)?;
+            *temp_const_expr = op_to_const_expr(&offset_expr)?;
             DataSegmentMode::Active {
                 memory_index,
                 offset: temp_const_expr,
