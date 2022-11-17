@@ -10,18 +10,28 @@ def scp_file(source, destination):
     return p
 
 
-def run_ssh(machine: str, command: str, f_stdout=None, f_stderr=None) -> subprocess.Popen:
-    """Run the given command on the given machine."""
-    print("{}: Running {}".format(colored(machine, "blue"), command))
+def get_ssh_args(machine, command, extra_args=[]):
     args = [
         "ssh",
         "-o",
         "UserKnownHostsFile=/dev/null",
         "-o",
         "StrictHostKeyChecking=No",
-        "admin@{}".format(machine),
-        command,
     ]
+    return (
+        args
+        + extra_args
+        + [
+            "admin@{}".format(machine),
+            command,
+        ]
+    )
+
+
+def run_ssh(machine: str, command: str, f_stdout=None, f_stderr=None) -> subprocess.Popen:
+    """Run the given command on the given machine."""
+    print("{}: Running {}".format(colored(machine, "blue"), command))
+    args = get_ssh_args(machine, command)
 
     if f_stdout is not None and f_stderr is not None:
         p = subprocess.Popen(args, stdout=open(f_stdout, "w"), stderr=open(f_stderr, "w"))
@@ -38,16 +48,7 @@ def run_ssh_with_t(machine, command, f_stdout, f_stderr):
     """
     print("{}: Running in terminal mode {}".format(colored(machine, "blue"), command))
     return subprocess.Popen(
-        [
-            "ssh",
-            "-tt",
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            "-o",
-            "StrictHostKeyChecking=No",
-            "admin@{}".format(machine),
-            command,
-        ],
+        get_ssh_args(machine, command, ["-tt"]),
         universal_newlines=True,
         stdin=subprocess.DEVNULL,
     )
