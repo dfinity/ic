@@ -1,53 +1,124 @@
-type Account = record { owner : principal; subaccount : opt vec nat8 };
-type GetBtcAddressArgs = record { subaccount : opt vec nat8 };
-type GetWithdrawalAccountResult = record { account : Account };
-type Result = variant { Ok : RetrieveBtcOk; Err : RetrieveBtcErr };
-type Result_1 = variant { Ok : UpdateBalanceResult; Err : UpdateBalanceError };
+// Represents an account on the ckBTC ledger.
+type Account = record { owner : principal; subaccount : opt blob };
+
 type RetrieveBtcArgs = record {
-  address : text;
-  amount : nat64;
+    // The address to which ckBTC minter should deposit BTC.
+    // Currently, the minter understands only the following types of addresses:
+    //   * P2WPKH addresses (they start with the "bc1q" prefix on the Bitcoin mainnet).
+    address : text;
+    // The amount of BTC in Satoshis that client wants to withdraw.
+    amount : nat64;
 };
-type RetrieveBtcErr = variant {
-  MalformedAddress : text;
-  AlreadyProcessing;
-  LedgerError : TransferError;
-  AmountTooLow : nat64;
-  TooManyConcurrentRequests;
-  LedgerConnectionError : record { int32; text };
+
+type RetrieveBtcError = variant {
+    // The minter failed to parse the destination address.
+    MalformedAddress : text;
+    // The minter is already processing another retrieval request for the same
+    // principal.
+    AlreadyProcessing;
+    // The withdrawal amount is too low.
+    // The payload contains the minimal withdrawal amount.
+    AmountTooLow : nat64;
+    // The withdrawal account does not hold requested ckBTC amount.
+    InsufficientFunds : record { balance : nat64 };
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+    // A generic error reserved for future extensions.
+    GenericError : record { error_message : text; error_code : nat64 };
 };
-type RetrieveBtcOk = record { block_index : nat64 };
-type TransferError = variant {
-  GenericError : record { message : text; error_code : nat };
-  TemporarilyUnavailable;
-  BadBurn : record { min_burn_amount : nat };
-  Duplicate : record { duplicate_of : nat };
-  BadFee : record { expected_fee : nat };
-  CreatedInFuture : record { ledger_time : nat64 };
-  TooOld;
-  InsufficientFunds : record { balance : nat };
+
+type RetrieveBtcOk = record {
+    // Returns the burn transaction index on ckBTC minter corresponding to the withdrawal.
+    // You can use this index to query the withdrawal status.
+    block_index : nat64
 };
-type UpdateBalanceArgs = record { subaccount : opt vec nat8 };
+
+// The result of an [update_balance] call.
+type UpdateBalanceResult = record {
+    // Returns the identifier of the mint transaction on the ckBTC ledger.
+    block_index : nat64;
+    // Returns the amount of newly minted ckBTC tokens.
+    amount : nat64;
+};
+
 type UpdateBalanceError = variant {
-  GenericError : record { error_message : text; error_code : nat64 };
-  TemporarilyUnavailable : text;
-  AlreadyProcessing;
-  TooManyConcurrentRequests;
-  NoNewUtxos;
+    // There are no new UTXOs to process.
+    NoNewUtxos;
+    // The minter already processes another update balance request for the caller.
+    AlreadyProcessing;
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+    // A generic error reserved for future extensions.
+    GenericError : record { error_message : text; error_code : nat64 };
 };
-type UpdateBalanceResult = record { block_index : nat64; amount : nat64 };
-type BtcNetwork = variant {Mainnet; Regtest; Testnet};
+
+type BtcNetwork = variant {
+    // The public Bitcoin mainnet.
+    Mainnet;
+    // The public Bitcoin testnet.
+    Testnet;
+    // A local Bitcoin regtest installation.
+    Regtest;
+};
 
 // The initialization parameters of the minter canister.
 type InitArgs = record {
+    // The minter will interact with this Bitcoin network to wrap/unwrap BTC.
     btc_network: BtcNetwork;
+
+    // The principal of the ledger that handles the ckBTC transfers.
+    // You must configure ledger to recognize the default account of
+    // ckBTC minter canister as the minting account.
     ledger_id : principal;
+
+    // The name of the ECDSA key to use.
+    // E.g., "dfx_test_key" on the local replica.
     ecdsa_key_name: text;
+
+    // The minimal amount of ckBTC that we allow to convert to BTC.
     retrieve_btc_min_amount: nat64;
 };
 
 service : (InitArgs) -> {
-  get_btc_address : (GetBtcAddressArgs) -> (text);
-  get_withdrawal_account : () -> (GetWithdrawalAccountResult);
-  retrieve_btc : (RetrieveBtcArgs) -> (Result);
-  update_balance : (UpdateBalanceArgs) -> (Result_1);
+    // Section "Wrap BTC" {{{
+
+    // Returns the bitcoin address to which the caller should send BTC
+    // before converting the amount to ckBTC using the update_balance
+    // endpoint.
+    get_btc_address : (record { subaccount : opt blob }) -> (text);
+
+    // Mints ckBTC for newly deposited UTXOs.
+    //
+    // # Preconditions
+    //
+    // * The caller deposited some BTC to the address that the
+    //   [get_btc_address] endpoint returns.
+    update_balance : (record { subaccount : opt blob }) -> (variant { Ok : UpdateBalanceResult; Err : UpdateBalanceError });
+
+    // }}} Section "Wrap BTC"
+
+    // Section "Unwrap BTC" {{{
+
+    // Returns the account to which the caller should deposit ckBTC
+    // before withdrawing BTC using the retrieve_btc endpoint.
+    get_withdrawal_account : () -> (record { account : Account });
+
+    // Submits a request to convert ckBTC to BTC.
+    //
+    // # Note
+    //
+    // Finalizing BTC retrieval can take up to an hour.  Instead of
+    // synchronously waiting for a BTC transaction to settle, this
+    // method returns a request ([block_index]) that the caller can use
+    // to query the request status.
+    //
+    // # Preconditions
+    //
+    // * The caller deposited the requested amount in ckBTC to the account
+    //   that the [get_withdrawal_account] endpoint returns.
+    retrieve_btc : (RetrieveBtcArgs) -> (variant { Ok : RetrieveBtcOk; Err : RetrieveBtcError });
+
+    // }}} Section "Unwrap BTC"
 }

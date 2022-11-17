@@ -22,7 +22,7 @@ use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
 };
-use ic_icrc1::endpoints::{TransferArg, TransferError};
+use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1::Account;
 use ic_icrc1_agent::Icrc1Agent;
 use slog::{debug, info};
@@ -170,11 +170,9 @@ pub fn test_retrieve_btc(env: TestEnv) {
             .await
             .expect("Error while calling retrieve_btc");
         assert_eq!(
-            Err(RetrieveBtcError::LedgerError(
-                TransferError::InsufficientFunds {
-                    balance: Nat::from(7_000_000u64)
-                }
-            )),
+            Err(RetrieveBtcError::InsufficientFunds {
+                balance: 7_000_000u64
+            }),
             retrieve_result
         );
 

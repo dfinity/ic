@@ -27,6 +27,7 @@ ic-icrc1-client-cdk = { path = "../../../rosetta-api/icrc1/client/cdk" }
 ic-ledger-core = { path = "../../../rosetta-api/ledger_core" }
 ic-metrics-encoder = { path = "../../../monitoring/metrics_encoder" }
 lazy_static = "1.4.0"
+num-traits = "0.2.14"
 ripemd = "0.1.1"
 serde = "1.0.136"
 serde_bytes = "0.11"

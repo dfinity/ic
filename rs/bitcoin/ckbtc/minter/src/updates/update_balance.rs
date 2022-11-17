@@ -35,7 +35,6 @@ enum ErrorCode {
 pub enum UpdateBalanceError {
     TemporarilyUnavailable(String),
     AlreadyProcessing,
-    TooManyConcurrentRequests,
     NoNewUtxos,
     GenericError {
         error_code: u64,
@@ -47,7 +46,9 @@ impl From<GuardError> for UpdateBalanceError {
     fn from(e: GuardError) -> Self {
         match e {
             GuardError::AlreadyProcessing => Self::AlreadyProcessing,
-            GuardError::TooManyConcurrentRequests => Self::TooManyConcurrentRequests,
+            GuardError::TooManyConcurrentRequests => {
+                Self::TemporarilyUnavailable("too many concurrent requests".to_string())
+            }
         }
     }
 }
