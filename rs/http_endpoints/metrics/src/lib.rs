@@ -1,4 +1,4 @@
-use hyper::{server::conn::Http, service::service_fn, Body, Response};
+use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_async_utils::TcpAcceptor;
 use ic_config::metrics::{Config, Exporter};
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -10,7 +10,12 @@ use std::net::SocketAddr;
 use std::string::String;
 use std::sync::Arc;
 use std::time::Duration;
+use thiserror::Error;
 use tokio::net::TcpListener;
+use tower::{
+    limit::concurrency::GlobalConcurrencyLimitLayer, load_shed::error::Overloaded,
+    util::BoxCloneService, BoxError, ServiceBuilder, ServiceExt,
+};
 
 const LOG_INTERVAL_SECS: u64 = 30;
 
@@ -25,6 +30,7 @@ const PROMETHEUS_TIMEOUT_HEADER: &str = "X-Prometheus-Scrape-Timeout-Seconds";
 // live TCP connections. If we are at the limit, we won't
 // accept new TCP connections.
 const MAX_OUTSTANDING_CONNECTIONS: usize = 20;
+const MAX_CONCURRENT_REQUESTS: usize = 50;
 
 /// The type of a metrics runtime implementation.
 pub struct MetricsHttpEndpoint {
@@ -34,6 +40,30 @@ pub struct MetricsHttpEndpoint {
     crypto_tls: Option<(Arc<dyn RegistryClient>, Arc<dyn TlsHandshake + Send + Sync>)>,
     log: slog::Logger,
     metrics: MetricsEndpointMetrics,
+}
+
+#[derive(Error, Debug)]
+struct HttpError {
+    response: Response<Body>,
+}
+
+impl std::fmt::Display for HttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.response)
+    }
+}
+impl From<BoxError> for HttpError {
+    fn from(err: BoxError) -> Self {
+        let builder = if err.is::<Overloaded>() {
+            Response::builder().status(StatusCode::TOO_MANY_REQUESTS)
+        } else {
+            Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR)
+        };
+        let response = builder
+            .body(Body::from(""))
+            .expect("Building response can't fail.");
+        Self { response }
+    }
 }
 
 #[derive(Clone)]
@@ -150,38 +180,48 @@ impl MetricsHttpEndpoint {
     fn start_http(&self, address: SocketAddr) {
         let metrics_registry = self.metrics_registry.clone();
         let log = self.log.clone();
-        let aservice = service_fn(move |req| {
-            // Clone again to ensure that `metrics_registry` outlives this closure.
-            let metrics_registry = metrics_registry.clone();
-            let encoder = TextEncoder::new();
-            async move {
-                // Replica metrics need to be served even if some adapters are unresponsive.
-                // To guarantee this, each adapter enforces either the default timeout (1s) or
-                // a fraction of the timeout provided by Prometheus in the scrape request header.
-                let metrics_registry_replica = metrics_registry.clone();
-                let metrics_registry_adapter = metrics_registry.clone();
-                let (mf_replica, mut mf_adapters) = tokio::join!(
-                    tokio::spawn(
-                        async move { metrics_registry_replica.prometheus_registry().gather() }
-                    ),
-                    metrics_registry_adapter.adapter_registry().gather(
-                        req.headers()
-                            .get(PROMETHEUS_TIMEOUT_HEADER)
-                            .and_then(|h| h.to_str().ok())
-                            .and_then(|h| Some(Duration::from_secs_f64(h.parse().ok()?)))
-                            .map(|h| { h.mul_f64(PROMETHEUS_TIMEOUT_FRACTION) })
-                            .unwrap_or(DEFAULT_ADAPTER_COLLECTION_TIMEOUT),
-                    )
-                );
-                mf_adapters.append(&mut mf_replica.unwrap_or_default());
+        let metrics_svc = ServiceBuilder::new()
+            .load_shed()
+            .layer(GlobalConcurrencyLimitLayer::new(MAX_CONCURRENT_REQUESTS))
+            .service_fn(move |req: Request<Body>| {
+                // Clone again to ensure that `metrics_registry` outlives this closure.
+                let metrics_registry = metrics_registry.clone();
+                let encoder = TextEncoder::new();
+                async move {
+                    // Replica metrics need to be served even if some adapters are unresponsive.
+                    // To guarantee this, each adapter enforces either the default timeout (1s) or
+                    // a fraction of the timeout provided by Prometheus in the scrape request header.
+                    let metrics_registry_replica = metrics_registry.clone();
+                    let metrics_registry_adapter = metrics_registry.clone();
+                    let (mf_replica, mut mf_adapters) = tokio::join!(
+                        tokio::spawn(async move {
+                            metrics_registry_replica.prometheus_registry().gather()
+                        }),
+                        metrics_registry_adapter.adapter_registry().gather(
+                            req.headers()
+                                .get(PROMETHEUS_TIMEOUT_HEADER)
+                                .and_then(|h| h.to_str().ok())
+                                .and_then(|h| Some(Duration::from_secs_f64(h.parse().ok()?)))
+                                .map(|h| { h.mul_f64(PROMETHEUS_TIMEOUT_FRACTION) })
+                                .unwrap_or(DEFAULT_ADAPTER_COLLECTION_TIMEOUT),
+                        )
+                    );
+                    mf_adapters.append(&mut mf_replica.unwrap_or_default());
 
-                let mut buffer = Vec::with_capacity(mf_adapters.len());
-                encoder.encode(&mf_adapters, &mut buffer).unwrap();
+                    let mut buffer = Vec::with_capacity(mf_adapters.len());
+                    encoder.encode(&mf_adapters, &mut buffer).unwrap();
 
-                Ok::<_, hyper::Error>(Response::new(Body::from(buffer)))
-            }
-        });
+                    Ok::<_, std::convert::Infallible>(Response::new(Body::from(buffer)))
+                }
+            })
+            .map_result(move |result| -> Result<Response<Body>, HttpError> {
+                match result {
+                    Ok(response) => Ok(response),
+                    Err(err) => Ok(HttpError::from(err).response),
+                }
+            });
 
+        let metrics_svc = BoxCloneService::new(metrics_svc);
         let crypto_tls = self.crypto_tls.clone();
         // Temporarily listen on [::] so that we accept both IPv4 and IPv6 connections.
         // This requires net.ipv6.bindv6only = 0.  TODO: revert this once we have rolled
@@ -193,15 +233,15 @@ impl MetricsHttpEndpoint {
         self.rt_handle.spawn(async move {
             let tcp_listener = TcpListener::bind(&addr)
                 .await
-                .unwrap_or_else(|_| panic!("Could not bind to addr: {}", addr));
+                .unwrap_or_else(|err| panic!("Could not bind to addr = {}. err = {}", addr, err));
             let tcp_acceptor = TcpAcceptor::new(tcp_listener, MAX_OUTSTANDING_CONNECTIONS);
 
             let http = Http::new();
             loop {
                 let log = log.clone();
                 let http = http.clone();
+                let metrics_svc = metrics_svc.clone();
                 let metrics = metrics.clone();
-                let aservice = aservice.clone();
                 let crypto_tls = crypto_tls.clone();
                 if let Ok((tcp_stream, _)) = tcp_acceptor.accept().await {
                     tokio::spawn(async move {
@@ -223,7 +263,7 @@ impl MetricsHttpEndpoint {
                                     Err(e) => warn!(log, "TLS error: {}", e),
                                     Ok(stream) => {
                                         if let Err(e) =
-                                            http.serve_connection(stream, aservice).await
+                                            http.serve_connection(stream, metrics_svc).await
                                         {
                                             trace!(log, "Connection error: {}", e);
                                         }
@@ -232,7 +272,7 @@ impl MetricsHttpEndpoint {
                             }
                         } else {
                             // Fallback to Http.
-                            if let Err(e) = http.serve_connection(tcp_stream, aservice).await {
+                            if let Err(e) = http.serve_connection(tcp_stream, metrics_svc).await {
                                 trace!(log, "Connection error: {}", e);
                             }
                         }
@@ -282,10 +322,21 @@ mod tests {
         Body, Error, Method, Request,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
+    use prometheus::{
+        core::{Collector, Desc},
+        proto::MetricFamily,
+    };
     use slog::info;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
     use std::time::Duration;
-    use tokio::{net::TcpSocket, time::sleep};
-
+    use tokio::{
+        net::TcpSocket,
+        sync::mpsc::{channel, Sender},
+        time::sleep,
+    };
     // Get a free port on this host to which we can connect transport to.
     fn get_free_localhost_port() -> std::io::Result<SocketAddr> {
         let socket = TcpSocket::new_v4()?;
@@ -297,21 +348,30 @@ mod tests {
         socket.local_addr()
     }
 
-    async fn create_client_and_send_request(
+    async fn send_request(
+        client: &Client<HttpConnector, Body>,
         addr: SocketAddr,
-    ) -> Result<Client<HttpConnector, Body>, Error> {
-        let client = Client::new();
-
+    ) -> Result<Response<Body>, Error> {
         let req = Request::builder()
             .method(Method::GET)
             .uri(format!("http://{}", addr))
             .body(Body::from(""))
             .expect("Building the request failed.");
 
-        client.request(req).await?;
-        Ok(client)
+        client.request(req).await
     }
 
+    async fn create_client_and_send_request(
+        addr: SocketAddr,
+    ) -> Result<Client<HttpConnector, Body>, Error> {
+        let client: Client<HttpConnector, Body> = Client::builder()
+            .http2_only(true)
+            .http2_max_concurrent_reset_streams(2 * MAX_CONCURRENT_REQUESTS)
+            .build_http();
+
+        send_request(&client, addr).await?;
+        Ok(client)
+    }
     #[tokio::test]
     async fn test_bounding_number_of_tcp_streams() {
         with_test_replica_logger(|log| async move {
@@ -357,6 +417,120 @@ mod tests {
             // Check we hit the limit of live TCP connections by expecting a failure when yet
             // another request is send.
             assert!(create_client_and_send_request(addr).await.is_err());
+        })
+        .await
+    }
+
+    #[derive(Clone)]
+    struct BlockingCollector {
+        test_desc: Desc,
+        sender: Sender<()>,
+        collect_calls: Arc<AtomicUsize>,
+    }
+
+    impl BlockingCollector {
+        fn new(sender: Sender<()>) -> Self {
+            let mut hm = std::collections::HashMap::new();
+            let _ = hm.insert("x".to_string(), "y".to_string());
+            let test_desc =
+                Desc::new("a".to_string(), "b".to_string(), vec!["c".to_string()], hm).unwrap();
+            let collect_calls = Arc::new(AtomicUsize::new(0));
+
+            Self {
+                test_desc,
+                sender,
+                collect_calls,
+            }
+        }
+    }
+
+    impl Collector for BlockingCollector {
+        fn desc(&self) -> Vec<&Desc> {
+            vec![&self.test_desc]
+        }
+
+        fn collect(&self) -> Vec<MetricFamily> {
+            self.collect_calls.fetch_add(1, Ordering::SeqCst);
+            let tx = self.sender.clone();
+            tokio::task::block_in_place(|| {
+                tx.blocking_send(()).unwrap();
+            });
+            vec![]
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_load_shedding() {
+        with_test_replica_logger(|log| async move {
+            let rt_handle = tokio::runtime::Handle::current();
+            let addr = get_free_localhost_port().unwrap();
+            let config = Config {
+                exporter: Exporter::Http(addr),
+            };
+            let metrics_registry = MetricsRegistry::default();
+            let (tx, mut rx) = channel(1);
+            let blocking_collector = metrics_registry.register(BlockingCollector::new(tx));
+            let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+                rt_handle,
+                config,
+                metrics_registry,
+                &log.inner_logger.root,
+            );
+
+            // Use a single client so we don't hit the max TCP connetions limit.
+            let client = Client::builder()
+                .http2_only(true)
+                .retry_canceled_requests(false)
+                .http2_max_concurrent_reset_streams(2 * MAX_CONCURRENT_REQUESTS)
+                .build_http();
+
+            let mut set = tokio::task::JoinSet::new();
+
+            loop {
+                match send_request(&client, addr).await {
+                    Err(_err) => {
+                        // in case the server is not up and running due to scheduling
+                        // timing resend the request
+                        sleep(Duration::from_millis(1)).await;
+                    }
+                    Ok(resp) => {
+                        assert_eq!(resp.status(), StatusCode::OK);
+                        break;
+                    }
+                }
+            }
+            // reset the counter to 0 after we confirmed there is a listening socket
+            blocking_collector.collect_calls.store(0, Ordering::SeqCst);
+            // Send 'MAX_CONCURRENT_REQUESTS' and block their progress.
+            for _i in 0..MAX_CONCURRENT_REQUESTS {
+                set.spawn({
+                    let client = client.clone();
+                    async move {
+                        assert_eq!(
+                            send_request(&client, addr).await.unwrap().status(),
+                            StatusCode::OK
+                        );
+                    }
+                });
+            }
+
+            // What until all requests reached the blocking/sync point.
+            while blocking_collector.collect_calls.load(Ordering::SeqCst) != MAX_CONCURRENT_REQUESTS
+            {
+                tokio::task::yield_now().await;
+            }
+            assert_eq!(
+                send_request(&client, addr).await.unwrap().status(),
+                StatusCode::TOO_MANY_REQUESTS
+            );
+
+            // unblock and join the tasks that have sent the initial requets
+            for _i in 0..MAX_CONCURRENT_REQUESTS + 1 {
+                rx.recv().await.unwrap();
+            }
+            for _i in 0..MAX_CONCURRENT_REQUESTS {
+                set.join_next().await.unwrap().unwrap();
+            }
         })
         .await
     }

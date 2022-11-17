@@ -13,7 +13,9 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:slog",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
+    "@crate_index//:tower",
 ]
 
 DEV_DEPENDENCIES = [
