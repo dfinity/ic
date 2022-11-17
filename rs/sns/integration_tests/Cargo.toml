@@ -67,6 +67,7 @@ ic-types = { path = "../../types/types" }
 itertools = "0.10.3"
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+pretty_assertions = "1.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
 tokio = { version = "1.17.0", features = ["time"] }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }

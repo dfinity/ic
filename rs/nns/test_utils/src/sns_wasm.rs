@@ -25,8 +25,10 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_state_machine_tests::StateMachine;
 use maplit::hashmap;
-use std::collections::HashMap;
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 /// Get an SnsWasm with the smallest valid WASM
 pub fn smallest_valid_wasm() -> SnsWasm {
@@ -93,6 +95,19 @@ pub fn add_wasm(
 
 /// Make add_wasm request to a canister in the StateMachine
 pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm, hash: &[u8; 32]) {
+    let proposal_id = add_wasm_via_proposal_and_return_immediately(env, wasm, hash);
+
+    while get_proposal_info(env, proposal_id).unwrap().status == (ProposalStatus::Open as i32) {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Make add_wasm request to a canister in the StateMachine
+pub fn add_wasm_via_proposal_and_return_immediately(
+    env: &StateMachine,
+    wasm: SnsWasm,
+    hash: &[u8; 32],
+) -> ProposalId {
     let payload = AddWasmRequest {
         hash: hash.to_vec(),
         wasm: Some(wasm),
@@ -124,13 +139,9 @@ pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm, hash: &[u8; 32])
     )
     .unwrap();
 
-    let pid = match response.command.unwrap() {
+    match response.command.unwrap() {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
         other => panic!("Unexpected response: {:?}", other),
-    };
-
-    while get_proposal_info(env, pid).unwrap().status == (ProposalStatus::Open as i32) {
-        std::thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -309,37 +320,79 @@ pub fn add_dummy_wasms_to_sns_wasms(machine: &StateMachine) {
 /// Adds real SNS wasms to the SNS-WASM canister for more robust tests, and returns
 /// a map of those wasms for use in further tests.
 pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) -> HashMap<SnsCanisterType, SnsWasm> {
+    fn is_not_open(status: i32) -> bool {
+        status != ProposalStatus::Open as i32
+    }
+    let timeout = Duration::from_secs(120);
+
+    let mut result = hashmap! {};
+    for (k, (proposal_id, v)) in
+        add_real_wasms_to_sns_wasms_and_return_immediately(machine).into_iter()
+    {
+        wait_for_proposal_status(machine, proposal_id, is_not_open, timeout);
+        result.insert(k, v);
+    }
+    result
+}
+
+pub fn wait_for_proposal_status(
+    machine: &StateMachine,
+    proposal_id: ProposalId,
+    is_status_achieved: impl Fn(i32) -> bool,
+    timeout: Duration,
+) {
+    let now = Instant::now;
+    let start = now();
+    while now() - start < timeout {
+        let status = get_proposal_info(machine, proposal_id).unwrap().status;
+        if is_status_achieved(status) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    panic!("Proposal {} never exited the Open state.", proposal_id);
+}
+
+pub fn add_real_wasms_to_sns_wasms_and_return_immediately(
+    machine: &StateMachine,
+) -> HashMap<SnsCanisterType, (ProposalId, SnsWasm)> {
     let root_wasm = build_root_sns_wasm();
     let root_hash = root_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, root_wasm.clone(), &root_hash);
+    let root_proposal_id =
+        add_wasm_via_proposal_and_return_immediately(machine, root_wasm.clone(), &root_hash);
 
     let gov_wasm = build_governance_sns_wasm();
     let gov_hash = gov_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, gov_wasm.clone(), &gov_hash);
+    let gov_proposal_id =
+        add_wasm_via_proposal_and_return_immediately(machine, gov_wasm.clone(), &gov_hash);
 
     let ledger_wasm = build_ledger_sns_wasm();
     let ledger_hash = ledger_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, ledger_wasm.clone(), &ledger_hash);
+    let ledger_proposal_id =
+        add_wasm_via_proposal_and_return_immediately(machine, ledger_wasm.clone(), &ledger_hash);
 
     let swap_wasm = build_swap_sns_wasm();
     let swap_hash = swap_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, swap_wasm.clone(), &swap_hash);
+    let swap_proposal_id =
+        add_wasm_via_proposal_and_return_immediately(machine, swap_wasm.clone(), &swap_hash);
 
     let archive_wasm = build_archive_sns_wasm();
     let archive_hash = archive_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, archive_wasm.clone(), &archive_hash);
+    let archive_proposal_id =
+        add_wasm_via_proposal_and_return_immediately(machine, archive_wasm.clone(), &archive_hash);
 
     let index_wasm = build_index_sns_wasm();
     let index_hash = index_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, index_wasm.clone(), &index_hash);
+    let index_proposal_id =
+        add_wasm_via_proposal_and_return_immediately(machine, index_wasm.clone(), &index_hash);
 
     hashmap! {
-        SnsCanisterType::Root => root_wasm,
-        SnsCanisterType::Governance => gov_wasm,
-        SnsCanisterType::Ledger => ledger_wasm,
-        SnsCanisterType::Swap => swap_wasm,
-        SnsCanisterType::Archive => archive_wasm,
-        SnsCanisterType::Index => index_wasm,
+        SnsCanisterType::Root => (root_proposal_id, root_wasm),
+        SnsCanisterType::Governance => (gov_proposal_id, gov_wasm),
+        SnsCanisterType::Ledger => (ledger_proposal_id, ledger_wasm),
+        SnsCanisterType::Swap => (swap_proposal_id, swap_wasm),
+        SnsCanisterType::Archive => (archive_proposal_id, archive_wasm),
+        SnsCanisterType::Index => (index_proposal_id, index_wasm),
     }
 }
 
