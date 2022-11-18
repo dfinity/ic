@@ -36,13 +36,13 @@ bazel-test-all:
     BAZEL_TARGETS: "//..."
     BAZEL_UPLOAD_TARGETS: "//..."
 
-bazel-test-basic-health:
+bazel-system-test-hourly:
   extends:
     - .bazel-test-all
     - .bazel-rules-post-master
   variables:
-    BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test --build_event_json_file=./build_event_file.json"
-    BAZEL_TARGETS: "//rs/tests:basic_health_test"
+    BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_hourly --build_event_json_file=./build_event_file.json"
+    BAZEL_TARGETS: "//rs/tests/..."
   artifacts:
     when: always
     paths:
