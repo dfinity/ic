@@ -5,8 +5,9 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
-use candid::{candid_method, Principal};
+use candid::Principal;
 use ic_cdk::api::call::RejectionCode;
+use ic_cdk_macros::{query, update};
 use ic_ic00_types::{CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use std::cell::RefCell;
@@ -17,8 +18,7 @@ thread_local! {
     pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (RejectionCode, String)>>>  = RefCell::new(HashMap::new());
 }
 
-#[ic_cdk_macros::update(name = "send_request")]
-#[candid_method(update, rename = "send_request")]
+#[update]
 async fn send_request(
     request: RemoteHttpRequest,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
@@ -67,8 +67,7 @@ async fn send_request(
     }
 }
 
-#[ic_cdk_macros::query(name = "check_response")]
-#[candid_method(query, rename = "check_response")]
+#[query]
 async fn check_response(
     url: String,
 ) -> Option<Result<RemoteHttpResponse, (RejectionCode, String)>> {
@@ -84,8 +83,7 @@ async fn check_response(
     })
 }
 
-#[ic_cdk_macros::query(name = "transform")]
-#[candid_method(query, rename = "transform")]
+#[query]
 fn transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, _) = (raw.response, raw.context);
     let mut transformed = response;
@@ -93,8 +91,17 @@ fn transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     transformed
 }
 
-#[ic_cdk_macros::query(name = "test_transform")]
-#[candid_method(query, rename = "test_transform")]
+#[query]
+fn transform_with_context(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let (response, context) = (raw.response, raw.context);
+    let mut context = context;
+    let mut transformed = response;
+    transformed.body.append(&mut context);
+    transformed.headers = vec![];
+    transformed
+}
+
+#[query]
 fn test_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, _) = (raw.response, raw.context);
     let mut transformed = response;
@@ -105,8 +112,7 @@ fn test_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     transformed
 }
 
-#[ic_cdk_macros::query(name = "bloat_transform")]
-#[candid_method(query, rename = "bloat_transform")]
+#[query]
 fn bloat_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, _) = (raw.response, raw.context);
     let mut transformed = response;
@@ -140,6 +146,25 @@ mod proxy_canister_test {
         println!("Sanitized body is: {}", sanitized_body);
         assert!(sanitized.headers.is_empty());
         assert_eq!(sanitized_body, "homepage");
+    }
+
+    #[test]
+    fn test_transform_with_context() {
+        let response = "response";
+        let context = "context";
+        let raw = TransformArgs {
+            response: CanisterHttpResponsePayload {
+                status: 200,
+                headers: vec![],
+                body: response.as_bytes().to_vec(),
+            },
+            context: context.as_bytes().to_vec(),
+        };
+        let transformed = transform_with_context(raw);
+        assert_eq!(
+            response.to_owned() + context,
+            String::from_utf8_lossy(&transformed.body).to_string()
+        );
     }
 }
 
