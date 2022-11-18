@@ -33,6 +33,7 @@ prometheus = { version = "0.12.0", features = [ "process" ] }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 
 [dev-dependencies]
+ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }

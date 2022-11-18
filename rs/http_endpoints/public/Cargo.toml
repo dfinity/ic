@@ -47,6 +47,7 @@ url = "2.1.1"
 
 [dev-dependencies]
 bytes = "1.0.1"
+ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
 ic-test-utilities = { path = "../../test_utilities" }
 maplit = "1.0.2"
 pretty_assertions = "0.7.1"

@@ -28,6 +28,7 @@ use ic_interfaces::{
     validation::ValidationResult,
 };
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
@@ -39,7 +40,6 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::ReplicatedStateBuilder,
-    state_manager::MockStateManager,
     types::ids::{canister_test_id, node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,

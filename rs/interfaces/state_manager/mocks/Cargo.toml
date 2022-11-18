@@ -1,0 +1,11 @@
+[package]
+name = "ic-interfaces-state-manager-mocks"
+version = "0.8.0"
+edition = "2021"
+
+[dependencies]
+ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
+ic-interfaces-state-manager = { path = "../" }
+ic-replicated-state = { path = "../../../replicated_state" }
+ic-types = { path = "../../../types/types" }
+mockall = "0.11.2"

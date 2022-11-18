@@ -48,6 +48,7 @@ ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/ca
 ic-execution-environment = { path = "../execution_environment" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
+ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-messaging = { path = "../messaging" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }

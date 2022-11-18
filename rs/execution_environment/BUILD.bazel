@@ -60,6 +60,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/bitcoin/test-utils",
     "//rs/crypto/sha",
+    "//rs/interfaces/state_manager/mocks",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",

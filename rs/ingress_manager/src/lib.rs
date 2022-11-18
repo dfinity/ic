@@ -211,6 +211,7 @@ pub(crate) mod tests {
             ValidatedIngressArtifact,
         },
     };
+    use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client::client::RegistryClientImpl;
     use ic_registry_keys::make_subnet_record_key;
@@ -222,7 +223,6 @@ pub(crate) mod tests {
         cycles_account_manager::CyclesAccountManagerBuilder,
         history::MockIngressHistory,
         state::ReplicatedStateBuilder,
-        state_manager::MockStateManager,
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_logger::with_test_replica_logger;

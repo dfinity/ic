@@ -28,6 +28,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/config",
+    "//rs/interfaces/state_manager/mocks",
     "//rs/registry/client",
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",

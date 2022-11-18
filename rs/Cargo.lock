@@ -4164,6 +4164,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -4646,6 +4647,7 @@ dependencies = [
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
@@ -5754,6 +5756,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-nns-constants",
@@ -5905,6 +5908,7 @@ dependencies = [
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-pprof",
@@ -6140,6 +6144,7 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -6244,6 +6249,17 @@ dependencies = [
  "ic-types",
  "phantom_newtype",
  "thiserror",
+]
+
+[[package]]
+name = "ic-interfaces-state-manager-mocks"
+version = "0.8.0"
+dependencies = [
+ "ic-crypto-tree-hash",
+ "ic-interfaces-state-manager",
+ "ic-replicated-state",
+ "ic-types",
+ "mockall 0.11.3",
 ]
 
 [[package]]
@@ -6387,6 +6403,7 @@ dependencies = [
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -8511,6 +8528,7 @@ dependencies = [
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
@@ -8929,6 +8947,7 @@ dependencies = [
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",

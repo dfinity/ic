@@ -1038,9 +1038,9 @@ impl MessageRouting for MessageRoutingImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_test_utilities::{
         notification::{Notification, WaitResult},
-        state_manager::MockStateManager,
         types::batch::BatchBuilder,
     };
     use ic_test_utilities_logger::with_test_replica_logger;

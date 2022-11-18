@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-ic-crypto-tree-hash = { path = "../..//crypto/tree_hash" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 thiserror = "1.0"

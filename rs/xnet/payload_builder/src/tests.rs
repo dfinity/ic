@@ -3,10 +3,11 @@ use super::*;
 use assert_matches::assert_matches;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetTransientValidationError};
 use ic_interfaces_state_manager::StateManagerError;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_test_utilities::{
     certified_stream_store::MockCertifiedStreamStore,
     crypto::fake_tls_handshake::FakeTlsHandshake,
-    state_manager::{FakeStateManager, MockStateManager},
+    state_manager::FakeStateManager,
     types::ids::{SUBNET_1, SUBNET_2},
 };
 use ic_test_utilities_logger::with_test_replica_logger;

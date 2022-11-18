@@ -60,6 +60,7 @@ iai = "0.1"
 ic-btc-test-utils = { path = "../bitcoin/test-utils" }
 ic-btc-types = { path = "../bitcoin/types/public" }
 ic-crypto-sha = { path = "../crypto/sha" }
+ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }

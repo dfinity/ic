@@ -52,6 +52,7 @@ BUILD_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "//rs/test_utilities",
+    "//rs/interfaces/state_manager/mocks",
     "@crate_index//:bytes",
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
