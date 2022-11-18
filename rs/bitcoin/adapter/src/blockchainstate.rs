@@ -420,6 +420,7 @@ impl HeaderStore for BlockchainState {
 #[cfg(test)]
 mod test {
     use bitcoin::TxMerkleNode;
+    use ic_metrics::MetricsRegistry;
 
     use super::*;
     use crate::{

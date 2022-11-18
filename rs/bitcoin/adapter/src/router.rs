@@ -2,7 +2,7 @@
 //! to the correct component.
 use crate::{
     blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE, config::Config,
-    connectionmanager::ConnectionManager, stream::handle_stream,
+    connectionmanager::ConnectionManager, metrics::RouterMetrics, stream::handle_stream,
     transaction_manager::TransactionManager, AdapterState, BlockchainManagerRequest,
     BlockchainState, Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError,
     ProcessEvent, TransactionManagerRequest,
@@ -38,11 +38,17 @@ pub fn start_router(
     let (network_message_sender, mut network_message_receiver) =
         channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
+    let router_metrics = RouterMetrics::new(metrics_registry);
+
     let mut blockchain_manager =
-        BlockchainManager::new(blockchain_state, logger.clone(), metrics_registry);
+        BlockchainManager::new(blockchain_state, logger.clone(), router_metrics.clone());
     let mut transaction_manager = TransactionManager::new(logger.clone());
-    let mut connection_manager =
-        ConnectionManager::new(config, logger, network_message_sender, metrics_registry);
+    let mut connection_manager = ConnectionManager::new(
+        config,
+        logger,
+        network_message_sender,
+        router_metrics.clone(),
+    );
 
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
@@ -69,6 +75,10 @@ pub fn start_router(
                 },
                 network_message = network_message_receiver.recv() => {
                     let (address, message) = network_message.unwrap();
+                    router_metrics
+                        .bitcoin_messages_received
+                        .with_label_values(&[message.cmd()])
+                        .inc();
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
                         connection_manager.process_bitcoin_network_message(address, &message) {
                         connection_manager.discard(&address);

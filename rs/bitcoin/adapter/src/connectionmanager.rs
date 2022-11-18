@@ -11,7 +11,6 @@ use bitcoin::network::{
     Address,
 };
 use ic_logger::{error, info, trace, warn, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
 use rand::prelude::*;
 use thiserror::Error;
 use tokio::{
@@ -28,7 +27,7 @@ use crate::{
     common::*,
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
-    metrics::ConnectionManagerMetrics,
+    metrics::RouterMetrics,
     stream::{StreamConfig, StreamEvent, StreamEventKind},
     Channel, ChannelError, Command, ProcessBitcoinNetworkMessage,
     ProcessBitcoinNetworkMessageError, ProcessEvent,
@@ -103,7 +102,7 @@ pub struct ConnectionManager {
     network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
     /// This field is used for the version nonce generation.
     rng: StdRng,
-    metrics: ConnectionManagerMetrics,
+    metrics: RouterMetrics,
 }
 
 impl ConnectionManager {
@@ -112,7 +111,7 @@ impl ConnectionManager {
         config: &Config,
         logger: ReplicaLogger,
         network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
-        metrics_registry: &MetricsRegistry,
+        metrics: RouterMetrics,
     ) -> Self {
         let address_book = AddressBook::new(config, logger.clone());
         let (stream_event_sender, stream_event_receiver) =
@@ -134,7 +133,7 @@ impl ConnectionManager {
             stream_event_sender,
             network_message_sender,
             stream_event_receiver,
-            metrics: ConnectionManagerMetrics::new(metrics_registry),
+            metrics,
         }
     }
 
@@ -578,6 +577,10 @@ impl ConnectionManager {
 
 impl Channel for ConnectionManager {
     fn send(&mut self, command: Command) -> Result<(), ChannelError> {
+        self.metrics
+            .bitcoin_messages_sent
+            .with_label_values(&[command.message.cmd()])
+            .inc();
         let Command { address, message } = command;
         if let Some(addr) = address {
             self.send_to(&addr, message).ok();
@@ -684,6 +687,7 @@ mod test {
     use crate::config::test::ConfigBuilder;
     use bitcoin::{network::constants::ServiceFlags, Network};
     use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
     use std::str::FromStr;
 
     const BLOCK_HEIGHT_FOR_TESTS: BlockHeight = 1;
@@ -715,7 +719,7 @@ mod test {
             &config,
             no_op_logger(),
             network_message_sender,
-            &MetricsRegistry::default(),
+            RouterMetrics::new(&MetricsRegistry::default()),
         );
         assert!(!manager.validate_received_version(&version_message));
     }
@@ -747,7 +751,7 @@ mod test {
             &config,
             no_op_logger(),
             network_message_sender,
-            &MetricsRegistry::default(),
+            RouterMetrics::new(&MetricsRegistry::default()),
         );
         manager.current_height = 100_000;
 
@@ -781,7 +785,7 @@ mod test {
             &config,
             no_op_logger(),
             network_message_sender,
-            &MetricsRegistry::default(),
+            RouterMetrics::new(&MetricsRegistry::default()),
         );
 
         assert!(!manager.validate_received_version(&version_message));
@@ -873,7 +877,7 @@ mod test {
             &config,
             no_op_logger(),
             network_message_sender,
-            &MetricsRegistry::default(),
+            RouterMetrics::new(&MetricsRegistry::default()),
         );
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         assert!(manager.initial_address_discovery);
@@ -938,7 +942,7 @@ mod test {
             &config,
             no_op_logger(),
             network_message_sender,
-            &MetricsRegistry::default(),
+            RouterMetrics::new(&MetricsRegistry::default()),
         );
         let timestamp = SystemTime::now() - Duration::from_secs(60);
         let (writer, _) = unbounded_channel();
@@ -982,7 +986,7 @@ mod test {
             &config,
             no_op_logger(),
             network_message_sender,
-            &MetricsRegistry::default(),
+            RouterMetrics::new(&MetricsRegistry::default()),
         );
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
@@ -1051,7 +1055,7 @@ mod test {
             &config,
             no_op_logger(),
             network_message_sender,
-            &MetricsRegistry::default(),
+            RouterMetrics::new(&MetricsRegistry::default()),
         );
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
@@ -1113,7 +1117,7 @@ mod test {
             &config,
             no_op_logger(),
             network_message_sender,
-            &MetricsRegistry::default(),
+            RouterMetrics::new(&MetricsRegistry::default()),
         );
         let (writer, _) = unbounded_channel();
         let conn = Connection::new_with_state(
@@ -1159,7 +1163,7 @@ mod test {
             &config,
             no_op_logger(),
             network_message_sender,
-            &MetricsRegistry::default(),
+            RouterMetrics::new(&MetricsRegistry::default()),
         );
         let (writer, _) = unbounded_channel();
         let conn = Connection::new_with_state(

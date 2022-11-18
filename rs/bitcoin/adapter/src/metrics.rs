@@ -4,17 +4,13 @@ use prometheus::{IntCounter, IntCounterVec, IntGauge};
 pub(crate) const LABEL_GET_SUCCESSOR: &str = "get_successor";
 pub(crate) const LABEL_REQUEST_TYPE: &str = "type";
 pub(crate) const LABEL_SEND_TRANSACTION: &str = "send_transaction";
-pub(crate) const LABEL_GET_HEADERS_MSG: &str = "get_headers";
-pub(crate) const LABEL_HEADERS_MSG: &str = "headers";
-pub(crate) const LABEL_INV_MSG: &str = "inv";
-pub(crate) const LABEL_BLOCK_MSG: &str = "block";
 
 #[derive(Debug, Clone)]
-pub struct AdapterServiceMetrics {
+pub struct ServiceMetrics {
     pub requests: IntCounterVec,
 }
 
-impl AdapterServiceMetrics {
+impl ServiceMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             requests: metrics_registry.int_counter_vec(
@@ -27,13 +23,16 @@ impl AdapterServiceMetrics {
 }
 
 #[derive(Debug, Clone)]
-pub struct BlockchainManagerMetrics {
+pub struct RouterMetrics {
     pub idle: IntCounter,
     pub bitcoin_messages_sent: IntCounterVec,
     pub bitcoin_messages_received: IntCounterVec,
+    pub available_connections: IntGauge,
+    pub connections: IntCounter,
+    pub known_peer_addresses: IntGauge,
 }
 
-impl BlockchainManagerMetrics {
+impl RouterMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             idle: metrics_registry.int_counter(
@@ -50,6 +49,12 @@ impl BlockchainManagerMetrics {
                 "Bitcoin network messages received.",
                 &[LABEL_REQUEST_TYPE],
             ),
+            available_connections: metrics_registry
+                .int_gauge("available_connections", "Active bitcoin peer connections."),
+            connections: metrics_registry
+                .int_counter("connection_total", "Connection setup attempts."),
+            known_peer_addresses: metrics_registry
+                .int_gauge("known_peer_addresses", "Known peer addresses."),
         }
     }
 }
@@ -70,31 +75,9 @@ impl BlockchainStateMetrics {
                 .int_gauge("block_cache_size_bytes", "Current size of block cache."),
             header_cache_size: metrics_registry.int_gauge(
                 "header_cache_size",
-                "Number of headers stored in the adpater.",
+                "Number of headers stored in the adapter.",
             ),
             tips: metrics_registry.int_gauge("blockchain_tips", "Number of active tips."),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ConnectionManagerMetrics {
-    pub available_connections: IntGauge,
-    pub connections: IntCounter,
-    pub known_peer_addresses: IntGauge,
-}
-
-impl ConnectionManagerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
-        Self {
-            available_connections: metrics_registry.int_gauge(
-                "available_connections",
-                "Available bitcoin peer connections.",
-            ),
-            connections: metrics_registry
-                .int_counter("connection_total", "Connection setup attempts."),
-            known_peer_addresses: metrics_registry
-                .int_gauge("known_peer_addresses", "Known peer addresses."),
         }
     }
 }
