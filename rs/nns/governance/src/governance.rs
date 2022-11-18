@@ -5359,6 +5359,7 @@ impl Governance {
                 PROPOSAL_URL_CHAR_MIN,
                 PROPOSAL_URL_CHAR_MAX,
                 "Proposal url",
+                Some(vec!["forum.dfinity.org"]),
             )
             .map_err(|err| invalid_proposal(err).unwrap_err())?;
         }
