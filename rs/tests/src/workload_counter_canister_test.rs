@@ -25,7 +25,9 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
+use crate::driver::test_env_api::{
+    HasGroupSetup, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+};
 use crate::util::{
     assert_canister_counter_with_retries, assert_create_agent, assert_endpoints_health, block_on,
     delay, get_random_application_node_endpoint, EndpointsStatus,
@@ -50,6 +52,7 @@ const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(5); // 
 
 /// Default configuration for this test
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(NODES_COUNT))
         .setup_and_start(&env)
