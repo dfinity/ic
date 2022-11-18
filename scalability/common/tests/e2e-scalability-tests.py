@@ -208,17 +208,6 @@ def main(argv):
                 + base_arguments_load_test
             )
 
-            print("📂 Gossip experiment")
-            run(
-                [
-                    "python3",
-                    "experiments/run_gossip_experiment.py",
-                    "--iter_duration",
-                    "10",
-                ]
-                + base_arguments_load_test
-            )
-
             print("📂 Large memory experiment with queries")
             run(
                 [
