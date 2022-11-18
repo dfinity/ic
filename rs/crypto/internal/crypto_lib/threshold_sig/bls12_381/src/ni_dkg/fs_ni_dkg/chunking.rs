@@ -48,15 +48,10 @@ impl PlaintextChunks {
     }
 
     /// Create a PlaintextChunks by rechunking dlog results
-    ///
-    /// Panics if any of the discrete logs were unsolved (None)
-    pub fn from_dlogs(dlogs: &[Option<Scalar>]) -> Self {
+    pub fn from_dlogs(dlogs: &[Scalar]) -> Self {
         let chunk_size = Scalar::from_usize(CHUNK_SIZE);
         let mut acc = Scalar::zero();
         for dlog in dlogs {
-            let dlog = dlog
-                .clone()
-                .expect("Unsolvable discrete logarithm in NIDKG");
             acc *= &chunk_size;
             acc += dlog;
         }

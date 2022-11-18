@@ -831,19 +831,34 @@ pub fn dec_chunks(
 
     // Find discrete log of the powers
     let linear_search = HonestDealerDlogLookupTable::new();
-    let mut dlogs = linear_search.solve_several(&powers);
 
-    if dlogs.iter().any(|x| x.is_none()) {
-        // Cheating dealer case
-        let cheating_solver = CheatingDealerDlogSolver::new(n, m);
+    let dlogs = {
+        let mut dlogs = linear_search.solve_several(&powers);
 
-        for i in 0..dlogs.len() {
-            if dlogs[i].is_none() {
-                // It may take hours to brute force a cheater's discrete log.
-                dlogs[i] = cheating_solver.solve(&powers[i]);
+        if dlogs.iter().any(|x| x.is_none()) {
+            // Cheating dealer case
+            let cheating_solver = CheatingDealerDlogSolver::new(n, m);
+
+            for i in 0..dlogs.len() {
+                if dlogs[i].is_none() {
+                    // It may take hours to brute force a cheater's discrete log.
+                    dlogs[i] = cheating_solver.solve(&powers[i]);
+                }
             }
         }
-    }
+
+        let mut solutions = Vec::with_capacity(dlogs.len());
+
+        for dlog in dlogs {
+            if let Some(solution) = dlog {
+                solutions.push(solution);
+            } else {
+                return Err(DecErr::InvalidChunk);
+            }
+        }
+
+        solutions
+    };
 
     Ok(PlaintextChunks::from_dlogs(&dlogs).recombine_to_scalar())
 }
