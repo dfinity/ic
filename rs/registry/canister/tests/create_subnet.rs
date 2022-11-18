@@ -260,6 +260,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                 key_ids: vec![(&key_1).into()],
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
             });
 
             let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -287,6 +288,8 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
             let initial_subnet_list_record = get_subnet_list_record(&registry).await;
 
             // Create payload message with EcdsaKeyRequest
+            let signature_request_timeout_ns = Some(12345);
+            let idkg_key_rotation_period_ms = Some(12345);
             let payload = {
                 let mut payload = make_create_subnet_payload(node_ids.clone());
                 payload.ecdsa_config = Some(EcdsaInitialConfig {
@@ -296,7 +299,8 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                         subnet_id: Some(*system_subnet_principal),
                     }],
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                    signature_request_timeout_ns: None,
+                    signature_request_timeout_ns,
+                    idkg_key_rotation_period_ms,
                 });
                 payload
             };
@@ -334,6 +338,14 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
 
             assert_eq!(ecdsa_config.quadruples_to_create_in_advance, 101);
             assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
+            assert_eq!(
+                ecdsa_config.signature_request_timeout_ns,
+                signature_request_timeout_ns
+            );
+            assert_eq!(
+                ecdsa_config.idkg_key_rotation_period_ms,
+                idkg_key_rotation_period_ms
+            );
             let key_ids = ecdsa_config.key_ids;
             assert_eq!(key_ids.len(), 1);
             assert_eq!(

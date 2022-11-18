@@ -477,13 +477,17 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
+        let signature_request_timeout_ns = Some(12345);
+        let idkg_key_rotation_period_ms = Some(12345);
+
         // update payload message
         let mut payload = UpdateSubnetPayload {
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
+                signature_request_timeout_ns,
+                idkg_key_rotation_period_ms,
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
@@ -540,7 +544,8 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
+                signature_request_timeout_ns,
+                idkg_key_rotation_period_ms,
             }),
             ecdsa_key_signing_enable: None,
             ..empty_update_subnet_payload(subnet_id)
@@ -570,7 +575,8 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                         quadruples_to_create_in_advance: 10,
                         key_ids: vec![make_ecdsa_key("key_id_1")],
                         max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                        signature_request_timeout_ns: None,
+                        signature_request_timeout_ns,
+                        idkg_key_rotation_period_ms,
                     }
                     .into()
                 ),
@@ -584,7 +590,8 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
+                signature_request_timeout_ns,
+                idkg_key_rotation_period_ms,
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)

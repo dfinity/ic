@@ -265,6 +265,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 key_ids: vec![(&key_1).into()],
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
             });
 
             let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -328,6 +329,8 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
 
             wait_for_ecdsa_setup(&runtime, &fake_governance_canister, &key_1).await;
 
+            let signature_request_timeout_ns = Some(12345);
+            let idkg_key_rotation_period_ms = Some(12345);
             let payload = RecoverSubnetPayload {
                 subnet_id: subnet_to_recover_subnet_id.get(),
                 height: 10,
@@ -342,7 +345,8 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                         subnet_id: Some(system_subnet_id.get()),
                     }],
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                    signature_request_timeout_ns: None,
+                    signature_request_timeout_ns,
+                    idkg_key_rotation_period_ms,
                 }),
             };
 
@@ -373,6 +377,14 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
             let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
             let ecdsa_config = subnet_record.ecdsa_config.unwrap();
             assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
+            assert_eq!(
+                ecdsa_config.signature_request_timeout_ns,
+                signature_request_timeout_ns
+            );
+            assert_eq!(
+                ecdsa_config.idkg_key_rotation_period_ms,
+                idkg_key_rotation_period_ms
+            );
 
             let key_ids = ecdsa_config.key_ids;
             assert_eq!(key_ids.len(), 1);
@@ -454,6 +466,7 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
                 key_ids: vec![(&key_1).into()],
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
             });
 
             let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -526,6 +539,8 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
             // Install the universal canister in place of the governance canister
             let fake_governance_canister = set_up_universal_canister_as_governance(&runtime).await;
 
+            let signature_request_timeout_ns = Some(12345);
+            let idkg_key_rotation_period_ms = Some(12345);
             let payload = RecoverSubnetPayload {
                 subnet_id: subnet_to_recover_subnet_id.get(),
                 height: 10,
@@ -537,7 +552,8 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
                     quadruples_to_create_in_advance: 1,
                     keys: vec![],
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                    signature_request_timeout_ns: None,
+                    signature_request_timeout_ns,
+                    idkg_key_rotation_period_ms,
                 }),
             };
 
@@ -561,6 +577,14 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
             let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
             let ecdsa_config = subnet_record.ecdsa_config.unwrap();
             assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
+            assert_eq!(
+                ecdsa_config.signature_request_timeout_ns,
+                signature_request_timeout_ns
+            );
+            assert_eq!(
+                ecdsa_config.idkg_key_rotation_period_ms,
+                idkg_key_rotation_period_ms
+            );
 
             let key_ids = ecdsa_config.key_ids;
             assert_eq!(key_ids.len(), 0);
