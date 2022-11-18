@@ -24,6 +24,8 @@ const MAX_CANISTER_TO_CANISTER_RATE: usize = 30;
 
 const DEFAULT_TARGETED_LATENCY_SECONDS: u64 = 20;
 
+pub const DEFAULT_DELETE_CANISTER_RETRIES: u64 = 8;
+
 /// Testcase 4.3 implementation: installs `xnet-test-canister` onto the first
 /// `subnets` subnets of `ic`; calls `start()` on each; sleeps for `runtime`;
 /// calls `stop()` on each; and finally retrieves and validates the metrics
@@ -43,6 +45,7 @@ pub async fn test_impl(
     wallet_canisters: Option<Vec<String>>,
     cycles_per_subnet: Option<u64>,
     skip_cleanup: bool,
+    delete_canister_retries: Option<u64>,
     all_to_one: bool,
 ) {
     if let Some(subnets) = subnets {
@@ -234,7 +237,11 @@ pub async fn test_impl(
 
     if !skip_cleanup {
         println!("👉 Cleaning up");
-        cleanup(locate_canisters(&canisters, &wallet_canisters, ic)).await;
+        cleanup(
+            locate_canisters(&canisters, &wallet_canisters, ic),
+            delete_canister_retries.unwrap_or(DEFAULT_DELETE_CANISTER_RETRIES),
+        )
+        .await;
     }
 
     let mut aggregated_metrics: Vec<Metrics> = Vec::with_capacity(subnets);

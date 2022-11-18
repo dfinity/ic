@@ -20,6 +20,7 @@ struct Config {
     cycles_per_subnet: Option<u64>,
     canisters_to_cleanup: Option<Vec<String>>,
     skip_cleanup: bool,
+    delete_canister_retries: Option<u64>,
     all_to_one: bool,
 }
 
@@ -139,6 +140,14 @@ pub fn main() {
             "--skip_cleanup" => {
                 config.skip_cleanup = true;
             }
+            "--delete_canister_retries" => {
+                config.delete_canister_retries = Some(
+                    args.next()
+                        .expect("Missing value for delete_canister_retries")
+                        .parse()
+                        .expect("Invalid delete_canister_retries, expected u64 value"),
+                )
+            }
             "--all_to_one" => {
                 config.all_to_one = true;
             }
@@ -178,6 +187,7 @@ pub fn main() {
                     config.cycles_per_subnet,
                     config.canisters_to_cleanup,
                     config.skip_cleanup,
+                    config.delete_canister_retries,
                     config.all_to_one,
                 )
             };
