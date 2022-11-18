@@ -49,6 +49,7 @@ pub fn test(env: TestEnv) {
 
 async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger: Logger) {
     retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+        let context = "There is context to be appended in body";
         let res =
             proxy_canister
                 .update_(
@@ -61,13 +62,13 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                         request: CanisterHttpRequestArgs {
                             url: url.to_string(),
                             headers: vec![],
-                            body: Some("".as_bytes().to_vec()),
+                            body: None,
                             transform: Some(TransformContext {
                                 function: TransformFunc(candid::Func {
                                     principal: proxy_canister.canister_id().get().0,
-                                    method: "transform".to_string(),
+                                    method: "transform_with_context".to_string(),
                                 }),
-                                context: vec![0, 1, 2],
+                                context: context.as_bytes().to_vec(),
                             }),
                             method: HttpMethod::GET,
                             max_response_bytes: None,
@@ -77,7 +78,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                 )
                 .await
                 .expect("Update call to proxy canister failed");
-        if !matches!(res, Ok(ref x) if x.status == 200) {
+        if !matches!(res, Ok(ref x) if x.status == 200 && x.body.contains(context)) {
             bail!("Http request failed response: {:?}", res);
         }
         info!(&logger, "Update call succeeded! {:?}", res);
