@@ -99,6 +99,7 @@ fn should_not_construct_crypto_component_for_non_replica_process_without_keys() 
             None,
             Arc::new(registry_client),
             no_op_logger(),
+            None,
         );
     })
 }
@@ -116,6 +117,7 @@ fn should_successfully_construct_crypto_component_for_non_replica_process_with_d
             None,
             Arc::new(registry_client),
             no_op_logger(),
+            None,
         );
     })
 }
@@ -132,6 +134,7 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
             None,
             Arc::new(registry_client),
             no_op_logger(),
+            None,
         );
 
         let retrieved_node_pks = crypto.current_node_public_keys();

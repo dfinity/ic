@@ -121,12 +121,14 @@ impl Orchestrator {
             let c_log = logger.clone();
             let c_registry = registry.clone();
             let crypto_config = config.crypto.clone();
+            let c_metrics = metrics_registry.clone();
             move || {
                 Arc::new(CryptoComponent::new_for_non_replica_process(
                     &crypto_config,
                     Some(tokio::runtime::Handle::current()),
                     c_registry.get_registry_client(),
                     c_log.clone(),
+                    Some(&c_metrics),
                 ))
             }
         });

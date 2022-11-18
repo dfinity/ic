@@ -319,6 +319,11 @@ impl CryptoComponentFatClient<Csp> {
     ///
     /// The methods of the `TlsHandshake` trait are unaffected by this.
     ///
+    /// # NOTE:
+    /// Callers of this method are strongly encouraged to switch from using
+    /// `CryptoComponentForNonReplicaProcess`, to using the full crypto component,
+    /// by calling `new` instead of `new_for_non_replica_process`.
+    ///
     /// # Panics
     /// Panics if the `config`'s vault type is `UnixSocket` and
     /// `tokio_runtime_handle` is `None`.
@@ -327,9 +332,15 @@ impl CryptoComponentFatClient<Csp> {
         tokio_runtime_handle: Option<tokio::runtime::Handle>,
         registry_client: Arc<dyn RegistryClient>,
         logger: ReplicaLogger,
+        metrics_registry: Option<&MetricsRegistry>,
     ) -> impl CryptoComponentForNonReplicaProcess {
-        // disable metrics for crypto in orchestrator:
-        CryptoComponentFatClient::new(config, tokio_runtime_handle, registry_client, logger, None)
+        CryptoComponentFatClient::new(
+            config,
+            tokio_runtime_handle,
+            registry_client,
+            logger,
+            metrics_registry,
+        )
     }
 
     /// Returns the `NodeId` of this crypto component.
