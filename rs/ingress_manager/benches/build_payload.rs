@@ -20,6 +20,7 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
@@ -33,7 +34,6 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
     state::ReplicatedStateBuilder,
-    state_manager::MockStateManager,
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
     FastForwardTimeSource,

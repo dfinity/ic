@@ -24,6 +24,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
@@ -38,7 +39,6 @@ use ic_test_utilities::{
     history::MockIngressHistory,
     mock_time,
     state::ReplicatedStateBuilder,
-    state_manager::MockStateManager,
     types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
     types::messages::SignedIngressBuilder,
     FastForwardTimeSource,

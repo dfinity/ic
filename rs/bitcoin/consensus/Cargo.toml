@@ -21,6 +21,7 @@ slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debu
 thiserror = "1.0"
 
 [dev-dependencies]
+ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
 ic-protobuf = { path = "../../protobuf" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-test-utilities = { path = "../../test_utilities" }

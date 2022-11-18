@@ -43,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/execution_environment",
     "//rs/ingress_manager",
     "//rs/interfaces/certified_stream_store",
+    "//rs/interfaces/state_manager/mocks",
     "//rs/messaging",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",

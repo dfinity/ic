@@ -7,13 +7,14 @@ use ic_interfaces::self_validating_payload::SelfValidatingPayloadBuilder;
 use ic_interfaces_bitcoin_adapter_client::BitcoinAdapterClientError;
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_registry_mocks::MockRegistryClient;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{bitcoin::v1 as pb_bitcoin, registry::subnet::v1::SubnetRecord};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::{
     bitcoin_adapter_client::MockBitcoinAdapterClient, mock_time,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-    state::ReplicatedStateBuilder, state_manager::MockStateManager, types::ids::subnet_test_id,
+    state::ReplicatedStateBuilder, types::ids::subnet_test_id,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{batch::ValidationContext, Height, NumBytes, RegistryVersion, SubnetId};

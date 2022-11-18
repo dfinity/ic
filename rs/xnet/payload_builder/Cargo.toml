@@ -34,6 +34,7 @@ tokio = { version = "1.15.0", features = ["full"] }
 [dev-dependencies]
 assert_matches = "1.3.0"
 ic-config = { path = "../../config" }
+ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-state-manager = { path = "../../state_manager" }

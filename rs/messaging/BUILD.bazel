@@ -42,6 +42,7 @@ rust_test(
     name = "messaging_test",
     crate = ":messaging",
     deps = [
+        "//rs/interfaces/state_manager/mocks",
         "//rs/test_utilities",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/metrics",

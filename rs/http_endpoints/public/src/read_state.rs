@@ -361,12 +361,12 @@ mod test {
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_interfaces_state_manager::Labeled;
+    use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{BitcoinState, CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{
         mock_time,
         state::insert_dummy_canister,
-        state_manager::MockStateManager,
         types::ids::{canister_test_id, subnet_test_id, user_test_id},
     };
     use ic_types::Height;
