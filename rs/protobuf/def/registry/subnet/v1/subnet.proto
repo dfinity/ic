@@ -373,4 +373,7 @@ message EcdsaConfig {
   uint32 max_queue_size = 4;
   // Signature requests will timeout after the given number of nano seconds.
   optional uint64 signature_request_timeout_ns = 5;
+  // Key rotation period of a single node in milliseconds.
+  // If none is specified key rotation is disabled.
+  optional uint64 idkg_key_rotation_period_ms = 6;
 }

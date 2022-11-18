@@ -68,6 +68,7 @@ pub fn get_subnet_holding_ecdsa_keys(
             key_ids: ecdsa_key_ids.to_vec(),
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
         }
         .into(),
     );

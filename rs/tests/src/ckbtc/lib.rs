@@ -113,6 +113,7 @@ async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, ke
             key_ids: vec![key_id.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
         }),
         ..empty_subnet_update()
     };

@@ -404,6 +404,19 @@ pub(crate) async fn enable_ecdsa_signing_with_timeout(
     key_id: EcdsaKeyId,
     timeout: Option<Duration>,
 ) {
+    enable_ecdsa_signing_with_timeout_and_rotation_period(
+        governance, subnet_id, key_id, timeout, None,
+    )
+    .await
+}
+
+pub(crate) async fn enable_ecdsa_signing_with_timeout_and_rotation_period(
+    governance: &Canister<'_>,
+    subnet_id: SubnetId,
+    key_id: EcdsaKeyId,
+    timeout: Option<Duration>,
+    period: Option<Duration>,
+) {
     // The ECDSA key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
@@ -414,6 +427,7 @@ pub(crate) async fn enable_ecdsa_signing_with_timeout(
             key_ids: vec![key_id.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
+            idkg_key_rotation_period_ms: period.map(|t| t.as_millis() as u64),
         }),
         ..empty_subnet_update()
     };
@@ -477,6 +491,7 @@ pub(crate) async fn create_new_subnet_with_keys(
             keys,
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
         }),
     };
     execute_create_subnet_proposal(governance, payload).await;

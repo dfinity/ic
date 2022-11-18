@@ -111,6 +111,7 @@ fn main() -> Result<()> {
             key_ids: vec![(&key_id).into()],
             max_queue_size: 64,
             signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
         });
 
         let mut topology_config = TopologyConfig::default();
