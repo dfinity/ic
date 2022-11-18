@@ -1,6 +1,5 @@
 //! A client to interface with canisters via HTTP.
 mod agent;
-mod canister_management;
 mod cbor;
 mod http_client;
 

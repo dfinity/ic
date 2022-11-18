@@ -1,6 +1,6 @@
-use crate::agent::{sign_query, sign_read_state, sign_submit, Agent};
+use crate::agent::Agent;
+use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::{LabeledTree, LookupStatus, Path};
-use ic_types::Time;
 use ic_types::{
     messages::{
         Blob, Certificate, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
@@ -8,7 +8,7 @@ use ic_types::{
         SignedRequestBytes,
     },
     time::current_time_and_expiry_time,
-    CanisterId,
+    CanisterId, Time,
 };
 use serde::Deserialize;
 use serde_cbor::value::Value as CBOR;
@@ -79,7 +79,7 @@ pub fn parse_read_state_response(
 }
 
 /// Given a CBOR response from a `query`, extract the response.
-pub(crate) fn parse_canister_query_response(message: &CBOR) -> Result<RequestStatus, String> {
+pub(crate) fn parse_query_response(message: &CBOR) -> Result<RequestStatus, String> {
     let content = match message {
         CBOR::Map(content) => Ok(content),
         cbor => Err(format!(
@@ -224,12 +224,364 @@ fn to_blob(canister_id: &CanisterId) -> Blob {
     Blob(canister_id.get().into_vec())
 }
 
+/// Wraps the content into an envelope that contains the message signature.
+///
+/// Prerequisite: `content` contains a `sender` field that is compatible with
+/// the `keypair` argument.
+fn sign_submit(
+    content: HttpCallContent,
+    sender: &Sender,
+) -> Result<(HttpRequestEnvelope<HttpCallContent>, MessageId), Box<dyn Error>> {
+    // Open question: should this also set the `sender` field of the `content`? The
+    // two are linked, but it's a bit weird for a function that presents itself
+    // as 'wrapping a content into an envelope' to mess up with the content.
+
+    let message_id = match &content {
+        HttpCallContent::Call { update } => update.id(),
+    };
+
+    let pub_key_der = sender.sender_pubkey_der().map(Blob);
+    let sender_sig = sender.sign_message_id(&message_id)?.map(Blob);
+
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
+        content,
+        sender_pubkey: pub_key_der,
+        sender_sig,
+        sender_delegation: None,
+    };
+    Ok((envelope, message_id))
+}
+
+/// Wraps the content into an envelope that contains the message signature.
+///
+/// Prerequisite: if `content` contains a `sender` field (this is the case for
+/// queries, but not for request_status), then this 'sender' must be compatible
+/// with the `keypair` argument.
+fn sign_read_state(
+    content: HttpReadStateContent,
+    sender: &Sender,
+) -> Result<HttpRequestEnvelope<HttpReadStateContent>, Box<dyn Error>> {
+    let message_id = content.id();
+    let pub_key_der = sender.sender_pubkey_der().map(Blob);
+    let sender_sig = sender.sign_message_id(&message_id)?.map(Blob);
+
+    Ok(HttpRequestEnvelope::<HttpReadStateContent> {
+        content,
+        sender_pubkey: pub_key_der,
+        sender_sig,
+        sender_delegation: None,
+    })
+}
+
+/// Wraps the content into an envelope that contains the message signature.
+///
+/// Prerequisite: if `content` contains a `sender` field (this is the case for
+/// queries, but not for request_status), then this 'sender' must be compatible
+/// with the `keypair` argument.
+fn sign_query(
+    content: HttpQueryContent,
+    sender: &Sender,
+) -> Result<HttpRequestEnvelope<HttpQueryContent>, Box<dyn Error>> {
+    let message_id = content.id();
+    let pub_key_der = sender.sender_pubkey_der().map(Blob);
+    let sender_sig = sender.sign_message_id(&message_id)?.map(Blob);
+
+    Ok(HttpRequestEnvelope::<HttpQueryContent> {
+        content,
+        sender_pubkey: pub_key_der,
+        sender_sig,
+        sender_delegation: None,
+    })
+}
+
+pub(crate) fn bytes_to_cbor(bytes: Vec<u8>) -> Result<CBOR, String> {
+    let cbor = serde_cbor::from_slice(&bytes).map_err(|e| {
+        format!(
+            "Agent::bytes_to_cbor: Failed to parse result from IC, got: {:?} - error {:?}",
+            String::from_utf8(
+                bytes
+                    .iter()
+                    .copied()
+                    .flat_map(std::ascii::escape_default)
+                    .collect()
+            )
+            .expect("ASCII is legal utf8"),
+            e
+        )
+    })?;
+    Ok(cbor)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
-    use ic_types::messages::HttpReadStateResponse;
+    use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
+    use ic_test_utilities::types::ids::node_test_id;
+    use ic_types::malicious_flags::MaliciousFlags;
+    use ic_types::messages::{
+        HttpCanisterUpdate, HttpReadStateResponse, HttpRequest, HttpUserQuery, UserQuery,
+    };
+    use ic_types::time::current_time;
+    use ic_types::{PrincipalId, RegistryVersion, UserId};
+    use ic_validator::get_authorized_canisters;
+    use rand::SeedableRng;
+    use rand_chacha::ChaChaRng;
     use serde::Serialize;
+    use std::convert::TryFrom;
+    use std::time::Duration;
+    use tokio_test::assert_ok;
+
+    // The node id of the node that validates message signatures
+    const VALIDATOR_NODE_ID: u64 = 42;
+    fn mock_registry_version() -> RegistryVersion {
+        RegistryVersion::from(0)
+    }
+
+    /// Create an HttpRequest with a non-anonymous user and then verify
+    /// that `validate_message` manages to authenticate it.
+    #[test]
+    fn sign_and_verify_submit_content_with_ed25519() {
+        let test_start_time = current_time();
+        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
+        // Set up an arbitrary legal input
+        let keypair = {
+            let mut rng = ChaChaRng::seed_from_u64(789_u64);
+            Ed25519KeyPair::generate(&mut rng)
+        };
+        let content = HttpCallContent::Call {
+            update: HttpCanisterUpdate {
+                canister_id: Blob(vec![51]),
+                method_name: "foo".to_string(),
+                arg: Blob(vec![12, 13, 99]),
+
+                nonce: None,
+                sender: Blob(
+                    UserId::from(PrincipalId::new_self_authenticating(
+                        &ed25519_public_key_to_der(keypair.public_key.to_vec()),
+                    ))
+                    .get()
+                    .into_vec(),
+                ),
+                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+            },
+        };
+        let sender = Sender::from_keypair(&keypair);
+        let (submit, id) = sign_submit(content.clone(), &sender).unwrap();
+
+        // The wrapped content is content, without modification
+        assert_eq!(submit.content, content);
+
+        // The message id matches one that can be reconstructed from the output
+        let request = HttpRequest::try_from(submit).unwrap();
+        assert_eq!(id, request.id());
+
+        // The envelope can be successfully authenticated
+        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
+        assert!(get_authorized_canisters(
+            &request,
+            &validator,
+            test_start_time,
+            mock_registry_version(),
+            &MaliciousFlags::default(),
+        )
+        .unwrap()
+        .contains(&request.content().canister_id()));
+    }
+
+    /// Create an HttpRequest with a non-anonymous user and then verify
+    /// that `validate_message` manages to authenticate it.
+    #[test]
+    fn sign_and_verify_submit_content_with_ecdsa_secp256k1() {
+        let test_start_time = current_time();
+        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
+        // Set up an arbitrary legal input
+        // Set up an arbitrary legal input
+        let (sk, pk) = {
+            let mut rng = ChaChaRng::seed_from_u64(89_u64);
+            let sk = libsecp256k1::SecretKey::random(&mut rng);
+            let pk = libsecp256k1::PublicKey::from_secret_key(&sk);
+            (sk.serialize(), pk.serialize())
+        };
+        let sender_id = UserId::from(PrincipalId::new_self_authenticating(
+            &ecdsa_secp256k1::api::public_key_to_der(
+                &ecdsa_secp256k1::types::PublicKeyBytes::from(pk.to_vec()),
+            )
+            .expect("DER encoding failed"),
+        ));
+        let content = HttpCallContent::Call {
+            update: HttpCanisterUpdate {
+                canister_id: Blob(vec![51]),
+                method_name: "foo".to_string(),
+                arg: Blob(vec![12, 13, 99]),
+                nonce: None,
+                sender: Blob(sender_id.get().into_vec()),
+                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+            },
+        };
+        let sender = Sender::from_secp256k1_keys(&sk, &pk);
+        let (submit, id) = sign_submit(content.clone(), &sender).unwrap();
+
+        // The wrapped content is content, without modification
+        assert_eq!(submit.content, content);
+
+        // The message id matches one that can be reconstructed from the output
+        let request = HttpRequest::try_from(submit).unwrap();
+        assert_eq!(id, request.id());
+
+        // The envelope can be successfully authenticated
+        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
+        assert!(get_authorized_canisters(
+            &request,
+            &validator,
+            test_start_time,
+            mock_registry_version(),
+            &MaliciousFlags::default(),
+        )
+        .unwrap()
+        .contains(&request.content().canister_id()));
+    }
+
+    /// Create an HttpRequest with an explicit anonymous user and then
+    /// verify that `validate_message` manages to authenticate it.
+    #[test]
+    fn sign_and_verify_submit_content_explicit_anonymous() {
+        let test_start_time = current_time();
+        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
+
+        // Set up an arbitrary legal input
+        let content = HttpCallContent::Call {
+            update: HttpCanisterUpdate {
+                canister_id: Blob(vec![51]),
+                method_name: "foo".to_string(),
+                arg: Blob(vec![12, 13, 99]),
+
+                nonce: None,
+                sender: Blob(UserId::from(PrincipalId::new_anonymous()).get().into_vec()),
+                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+            },
+        };
+        let (submit, id) = sign_submit(content.clone(), &Sender::Anonymous).unwrap();
+
+        // The wrapped content is content, without modification
+        assert_eq!(submit.content, content);
+
+        // The message id matches one that can be reconstructed from the output
+        let request = HttpRequest::try_from(submit).unwrap();
+        assert_eq!(id, request.id());
+
+        // The envelope can be successfully authenticated
+        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
+        assert!(get_authorized_canisters(
+            &request,
+            &validator,
+            test_start_time,
+            mock_registry_version(),
+            &MaliciousFlags::default(),
+        )
+        .unwrap()
+        .contains(&request.content().canister_id()));
+    }
+
+    #[test]
+    fn sign_and_verify_request_status_content_valid_query_with_ed25519() {
+        let test_start_time = current_time();
+        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
+
+        // Set up an arbitrary legal input
+        let keypair = {
+            let mut rng = ChaChaRng::seed_from_u64(89_u64);
+            Ed25519KeyPair::generate(&mut rng)
+        };
+        let sender = UserId::from(PrincipalId::new_self_authenticating(
+            &ed25519_public_key_to_der(keypair.public_key.to_vec()),
+        ));
+        let content = HttpQueryContent::Query {
+            query: HttpUserQuery {
+                canister_id: Blob(vec![67, 3]),
+                method_name: "foo".to_string(),
+                arg: Blob(vec![23, 19, 4]),
+                sender: Blob(sender.get().into_vec()),
+                nonce: None,
+                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+            },
+        };
+        // Workaround because HttpQueryContent is not cloneable
+        let content_copy = serde_cbor::value::from_value::<HttpQueryContent>(
+            serde_cbor::value::to_value(&content).unwrap(),
+        )
+        .unwrap();
+
+        let read = sign_query(content, &Sender::from_keypair(&keypair)).unwrap();
+
+        // The wrapped content is content, without modification
+        assert_eq!(read.content, content_copy);
+
+        // The signature matches
+        let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
+        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
+        assert_ok!(get_authorized_canisters(
+            &read_request,
+            &validator,
+            test_start_time,
+            mock_registry_version(),
+            &MaliciousFlags::default(),
+        ));
+    }
+
+    #[test]
+    fn sign_and_verify_request_status_content_valid_query_with_ecdsa_secp256k1() {
+        let test_start_time = current_time();
+        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
+
+        // Set up an arbitrary legal input
+        let (sk, pk) = {
+            let mut rng = ChaChaRng::seed_from_u64(89_u64);
+            let sk = libsecp256k1::SecretKey::random(&mut rng);
+            let pk = libsecp256k1::PublicKey::from_secret_key(&sk);
+            (sk.serialize(), pk.serialize())
+        };
+
+        let sender_id = UserId::from(PrincipalId::new_self_authenticating(
+            &ecdsa_secp256k1::api::public_key_to_der(
+                &ecdsa_secp256k1::types::PublicKeyBytes::from(pk.to_vec()),
+            )
+            .expect("DER encoding failed"),
+        ));
+        let content = HttpQueryContent::Query {
+            query: HttpUserQuery {
+                canister_id: Blob(vec![67, 3]),
+                method_name: "foo".to_string(),
+                arg: Blob(vec![23, 19, 4]),
+                sender: Blob(sender_id.get().into_vec()),
+                nonce: None,
+                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+            },
+        };
+        // Workaround because HttpQueryContent is not cloneable
+        let content_copy = serde_cbor::value::from_value::<HttpQueryContent>(
+            serde_cbor::value::to_value(&content).unwrap(),
+        )
+        .unwrap();
+
+        let sender = Sender::from_secp256k1_keys(&sk, &pk);
+        let read = sign_query(content, &sender).unwrap();
+
+        // The wrapped content is content, without modification
+        assert_eq!(read.content, content_copy);
+
+        // The signature matches
+        let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
+        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
+        assert_ok!(get_authorized_canisters(
+            &read_request,
+            &validator,
+            test_start_time,
+            mock_registry_version(),
+            &MaliciousFlags::default(),
+        ));
+    }
 
     fn to_self_describing_cbor<T: Serialize>(e: &T) -> serde_cbor::Result<Vec<u8>> {
         let mut serialized_bytes = Vec::new();
