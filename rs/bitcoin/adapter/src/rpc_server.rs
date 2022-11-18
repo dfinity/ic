@@ -1,7 +1,7 @@
 use crate::{
     config::{Config, IncomingSource},
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
-    metrics::{AdapterServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
+    metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
     AdapterState, GetSuccessorsHandler, TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
@@ -22,7 +22,7 @@ struct BtcServiceImpl {
     get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: Sender<TransactionManagerRequest>,
     logger: ReplicaLogger,
-    metrics: AdapterServiceMetrics,
+    metrics: ServiceMetrics,
 }
 
 impl TryFrom<BtcServiceGetSuccessorsRequest> for GetSuccessorsRequest {
@@ -133,7 +133,7 @@ pub fn spawn_grpc_server(
         get_successors_handler,
         transaction_manager_tx,
         logger,
-        metrics: AdapterServiceMetrics::new(metrics_registry),
+        metrics: ServiceMetrics::new(metrics_registry),
     };
     tokio::spawn(async move {
         match config.incoming_source {

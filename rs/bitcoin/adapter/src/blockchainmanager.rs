@@ -1,10 +1,7 @@
 use crate::{
     blockchainstate::{AddHeaderError, BlockchainState},
     common::{BlockHeight, MINIMUM_VERSION_NUMBER},
-    metrics::{
-        BlockchainManagerMetrics, LABEL_BLOCK_MSG, LABEL_GET_HEADERS_MSG, LABEL_HEADERS_MSG,
-        LABEL_INV_MSG,
-    },
+    metrics::RouterMetrics,
     Channel, Command, ProcessBitcoinNetworkMessageError,
 };
 use bitcoin::{
@@ -16,7 +13,6 @@ use bitcoin::{
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
@@ -176,7 +172,7 @@ pub struct BlockchainManager {
 
     /// This field contains a logger for the blockchain manager's use.
     logger: ReplicaLogger,
-    metrics: BlockchainManagerMetrics,
+    metrics: RouterMetrics,
 }
 
 impl BlockchainManager {
@@ -186,7 +182,7 @@ impl BlockchainManager {
     pub fn new(
         blockchain: Arc<Mutex<BlockchainState>>,
         logger: ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
+        metrics: RouterMetrics,
     ) -> Self {
         let peer_info = HashMap::new();
         let getdata_request_info = LinkedHashMap::new();
@@ -199,7 +195,7 @@ impl BlockchainManager {
             catchup_headers: HashSet::new(),
             block_sync_queue: LinkedHashSet::new(),
             logger,
-            metrics: BlockchainManagerMetrics::new(metrics_registry),
+            metrics,
         }
     }
 
@@ -224,11 +220,6 @@ impl BlockchainManager {
         addr: &SocketAddr,
         locators: Locators,
     ) {
-        self.metrics
-            .bitcoin_messages_sent
-            .with_label_values(&[LABEL_GET_HEADERS_MSG])
-            .inc();
-
         //If the peer address is not stored in peer_info, then return;
         if self.peer_info.get(addr).is_none() {
             return;
@@ -259,10 +250,6 @@ impl BlockchainManager {
         addr: &SocketAddr,
         inventory: &[Inventory],
     ) -> Result<(), ReceivedInvMessageError> {
-        self.metrics
-            .bitcoin_messages_received
-            .with_label_values(&[LABEL_INV_MSG])
-            .inc();
         // If the inv message has more inventory than MAX_INV_SIZE (50000), reject it.
         if inventory.len() > MAX_INV_SIZE {
             return Err(ReceivedInvMessageError::TooMuchInventory);
@@ -319,10 +306,6 @@ impl BlockchainManager {
         addr: &SocketAddr,
         headers: &[BlockHeader],
     ) -> Result<(), ReceivedHeadersMessageError> {
-        self.metrics
-            .bitcoin_messages_received
-            .with_label_values(&[LABEL_HEADERS_MSG])
-            .inc();
         let peer = self
             .peer_info
             .get_mut(addr)
@@ -433,11 +416,6 @@ impl BlockchainManager {
         addr: &SocketAddr,
         block: &Block,
     ) -> Result<(), ReceivedBlockMessageError> {
-        self.metrics
-            .bitcoin_messages_received
-            .with_label_values(&[LABEL_BLOCK_MSG])
-            .inc();
-
         if !self.peer_info.contains_key(addr) {
             return Err(ReceivedBlockMessageError::UnknownPeer);
         }
@@ -818,6 +796,7 @@ pub mod test {
     };
     use hex::FromHex;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
     use std::net::SocketAddr;
     use std::str::FromStr;
 
@@ -828,7 +807,7 @@ pub mod test {
             BlockchainManager::new(
                 Arc::new(Mutex::new(blockchain_state)),
                 no_op_logger(),
-                &MetricsRegistry::default(),
+                RouterMetrics::new(&MetricsRegistry::default()),
             ),
         )
     }
