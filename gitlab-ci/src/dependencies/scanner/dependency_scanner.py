@@ -1,6 +1,7 @@
 import abc
 import logging
 import os
+import traceback
 import typing
 
 from data_source.finding_data_source import FindingDataSource
@@ -77,7 +78,7 @@ class BazelICScanner(DependencyScanner):
             for subscriber in self.subscribers:
                 subscriber.on_scan_job_succeeded(ScannerJobType.PERIODIC_SCAN, job_id)
         except Exception as err:
-            logging.error(f"{scanner} for {repository} failed for {job_id} with error {str(err)}")
+            logging.error(f"{scanner} for {repository} failed for {job_id} with error:\n{traceback.format_exc()}")
             for subscriber in self.subscribers:
                 subscriber.on_scan_job_failed(ScannerJobType.PERIODIC_SCAN, job_id, str(err))
 

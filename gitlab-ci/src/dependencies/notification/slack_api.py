@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import traceback
 import urllib.request
 from typing import Dict
 from typing import Optional
@@ -64,9 +65,11 @@ class SlackApi:
                 return response
             except urllib.error.HTTPError as e:
                 body = e.read().decode()
-                logging.error("Slack send_message failed with HTTP response body: %s", body)
+                logging.error(
+                    f"Slack send_message failed with HTTP response body: {body}\ntraceback:\n{traceback.format_exc()}"
+                )
             except Exception:
-                logging.error("Slack send_message could not send the requested message.")
+                logging.error(f"Slack send_message could not send the requested message.\n{traceback.format_exc()}")
 
     def send_message(self, message: str):
         SlackApi.__send_message(message, self.channel, self.webhook, self.log_to_console)
@@ -93,6 +96,8 @@ class SlackApi:
                 logging.error(
                     f"Slack API users.lookupByEmail for user {user} returned non ok response: {api_response['ok']} with error: {api_response['error'] if 'error' in api_response else 'None'}"
                 )
-        except Exception as e:
-            logging.error(f"There was an exception while calling Slack API users.lookupByEmail: {e}")
+        except Exception:
+            logging.error(
+                f"There was an exception while calling Slack API users.lookupByEmail:\n{traceback.format_exc()}"
+            )
         return None

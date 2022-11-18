@@ -5,6 +5,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import traceback
 import typing
 
 import parse
@@ -125,8 +126,8 @@ class Bazel(DependencyManager):
 
         try:
             result = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
-        except subprocess.CalledProcessError as err:
-            logging.error("Command execution failed for bazel projects " + str(err))
+        except subprocess.CalledProcessError:
+            logging.error(f"Command execution failed for bazel projects:\n{traceback.format_exc()}")
         finally:
             return result
 
