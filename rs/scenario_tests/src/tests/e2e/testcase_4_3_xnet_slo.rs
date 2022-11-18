@@ -1,5 +1,5 @@
 use crate::api::e2e::{handle::IcHandle, testnet::Testnet};
-use crate::tests::testcase_4_3_xnet_slo::stop_chatters;
+use crate::tests::testcase_4_3_xnet_slo::{stop_chatters, DEFAULT_DELETE_CANISTER_RETRIES};
 use crate::tests::{cleanup_canister_ids, locate_canister_ids, testcase_4_3_xnet_slo::test_impl};
 
 /// Testcase 4.3 in its end-to-end test incarnation.
@@ -18,6 +18,7 @@ pub async fn e2e_test(
     cycles_per_subnet: Option<u64>,
     canisters_to_cleanup: Option<Vec<String>>,
     skip_cleanup: bool,
+    delete_canister_retries: Option<u64>,
     all_to_one: bool,
 ) {
     let ic = match key_file {
@@ -43,7 +44,13 @@ pub async fn e2e_test(
             |_| { /* do nothing */ },
         )
         .await;
-        cleanup_canister_ids(canisters_to_cleanup, wallet_canisters, &ic).await;
+        cleanup_canister_ids(
+            canisters_to_cleanup,
+            wallet_canisters,
+            &ic,
+            delete_canister_retries.unwrap_or(DEFAULT_DELETE_CANISTER_RETRIES),
+        )
+        .await;
         return;
     }
 
@@ -57,6 +64,7 @@ pub async fn e2e_test(
         wallet_canisters,
         cycles_per_subnet,
         skip_cleanup,
+        delete_canister_retries,
         all_to_one,
     )
     .await
