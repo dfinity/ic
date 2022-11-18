@@ -6317,7 +6317,7 @@ dependencies = [
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.1.0"
 dependencies = [
- "ic-canister-client",
+ "ic-canister-client-sender",
  "ic-cdk",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
@@ -7710,6 +7710,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-canister-client",
+ "ic-canister-client-sender",
  "ic-cdk",
  "ic-constants",
  "ic-crypto-internal-threshold-sig-bls12381",
@@ -8000,7 +8001,6 @@ dependencies = [
  "dfn_protobuf",
  "hex",
  "ic-base-types",
- "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto",
  "ic-crypto-sha",
@@ -8860,6 +8860,7 @@ dependencies = [
  "hyper",
  "hyper-tls",
  "ic-canister-client",
+ "ic-canister-client-sender",
  "ic-config",
  "ic-http-endpoints-metrics",
  "ic-ic00-types",
@@ -13861,6 +13862,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-types",
  "ic-canister-client",
+ "ic-canister-client-sender",
  "ic-cdk",
  "ic-certification",
  "ic-ckbtc-agent",

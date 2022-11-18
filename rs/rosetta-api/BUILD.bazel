@@ -10,6 +10,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/canister_client",
+    "//rs/canister_client/sender",
     "//rs/constants",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/sha",

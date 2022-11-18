@@ -5,7 +5,7 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2021"
 
 [dependencies]
-ic-canister-client = { path = "../../../canister_client" }
+ic-canister-client-sender = { path = "../../../canister_client/sender" }
 ic-cdk = { version = "0.6.0" }
 ic-ledger-canister-blocks-synchronizer = { path = "../" }
 ic-ledger-core = { path = "../../ledger_core" }

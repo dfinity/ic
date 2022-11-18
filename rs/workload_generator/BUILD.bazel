@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/canister_client",
+    "//rs/canister_client/sender",
     "//rs/config",
     "//rs/monitoring/metrics",
     "//rs/http_endpoints/metrics",

@@ -122,16 +122,6 @@ fn canister_status(
 }
 
 fn make_account(seed: u64) -> ic_base_types::PrincipalId {
-    /// This is copied from ic_canister_client::agent::ed25519_public_key_to_der to
-    /// avoid having to import that crate.
-    fn ed25519_public_key_to_der(mut key: Vec<u8>) -> Vec<u8> {
-        let mut encoded: Vec<u8> = vec![
-            0x30, 0x2A, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x03, 0x21, 0x00,
-        ];
-        encoded.append(&mut key);
-        encoded
-    }
-
     let keypair = {
         let mut rng = ChaChaRng::seed_from_u64(seed);
         ic_canister_client_sender::Ed25519KeyPair::generate(&mut rng)
@@ -140,8 +130,9 @@ fn make_account(seed: u64) -> ic_base_types::PrincipalId {
         key: keypair.public_key.to_vec(),
         algorithm_id: AlgorithmId::Ed25519,
     };
-    let principal_id: PrincipalId =
-        PrincipalId::new_self_authenticating(&ed25519_public_key_to_der(pubkey.key));
+    let principal_id: PrincipalId = PrincipalId::new_self_authenticating(
+        &ic_canister_client_sender::ed25519_public_key_to_der(pubkey.key),
+    );
     principal_id
 }
 

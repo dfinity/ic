@@ -34,9 +34,8 @@ use canister_test::{Canister, Runtime};
 use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
 use ic_agent::Agent;
-use ic_canister_client::{Ed25519KeyPair, Sender};
+use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair, Sender};
 use ic_ledger_core::block::BlockType;
-use ic_nervous_system_common_test_keys::ed25519_public_key_to_der;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
 };

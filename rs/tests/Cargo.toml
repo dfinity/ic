@@ -33,6 +33,7 @@ hyper-tls = "0.5.0"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-types = { path = "../bitcoin/types/public" }
 ic-canister-client = { path = "../canister_client" }
+ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = "0.6.0"
 ic-certification = { path = "../certification" }
 ic-ckbtc-agent = { path = "../bitcoin/ckbtc/agent" }
