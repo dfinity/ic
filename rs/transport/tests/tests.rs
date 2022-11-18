@@ -16,7 +16,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_transport::transport::create_transport;
-use ic_types_test_utils::ids::{NODE_1, NODE_2};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -28,6 +28,9 @@ use tokio::time::Duration;
 
 const NODE_ID_1: NodeId = NODE_1;
 const NODE_ID_2: NodeId = NODE_2;
+const NODE_ID_3: NodeId = NODE_3;
+const NODE_ID_4: NodeId = NODE_4;
+
 const TRANSPORT_CHANNEL_ID: u32 = 1234;
 
 #[test]
@@ -324,43 +327,111 @@ fn test_drain_send_queue_impl(use_h2: bool) {
 // [Incomplete]
 /*
 Test connection and message sending at a larger scale:
-Creates peer A and connect it to 4 other peers (B-E)
+Creates peer A and connect it to 3 other peers (B-D)
 Send a high volume of messages from all nodes to A
 */
 #[test]
 fn test_multiple_connections_to_single_peer() {
-    let use_h2 = false; // TO DO - fix
+    test_multiple_connections_to_single_peer_impl(false);
+    test_multiple_connections_to_single_peer_impl(true);
+}
 
-    let registry_version = REG_V1;
+fn test_multiple_connections_to_single_peer_impl(use_h2: bool) {
     with_test_replica_logger(|logger| {
         // Setup registry and crypto component
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let mut registry_and_data = RegistryAndDataProvider::new();
-        registry_and_data.registry.update_to_latest_version();
 
-        let crypto_factory = |registry_and_data: &mut RegistryAndDataProvider, node_id: NodeId| {
-            Arc::new(temp_crypto_component_with_tls_keys_in_registry(
-                registry_and_data,
-                node_id,
-            )) as Arc<dyn TlsHandshake + Send + Sync>
-        };
-
-        let (peer_a_sender, _peer_a_receiver) = channel(10);
-        let event_handler_1 = setup_peer_up_ack_event_handler(rt.handle().clone(), peer_a_sender);
-
-        let (_peer, _addr) = setup_test_peer(
-            logger,
+        let mut nodes = create_n_peers(
+            vec![NODE_ID_1, NODE_ID_2, NODE_ID_3, NODE_ID_4],
             rt.handle().clone(),
-            NODE_ID_1,
+            logger,
+            50,
+            use_h2,
+        );
+        let remainder = nodes.split_off(1);
+        connect_nodes_to_central_node(&nodes[0], &remainder);
+
+        let mut successful_sends = 0;
+        let normal_msg = TransportPayload(vec![0xb; 1000000]);
+
+        for node_data in remainder {
+            let node_b = node_data.0;
+            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
+            for _ in 1..500 {
+                if node_b
+                    .send(&NODE_ID_1, channel_id, normal_msg.clone())
+                    .is_ok()
+                {
+                    successful_sends += 1;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+
+        for _ in 1..successful_sends {
+            assert_eq!(nodes[0].3.blocking_recv(), Some(normal_msg.clone()));
+        }
+    });
+}
+
+// helper functions
+type PeerData<T> = (Arc<dyn Transport>, SocketAddr, NodeId, Receiver<T>);
+
+fn create_n_peers(
+    peer_ids: Vec<NodeId>,
+    rt_handle: tokio::runtime::Handle,
+    logger: ReplicaLogger,
+    channel_size: usize,
+    use_h2: bool,
+) -> Vec<PeerData<TransportPayload>> {
+    let registry_version = REG_V1;
+    let mut registry_and_data = RegistryAndDataProvider::new();
+
+    let crypto_factory = |registry_and_data: &mut RegistryAndDataProvider, node_id: NodeId| {
+        Arc::new(temp_crypto_component_with_tls_keys_in_registry(
+            registry_and_data,
+            node_id,
+        )) as Arc<dyn TlsHandshake + Send + Sync>
+    };
+
+    let mut nodes = vec![];
+
+    for peer_id in peer_ids {
+        let (peer_i_sender, peer_i_receiver) = channel(channel_size);
+        let event_handler_i = setup_message_ack_event_handler(rt_handle.clone(), peer_i_sender);
+
+        let (peer, addr) = setup_test_peer(
+            logger.clone(),
+            rt_handle.clone(),
+            peer_id,
             get_free_localhost_port().expect("Failed to get free localhost port"),
             registry_version,
             &mut registry_and_data,
             crypto_factory,
-            event_handler_1,
+            event_handler_i,
             use_h2,
         );
-        // TODO - complete rest of test
-    });
+        nodes.push((peer, addr, peer_id, peer_i_receiver));
+    }
+    registry_and_data.registry.update_to_latest_version();
+    nodes
+}
+
+// creates connection between central node and each 'peer'
+fn connect_nodes_to_central_node<T>(central_node_data: &PeerData<T>, peer_data: &Vec<PeerData<T>>) {
+    let (central_node, central_node_addr, central_node_id, _) = central_node_data;
+
+    for peer_data_i in peer_data {
+        let (peer_i, peer_i_addr, peer_i_id, _) = peer_data_i;
+
+        central_node
+            .start_connection(peer_i_id, *peer_i_addr, REG_V1)
+            .expect("start_connection");
+
+        peer_i
+            .start_connection(central_node_id, *central_node_addr, REG_V1)
+            .expect("start_connection");
+    }
 }
 
 // helper functions
