@@ -1,6 +1,6 @@
 use super::*;
-use rand::{Rng, SeedableRng};
-use rand_chacha::ChaCha20Rng;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::Rng;
 
 fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
     let get_bit = |bytes: &[u8]| {
@@ -28,16 +28,9 @@ fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
     }
 }
 
-fn test_rng() -> ChaCha20Rng {
-    let mut thread_rng = rand::thread_rng();
-    let seed = thread_rng.gen::<u64>();
-    println!("RNG seed {}", seed);
-    ChaCha20Rng::seed_from_u64(seed)
-}
-
 #[test]
 fn test_range_to_i8_is_correct() -> ThresholdEcdsaResult<()> {
-    let mut rng = test_rng();
+    let mut rng = reproducible_rng();
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..10)
             .map(|_| EccScalar::random(curve_type, &mut rng))
@@ -112,7 +105,7 @@ non_adjacent_form_transformation_is_correct_full_domain_test_factory!(u16, i32);
 
 #[test]
 fn non_adjacent_form_transformation_is_correct_u64_random_samples() -> ThresholdEcdsaResult<()> {
-    let mut rng = test_rng();
+    let mut rng = reproducible_rng();
     let scalars: Vec<u64> = (0..10000).map(|_| rng.next_u64()).collect();
     let naf: Vec<Naf> = scalars
         .iter()
@@ -128,7 +121,7 @@ fn non_adjacent_form_transformation_is_correct_u64_random_samples() -> Threshold
 #[test]
 fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples(
 ) -> ThresholdEcdsaResult<()> {
-    let mut rng = test_rng();
+    let mut rng = reproducible_rng();
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..1000)
             .map(|_| EccScalar::random(curve_type, &mut rng))
