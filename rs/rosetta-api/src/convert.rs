@@ -351,9 +351,9 @@ pub fn principal_id_from_public_key(pk: &models::PublicKey) -> Result<PrincipalI
             "Only EDWARDS25519 curve type is supported".into(),
         ));
     }
-    let pid = PrincipalId::new_self_authenticating(&ic_canister_client::ed25519_public_key_to_der(
-        from_hex(&pk.hex_bytes)?,
-    ));
+    let pid = PrincipalId::new_self_authenticating(
+        &ic_canister_client_sender::ed25519_public_key_to_der(from_hex(&pk.hex_bytes)?),
+    );
     Ok(pid)
 }
 

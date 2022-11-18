@@ -10,7 +10,6 @@ package(default_visibility = [
     "//rs/rosetta-api:__subpackages__",
     "//rs/rust_canisters/canister_test:__pkg__",
     "//rs/scenario_tests:__pkg__",
-    "//rs/sns/integration_tests:__pkg__",
     "//rs/tests:__pkg__",
     "//rs/workload_generator:__pkg__",
 ])

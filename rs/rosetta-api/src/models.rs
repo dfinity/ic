@@ -1147,7 +1147,7 @@ impl Display for Error {
 }
 
 impl actix_web::ResponseError for Error {
-    fn status_code(&self) -> ic_canister_client::HttpStatusCode {
+    fn status_code(&self) -> actix_web::http::StatusCode {
         self.code
             .try_into()
             .ok()

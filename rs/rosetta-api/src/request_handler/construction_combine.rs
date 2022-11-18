@@ -60,18 +60,22 @@ impl RosettaRequestHandler {
 
                 let envelope = HttpRequestEnvelope::<HttpCallContent> {
                     content: HttpCallContent::Call { update },
-                    sender_pubkey: Some(Blob(ic_canister_client::ed25519_public_key_to_der(
-                        convert::from_public_key(&transaction_signature.public_key)?,
-                    ))),
+                    sender_pubkey: Some(Blob(
+                        ic_canister_client_sender::ed25519_public_key_to_der(
+                            convert::from_public_key(&transaction_signature.public_key)?,
+                        ),
+                    )),
                     sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
                     sender_delegation: None,
                 };
 
                 let read_state_envelope = HttpRequestEnvelope::<HttpReadStateContent> {
                     content: HttpReadStateContent::ReadState { read_state },
-                    sender_pubkey: Some(Blob(ic_canister_client::ed25519_public_key_to_der(
-                        convert::from_public_key(&read_state_signature.public_key)?,
-                    ))),
+                    sender_pubkey: Some(Blob(
+                        ic_canister_client_sender::ed25519_public_key_to_der(
+                            convert::from_public_key(&read_state_signature.public_key)?,
+                        ),
+                    )),
                     sender_sig: Some(Blob(from_hex(&read_state_signature.hex_bytes)?)),
                     sender_delegation: None,
                 };

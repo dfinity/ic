@@ -1,6 +1,5 @@
-use crate::crypto::basic_utilities::ed25519_public_key_to_der;
 use crate::types::ids::{canister_test_id, user_test_id};
-use ic_canister_client_sender::Sender;
+use ic_canister_client_sender::{ed25519_public_key_to_der, Sender};
 use ic_types::{
     crypto::DOMAIN_IC_REQUEST,
     messages::{

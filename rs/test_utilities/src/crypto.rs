@@ -1,4 +1,3 @@
-pub mod basic_utilities;
 pub mod fake_tls_handshake;
 
 pub use ic_crypto_test_utils::files as temp_dir;

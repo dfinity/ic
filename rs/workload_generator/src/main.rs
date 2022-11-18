@@ -29,9 +29,8 @@ mod metrics;
 mod plan;
 mod stats;
 
-use ic_canister_client::{
-    ed25519_public_key_to_der, HttpClient, HttpClientConfig, Sender as AgentSender,
-};
+use ic_canister_client::{HttpClient, HttpClientConfig, Sender as AgentSender};
+use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_test_identity::{get_pair, TEST_IDENTITY_KEYPAIR, TEST_IDENTITY_KEYPAIR_HARD_CODED};
 use ic_types::{messages::Blob, CanisterId, PrincipalId, UserId};
