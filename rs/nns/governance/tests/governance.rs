@@ -11362,3 +11362,52 @@ fn test_accept_reasonable_proposal_title() {
     let result = validate_proposal_title(&Some("When In The Course of Human Events".to_string()));
     assert!(result.is_ok());
 }
+
+// More exhaustive testing of the url validation function happens in sns/governance/src/types.rs `test_sns_metadata_validate()`
+#[tokio::test]
+async fn test_proposal_url_not_on_list_fails() {
+    let fake_driver = fake::FakeDriver::default()
+        .at(78)
+        .with_supply(Tokens::from_e8s(500_000));
+    let fixture = fixture_two_neurons_second_is_bigger();
+    let mut gov = Governance::new(
+        fixture,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
+    );
+
+    // Submit a proposal with a url not on the whitelist
+    gov.make_proposal(
+        &NeuronId { id: 1 },
+        // Must match neuron 1's serialized_id.
+        &principal(1),
+        &Proposal {
+            title: Some("A Reasonable Title".to_string()),
+            summary: "proposal 1 (long)".to_string(),
+            action: Some(proposal::Action::Motion(Motion {
+                motion_text: "a".to_string(),
+            })),
+            url: "https://foo.com".to_string(),
+        },
+    )
+    .await
+    .unwrap_err();
+
+    // Submit a proposal with a URL on the whitelist
+    gov.make_proposal(
+        &NeuronId { id: 1 },
+        // Must match neuron 1's serialized_id.
+        &principal(1),
+        &Proposal {
+            title: Some("A Reasonable Title".to_string()),
+            summary: "proposal 1 (long)".to_string(),
+            action: Some(proposal::Action::Motion(Motion {
+                motion_text: "a".to_string(),
+            })),
+            url: "https://forum.dfinity.org/anything".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+}

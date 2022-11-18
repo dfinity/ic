@@ -1074,6 +1074,7 @@ impl SnsMetadata {
             Self::MIN_URL_LENGTH,
             Self::MAX_URL_LENGTH,
             "SnsMetadata.url",
+            None,
         )
     }
 
@@ -2253,25 +2254,58 @@ pub(crate) mod tests {
     fn test_sns_metadata_validate() {
         let default = SnsMetadata {
             logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
-            url: Some(format!(
-                "https://{}.org",
-                "x".repeat(1.max(SnsMetadata::MIN_URL_LENGTH.saturating_sub("http://.org".len())))
-            )),
+            url: Some("https://forum.dfinity.org".to_string()),
             name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH)),
             description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH)),
         };
 
-        let invalid_sns_metadata = vec![
+        let valid_sns_metadata = vec![
+            default.clone(),
             SnsMetadata {
-                url: None,
+                url: Some("https://forum.dfinity.org/foo/bar/?".to_string()),
                 ..default.clone()
             },
+            SnsMetadata {
+                url: Some("https://forum.dfinity.org/foo/bar/?".to_string()),
+                ..default.clone()
+            },
+            SnsMetadata {
+                url: Some("https://any-url.com/foo/bar/?".to_string()),
+                ..default.clone()
+            },
+        ];
+
+        let invalid_sns_metadata = vec![
             SnsMetadata {
                 name: None,
                 ..default.clone()
             },
             SnsMetadata {
+                name: Some("X".repeat(SnsMetadata::MAX_NAME_LENGTH + 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH - 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
                 description: None,
+                ..default.clone()
+            },
+            SnsMetadata {
+                description: Some("X".repeat(SnsMetadata::MAX_DESCRIPTION_LENGTH + 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH - 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                logo: Some("X".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                url: None,
                 ..default.clone()
             },
             SnsMetadata {
@@ -2287,19 +2321,23 @@ pub(crate) mod tests {
                 ..default.clone()
             },
             SnsMetadata {
-                logo: Some("X".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1)),
+                url: Some("file://forum.dfinity.org".to_string()),
                 ..default.clone()
             },
             SnsMetadata {
-                name: Some("X".repeat(SnsMetadata::MAX_NAME_LENGTH + 1)),
+                url: Some("https://".to_string()),
                 ..default.clone()
             },
             SnsMetadata {
-                name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH - 1)),
+                url: Some("https://forum.dfinity.org/https://forum.dfinity.org".to_string()),
                 ..default.clone()
             },
             SnsMetadata {
-                url: Some("file://internetcomputer.org".to_string()),
+                url: Some("https://example@forum.dfinity.org".to_string()),
+                ..default.clone()
+            },
+            SnsMetadata {
+                url: Some("http://internetcomputer".to_string()),
                 ..default.clone()
             },
             SnsMetadata {
@@ -2308,23 +2346,21 @@ pub(crate) mod tests {
             },
             SnsMetadata {
                 url: Some("internetcomputer".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                description: Some("X".repeat(SnsMetadata::MAX_DESCRIPTION_LENGTH + 1)),
-                ..default.clone()
-            },
-            SnsMetadata {
-                description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH - 1)),
-                ..default.clone()
+                ..default
             },
         ];
 
         for sns_metadata in invalid_sns_metadata {
-            sns_metadata.validate().unwrap_err();
+            if sns_metadata.validate().is_ok() {
+                panic!("Invalid metadata passed validation: {:?}", sns_metadata);
+            }
         }
 
-        assert!(default.validate().is_ok());
+        for sns_metadata in valid_sns_metadata {
+            if sns_metadata.validate().is_err() {
+                panic!("Valid metadata failed validation: {:?}", sns_metadata);
+            }
+        }
     }
 
     #[test]

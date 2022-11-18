@@ -13,8 +13,6 @@ use ic_base_types::PrincipalId;
 use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
 use ic_ledger_core::Tokens;
 
-use url::{Host, Url};
-
 pub mod ledger;
 pub mod stable_mem_utils;
 
@@ -417,8 +415,9 @@ pub fn validate_proposal_url(
     min_length: usize,
     max_length: usize,
     field_name: &str,
+    allowed_domains: Option<Vec<&str>>,
 ) -> Result<(), String> {
-    // Check that the URL is a sensible length
+    // // Check that the URL is a sensible length
     if url.len() > max_length {
         return Err(format!(
             "{field_name} must be less than {max_length} characters long, but it is {} characters long. (Field was set to `{url}`.)",
@@ -432,47 +431,48 @@ pub fn validate_proposal_url(
         ));
     }
 
-    let url = Url::parse(url).map_err(|_| format!("{field_name} must be a valid URL."))?;
+    //
 
-    if url.cannot_be_a_base() {
-        return Err(format!("{field_name} must be a valid link",));
-    }
-
-    let scheme_is_http_or_https = url.scheme() == "http" || url.scheme() == "https";
-    if !scheme_is_http_or_https {
+    if !url.starts_with("https://") {
         return Err(format!(
-            "{field_name} must begin with http:// or https://. (Field was set to `{url}`.)",
+            "{field_name} must begin with https://. (Field was set to `{url}`.)",
         ));
     }
 
-    let has_login = url.username() != "" || url.password().is_some();
-    if has_login {
+    let parts_url: Vec<&str> = url.split("://").collect();
+    if parts_url.len() > 2 {
         return Err(format!(
-            "{field_name} should not contain a username or password.  (Field was set to `{url}`.)",
+            "{field_name} contains an invalid sequence of characters"
         ));
     }
 
-    match url.host() {
-        Some(Host::Domain(_)) => {}
-        Some(_) => {
-            return Err(format!(
-                "{field_name} should have a domain name. (It was `{url}`.)",
-            ))
-        }
-        None => {
-            return Err(format!(
-                "{field_name} should have a host. (It was `{url}`.)",
-            ))
-        }
+    if parts_url.len() < 2 {
+        return Err(format!("{field_name} is missing content after protocol."));
     }
 
-    if url.port().is_some() {
+    if url.contains('@') {
         return Err(format!(
-            "{field_name} should not contain a port.  (It was `{url}`.)",
+            "{field_name} cannot contain authentication information"
         ));
     }
 
-    Ok(())
+    let parts_past_protocol = parts_url[1].split_once('/');
+
+    let (domain, _path) = match parts_past_protocol {
+        Some((domain, path)) => (domain, Some(path)),
+        None => (parts_url[1], None),
+    };
+
+    match allowed_domains {
+        Some(allowed) => match allowed.iter().any(|allowed| domain == *allowed) {
+            true => Ok(()),
+            false => Err(format!(
+                "{field_name} was not in the list of allowed domains: {:?}",
+                allowed
+            )),
+        },
+        None => Ok(()),
+    }
 }
 
 /// Returns the total amount of memory (heap, stable memory, etc) that the calling canister has allocated.

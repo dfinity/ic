@@ -28,7 +28,6 @@ rand = "0.8.4"
 rand_chacha = "0.3.1"
 rust_decimal = "1.25"
 serde = { version = "1.0", features = ["derive"] }
-url = "2.3.1"
 
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!

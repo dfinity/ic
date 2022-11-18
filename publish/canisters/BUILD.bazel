@@ -62,8 +62,8 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
     "registry-canister.wasm": "3500000",
     "root-canister.wasm": "1500000",
     "sns-canister.wasm": "1500000",
-    "sns-governance-canister.wasm": "1900000",
-    "sns-governance-canistertest.wasm": "1900000",
+    "sns-governance-canister.wasm": "1700000",
+    "sns-governance-canistertest.wasm": "1700000",
     "sns-root-canister.wasm": "1500000",
     "sns-swap-canister.wasm": "1500000",
 }
