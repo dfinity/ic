@@ -58,17 +58,21 @@ pub struct TransformContext {
 }
 
 impl TransformContext {
-    /// Construct `TransformType` from a transform function.
+    /// Construct `TransformContext` from a transform function.
     ///
     /// # example
     ///
-    /// ```ignore
-    /// #[ic_cdk_macros::query]
+    /// ```no_run
+    /// # use ic_cdk::api::management_canister::http_request::{TransformContext, TransformArgs, HttpResponse};
+    /// #[ic_cdk::query]
     /// fn my_transform(arg: TransformArgs) -> HttpResponse {
-    ///     ...
+    ///     // ...
+    /// # unimplemented!()
     /// }
-    ///
-    /// let transform = TransformType::from_transform_function(my_transform);
+    /// # fn main() {
+    /// # let context = vec![];
+    /// let transform = TransformContext::new(my_transform, context);
+    /// # }
     /// ```
     pub fn new<T>(func: T, context: Vec<u8>) -> Self
     where
