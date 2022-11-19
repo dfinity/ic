@@ -22,7 +22,7 @@ use cycles_minting_canister::{
 use dfn_candid::{candid_one, CandidOne};
 use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_canister_client::{Agent, Ed25519KeyPair, HttpClient, Sender};
-use ic_certification::verify_certificate;
+use ic_certification::verify_certified_data;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_crypto::threshold_sig_public_key_from_der;
@@ -205,7 +205,7 @@ pub fn test(env: TestEnv) {
             serde_cbor::from_slice(&conversion_rate_response.hash_tree).unwrap();
         // Verify the authenticity of the root hash stored by the canister in the
         // certified_data field
-        verify_certificate(
+        verify_certified_data(
             &conversion_rate_response.certificate[..],
             &CYCLES_MINTING_CANISTER_ID,
             &pk,

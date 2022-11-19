@@ -2,8 +2,6 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt;
 
-use serde::Deserialize;
-
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_crypto_utils_threshold_sig::verify_combined;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
@@ -16,6 +14,7 @@ use ic_types::{
     messages::{Blob, Certificate},
     CanisterId, CryptoHashOfPartialState, PrincipalId, SubnetId, Time,
 };
+use serde::Deserialize;
 use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
 
 #[cfg(test)]
@@ -76,7 +75,7 @@ impl fmt::Display for CertificateValidationError {
     }
 }
 
-/// Verifies a certificate.
+/// Verifies a certificate and its certified data.
 ///
 /// Verification ensures that
 /// * the certificate is well-formed and contains a tree, a signature, and
@@ -100,7 +99,7 @@ impl fmt::Display for CertificateValidationError {
 /// * the public key is well-formed.
 ///
 /// Returns the certificate's timestamp, if verification is successful.
-pub fn verify_certificate(
+pub fn verify_certified_data(
     certificate: &[u8],
     canister_id: &CanisterId,
     root_pk: &ThresholdSigPublicKey,
@@ -117,30 +116,9 @@ pub fn verify_certificate(
         canister: BTreeMap<CanisterId, CanisterView>,
     }
 
-    let certificate: Certificate = parse_certificate(certificate)?;
+    let verified_certificate = verify_certificate(certificate, canister_id, root_pk)?;
 
-    let key = if let Some(delegation) = &certificate.delegation {
-        let subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
-            .map(SubnetId::from)
-            .map_err(|err| {
-                CertificateValidationError::DeserError(format!(
-                    "failed to parse delegation subnet id: {}",
-                    err
-                ))
-            })?;
-        verify_delegation_certificate(
-            &delegation.certificate,
-            &subnet_id,
-            root_pk,
-            Some(canister_id),
-        )?
-    } else {
-        *root_pk
-    };
-
-    verify_certificate_signature(&certificate, &key)?;
-
-    let replica_labeled_tree = parse_tree(certificate.tree)?;
+    let replica_labeled_tree = parse_tree(verified_certificate.tree)?;
     let replica_state = ReplicaState::deserialize(LabeledTreeDeserializer::new(
         &replica_labeled_tree,
     ))
@@ -170,6 +148,56 @@ pub fn verify_certificate(
     }
 
     Ok(Time::from_nanos_since_unix_epoch(replica_state.time.0))
+}
+
+/// Verifies a certificate.
+///
+/// Verification ensures that
+/// * the certificate is well-formed and contains a tree, a signature, and
+///   optionally a delegation with a certificate and a subnet ID,
+/// * if a delegation is present, that the delegation certificate is valid for
+///   the delegation subnet for the canister with ID `canister_id` w.r.t. the
+///   `root_pk` (see below for details on verifying a delegation certificate).
+/// * the signature is valid, either w.r.t. `root_pk` or w.r.t
+///   the delegation key if a delegation is present,
+///
+/// Verification of the delegation certificate ensures that
+/// * the certificate is well-formed and contains a tree, a signature, and
+///   _no_ further delegation, i.e., it comes directly from the root subnet,
+/// * the signature is valid w.r.t. `root_pk`,
+/// * the tree is well-formed and contains time as well as subnet information
+///   (i.e., a public_key and canister ranges) for the given subnet,
+/// * the canister ranges are well-formed and contain the `canister_id`, and
+/// * the public key is well-formed.
+///
+/// Returns the verified certificate, if verification is successful.
+pub fn verify_certificate(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<Certificate, CertificateValidationError> {
+    let certificate: Certificate = parse_certificate(certificate)?;
+    let key = if let Some(delegation) = &certificate.delegation {
+        let subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
+            .map(SubnetId::from)
+            .map_err(|err| {
+                CertificateValidationError::DeserError(format!(
+                    "failed to parse delegation subnet id: {}",
+                    err
+                ))
+            })?;
+        verify_delegation_certificate(
+            &delegation.certificate,
+            &subnet_id,
+            root_pk,
+            Some(canister_id),
+        )?
+    } else {
+        *root_pk
+    };
+
+    verify_certificate_signature(&certificate, &key)?;
+    Ok(certificate)
 }
 
 /// Verifies a delegation certificate.
