@@ -4,8 +4,7 @@ set -e
 
 PREREQ=""
 
-prereqs()
-{
+prereqs() {
     echo "$PREREQ"
 }
 
@@ -18,11 +17,6 @@ esac
 
 . /usr/share/initramfs-tools/hook-functions
 
+# The veritysetup tool is required in order to set up the root filesystem
+# with integrity protection from initramfs.
 copy_exec /sbin/veritysetup
-copy_exec /bin/tail
-copy_exec /bin/xargs
-copy_exec /sbin/fsck
-copy_exec /sbin/fsck.ext4 /sbin
-copy_exec /sbin/logsave
-
-manual_add_modules dm_verity

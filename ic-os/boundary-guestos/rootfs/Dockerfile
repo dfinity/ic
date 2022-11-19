@@ -79,12 +79,11 @@ COPY --from=download \
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
-    chmod 0755 /etc/systemd/system-generators/mount-generator && \
+    chmod 0755 /etc/systemd/system-generators/* && \
     chmod 0440 /etc/sudoers && \
     chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id && \
-    chmod 755 /etc/initramfs-tools/scripts/local && \
-    chmod 755 /etc/initramfs-tools/scripts/local-premount/setup-verity && \
-    chmod 755 /etc/initramfs-tools/hooks/setup-verity
+    chmod 755 /etc/initramfs-tools/scripts/init-premount/verity-root && \
+    chmod 755 /etc/initramfs-tools/hooks/veritysetup
 
     # Deactivate motd, it tries creating $HOME/.cache/motd.legal-displayed,
     # but we want to prohibit it from writing to user home dirs
@@ -249,10 +248,6 @@ RUN apt-get clean && \
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/*
-
-COPY boot /boot
-# Update POSIX permissions in /boot/
-RUN chmod 0644 /boot/extra_boot_args
 
 # Take care of nginx files
 RUN chmod 0755 /etc/nginx/* && \
