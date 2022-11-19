@@ -1660,14 +1660,11 @@ fn test_neuron_add_all_permissions_to_self() {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let system_params = NervousSystemParameters {
-            // Just grant ManagePrincipals to the claimer
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
-            }),
             // Be able to grant all permissions
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
+            // ManagePrincipals will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -1688,11 +1685,15 @@ fn test_neuron_add_all_permissions_to_self() {
             neuron.permissions[0].principal.unwrap(),
             user.get_principal_id()
         );
-        assert_eq!(neuron.permissions[0].permission_type.len(), 1);
         assert_eq!(
-            neuron.permissions[0].permission_type[0],
-            NeuronPermissionType::ManagePrincipals as i32
+            neuron.permissions[0].permission_type.len(),
+            NervousSystemParameters::with_default_values()
+                .neuron_claimer_permissions
+                .unwrap()
+                .permissions
+                .len()
         );
+        assert!(neuron.permissions[0].permission_type.len() != NeuronPermissionType::all().len());
 
         // Grant the claimer all permissions
         sns_canisters
@@ -1732,14 +1733,11 @@ fn test_neuron_add_multiple_permissions_and_principals() {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let system_params = NervousSystemParameters {
-            // Just grant ManagePrincipals to the claimer
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
-            }),
             // Be able to grant all permissions
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
+            // ManagePrincipals will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -1819,14 +1817,11 @@ fn test_neuron_add_non_grantable_permission_fails() {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let system_params = NervousSystemParameters {
-            // Just grant ManagePrincipals to the claimer
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
-            }),
             // Be able to grant no permissions
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: vec![],
             }),
+            // ManagePrincipals will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -1888,15 +1883,12 @@ fn test_exceeding_max_principals_for_neuron_fails() {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let system_params = NervousSystemParameters {
-            // Just grant ManagePrincipals to the claimer
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
-            }),
             // Be able to grant all permissions
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
             max_number_of_principals_per_neuron: Some(1_u64),
+            // ManagePrincipals will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -1957,13 +1949,10 @@ fn test_add_neuron_permission_missing_principal_id_fails() {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let system_params = NervousSystemParameters {
-            // Just grant ManagePrincipals to the claimer
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
-            }),
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
+            // ManagePrincipals will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -2342,14 +2331,11 @@ fn test_neuron_remove_permissions_of_different_principal() {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let system_params = NervousSystemParameters {
-            // Just grant ManagePrincipals to the claimer
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
-            }),
             // Be able to grant all permissions
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
+            // ManagePrincipals will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -2432,13 +2418,10 @@ fn test_remove_neuron_permission_missing_principal_id_fails() {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let system_params = NervousSystemParameters {
-            // Just grant ManagePrincipals to the claimer
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
-            }),
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
+            // ManagePrincipals will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -2499,16 +2482,10 @@ fn test_remove_neuron_permission_when_neuron_missing_permission_type_fails() {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let system_params = NervousSystemParameters {
-            // Initialize a neuron with only two permissions, Vote and ManagePrincipals
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: vec![
-                    NeuronPermissionType::ManagePrincipals as i32,
-                    NeuronPermissionType::Vote as i32,
-                ],
-            }),
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
+            // ManagePrincipals and Vote will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
 

@@ -323,6 +323,20 @@ impl NervousSystemParameters {
     /// to an over-concentration of voting power. The value used by the NNS is 25.
     pub const MAX_AGE_BONUS_PERCENTAGE_CEILING: u64 = 400;
 
+    /// These are the permissions that must be present in
+    /// `neuron_claimer_permissions`.
+    /// Permissions not in this list can be added after the SNS is created via a
+    /// proposal.
+    pub const REQUIRED_NEURON_CLAIMER_PERMISSIONS: &'static [NeuronPermissionType] = &[
+        // Without this permission, it would be impossible to transfer control
+        // of a neuron to a new principal.
+        NeuronPermissionType::ManagePrincipals,
+        // Without this permission, it would be impossible to vote.
+        NeuronPermissionType::Vote,
+        // Without this permission, it would be impossible to submit a proposal.
+        NeuronPermissionType::SubmitProposal,
+    ];
+
     pub fn with_default_values() -> Self {
         Self {
             reject_cost_e8s: Some(E8S_PER_TOKEN), // 1 governance token
@@ -683,20 +697,32 @@ impl NervousSystemParameters {
                 "NervousSystemParameters.neuron_claimer_permissions must be set".to_string()
             })?;
 
-        if !neuron_claimer_permissions
-            .permissions
-            .contains(&(NeuronPermissionType::ManagePrincipals as i32))
-        {
-            return Err("NervousSystemParameters.neuron_claimer_permissions must contain NeuronPermissionType::ManagePrincipals".to_string());
-        }
+        let neuron_claimer_permissions = neuron_claimer_permissions.clone().try_into().unwrap();
 
+        let required_claimer_permissions = Self::REQUIRED_NEURON_CLAIMER_PERMISSIONS
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>();
+
+        let difference = required_claimer_permissions
+            .difference(&neuron_claimer_permissions)
+            .collect::<Vec<_>>();
+
+        if !difference.is_empty() {
+            return Err(format!(
+                "NervousSystemParameters.neuron_claimer_permissions is missing the required permissions {difference:?}",
+            ));
+        }
         Ok(())
     }
 
     /// Returns the default for the nervous system parameter neuron_claimer_permissions.
     fn default_neuron_claimer_permissions() -> NeuronPermissionList {
         NeuronPermissionList {
-            permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
+            permissions: Self::REQUIRED_NEURON_CLAIMER_PERMISSIONS
+                .iter()
+                .map(|p| *p as i32)
+                .collect(),
         }
     }
 
@@ -1453,6 +1479,36 @@ impl NeuronParameters {
         }
 
         permissions
+    }
+}
+
+impl From<Vec<NeuronPermissionType>> for NeuronPermissionList {
+    fn from(permissions: Vec<NeuronPermissionType>) -> Self {
+        NeuronPermissionList {
+            permissions: permissions.into_iter().map(|p| p as i32).collect(),
+        }
+    }
+}
+
+impl From<HashSet<NeuronPermissionType>> for NeuronPermissionList {
+    fn from(permissions: HashSet<NeuronPermissionType>) -> Self {
+        NeuronPermissionList {
+            permissions: permissions.into_iter().map(|p| p as i32).collect(),
+        }
+    }
+}
+
+impl TryFrom<NeuronPermissionList> for HashSet<NeuronPermissionType> {
+    type Error = String;
+
+    fn try_from(permissions: NeuronPermissionList) -> Result<Self, Self::Error> {
+        permissions
+            .permissions
+            .into_iter()
+            .map(|p| {
+                NeuronPermissionType::from_i32(p).ok_or_else(|| format!("Invalid permission {}", p))
+            })
+            .collect()
     }
 }
 
@@ -2454,6 +2510,22 @@ pub(crate) mod tests {
         parameters.voting_rewards_parameters = None;
         // This is where we expect to panic.
         parameters.validate().unwrap();
+    }
+
+    #[test]
+    fn test_nervous_system_parameters_wont_validate_without_the_required_claimer_permissions() {
+        for permission_to_omit in NervousSystemParameters::REQUIRED_NEURON_CLAIMER_PERMISSIONS {
+            let mut parameters = NervousSystemParameters::with_default_values();
+            parameters.neuron_claimer_permissions = Some(
+                NervousSystemParameters::REQUIRED_NEURON_CLAIMER_PERMISSIONS
+                    .iter()
+                    .filter(|p| *p != permission_to_omit)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .into(),
+            );
+            parameters.validate().unwrap_err();
+        }
     }
 
     #[test]
