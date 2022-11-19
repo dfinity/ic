@@ -1,4 +1,4 @@
-use ic_certification::verify_certificate;
+use ic_certification::verify_certified_data;
 use ic_ledger_core::block::{EncodedBlock, HashOf};
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId};
 
@@ -12,7 +12,7 @@ pub(crate) fn verify_block_hash(
     hash: HashOf<EncodedBlock>,
     info: &VerificationInfo,
 ) -> Result<(), String> {
-    verify_certificate(
+    verify_certified_data(
         cert.as_ref()
             .ok_or("verify tip failed: no data certificate present")?,
         &info.canister_id,

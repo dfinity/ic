@@ -1,4 +1,4 @@
-use ic_certification::{verify_certificate, CertificateValidationError};
+use ic_certification::{verify_certified_data, CertificateValidationError};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::pb::v1::{
@@ -187,7 +187,7 @@ pub fn decode_certified_deltas(
 
     // Verify the authenticity of the root hash stored by the canister in the
     // certified_data field, and get the time on the certificate.
-    let time = verify_certificate(
+    let time = verify_certified_data(
         &certified_response.certificate[..],
         canister_id,
         nns_pk,

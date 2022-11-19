@@ -14,7 +14,7 @@ use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::Time;
 
 use crate::{
-    validate_subnet_delegation_certificate, verify_certificate, CanisterId,
+    validate_subnet_delegation_certificate, verify_certified_data, CanisterId,
     CertificateValidationError,
 };
 
@@ -28,7 +28,7 @@ fn should_validate_subnet_delegation_test_vector() {
         151, 175, 200, 212, 236, 231, 248, 36, 83, 84, 142, 170,
     ];
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &certificate,
         &CanisterId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
         &parse_threshold_sig_key_from_der(&root_pubkey).unwrap(),
@@ -48,7 +48,7 @@ fn should_validate_certificate_without_delegation() {
     .build();
 
     let verification_result =
-        verify_certificate(&cbor, &canister_id(1), &pk, certified_data.as_bytes());
+        verify_certified_data(&cbor, &canister_id(1), &pk, certified_data.as_bytes());
     verification_result.expect("expect valid signature");
 }
 
@@ -65,7 +65,7 @@ fn should_return_correct_time() {
     .build();
 
     let verification_result =
-        verify_certificate(&cbor, &canister_id(1), &pk, certified_data.as_bytes());
+        verify_certified_data(&cbor, &canister_id(1), &pk, certified_data.as_bytes());
 
     assert_eq!(verification_result.expect("expect valid signature"), time);
 }
@@ -84,7 +84,7 @@ fn should_validate_certificate_with_delegation() {
     .build();
 
     let verification_result =
-        verify_certificate(&cbor, &canister_id(1), &pk, certified_data.as_bytes());
+        verify_certified_data(&cbor, &canister_id(1), &pk, certified_data.as_bytes());
     verification_result.expect("expect valid signature");
 }
 
@@ -103,7 +103,7 @@ fn should_validate_certificate_with_delegation_lowest_canister_id() {
     .build();
 
     let verification_result =
-        verify_certificate(&cbor, &low_canister_id, &pk, certified_data.as_bytes());
+        verify_certified_data(&cbor, &low_canister_id, &pk, certified_data.as_bytes());
     verification_result.expect("expect valid signature");
 }
 
@@ -122,7 +122,7 @@ fn should_validate_certificate_with_delegation_highest_canister_id() {
     .build();
 
     let verification_result =
-        verify_certificate(&cbor, &high_canister_id, &pk, certified_data.as_bytes());
+        verify_certified_data(&cbor, &high_canister_id, &pk, certified_data.as_bytes());
     verification_result.expect("expect valid signature");
 }
 
@@ -141,7 +141,7 @@ fn should_validate_certificate_with_single_id_canister_id_range() {
     .build();
 
     let verification_result =
-        verify_certificate(&cbor, &canister_id, &pk, certified_data.as_bytes());
+        verify_certified_data(&cbor, &canister_id, &pk, certified_data.as_bytes());
     verification_result.expect("expect valid signature");
 }
 
@@ -163,7 +163,7 @@ fn should_validate_certificate_with_delegation_with_multiple_canister_id_ranges(
     }))
     .build();
 
-    let verification_result = verify_certificate(&cbor, &cid, &pk, certified_data.as_bytes());
+    let verification_result = verify_certified_data(&cbor, &cid, &pk, certified_data.as_bytes());
     verification_result.expect("expect valid signature");
 }
 
@@ -179,7 +179,7 @@ fn should_fail_certificate_verification_with_empty_canister_id_range() {
     }))
     .build();
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &cbor,
         &canister_id(1),
         &pk,
@@ -200,7 +200,7 @@ fn should_fail_certificate_with_invalid_signature() {
     .with_invalid_sig()
     .build();
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &cbor,
         &canister_id(1),
         &pk,
@@ -225,7 +225,7 @@ fn should_fail_certificate_validation_with_wrong_public_key() {
 
     assert_ne!(pk, wrong_pk);
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &cbor,
         &canister_id(1),
         &wrong_pk,
@@ -252,7 +252,7 @@ fn should_fail_certificate_verification_with_invalid_delegation_signature() {
     )
     .build();
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &cbor,
         &canister_id(1),
         &pk,
@@ -281,7 +281,7 @@ fn should_fail_certificate_verification_with_mismatched_delegation_subnet_id() {
     }))
     .build();
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &cbor,
         &canister_id(1),
         &pk,
@@ -312,7 +312,7 @@ fn should_fail_certificate_verification_with_too_many_delegations() {
     )
     .build();
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &cbor,
         &canister_id(1),
         &pk,
@@ -337,7 +337,7 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range() {
     }))
     .build();
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &cbor,
         &canister_id(1),
         &pk,
@@ -365,7 +365,7 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range_multiple_r
     }))
     .build();
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &cbor,
         &canister_id(1),
         &pk,
@@ -390,7 +390,7 @@ fn should_fail_on_certified_data_mismatch() {
     })
     .build();
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &cbor,
         &canister_id(1),
         &pk,
@@ -410,7 +410,7 @@ fn should_fail_on_invalid_cbor() {
     let mut garbled_data: [u8; 128] = [0; 128];
     thread_rng().fill(&mut garbled_data);
 
-    let verification_result = verify_certificate(
+    let verification_result = verify_certified_data(
         &garbled_data,
         &canister_id(1),
         &pk,
@@ -432,7 +432,7 @@ fn should_fail_on_unexpected_tree() {
     .build();
 
     let verification_result =
-        verify_certificate(&cbor, &canister_id(1), &pk, Digest([1; 32]).as_bytes());
+        verify_certified_data(&cbor, &canister_id(1), &pk, Digest([1; 32]).as_bytes());
 
     assert!(matches!(
         verification_result,
