@@ -304,6 +304,7 @@ pub struct SandboxSafeSystemState {
     ic00_available_request_slots: usize,
     ic00_aliases: BTreeSet<CanisterId>,
     global_timer: CanisterTimer,
+    canister_version: u64,
 }
 
 impl SandboxSafeSystemState {
@@ -326,6 +327,7 @@ impl SandboxSafeSystemState {
         subnet_size: usize,
         dirty_page_overhead: NumInstructions,
         global_timer: CanisterTimer,
+        canister_version: u64,
     ) -> Self {
         Self {
             canister_id,
@@ -345,6 +347,7 @@ impl SandboxSafeSystemState {
             ic00_available_request_slots,
             ic00_aliases,
             global_timer,
+            canister_version,
         }
     }
 
@@ -404,6 +407,7 @@ impl SandboxSafeSystemState {
             subnet_size,
             dirty_page_overhead,
             system_state.global_timer,
+            system_state.canister_version,
         )
     }
 
@@ -413,6 +417,10 @@ impl SandboxSafeSystemState {
 
     pub fn global_timer(&self) -> CanisterTimer {
         self.global_timer
+    }
+
+    pub fn canister_version(&self) -> u64 {
+        self.canister_version
     }
 
     pub fn set_global_timer(&mut self, timer: CanisterTimer) {

@@ -237,4 +237,6 @@ message CanisterStateBits {
   state.queues.v1.Cycles cycles_debit = 32;
   // Canister global timer, in nanoseconds since Unix epoch.
   optional uint64 global_timer_nanos = 33;
+  // Canister version.
+  uint64 canister_version = 34;
 }

@@ -364,6 +364,9 @@ pub struct CanisterStateBits {
     /// Canister global timer, in nanoseconds since Unix epoch.
     #[prost(uint64, optional, tag = "33")]
     pub global_timer_nanos: ::core::option::Option<u64>,
+    /// Canister version.
+    #[prost(uint64, tag = "34")]
+    pub canister_version: u64,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

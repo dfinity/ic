@@ -109,6 +109,10 @@ impl InstallCodeHelper {
         self.canister.system_state.global_timer = CanisterTimer::Inactive;
     }
 
+    pub fn bump_canister_version(&mut self) {
+        self.canister.system_state.canister_version += 1;
+    }
+
     pub fn execution_parameters(&self) -> &ExecutionParameters {
         &self.execution_parameters
     }

@@ -210,6 +210,7 @@ mod tests {
             SMALL_APP_SUBNET_MAX_SIZE,
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
+            0,
         )
     }
 

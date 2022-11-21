@@ -2386,6 +2386,26 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_canister_version(&self) -> HypervisorResult<u64> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_canister_version")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                Ok(self.sandbox_safe_system_state.canister_version())
+            }
+        };
+        trace_syscall!(self, ic0_canister_version, result);
+        result
+    }
+
     fn out_of_instructions(&mut self, instruction_counter: i64) -> HypervisorResult<i64> {
         let result = self
             .out_of_instructions_handler

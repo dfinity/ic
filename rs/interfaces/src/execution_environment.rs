@@ -647,6 +647,9 @@ pub trait SystemApi {
     /// The canister can set a global one-off timer at the specific time.
     fn ic0_global_timer_set(&mut self, time: Time) -> HypervisorResult<Time>;
 
+    /// The canister can query the IC for its version.
+    fn ic0_canister_version(&self) -> HypervisorResult<u64>;
+
     /// The canister can query the "performance counter", which is
     /// a deterministic monotonically increasing integer approximating
     /// the amount of work the canister has done since the beginning of

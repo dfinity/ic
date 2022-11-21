@@ -4,6 +4,7 @@ use crate::execution::test_utilities::{
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_base_types::NumSeconds;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_ic00_types::CanisterHttpResponsePayload;
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
@@ -819,6 +820,118 @@ fn ic0_global_timer_set_returns_previous_value() {
     test.advance_time(Duration::new(5, 0));
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_canister_version_returns_correct_value() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let ctr = wasm().canister_version().reply_int64().build();
+
+    let result = test.ingress(canister_id, "query", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 1;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 1;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    test.upgrade_canister(canister_id, vec![]).unwrap_err();
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 2;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    test.uninstall_code(canister_id).unwrap();
+    test.install_canister(canister_id, vec![]).unwrap_err();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 4;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    test.uninstall_code(canister_id).unwrap();
+    let memory_allocation = NumBytes::from(1024 * 1024 * 1024);
+    test.install_canister_with_allocation(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        None,
+        Some(memory_allocation.get()),
+    )
+    .unwrap();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 6;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    test.reinstall_canister(canister_id, vec![]).unwrap_err();
+    test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 7;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    test.update_freezing_threshold(canister_id, NumSeconds::from(1))
+        .unwrap();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 8;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    test.canister_update_allocations_settings(canister_id, None, None)
+        .unwrap();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 9;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    test.canister_update_allocations_settings(canister_id, Some(1000), None)
+        .unwrap_err();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 9;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    test.set_controller(canister_id, canister_id.into())
+        .unwrap();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    let expected_ctr: u64 = 10;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
+
+    test.uninstall_code(canister_id).unwrap_err();
+    let result = test.ingress(canister_id, "update", ctr).unwrap();
+    let expected_ctr: u64 = 10;
+    assert_eq!(
+        result,
+        WasmResult::Reply((expected_ctr as u64).to_le_bytes().to_vec())
+    );
 }
 
 #[test]
