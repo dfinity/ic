@@ -3682,6 +3682,7 @@ fn test_subnet_size_sign_with_ecdsa() {
     }
 }
 
+// TODO(EXC-1168): remove after full migration is done.
 #[test]
 fn test_subnet_size_http_request_fee() {
     let subnet_type = SubnetType::Application;

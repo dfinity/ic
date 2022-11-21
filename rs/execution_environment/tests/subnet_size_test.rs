@@ -3,16 +3,19 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
-use ic_ic00_types::{self as ic00, CanisterInstallMode, EcdsaCurve, EcdsaKeyId};
+use ic_ic00_types::{
+    self as ic00, CanisterHttpRequestArgs, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, HttpMethod,
+    TransformContext, TransformFunc,
+};
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{CanisterSettingsArgs, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_types::{
-    messages::SignedIngressContent, ComputeAllocation, Cycles, NumBytes, NumInstructions,
-    PrincipalId,
-};
+use ic_types::messages::{SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
+use ic_types::{ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId};
 use std::time::Duration;
+use std::{convert::TryFrom, str::FromStr};
 
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(10_000_000_000);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 996_000;
@@ -386,6 +389,95 @@ fn simulate_sign_with_ecdsa_cost(subnet_type: SubnetType, subnet_size: usize) ->
     let payment_after = context.request.payment;
 
     payment_before - payment_after
+}
+
+/// Simulates `execute_round` to get the cost of executing HTTP request.
+/// Payment is done via attaching cycles to request and the cost is subtracted from it
+/// after executing the message.
+fn simulate_http_request_fee_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    let env = StateMachineBuilder::new()
+        .with_use_cost_scaling_flag(true)
+        .with_subnet_type(subnet_type)
+        .with_subnet_size(subnet_size)
+        .with_features(SubnetFeatures::from_str("http_requests").unwrap())
+        .build();
+    // Create canister with initial cycles for some unrelated costs (eg. ingress induction, heartbeat).
+    let canister_id =
+        env.create_canister_with_cycles(Cycles::new(100_000_000_000) * subnet_size, None);
+    env.install_wasm_in_mode(
+        canister_id,
+        CanisterInstallMode::Install,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+    )
+    .unwrap();
+
+    // HttpRequest is payed with cycles attached to the request.
+    let payment_before = Cycles::new(20_000_000_000) * subnet_size;
+    let http_request = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            ic00::Method::HttpRequest,
+            call_args().other_side(
+                Encode!(&CanisterHttpRequestArgs {
+                    url: "https://".to_string(),
+                    max_response_bytes: None,
+                    headers: Vec::new(),
+                    body: None,
+                    method: HttpMethod::GET,
+                    transform: Some(TransformContext {
+                        function: TransformFunc(candid::Func {
+                            principal: canister_id.get().0,
+                            method: "transform".to_string(),
+                        }),
+                        context: vec![],
+                    }),
+                })
+                .unwrap(),
+            ),
+            payment_before.into_parts(),
+        )
+        .build();
+    // Ignore ingress message response, since HttpRequest requires a consensus response,
+    // which is not simulated in staet_machine_tests.
+    let _msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        http_request,
+    );
+
+    // Run `execute_subnet_message`.
+    env.tick();
+
+    // Expect `HttpRequest` request to be added into subnet call context manager.
+    // HttpRequest fee is deduced from `request.payment`, the excess amount
+    // will be reimbursed after the consensus response.
+    let canister_http_request_contexts = env.canister_http_request_contexts();
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    let (_, context) = canister_http_request_contexts.iter().next().unwrap();
+    let payment_after = context.request.payment;
+
+    payment_before - payment_after
+}
+
+fn calculate_http_request_fee_cycles(
+    config: &CyclesAccountManagerConfig,
+    request_size: NumBytes,
+    response_size_limit: Option<NumBytes>,
+    subnet_size: usize,
+) -> Cycles {
+    let response_size = match response_size_limit {
+        Some(response_size) => response_size.get(),
+        // Defaults to maximum response size.
+        None => MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+    };
+    let total_bytes = response_size + request_size.get();
+    scale_cost(
+        config,
+        config.http_request_baseline_fee + config.http_request_per_byte_fee * total_bytes,
+        subnet_size,
+    )
 }
 
 fn calculate_sign_with_ecdsa_cycles(
@@ -1013,6 +1105,53 @@ fn test_subnet_size_sign_with_ecdsa() {
     let reference_cost = simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..50 {
         let simulated_cost = simulate_sign_with_ecdsa_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_http_request_fee() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        calculate_http_request_fee_cycles(&config, NumBytes::new(17), None, reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_http_request_fee_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 1)
+            < simulate_http_request_fee_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 11)
+            < simulate_http_request_fee_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 101)
+            < simulate_http_request_fee_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 1_001)
+            < simulate_http_request_fee_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_http_request_fee_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_http_request_fee_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
