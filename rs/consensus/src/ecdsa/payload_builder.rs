@@ -493,6 +493,7 @@ pub(crate) fn create_data_payload(
         &signature_builder,
         state_manager,
         registry_client,
+        Some(ecdsa_payload_metrics),
         log,
     )?;
     if let Some(ecdsa_payload) = &new_payload {
@@ -551,6 +552,7 @@ pub(crate) fn create_data_payload_helper(
     signature_builder: &dyn EcdsaSignatureBuilder,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     registry_client: &dyn RegistryClient,
+    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
     log: ReplicaLogger,
 ) -> Result<Option<ecdsa::EcdsaPayload>, EcdsaPayloadError> {
     let height = parent_block.height().increment();
@@ -604,6 +606,7 @@ pub(crate) fn create_data_payload_helper(
         block_reader,
         transcript_builder,
         signature_builder,
+        ecdsa_payload_metrics,
         log,
     )?;
     Ok(Some(ecdsa_payload))
@@ -621,6 +624,7 @@ pub(crate) fn create_data_payload_helper_2(
     block_reader: &dyn EcdsaBlockReader,
     transcript_builder: &dyn EcdsaTranscriptBuilder,
     signature_builder: &dyn EcdsaSignatureBuilder,
+    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
     log: ReplicaLogger,
 ) -> Result<(), EcdsaPayloadError> {
     // Check if we are creating a new key, if so, start using it immediately.
@@ -654,6 +658,7 @@ pub(crate) fn create_data_payload_helper_2(
         ecdsa_payload,
         all_signing_requests,
         &valid_keys,
+        ecdsa_payload_metrics,
     );
     update_ongoing_signatures(
         new_signing_requests,
@@ -861,8 +866,9 @@ pub(crate) fn get_signing_requests<'a>(
     ecdsa_payload: &mut ecdsa::EcdsaPayload,
     sign_with_ecdsa_contexts: &'a BTreeMap<CallbackId, SignWithEcdsaContext>,
     valid_keys: &BTreeSet<EcdsaKeyId>,
+    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
 ) -> BTreeMap<ecdsa::RequestId, &'a SignWithEcdsaContext> {
-    let known_random_ids_completed = ecdsa_payload
+    let mut known_random_ids_completed = ecdsa_payload
         .signature_agreements
         .keys()
         .cloned()
@@ -876,26 +882,61 @@ pub(crate) fn get_signing_requests<'a>(
     // sort in reverse order (bigger to smaller).
     unassigned_quadruple_ids.sort_by(|a, b| b.cmp(a));
     let mut new_requests = BTreeMap::new();
+
+    // We first go through all requests and check if their key_ids are valid.
+    // All new requests with invalid key ids will be rejected.
+    for (callback_id, context) in sign_with_ecdsa_contexts.iter() {
+        if !known_random_ids_completed.contains(&context.pseudo_random_id)
+            && known_random_ids_ongoing
+                .get(&context.pseudo_random_id)
+                .is_none()
+            && !valid_keys.contains(&context.key_id)
+        {
+            // Reject news requests with unknown key Ids.
+            // Note that no quadruples are consumed at this stage.
+            let response = ic_types::messages::Response {
+                originator: context.request.sender,
+                respondent: ic_types::CanisterId::ic_00(),
+                originator_reply_callback: *callback_id,
+                refund: context.request.payment,
+                response_payload: ic_types::messages::Payload::Reject(RejectContext {
+                    code: RejectCode::CanisterReject,
+                    message: format!("Invalid key_id in signature request: {:?}", context.key_id),
+                }),
+            };
+            ecdsa_payload.signature_agreements.insert(
+                context.pseudo_random_id,
+                ecdsa::CompletedSignature::Unreported(response),
+            );
+            // Remember this is already responded to.
+            known_random_ids_completed.insert(context.pseudo_random_id);
+            if let Some(metrics) = ecdsa_payload_metrics {
+                metrics.payload_errors_inc("expired_requests");
+            }
+        }
+    }
+
     // The following iteration goes through contexts in the order
     // of their keys, which is the callback_id. Therefore we are
     // traversing the requests in the order they were created.
     for (callback_id, context) in sign_with_ecdsa_contexts.iter() {
+        // Skip known completed ones
         if known_random_ids_completed.contains(&context.pseudo_random_id) {
             continue;
-        };
-
-        // Generate a new request id only when it is not known.
-        let known_request_id = known_random_ids_ongoing.get(context.pseudo_random_id.as_slice());
+        }
+        // A request_id may already exist for this signing request.
+        // If not, we create one by pairing the pseudo_random_id with a quadruple id
+        // if there are still unassigned quadruples.
+        let known_request_id = known_random_ids_ongoing.get(&context.pseudo_random_id);
         let request_id = match known_request_id {
-            Some(id) => *id,
-            None => match unassigned_quadruple_ids.pop() {
-                Some(quadruple_id) => ecdsa::RequestId {
+            Some(id) => Some(*id),
+            None => unassigned_quadruple_ids
+                .pop()
+                .map(|quadruple_id| ecdsa::RequestId {
                     height,
                     quadruple_id,
                     pseudo_random_id: context.pseudo_random_id,
-                },
-                None => break,
-            },
+                }),
         };
 
         // Reject requests that timed out.
@@ -920,53 +961,30 @@ pub(crate) fn get_signing_requests<'a>(
                     }),
                 };
                 ecdsa_payload.signature_agreements.insert(
-                    request_id.pseudo_random_id,
+                    context.pseudo_random_id,
                     ecdsa::CompletedSignature::Unreported(response),
                 );
-                // Also remove from other structures
-                ecdsa_payload.ongoing_signatures.remove(&request_id);
-                ecdsa_payload
-                    .quadruples_in_creation
-                    .remove(&request_id.quadruple_id);
-                ecdsa_payload
-                    .available_quadruples
-                    .remove(&request_id.quadruple_id);
+                if let Some(metrics) = ecdsa_payload_metrics {
+                    metrics.payload_errors_inc("invalid_keyid_requests");
+                }
+                // Remove from other structures if request id exists
+                if let Some(request_id) = request_id {
+                    ecdsa_payload.ongoing_signatures.remove(&request_id);
+                    ecdsa_payload
+                        .quadruples_in_creation
+                        .remove(&request_id.quadruple_id);
+                    ecdsa_payload
+                        .available_quadruples
+                        .remove(&request_id.quadruple_id);
+                }
                 continue;
             }
         }
-
-        // For the non-expired requests, we also need to skip those that are already in progress.
-        if known_request_id.is_some() {
-            continue;
-        };
-        // Only put them in progress when the key_id matche.
-        if valid_keys.contains(&context.key_id) {
-            new_requests.insert(request_id, context);
-        } else {
-            // Reject requests with unknown key Ids.
-            // We currently consume a quadruple even if we are rejecting the request, for
-            // the following reason:
-            //
-            // RequestId has an associated quadruple(assumes a quadruple has been assigned).
-            // We could create special requests that are rejected early on, with an optional
-            // QuadrupleId or reserved quadrupled Id. But this makes other paths (EcdsaPayload,
-            // proto conversion, etc) more involved. Since the execution already filters invalid
-            // keys, this case is expected to happen only rarely: during key deletion, etc. So it
-            // should be fine to burn a quadruple in favor of simple design. Revisit if needed.
-            let response = ic_types::messages::Response {
-                originator: context.request.sender,
-                respondent: ic_types::CanisterId::ic_00(),
-                originator_reply_callback: *callback_id,
-                refund: context.request.payment,
-                response_payload: ic_types::messages::Payload::Reject(RejectContext {
-                    code: RejectCode::CanisterReject,
-                    message: format!("Invalid key_id in signature request: {:?}", context.key_id),
-                }),
-            };
-            ecdsa_payload.signature_agreements.insert(
-                request_id.pseudo_random_id,
-                ecdsa::CompletedSignature::Unreported(response),
-            );
+        // If a request is not known and not expired and request id exists, it is a new request.
+        if known_request_id.is_none() {
+            if let Some(request_id) = request_id {
+                new_requests.insert(request_id, context);
+            }
         }
     }
     new_requests
@@ -1852,6 +1870,7 @@ mod tests {
                 .subnet_call_context_manager
                 .sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
         // Because there is no quadruples available, expect empty return
         assert!(result.is_empty());
@@ -1879,6 +1898,7 @@ mod tests {
                 .subnet_call_context_manager
                 .sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
         assert_eq!(new_requests.len(), 1);
         // Check if it is matched with the smaller quadruple ID
@@ -1943,6 +1963,7 @@ mod tests {
                 .subnet_call_context_manager
                 .sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
         assert_eq!(new_requests.len(), 2);
         let request_id_1 = *new_requests.keys().find(|x| x != &&request_id_0).unwrap();
@@ -1968,6 +1989,7 @@ mod tests {
                 .subnet_call_context_manager
                 .sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
         assert_eq!(result.len(), 1);
         assert_eq!(result.keys().next().unwrap().clone(), request_id_0);
@@ -2007,6 +2029,7 @@ mod tests {
                 .subnet_call_context_manager
                 .sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
         // Because there is no quadruples available, expect empty return
         assert!(result.is_empty());
@@ -2032,6 +2055,7 @@ mod tests {
                 .subnet_call_context_manager
                 .sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
         assert_eq!(result.len(), 1);
         // Check if it is matched with the smaller quadruple ID
@@ -2103,6 +2127,7 @@ mod tests {
                 .subnet_call_context_manager
                 .sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
         assert_eq!(result.len(), 1);
         // Check if it is matched with the quadruple ID 1, because quadruple ID 0 is discard too.
@@ -2146,6 +2171,7 @@ mod tests {
                 .subnet_call_context_manager
                 .sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
         // Because there is no quadruples available, expect empty return
         assert!(result.is_empty());
@@ -2171,6 +2197,7 @@ mod tests {
                 .subnet_call_context_manager
                 .sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
 
         // Verify the request is rejected.
@@ -2713,6 +2740,7 @@ mod tests {
             &mut ecdsa_payload,
             &sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
 
         update_ongoing_signatures(
@@ -2744,6 +2772,7 @@ mod tests {
             &block_reader,
             &transcript_builder,
             &signature_builder,
+            None,
             ic_logger::replica_logger::no_op_logger(),
         )
         .unwrap();
@@ -2765,6 +2794,7 @@ mod tests {
             &block_reader,
             &transcript_builder,
             &signature_builder,
+            None,
             ic_logger::replica_logger::no_op_logger(),
         )
         .unwrap();
