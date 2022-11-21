@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
-use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
+use ic_crypto::{CryptoComponent, CryptoComponentFatClient, CryptoTime};
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -24,9 +24,13 @@ use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId, PublicKey as PublicKeyProto};
+use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetListRecord, SubnetRecord, SubnetType};
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
+use ic_registry_keys::{
+    make_crypto_node_key, make_crypto_tls_cert_key, make_subnet_list_record_key,
+    make_subnet_record_key,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
@@ -56,11 +60,13 @@ use ic_types::crypto::{
     UserPublicKey,
 };
 use ic_types::signature::BasicSignatureBatch;
-use ic_types::{NodeId, RegistryVersion, SubnetId};
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId, Time};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use tempfile::TempDir;
 use tokio::net::{TcpStream, UnixListener};
 
@@ -129,7 +135,8 @@ pub struct TempCryptoBuilder {
     connected_remote_vault: Option<Arc<TempCspVaultServer>>,
     temp_dir_source: Option<PathBuf>,
     logger: Option<ReplicaLogger>,
-    time_source: Option<Arc<dyn TimeSource>>,
+    time_source: Option<Arc<dyn CryptoTime>>,
+    ecdsa_subnet_config: Option<EcdsaSubnetConfig>,
 }
 
 impl TempCryptoBuilder {
@@ -205,8 +212,13 @@ impl TempCryptoBuilder {
         self
     }
 
-    pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
+    pub fn with_time_source(mut self, time_source: Arc<dyn CryptoTime>) -> Self {
         self.time_source = Some(time_source);
+        self
+    }
+
+    pub fn with_ecdsa_subnet_config(mut self, ecdsa_subnet_config: EcdsaSubnetConfig) -> Self {
+        self.ecdsa_subnet_config = Some(ecdsa_subnet_config);
         self
     }
 
@@ -298,6 +310,26 @@ impl TempCryptoBuilder {
                         Some(tls_certificate.to_owned()),
                     )
                     .expect("failed to add TLS certificate to registry");
+            }
+            if let Some(ecdsa_subnet_config) = self.ecdsa_subnet_config {
+                registry_data
+                    .add(
+                        &make_subnet_record_key(ecdsa_subnet_config.subnet_id),
+                        registry_version,
+                        Some(ecdsa_subnet_config.subnet_record),
+                    )
+                    .expect("Failed to add subnet record.");
+                let subnet_list_record = SubnetListRecord {
+                    subnets: vec![ecdsa_subnet_config.subnet_id.get().into_vec()],
+                };
+                // Set subnetwork list
+                registry_data
+                    .add(
+                        make_subnet_list_record_key().as_str(),
+                        registry_version,
+                        Some(subnet_list_record),
+                    )
+                    .expect("Failed to add subnet list record key");
             }
         }
         let registry_client = self.registry_client.unwrap_or_else(|| {
@@ -433,6 +465,7 @@ impl TempCryptoComponent {
             temp_dir_source: None,
             logger: None,
             time_source: None,
+            ecdsa_subnet_config: None,
         }
     }
 
@@ -463,6 +496,81 @@ impl TempCryptoComponent {
 
     pub fn copy_crypto_root_to(&self, target: &Path) {
         copy_crypto_root(self.temp_dir_path(), target);
+    }
+}
+
+pub struct EcdsaSubnetConfig {
+    pub subnet_id: SubnetId,
+    pub subnet_record: SubnetRecord,
+}
+
+impl EcdsaSubnetConfig {
+    pub fn new(
+        subnet_id: SubnetId,
+        node_id: Option<NodeId>,
+        key_rotation_period: Option<Duration>,
+    ) -> Self {
+        EcdsaSubnetConfig {
+            subnet_id,
+            subnet_record: SubnetRecord {
+                membership: if let Some(node_id) = node_id {
+                    vec![node_id.get().to_vec()]
+                } else {
+                    vec![]
+                },
+                max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_messages_per_block: 1000,
+                max_block_payload_size: 2 * 1024 * 1024,
+                unit_delay_millis: 500,
+                initial_notary_delay_millis: 1500,
+                replica_version_id: ReplicaVersion::default().into(),
+                dkg_interval_length: 59,
+                dkg_dealings_per_block: 1,
+                gossip_config: None,
+                start_as_nns: false,
+                subnet_type: SubnetType::Application.into(),
+                is_halted: false,
+                max_instructions_per_message: 5_000_000_000,
+                max_instructions_per_round: 7_000_000_000,
+                max_instructions_per_install_code: 200_000_000_000,
+                features: None,
+                max_number_of_canisters: 0,
+                ssh_readonly_access: vec![],
+                ssh_backup_access: vec![],
+                ecdsa_config: Some(EcdsaConfig {
+                    quadruples_to_create_in_advance: 10,
+                    key_ids: vec![EcdsaKeyId {
+                        curve: EcdsaCurve::Secp256k1.into(),
+                        name: "dummy_ecdsa_key_id".to_string(),
+                    }],
+                    max_queue_size: 20,
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: key_rotation_period
+                        .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
+                }),
+            },
+        }
+    }
+
+    pub fn new_without_ecdsa_config(subnet_id: SubnetId, node_id: Option<NodeId>) -> Self {
+        let mut subnet_config = Self::new(subnet_id, node_id, None);
+        subnet_config.subnet_record.ecdsa_config = None;
+        subnet_config
+    }
+
+    pub fn new_without_key_ids(
+        subnet_id: SubnetId,
+        node_id: Option<NodeId>,
+        key_rotation_period: Option<Duration>,
+    ) -> Self {
+        let mut subnet_config = Self::new(subnet_id, node_id, key_rotation_period);
+        subnet_config
+            .subnet_record
+            .ecdsa_config
+            .take()
+            .expect("ECDSA config is None")
+            .key_ids = vec![];
+        subnet_config
     }
 }
 
@@ -1013,4 +1121,55 @@ fn csp_for_config(
         None,
         Arc::new(CryptoMetrics::none()),
     )
+}
+
+/// A pure implementation of [TimeSource] that requires manual
+/// fast forward to advance time.
+pub struct FastForwardCryptoTimeSource(RwLock<TickCryptoTimeData>);
+
+struct TickCryptoTimeData {
+    current_time: Time,
+}
+
+/// Error when time update is not monotone.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct CryptoTimeNotMonotoneError;
+
+impl FastForwardCryptoTimeSource {
+    pub fn new() -> Arc<FastForwardCryptoTimeSource> {
+        Arc::new(FastForwardCryptoTimeSource(RwLock::new(
+            TickCryptoTimeData {
+                current_time: UNIX_EPOCH,
+            },
+        )))
+    }
+
+    /// Set the time to a new value, only when the given time is greater than
+    /// or equal to the current time. Return error otherwise.
+    pub fn set_time(&self, time: Time) -> Result<(), CryptoTimeNotMonotoneError> {
+        let data = &mut self.0.write().unwrap();
+        if time >= data.current_time {
+            data.current_time = time;
+            Ok(())
+        } else {
+            Err(CryptoTimeNotMonotoneError)
+        }
+    }
+
+    /// Reset the time to start value.
+    pub fn reset(&self) {
+        self.0.write().unwrap().current_time = UNIX_EPOCH;
+    }
+}
+
+impl TimeSource for FastForwardCryptoTimeSource {
+    fn get_relative_time(&self) -> Time {
+        self.0.read().unwrap().current_time
+    }
+}
+
+impl CryptoTime for FastForwardCryptoTimeSource {
+    fn get_current_time(&self) -> Time {
+        self.0.read().unwrap().current_time
+    }
 }
