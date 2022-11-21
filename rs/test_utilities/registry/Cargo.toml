@@ -12,6 +12,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
 serde_cbor = "0.11.1"

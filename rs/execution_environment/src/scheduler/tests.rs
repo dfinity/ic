@@ -3635,6 +3635,7 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
     }
 }
 
+// TODO(EXC-1168): remove after full migration is done.
 #[test]
 fn test_subnet_size_sign_with_ecdsa() {
     let subnet_type = SubnetType::Application;
