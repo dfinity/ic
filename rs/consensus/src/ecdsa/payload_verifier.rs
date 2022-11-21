@@ -377,6 +377,7 @@ pub fn validate_data_payload(
         &builder,
         state_manager,
         registry_client,
+        None,
         ic_logger::replica_logger::no_op_logger(),
     )
     .map_err(|err| PermanentError::UnexpectedDataPayload(Some(err)))?;
@@ -897,6 +898,7 @@ mod test {
             &mut ecdsa_payload,
             &sign_with_ecdsa_contexts,
             &valid_keys,
+            None,
         );
 
         update_ongoing_signatures(
