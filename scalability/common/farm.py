@@ -22,13 +22,14 @@ from common import ssh  # noqa
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string("farm_group_name", None, "Farm group name to use. Default is testvm-$user-$time")
 gflags.DEFINE_string("ci_runner_tags", None, "Allocate VMs close to the CI runner, when running on CI")
+gflags.DEFINE_integer("farm_ttl_secs", 3600, "VM expiry in seconds")
 
 FARM_BASE_URL = "https://farm.dfinity.systems"
-TTL = 3600
 
 DOWNLOAD_BASE_URL = "http://download.proxy-global.dfinity.network:8080"
 DISK_IMAGE = "disk-img.tar.zst"
 DISK_IMAGE_KIND = "disk-img-dev"
+DEFAULT_NUM_VCPUS = 2
 
 # The SHA-256 hash of the Prometheus VM disk image.
 # The latest hash can be retrieved by downloading the SHA256SUMS file from:
@@ -243,7 +244,7 @@ class Farm(object):
         # Create group
         response = requests.post(
             self.group_url,
-            json={"ttl": TTL, "spec": {}},
+            json={"ttl": FLAGS.farm_ttl_secs, "spec": {}},
             headers={"accept": "application/json"},
         )
         if response.status_code >= 400:
@@ -258,7 +259,7 @@ class Farm(object):
         print(f"Deleting farm group {self.group_url}")
         _ = requests.delete(self.group_url)
 
-    def create_vms_from_ic_os_image_via_url(self, url, img_hash):
+    def create_vms_from_ic_os_image_via_url(self, url, img_hash, num_vcpus={}):
         """Set up VMs using IC-OS image uploaded previously."""
         print("Setting up VMs using disk image %s" % url)
         self.ic_node_ipv6s = []
@@ -275,8 +276,8 @@ class Farm(object):
                     self.ic_node_urls[-1],
                     json={
                         "type": "production",
-                        "vCPUs": 2,
-                        "memoryKiB": 25165824,
+                        "vCPUs": num_vcpus.get(subnet_idx, DEFAULT_NUM_VCPUS),
+                        "memoryKiB": 25_165_824,
                         "primaryImage": primary_image,
                         "primaryImageMinimalSizeGiB": 100,
                         "requiredHostFeatures": allocation,
@@ -295,7 +296,7 @@ class Farm(object):
             json={
                 "type": "production",
                 "vCPUs": 2,
-                "memoryKiB": 25165824,
+                "memoryKiB": 25_165_824,  # 25 GiB
                 "primaryImage": {
                     "_tag": "imageViaUrl",
                     "url": PROMETHEUS_VM_DISK_IMG_URL,

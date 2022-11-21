@@ -162,7 +162,7 @@ def nns_install(ic_config, ic_url):
         "--wasm-dir",
         FLAGS.nns_canisters,
     ]
-    subprocess.run(cmd, check=True)
+    return subprocess.run(cmd, check=True)
 
 
 def wait_ic_up(ic_config, timeout=None):

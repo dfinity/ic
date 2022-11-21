@@ -1,0 +1,22 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_json",
+    "@crate_index//:futures",
+    "@crate_index//:serde_json",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_macro",
+]
+
+rust_canister(
+    name = "call-tree-test-canister",
+    srcs = ["src/main.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

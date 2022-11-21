@@ -30,7 +30,6 @@ gflags.DEFINE_integer("subnet", 1, "Subnet from which to choose the target machi
 gflags.DEFINE_integer("wg_subnet", 0, "Subnet in which to run the workload generator.")
 gflags.DEFINE_string("mainnet_target_subnet_id", "", "Subnet ID that is running the canister specified by canister_id.")
 gflags.DEFINE_boolean("target_all", False, "Target all nodes, even when running query calls.")
-gflags.DEFINE_string("targets", "", "Set load target IP adresses from this coma-separated list directly.")
 gflags.DEFINE_string(
     "workload_generator_machines", "", "Set workload generator IP adresses from this coma-separated list directly."
 )
