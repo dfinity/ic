@@ -25,6 +25,7 @@ RUST_BINARIES = [
     "denylist-updater",
     "e2e-test-driver",
     "ic-admin",
+    "ic-backup",
     "ic-balance-exporter",
     "ic-btc-adapter",
     "ic-canister-http-adapter",
