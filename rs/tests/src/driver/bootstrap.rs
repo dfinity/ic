@@ -255,24 +255,24 @@ pub fn create_config_disk_image(
             .arg(journalbeat_hosts.join(" "));
     }
 
-    let log_debug_overrides: Vec<String> = test_env.get_log_debug_overrides()?;
+    let replica_log_debug_overrides: Vec<String> = test_env.get_replica_log_debug_overrides()?;
 
     info!(
         test_env.logger(),
-        "log-debug-overrides args are {:?}", log_debug_overrides
+        "replica-log-debug-overrides args are {:?}", replica_log_debug_overrides
     );
 
-    if !log_debug_overrides.is_empty() {
-        let log_debug_overrides_val = format!(
+    if !replica_log_debug_overrides.is_empty() {
+        let replica_log_debug_overrides_val = format!(
             "[{}]",
-            log_debug_overrides
+            replica_log_debug_overrides
                 .iter()
                 .map(|component_unquoted| format!("\"{}\"", component_unquoted))
                 .collect::<Vec<_>>()
                 .join(",")
         );
-        cmd.arg("--log_debug_overrides")
-            .arg(log_debug_overrides_val);
+        cmd.arg("--replica_log_debug_overrides")
+            .arg(replica_log_debug_overrides_val);
     }
     // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {

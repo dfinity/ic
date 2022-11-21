@@ -96,11 +96,11 @@ If not provided, a default of the form `$HOSTNAME-<timestamp>` is used, where
 
     // TODO: remove this arg, which is anyway ignored, as it is should be passed as /dependencies.
     #[clap(
-        long = "log-debug-overrides",
+        long = "replica-log-debug-overrides",
         help = r#"A string containing debug overrides in terms of ic.json5.template
  (e.g. "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors")"#
     )]
-    _log_debug_overrides: Option<String>,
+    _replica_log_debug_overrides: Option<String>,
 
     #[clap(
         long = "pot-timeout",
@@ -218,7 +218,7 @@ pub fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
     Ok(res)
 }
 
-pub fn parse_log_debug_overrides(s: Option<String>) -> Result<Vec<String>> {
+pub fn parse_replica_log_debug_overrides(s: Option<String>) -> Result<Vec<String>> {
     let s = match s {
         Some(s) => s,
         None => return Ok(vec![]),
@@ -228,7 +228,7 @@ pub fn parse_log_debug_overrides(s: Option<String>) -> Result<Vec<String>> {
     let mut res = vec![];
     for target in s.trim().split(',') {
         if !rgx.is_match(target) {
-            bail!("Invalid log_debug_overrides: '{}'", s);
+            bail!("Invalid replica_log_debug_overrides: '{}'", s);
         }
         res.push(target.to_string());
     }

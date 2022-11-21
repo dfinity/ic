@@ -277,7 +277,7 @@ def populate_dependencies_dir(
     ic_root_dir: str,
     journalbeat_hosts: str,
     farm_base_url: str,
-    log_debug_overrides: str,
+    replica_log_debug_overrides: str,
     ic_version_id: str,
     ic_os_img_url: str,
     ic_os_img_sha256: str,
@@ -309,7 +309,7 @@ def populate_dependencies_dir(
     files_with_content = [
         ("farm_base_url", farm_base_url),
         ("journalbeat_hosts", journalbeat_hosts),
-        ("log_debug_overrides", log_debug_overrides),
+        ("replica_log_debug_overrides", replica_log_debug_overrides),
         ("ic-os/guestos/dev/ic_version_id", ic_version_id),
         ("ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url", ic_os_img_url),
         ("ic-os/guestos/dev/disk-img.tar.zst.sha256", ic_os_img_sha256),
@@ -559,8 +559,8 @@ def main(
     dependencies_dir = os.path.join(working_dir, "system_env/dependencies")
     logging.info(f"Populating dependencies dir {dependencies_dir}")
 
-    (log_debug_overrides,) = try_extract_arguments(
-        search_args=["--log-debug-overrides"], separator="=", args=runner_args
+    (replica_log_debug_overrides,) = try_extract_arguments(
+        search_args=["--replica-log-debug-overrides"], separator="=", args=runner_args
     )
 
     populate_dependencies_dir(
@@ -578,7 +578,7 @@ def main(
         farm_base_url=DEFAULT_FARM_BASE_URL,
         boundary_node_img_url=BOUNDARY_NODE_IMG_URL,
         boundary_node_img_sha256=BOUNDARY_NODE_IMG_SHA256,
-        log_debug_overrides=log_debug_overrides,
+        replica_log_debug_overrides=replica_log_debug_overrides,
     )
     logging.debug("dependencies dir has been populated with content:")
     list_files(dependencies_dir)

@@ -95,7 +95,7 @@ you can use the following:
 IC_VERSION_ID=<version> ./run-system-tests.py \
     --include-pattern=http_basic_remote \
     --suite=staging \
-    --log-debug-overrides="ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors"
+    --replica-log-debug-overrides="ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors"
 ```
 
 If you have further questions, please contact the testing team on #eng-testing.

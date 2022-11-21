@@ -77,7 +77,7 @@ options may be specified:
   --backup_puging_interval seconds
     How often the backup purging should be executed.
 
-  --log_debug_overrides overrides
+  --replica_log_debug_overrides overrides
     A list of fully qualified Rust module paths. For each of the listed
     modules, at least DEBUG logs will be produced by the node software.
     Primarily intended for testing.
@@ -113,7 +113,7 @@ function build_ic_bootstrap_tar() {
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
     local JOURNALBEAT_HOSTS JOURNALBEAT_TAGS
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
-    local LOG_DEBUG_OVERRIDES
+    local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
     while true; do
         if [ $# == 0 ]; then
@@ -159,8 +159,8 @@ function build_ic_bootstrap_tar() {
             --backup_puging_interval)
                 BACKUP_PURGING_INTERVAL_SECS="$2"
                 ;;
-            --log_debug_overrides)
-                LOG_DEBUG_OVERRIDES="$2"
+            --replica_log_debug_overrides)
+                REPLICA_LOG_DEBUG_OVERRIDES="$2"
                 ;;
             --malicious_behavior)
                 MALICIOUS_BEHAVIOR="$2"
@@ -204,8 +204,8 @@ EOF
         echo "backup_retention_time_secs=${BACKUP_RETENTION_TIME_SECS}" >"${BOOTSTRAP_TMPDIR}/backup.conf"
         echo "backup_puging_interval_secs=${BACKUP_PURGING_INTERVAL_SECS}" >>"${BOOTSTRAP_TMPDIR}/backup.conf"
     fi
-    if [ "${LOG_DEBUG_OVERRIDES}" != "" ]; then
-        echo "log_debug_overrides=${LOG_DEBUG_OVERRIDES}" >"${BOOTSTRAP_TMPDIR}/log.conf"
+    if [ "${REPLICA_LOG_DEBUG_OVERRIDES}" != "" ]; then
+        echo "replica_log_debug_overrides=${REPLICA_LOG_DEBUG_OVERRIDES}" >"${BOOTSTRAP_TMPDIR}/log.conf"
     fi
     if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
         echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
