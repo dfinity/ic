@@ -790,9 +790,18 @@ impl GossipImpl {
             .consensus_pool_cache
             .get_oldest_registry_version_in_use();
         let mut subnet_nodes = BTreeMap::new();
-        // Iterate from subnet_membership_version to latest_registry_version + 1 (since
-        // end is non-inclusive).
-        for version in subnet_membership_version.get()..=latest_registry_version.get() {
+        // Iterate from min(consensus_registry_version,latest_local_registry_version) to max(consensus_registry_version,latest_local_registry_version).
+        // The `consensus_registry_version` is extracted from the latest CUP seen.
+        // The `latest_local_registry_version` is the latest registry version known to this node.
+        // In almost any case `latest_local_registry_version >= consensus_registry_version` but there may exist cases where this condition does not hold.
+        // In that case we should at least include our latest local view of the subnet.
+        for version in subnet_membership_version
+            .get()
+            .min(latest_registry_version.get())
+            ..=subnet_membership_version
+                .get()
+                .max(latest_registry_version.get())
+        {
             let version = RegistryVersion::from(version);
             let node_records = self
                 .registry_client
@@ -2105,5 +2114,43 @@ pub mod tests {
                 "[2001:db8:0:1:1:1:1:1]:100".to_string()
             );
         }
+    }
+    #[tokio::test]
+    async fn test_merge_subnet_membership() {
+        let logger = p2p_test_setup_logger();
+        let num_replicas = 3;
+
+        let allocated_ports = allocate_ports("127.0.0.1", num_replicas as u16)
+            .expect("Port allocation for test failed");
+        let node_port_allocation: Vec<u16> = allocated_ports.iter().map(|np| np.port).collect();
+        let data_provider = test_group_set_registry(
+            subnet_test_id(P2P_SUBNET_ID_DEFAULT),
+            Arc::new(node_port_allocation),
+        );
+        let registry_data_provider = data_provider;
+        let registry_client = Arc::new(FakeRegistryClient::new(registry_data_provider));
+        registry_client.update_to_latest_version();
+
+        // Create consensus cache that returns a oldest registry version higher than the the local view.
+        let mut mock_consensus_cache = MockConsensusCache::new();
+        let consensus_registry_client = registry_client.clone();
+        mock_consensus_cache
+            .expect_get_oldest_registry_version_in_use()
+            .returning(move || {
+                RegistryVersion::from(consensus_registry_client.get_latest_version().get() + 5)
+            });
+        let consensus_pool_cache = Arc::new(mock_consensus_cache);
+
+        let gossip = new_test_gossip_impl_with_registry(
+            num_replicas,
+            &logger,
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&consensus_pool_cache) as Arc<_>,
+            tokio::runtime::Handle::current(),
+        );
+        // Make sure the subnet membership in non-empty
+        assert!(!gossip
+            .merge_subnet_membership(registry_client.get_latest_version())
+            .is_empty())
     }
 }
