@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//rs/replica:__subpackages__"])
 
@@ -51,12 +52,17 @@ MACRO_DEPENDENCIES = []
 BUILD_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/registry/routing_table",
     "//rs/test_utilities",
+    "//rs/interfaces/registry/mocks",
     "//rs/interfaces/state_manager/mocks",
+    "//rs/crypto/tls_interfaces/mocks",
     "@crate_index//:bytes",
+    "@crate_index//:ic-agent",
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
+    "@crate_index//:tower-test",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -91,4 +97,16 @@ rust_test(
     crate = ":public",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "public_integration_tests",
+    size = "small",
+    srcs = glob(
+        ["tests/**"],
+        exclude = ["tests/common/**"],
+    ),
+    extra_srcs = glob(["tests/common/**"]),
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":public"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
