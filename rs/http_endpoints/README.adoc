@@ -1,0 +1,44 @@
+= Public HTTPS Endpoints =
+:toc:
+ 
+== Introduction ==
+ 
+The directory contains replica components that open active sockets, so NNS managed nodes can 
+communicate with each other.
+ 
+
+The replica components in this directory are:
+
+* public HTTPS API endpoints, serving incoming requests from boundary nodes and other replica nodes
+* metrics HTTPS endpoint, used by Prometheus for scraping
+
+== Connection management ==
+
+Components in scope assume persistent connections are established. A hard cap exists on
+the number of live TCP connections per source IP. If the limit is reached for an IP address, new
+incoming connections from the same IP are refused.
+Given the existence of persistent connections, we must detect dead peers and disconnections due
+to network inactivity. For this purpose, we use https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html#whyuse[TCP alivekeep].
+Different sockets may use different TCP keepalive configurations.
+
+== Thread-per-request (aka Tower global concurrency buffer) ==
+ 
+Components in scope listen on a socket, parse the corresponding request and execute the requested API
+call by calling a downstream component(s) that may block the running thread. Since async code needs to be
+https://docs.rs/tokio/latest/tokio/task/index.html[non-blocking], the components use 
+https://sre.google/sre-book/addressing-cascading-failures/#xref_cascading-failure_queue-management[thread-per-request]
+pattern for executing the corresponding downstream API calls. More specifically, there is a
+queue in front of each thread pool that handles requests. Requests come in, they sit in a bounded-size queue, and then
+threads pick requests off the queue and perform the actual work (whatever actions are required by the replica).
+The caller is responsible for correctly handling the case when the queue is full.
+
+== Preventing Server Overload (aka Tower load shedding) ==
+ 
+Servers should protect themselves from becoming overloaded and crashing. When overloaded at either the frontend or
+backend layers, fail early and cheaply. For details, see 
+https://sre.google/sre-book/addressing-cascading-failures/#xref_cascading-failure_load-shed-graceful-degredation[Load Shedding and Graceful Degradation.]
+
+In addition, serving errors early and cheaply can be beneficial for replicated servers that stay behind load balancers.
+For example, https://sre.google/sre-book/load-balancing-datacenter/[Least-Loaded Round Robin] takes into account recent errors.
+ 
+== Fairness (aka Tower buffer) ==
