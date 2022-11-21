@@ -4,7 +4,7 @@ use ic_config::metrics::{Config, Exporter};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_registry::RegistryClient;
 use ic_metrics::registry::MetricsRegistry;
-use prometheus::{Encoder, IntCounter, TextEncoder};
+use prometheus::{Encoder, IntCounterVec, TextEncoder};
 use slog::{error, trace, warn};
 use std::net::SocketAddr;
 use std::string::String;
@@ -68,15 +68,16 @@ impl From<BoxError> for HttpError {
 
 #[derive(Clone)]
 struct MetricsEndpointMetrics {
-    connections_total: IntCounter,
+    connections_total: IntCounterVec,
 }
 
 impl MetricsEndpointMetrics {
     fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
-            connections_total: metrics_registry.int_counter(
+            connections_total: metrics_registry.int_counter_vec(
                 "metrics_endpoint_tcp_connections_total",
                 "Total number of accepted TCP connections.",
+                &["protocol"],
             ),
         }
     }
@@ -245,10 +246,14 @@ impl MetricsHttpEndpoint {
                 let crypto_tls = crypto_tls.clone();
                 if let Ok((tcp_stream, _)) = tcp_acceptor.accept().await {
                     tokio::spawn(async move {
-                        metrics.connections_total.inc();
                         let mut b = [0_u8; 1];
                         let (tcp_stream, _counter) = tcp_stream.take();
                         if tcp_stream.peek(&mut b).await.is_ok() && b[0] == 22 {
+                            metrics
+                                .connections_total
+                                .with_label_values(&["https"])
+                                .inc();
+
                             if let Some((registry_client, crypto)) = crypto_tls {
                                 // Note: the unwrap() can't fail since we tested Some(crypto)
                                 // above.
@@ -271,6 +276,7 @@ impl MetricsHttpEndpoint {
                                 };
                             }
                         } else {
+                            metrics.connections_total.with_label_values(&["http"]).inc();
                             // Fallback to Http.
                             if let Err(e) = http.serve_connection(tcp_stream, metrics_svc).await {
                                 trace!(log, "Connection error: {}", e);
