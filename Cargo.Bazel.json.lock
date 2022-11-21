@@ -1,5 +1,5 @@
 {
-  "checksum": "86d1c04650d473085ea6aaa16ab6eb58dffad46c8aa7f8c5505f347e56c2eb33",
+  "checksum": "5c963d90e6d1a178b912239a673996699a8a451709e3f775d64db7b8dd203eb1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -124,7 +124,7 @@
               "target": "abnf"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -882,7 +882,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -2076,7 +2076,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -2130,7 +2130,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -2788,7 +2788,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -4032,7 +4032,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -4082,7 +4082,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -4764,7 +4764,7 @@
               "target": "rustc_version"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -4924,7 +4924,7 @@
               "target": "quote"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -5404,13 +5404,13 @@
       },
       "license": "Apache-2.0"
     },
-    "candid 0.8.3": {
+    "candid 0.8.4": {
       "name": "candid",
-      "version": "0.8.3",
+      "version": "0.8.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/candid/0.8.3/download",
-          "sha256": "0571f3777880555f86d8aaa63080162560a8bf183d7853e0cc561d9a75458bbd"
+          "url": "https://crates.io/api/v1/crates/candid/0.8.4/download",
+          "sha256": "244005a1917bb7614cd775ca8a5d59efeb5ac74397bb14ba29a19347ebd78591"
         }
       },
       "targets": [
@@ -5459,7 +5459,7 @@
               "target": "byteorder"
             },
             {
-              "id": "candid 0.8.3",
+              "id": "candid 0.8.4",
               "target": "build_script_build"
             },
             {
@@ -5539,7 +5539,7 @@
           ],
           "selects": {}
         },
-        "version": "0.8.3"
+        "version": "0.8.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -5757,7 +5757,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -5991,7 +5991,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -6787,7 +6787,7 @@
               "target": "clap_lex"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -6823,13 +6823,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.0.24": {
+    "clap 4.0.26": {
       "name": "clap",
-      "version": "4.0.24",
+      "version": "4.0.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.0.24/download",
-          "sha256": "60494cedb60cb47462c0ff7be53de32c0e42a6fc2c772184554fa12bd9489c03"
+          "url": "https://crates.io/api/v1/crates/clap/4.0.26/download",
+          "sha256": "2148adefda54e14492fb9bddcc600b4344c5d1a3123bd666dcb939c6f0e0e57e"
         }
       },
       "targets": [
@@ -6912,7 +6912,7 @@
           ],
           "selects": {}
         },
-        "version": "4.0.24"
+        "version": "4.0.26"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -7227,7 +7227,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "reqwest 0.11.12",
+              "id": "reqwest 0.11.13",
               "target": "reqwest"
             },
             {
@@ -7235,7 +7235,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -9031,7 +9031,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -11250,13 +11250,13 @@
       },
       "license": "MIT"
     },
-    "digest 0.10.5": {
+    "digest 0.10.6": {
       "name": "digest",
-      "version": "0.10.5",
+      "version": "0.10.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/digest/0.10.5/download",
-          "sha256": "adfbc57365a37acbd2ebf2b64d7e69bb766e2fea813521ed536f5d0520dcf86c"
+          "url": "https://crates.io/api/v1/crates/digest/0.10.6/download",
+          "sha256": "8168378f4e5023e7218c89c891c0fd8ecdb5e5e4f18cb78f38cf245dd021e76f"
         }
       },
       "targets": [
@@ -11305,7 +11305,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.10.5"
+        "version": "0.10.6"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -11497,7 +11497,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.8.3",
+              "id": "candid 0.8.4",
               "target": "candid"
             },
             {
@@ -11533,7 +11533,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.0.24",
+              "id": "clap 4.0.26",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -11714,7 +11714,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.23.0",
+              "id": "hyper-rustls 0.23.1",
               "target": "hyper_rustls"
             },
             {
@@ -11734,7 +11734,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-cdk 0.6.6",
+              "id": "ic-cdk 0.6.7",
               "target": "ic_cdk"
             },
             {
@@ -11774,7 +11774,7 @@
               "target": "insta"
             },
             {
-              "id": "instant-acme 0.1.0",
+              "id": "instant-acme 0.1.1",
               "target": "instant_acme"
             },
             {
@@ -12081,7 +12081,7 @@
               "target": "regex"
             },
             {
-              "id": "reqwest 0.11.12",
+              "id": "reqwest 0.11.13",
               "target": "reqwest"
             },
             {
@@ -12158,7 +12158,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -12481,7 +12481,7 @@
               "target": "gflags_derive"
             },
             {
-              "id": "ic-cdk-macros 0.6.6",
+              "id": "ic-cdk-macros 0.6.7",
               "target": "ic_cdk_macros"
             },
             {
@@ -13299,7 +13299,7 @@
               "target": "der"
             },
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             },
             {
@@ -14015,7 +14015,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -16468,7 +16468,7 @@
               "target": "fallible_iterator"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -16674,7 +16674,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -17262,7 +17262,7 @@
         "deps": {
           "common": [
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             }
           ],
@@ -17731,7 +17731,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -17977,13 +17977,13 @@
       },
       "license": "MIT"
     },
-    "hyper-rustls 0.23.0": {
+    "hyper-rustls 0.23.1": {
       "name": "hyper-rustls",
-      "version": "0.23.0",
+      "version": "0.23.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/hyper-rustls/0.23.0/download",
-          "sha256": "d87c48c02e0dc5e3b849a2041db3029fd066650f8f717c07bf8ed78ccb895cac"
+          "url": "https://crates.io/api/v1/crates/hyper-rustls/0.23.1/download",
+          "sha256": "59df7c4e19c950e6e0e868dcc0a300b09a9b88e9ec55bd879ca819087a77355d"
         }
       },
       "targets": [
@@ -18055,7 +18055,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.23.0"
+        "version": "0.23.1"
       },
       "license": "Apache-2.0/ISC/MIT"
     },
@@ -18327,7 +18327,7 @@
               "target": "byteorder"
             },
             {
-              "id": "candid 0.8.3",
+              "id": "candid 0.8.4",
               "target": "candid"
             },
             {
@@ -18355,7 +18355,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.23.0",
+              "id": "hyper-rustls 0.23.1",
               "target": "hyper_rustls"
             },
             {
@@ -18387,7 +18387,7 @@
               "target": "rand"
             },
             {
-              "id": "reqwest 0.11.12",
+              "id": "reqwest 0.11.13",
               "target": "reqwest"
             },
             {
@@ -18497,13 +18497,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-cdk 0.6.6": {
+    "ic-cdk 0.6.7": {
       "name": "ic-cdk",
-      "version": "0.6.6",
+      "version": "0.6.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-cdk/0.6.6/download",
-          "sha256": "dc234b5fbb3e41ff88c7f287b490104e33ec5690d3f441dfefc686c37266c8b3"
+          "url": "https://crates.io/api/v1/crates/ic-cdk/0.6.7/download",
+          "sha256": "e9a5581267f756cab81f618c4ab27e3ca89a5a72b1869f9fbd5a8ec97a50c4e9"
         }
       },
       "targets": [
@@ -18528,7 +18528,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.8.3",
+              "id": "candid 0.8.4",
               "target": "candid"
             },
             {
@@ -18551,17 +18551,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.6"
+        "version": "0.6.7"
       },
       "license": "Apache-2.0"
     },
-    "ic-cdk-macros 0.6.6": {
+    "ic-cdk-macros 0.6.7": {
       "name": "ic-cdk-macros",
-      "version": "0.6.6",
+      "version": "0.6.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-cdk-macros/0.6.6/download",
-          "sha256": "fbcec58ff3e0a6977a7a14bb47163a0d79a37f04eb92c0f69231a008c53cc375"
+          "url": "https://crates.io/api/v1/crates/ic-cdk-macros/0.6.7/download",
+          "sha256": "2f2c0d698c4efb47284fe469642f5c37db856889c3e8a3931d6a7561b9625247"
         }
       },
       "targets": [
@@ -18586,11 +18586,11 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.8.3",
+              "id": "candid 0.8.4",
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.6.6",
+              "id": "ic-cdk 0.6.7",
               "target": "ic_cdk"
             },
             {
@@ -18617,7 +18617,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.6"
+        "version": "0.6.7"
       },
       "license": "Apache-2.0"
     },
@@ -19012,7 +19012,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.8.3",
+              "id": "candid 0.8.4",
               "target": "candid"
             },
             {
@@ -19525,13 +19525,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "indexmap 1.9.1": {
+    "indexmap 1.9.2": {
       "name": "indexmap",
-      "version": "1.9.1",
+      "version": "1.9.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/indexmap/1.9.1/download",
-          "sha256": "10a35a97730320ffe8e2d410b5d3b69279b98d2c14bdb8b70ea89ecf7888d41e"
+          "url": "https://crates.io/api/v1/crates/indexmap/1.9.2/download",
+          "sha256": "1885e79c1fc4b10f0e172c475f458b7f7b93061064d98c3293e98c5ba0c8b399"
         }
       },
       "targets": [
@@ -19577,7 +19577,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "build_script_build"
             },
             {
@@ -19588,7 +19588,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.9.1"
+        "version": "1.9.2"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -19846,7 +19846,7 @@
               "target": "atty"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -20067,7 +20067,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -20132,13 +20132,13 @@
       },
       "license": "BSD-3-Clause"
     },
-    "instant-acme 0.1.0": {
+    "instant-acme 0.1.1": {
       "name": "instant-acme",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/instant-acme/0.1.0/download",
-          "sha256": "b406e5b10f83a118305a9aeff0c6942db8e63ee21cf5af8f05a3128444cb2992"
+          "url": "https://crates.io/api/v1/crates/instant-acme/0.1.1/download",
+          "sha256": "a4c6a5dc426fcc25b99d91e4a283a8f5518339a0f63bf28588a6c5f31e089f8a"
         }
       },
       "targets": [
@@ -20171,7 +20171,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.23.0",
+              "id": "hyper-rustls 0.23.1",
               "target": "hyper_rustls"
             },
             {
@@ -20183,7 +20183,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -20194,7 +20194,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.0"
+        "version": "0.1.1"
       },
       "license": "Apache-2.0"
     },
@@ -20938,7 +20938,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -21055,7 +21055,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -23543,7 +23543,7 @@
               "target": "serde_value"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -27460,7 +27460,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -28391,7 +28391,7 @@
               "target": "futures_util"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -29318,7 +29318,7 @@
         "deps": {
           "common": [
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             }
           ],
@@ -29903,7 +29903,7 @@
               "target": "fixedbitset"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             }
           ],
@@ -34807,13 +34807,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "reqwest 0.11.12": {
+    "reqwest 0.11.13": {
       "name": "reqwest",
-      "version": "0.11.12",
+      "version": "0.11.13",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/reqwest/0.11.12/download",
-          "sha256": "431949c384f4e2ae07605ccaa56d1d9d2ecdb5cadd4f9577ccfab29f2e5149fc"
+          "url": "https://crates.io/api/v1/crates/reqwest/0.11.13/download",
+          "sha256": "68cc60575865c7831548863cc02356512e3f1dc2f3f82cb837d7fc4cc8f3c97c"
         }
       },
       "targets": [
@@ -34882,7 +34882,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -34925,7 +34925,7 @@
                 "target": "hyper"
               },
               {
-                "id": "hyper-rustls 0.23.0",
+                "id": "hyper-rustls 0.23.1",
                 "target": "hyper_rustls"
               },
               {
@@ -34996,7 +34996,7 @@
                 "target": "js_sys"
               },
               {
-                "id": "serde_json 1.0.87",
+                "id": "serde_json 1.0.88",
                 "target": "serde_json"
               },
               {
@@ -35021,7 +35021,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.11.12"
+        "version": "0.11.13"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -35361,7 +35361,7 @@
         "deps": {
           "common": [
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             }
           ],
@@ -35585,7 +35585,7 @@
               "target": "byteorder"
             },
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             },
             {
@@ -37689,13 +37689,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "serde_json 1.0.87": {
+    "serde_json 1.0.88": {
       "name": "serde_json",
-      "version": "1.0.87",
+      "version": "1.0.88",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_json/1.0.87/download",
-          "sha256": "6ce777b7b150d76b9cf60d28b55f5847135a003f7d7350c6be7a773508ce7d45"
+          "url": "https://crates.io/api/v1/crates/serde_json/1.0.88/download",
+          "sha256": "8e8b3801309262e8184d9687fb697586833e939767aea0dda89f5a8e650e8bd7"
         }
       },
       "targets": [
@@ -37750,14 +37750,14 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.87"
+        "version": "1.0.88"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -38110,7 +38110,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -38303,7 +38303,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             }
           ],
@@ -38360,7 +38360,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             }
           ],
@@ -38450,7 +38450,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             }
           ],
@@ -38564,7 +38564,7 @@
         "deps": {
           "common": [
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             },
             {
@@ -38931,7 +38931,7 @@
         "deps": {
           "common": [
             {
-              "id": "digest 0.10.5",
+              "id": "digest 0.10.6",
               "target": "digest"
             },
             {
@@ -39619,7 +39619,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -42525,7 +42525,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -42958,7 +42958,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -43588,7 +43588,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -44304,7 +44304,7 @@
               "target": "futures_util"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -45115,7 +45115,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -45185,7 +45185,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -46688,8 +46688,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -46700,8 +46700,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -47063,7 +47063,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             },
             {
@@ -47696,7 +47696,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             }
           ],
@@ -47738,7 +47738,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             }
           ],
@@ -47809,7 +47809,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -48072,7 +48072,7 @@
               "target": "gimli"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -48318,7 +48318,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "indexmap 1.9.1",
+              "id": "indexmap 1.9.2",
               "target": "indexmap"
             },
             {
@@ -50439,7 +50439,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.87",
+              "id": "serde_json 1.0.88",
               "target": "serde_json"
             }
           ],
@@ -51048,7 +51048,7 @@
     "cc 1.0.76",
     "cddl 0.9.1",
     "clap 3.2.23",
-    "clap 4.0.24",
+    "clap 4.0.26",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",

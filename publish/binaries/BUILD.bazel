@@ -14,6 +14,7 @@ STRIP_BINARIES = {
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
     "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
     "ic-admin": "//rs/registry/admin:ic-admin",
+    "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
     "ic-canister-http-adapter": "//rs/canister_http/adapter:ic-canister-http-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",

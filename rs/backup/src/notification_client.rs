@@ -1,6 +1,6 @@
-use std::io::Read;
+// use std::io::Read;
 
-use curl::easy::{Easy, List};
+// use curl::easy::{Easy, List};
 use slog::{info, Logger};
 
 pub struct NotificationClient {
@@ -11,7 +11,8 @@ pub struct NotificationClient {
 }
 
 impl NotificationClient {
-    fn curl_post_request(url: String, content_type: String, data_str: String) {
+    fn curl_post_request(_url: String, _content_type: String, _data_str: String) {
+        /*
         let mut data = data_str.as_bytes();
         let mut easy = Easy::new();
         easy.url(&url).unwrap();
@@ -29,6 +30,7 @@ impl NotificationClient {
             .unwrap();
 
         transfer.perform().unwrap();
+        */
     }
 
     pub fn message_slack(&self, message: String) {
