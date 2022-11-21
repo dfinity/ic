@@ -49,7 +49,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, RoutingTable,
 };
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_replicated_state::page_map::Buffer;
@@ -73,6 +73,7 @@ use ic_types::messages::{CallbackId, Certificate};
 use ic_types::signature::ThresholdSignature;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
+    canister_http::CanisterHttpRequestContext,
     consensus::certification::Certification,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress, UserQuery,
@@ -120,6 +121,7 @@ fn make_nodes_registry(
     subnet_type: SubnetType,
     node_ids: &[NodeId],
     ecdsa_keys: &[EcdsaKeyId],
+    features: SubnetFeatures,
 ) -> (Arc<ProtoRegistryDataProvider>, Arc<FakeRegistryClient>) {
     let registry_version = RegistryVersion::from(1);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -211,6 +213,7 @@ fn make_nodes_registry(
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         })
+        .with_features(features.into())
         .build();
 
     insert_initial_dkg_transcript(registry_version.get(), subnet_id, &record, &data_provider);
@@ -290,6 +293,7 @@ pub struct StateMachineBuilder {
     subnet_size: usize,
     use_cost_scaling_flag: bool,
     ecdsa_keys: Vec<EcdsaKeyId>,
+    features: SubnetFeatures,
 }
 
 impl StateMachineBuilder {
@@ -304,6 +308,7 @@ impl StateMachineBuilder {
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             ecdsa_keys: Vec::new(),
+            features: SubnetFeatures::default(),
         }
     }
 
@@ -357,6 +362,10 @@ impl StateMachineBuilder {
         Self { ecdsa_keys, ..self }
     }
 
+    pub fn with_features(self, features: SubnetFeatures) -> Self {
+        Self { features, ..self }
+    }
+
     pub fn build(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -368,6 +377,7 @@ impl StateMachineBuilder {
             self.subnet_size,
             self.use_cost_scaling_flag,
             self.ecdsa_keys,
+            self.features,
         )
     }
 }
@@ -404,6 +414,7 @@ impl StateMachine {
         subnet_size: usize,
         use_cost_scaling_flag: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
+        features: SubnetFeatures,
     ) -> Self {
         use slog::Drain;
 
@@ -442,6 +453,7 @@ impl StateMachine {
             subnet_type,
             &node_ids,
             &ecdsa_keys,
+            features,
         );
 
         let sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
@@ -1497,6 +1509,18 @@ impl StateMachine {
             .metadata
             .subnet_call_context_manager
             .sign_with_ecdsa_contexts
+            .clone()
+    }
+
+    /// Returns canister HTTP request contexts from internal subnet call context manager.
+    pub fn canister_http_request_contexts(
+        &self,
+    ) -> BTreeMap<CallbackId, CanisterHttpRequestContext> {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
             .clone()
     }
 }
