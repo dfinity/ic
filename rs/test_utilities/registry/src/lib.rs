@@ -9,6 +9,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_subnet_features::EcdsaConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -227,6 +228,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_features(mut self, features: SubnetFeatures) -> Self {
         self.record.features = Some(features);
+        self
+    }
+
+    pub fn with_ecdsa_config(mut self, ecdsa_config: EcdsaConfig) -> Self {
+        self.record.ecdsa_config = Some(ecdsa_config.into());
         self
     }
 

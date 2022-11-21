@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/interfaces",
@@ -11,6 +12,7 @@ DEPENDENCIES = [
     "//rs/registry/fake",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
+    "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/types/types",
     "@crate_index//:serde_cbor",

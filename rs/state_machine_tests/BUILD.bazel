@@ -25,6 +25,7 @@ DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/routing_table",
+    "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/state_layout",
