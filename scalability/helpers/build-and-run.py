@@ -74,7 +74,7 @@ def build_icos():
                 print(f"Determining sha256 sum from : {sha256_url}")
 
     version = open(os.path.join(ic_root, "bazel-bin/ic-os/guestos/dev/version.txt"), "r").read().strip()
-    print(f"Running version {version}")
+    print(colored(f"Running version {version}", "blue"))
 
     sha256 = (
         subprocess.check_output(f"curl -L -s {sha256_url} | awk '/zst$/ {{print $1}}'", shell=True).decode().split()[0]
@@ -86,10 +86,10 @@ def build_icos():
     return (version, url, sha256)
 
 
-def deploy_farm(farm_instance, url, sha256sum, install_nns=False):
+def deploy_farm(farm_instance, url, sha256sum, install_nns=False, num_vcpus={}):
     print(f"Deploying Farm from URL: {url} ")
     farm_instance.create_farm_group()
-    farm_instance.create_vms_from_ic_os_image_via_url(url, sha256sum)
+    farm_instance.create_vms_from_ic_os_image_via_url(url, sha256sum, num_vcpus)
     farm_instance.prepare_and_register_config_image()
     farm_instance.start_ic_node_vms()
     if not farm_instance.wait_replica_up():
@@ -135,11 +135,11 @@ def main(argv):
 
     try:
         # We should really deploy those concurrently.
-        target_ip = deploy_farm(target_instance, download_url, sha256sum, install_nns=True)
+        target_ip = deploy_farm(target_instance, download_url, sha256sum, install_nns=True, num_vcpus={1: 48})
         wg_ip = deploy_farm(wg_instance, download_url, sha256sum)
         print(
             (
-                "IC url to use is: "
+                "IC workload experiments: "
                 + colored(
                     (
                         f"--targets={target_instance.ic_node_ipv6s[1][0]} --workload_generator_machines={wg_ip} "
@@ -150,11 +150,31 @@ def main(argv):
                 )
             )
         )
+        print(
+            (
+                "IC base experiments: "
+                + colored(
+                    (
+                        f"--targets={target_instance.ic_node_ipv6s[1][0]} "
+                        f"--testnet=none --no_prometheus=True --no_instrument=True "
+                        f"--nns_url=http://[{target_ip}]:8080"
+                    ),
+                    "red",
+                )
+            )
+        )
+        print(
+            (
+                f"Base experiments: "
+                f"--testnet=none --no_prometheus=True --no_instrument=True "
+                f"--nns_url=http://[{target_ip}]:8080"
+            )
+        )
 
         duration = time.time() - t_start
         print(f"Deployment finished at: {duration}s")
         print("Sleeping for 1h. CTRL+C to terminate immediately")
-        time.sleep(3600)
+        time.sleep(FLAGS.farm_ttl_secs)
 
     finally:
         target_instance.delete_farm_group()

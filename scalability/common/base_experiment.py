@@ -48,6 +48,7 @@ gflags.DEFINE_string(
 gflags.DEFINE_string("artifacts_path", "../artifacts/release", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
+gflags.DEFINE_string("targets", "", "Set load target IP adresses from this coma-separated list directly.")
 gflags.DEFINE_string("top_level_out_dir", "", "Set the top-level output directory. Default is the git commit id.")
 gflags.DEFINE_string(
     "second_level_out_dir",
@@ -75,6 +76,10 @@ class BaseExperiment:
 
         # Map canister name -> list of canister IDs
         self.canister_ids = {}
+
+        # Used only to track which canister ID to return in case canister IDs have
+        # been passed as argument.
+        self.canister_id_from_argument_index = {}
 
         # List of canisters that have been installed
         self.canister = []
@@ -171,6 +176,9 @@ class BaseExperiment:
 
     def get_machine_to_instrument(self) -> str:
         """Return the machine to instrument."""
+        if len(FLAGS.targets) > 0:
+            return FLAGS.targets.split(",")[0]
+
         topology = self.__get_topology()
         for subnet, info in topology["topology"]["subnets"].items():
             subnet_type = info["records"][0]["value"]["subnet_type"]
@@ -447,18 +455,25 @@ class BaseExperiment:
 
         Returns the canister ID if installation was successful.
         """
+        print(f"Installing canister .. {canister} on {target}")
+        this_canister = canister if canister is not None else "counter"
+        this_canister_name = "".join(this_canister.split("#")[0])
+
         if FLAGS.canister_ids is not None and len(FLAGS.canister_ids) > 0:
             canister_id_map_as_json = json.loads(FLAGS.canister_ids)
             print(f"⚠️  Not installing canister, using {FLAGS.canister_ids} ")
             self.canister = list(canister_id_map_as_json.keys())
             self.canister_ids = canister_id_map_as_json
-            return None
+            # Attempt to return a useful canister ID in case of using canisters parsed as argument.
+            this_idx = self.canister_id_from_argument_index.get(this_canister_name, 0)
+            assert this_canister_name in self.canister_ids
+            assert this_idx < len(self.canister_ids[this_canister_name])
+            cid = self.canister_ids[this_canister_name][this_idx]
+            this_idx += 1
+            self.canister_id_from_argument_index[this_canister_name] = this_idx
+            return cid
 
         this_canister_id = None
-
-        print(f"Installing canister .. {canister} on {target}")
-        this_canister = canister if canister is not None else "counter"
-        this_canister_name = "".join(this_canister.split("#")[0])
 
         cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "0"]
         if this_canister_name != "counter":
@@ -489,10 +504,11 @@ class BaseExperiment:
                     this_canister_id = cid
                     print("Found canister ID: ", cid)
                     print(
+                        "Canister(s) installed successfully, reuse across runs: ",
                         colored(
-                            f"Cannister installed successfully (to reuse across runs, specify --canister_ids='{json.dumps(self.canister_ids)}')",
+                            f"--canister_ids='{json.dumps(self.canister_ids)}'",
                             "yellow",
-                        )
+                        ),
                     )
             wg_err_output = p.stderr.decode("utf-8").strip()
             for line in wg_err_output.split("\n"):
