@@ -75,4 +75,11 @@ pub enum IDkgDealingEncryptionKeyRotationError {
     LatestLocalRotationTooRecent,
     KeyGenerationError(String),
     RegistryError(RegistryClientError),
+    KeyRotationNotEnabled,
+}
+
+impl From<RegistryClientError> for IDkgDealingEncryptionKeyRotationError {
+    fn from(registry_client_error: RegistryClientError) -> Self {
+        IDkgDealingEncryptionKeyRotationError::RegistryError(registry_client_error)
+    }
 }

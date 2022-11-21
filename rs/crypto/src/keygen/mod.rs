@@ -23,7 +23,9 @@ use ic_interfaces::crypto::{
 use ic_logger::{error, info};
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_registry_client_helpers::crypto::CryptoRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, CurrentNodePublicKeys, KeyPurpose};
+use ic_types::registry::RegistryClientError;
 use ic_types::{RegistryVersion, Time};
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -71,6 +73,19 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
             });
         }
 
+        // Get the key rotation period from the subnet config; if it is None, key rotation is disabled
+        let key_rotation_period: Duration = if let Some(key_rotation_period) =
+            self.get_rotation_period_for_current_node_if_key_rotation_enabled(registry_version)?
+        {
+            key_rotation_period
+        } else {
+            info!(
+                self.logger,
+                "iDKG dealing encryption key rotation not enabled"
+            );
+            return Ok(PublicKeyRegistrationStatus::AllKeysRegistered);
+        };
+
         // Check if the latest iDKG key we have locally still needs to be registered in the
         // registry, or if it needs to be rotated.
         if let Some(latest_local_idkg_dealing_encryption_key) = self
@@ -87,29 +102,17 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
                             self.logger,
                             "iDKG dealing encryption key has no timestamp and needs rotating"
                         );
-                        //////////////////////////////////////////////////////////////////
-                        // TODO: When key rotation is to be enabled as part of CRP-1787, change the
-                        //  return value to be the one commented out below, instead of
-                        //  Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-                        //////////////////////////////////////////////////////////////////
-                        // return Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys);
-                        //////////////////////////////////////////////////////////////////
-                        return Ok(PublicKeyRegistrationStatus::AllKeysRegistered);
+                        return Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys);
                     }
                     Some(timestamp_in_millis) => {
-                        if self.is_current_key_too_old(timestamp_in_millis) {
+                        if self.is_current_key_too_old(timestamp_in_millis, key_rotation_period) {
                             info!(
                                 self.logger,
                                 "iDKG dealing encryption key too old and needs rotating"
                             );
-                            //////////////////////////////////////////////////////////////////
-                            // TODO: When key rotation is to be enabled as part of CRP-1787, change the
-                            //  return value to be the one commented out below, instead of
-                            //  Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-                            //////////////////////////////////////////////////////////////////
-                            // return Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys);
-                            //////////////////////////////////////////////////////////////////
-                            return Ok(PublicKeyRegistrationStatus::AllKeysRegistered);
+                            return Ok(
+                                PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys,
+                            );
                         }
                     }
                 }
@@ -118,18 +121,11 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
                     self.logger,
                     "Local iDKG dealing encryption key needs registration"
                 );
-                //////////////////////////////////////////////////////////////////
-                // TODO: When key rotation is to be enabled as part of CRP-1787, change the
-                //  return value to be the one commented out below, instead of
-                //  Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-                //////////////////////////////////////////////////////////////////
-                // return Ok(
-                //     PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(
-                //         latest_local_idkg_dealing_encryption_key,
-                //     ),
-                // );
-                //////////////////////////////////////////////////////////////////
-                return Ok(PublicKeyRegistrationStatus::AllKeysRegistered);
+                return Ok(
+                    PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(
+                        latest_local_idkg_dealing_encryption_key,
+                    ),
+                );
             }
         } else {
             panic!("No iDKG dealing encryption key found locally");
@@ -150,6 +146,18 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         &self,
         registry_version: RegistryVersion,
     ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError> {
+        let key_rotation_period: Duration = if let Some(key_rotation_period) =
+            self.get_rotation_period_for_current_node_if_key_rotation_enabled(registry_version)?
+        {
+            key_rotation_period
+        } else {
+            info!(
+                self.logger,
+                "iDKG dealing encryption key rotation not enabled"
+            );
+            return Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled);
+        };
+
         let current_idkg_public_key_proto = (&self.current_node_public_keys().idkg_dealing_encryption_public_key
             .expect("missing local IDKG public key! \
             This should not happen because it's expected that check_keys_with_registry() was called before \
@@ -171,7 +179,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
                         self.csp.idkg_gen_dealing_encryption_key_pair()?,
                     )),
                     Some(timestamp_in_millis) => {
-                        if self.is_current_key_too_old(timestamp_in_millis) {
+                        if self.is_current_key_too_old(timestamp_in_millis, key_rotation_period) {
                             Ok(idkg_dealing_encryption_pk_to_proto(
                                 self.csp.idkg_gen_dealing_encryption_key_pair()?,
                             ))
@@ -332,16 +340,47 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         Ok(public_key_cert)
     }
 
-    fn is_current_key_too_old(&self, timestamp_in_millis: u64) -> bool {
-        //TODO CRP-1727: get delta value from registry
-        let two_weeks = Duration::from_secs(2 * 7 * 24 * 60 * 60);
+    fn get_rotation_period_for_current_node_if_key_rotation_enabled(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<Option<Duration>, RegistryClientError> {
+        match self
+            .registry_client
+            .get_listed_subnet_for_node_id(self.node_id, registry_version)?
+        {
+            None => Ok(None),
+            Some((subnet_id, _subnet_record)) => {
+                let key_rotation_period = match self
+                    .registry_client
+                    .get_ecdsa_config(subnet_id, registry_version)
+                {
+                    Ok(Some(config)) if !config.key_ids.is_empty() => {
+                        match config.idkg_key_rotation_period_ms {
+                            Some(ms) => Duration::from_millis(ms),
+                            None => return Ok(None),
+                        }
+                    }
+                    _ => {
+                        return Ok(None);
+                    }
+                };
+                Ok(Some(key_rotation_period))
+            }
+        }
+    }
+
+    fn is_current_key_too_old(
+        &self,
+        timestamp_in_millis: u64,
+        key_rotation_period: Duration,
+    ) -> bool {
         let time_of_registration = Time::from_nanos_since_unix_epoch(
             timestamp_in_millis
                 .checked_mul(1_000_000)
                 .expect("should not happen before around 580 years"),
         );
-        let current_time = self.time_source.get_relative_time();
-        current_time > time_of_registration + two_weeks
+        let current_time = self.time_source.get_current_time();
+        current_time > time_of_registration + key_rotation_period
     }
 }
 

@@ -40,7 +40,7 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::consensus::CatchUpContentProtobufBytes;
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::messages::MessageId;
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::{NodeId, RegistryVersion, Time};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use rand::{CryptoRng, Rng};
 use std::fmt;
@@ -101,7 +101,7 @@ pub struct CryptoComponentFatClient<C: CryptoServiceProvider> {
     node_id: NodeId,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
-    time_source: Arc<dyn TimeSource>,
+    time_source: Arc<dyn CryptoTime>,
 }
 
 /// A `ThresholdSigDataStore` that is wrapped by a `RwLock`.
@@ -281,7 +281,7 @@ impl CryptoComponentFatClient<Csp> {
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
         logger: ReplicaLogger,
-        time_source: Arc<dyn TimeSource>,
+        time_source: Arc<dyn CryptoTime>,
     ) -> Self {
         let metrics = Arc::new(CryptoMetrics::none());
         CryptoComponentFatClient {
@@ -384,5 +384,16 @@ fn get_log_id(logger: &ReplicaLogger, module_path: &'static str) -> u64 {
         ic_types::time::current_time().as_nanos_since_unix_epoch()
     } else {
         0
+    }
+}
+
+pub trait CryptoTime: Send + Sync + TimeSource {
+    fn get_current_time(&self) -> Time;
+}
+
+impl CryptoTime for SysTimeSource {
+    fn get_current_time(&self) -> Time {
+        self.update_time().expect("Cannot update crypto time");
+        self.get_relative_time()
     }
 }
