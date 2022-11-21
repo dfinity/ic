@@ -19,6 +19,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::HasGroupSetup;
 use crate::driver::vm_control::IcControl;
 use crate::util::{assert_all_ready, assert_create_agent, block_on, UniversalCanister};
 use ic_fondue::{ic_manager::IcEndpoint, iterator::PermOf};
@@ -33,6 +34,7 @@ const DKG_INTERVAL: u64 = 14;
 const NOTARY_DELAY: Duration = Duration::from_millis(100);
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

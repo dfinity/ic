@@ -173,8 +173,16 @@ name = "ic-systest-icrc1-agent-test"
 path = "bin/icrc1_agent_test.rs"
 
 [[bin]]
-name = "workload-counter-canister-test"
+name = "ic-systest-workload-counter-canister-test"
 path = "bin/workload_counter_canister_test.rs"
+
+[[bin]]
+name = "ic-systest-create-subnet-hourly-test"
+path = "bin/create_subnet_hourly_test.rs"
+
+[[bin]]
+name = "ic-systest-rejoin-test"
+path = "bin/rejoin_test.rs"
 
 [[bin]]
 name = "test-driver-e2e-scenarios"
