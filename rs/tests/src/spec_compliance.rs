@@ -49,7 +49,7 @@ pub fn config(env: TestEnv) {
     use std::env;
 
     // Set up Universal VM with HTTP Bin testing service
-    let activate_script = &get_universal_vm_activation_script()[..];
+    let activate_script = &get_universal_vm_activation_script(&env)[..];
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
         .unwrap();

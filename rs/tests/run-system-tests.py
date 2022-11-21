@@ -296,6 +296,7 @@ def populate_dependencies_dir(
         "rs/tests/rosetta_workspace/ic_rosetta_api_log_config.yml",
         "rs/tests/rosetta_workspace/rosetta_cli.json",
         "rs/tests/rosetta_workspace/rosetta_workflows.ros",
+        "rs/tests/src/canister_http/universal_vm_activation.sh",
         "ic-os/guestos/dev/certs/canister_http_test_ca.cert",
         "ic-os/guestos/dev/certs/canister_http_test_ca.key",
     ]
