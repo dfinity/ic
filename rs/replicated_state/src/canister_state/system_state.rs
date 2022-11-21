@@ -109,6 +109,9 @@ pub struct SystemState {
 
     /// Canister global timer.
     pub global_timer: CanisterTimer,
+
+    /// Canister version.
+    pub canister_version: u64,
 }
 
 /// A wrapper around the different canister statuses.
@@ -412,6 +415,7 @@ impl SystemState {
             canister_metrics: CanisterMetrics::default(),
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
+            canister_version: 0,
         }
     }
 
@@ -445,6 +449,7 @@ impl SystemState {
         cycles_debit: Cycles,
         task_queue: VecDeque<ExecutionTask>,
         global_timer: CanisterTimer,
+        canister_version: u64,
     ) -> Self {
         Self {
             controllers,
@@ -459,6 +464,7 @@ impl SystemState {
             cycles_debit,
             task_queue,
             global_timer,
+            canister_version,
         }
     }
 

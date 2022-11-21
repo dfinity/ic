@@ -519,6 +519,8 @@ impl CanisterManager {
                 .increment(old_mem - new_mem, NumBytes::from(0));
         }
 
+        canister.system_state.canister_version += 1;
+
         Ok(())
     }
 
@@ -1468,6 +1470,8 @@ pub fn uninstall_canister(
 
     // Deactivate global timer.
     canister.system_state.global_timer = CanisterTimer::Inactive;
+    // Increment canister version.
+    canister.system_state.canister_version += 1;
 
     let mut rejects = Vec::new();
     let canister_id = canister.canister_id();

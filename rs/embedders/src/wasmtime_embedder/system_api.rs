@@ -1119,6 +1119,15 @@ pub(crate) fn syscalls<S: SystemApi>(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "canister_version", {
+            move |mut caller: Caller<'_, StoreData<S>>| {
+                with_system_api(&mut caller, |s| s.ic0_canister_version())
+                    .map_err(|e| process_err(&mut caller, e))
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "canister_cycle_balance", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance())

@@ -66,6 +66,7 @@ mod ic0 {
         pub fn time() -> u64;
         pub fn performance_counter(_type: u32) -> u64;
         pub fn global_timer_set(timestamp: u64) -> u64;
+        pub fn canister_version() -> u64;
     }
 }
 
@@ -348,6 +349,10 @@ pub fn method_name() -> Vec<u8> {
 
 pub fn global_timer_set(timestamp: u64) -> u64 {
     unsafe { ic0::global_timer_set(timestamp) }
+}
+
+pub fn canister_version() -> u64 {
+    unsafe { ic0::canister_version() }
 }
 
 /// Prints the given message.

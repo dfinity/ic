@@ -214,6 +214,9 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<u64> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_canister_version(&self) -> HypervisorResult<u64> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn out_of_instructions(&mut self, _instruction_counter: i64) -> Result<i64, HypervisorError> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }

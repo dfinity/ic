@@ -429,6 +429,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "canister_version",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+        (
             "trap",
             vec![(
                 API_VERSION_IC0,

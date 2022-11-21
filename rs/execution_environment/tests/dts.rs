@@ -27,6 +27,7 @@ const DTS_WAT: &str = r#"
             (import "ic0" "global_timer_set"
                 (func $global_timer_set (param i64) (result i64))
             )
+            (import "ic0" "canister_version" (func $canister_version (result i64)))
             (func $work
                 (memory.fill (i32.const 0) (i32.const 12) (i32.const 10000))
                 (memory.fill (i32.const 0) (i32.const 23) (i32.const 10000))
@@ -51,6 +52,7 @@ const DTS_WAT: &str = r#"
                 (drop (call $global_timer_set
                     (i64.add (call $time) (i64.const 1))
                 ))
+                (drop (call $canister_version))
             )
 
             (func (export "canister_query read")

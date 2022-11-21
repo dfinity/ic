@@ -779,6 +779,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             canister.system_state.memory_allocation,
             MemoryAllocation::BestEffort
         );
+        assert_eq!(canister.system_state.canister_version, 1);
     }
     assert_eq!(
         test.scheduler()

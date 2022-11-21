@@ -247,6 +247,7 @@ fn serialize_canister_to_tip(
                     .system_state
                     .global_timer
                     .to_nanos_since_unix_epoch(),
+                canister_version: canister_state.system_state.canister_version,
             }
             .into(),
         )
@@ -585,6 +586,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.cycles_debit,
         canister_state_bits.task_queue.into_iter().collect(),
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
+        canister_state_bits.canister_version,
     );
 
     let canister_state = CanisterState {

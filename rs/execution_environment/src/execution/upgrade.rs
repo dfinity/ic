@@ -27,7 +27,7 @@ mod tests;
 /// Performs a canister upgrade. The algorithm consists of six stages:
 /// - Stage 0: validate input.
 /// - Stage 1: invoke `canister_pre_upgrade()` (if present) using the old code.
-/// - Stage 2: create a new execution state based on the new Wasm code and deactivate global timer.
+/// - Stage 2: create a new execution state based on the new Wasm code, deactivate global timer, and bump canister version.
 /// - Stage 3: invoke the `start()` method (if present).
 /// - Stage 4: invoke the `canister_post_upgrade()` method (if present).
 /// - Stage 5: finalize execution and refund execution cycles.
@@ -52,7 +52,7 @@ mod tests;
 ///   │
 ///   │
 ///   ▼
-/// [create new execution state and deactivate global timer]
+/// [create new execution state, deactivate global timer, and bump canister version]
 ///   │
 ///   │
 ///   │                         exceeded slice
@@ -227,7 +227,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     let canister_id = helper.canister().canister_id();
-    // Stage 2: create a new execution state based on the new Wasm code and deactivate global timer.
+    // Stage 2: create a new execution state based on the new Wasm code, deactivate global timer, and bump canister version.
     // Replace the execution state of the canister with a new execution state, but
     // persist the stable memory (if it exists).
     let layout = canister_layout(&original.canister_layout_path, &canister_id);
@@ -250,6 +250,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     }
 
     helper.deactivate_global_timer();
+    helper.bump_canister_version();
 
     // Stage 3: invoke the `start()` method (if present).
     let method = WasmMethod::System(SystemMethod::CanisterStart);

@@ -22,7 +22,7 @@ use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
 /// Installs a new code in canister. The algorithm consists of five stages:
 /// - Stage 0: validate input.
-/// - Stage 1: create a new execution state based on the new Wasm code and deactivate global timer.
+/// - Stage 1: create a new execution state based on the new Wasm code, deactivate global timer, and bump canister version.
 /// - Stage 2: invoke the `start()` method (if present).
 /// - Stage 3: invoke the `canister_init()` method (if present).
 /// - Stage 4: finalize execution and refund execution cycles.
@@ -38,7 +38,7 @@ use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 ///   │
 ///   │
 ///   ▼
-/// [create new execution state and deactivate global timer]
+/// [create new execution state, deactivate global timer, and bump canister version]
 ///   │
 ///   │
 ///   │                   exceeded slice
@@ -82,7 +82,7 @@ pub(crate) fn execute_install(
         return finish_err(clean_canister, instructions_left, original, round, err);
     }
 
-    // Stage 1: create a new execution state based on the new Wasm binary and deactivate global timer.
+    // Stage 1: create a new execution state based on the new Wasm binary, deactivate global timer, and bump canister version.
     let canister_id = helper.canister().canister_id();
     let layout = canister_layout(&original.canister_layout_path, &canister_id);
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
@@ -102,6 +102,7 @@ pub(crate) fn execute_install(
         return finish_err(clean_canister, instructions_left, original, round, err);
     }
     helper.deactivate_global_timer();
+    helper.bump_canister_version();
 
     // Stage 2: invoke the `start()` method of the Wasm module (if present).
     let method = WasmMethod::System(SystemMethod::CanisterStart);

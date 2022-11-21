@@ -102,5 +102,6 @@ try_from_u8!(
         GetHttpTransformContext = 71,
         */
         StableFill64 = 72,
+        CanisterVersion = 73,
     }
 );
