@@ -79,18 +79,19 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     if mode == "dev":
         dev_rootfs_args = ["--extra-dockerfile", "ic-os/guestos/rootfs/Dockerfile.dev", "--dev-root-ca", "ic-os/guestos/dev-root-ca.crt"]
 
+    extra_args_docker = ["--build-arg", "BASE_IMAGE=" + img_bases[mode]]
+
+    # set root password only in dev mode
+    if mode == "dev":
+        extra_args_docker.extend(["--build-arg", "ROOT_PASSWORD=root"])
+
     docker_tar(
         visibility = visibility,
         name = "rootfs-tree.tar",
         src = "//ic-os/guestos:rootfs",
         dep = native.glob(["rootfs/**"] + ["dev-root-ca.crt"] if mode == "dev" else []),
         extra_args_before = dev_rootfs_args,
-        extra_args_after = [
-            "--build-arg",
-            "ROOT_PASSWORD=root",
-            "--build-arg",
-            "BASE_IMAGE=" + img_bases[mode],
-        ],
+        extra_args_after = extra_args_docker,
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
