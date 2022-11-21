@@ -40,6 +40,7 @@ pub enum ApiError {
     TransactionRejected(bool, Details),
     TransactionExpired,
     OperationsErrors(TransactionResults, String),
+    InvalidTipOfChain(Details),
 }
 
 impl ApiError {
@@ -60,6 +61,7 @@ impl ApiError {
             | ApiError::TransactionRejected(r, _) => *r,
             ApiError::OperationsErrors(e, _) => e.retriable(),
             ApiError::TransactionExpired => false,
+            ApiError::InvalidTipOfChain(_) => false,
         }
     }
 
@@ -94,6 +96,10 @@ impl ApiError {
     pub fn invalid_account_id<T: Into<Details>>(t: T) -> ApiError {
         ApiError::InvalidAccountId(false, t.into())
     }
+
+    pub fn invalid_tip_of_chain<T: Into<Details>>(t: T) -> ApiError {
+        ApiError::InvalidTipOfChain(t.into())
+    }
 }
 
 impl From<BlockStoreError> for ApiError {
@@ -116,6 +122,7 @@ impl From<ic_ledger_canister_blocks_synchronizer::errors::Error> for ApiError {
         match e {
             Error::InvalidBlockId(err) => ApiError::invalid_block_id(err),
             Error::InternalError(err) => ApiError::internal_error(err),
+            Error::InvalidTipOfChain(err) => ApiError::invalid_tip_of_chain(err),
         }
     }
 }
@@ -156,6 +163,7 @@ pub fn convert_to_error(api_err: &ApiError) -> Error {
                 ),
             }
         }
+        ApiError::InvalidTipOfChain(d) => (715, "Invalid tip of the chain", false, d.into()),
     };
     Error {
         code,

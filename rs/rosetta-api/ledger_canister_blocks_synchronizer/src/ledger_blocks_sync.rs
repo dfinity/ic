@@ -26,6 +26,11 @@ const DATABASE_WRITE_BLOCKS_BATCH_SIZE: u64 = 500000;
 // Max number of retry in case of query failure while retrieving blocks.
 const MAX_RETRY: u8 = 5;
 
+struct BlockWithIndex {
+    block: Block,
+    index: BlockIndex,
+}
+
 /// The LedgerBlocksSynchronizer will use this to output the metrics while
 /// synchronizing with the Ledger
 pub trait LedgerBlocksSynchronizerMetrics {
@@ -211,23 +216,47 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         Box::new(self.blockchain.read().await)
     }
 
+    /// Return the tip of the chain with its index or error if the tip cannot be verified
+    ///
+    /// Note that self.verification_info must be set in order to verify the tip. If it's
+    /// not set then this method will return the tip without verifying it.
+    async fn query_verified_tip(&self) -> Result<BlockWithIndex, String> {
+        let canister = self.blocks_access.as_ref().unwrap();
+        let TipOfChainRes {
+            tip_index,
+            certification,
+        } = canister.query_tip().await?;
+        let encoded_block = canister.query_raw_block(tip_index).await?.ok_or(format!(
+            "Tip of the chain has index {} but no block found at that index!",
+            tip_index
+        ))?;
+        let block = Block::decode(encoded_block.clone())?;
+        if let Some(info) = &self.verification_info {
+            let hash = HashedBlock::hash_block(encoded_block, block.parent_hash, tip_index).hash;
+            verify_block_hash(&certification, hash, info)?;
+        }
+        Ok(BlockWithIndex {
+            block,
+            index: tip_index,
+        })
+    }
+
     pub async fn sync_blocks(
         &self,
         stopped: Arc<AtomicBool>,
         up_to_block_included: Option<BlockIndex>,
     ) -> Result<(), Error> {
-        let canister = self.blocks_access.as_ref().unwrap();
-        let TipOfChainRes {
-            tip_index,
-            mut certification,
-        } = canister.query_tip().await.map_err(Error::InternalError)?;
-        if tip_index == u64::MAX {
-            error!("Bogus value of tip index: {}", tip_index);
+        let tip = self
+            .query_verified_tip()
+            .await
+            .map_err(Error::InternalError)?;
+        if tip.index == u64::MAX {
+            error!("Bogus value of tip index: {}", tip.index);
             return Err(Error::InternalError(
                 "Received tip_index == u64::MAX".to_string(),
             ));
         }
-        self.metrics.set_target_height(tip_index);
+        self.metrics.set_target_height(tip.index);
 
         let mut blockchain = self.blockchain.write().await;
 
@@ -237,24 +266,20 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             Err(_) => (None, 0),
         };
 
-        if next_block_index == tip_index + 1 {
+        if next_block_index == tip.index + 1 {
             return Ok(());
         }
-        if next_block_index > tip_index + 1 {
+        if next_block_index > tip.index + 1 {
             trace!(
                 "Tip received from the Ledger is lower than what we already have (queried lagging replica?),
                 Ledger tip index: {}, local copy tip index+1: {}",
-                tip_index,
+                tip.index,
                 next_block_index
             );
             return Ok(());
         }
 
-        let up_to_block_included = tip_index.min(up_to_block_included.unwrap_or(u64::MAX - 1));
-
-        if up_to_block_included != tip_index {
-            certification = None; // certification can be checked only with the last block
-        }
+        let up_to_block_included = tip.index.min(up_to_block_included.unwrap_or(u64::MAX - 1));
 
         if next_block_index > up_to_block_included {
             return Ok(()); // nothing to do nor report, local copy has enough blocks
@@ -264,7 +289,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             "Sync {} blocks from index: {}, ledger tip index: {}",
             up_to_block_included + 1 - next_block_index,
             next_block_index,
-            tip_index
+            tip.index
         );
 
         self.sync_range_of_blocks(
@@ -274,7 +299,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             },
             last_block_hash,
             stopped,
-            certification,
+            tip,
             &mut *blockchain,
         )
         .await?;
@@ -294,7 +319,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         range: Range<BlockIndex>,
         first_block_parent_hash: Option<HashOf<EncodedBlock>>,
         stopped: Arc<AtomicBool>,
-        certification: Option<Vec<u8>>,
+        tip: BlockWithIndex,
         blockchain: &mut Blocks,
     ) -> Result<(), Error> {
         let t_total = Instant::now();
@@ -362,13 +387,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     error!("{}", err_msg);
                     return Err(Error::InternalError(err_msg));
                 }
-                let hb = HashedBlock::hash_block(raw_block, last_block_hash, i);
-                if i == range.end - 1 {
-                    if let Some(verification_info) = &self.verification_info {
-                        verify_block_hash(&certification, hb.hash, verification_info)
-                            .map_err(Error::InternalError)?;
-                    }
+                if i == tip.index && block != tip.block {
+                    return Err(Error::invalid_tip_of_chain(tip.index, tip.block, block));
                 }
+                let hb = HashedBlock::hash_block(raw_block, last_block_hash, i);
                 last_block_hash = Some(hb.hash);
                 block_batch.push(hb);
                 i += 1;
