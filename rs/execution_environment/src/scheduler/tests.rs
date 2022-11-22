@@ -662,7 +662,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     let bytes_per_cycle = (1_u128 << 30)
         .checked_div(
             CyclesAccountManagerConfig::application_subnet()
-                .gib_storage_per_second_fee(test.use_cost_scaling(), test.subnet_size())
+                .gib_storage_per_second_fee
                 .get(),
         )
         .unwrap() as u64

@@ -514,21 +514,13 @@ fn memory_cost(
     subnet_size: usize,
 ) -> Cycles {
     let one_gib = 1024 * 1024 * 1024;
-    let use_cost_scaling = true;
     let cycles = Cycles::from(
         (bytes.get() as u128
-            * config
-                .gib_storage_per_second_fee(use_cost_scaling, subnet_size)
-                .get()
+            * config.gib_storage_per_second_fee.get()
             * duration.as_secs() as u128)
             / one_gib,
     );
-    // No scaling below non-subsidised storage cost threshold.
-    if subnet_size < CyclesAccountManagerConfig::fair_storage_cost_subnet_size() {
-        cycles
-    } else {
-        scale_cost(config, cycles, subnet_size)
-    }
+    scale_cost(config, cycles, subnet_size)
 }
 
 fn compute_allocation_cost(
@@ -661,11 +653,11 @@ fn test_subnet_size_one_gib_storage_default_cost() {
 
     // Assert big subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_hi, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(4_652.792_300_736));
+    assert_eq!(cost * per_year, trillion_cycles(10.474_777_008));
 
     // Assert big subnet size cost per year scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(1_779.008_800_464));
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(4.005_040_464));
 }
 
 // Storage cost tests split into 2: zero and non-zero compute allocation.
@@ -681,7 +673,7 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation() {
     let compute_allocation = ComputeAllocation::zero();
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
 
     // Check default cost.
     assert_eq!(
@@ -689,19 +681,14 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation() {
         calculate_one_gib_per_second_cost(&config, reference_subnet_size, compute_allocation)
     );
 
-    // Below subnet size threshold: check if cost is the same.
-    assert_eq!(
-        simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation),
-        simulate_one_gib_per_second_cost(subnet_type, 13, compute_allocation)
-    );
-    assert_eq!(
-        simulate_one_gib_per_second_cost(subnet_type, 13, compute_allocation),
-        simulate_one_gib_per_second_cost(subnet_type, 19, compute_allocation)
-    );
-    // Equal or above subnet size threshold: check if cost is increasing with subnet size.
+    // Check if cost is increasing with subnet size.
     assert!(
-        simulate_one_gib_per_second_cost(subnet_type, 31, compute_allocation)
-            < simulate_one_gib_per_second_cost(subnet_type, 32, compute_allocation)
+        simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 2, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 11, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 12, compute_allocation)
     );
     assert!(
         simulate_one_gib_per_second_cost(subnet_type, 101, compute_allocation)
@@ -712,35 +699,15 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation() {
             < simulate_one_gib_per_second_cost(subnet_type, 1_002, compute_allocation)
     );
 
-    // Check with/without linear scaling.
-    // Both lo/hi subnet sizes have to be a factor of reference_subnet_size from config
-    // to avoid round errors.
-    let reference_subnet_size_lo = config.reference_subnet_size as usize;
-    let reference_subnet_size_hi = 2 * config.reference_subnet_size as usize;
-    let subnet_size_threshold = CyclesAccountManagerConfig::fair_storage_cost_subnet_size();
-    // Make sure subnet sizes comply to `lo < threshold <= hi`.
-    assert!(reference_subnet_size_lo < subnet_size_threshold);
-    assert!(subnet_size_threshold <= reference_subnet_size_hi);
-
-    let reference_cost_lo =
-        calculate_one_gib_per_second_cost(&config, reference_subnet_size_lo, compute_allocation);
-    let reference_cost_hi =
-        calculate_one_gib_per_second_cost(&config, reference_subnet_size_hi, compute_allocation);
-
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size;
+    let reference_cost =
+        calculate_one_gib_per_second_cost(&config, reference_subnet_size, compute_allocation);
     for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost =
-            simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation);
-        // Choose corresponding reference values according to a threshold value.
-        let calculated_cost = if subnet_size < subnet_size_threshold {
-            // No scaling, constant cost.
-            reference_cost_lo
-        } else {
-            // Linear scaling.
-            Cycles::new(
-                reference_cost_hi.get() * subnet_size as u128 / reference_subnet_size_hi as u128,
-            )
-        };
-
+            calculate_one_gib_per_second_cost(&config, subnet_size, compute_allocation);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
             "compute_allocation={compute_allocation:?}, subnet_size={subnet_size}",
@@ -757,7 +724,7 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
     ] {
         let subnet_type = SubnetType::Application;
         let config = get_cycles_account_manager_config(subnet_type);
-        let reference_subnet_size = config.reference_subnet_size as usize;
+        let reference_subnet_size = config.reference_subnet_size;
 
         // Check default cost.
         assert_eq!(
@@ -788,50 +755,15 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
         );
 
         // Check linear scaling.
-        // Both lo/hi subnet sizes have to be a factor of reference_subnet_size from config
-        // to avoid round errors.
-        let reference_subnet_size_lo = config.reference_subnet_size as usize;
-        let reference_subnet_size_hi = 2 * config.reference_subnet_size as usize;
-        let subnet_size_threshold = CyclesAccountManagerConfig::fair_storage_cost_subnet_size();
-        // Make sure subnet sizes comply to `lo < threshold <= hi`.
-        assert!(reference_subnet_size_lo < subnet_size_threshold);
-        assert!(subnet_size_threshold <= reference_subnet_size_hi);
-
-        let reference_cost_base = calculate_one_gib_per_second_cost(
-            &config,
-            reference_subnet_size_lo,
-            ComputeAllocation::zero(),
-        );
-        let reference_cost_lo = calculate_one_gib_per_second_cost(
-            &config,
-            reference_subnet_size_lo,
-            compute_allocation,
-        ) - reference_cost_base;
-        let reference_cost_hi = calculate_one_gib_per_second_cost(
-            &config,
-            reference_subnet_size_hi,
-            compute_allocation,
-        );
-
+        let reference_subnet_size = config.reference_subnet_size;
+        let reference_cost =
+            calculate_one_gib_per_second_cost(&config, reference_subnet_size, compute_allocation);
         for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
             let simulated_cost =
-                simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation);
-            // Choose corresponding reference values according to a threshold value.
-            let calculated_cost = if subnet_size < subnet_size_threshold {
-                // Linear scaling with memory cost offset.
-                reference_cost_base
-                    + Cycles::new(
-                        reference_cost_lo.get() * subnet_size as u128
-                            / reference_subnet_size_lo as u128,
-                    )
-            } else {
-                // Linear scaling.
-                Cycles::new(
-                    reference_cost_hi.get() * subnet_size as u128
-                        / reference_subnet_size_hi as u128,
-                )
-            };
-
+                calculate_one_gib_per_second_cost(&config, subnet_size, compute_allocation);
+            let calculated_cost = Cycles::new(
+                reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128,
+            );
             assert!(
                 is_almost_eq(simulated_cost, calculated_cost),
                 "compute_allocation={compute_allocation:?}, subnet_size={subnet_size}",
@@ -844,7 +776,7 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
 fn test_subnet_size_execute_install_code() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = calculate_execution_cycles(
         &config,
         NumInstructions::from(TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS),
@@ -876,7 +808,7 @@ fn test_subnet_size_execute_install_code() {
     );
 
     // Check linear scaling.
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_execute_install_code_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_execute_install_code_cost(subnet_type, subnet_size);
@@ -893,7 +825,7 @@ fn test_subnet_size_execute_install_code() {
 fn test_subnet_size_ingress_induction_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let signed_ingress = SignedIngressBuilder::new()
         .method_name("inc")
         .nonce(3)
@@ -926,7 +858,7 @@ fn test_subnet_size_ingress_induction_cost() {
     );
 
     // Check linear scaling.
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_execute_install_code_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_execute_install_code_cost(subnet_type, subnet_size);
@@ -943,7 +875,7 @@ fn test_subnet_size_ingress_induction_cost() {
 fn test_subnet_size_execute_message() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = calculate_execution_cycles(
         &config,
         NumInstructions::from(TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS),
@@ -975,7 +907,7 @@ fn test_subnet_size_execute_message() {
     );
 
     // Check linear scaling.
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_execute_message_cost(subnet_type, subnet_size);
@@ -992,7 +924,7 @@ fn test_subnet_size_execute_message() {
 fn test_subnet_size_execute_heartbeat() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = calculate_execution_cycles(
         &config,
         NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS),
@@ -1024,7 +956,7 @@ fn test_subnet_size_execute_heartbeat() {
     );
 
     // Check linear scaling.
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost =
         simulate_execute_canister_heartbeat_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
@@ -1066,7 +998,7 @@ fn test_subnet_size_execute_heartbeat_default_cost() {
 fn test_subnet_size_sign_with_ecdsa() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = calculate_sign_with_ecdsa_cycles(&config, reference_subnet_size);
 
     // Check default cost.
@@ -1094,7 +1026,7 @@ fn test_subnet_size_sign_with_ecdsa() {
     );
 
     // Check linear scaling.
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_sign_with_ecdsa_cost(subnet_type, subnet_size);
@@ -1111,7 +1043,7 @@ fn test_subnet_size_sign_with_ecdsa() {
 fn test_subnet_size_http_request_fee() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost =
         calculate_http_request_fee_cycles(&config, NumBytes::new(17), None, reference_subnet_size);
 
@@ -1140,7 +1072,7 @@ fn test_subnet_size_http_request_fee() {
     );
 
     // Check linear scaling.
-    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_http_request_fee_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_http_request_fee_cost(subnet_type, subnet_size);

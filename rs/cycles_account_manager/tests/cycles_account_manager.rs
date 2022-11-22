@@ -314,9 +314,7 @@ fn canister_charge_for_memory_until_zero_works() {
     let config = SubnetConfigs::default()
         .own_subnet_config(subnet_type)
         .cycles_account_manager_config;
-    let use_cost_scaling = false;
-    let gib_stored_per_second_fee =
-        config.gib_storage_per_second_fee(use_cost_scaling, subnet_size);
+    let gib_stored_per_second_fee = config.gib_storage_per_second_fee;
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(subnet_type)
         .build();

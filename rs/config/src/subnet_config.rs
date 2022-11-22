@@ -120,12 +120,6 @@ pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
 const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 
-/// Non-subsidised storage subnet size threshold.
-///
-/// Below this subnet size threshold storage cost is subsidised (~4 SRD for 1 GiB per year).
-/// Equal or above subnet size does not have storage cost subsidised.
-const FAIR_STORAGE_COST_SUBNET_SIZE: usize = 20;
-
 /// Costs for each newly created dirty page in stable memory.
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
 const SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(0);
@@ -335,17 +329,8 @@ pub struct CyclesAccountManagerConfig {
     /// Fee for every byte received in an ingress message.
     pub ingress_byte_reception_fee: Cycles,
 
-    /// Subsidised fee for storing a GiB of data per second.
-    /// Used when `subnet_size < FAIR_STORAGE_COST_SUBNET_SIZE`.
-    /// The value is calculated for `reference_subnet_size` and has NO SCALING
-    /// according to a subnet size.
-    subsidised_gib_storage_per_second_fee: Cycles,
-
-    /// Fair (not subsidised) fee for storing a GiB of data per second.
-    /// Used when `subnet_size >= FAIR_STORAGE_COST_SUBNET_SIZE`.
-    /// The value is calculated for `reference_subnet_size` and must be scaled
-    /// according to the actual subnet size separately.
-    fair_gib_storage_per_second_fee: Cycles,
+    /// Fee for storing a GiB of data per second.
+    pub gib_storage_per_second_fee: Cycles,
 
     /// Fee for each percent of the reserved compute allocation. Note that
     /// reserved compute allocation is a scarce resource, and should be
@@ -386,9 +371,7 @@ impl CyclesAccountManagerConfig {
             ingress_message_reception_fee: Cycles::new(1_200_000),
             ingress_byte_reception_fee: Cycles::new(2_000),
             // 4 SDR per GiB per year => 4e12 Cycles per year
-            subsidised_gib_storage_per_second_fee: Cycles::new(127_000),
-            // 1779 SDR per GiB per year => 1779e12 Cycles per year
-            fair_gib_storage_per_second_fee: Cycles::new(56_412_000),
+            gib_storage_per_second_fee: Cycles::new(127_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_baseline_fee: Cycles::new(400_000_000),
@@ -408,8 +391,7 @@ impl CyclesAccountManagerConfig {
             xnet_byte_transmission_fee: Cycles::new(0),
             ingress_message_reception_fee: Cycles::new(0),
             ingress_byte_reception_fee: Cycles::new(0),
-            subsidised_gib_storage_per_second_fee: Cycles::new(0),
-            fair_gib_storage_per_second_fee: Cycles::new(0),
+            gib_storage_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
             /// The ECDSA signature fee is the fee charged when creating a
             /// signature on this subnet. The request likely came from a
@@ -420,27 +402,6 @@ impl CyclesAccountManagerConfig {
             http_request_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
         }
-    }
-
-    /// Fee for storing 1 GiB per second adjusted according to subnet size,
-    /// but normalized for `reference_subnet_size`.
-    pub fn gib_storage_per_second_fee(&self, use_cost_scaling: bool, subnet_size: usize) -> Cycles {
-        match use_cost_scaling {
-            false => self.subsidised_gib_storage_per_second_fee,
-            true => {
-                if subnet_size < FAIR_STORAGE_COST_SUBNET_SIZE {
-                    self.subsidised_gib_storage_per_second_fee
-                } else {
-                    self.fair_gib_storage_per_second_fee
-                }
-            }
-        }
-    }
-
-    /// Fair storage cost subnet size threshold. Made public for tests.
-    #[doc(hidden)]
-    pub fn fair_storage_cost_subnet_size() -> usize {
-        FAIR_STORAGE_COST_SUBNET_SIZE
     }
 }
 
