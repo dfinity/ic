@@ -1133,7 +1133,7 @@ where
         let file = open_for_write(&self.path)?;
         let mut writer = std::io::BufWriter::new(file);
         writer
-            .write(&serialized)
+            .write_all(&serialized)
             .map_err(|io_err| LayoutError::IoError {
                 path: self.path.clone(),
                 message: "failed to write serialized protobuf to disk".to_string(),
