@@ -241,6 +241,11 @@ fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
     TransactionRange { transactions }
 }
 
+#[query]
+fn __get_candid_interface_tmp_hack() -> &'static str {
+    include_str!(env!("ARCHIVE_DID_PATH"))
+}
+
 fn main() {}
 
 #[test]

@@ -305,14 +305,19 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
     Access::with_ledger(|ledger| ledger.get_transactions(start, length))
 }
 
+candid::export_service!();
+
+#[query]
+fn __get_candid_interface_tmp_hack() -> String {
+    __export_service()
+}
+
 fn main() {}
 
 #[test]
 fn check_candid_interface() {
     use candid::utils::{service_compatible, CandidSource};
     use std::path::PathBuf;
-
-    candid::export_service!();
 
     let new_interface = __export_service();
 

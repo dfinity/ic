@@ -6,10 +6,14 @@ package(default_visibility = ["//visibility:public"])
 rust_canister(
     name = "archive_canister",
     srcs = ["src/main.rs"],
+    compile_data = [":archive.did"],
     crate_name = "ic_icrc1_archive",
     proc_macro_deps = [
         "@crate_index//:ic-cdk-macros",
     ],
+    rustc_env = {
+        "ARCHIVE_DID_PATH": "$(execpath :archive.did)",
+    },
     version = "0.8.0",
     deps = [
         "//rs/rosetta-api/icrc1",

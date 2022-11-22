@@ -37,9 +37,13 @@ rust_library(
 rust_canister(
     name = "index_canister",
     srcs = ["src/main.rs"],
+    compile_data = ["index.did"],
     crate_name = "ic_icrc1_index_canister",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_env = {
+        "INDEX_DID_PATH": "$(execpath :index.did)",
+    },
     deps = [":index"] + DEPENDENCIES,
 )
 

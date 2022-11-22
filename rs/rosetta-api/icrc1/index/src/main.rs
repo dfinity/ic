@@ -51,6 +51,11 @@ fn post_upgrade() {
     ic_icrc1_index::post_upgrade()
 }
 
+#[query]
+fn __get_candid_interface_tmp_hack() -> &'static str {
+    include_str!(env!("INDEX_DID_PATH"))
+}
+
 #[test]
 fn check_candid_interface() {
     use candid::utils::{service_compatible, CandidSource};
