@@ -174,7 +174,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let start_time = self.metrics.now();
         self.sks_write_lock()
             .retain(
-                |key_id, _| active_key_ids.contains(key_id),
+                move |key_id, _| active_key_ids.contains(key_id),
                 NIDKG_THRESHOLD_SCOPE,
             )
             .unwrap_or_else(|e| panic!("error retaining threshold keys: {}", e));
