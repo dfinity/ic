@@ -45,7 +45,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let pk = CspPublicKey::Ed25519(pk_bytes);
 
         let result = self
-            .store_secret_key(sk, KeyId::from(&pk))
+            .store_secret_key(KeyId::from(&pk), sk, None)
             .map_err(CspBasicSignatureKeygenError::from)
             .and_then(|()| {
                 self.public_key_store_write_lock()

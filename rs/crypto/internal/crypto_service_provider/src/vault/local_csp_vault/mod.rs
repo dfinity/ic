@@ -22,6 +22,7 @@ use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
 use crate::types::CspSecretKey;
 use crate::CspRwLock;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use ic_crypto_internal_types::scope::Scope;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -206,10 +207,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn store_secret_key(
         &self,
-        csp_secret_key: CspSecretKey,
         key_id: KeyId,
+        csp_secret_key: CspSecretKey,
+        scope: Option<Scope>,
     ) -> Result<(), SecretKeyStoreError> {
-        self.sks_write_lock().insert(key_id, csp_secret_key, None)
+        self.sks_write_lock().insert(key_id, csp_secret_key, scope)
     }
 }
 

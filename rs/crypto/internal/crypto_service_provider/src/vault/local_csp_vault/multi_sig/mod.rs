@@ -46,7 +46,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let sk_id = KeyId::from(&pk_and_pop.0);
 
         let result = self
-            .store_secret_key(sk, sk_id)
+            .store_secret_key(sk_id, sk, None)
             .map_err(CspMultiSignatureKeygenError::from)
             .and_then(|_| {
                 self.store_committee_signing_public_key(&pk_and_pop)

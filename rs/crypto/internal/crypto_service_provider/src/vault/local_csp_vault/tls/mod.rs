@@ -107,7 +107,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         secret_key: TlsEd25519SecretKeyDerBytes,
     ) -> Result<KeyId, CspTlsKeygenError> {
         let key_id = KeyId::from(cert);
-        self.store_secret_key(CspSecretKey::TlsEd25519(secret_key), key_id)?;
+        self.store_secret_key(key_id, CspSecretKey::TlsEd25519(secret_key), None)?;
         Ok(key_id)
     }
 

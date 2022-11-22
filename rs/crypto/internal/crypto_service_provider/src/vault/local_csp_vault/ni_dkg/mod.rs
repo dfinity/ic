@@ -51,8 +51,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         // Update state:
         self.store_secret_key(
-            CspSecretKey::FsEncryption(key_set),
             KeyId::from(&public_key),
+            CspSecretKey::FsEncryption(key_set),
+            None,
         )
         .map_err(|e| match e {
             SecretKeyStoreError::DuplicateKeyId(key_id) => {
