@@ -10,15 +10,15 @@ To make modifications to the universal canister:
 # Build the Wasm binary
 bazel build //rs/universal_canister/impl:universal_canister
 
-# Find the optimized canister binary
-ls -l $(bazel info output_path)/k8-opt/bin/rs/universal_canister/impl/universal_canister.opt.wasm
+# Find the optimized canister binary (from the root `ic` directory)
+ls -l bazel-bin/rs/universal_canister/impl/universal_canister.wasm
 
-# Move optimized WASM into the /lib directory.
-mv $(bazel info output_path)/k8-opt/bin/rs/universal_canister/impl/universal_canister.opt.wasm universal_canister/lib/src/universal-canister.wasm
+# Move optimized WASM into the /lib directory (from the root `ic` directory)
+mv bazel-bin/rs/universal_canister/impl/universal_canister.wasm rs/universal_canister/lib/src/universal-canister.wasm
 
 # When done making changes and you're ready to push a change,
-# you need to update the checksum in /lib.
-sha256sum universal_canister/lib/src/universal-canister.wasm
+# you need to update the checksum in /lib (from the root `ic` directory).
+sha256sum rs/universal_canister/lib/src/universal-canister.wasm
 
 # Take the output of the command above and paste it as the value of UNIVERSAL_CANISTER_WASM_SHA256
 # in lib/src/lib.rs

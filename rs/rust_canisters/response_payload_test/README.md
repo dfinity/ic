@@ -11,8 +11,10 @@ Build
 # Build the Wasm binary
 bazel build //rs/rust_canisters/response_payload_test:response-payload-test-canister
 
-# Find the optimized canister binary
-ls -l $(bazel info output_path)/k8-opt/bin/rs/rust_canisters/response_payload_test/response-payload-test-canister.opt.wasm
+# Find the optimized canister binary from the root `ic` directory:
+ls -l bazel-bin/rs/rust_canisters/response_payload_test/response-payload-test-canister.wasm
+# From other directories:
+ls -l $(bazel info bazel-bin)/rs/rust_canisters/response_payload_test/response-payload-test-canister.wasm
 ```
 
 Run
