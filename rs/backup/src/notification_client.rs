@@ -1,7 +1,5 @@
-// use std::io::Read;
-
-// use curl::easy::{Easy, List};
-use slog::{info, Logger};
+use crate::util::block_on;
+use slog::{error, info, Logger};
 
 pub struct NotificationClient {
     pub backup_instance: String,
@@ -11,31 +9,24 @@ pub struct NotificationClient {
 }
 
 impl NotificationClient {
-    fn curl_post_request(_url: String, _content_type: String, _data_str: String) {
-        /*
-        let mut data = data_str.as_bytes();
-        let mut easy = Easy::new();
-        easy.url(&url).unwrap();
-
-        let mut list = List::new();
-        list.append(&content_type).unwrap();
-        easy.http_headers(list).unwrap();
-
-        easy.post(true).unwrap();
-        easy.post_field_size(data.len() as u64).unwrap();
-
-        let mut transfer = easy.transfer();
-        transfer
-            .read_function(|buf| Ok(data.read(buf).unwrap_or(0)))
-            .unwrap();
-
-        transfer.perform().unwrap();
-        */
+    fn http_post_request(&self, url: String, content_type: String, data_str: String) {
+        block_on(async {
+            let client = reqwest::Client::new();
+            match client
+                .post(url)
+                .header(reqwest::header::CONTENT_TYPE, content_type)
+                .body(data_str)
+                .send()
+                .await
+            {
+                Ok(_) => {}
+                Err(err) => error!(self.log, "Http POST failed: {}", err),
+            }
+        });
     }
 
     pub fn message_slack(&self, message: String) {
         info!(self.log, "{}", message);
-
         let url = format!(
             "https://hooks.slack.com/services/T43F9UHS5/B027BHAQ1HQ/{}",
             self.slack_token
@@ -48,7 +39,7 @@ impl NotificationClient {
         );
         let content_type = "Content-type: application/json".to_string();
 
-        NotificationClient::curl_post_request(url, content_type, data_str)
+        self.http_post_request(url, content_type, data_str)
     }
 
     pub fn report_failure_slack(&self, message: String) {
@@ -66,7 +57,7 @@ impl NotificationClient {
         );
         let content_type = "Content-type: application/octet-stream".to_string();
 
-        NotificationClient::curl_post_request(url, content_type, message);
+        self.http_post_request(url, content_type, message);
     }
 
     pub fn push_metrics_restored_height(&self, height: u64) {
