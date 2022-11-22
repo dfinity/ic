@@ -32,7 +32,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
@@ -255,6 +255,7 @@ impl Default for BitcoinStateBits {
 pub struct StateLayout {
     root: PathBuf,
     log: ReplicaLogger,
+    checkpoint_remove_guard: Arc<Mutex<()>>,
     tip_handler_captured: Arc<AtomicBool>,
 }
 
@@ -373,6 +374,7 @@ impl StateLayout {
         let state_layout = Self {
             root,
             log,
+            checkpoint_remove_guard: Arc::new(Mutex::new(())),
             tip_handler_captured: Arc::new(false.into()),
         };
         state_layout.init()?;
@@ -605,6 +607,16 @@ impl StateLayout {
     /// Postcondition:
     ///   height ∉ self.checkpoint_heights()
     pub fn remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
+        // Don't ever remove the last checkpoint; in debug, crash
+        // Mutex to prevent removing two last checkpoints from two threads.
+        let _lock = &mut self.checkpoint_remove_guard.lock().unwrap();
+        let heights = self.checkpoint_heights()?;
+        // If we have one last state e.g. @4 but we try to remove @3, we should fail with an error
+        // different from LastCheckpoint
+        if heights.len() == 1 && heights[0] == height {
+            debug_assert!(false, "Trying to remove the last checkpoint");
+            return Err(LayoutError::LastCheckpoint(height));
+        }
         let cp_name = self.checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         let tmp_path = self.fs_tmp().join(&cp_name);

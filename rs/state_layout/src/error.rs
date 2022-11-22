@@ -21,6 +21,9 @@ pub enum LayoutError {
 
     /// Checkpoint for the requested height not found.
     NotFound(Height),
+
+    /// Trying to remove the last checkpoint.
+    LastCheckpoint(Height),
 }
 
 impl fmt::Display for LayoutError {
@@ -47,6 +50,11 @@ impl fmt::Display for LayoutError {
             Self::AlreadyExists(height) => write!(
                 f,
                 "failed to create checkpoint at height {} because it already exists",
+                height
+            ),
+            Self::LastCheckpoint(height) => write!(
+                f,
+                "Trying to remove the last checkpoint at height @{}",
                 height
             ),
         }

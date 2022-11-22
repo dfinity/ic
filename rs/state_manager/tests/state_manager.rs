@@ -3060,6 +3060,18 @@ fn remove_too_many_diverged_states() {
 }
 
 #[test]
+#[should_panic]
+fn debug_assert_last_checkpoint() {
+    state_manager_test(|_metrics, state_manager| {
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(1));
+
+        let _ = state_manager.state_layout().remove_checkpoint(height(1));
+    });
+}
+
+#[test]
 fn can_reset_memory() {
     state_manager_test(|metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
