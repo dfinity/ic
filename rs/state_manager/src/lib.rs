@@ -3383,6 +3383,8 @@ pub enum CheckpointError {
     NotFound(Height),
     /// Wraps a PageMap error.
     Persistence(PersistenceError),
+    /// Trying to remove the last checkpoint.
+    LastCheckpoint(Height),
 }
 
 impl std::error::Error for CheckpointError {
@@ -3430,6 +3432,12 @@ impl std::fmt::Display for CheckpointError {
             }
 
             CheckpointError::Persistence(err) => write!(f, "persistence error: {}", err),
+
+            CheckpointError::LastCheckpoint(height) => write!(
+                f,
+                "Trying to remove the last checkpoint at height @{}",
+                height
+            ),
         }
     }
 }
@@ -3457,6 +3465,7 @@ impl From<LayoutError> for CheckpointError {
             }
             LayoutError::NotFound(h) => CheckpointError::NotFound(h),
             LayoutError::AlreadyExists(h) => CheckpointError::AlreadyExists(h),
+            LayoutError::LastCheckpoint(h) => CheckpointError::LastCheckpoint(h),
         }
     }
 }
