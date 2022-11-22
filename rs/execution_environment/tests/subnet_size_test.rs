@@ -17,6 +17,7 @@ use ic_types::{ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
 
+const TEST_SUBNET_SIZE_MAX: usize = 34;
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(10_000_000_000);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 996_000;
 const TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS: u64 = 30;
@@ -726,7 +727,7 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation() {
     let reference_cost_hi =
         calculate_one_gib_per_second_cost(&config, reference_subnet_size_hi, compute_allocation);
 
-    for subnet_size in 1..50 {
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost =
             simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation);
         // Choose corresponding reference values according to a threshold value.
@@ -742,9 +743,7 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation() {
 
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "compute_allocation={:?}, subnet_size={}",
-            compute_allocation,
-            subnet_size
+            "compute_allocation={compute_allocation:?}, subnet_size={subnet_size}",
         );
     }
 }
@@ -814,7 +813,7 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
             compute_allocation,
         );
 
-        for subnet_size in 1..50 {
+        for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
             let simulated_cost =
                 simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation);
             // Choose corresponding reference values according to a threshold value.
@@ -835,9 +834,7 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
 
             assert!(
                 is_almost_eq(simulated_cost, calculated_cost),
-                "compute_allocation={:?}, subnet_size={}",
-                compute_allocation,
-                subnet_size
+                "compute_allocation={compute_allocation:?}, subnet_size={subnet_size}",
             );
         }
     }
@@ -881,14 +878,13 @@ fn test_subnet_size_execute_install_code() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size as usize;
     let reference_cost = simulate_execute_install_code_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..50 {
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_execute_install_code_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={}",
-            subnet_size
+            "subnet_size={subnet_size}"
         );
     }
 }
@@ -932,14 +928,13 @@ fn test_subnet_size_ingress_induction_cost() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size as usize;
     let reference_cost = simulate_execute_install_code_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..50 {
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_execute_install_code_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={}",
-            subnet_size
+            "subnet_size={subnet_size}"
         );
     }
 }
@@ -982,14 +977,13 @@ fn test_subnet_size_execute_message() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size as usize;
     let reference_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..50 {
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_execute_message_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={}",
-            subnet_size
+            "subnet_size={subnet_size}"
         );
     }
 }
@@ -1033,14 +1027,13 @@ fn test_subnet_size_execute_heartbeat() {
     let reference_subnet_size = config.reference_subnet_size as usize;
     let reference_cost =
         simulate_execute_canister_heartbeat_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..50 {
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={}",
-            subnet_size
+            "subnet_size={subnet_size}"
         );
     }
 }
@@ -1103,14 +1096,13 @@ fn test_subnet_size_sign_with_ecdsa() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size as usize;
     let reference_cost = simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..50 {
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_sign_with_ecdsa_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={}",
-            subnet_size
+            "subnet_size={subnet_size}"
         );
     }
 }
@@ -1150,14 +1142,90 @@ fn test_subnet_size_http_request_fee() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size as usize;
     let reference_cost = simulate_http_request_fee_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..50 {
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
         let simulated_cost = simulate_http_request_fee_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={}",
-            subnet_size
+            "subnet_size={subnet_size}"
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_system_subnet_has_zero_cost() {
+    let subnet_type = SubnetType::System;
+
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+        let compute_allocation = ComputeAllocation::zero();
+        assert_eq!(
+            simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation),
+            Cycles::zero(),
+            "subnet_size={subnet_size}"
+        );
+
+        let compute_allocation = ComputeAllocation::try_from(50).unwrap();
+        assert_eq!(
+            simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation),
+            Cycles::zero(),
+            "subnet_size={subnet_size}"
+        );
+
+        let compute_allocation = ComputeAllocation::try_from(100).unwrap();
+        assert_eq!(
+            simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation),
+            Cycles::zero(),
+            "subnet_size={subnet_size}"
+        );
+
+        assert_eq!(
+            simulate_execute_message_cost(subnet_type, subnet_size),
+            Cycles::zero(),
+            "subnet_size={subnet_size}"
+        );
+
+        assert_eq!(
+            simulate_execute_install_code_cost(subnet_type, subnet_size),
+            Cycles::zero(),
+            "subnet_size={subnet_size}"
+        );
+
+        assert_eq!(
+            simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size),
+            Cycles::zero(),
+            "subnet_size={subnet_size}"
+        );
+
+        assert_eq!(
+            simulate_http_request_fee_cost(subnet_type, subnet_size),
+            Cycles::zero(),
+            "subnet_size={subnet_size}"
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_system_subnet_non_zero_cost() {
+    let subnet_type = SubnetType::System;
+
+    // Check linear scaling.
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+        let simulated_cost = simulate_sign_with_ecdsa_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+
+        // The ECDSA signature fee is the fee charged when creating a
+        // signature on system subnet. The request likely came from a
+        // different subnet which is not a system subnet. There is an
+        // explicit exception for requests originating from the NNS when the
+        // charging occurs.
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={subnet_size}"
         );
     }
 }
