@@ -16,6 +16,10 @@ use ic_btc_types::{Network, OutPoint, Utxo};
 use ic_icrc1::Account;
 use serde::Serialize;
 
+/// The maximum number of finalized BTC retrieval requests that we keep in the
+/// history.
+const MAX_FINALIZED_REQUESTS: usize = 100;
+
 thread_local! {
     static __STATE: RefCell<Option<CkBtcMinterState>> = RefCell::default();
 }
@@ -26,6 +30,52 @@ pub struct RetrieveBtcRequest {
     pub amount: u64,
     pub address: BitcoinAddress,
     pub block_index: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SubmittedBtcRetrieval {
+    /// The original retrieve_btc request that initiated the transaction.
+    pub request: RetrieveBtcRequest,
+    /// The identifier of the unconfirmed transaction.
+    pub txid: [u8; 32],
+    /// The list of UTXOs we used in the transaction.
+    pub used_utxos: Vec<Utxo>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FinalizedBtcRetrieval {
+    /// The original retrieve_btc request that initiated the transaction.
+    pub request: RetrieveBtcRequest,
+    /// The state of the finalized request.
+    pub state: FinalizedStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum FinalizedStatus {
+    /// The request amount was to low to cover the fees.
+    AmountTooLow,
+    /// The transaction that retrieves BTC got enough confirmations.
+    Confirmed {
+        /// The witness transaction identifier of the transaction.
+        txid: [u8; 32],
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum InFlightStatus {
+    Signing,
+    Sending { txid: [u8; 32] },
+}
+
+#[derive(candid::CandidType, Clone, Debug, PartialEq, Deserialize)]
+pub enum RetrieveBtcStatus {
+    Unknown,
+    Pending,
+    Signing,
+    Sending { txid: [u8; 32] },
+    Submitted { txid: [u8; 32] },
+    AmountTooLow,
+    Confirmed { txid: [u8; 32] },
 }
 
 /// The state of the ckBTC Minter.
@@ -57,6 +107,16 @@ pub struct CkBtcMinterState {
 
     /// Retrieve_btc requests that are waiting to be served
     pub pending_retrieve_btc_requests: VecDeque<RetrieveBtcRequest>,
+
+    /// The identifiers of retrieve_btc requests which we're currently signing a
+    /// transaction or sending to the Bitcoin network.
+    pub requests_in_flight: BTreeMap<u64, InFlightStatus>,
+
+    /// Processed retrieve_btc requests waiting for finalization.
+    pub submitted_requests: Vec<SubmittedBtcRetrieval>,
+
+    /// Finalized retrieve_btc requests for which we received enough confirmations.
+    pub finalized_requests: VecDeque<FinalizedBtcRetrieval>,
 
     /// The CanisterId of the ckBTC Ledger
     pub ledger_id: CanisterId,
@@ -121,6 +181,116 @@ impl CkBtcMinterState {
         #[cfg(debug_assertions)]
         self.check_invariants();
     }
+
+    /// Returns the status of the retrieve_btc request with the specified
+    /// identifier.
+    pub fn retrieve_btc_status(&self, block_index: u64) -> RetrieveBtcStatus {
+        if self
+            .pending_retrieve_btc_requests
+            .iter()
+            .any(|req| req.block_index == block_index)
+        {
+            return RetrieveBtcStatus::Pending;
+        }
+
+        if let Some(status) = self.requests_in_flight.get(&block_index).cloned() {
+            return match status {
+                InFlightStatus::Signing => RetrieveBtcStatus::Signing,
+                InFlightStatus::Sending { txid } => RetrieveBtcStatus::Sending { txid },
+            };
+        }
+
+        if let Some(txid) = self
+            .submitted_requests
+            .iter()
+            .find_map(|req| (req.request.block_index == block_index).then(|| req.txid))
+        {
+            return RetrieveBtcStatus::Submitted { txid };
+        }
+
+        match self
+            .finalized_requests
+            .iter()
+            .find_map(|req| (req.request.block_index == block_index).then(|| req.state.clone()))
+        {
+            Some(FinalizedStatus::AmountTooLow) => return RetrieveBtcStatus::AmountTooLow,
+            Some(FinalizedStatus::Confirmed { txid }) => {
+                return RetrieveBtcStatus::Confirmed { txid }
+            }
+            None => (),
+        }
+
+        RetrieveBtcStatus::Unknown
+    }
+
+    /// Returns the total number of all retrieve_btc requests that we haven't
+    /// finalized yet.
+    pub fn count_incomplete_retrieve_btc_requests(&self) -> usize {
+        self.pending_retrieve_btc_requests.len()
+            + self.requests_in_flight.len()
+            + self.submitted_requests.len()
+    }
+
+    /// Returns true if there is a pending retrieve_btc request with the given
+    /// identifier.
+    fn has_pending_request(&self, block_index: u64) -> bool {
+        self.pending_retrieve_btc_requests
+            .iter()
+            .any(|req| req.block_index == block_index)
+    }
+
+    /// Marks the specified retrieve_btc request as in-flight.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is a pending retrieve_btc request with the
+    /// same identifier.
+    pub fn push_in_flight_request(&mut self, block_index: u64, status: InFlightStatus) {
+        assert!(!self.has_pending_request(block_index));
+
+        self.requests_in_flight.insert(block_index, status);
+    }
+
+    /// Adds a new retrieve_btc request to the back of the queue.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is a pending retrieve_btc request with the
+    /// same identifier.
+    pub fn push_pending_request(&mut self, req: RetrieveBtcRequest) {
+        assert!(!self.has_pending_request(req.block_index));
+
+        self.requests_in_flight.remove(&req.block_index);
+        self.pending_retrieve_btc_requests.push_back(req);
+    }
+
+    /// Marks the specified retrieve_btc request as submitted.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is a pending retrieve_btc request with the
+    /// same identifier.
+    pub fn push_submitted_request(&mut self, req: SubmittedBtcRetrieval) {
+        assert!(!self.has_pending_request(req.request.block_index));
+
+        self.requests_in_flight.remove(&req.request.block_index);
+        self.submitted_requests.push(req);
+    }
+
+    /// Marks the specified retrieve_btc request as finalized.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is a pending retrieve_btc request with the
+    /// same identifier.
+    pub fn push_finalized_request(&mut self, req: FinalizedBtcRetrieval) {
+        assert!(!self.has_pending_request(req.request.block_index));
+
+        if self.finalized_requests.len() >= MAX_FINALIZED_REQUESTS {
+            self.finalized_requests.pop_front();
+        }
+        self.finalized_requests.push_back(req)
+    }
 }
 
 impl From<InitArgs> for CkBtcMinterState {
@@ -134,6 +304,9 @@ impl From<InitArgs> for CkBtcMinterState {
             retrieve_btc_principals: Default::default(),
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),
+            requests_in_flight: Default::default(),
+            submitted_requests: Default::default(),
+            finalized_requests: VecDeque::with_capacity(MAX_FINALIZED_REQUESTS),
             ledger_id: args.ledger_id,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),

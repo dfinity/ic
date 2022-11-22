@@ -25,7 +25,7 @@ use crate::{
     util::UniversalCanister,
 };
 use bitcoincore_rpc::{
-    bitcoin::{Address, Amount},
+    bitcoin::{Address, Amount, Txid},
     bitcoincore_rpc_json, Auth, Client, RpcApi,
 };
 use candid::{Decode, Encode, Nat};
@@ -100,7 +100,7 @@ pub async fn wait_for_bitcoin_balance<'a>(
 
 /// Wait until we have a tx in btc mempool
 /// Timeout after TIMEOUT_30S if the minter doesn't successfully find a new tx in the timeframe.
-pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) {
+pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) -> Vec<Txid> {
     let start = Instant::now();
     loop {
         if start.elapsed() >= TIMEOUT_30S {
@@ -108,11 +108,11 @@ pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) {
         };
         match btc_rpc.get_raw_mempool() {
             Ok(r) => {
-                for txid in r.clone() {
+                for txid in r.iter() {
                     info!(&logger, "Tx in mempool : {:?}", txid);
                 }
                 if !r.is_empty() {
-                    break;
+                    return r;
                 }
             }
             Err(e) => {

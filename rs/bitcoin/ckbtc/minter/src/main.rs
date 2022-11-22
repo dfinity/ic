@@ -1,7 +1,9 @@
 use candid::candid_method;
-use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, update};
+use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
 use ic_ckbtc_minter::lifecycle::{self, init::InitArgs};
 use ic_ckbtc_minter::metrics::encode_metrics;
+use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
+use ic_ckbtc_minter::state::{read_state, RetrieveBtcStatus};
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
 use ic_ckbtc_minter::updates::{
     self,
@@ -46,6 +48,12 @@ async fn get_withdrawal_account() -> GetWithdrawalAccountResult {
 #[update]
 async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
     updates::retrieve_btc::retrieve_btc(args).await
+}
+
+#[candid_method(query)]
+#[query]
+fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
+    read_state(|s| s.retrieve_btc_status(req.block_index))
 }
 
 #[candid_method(update)]
