@@ -22,8 +22,11 @@ pub fn verify_complaint<C: CspIDkgProtocol>(
     if transcript.transcript_id != complaint.transcript_id {
         return Err(IDkgVerifyComplaintError::InvalidArgumentMismatchingTranscriptIDs);
     }
-    let complainer_mega_pubkey =
-        get_mega_pubkey(&complainer_id, registry, transcript.registry_version)?;
+    let complainer_mega_pubkey = get_mega_pubkey(
+        &complainer_id,
+        registry.as_ref(),
+        transcript.registry_version,
+    )?;
     let complainer_index = index_of_complainer(complainer_id, transcript)?;
     let internal_complaint = IDkgComplaintInternal::try_from(complaint).map_err(|e| {
         IDkgVerifyComplaintError::SerializationError {

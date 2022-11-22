@@ -30,5 +30,5 @@ fn should_retrieve_mega_keys_from_the_registry() {
 
     registry_client.update_to_latest_version();
 
-    assert!(get_mega_pubkey(&node_id, &(registry_client as Arc<_>), registry_version).is_ok());
+    assert!(get_mega_pubkey(&node_id, registry_client.as_ref(), registry_version).is_ok());
 }

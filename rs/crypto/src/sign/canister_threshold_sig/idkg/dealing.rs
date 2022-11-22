@@ -35,7 +35,7 @@ pub fn create_dealing<C: CspIDkgProtocol>(
 
     let receiver_keys = idkg_encryption_keys_from_registry(
         params.receivers(),
-        registry,
+        registry.as_ref(),
         params.registry_version(),
     )?;
     let receiver_keys_vec = receiver_keys
@@ -103,7 +103,8 @@ pub fn verify_dealing_private<C: CspIDkgProtocol>(
     let self_receiver_index = params
         .receiver_index(*self_node_id)
         .ok_or(IDkgVerifyDealingPrivateError::NotAReceiver)?;
-    let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, params.registry_version())?;
+    let self_mega_pubkey =
+        get_mega_pubkey(self_node_id, registry.as_ref(), params.registry_version())?;
 
     csp_client.idkg_verify_dealing_private(
         params.algorithm_id(),

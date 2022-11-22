@@ -164,7 +164,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
             to ensure that rotation was needed.")).clone();
         let idkg_public_key_from_registry = fetch_idkg_dealing_encryption_public_key_from_registry(
             &self.node_id,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             registry_version,
         );
         match idkg_public_key_from_registry {
