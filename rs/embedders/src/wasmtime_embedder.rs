@@ -18,7 +18,9 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
 use ic_logger::{debug, error, fatal, ReplicaLogger};
-use ic_replicated_state::{EmbedderCache, Global, NumWasmPages, PageIndex, PageMap};
+use ic_replicated_state::{
+    canister_state::execution_state, EmbedderCache, Global, NumWasmPages, PageIndex, PageMap,
+};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
@@ -103,6 +105,11 @@ fn trap_code_to_hypervisor_error(trap_code: wasmtime::TrapCode) -> HypervisorErr
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CanisterMemoryType {
+    Heap,
+}
+
 pub struct WasmtimeEmbedder {
     log: ReplicaLogger,
     config: EmbeddersConfig,
@@ -181,8 +188,8 @@ impl WasmtimeEmbedder {
         canister_id: CanisterId,
         cache: &EmbedderCache,
         exported_globals: &[Global],
-        heap_size: NumWasmPages,
-        page_map: PageMap,
+        heap_memory: &execution_state::Memory,
+        _stable_memory: &execution_state::Memory,
         modification_tracking: ModificationTracking,
         system_api: S,
     ) -> Result<WasmtimeInstance<S>, (HypervisorError, S)> {
@@ -282,25 +289,26 @@ impl WasmtimeEmbedder {
             }
         }
 
-        let instance_memory = instance
-            .get_memory(&mut store, "memory")
-            .map(|instance_memory| {
-                let current_heap_size = instance_memory.size(&store);
-                let requested_size = heap_size.get() as u64;
+        let instance_heap_memory =
+            instance
+                .get_memory(&mut store, "memory")
+                .map(|instance_memory| {
+                    let current_heap_size = instance_memory.size(&store);
+                    let requested_size = heap_memory.size.get() as u64;
 
-                if current_heap_size < requested_size {
-                    let delta = requested_size - current_heap_size;
-                    // TODO(DFN-1305): It is OK to panic here. `requested_size` is
-                    // value we store only after we've successfully grown module memory in some
-                    // previous execution.
-                    // Example: module starts with (memory 1 2) and calls (memory.grow 1). Then
-                    // requested_size will be 2.
+                    if current_heap_size < requested_size {
+                        let delta = requested_size - current_heap_size;
+                        // TODO(DFN-1305): It is OK to panic here. `requested_size` is
+                        // value we store only after we've successfully grown module memory in some
+                        // previous execution.
+                        // Example: module starts with (memory 1 2) and calls (memory.grow 1). Then
+                        // requested_size will be 2.
+                        instance_memory
+                            .grow(&mut store, delta)
+                            .expect("memory grow failed");
+                    }
                     instance_memory
-                        .grow(&mut store, delta)
-                        .expect("memory grow failed");
-                }
-                instance_memory
-            });
+                });
 
         let dirty_page_tracking = match modification_tracking {
             ModificationTracking::Ignore => DirtyPageTracking::Ignore,
@@ -308,8 +316,8 @@ impl WasmtimeEmbedder {
         };
 
         // if `wasmtime::Instance` does not have memory we don't need a memory tracker
-        let memory_tracker = match instance_memory {
-            None => None,
+        let memory_trackers = match instance_heap_memory {
+            None => HashMap::new(),
             Some(instance_memory) => {
                 let start = MemoryStart(instance_memory.data_ptr(&store) as usize);
                 match self
@@ -330,14 +338,21 @@ impl WasmtimeEmbedder {
                             store.into_data().system_api,
                         ));
                     }
-                    Some(current_memory_size_in_pages) => Some(sigsegv_memory_tracker(
-                        &instance_memory,
-                        current_memory_size_in_pages,
+                    Some(current_memory_size_in_pages) => sigsegv_memory_tracker(
+                        [(
+                            CanisterMemoryType::Heap,
+                            (
+                                instance_memory,
+                                current_memory_size_in_pages,
+                                heap_memory.page_map.clone(),
+                            ),
+                        )]
+                        .into_iter()
+                        .collect(),
                         &mut store,
-                        page_map,
                         self.log.clone(),
                         dirty_page_tracking,
-                    )),
+                    ),
                 }
             }
         };
@@ -345,7 +360,7 @@ impl WasmtimeEmbedder {
 
         Ok(WasmtimeInstance {
             instance,
-            memory_tracker,
+            memory_trackers,
             signal_stack,
             log: self.log.clone(),
             instance_stats: InstanceStats {
@@ -372,45 +387,46 @@ unsafe impl Sync for StoreRef {}
 unsafe impl Send for StoreRef {}
 
 fn sigsegv_memory_tracker<S>(
-    instance_memory: &wasmtime::Memory,
-    current_memory_size_in_pages: MemoryPageSize,
+    memories: HashMap<CanisterMemoryType, (wasmtime::Memory, MemoryPageSize, PageMap)>,
     store: &mut wasmtime::Store<S>,
-    page_map: PageMap,
     log: ReplicaLogger,
     dirty_page_tracking: DirtyPageTracking,
-) -> Arc<Mutex<SigsegvMemoryTracker>> {
-    let base = instance_memory.data_ptr(&store);
-    let size = instance_memory.data_size(&store);
+) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
+    let mut tracked_memories = vec![];
+    let mut result = HashMap::new();
+    for (mem_type, (instance_memory, current_memory_size_in_pages, page_map)) in memories {
+        let base = instance_memory.data_ptr(&store);
+        let size = instance_memory.data_size(&store);
 
-    let sigsegv_memory_tracker = {
-        // For both SIGSEGV and in the future UFFD memory tracking we need
-        // the base address of the heap and its size
-        let base = base as *mut libc::c_void;
-        if base as usize % PAGE_SIZE != 0 {
-            fatal!(log, "[EXC-BUG] Memory tracker - Heap must be page aligned.");
-        }
-        if size % PAGE_SIZE != 0 {
-            fatal!(
-                log,
-                "[EXC-BUG] Memory tracker - Heap size must be a multiple of page size."
-            );
-        }
+        let sigsegv_memory_tracker = {
+            // For both SIGSEGV and in the future UFFD memory tracking we need
+            // the base address of the heap and its size
+            let base = base as *mut libc::c_void;
+            if base as usize % PAGE_SIZE != 0 {
+                fatal!(log, "[EXC-BUG] Memory tracker - Heap must be page aligned.");
+            }
+            if size % PAGE_SIZE != 0 {
+                fatal!(
+                    log,
+                    "[EXC-BUG] Memory tracker - Heap size must be a multiple of page size."
+                );
+            }
 
-        Arc::new(Mutex::new(
-            SigsegvMemoryTracker::new(base, size, log, dirty_page_tracking, page_map)
-                .expect("failed to instantiate SIGSEGV memory tracker"),
-        ))
-    };
+            Arc::new(Mutex::new(
+                SigsegvMemoryTracker::new(base, size, log.clone(), dirty_page_tracking, page_map)
+                    .expect("failed to instantiate SIGSEGV memory tracker"),
+            ))
+        };
+        result.insert(mem_type, Arc::clone(&sigsegv_memory_tracker));
+        tracked_memories.push((sigsegv_memory_tracker, current_memory_size_in_pages));
+    }
 
-    let handler = crate::signal_handler::sigsegv_memory_tracker_handler(
-        Arc::clone(&sigsegv_memory_tracker),
-        current_memory_size_in_pages,
-    );
+    let handler = crate::signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
     // http://man7.org/linux/man-pages/man7/signal-safety.7.html
     unsafe {
         store.set_signal_handler(handler);
     };
-    sigsegv_memory_tracker
+    result
 }
 
 /// Additional types that need to be owned by the `wasmtime::Store`.
@@ -419,10 +435,15 @@ pub struct StoreData<S> {
     pub num_instructions_global: Option<wasmtime::Global>,
 }
 
+pub struct PageAccessResults {
+    pub dirty_pages: Vec<PageIndex>,
+    pub num_accessed_pages: usize,
+}
+
 /// Encapsulates a Wasmtime instance on the Internet Computer.
 pub struct WasmtimeInstance<S: SystemApi> {
     instance: wasmtime::Instance,
-    memory_tracker: Option<Arc<Mutex<SigsegvMemoryTracker>>>,
+    memory_trackers: HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>>,
     signal_stack: WasmtimeSignalStack,
     log: ReplicaLogger,
     instance_stats: InstanceStats,
@@ -456,23 +477,34 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             .map_err(wasmtime_error_to_hypervisor_error)
     }
 
-    fn dirty_pages(&self) -> Vec<PageIndex> {
-        if let Some(memory_tracker) = self.memory_tracker.as_ref() {
-            let memory_tracker = memory_tracker.lock().unwrap();
-            let speculatively_dirty_pages = memory_tracker.take_speculatively_dirty_pages();
-            let dirty_pages = memory_tracker.take_dirty_pages();
-            dirty_pages
-                .into_iter()
-                .chain(speculatively_dirty_pages.into_iter())
-                .filter_map(|p| memory_tracker.validate_speculatively_dirty_page(p))
-                .collect::<Vec<PageIndex>>()
-        } else {
+    fn dirty_pages(&self) -> HashMap<CanisterMemoryType, PageAccessResults> {
+        if self.memory_trackers.is_empty() {
             debug!(
                 self.log,
                 "Memory tracking disabled. Returning empty list of dirty pages"
             );
-            vec![]
+            return HashMap::new();
         }
+        self.memory_trackers
+            .iter()
+            .map(|(ty, tracker)| {
+                let memory_tracker = tracker.lock().unwrap();
+                let speculatively_dirty_pages = memory_tracker.take_speculatively_dirty_pages();
+                let dirty_pages = memory_tracker.take_dirty_pages();
+                let dirty_pages = dirty_pages
+                    .into_iter()
+                    .chain(speculatively_dirty_pages.into_iter())
+                    .filter_map(|p| memory_tracker.validate_speculatively_dirty_page(p))
+                    .collect::<Vec<PageIndex>>();
+                (
+                    *ty,
+                    PageAccessResults {
+                        dirty_pages,
+                        num_accessed_pages: memory_tracker.num_accessed_pages(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn memory(&mut self) -> HypervisorResult<Memory> {
@@ -524,13 +556,18 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 .unwrap_or(e)
         });
 
-        let dirty_pages = self.dirty_pages();
-        let num_accessed_pages = self
-            .memory_tracker
-            .as_ref()
-            .map_or(0, |tracker| tracker.lock().unwrap().num_accessed_pages());
-        self.instance_stats.accessed_pages += num_accessed_pages;
-        self.instance_stats.dirty_pages += dirty_pages.len();
+        let mut accesses = self.dirty_pages();
+        let dirty_pages = if let Some(PageAccessResults {
+            dirty_pages,
+            num_accessed_pages,
+        }) = accesses.remove(&CanisterMemoryType::Heap)
+        {
+            self.instance_stats.accessed_pages += num_accessed_pages;
+            self.instance_stats.dirty_pages += dirty_pages.len();
+            dirty_pages
+        } else {
+            vec![]
+        };
 
         let stable_memory_dirty_pages: Vec<_> = self
             .store

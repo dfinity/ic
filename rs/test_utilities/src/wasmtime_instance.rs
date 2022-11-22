@@ -129,8 +129,14 @@ impl WasmtimeInstanceBuilder {
                 canister_test_id(1),
                 &compiled,
                 &self.globals,
-                ic_replicated_state::NumWasmPages::from(0),
-                PageMap::default(),
+                &Memory::new(
+                    PageMap::default(),
+                    ic_replicated_state::NumWasmPages::from(0),
+                ),
+                &Memory::new(
+                    PageMap::default(),
+                    ic_replicated_state::NumWasmPages::from(0),
+                ),
                 ModificationTracking::Track,
                 api,
             )
