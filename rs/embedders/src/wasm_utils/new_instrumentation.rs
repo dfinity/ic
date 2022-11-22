@@ -98,7 +98,7 @@ use super::{InstrumentationOutput, Segments};
 use ic_replicated_state::NumWasmPages;
 use ic_types::methods::WasmMethod;
 use ic_types::NumInstructions;
-use ic_wasm_types::{BinaryEncodedWasm, ParityWasmError, WasmInstrumentationError};
+use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 
 use crate::wasm_utils::wasm_transform::{self, Module};
 use wasmparser::{
@@ -324,7 +324,7 @@ pub(super) fn instrument(
     };
 
     // pull out the data from the data section
-    let data = get_data(&mut module.data);
+    let data = get_data(&mut module.data)?;
     data.validate(NumWasmPages::from(initial_limit as usize))?;
 
     let mut wasm_instruction_count: u64 = 0;
@@ -336,7 +336,7 @@ pub(super) fn instrument(
     }
 
     let result = module.encode().map_err(|err| {
-        WasmInstrumentationError::ParitySerializeError(ParityWasmError::new(err.to_string()))
+        WasmInstrumentationError::WasmSerializeError(WasmError::new(err.to_string()))
     })?;
 
     Ok(InstrumentationOutput {
@@ -672,7 +672,9 @@ fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
 
 // Looks for the data section and if it is present, converts it to a vector of
 // tuples (heap offset, bytes) and then deletes the section.
-fn get_data(data_section: &mut Vec<wasm_transform::DataSegment>) -> Segments {
+fn get_data(
+    data_section: &mut Vec<wasm_transform::DataSegment>,
+) -> Result<Segments, WasmInstrumentationError> {
     let res = data_section
         .iter()
         .map(|segment| {
@@ -682,19 +684,22 @@ fn get_data(data_section: &mut Vec<wasm_transform::DataSegment>) -> Segments {
                     offset_expr,
                 } => match offset_expr {
                     Operator::I32Const { value } => *value as usize,
-                    _ => panic!(
-                        "complex initialization expressions for data segments are not supported!"
-                    ),
+                    _ => return Err(WasmInstrumentationError::WasmDeserializeError(WasmError::new(
+                        "complex initialization expressions for data segments are not supported!".into()
+                    ))),
                 },
-                _ => panic!("no offset found for the data segment"),
+
+                _ => return Err(WasmInstrumentationError::WasmDeserializeError(
+                    WasmError::new("no offset found for the data segment".into())
+                )),
             };
 
-            (offset, segment.data.to_vec())
+            Ok((offset, segment.data.to_vec()))
         })
-        .collect();
+        .collect::<Result<_,_>>()?;
 
     data_section.clear();
-    res
+    Ok(res)
 }
 
 fn export_table(mut module: Module) -> Module {

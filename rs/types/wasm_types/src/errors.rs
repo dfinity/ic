@@ -1,23 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-/// Represents an error that can happen when parsing a Wasm module using
-/// `parity_wasm`.
-///
-/// Note that ideally we would wrap a `parity_wasm::elements:Error` here but
-/// unfortunately it does not derive `Serialize` and `Deserialize` which is
-/// required by other types that this error gets embedded in. So, instead wrap
-/// only the error message.
+/// Represents an error that can happen when parsing or encoding a Wasm module
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ParityWasmError(String);
+pub struct WasmError(String);
 
-impl ParityWasmError {
-    /// Creates a new `ParityWasmError` out of an error message.
+impl WasmError {
+    /// Creates a new `WasmError` out of an error message.
     pub fn new(error_message: String) -> Self {
         Self(error_message)
     }
 }
 
-impl std::fmt::Display for ParityWasmError {
+impl std::fmt::Display for WasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -26,8 +20,8 @@ impl std::fmt::Display for ParityWasmError {
 /// Different errors that be returned by `validate_wasm_binary`
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WasmValidationError {
-    /// Failure in party_wasm when deserializing the wasm module.  
-    ParityDeserializeError(ParityWasmError),
+    /// Failure in deserialization of the wasm module.
+    WasmDeserializeError(WasmError),
     /// wasmtime::Module::validate() failed
     WasmtimeValidation(String),
     /// Failed to decode the canister module.
@@ -67,7 +61,7 @@ pub enum WasmValidationError {
 impl std::fmt::Display for WasmValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ParityDeserializeError(err) => {
+            Self::WasmDeserializeError(err) => {
                 write!(f, "Failed to deserialize wasm module with {}", err)
             }
             Self::WasmtimeValidation(err) => {
@@ -131,10 +125,10 @@ impl std::fmt::Display for WasmValidationError {
 /// Different errors that can be returned by `instrument`
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WasmInstrumentationError {
-    /// Failure in party_wasm when deserializing the wasm module
-    ParityDeserializeError(ParityWasmError),
-    /// Failure in party_wasm when serializing the wasm module
-    ParitySerializeError(ParityWasmError),
+    /// Failure in deserialization the wasm module
+    WasmDeserializeError(WasmError),
+    /// Failure in serialization the wasm module
+    WasmSerializeError(WasmError),
     /// Incorrect number of memory sections
     IncorrectNumberMemorySections {
         expected: usize,
@@ -150,10 +144,10 @@ pub enum WasmInstrumentationError {
 impl std::fmt::Display for WasmInstrumentationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ParityDeserializeError(err) => {
+            Self::WasmDeserializeError(err) => {
                 write!(f, "Failed to deserialize wasm module with {}", err)
             }
-            Self::ParitySerializeError(err) => {
+            Self::WasmSerializeError(err) => {
                 write!(f, "Failed to serialize wasm module with {}", err)
             }
             Self::IncorrectNumberMemorySections { expected, got } => write!(
