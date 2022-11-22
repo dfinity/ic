@@ -26,6 +26,8 @@ mock! {
         fn get(&self, id: &KeyId) -> Option<CspSecretKey>;
         fn contains(&self, id: &KeyId) -> bool;
         fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError>;
+        fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
+            where F: Fn(&KeyId, &CspSecretKey) -> bool + 'static;
     }
 }
 
@@ -71,7 +73,11 @@ impl SecretKeyStore for TempSecretKeyStore {
         self.store.remove(id)
     }
 
-    fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
+    fn retain<F: 'static>(
+        &mut self,
+        filter: F,
+        scope: Scope,
+    ) -> Result<(), SecretKeyStorePersistenceError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {
@@ -194,11 +200,11 @@ pub fn should_retain_expected_keys<T: SecretKeyStore>(mut key_store: T) {
     insert_key_with_scope(&key_with_different_scope, Some(different_scope));
     insert_key_with_scope(&key_with_no_scope, None);
 
-    let id_to_retain = &key_with_id_to_retain.0;
-    let value_to_retain = &key_with_value_to_retain.1;
+    let id_to_retain = key_with_id_to_retain.0;
+    let value_to_retain = key_with_value_to_retain.1;
     assert!(key_store
         .retain(
-            |id, value| (id == id_to_retain) || (value == value_to_retain),
+            move |id, value| (id == &id_to_retain) || (value == &value_to_retain),
             selected_scope,
         )
         .is_ok());

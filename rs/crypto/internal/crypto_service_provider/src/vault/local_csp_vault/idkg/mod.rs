@@ -200,7 +200,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let start_time = self.metrics.now();
         self.canister_sks_write_lock()
             .retain(
-                |key_id, _| active_key_ids.contains(key_id),
+                move |key_id, _| active_key_ids.contains(key_id),
                 IDKG_THRESHOLD_KEYS_SCOPE,
             )
             .map_err(|e| match e {

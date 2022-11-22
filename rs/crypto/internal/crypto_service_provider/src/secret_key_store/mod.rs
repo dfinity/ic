@@ -85,7 +85,12 @@ pub trait SecretKeyStore: Send + Sync {
     /// # Panics
     /// This MAY panic if the predicate panics.
     ///
-    /// Details: Unlike e.g. `HashMap::filter_drain(..)` this does not
+    /// # Notes
+    /// `F` is bounded by a 'static lifetime (i.e., has 'static as trait bound)
+    /// only so that (the trait can be mocked with
+    /// mockall)[https://docs.rs/mockall/latest/mockall/#generic-methods].
+    ///
+    /// Unlike e.g. `HashMap::filter_drain(..)` this does not
     /// (handle the case where the filter panics)[https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.drain_filter].
     /// If the filter panics, the panic is likely to cause the secret key store
     /// to crash. Thus lambdas MUST NEVER be taken from untrusted sources.
@@ -98,7 +103,7 @@ pub trait SecretKeyStore: Send + Sync {
     /// and function documentation for more details.
     fn retain<F>(&mut self, _filter: F, _scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
     where
-        F: Fn(&KeyId, &CspSecretKey) -> bool,
+        F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
     {
         unimplemented!()
     }

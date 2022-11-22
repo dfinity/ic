@@ -24,6 +24,8 @@ mock! {
         fn get(&self, id: &KeyId) -> Option<CspSecretKey>;
         fn contains(&self, id: &KeyId) -> bool;
         fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError>;
+        fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
+            where F: Fn(&KeyId, &CspSecretKey) -> bool + 'static;
     }
 }
 
