@@ -13754,6 +13754,7 @@ dependencies = [
  "hyper-tls",
  "ic-agent",
  "ic-artifact-pool",
+ "ic-backup",
  "ic-base-types",
  "ic-btc-types",
  "ic-canister-client",

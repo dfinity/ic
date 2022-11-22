@@ -1074,6 +1074,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
                     )]),
                 ),
+                pot_with_setup(
+                    "backup_manager_pot",
+                    orchestrator::backup_manager::config,
+                    par(vec![sys_t(
+                        "backup_manager_test",
+                        orchestrator::backup_manager::test,
+                    )]),
+                ),
             ],
         )
         .with_alert(ENG_ORCHESTRATOR_CHANNEL),

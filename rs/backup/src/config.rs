@@ -7,7 +7,10 @@ use url::Url;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SubnetConfig {
     pub subnet_id: SubnetId,
-    #[serde(deserialize_with = "crate::util::replica_from_string")]
+    #[serde(
+        deserialize_with = "crate::util::replica_from_string",
+        serialize_with = "crate::util::replica_to_string"
+    )]
     pub initial_replica_version: ReplicaVersion,
     pub nodes_syncing: u32,
     pub sync_period_secs: u64,
