@@ -354,3 +354,27 @@ system_test(
         ],
     deps = DEPENDENCIES + [":tests"],
 )
+
+exports_files([
+    "src/canister_http/universal_vm_activation.sh",
+])
+
+CANISTER_HTTP_RUNTIME_DEPS = [
+    ":src/canister_http/universal_vm_activation.sh",
+    "//ic-os/guestos/dev:certs/canister_http_test_ca.cert",
+    "//ic-os/guestos/dev:certs/canister_http_test_ca.key",
+]
+
+system_test(
+    name = "canister_http_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS +
+        CANISTER_HTTP_RUNTIME_DEPS + [
+            "//rs/rust_canisters/proxy_canister:proxy_canister",
+        ],
+    deps = DEPENDENCIES + [":tests"],
+)

@@ -9,7 +9,6 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 pub use ic_types::{CanisterId, PrincipalId};
 use slog::info;
-use std::fs;
 use std::net::Ipv6Addr;
 use std::time::Duration;
 
@@ -22,8 +21,9 @@ pub enum PemType {
     PemKey,
 }
 
-pub fn get_universal_vm_activation_script() -> String {
-    fs::read_to_string("src/canister_http/universal_vm_activation.sh").expect("File not found")
+pub fn get_universal_vm_activation_script(env: &TestEnv) -> String {
+    env.read_dependency_to_string("rs/tests/src/canister_http/universal_vm_activation.sh")
+        .expect("File not found")
 }
 
 pub fn await_nodes_healthy(env: &TestEnv) {
@@ -49,8 +49,10 @@ pub fn install_nns_canisters(env: &TestEnv) {
 }
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+
     // Set up Universal VM with HTTP Bin testing service
-    let activate_script = &get_universal_vm_activation_script()[..];
+    let activate_script = &get_universal_vm_activation_script(&env)[..];
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
         .unwrap();
