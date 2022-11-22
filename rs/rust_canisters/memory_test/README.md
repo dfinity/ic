@@ -7,27 +7,26 @@ Build
 ```bash
 # Build the Wasm binary
 bazel build //rs/rust_canisters/memory_test:memory_test_canister
-
-# Find the optimized canister binary
-ls -l $(bazel info output_path)/k8-opt/bin/rs/rust_canisters/memory_test/memory_test_canister.opt.wasm
 ```
 
 Run
 ---
 
 ```bash
+# Bazel will produce the build artifacts in `bazel-bin` at the root of the ic repo.
+WASM='bazel-bin/rs/rust_canisters/memory_test/memory_test_canister.wasm'
 NODE='http://[2001:4d78:40d:0:5000:67ff:fe4f:650d]:8080'
 # Payload (a json string) has to be encoded in hex.
 PAYLOAD=$(echo -n '{"size":  5000000}'|od -t x1 -A none|xargs|sed -e 's/ //g')
 # Run a query
-cargo run --release --bin ic-workload-generator $NODE -r 10 -n 300 \
-      -m Query --call-method "query_copy" --payload $PAYLOAD --canister memory-test-canister.wasm
+bazel run //rs/workload_generator:ic-workload-generator -- $NODE -r 10 -n 300 \
+      -m Query --call-method "query_copy" --payload $PAYLOAD --canister $WASM
 # Run a replicated query
-cargo run --release --bin ic-workload-generator $NODE -r 10 -n 300 \
-      -m Update --call-method "query_copy" --payload $PAYLOAD --canister memory-test-canister.wasm
+bazel run //rs/workload_generator:ic-workload-generator -- $NODE -r 10 -n 300 \
+      -m Update --call-method "query_copy" --payload $PAYLOAD --canister $WASM
 # Run an update
-cargo run --release --bin ic-workload-generator $NODE -r 10 -n 300 \
-      -m Update --call-method "update_copy" --payload $PAYLOAD --canister memory-test-canister.wasm
+bazel run //rs/workload_generator:ic-workload-generator -- $NODE -r 10 -n 300 \
+      -m Update --call-method "update_copy" --payload $PAYLOAD --canister $WASM
 ```
 
 Other canister methods can be called similarly:

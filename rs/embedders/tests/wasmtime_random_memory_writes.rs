@@ -231,8 +231,8 @@ mod tests {
                         canister_test_id(1),
                         &embedder_cache,
                         &[],
-                        NumWasmPages::from(0),
-                        page_map.clone(),
+                        &Memory::new(page_map.clone(), NumWasmPages::from(0)),
+                        &Memory::new(PageMap::default(), NumWasmPages::from(0)),
                         modification_tracking,
                         api,
                     )
@@ -380,8 +380,8 @@ mod tests {
                     canister_test_id(1),
                     &cache,
                     &[],
-                    NumWasmPages::from(0),
-                    PageMap::default(),
+                    &Memory::new(PageMap::default(), NumWasmPages::from(0)),
+                    &Memory::new(PageMap::default(), NumWasmPages::from(0)),
                     ModificationTracking::Ignore,
                     api,
                 )
@@ -601,8 +601,8 @@ mod tests {
                 canister_test_id(1),
                 &cache,
                 &[],
-                NumWasmPages::from(0),
-                PageMap::default(),
+                &Memory::new(PageMap::default(), NumWasmPages::from(0)),
+                &Memory::new(PageMap::default(), NumWasmPages::from(0)),
                 ModificationTracking::Track,
                 api,
             )

@@ -612,8 +612,8 @@ pub fn process(
         canister_id,
         embedder_cache,
         globals,
-        wasm_memory.size,
-        wasm_memory.page_map.clone(),
+        wasm_memory,
+        stable_memory,
         modification_tracking,
         system_api,
     ) {
@@ -778,8 +778,8 @@ pub fn get_initial_globals_and_memory(
         canister_id,
         embedder_cache,
         &[],
-        NumWasmPages::from(0),
-        wasm_page_map.clone(),
+        &Memory::new(wasm_page_map.clone(), NumWasmPages::from(0)),
+        &Memory::new(PageMap::default(), NumWasmPages::from(0)),
         ModificationTracking::Ignore,
         system_api,
     ) {
