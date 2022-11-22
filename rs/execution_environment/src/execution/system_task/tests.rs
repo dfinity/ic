@@ -3,9 +3,10 @@ use crate::execution::test_utilities::{wat_compilation_cost, ExecutionTestBuilde
 use assert_matches::assert_matches;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{page_map::PAGE_SIZE, CanisterStatus};
-use ic_state_machine_tests::StateMachine;
-use ic_state_machine_tests::WasmResult;
+use ic_state_machine_tests::{Cycles, StateMachine};
+use ic_state_machine_tests::{StateMachineBuilder, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::methods::SystemMethod;
 use ic_types::NumBytes;
@@ -506,4 +507,73 @@ fn global_timer_is_not_set_if_execution_traps() {
     };
     // Includes install code, update and 5 ticks
     assert_eq!(7, executed_messages[&heartbeat_no_response]);
+}
+
+#[test]
+fn global_timer_refunds_cycles_for_request_in_prep() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let binary = wabt::wat2wasm(
+        r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                (param $callee_src i32)         (param $callee_size i32)
+                (param $name_src i32)           (param $name_size i32)
+                (param $reply_fun i32)          (param $reply_env i32)
+                (param $reject_fun i32)         (param $reject_env i32)
+            ))
+            (import "ic0" "call_cycles_add"
+                (func $ic0_call_cycles_add (param $amount i64))
+            )
+            (import "ic0" "global_timer_set"
+                (func $global_timer_set (param i64) (result i64))
+            )
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (memory 1)
+
+            (func (export "canister_global_timer")
+                (drop (call $global_timer_set (i64.const 1)))
+                (call $ic0_call_new
+                    (i32.const 0)   (i32.const 10)
+                    (i32.const 100) (i32.const 18)
+                    (i32.const 11)  (i32.const 0) ;; non-existent function
+                    (i32.const 22)  (i32.const 0) ;; non-existent function
+                )
+                ;; Add a lot of cycles...
+                (call $ic0_call_cycles_add (i64.const 10000000000))
+                ;; ...but never perform the call
+            )
+            (func (export "canister_update test")
+                (drop (call $global_timer_set (i64.const 1)))
+                (call $ic0_msg_reply)
+            )
+        )"#,
+    )
+    .unwrap();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(100_000_000_000))
+        .unwrap();
+
+    let result = env.execute_ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+    env.tick();
+
+    // There should be a consistent cycles difference across rounds.
+    let initial_cycle_balance = env.cycle_balance(canister_id);
+    env.tick();
+    let mut cycle_balance = env.cycle_balance(canister_id);
+    let cycle_balance_diff = initial_cycle_balance - cycle_balance;
+    // The timer should run every tick(), so the instructions diff should be non-zero.
+    assert_ne!(0, cycle_balance_diff);
+    // As we don't perform the call, the cycles balance should decrease very slowly,
+    // and we should be able to perform 100 rounds.
+    for _ in 0..10 {
+        let initial_cycle_balance = cycle_balance;
+        env.tick();
+        cycle_balance = env.cycle_balance(canister_id);
+        assert_eq!(initial_cycle_balance - cycle_balance, cycle_balance_diff);
+    }
 }

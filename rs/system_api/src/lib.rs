@@ -778,13 +778,15 @@ impl SystemApiImpl {
         match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::NonReplicatedQuery { .. } => (),
-            ApiType::Update {
+            ApiType::SystemTask {
+                outgoing_request, ..
+            }
+            | ApiType::Update {
                 outgoing_request, ..
             }
             | ApiType::ReplyCallback {
