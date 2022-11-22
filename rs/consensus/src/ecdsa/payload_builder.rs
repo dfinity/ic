@@ -9,6 +9,7 @@ use crate::consensus::{
     crypto::ConsensusCrypto, metrics::EcdsaPayloadMetrics, pool_reader::PoolReader,
 };
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
+use ic_crypto::{get_mega_pubkey, MegaKeyFromRegistryError};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
 use ic_interfaces::{consensus_pool::ConsensusBlockChain, ecdsa::EcdsaPool};
@@ -51,6 +52,7 @@ use std::time::Duration;
 #[derive(Clone, Debug)]
 pub enum EcdsaPayloadError {
     RegistryClientError(RegistryClientError),
+    MegaKeyFromRegistryError(MegaKeyFromRegistryError),
     ConsensusSummaryBlockNotFound(Height),
     ConsensusRegistryVersionNotFound(Height),
     StateManagerError(StateManagerError),
@@ -117,6 +119,7 @@ impl From<ecdsa::TranscriptCastError> for EcdsaPayloadError {
 #[derive(Clone, Debug)]
 pub(crate) enum MembershipError {
     RegistryClientError(RegistryClientError),
+    MegaKeyFromRegistryError(MegaKeyFromRegistryError),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
 }
 
@@ -125,6 +128,9 @@ impl From<MembershipError> for EcdsaPayloadError {
         match err {
             MembershipError::RegistryClientError(err) => {
                 EcdsaPayloadError::RegistryClientError(err)
+            }
+            MembershipError::MegaKeyFromRegistryError(err) => {
+                EcdsaPayloadError::MegaKeyFromRegistryError(err)
             }
             MembershipError::SubnetWithNoNodes(subnet_id, err) => {
                 EcdsaPayloadError::SubnetWithNoNodes(subnet_id, err)
@@ -322,7 +328,7 @@ pub(crate) fn create_summary_payload(
 
     // Check for membership change, start next key creation if needed.
     // The registry versions to determine node membership:
-    let next_in_creation = if is_subnet_membership_changing(
+    let next_in_creation = if is_time_to_reshare_key_transcript(
         registry_client,
         curr_interval_registry_version,
         next_interval_registry_version,
@@ -419,7 +425,7 @@ fn get_subnet_nodes(
         ))
 }
 
-pub(crate) fn is_subnet_membership_changing(
+pub(crate) fn is_time_to_reshare_key_transcript(
     registry_client: &dyn RegistryClient,
     curr_interval_registry_version: RegistryVersion,
     next_interval_registry_version: RegistryVersion,
@@ -432,7 +438,20 @@ pub(crate) fn is_subnet_membership_changing(
     let next_nodes = get_subnet_nodes(registry_client, next_interval_registry_version, subnet_id)?
         .into_iter()
         .collect::<BTreeSet<_>>();
-    Ok(current_nodes != next_nodes)
+    if current_nodes != next_nodes {
+        return Ok(true);
+    }
+    // Check if node's key has changed, which should also trigger key transcript resharing.
+    for node in current_nodes {
+        let curr_key = get_mega_pubkey(&node, registry_client, curr_interval_registry_version)
+            .map_err(MembershipError::MegaKeyFromRegistryError)?;
+        let next_key = get_mega_pubkey(&node, registry_client, next_interval_registry_version)
+            .map_err(MembershipError::MegaKeyFromRegistryError)?;
+        if curr_key != next_key {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Creates a threshold ECDSA batch payload.
@@ -1102,17 +1121,14 @@ fn update_next_key_transcript(
             // We have an existing key transcript, need to reshare it to create next
             // Create a new reshare config when there is none
             let dealers = transcript.receivers();
-            let dealers_set = dealers.clone();
             let receivers_set = receivers.iter().copied().collect::<BTreeSet<_>>();
-            if dealers_set != receivers_set {
-                info!(
-                    log,
-                    "Node membership changed. Reshare key transcript from dealers {:?} to receivers {:?}, height = {:?}",
-                    dealers,
-                    receivers,
-                    height,
-                );
-            }
+            info!(
+                log,
+                "Reshare ECDSA key transcript from dealers {:?} to receivers {:?}, height = {:?}",
+                dealers,
+                receivers,
+                height,
+            );
             *next_key_transcript_creation = ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(
                 ecdsa::ReshareOfUnmaskedParams::new(
                     uid_generator.next_transcript_id(),
