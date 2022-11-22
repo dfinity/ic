@@ -10,10 +10,8 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
-use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use openssl::sha::sha256;
-use rand::rngs::OsRng;
 
 #[cfg(test)]
 mod tests;
@@ -215,9 +213,8 @@ impl CspSigVerifier for Csp {
         match algorithm_id {
             // use more efficient batch verification for Ed25519
             AlgorithmId::Ed25519 => {
-                // generate a random seed from `OsRng` to use in batched sig verification
-                let mut rng = OsRng::default();
-                let seed = Seed::from_rng(&mut rng);
+                // generate a random seed to be used in batched sig verification
+                let seed = self.csp_vault.new_public_seed()?;
                 // define a closure to convert a public key and a `CspSignature::Ed25519` to bytes
                 // or return an error if the input is not using Ed25519
                 let pk_and_sig_to_bytes =

@@ -120,12 +120,14 @@ pub trait CspSigVerifier {
     /// * `msg` the message data to be verified
     /// * `algorithm_id` the signature algorithm
     /// # Errors
-    /// * `CryptoError::SignatureVerification` if the signature algorithm used
+    /// * [`CryptoError::InternalError`] in case of internal CSP error, e.g., if
+    ///   the CSP failed to generate the required randomness.
+    /// * [`CryptoError::SignatureVerification`] if the signature algorithm used
     ///   is not supported by the trait implementation, or if the signature was
     ///   checked and found to be invalid.
-    /// * `CryptoError::MalformedPublicKey` if the public key seems to be
+    /// * [`CryptoError::MalformedPublicKey`] if the public key seems to be
     ///   invalid or malformed
-    /// * `CryptoError::MalformedSignature` if the signature seems to be invalid
+    /// * [`CryptoError::MalformedSignature`] if the signature seems to be invalid
     ///   or malformed
     /// # Returns
     /// `Ok(())` if the signature is valid or an `Err` otherwise

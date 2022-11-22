@@ -2,6 +2,7 @@ use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
 use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
+use crate::vault::CryptoError;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -587,6 +588,16 @@ pub trait ThresholdEcdsaSignerCspVault {
 pub enum PublicRandomSeedGeneratorError {
     /// Internal error, e.g., an RPC error.
     InternalError { internal_error: String },
+}
+
+impl From<PublicRandomSeedGeneratorError> for CryptoError {
+    fn from(error: PublicRandomSeedGeneratorError) -> CryptoError {
+        match error {
+            PublicRandomSeedGeneratorError::InternalError { internal_error } => {
+                CryptoError::InternalError { internal_error }
+            }
+        }
+    }
 }
 
 /// Operations of [`CspVault`] for generating public random seed.
