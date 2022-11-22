@@ -5,26 +5,29 @@ use nix::{
 use std::{
     process::{Command, ExitStatus, Stdio},
     sync::Arc,
-    time::SystemTime,
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command as AsyncCommand},
     task::{self, JoinHandle},
 };
+
+pub trait KillFn: FnOnce() + Send + Sync {}
+impl<T: FnOnce() + Send + Sync> KillFn for T {}
+
+use super::event::{Event, EventSubscriber, EventSubscriberFactory, TaskId};
 pub struct Process {
     child: Child,
-    signal_state: SignalState,
     stdout_jh: JoinHandle<()>,
     stderr_jh: JoinHandle<()>,
 }
 
 impl Process {
     pub async fn new(
+        task_id: TaskId,
         cmd: Command,
-        sub: impl EventSubscriber<Payload = ProcessEvent> + 'static,
-    ) -> Self {
-        let sub = Arc::new(sub);
+        sub_fact: Arc<dyn EventSubscriberFactory>,
+    ) -> (Self, impl FnOnce()) {
         let mut cmd: AsyncCommand = cmd.into();
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
@@ -36,27 +39,33 @@ impl Process {
         let mut child = cmd.spawn().expect("Could not spawn child.");
         let stdout = child.stdout.take().unwrap();
         let stdout_jh = task::spawn(Self::listen_on_channel(
-            sub.clone(),
+            task_id.clone(),
+            sub_fact.create_subscriber(),
             ChannelName::StdOut,
             stdout,
         ));
         let stderr = child.stderr.take().unwrap();
-        let stderr_jh = task::spawn(Self::listen_on_channel(sub, ChannelName::StdErr, stderr));
+        let stderr_jh = task::spawn(Self::listen_on_channel(
+            task_id,
+            sub_fact.create_subscriber(),
+            ChannelName::StdErr,
+            stderr,
+        ));
 
-        Self {
+        let self_ = Self {
             child,
-            signal_state: SignalState::NotSignalled,
             stdout_jh,
             stderr_jh,
-        }
-    }
+        };
 
-    pub fn kill(&mut self) {
-        if self.signal_state == SignalState::NotSignalled {
-            let pid = Pid::from_raw(self.child.id().unwrap() as i32);
-            kill(pid, Signal::SIGKILL).expect("Could not send kill signal!");
-            self.signal_state = SignalState::KillSent;
-        }
+        let kill_signal = {
+            let pid = Pid::from_raw(self_.child.id().unwrap() as i32);
+            move || {
+                let _ = kill(pid, Signal::SIGKILL);
+            }
+        };
+
+        (self_, kill_signal)
     }
 
     /// Waits for stdout/err to be closed. Then waits for the child process to
@@ -70,32 +79,36 @@ impl Process {
         child.wait().await
     }
 
-    async fn listen_on_channel<S, R>(sub: Arc<S>, channel_tag: ChannelName, src: R)
-    where
-        S: EventSubscriber<Payload = ProcessEvent>,
+    async fn listen_on_channel<R>(
+        task_id: TaskId,
+        mut event_sub: Box<dyn EventSubscriber>,
+        channel_tag: ChannelName,
+        src: R,
+    ) where
         R: AsyncRead + Unpin,
     {
         let buffered_reader = BufReader::new(src);
         let mut lines = buffered_reader.lines();
         loop {
             match lines.next_line().await {
-                Ok(Some(line)) => sub.send(ProcessEvent::output_line(channel_tag.clone(), line)),
+                Ok(Some(line)) => (event_sub)(ProcessEventPayload::output_line(
+                    task_id.clone(),
+                    channel_tag.clone(),
+                    line,
+                )),
                 Ok(None) => break,
                 Err(e) => eprintln!("listen_on_channel(): {:?}", e),
             }
         }
-        sub.send(ProcessEvent::channel_closed(channel_tag));
+        (event_sub)(ProcessEventPayload::channel_closed(
+            task_id.clone(),
+            channel_tag,
+        ));
     }
 }
 
-pub trait EventSubscriber: Send + Sync {
-    type Payload;
-
-    fn send(&self, ev: Event<Self::Payload>);
-}
-
-#[derive(Debug)]
-pub enum ProcessEvent {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProcessEventPayload {
     OutputLine {
         channel_name: ChannelName,
         line: String,
@@ -106,16 +119,19 @@ pub enum ProcessEvent {
     Exited(ExitStatus),
 }
 
-impl ProcessEvent {
-    pub fn output_line(tag: ChannelName, line: String) -> Event<Self> {
-        Event::new(ProcessEvent::OutputLine {
-            channel_name: tag,
-            line,
-        })
+impl ProcessEventPayload {
+    pub fn output_line(task_id: TaskId, channel_name: ChannelName, line: String) -> Event {
+        Event::process_event(
+            task_id,
+            ProcessEventPayload::OutputLine { channel_name, line },
+        )
     }
 
-    pub fn channel_closed(tag: ChannelName) -> Event<Self> {
-        Event::new(ProcessEvent::ChannelClosed { channel_name: tag })
+    pub fn channel_closed(task_id: TaskId, tag: ChannelName) -> Event {
+        Event::process_event(
+            task_id,
+            ProcessEventPayload::ChannelClosed { channel_name: tag },
+        )
     }
 }
 
@@ -125,61 +141,43 @@ pub enum ChannelName {
     StdErr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SignalState {
-    NotSignalled,
-    KillSent,
-}
-
-#[derive(Debug)]
-pub struct Event<T> {
-    pub when: SystemTime,
-    pub what: T,
-}
-
-impl<T> Event<T> {
-    pub fn new(what: T) -> Self {
-        Self {
-            when: SystemTime::now(),
-            what,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::driver::new::event::{EventPayload, EventSubscriber};
+
     use super::*;
-    use std::sync::Mutex;
+    use crossbeam_channel::{unbounded, Sender};
 
-    type PEvent = Event<ProcessEvent>;
-    #[derive(Clone)]
-    struct EventSink(pub Arc<Mutex<Vec<PEvent>>>);
+    // A simple wrapper so that we can implement the EventSubscriberFactory
+    // here.
+    struct SubscriberFactorySender(Sender<Event>);
 
-    impl EventSubscriber for EventSink {
-        type Payload = ProcessEvent;
+    impl EventSubscriberFactory for SubscriberFactorySender {
+        fn create_subscriber(&self) -> Box<dyn EventSubscriber> {
+            let new_sender = self.0.clone();
 
-        fn send(&self, ev: super::Event<Self::Payload>) {
-            let mut sink = self.0.lock().unwrap();
-            sink.push(ev);
+            Box::new(move |evt: Event| new_sender.send(evt).expect("Could not send event!"))
         }
     }
 
     #[test]
     fn can_capture_output_from_bash() {
         let r = tokio::runtime::Runtime::new().unwrap();
+        let task_id = "proc".to_string();
+        let (event_sender, event_recv) = unbounded();
+        let event_sender = Arc::new(SubscriberFactorySender(event_sender));
 
         let mut cmd = Command::new("bash");
         cmd.arg("-c");
         cmd.arg("for i in {1..10}; do echo $i; done;");
 
-        let sub = EventSink(Arc::new(Mutex::new(vec![])));
-        let p = r.block_on(Process::new(cmd, sub.clone()));
+        let (p, _kill_signal) = r.block_on(Process::new(task_id, cmd, event_sender));
         let _exit_status = r.block_on(p.block_on_exit()).unwrap();
 
-        let events: Vec<_> = {
-            let mut lock = sub.0.lock().unwrap();
-            std::mem::take(lock.as_mut())
-        };
+        let mut events: Vec<_> = vec![];
+        while let Ok(e) = event_recv.recv() {
+            events.push(e);
+        }
 
         let original_length = events.len();
         let mut events: Vec<_> = events.into_iter().filter(|e| !is_close_event(e)).collect();
@@ -194,19 +192,26 @@ mod tests {
         }
     }
 
-    fn is_line(value: PEvent, expected_channel_name: ChannelName, expected_line: &str) -> bool {
-        if let ProcessEvent::OutputLine { channel_name, line } = value.what {
-            if channel_name == expected_channel_name && line == expected_line {
-                return true;
-            }
-        }
-        false
+    fn is_line(event: Event, expected_channel_name: ChannelName, expected_line: &str) -> bool {
+        matches!(
+            event.what,
+            EventPayload::ProcessEvent {
+                task_id: _,
+                process_event: ProcessEventPayload::OutputLine {
+                    channel_name,
+                    line
+                }
+            } if channel_name == expected_channel_name && line == expected_line
+        )
     }
 
-    fn is_close_event(value: &PEvent) -> bool {
-        if let ProcessEvent::ChannelClosed { channel_name: _ } = value.what {
-            return true;
-        }
-        false
+    fn is_close_event(event: &Event) -> bool {
+        matches!(
+            event.what,
+            EventPayload::ProcessEvent {
+                task_id: _,
+                process_event: ProcessEventPayload::ChannelClosed { channel_name: _ }
+            }
+        )
     }
 }

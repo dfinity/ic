@@ -108,6 +108,14 @@ impl GroupContext {
         let setup_dir = self.get_or_create_setup_dir()?;
         TestEnv::new(setup_dir, self.logger.clone())
     }
+
+    pub fn logger(&self) -> Logger {
+        self.logger.clone()
+    }
+
+    pub fn log(&self) -> &Logger {
+        &self.logger
+    }
 }
 
 #[derive(Debug, Clone)]

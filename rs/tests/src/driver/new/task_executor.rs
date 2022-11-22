@@ -3,13 +3,13 @@
 use std::collections::BTreeSet;
 use std::process::Command;
 
-use crate::driver::new::{context::GroupContext, task::Task};
+use crate::driver::new::{context::GroupContext, task::OldTask};
 
 pub struct TaskExecutor {}
 
 impl TaskExecutor {
-    pub fn execute(ctx: &GroupContext, tasks: &mut BTreeSet<Task>) -> BTreeSet<Task> {
-        let mut processed_tasks: BTreeSet<Task> = BTreeSet::new();
+    pub fn execute(ctx: &GroupContext, tasks: &mut BTreeSet<OldTask>) -> BTreeSet<OldTask> {
+        let mut processed_tasks: BTreeSet<OldTask> = BTreeSet::new();
         // TODO: make this function communicate with a sub-process
         for task in tasks.iter() {
             let test_name = task.name();
