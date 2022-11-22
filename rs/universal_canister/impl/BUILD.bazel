@@ -1,18 +1,50 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+LIB_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
     "@crate_index//:hex-literal",
     "@crate_index//:serde",
 ]
 
+DEPENDENCIES = [
+    ":lib",
+    # Keep sorted.
+    "@crate_index//:lazy_static",
+    "@crate_index//:wee_alloc",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
 rust_library(
     name = "lib",
     srcs = glob(["src/*.rs"]),
     crate_name = "universal_canister",
     version = "0.8.0",
-    deps = DEPENDENCIES,
+    deps = LIB_DEPENDENCIES,
+)
+
+rust_canister(
+    name = "universal_canister",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES + DEPENDENCIES,
+)
+
+rust_test(
+    name = "universal_canister_test",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES + DEPENDENCIES + DEV_DEPENDENCIES,
 )

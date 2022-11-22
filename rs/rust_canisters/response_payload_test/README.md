@@ -9,16 +9,10 @@ Build
 
 ```bash
 # Build the Wasm binary
-cargo build --target wasm32-unknown-unknown --release
+bazel build //rs/rust_canisters/response_payload_test:response-payload-test-canister
 
-# Go to ic/rs
-cd ../..
-
-# Optional: install ic-cdk-optimizer
-cargo install ic-cdk-optimizer
-
-# Reduce the Wasm binary size
-ic-cdk-optimizer target/wasm32-unknown-unknown/release/response-payload-test-canister.wasm --output response-payload-test-canister.wasm
+# Find the optimized canister binary
+ls -l $(bazel info output_path)/k8-opt/bin/rs/rust_canisters/response_payload_test/response-payload-test-canister.opt.wasm
 ```
 
 Run
