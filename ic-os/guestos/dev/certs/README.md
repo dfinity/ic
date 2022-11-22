@@ -6,21 +6,12 @@ well as where to apply these files and when to apply these files to make use of 
 `cd ic-os/guestos/dev/certs`
 `sh root_cert_gen.sh`
 
-## How to store the keys
-For security purpose, these 2 files should be protected and should not be checked into the repository.
-So for storage, use the default secret management store and create a new secret containing these 2 files.
-(`1password`, etc.) Share the secret access to appropriate group of people.
-
 ## How to apply root CA and signing key to VMs
 ### VM as HTTPS client
 Copy `minica.pem` to `/usr/local/share/ca-certificates/` folder of Linux VM, and run: 
 `sudo update-ca-certificates` command. This adds the newly-generated root certificate 
 to the `ca-certificates.crt` bundle file sitting under `/etc/ssl/certs` folder, where
 processes running on the VM will be able to treat `/etc/ssl/certs` directory as trusted CAs.
-
-For GitLab Jobs, supply above generated cert and key to GitLab schedule/pipeline via below variables:
-- DEV_ROOT_CA  (copy content of `minica.pem` as value of the variable)
-- DEV_ROOT_CA_KEY  (copy content of `minica-key.pem` as value of the variable)
 
 IC-OS reads these two variables to update its `/etc/ssl/certs/ca-certificates.crt`
 bundle in script: `/ic-os/guestos/rootfs/Dockerfile.dev`

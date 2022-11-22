@@ -553,6 +553,8 @@ pub trait HasIcDependencies {
     fn get_boundary_node_snp_img_sha256(&self) -> Result<String>;
     fn get_boundary_node_img_url(&self) -> Result<Url>;
     fn get_boundary_node_img_sha256(&self) -> Result<String>;
+    fn get_canister_http_test_ca_cert(&self) -> Result<String>;
+    fn get_canister_http_test_ca_key(&self) -> Result<String>;
 }
 
 impl<T: HasDependencies> HasIcDependencies for T {
@@ -632,6 +634,15 @@ impl<T: HasDependencies> HasIcDependencies for T {
         let sha256 = self.read_dependency_to_string(dep_rel_path)?;
         bail_if_sha256_invalid(&sha256, "boundary_node_snp_img_sha256")?;
         Ok(sha256)
+    }
+
+    fn get_canister_http_test_ca_cert(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/guestos/dev/certs/canister_http_test_ca.cert";
+        self.read_dependency_to_string(dep_rel_path)
+    }
+    fn get_canister_http_test_ca_key(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/guestos/dev/certs/canister_http_test_ca.key";
+        self.read_dependency_to_string(dep_rel_path)
     }
 }
 

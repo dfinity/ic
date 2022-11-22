@@ -56,12 +56,12 @@ pub fn config(env: TestEnv) {
     let _ = insert_file_to_config(
         config_dir.clone(),
         "cert.pem",
-        get_pem_content(&PemType::PemCert).as_bytes(),
+        get_pem_content(&env, &PemType::PemCert).as_bytes(),
     );
     let _ = insert_file_to_config(
         config_dir.clone(),
         "key.pem",
-        get_pem_content(&PemType::PemKey).as_bytes(),
+        get_pem_content(&env, &PemType::PemKey).as_bytes(),
     );
     env::set_var("SSL_CERT_FILE", config_dir.as_path().join("cert.pem"));
     env::remove_var("NIX_SSL_CERT_FILE");
