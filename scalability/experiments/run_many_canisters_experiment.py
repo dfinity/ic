@@ -40,6 +40,7 @@ import common.prometheus as prometheus  # noqa
 # Number of canisters to install in each iteration
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("batchsize", 20, "Number of concurrent canisters installs to execute")
+gflags.DEFINE_integer("num_canisters", 50000, "Maximum number of canisters to install")
 
 
 def install_single(payload):
@@ -84,7 +85,7 @@ class ManyCanistersExperiment(base_experiment.BaseExperiment):
     def run_experiment_internal(self, config):
         """Run workload generator with the load specified in config."""
         # Install batchsize number of canisters
-        iteration_max = int(math.ceil(50000 / FLAGS.batchsize))
+        iteration_max = int(math.ceil(FLAGS.num_canisters / FLAGS.batchsize))
         for i in range(iteration_max):
 
             num_canisters = self.get_num_canisters()
