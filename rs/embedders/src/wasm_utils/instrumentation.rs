@@ -95,7 +95,7 @@
 //! non-reentrant basic blocks.
 
 use super::{
-    errors::into_parity_wasm_error, wasm_module_builder::WasmModuleBuilder, InstrumentationOutput,
+    errors::into_wasm_error, wasm_module_builder::WasmModuleBuilder, InstrumentationOutput,
     Segments,
 };
 use ic_replicated_state::NumWasmPages;
@@ -243,9 +243,8 @@ pub(super) fn instrument(
     wasm: &BinaryEncodedWasm,
     cost_to_compile_wasm_instruction: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
-    let module = parity_wasm::deserialize_buffer::<Module>(wasm.as_slice()).map_err(|err| {
-        WasmInstrumentationError::ParityDeserializeError(into_parity_wasm_error(err))
-    })?;
+    let module = parity_wasm::deserialize_buffer::<Module>(wasm.as_slice())
+        .map_err(|err| WasmInstrumentationError::WasmDeserializeError(into_wasm_error(err)))?;
     let mut module = inject_helper_functions(module);
     module = export_table(module);
     module = export_memory(module);
@@ -348,9 +347,8 @@ pub(super) fn instrument(
             })
             .unwrap_or(0)) as u64;
 
-    let result = parity_wasm::serialize(module).map_err(|err| {
-        WasmInstrumentationError::ParitySerializeError(into_parity_wasm_error(err))
-    })?;
+    let result = parity_wasm::serialize(module)
+        .map_err(|err| WasmInstrumentationError::WasmSerializeError(into_wasm_error(err)))?;
     Ok(InstrumentationOutput {
         exported_functions,
         data,

@@ -93,7 +93,7 @@ pub(super) fn const_expr(expr: ConstExpr) -> Result<wasm_encoder::ConstExpr, Bin
     // The const expression should end in a `End` instruction, but the encoder
     // doesn't expect that instruction to be part of its input so we drop it.
     let bytes = reader.read_bytes(size - 1)?.to_vec();
-    match reader.read_operator().unwrap() {
+    match reader.read_operator()? {
         Operator::End => {}
         _ => {
             panic!("const expr didn't end with `End` instruction");
