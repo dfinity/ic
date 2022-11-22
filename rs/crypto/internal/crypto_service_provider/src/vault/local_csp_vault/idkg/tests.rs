@@ -1,3 +1,4 @@
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::test_utils::temp_local_csp_server::TempLocalCspVault;
@@ -15,6 +16,7 @@ use std::sync::Arc;
 
 mod idkg_gen_dealing_encryption_key_pair {
     use super::*;
+    use crate::canister_threshold::IDKG_MEGA_SCOPE;
     use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
@@ -22,6 +24,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     use crate::vault::api::SecretKeyStoreCspVault;
     use crate::vault::test_utils::local_csp_vault::new_local_csp_vault;
     use crate::KeyId;
+    use hex::FromHex;
     use ic_crypto_internal_seed::Seed;
     use ic_crypto_internal_threshold_sig_ecdsa::EccCurveType;
     use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -148,6 +151,23 @@ mod idkg_gen_dealing_encryption_key_pair {
 
         assert!(vault.idkg_gen_dealing_encryption_key_pair().is_ok());
     }
+
+    #[test]
+    fn should_store_generated_secret_key_with_correct_key_id_and_scope() {
+        let mut sks = MockSecretKeyStore::new();
+        let expected_key_id =
+            KeyId::from_hex("568eafefbc843ff381017aad14151150f4147e212f7e53bb57258f4547e69546")
+                .expect("invalid key id");
+        sks.expect_insert()
+            .times(1)
+            .withf(move |key_id, _key, scope| {
+                *key_id == expected_key_id && *scope == Some(IDKG_MEGA_SCOPE)
+            })
+            .return_const(Ok(()));
+        let vault = vault_with_secret_key_store(sks);
+
+        assert!(vault.idkg_gen_dealing_encryption_key_pair().is_ok());
+    }
 }
 
 fn idkg_node_public_key_with_value(key_value: Vec<u8>) -> PublicKey {
@@ -166,6 +186,15 @@ fn vault_with_public_key_store<P: PublicKeyStore + 'static>(
     let dummy_rng = ChaCha20Rng::seed_from_u64(42);
     let temp_sks = TempSecretKeyStore::new();
     let vault = LocalCspVault::new_for_test(dummy_rng, temp_sks, public_key_store);
+    Arc::new(vault)
+}
+
+fn vault_with_secret_key_store<S: SecretKeyStore + 'static>(
+    secret_key_store: S,
+) -> Arc<dyn CspVault> {
+    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
+    let temp_pks = TempPublicKeyStore::new();
+    let vault = LocalCspVault::new_for_test(dummy_rng, secret_key_store, temp_pks);
     Arc::new(vault)
 }
 

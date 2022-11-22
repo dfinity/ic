@@ -1,5 +1,5 @@
 use crate::api::CspCreateMEGaKeyError;
-use crate::canister_threshold::IDKG_THRESHOLD_KEYS_SCOPE;
+use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
 use crate::key_id::KeyId;
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStorePersistenceError};
@@ -453,11 +453,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let private_key_bytes = MEGaPrivateKeyK256Bytes::try_from(&private_key)
             .map_err(CspCreateMEGaKeyError::SerializationError)?;
         self.store_secret_key(
+            key_id,
             CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
                 public_key: public_key_bytes,
                 private_key: private_key_bytes,
             }),
-            key_id,
+            Some(IDKG_MEGA_SCOPE),
         )
         .map_err(|err| CspCreateMEGaKeyError::from(err))
     }
