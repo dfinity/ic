@@ -19,13 +19,13 @@ fn multi_sig_verifier() -> impl CspSigner {
     Csp::of(csprng, dummy_secret_key_store, dummy_public_key_store)
 }
 
-pub fn should_generate_committee_signing_key_pair_and_store_pubkey(csp_vault: Arc<dyn CspVault>) {
+pub fn should_generate_committee_signing_key_pair_and_store_keys(csp_vault: Arc<dyn CspVault>) {
     let (pk, pop) = csp_vault
         .gen_committee_signing_key_pair()
         .expect("Failure generating key pair with pop");
 
     assert!(matches!(pk, CspPublicKey::MultiBls12_381(_)));
-
+    assert!(csp_vault.sks_contains(&KeyId::from(&pk)).is_ok());
     assert_eq!(
         csp_vault
             .current_node_public_keys()

@@ -2,13 +2,15 @@ use crate::api::CspCreateMEGaKeyError;
 use crate::key_id::KeyId;
 use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use crate::CspVault;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 pub fn should_generate_and_store_dealing_encryption_key_pair_multiple_times(
     csp_vault: Arc<dyn CspVault>,
 ) {
+    let mut key_ids = HashSet::new();
     for _ in 1..=5 {
-        let generated_idkg_dealing_encryption_public_key = csp_vault
+        let public_key = csp_vault
             .idkg_gen_dealing_encryption_key_pair()
             .expect("error generating IDKG key pair");
 
@@ -18,13 +20,17 @@ pub fn should_generate_and_store_dealing_encryption_key_pair_multiple_times(
                 .expect("missing public keys")
                 .idkg_dealing_encryption_public_key
                 .expect("missing IDKG public key"),
-            idkg_dealing_encryption_pk_to_proto(
-                generated_idkg_dealing_encryption_public_key.clone()
-            )
+            idkg_dealing_encryption_pk_to_proto(public_key.clone())
         );
 
-        let key_id =
-            KeyId::try_from(&generated_idkg_dealing_encryption_public_key).expect("invalid key ID");
+        let key_id = KeyId::try_from(&public_key).expect("invalid key ID");
+        assert!(csp_vault.sks_contains(&key_id).expect("error reading SKS"));
+
+        assert!(key_ids.insert(key_id));
+    }
+    // Ensure that previously generated secret keys were not
+    // deleted/overwritten by the generation of new keys.
+    for key_id in key_ids {
         assert!(csp_vault.sks_contains(&key_id).expect("error reading SKS"));
     }
 }
