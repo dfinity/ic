@@ -14,7 +14,7 @@ use crate::{
     state::{mutate_state, read_state, RetrieveBtcRequest},
 };
 
-const MAX_CONCURRENT_PENDING_REQUESTS: usize = 100;
+const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct RetrieveBtcArgs {
@@ -81,7 +81,8 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         return Err(RetrieveBtcError::AmountTooLow(min_amount));
     }
     let parsed_address = crate::address::parse_address(&args.address, btc_network)?;
-    if read_state(|s| s.pending_retrieve_btc_requests.len() >= MAX_CONCURRENT_PENDING_REQUESTS) {
+    if read_state(|s| s.count_incomplete_retrieve_btc_requests() >= MAX_CONCURRENT_PENDING_REQUESTS)
+    {
         return Err(RetrieveBtcError::TemporarilyUnavailable(
             "too many pending retrieve_btc requests".to_string(),
         ));
@@ -93,7 +94,14 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         address: parsed_address,
         block_index,
     };
+
     mutate_state(|s| s.pending_retrieve_btc_requests.push_back(request));
+
+    assert_eq!(
+        crate::state::RetrieveBtcStatus::Pending,
+        read_state(|s| s.retrieve_btc_status(block_index))
+    );
+
     Ok(RetrieveBtcOk { block_index })
 }
 

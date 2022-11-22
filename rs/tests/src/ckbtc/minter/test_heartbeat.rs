@@ -13,10 +13,14 @@ use crate::{
     },
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
-use bitcoincore_rpc::RpcApi;
+use bitcoincore_rpc::{
+    bitcoin::{hashes::Hash, Txid},
+    RpcApi,
+};
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
+use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcArgs;
 use ic_icrc1::endpoints::TransferArg;
@@ -118,7 +122,7 @@ pub fn test_heartbeat(env: TestEnv) {
 
         info!(&logger, "Call retrieve_btc");
         let retrieve_amount = 10_000_000;
-        minter_agent
+        let retrieve_response = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
                 amount: retrieve_amount,
                 address: destination_btc_address.to_string(),
@@ -127,8 +131,43 @@ pub fn test_heartbeat(env: TestEnv) {
             .expect("Error while calling retrieve_btc")
             .expect("Error in retrieve_btc");
 
+        let retrieve_status = minter_agent
+            .retrieve_btc_status(retrieve_response.block_index)
+            .await
+            .expect("failed to call retrieve_btc_status");
+
+        assert!(
+            matches!(
+                retrieve_status,
+                RetrieveBtcStatus::Pending
+                    | RetrieveBtcStatus::Signing
+                    | RetrieveBtcStatus::Sending { .. }
+                    | RetrieveBtcStatus::Submitted { .. }
+            ),
+            "Expected status Submitted or Pending, got {:?}",
+            retrieve_status,
+        );
+
         // We wait for the heartbeat to send the transaction to the mempool
         info!(&logger, "Waiting for tx to appear in mempool");
-        wait_for_mempool_change(&btc_rpc, &logger).await;
+        let mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
+
+        let retrieve_status = minter_agent
+            .retrieve_btc_status(retrieve_response.block_index)
+            .await
+            .expect("failed to call retrieve_btc_status");
+
+        match retrieve_status {
+            RetrieveBtcStatus::Submitted { txid } => {
+                let btc_txid = Txid::from_hash(Hash::from_slice(&txid).unwrap());
+                assert!(
+                    mempool_txids.contains(&btc_txid),
+                    "The mempool does not contain the expected txid: {}, mempool contents: {:?}",
+                    btc_txid,
+                    mempool_txids
+                );
+            }
+            other => panic!("Expected status Submitted, got {:?}", other),
+        }
     })
 }

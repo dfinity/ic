@@ -81,6 +81,37 @@ type InitArgs = record {
     retrieve_btc_min_amount: nat64;
 };
 
+type RetrieveBtcStatus = variant {
+    // The minter does not have any information on the specified
+    // retrieval request.  It can be that nobody submitted the
+    // request, or the minter pruned the relevant information from the
+    // history to save space.
+    Unknown;
+
+    // The minter did not send a Bitcoin transaction for this request yet.
+    Pending;
+
+    // The minter is obtaining all required ECDSA signatures on the
+    // Bitcoin transaction for this request.
+    Signing;
+
+    // The minter signed the transaction and is waiting for a reply
+    // from the Bitcoin canister.
+    Sending : record { txid : blob };
+
+    // The minter sent a transaction for the retrieve request.
+    // The payload contains the identifier of the transaction on the Bitcoin network.
+    Submitted : record { txid : blob };
+
+    // The amount was too low to cover the transaction fees.
+    AmountTooLow;
+
+    // The minter received enough confirmations for the Bitcoin
+    // transaction for this request.  The payload contains the
+    // identifier of the transaction on the Bitcoin network.
+    Confirmed : record { txid : blob };
+};
+
 service : (InitArgs) -> {
     // Section "Wrap BTC" {{{
 
@@ -119,6 +150,9 @@ service : (InitArgs) -> {
     // * The caller deposited the requested amount in ckBTC to the account
     //   that the [get_withdrawal_account] endpoint returns.
     retrieve_btc : (RetrieveBtcArgs) -> (variant { Ok : RetrieveBtcOk; Err : RetrieveBtcError });
+
+    /// Returns the status of a [retrieve_btc] request.
+    retrieve_btc_status : (record { block_index : nat64 }) -> (RetrieveBtcStatus) query;
 
     // }}} Section "Unwrap BTC"
 }
