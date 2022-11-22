@@ -181,6 +181,10 @@ name = "ic-systest-create-subnet-hourly-test"
 path = "bin/create_subnet_hourly_test.rs"
 
 [[bin]]
+name = "ic-systest-create-subnet-pre-master-test"
+path = "bin/create_subnet_pre_master_test.rs"
+
+[[bin]]
 name = "ic-systest-rejoin-test"
 path = "bin/rejoin_test.rs"
 
