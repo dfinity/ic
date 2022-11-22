@@ -436,3 +436,52 @@ nns_canister_id() {
 
     return $FOUND
 }
+
+##: published_sns_canister_diff
+## Gets the diff between the mainnet commits of various SNS canisters and IC master.
+## Usage: $1
+##
+## In V1 of this function, the commits are sourced from commits.sh. In the future, these
+## commits will be automatically parsed
+published_sns_canister_diff() {
+    IC_REPO=$(repo_root)
+    git fetch origin master
+
+    source "$SCRIPT_DIR/commits.sh"
+
+    echo "rs/sns/governance changes since $SNS_GOVERNANCE_COMMIT"
+    pretty_git_log "$SNS_GOVERNANCE_COMMIT" "rs/sns/governance"
+
+    echo "rs/sns/root changes since $SNS_ROOT_COMMIT"
+    pretty_git_log "$SNS_ROOT_COMMIT" "rs/sns/root"
+
+    echo "rs/sns/swap changes since $SNS_SWAP_COMMIT"
+    pretty_git_log "$SNS_SWAP_COMMIT" "rs/sns/swap"
+
+    echo "rs/rosetta-api/icrc1/archive changes since $SNS_ARCHIVE_COMMIT"
+    pretty_git_log "$SNS_ARCHIVE_COMMIT" "rs/rosetta-api/icrc1/archive"
+
+    echo "rs/rosetta-api/icrc1/ledger changes since $SNS_LEDGER_COMMIT"
+    pretty_git_log "$SNS_LEDGER_COMMIT" "rs/rosetta-api/icrc1/ledger"
+
+    echo "rs/rosetta-api/icrc1/index changes since $SNS_INDEX_COMMIT"
+    pretty_git_log "$SNS_INDEX_COMMIT" "rs/rosetta-api/icrc1/index"
+
+    echo "rs/nns/sns-wasm since $SNS_WASM_COMMIT"
+    pretty_git_log "$SNS_WASM_COMMIT" "rs/nns/sns-wasm"
+
+    echo "rs/sns/init changes w.r.t. sns-wasm since $SNS_WASM_COMMIT"
+    pretty_git_log "$SNS_WASM_COMMIT" "rs/sns/init"
+    echo
+
+    echo "------------------------------------------------------------------------------------------"
+    echo "If you are publishing a new SNS Version based off of this script, please update commits.sh"
+    echo "------------------------------------------------------------------------------------------"
+}
+
+pretty_git_log() {
+    local COMMIT=$1
+    local DIR=$2
+    git --no-pager log master --pretty=format:"   %Cred%h%Creset %s" "$COMMIT"... -- "$IC_REPO/$DIR"
+    echo
+}
