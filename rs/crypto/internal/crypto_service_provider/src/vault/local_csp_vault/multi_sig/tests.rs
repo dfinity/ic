@@ -15,8 +15,8 @@ use crate::vault::test_utils::local_csp_vault::new_local_csp_vault;
 use crate::LocalCspVault;
 
 #[test]
-fn should_generate_committee_signing_key_pair_and_store_pubkey() {
-    test_utils::multi_sig::should_generate_committee_signing_key_pair_and_store_pubkey(
+fn should_generate_committee_signing_key_pair_and_store_keys() {
+    test_utils::multi_sig::should_generate_committee_signing_key_pair_and_store_keys(
         new_local_csp_vault(),
     );
 }

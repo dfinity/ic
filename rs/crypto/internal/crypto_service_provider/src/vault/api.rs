@@ -441,6 +441,7 @@ pub trait PublicKeyStoreCspVault {
         &self,
         public_keys: CurrentNodePublicKeys,
     ) -> Result<bool, CspPublicKeyStoreError>;
+
     /// Returns the node's current public keys.
     ///
     /// For keys that are periodically rotated (such as the iDKG dealing encryption key pair) only
