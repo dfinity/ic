@@ -10,6 +10,7 @@ exports_files([
 
 DEPENDENCIES = [
     "//rs/artifact_pool",
+    "//rs/backup",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/bitcoin/types/public",

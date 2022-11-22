@@ -187,7 +187,7 @@ impl BackupHelper {
             "ssh -o StrictHostKeyChecking=no -i {}",
             self.ssh_private_key
         ));
-        cmd.arg("--timeout=600");
+        cmd.arg("--timeout=60");
         cmd.args(arguments);
         cmd.arg("--min-size=1").arg(remote_dir).arg(local_dir);
         info!(self.log, "Will execute: {:?}", cmd);
@@ -327,7 +327,7 @@ impl BackupHelper {
         } else {
             warn!(self.log, "No progress in the replay!");
             self.notification_client.report_failure_slack(
-                "No height progress after the last recovery detected!".to_string(),
+                "No height progress after the last replay detected!".to_string(),
             );
         }
     }
