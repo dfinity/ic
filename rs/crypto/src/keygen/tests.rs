@@ -2,8 +2,11 @@
 
 use super::*;
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
+use ic_crypto_temp_crypto::TempCryptoBuilder;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
+use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::KeyPurpose;
@@ -354,6 +357,25 @@ mod rotate_idkg_dealing_encryption_keys {
         );
     }
 
+    #[test]
+    fn should_return_error_when_registry_error() {
+        let mock_registry_client = registry_returning(RegistryClientError::PollLockFailed {
+            error: "oh no!".to_string(),
+        });
+        let crypto = temp_crypto_builder()
+            .with_registry(Arc::new(mock_registry_client))
+            .build();
+
+        let rotated_idkg_key = crypto.rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_1);
+
+        assert!(matches!(
+            rotated_idkg_key,
+            Err(IDkgDealingEncryptionKeyRotationError::RegistryError(
+                RegistryClientError::PollLockFailed { error }
+            )) if error.contains("oh no!")
+        ));
+    }
+
     struct Setup {
         registry_data: Arc<ProtoRegistryDataProvider>,
         registry_client: Arc<FakeRegistryClient>,
@@ -371,41 +393,33 @@ mod rotate_idkg_dealing_encryption_keys {
         }
 
         fn new_with_keys_to_generate(node_keys_to_generate: NodeKeysToGenerate) -> Self {
-            let registry_data = Arc::new(ProtoRegistryDataProvider::new());
-            let registry_client =
-                Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-            let time_source = FastForwardCryptoTimeSource::new();
-            let setup = Setup {
-                registry_data: Arc::clone(&registry_data) as Arc<_>,
-                registry_client: Arc::clone(&registry_client) as Arc<_>,
-                time_source: Arc::clone(&time_source) as Arc<_>,
-                crypto: TempCryptoComponent::builder()
-                    .with_keys(node_keys_to_generate)
-                    .with_node_id(node_id())
-                    .with_registry_client_and_data(
-                        Arc::clone(&registry_client) as Arc<_>,
-                        Arc::clone(&registry_data) as Arc<_>,
-                    )
-                    .with_time_source(Arc::clone(&time_source) as Arc<_>)
-                    .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
-                        subnet_id(),
-                        Some(node_id()),
-                        Some(TWO_WEEKS),
-                    ))
-                    .build(),
-            };
-            registry_client.reload();
-            setup
+            Self::new_internal(
+                node_keys_to_generate,
+                Some(EcdsaSubnetConfig::new(
+                    subnet_id(),
+                    Some(node_id()),
+                    Some(TWO_WEEKS),
+                )),
+            )
         }
 
         fn new_with_ecdsa_subnet_config(ecdsa_subnet_config: Option<EcdsaSubnetConfig>) -> Self {
+            Self::new_internal(
+                NodeKeysToGenerate::only_idkg_dealing_encryption_key(),
+                ecdsa_subnet_config,
+            )
+        }
+
+        fn new_internal(
+            node_keys_to_generate: NodeKeysToGenerate,
+            ecdsa_subnet_config: Option<EcdsaSubnetConfig>,
+        ) -> Self {
             let registry_data = Arc::new(ProtoRegistryDataProvider::new());
             let registry_client =
                 Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
             let time_source = FastForwardCryptoTimeSource::new();
-            let mut crypto_builder = TempCryptoComponent::builder()
-                .with_keys(NodeKeysToGenerate::only_idkg_dealing_encryption_key())
-                .with_node_id(node_id())
+            let mut crypto_builder = temp_crypto_builder()
+                .with_keys(node_keys_to_generate)
                 .with_registry_client_and_data(
                     Arc::clone(&registry_client) as Arc<_>,
                     Arc::clone(&registry_data) as Arc<_>,
@@ -472,5 +486,21 @@ mod rotate_idkg_dealing_encryption_keys {
             )
             .unwrap(),
         )
+    }
+
+    fn registry_returning(error: RegistryClientError) -> impl RegistryClient {
+        let mut registry = MockRegistryClient::new();
+        registry
+            .expect_get_value()
+            .returning(move |_, _| Err(error.clone()));
+        registry
+    }
+
+    fn temp_crypto_builder() -> TempCryptoBuilder {
+        TempCryptoComponent::builder()
+            .with_keys(NodeKeysToGenerate::only_idkg_dealing_encryption_key())
+            // callers of rotate_idkg_dealing_encryption_keys use a CryptoComponent with a remote vault
+            .with_remote_vault()
+            .with_node_id(node_id())
     }
 }
