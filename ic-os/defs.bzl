@@ -77,7 +77,7 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     dev_rootfs_args = []
 
     if mode == "dev":
-        dev_rootfs_args = ["--extra-dockerfile", "ic-os/guestos/rootfs/Dockerfile.dev", "--dev-root-ca", "ic-os/guestos/dev-root-ca.crt"]
+        dev_rootfs_args = ["--extra-dockerfile", "ic-os/guestos/rootfs/Dockerfile.dev", "--dev-root-ca", "ic-os/guestos/dev/certs/canister_http_test_ca.cert"]
 
     extra_args_docker = ["--build-arg", "BASE_IMAGE=" + img_bases[mode]]
 

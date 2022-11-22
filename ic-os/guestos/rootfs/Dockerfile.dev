@@ -15,5 +15,5 @@ USER root:root
 
 ARG DEV_ROOT_CA
 
-RUN echo "${DEV_ROOT_CA}" | sed -e 's/^"//' -e 's/"$//' >/usr/local/share/ca-certificates/dev-root-ca.crt
+RUN echo "${DEV_ROOT_CA}"  >/usr/local/share/ca-certificates/dev-root-ca.crt
 RUN update-ca-certificates

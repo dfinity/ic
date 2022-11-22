@@ -5,3 +5,8 @@ load("//ic-os:defs.bzl", "icos_build")
 #       //ic-os/guestos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
 icos_build(name = "dev")
+
+exports_files([
+    "certs/canister_http_test_ca.cert",
+    "certs/canister_http_test_ca.key",
+])
