@@ -153,14 +153,6 @@ impl SchedulerTest {
         &self.registry_settings
     }
 
-    pub fn subnet_size(&self) -> usize {
-        self.registry_settings.subnet_size
-    }
-
-    pub fn use_cost_scaling(&self) -> bool {
-        self.scheduler().cycles_account_manager.use_cost_scaling()
-    }
-
     /// Returns how many instructions were executed by a canister on a thread
     /// and in an execution round. The order of elements is important and
     /// matches the execution order for a fixed thread.
