@@ -69,6 +69,11 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
+#[query]
+fn __get_candid_interface_tmp_hack() -> &'static str {
+    include_str!(env!("CKBTC_MINTER_DID_PATH"))
+}
+
 fn main() {}
 
 /// Checks the real candid interface against the one declared in the did file

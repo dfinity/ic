@@ -53,10 +53,14 @@ alias(
 rust_canister(
     name = "ckbtc_minter",
     srcs = ["src/main.rs"],
+    compile_data = [":ckbtc_minter.did"],
     crate_name = "ic_ckbtc_minter_canister",
     proc_macro_deps = [
         "@crate_index//:ic-cdk-macros",
     ],
+    rustc_env = {
+        "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
+    },
     deps = [
         ":ckbtc_minter_lib",
         "//rs/crypto/getrandom_for_wasm",
