@@ -4348,6 +4348,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-canisters-http-types"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-canonical-state"
 version = "0.8.0"
 dependencies = [
@@ -4484,10 +4493,10 @@ dependencies = [
  "candid",
  "canister-test",
  "ciborium",
- "dfn_http_metrics",
  "hex",
  "ic-base-types",
  "ic-btc-types",
+ "ic-canisters-http-types",
  "ic-cdk",
  "ic-cdk-macros",
  "ic-crypto-extended-bip32",

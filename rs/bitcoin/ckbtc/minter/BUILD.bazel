@@ -13,7 +13,6 @@ LIB_DEPS = [
     "//rs/rosetta-api/icrc1/client/cdk",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_core",
-    "//rs/rust_canisters/dfn_http_metrics",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "@crate_index//:bech32",
@@ -64,7 +63,8 @@ rust_canister(
     deps = [
         ":ckbtc_minter_lib",
         "//rs/crypto/getrandom_for_wasm",
-        "//rs/rust_canisters/dfn_http_metrics",
+        "//rs/monitoring/metrics_encoder",
+        "//rs/rust_canisters/http_types",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
     ],

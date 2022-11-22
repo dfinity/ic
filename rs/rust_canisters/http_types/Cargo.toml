@@ -1,0 +1,9 @@
+[package]
+name = "ic-canisters-http-types"
+version = "0.8.0"
+edition = "2021"
+
+[dependencies]
+candid = "0.8.1"
+serde = "1.0"
+serde_bytes = "0.11"
