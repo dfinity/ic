@@ -2,7 +2,7 @@
 
 use core::fmt;
 use ic_metrics::MetricsRegistry;
-use prometheus::{HistogramVec, IntGauge};
+use prometheus::{HistogramVec, IntCounterVec, IntGauge};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::time;
@@ -96,6 +96,15 @@ impl CryptoMetrics {
             metrics.crypto_key_counts[&KeyType::SecretSKS].set(key_counts.get_sk_local() as i64);
         }
     }
+
+    pub fn observe_key_rotation_result(&self, result: KeyRotationResult) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .crypto_key_rotation_results
+                .with_label_values(&[&format!("{}", result)])
+                .inc();
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
@@ -137,6 +146,17 @@ impl<T, E> From<&Result<T, E>> for MetricsResult {
             Err(_) => MetricsResult::Err,
         }
     }
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+pub enum KeyRotationResult {
+    KeyRotated,
+    LatestLocalRotationTooRecent,
+    KeyGenerationError,
+    RegistryError,
+    KeyRotationNotEnabled,
+    KeyNotRotated,
+    RegistryKeyBadOrMissing,
 }
 
 /// Keeps track of the number of node keys. This information is collected and provided to the
@@ -200,6 +220,8 @@ struct Metrics {
     ///  - Local public key store
     ///  - Local secret key store (SKS)
     pub crypto_key_counts: BTreeMap<KeyType, IntGauge>,
+
+    pub crypto_key_rotation_results: IntCounterVec,
 }
 
 impl Display for MetricsDomain {
@@ -250,6 +272,26 @@ impl MetricsResult {
         match self {
             MetricsResult::Ok => "ok",
             MetricsResult::Err => "err",
+        }
+    }
+}
+
+impl Display for KeyRotationResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str_snake_case())
+    }
+}
+
+impl KeyRotationResult {
+    fn as_str_snake_case(&self) -> &str {
+        match self {
+            KeyRotationResult::KeyRotated => "key_rotated",
+            KeyRotationResult::LatestLocalRotationTooRecent => "latest_local_rotation_too_recent",
+            KeyRotationResult::KeyGenerationError => "key_generation_error",
+            KeyRotationResult::RegistryError => "registry_error",
+            KeyRotationResult::KeyRotationNotEnabled => "key_rotation_not_enabled",
+            KeyRotationResult::KeyNotRotated => "key_not_rotated",
+            KeyRotationResult::RegistryKeyBadOrMissing => "registry_key_bad_or_missing",
         }
     }
 }
@@ -305,6 +347,11 @@ impl Metrics {
             ),
             crypto_duration_seconds: durations,
             crypto_key_counts: key_counts,
+            crypto_key_rotation_results: r.int_counter_vec(
+                "crypto_key_rotation_results",
+                "Result from iDKG dealing encryption key rotations",
+                &["result"],
+            ),
         }
     }
 }
