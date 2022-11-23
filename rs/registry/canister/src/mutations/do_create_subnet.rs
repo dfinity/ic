@@ -274,6 +274,7 @@ pub struct EcdsaInitialConfig {
     /// Must be optional for registry candid backwards compatibility.
     pub max_queue_size: Option<u32>,
     pub signature_request_timeout_ns: Option<u64>,
+    pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -293,6 +294,7 @@ impl From<EcdsaInitialConfig> for EcdsaConfig {
                 .collect::<Vec<_>>(),
             max_queue_size: val.max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: val.signature_request_timeout_ns,
+            idkg_key_rotation_period_ms: val.idkg_key_rotation_period_ms,
         }
     }
 }
@@ -383,6 +385,7 @@ mod test {
                 }],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
             }),
             ..Default::default()
         };
@@ -416,6 +419,7 @@ mod test {
                 key_ids: vec![key_id.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
             }
             .into(),
         );
@@ -434,6 +438,7 @@ mod test {
                 }],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
             }),
             ..Default::default()
         };
@@ -467,6 +472,7 @@ mod test {
                 key_ids: vec![key_id.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
             }
             .into(),
         );
@@ -485,6 +491,7 @@ mod test {
                 }],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
             }),
             ..Default::default()
         };
