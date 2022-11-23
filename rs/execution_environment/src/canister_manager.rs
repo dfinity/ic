@@ -1009,35 +1009,10 @@ impl CanisterManager {
 
         self.validate_canister_is_stopped(canister_to_delete)?;
 
-        // Once a canister is stopped, it stops accepting new messages, so this should
-        // never happen.
-        if canister_to_delete.has_input() {
-            fatal!(
-                self.log,
-                "[EXC-BUG] Trying to delete canister {} while having messages in its input queue.",
-                canister_to_delete.canister_id()
-            );
-        }
-
-        // This scenario should be impossible because:
-        //
-        // 1) A stopped canister does not accept new messages.
-        //
-        // 2) A canister is transitioned to a stopped state at the end of a round.
-        //
-        // 3) All output messages are cleared by the `StreamBuilder` at the end of
-        //    every round.
-        //
-        // Because the canister is already stopped, it must have been stopped in a
-        // previous round (2), had its output queued emptied in a previous round (3),
-        // and the output queue is still empty because it didn't accept any new
-        // messages (1).
-        if canister_to_delete.has_output() {
-            fatal!(
-                self.log,
-                "[EXC-BUG] Trying to delete canister {} while having messages in its output queue.",
-                canister_to_delete.canister_id()
-            );
+        if canister_to_delete.has_input() || canister_to_delete.has_output() {
+            return Err(CanisterManagerError::DeleteCanisterQueueNotEmpty(
+                canister_id_to_delete,
+            ));
         }
 
         // When a canister is deleted:
@@ -1273,6 +1248,7 @@ pub(crate) enum CanisterManagerError {
     Hypervisor(CanisterId, HypervisorError),
     DeleteCanisterNotStopped(CanisterId),
     DeleteCanisterSelf(CanisterId),
+    DeleteCanisterQueueNotEmpty(CanisterId),
     SenderNotInWhitelist(PrincipalId),
     NotEnoughMemoryAllocationGiven {
         canister_id: CanisterId,
@@ -1359,6 +1335,16 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::CanisterNotStopped,
                     format!(
                         "Canister {} must be stopped before it is deleted.",
+                        canister_id,
+                    )
+                )
+            }
+            DeleteCanisterQueueNotEmpty(canister_id) => {
+                Self::new(
+                    ErrorCode::CanisterQueueNotEmpty,
+                    format!(
+                        "Canister {} has messages in its queues and cannot be \
+                        deleted now. Please retry after some time",
                         canister_id,
                     )
                 )
