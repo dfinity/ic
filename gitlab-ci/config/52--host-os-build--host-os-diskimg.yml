@@ -2,7 +2,6 @@ host-os-diskimg:
   extends:
     - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
-    - .rules-hostos
   stage: host-os-build
   needs: []
   artifacts:

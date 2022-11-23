@@ -322,14 +322,3 @@
     - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
       allow_failure: true
-
-.rules-hostos:
-  rules:
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - 'ic-os/**/*'
-        - 'toolchains/sysimage/**/*'
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-    - if: '$SCHEDULE_NAME == "run-all-master"'
