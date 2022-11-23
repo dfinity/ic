@@ -73,6 +73,12 @@ pub(crate) struct TransportHeader {
     pub(crate) payload_length: u32, // Serialized little endian.
 }
 
+/// This is the max frame size that H2 supports
+pub const H2_FRAME_SIZE: u32 = 16_777_215;
+
+/// This value was chosen empirically and can be raised if needed
+pub const H2_WINDOW_SIZE: u32 = 1_000_000;
+
 pub(crate) enum ChannelReader {
     Legacy(Box<dyn TlsStreamReadHalf>),
     H2RecvStream(RecvStream),

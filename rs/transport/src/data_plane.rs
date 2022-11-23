@@ -21,8 +21,8 @@ use crate::{
     metrics::{DataPlaneMetrics, IntGaugeResource},
     types::{
         ChannelReader, ChannelWriter, Connected, ConnectionRole, PayloadData, SendQueueReader,
-        SendStreamWrapper, TransportHeader, TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT,
-        TRANSPORT_HEADER_SIZE,
+        SendStreamWrapper, TransportHeader, TransportImpl, H2_FRAME_SIZE, H2_WINDOW_SIZE,
+        TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
     },
 };
 use h2::RecvStream;
@@ -76,6 +76,7 @@ const READ_RESULT_MESSAGE: &str = "message";
 enum StreamReadError {
     Failed(std::io::Error),
     TimeOut,
+    H2ReceiveStreamFailure(String),
 }
 
 /// Create header bytes to send with payload.
@@ -356,68 +357,74 @@ async fn read_one_message<T: AsyncRead + Unpin>(
     Ok((header, payload))
 }
 
+/// Reads and returns the header and message payload.
+/// Note: both the header and message may come in as 1+ frames
+/// TODO: in final state, we cannot assume that there is exactly 1 message to read without an excess
 async fn read_one_message_h2(
     receive_stream: &mut RecvStream,
     timeout: Duration,
 ) -> Result<(TransportHeader, TransportPayload), StreamReadError> {
-    // Read next frame to obtain the header
-    // If heartbeat, return.
-    // Otherwise, check header for message size, and call .data() until
-    // total message size is retrieved
+    // First frame should be full or partial header.  From there, keeping reading frames until
+    // full header is processed.
+    let (complete_header, partial_body) = build_message(
+        receive_stream,
+        vec![],
+        TRANSPORT_HEADER_SIZE,
+        "header".to_string(),
+        timeout,
+    )
+    .await?;
+    let header = unpack_header(complete_header);
 
-    let mut flow = receive_stream.flow_control().clone();
+    if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
+        // Process heartbeat
+        return Ok((header, TransportPayload::default()));
+    }
 
-    let read_future = receive_stream.data();
-    match tokio::time::timeout(timeout, read_future).await {
-        Err(_) => Err(StreamReadError::TimeOut),
-        Ok(Some(Ok(header_chunk))) => {
-            // First frame should be header
-            if header_chunk.len() != TRANSPORT_HEADER_SIZE {
-                let msg = format!(
-                    "Unexpected transport header length.  Expected {:?} bytes but received {:?}",
-                    TRANSPORT_HEADER_SIZE,
-                    header_chunk.len()
-                );
-                return Err(StreamReadError::Failed(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    msg,
+    let (complete_payload, _) = build_message(
+        receive_stream,
+        partial_body,
+        header.payload_length.try_into().unwrap(),
+        "body".to_string(),
+        timeout,
+    )
+    .await?;
+
+    let payload = TransportPayload(complete_payload);
+    Ok((header, payload))
+}
+
+/// Reads frames until target length is reached.
+/// After each frame is read, capacity is released.
+/// Timeout is applied to each frame read.
+async fn build_message(
+    receive_stream: &mut RecvStream,
+    mut buffer: Vec<u8>,
+    target_len: usize,
+    msg_type: String,
+    timeout: Duration,
+) -> Result<(Vec<u8>, Vec<u8>), StreamReadError> {
+    while buffer.len() < target_len {
+        let read_future = receive_stream.data();
+        match tokio::time::timeout(timeout, read_future).await {
+            Err(_) => return Err(StreamReadError::TimeOut),
+            Ok(Some(Ok(chunk))) => {
+                buffer.append(&mut chunk.to_vec());
+                let _ = receive_stream.flow_control().release_capacity(chunk.len());
+            }
+            // If stream returns empty frame, continue polling
+            Ok(None) => {}
+            Ok(Some(Err(h2_error))) => {
+                return Err(StreamReadError::H2ReceiveStreamFailure(format!(
+                    "{:?} for {:?}",
+                    h2_error.to_string(),
+                    msg_type
                 )));
             }
-            let header = unpack_header(header_chunk.to_vec());
-            if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
-                // Process heartbeat
-                let _ = flow.release_capacity(header_chunk.len());
-                return Ok((header, TransportPayload::default()));
-            }
-
-            let payload_len = header.payload_length;
-            let mut payload_buffer = Vec::new();
-            let mut total_len = 0;
-
-            // Consume frames until we hit target length
-            while total_len < payload_len {
-                match receive_stream.data().await {
-                    Some(Ok(chunk)) => {
-                        payload_buffer.append(&mut chunk.to_vec());
-                        total_len += chunk.len() as u32;
-                        let _ = flow.release_capacity(chunk.len());
-                    }
-                    None | Some(Err(_)) => {
-                        return Err(StreamReadError::Failed(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "Error receiving next data frame",
-                        )));
-                    }
-                }
-            }
-            let payload = TransportPayload(payload_buffer);
-            Ok((header, payload))
         }
-        Ok(None) | Ok(Some(Err(_))) => Err(StreamReadError::Failed(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Error receiving next header",
-        ))),
     }
+    let extra_buffer = buffer.split_off(target_len as usize);
+    Ok((buffer, extra_buffer))
 }
 
 /// Reads the requested bytes from the socket with a timeout
@@ -529,8 +536,13 @@ pub(crate) async fn create_connected_state_for_h2_client(
     let rt_handle_clone2 = rt_handle.clone();
 
     rt_handle.clone().spawn(async move {
-        // TODO: We need to handle the error.
-        match h2::client::handshake(tls_stream).await {
+        match h2::client::Builder::new()
+            .initial_window_size(H2_WINDOW_SIZE)
+            .initial_connection_window_size(H2_WINDOW_SIZE)
+            .max_frame_size(H2_FRAME_SIZE)
+            .handshake(tls_stream)
+            .await
+        {
             Ok((mut client, connection)) => {
                 // This needs to be running before we send a request for server to accept the request
                 rt_handle.clone().spawn(async move {
@@ -615,7 +627,13 @@ pub(crate) async fn create_connected_state_for_h2_server(
 ) -> Result<Connected, Box<dyn std::error::Error + Send + Sync>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     rt_handle.clone().spawn(async move {
-        match h2::server::handshake(tls_stream).await {
+        match h2::server::Builder::new()
+            .initial_window_size(H2_WINDOW_SIZE)
+            .initial_connection_window_size(H2_WINDOW_SIZE)
+            .max_frame_size(H2_FRAME_SIZE)
+            .handshake(tls_stream)
+            .await
+        {
             Ok(mut connection) => {
                 // accept the first request
                 if let Some(res) = connection.accept().await {
