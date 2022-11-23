@@ -3,7 +3,7 @@ use ic_canister_sandbox_backend_lib::{
     canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
 use ic_canister_sandbox_launcher::sandbox_launcher_main;
-use ic_config::{Config, ConfigSource};
+use ic_config::{flag_status::FlagStatus, Config, ConfigSource};
 use ic_drun::{run_drun, DrunOptions};
 use std::path::PathBuf;
 
@@ -33,11 +33,14 @@ fn main() -> Result<(), String> {
 #[tokio::main]
 async fn drun_main() -> Result<(), String> {
     let matches = get_arg_matches();
-    Config::run_with_temp_config(|default_config| {
+    Config::run_with_temp_config(|mut default_config| {
         let source = matches
             .value_of(ARG_CONF)
             .map(|arg| ConfigSource::File(PathBuf::from(arg)))
             .unwrap_or(ConfigSource::Default);
+        // Enable composite queries in drun by default to allow local
+        // development and testing.
+        default_config.hypervisor.composite_queries = FlagStatus::Enabled;
         let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             eprintln!("Failed to load config:\n  {}", err);
             std::process::exit(1);

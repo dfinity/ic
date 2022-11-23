@@ -152,6 +152,9 @@ pub struct Config {
 
     /// Bitcoin configuration.
     pub bitcoin: BitcoinConfig,
+
+    /// Indicates whether composite queries are available or not.
+    pub composite_queries: FlagStatus,
 }
 
 impl Default for Config {
@@ -207,6 +210,7 @@ impl Default for Config {
                 testnet_canister_id: Some(bitcoin_testnet_canister_id),
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
             },
+            composite_queries: FlagStatus::Disabled,
         }
     }
 }
