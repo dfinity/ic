@@ -1,6 +1,6 @@
 use crate::{
-    address::BitcoinAddress, build_unsigned_transaction, greedy, signature::EncodedSignature,
-    signed_transaction_length, tx, BuildTxError,
+    address::BitcoinAddress, build_unsigned_transaction, fake_sign, greedy,
+    signature::EncodedSignature, tx, BuildTxError,
 };
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -332,6 +332,7 @@ proptest! {
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
         prop_assert_eq!(&arb_tx.wtxid(), &*btc_tx.wtxid());
+        prop_assert_eq!(arb_tx.vsize(), btc_tx.vsize());
     }
 
     #[test]
@@ -359,7 +360,7 @@ proptest! {
         )
         .expect("failed to build transaction");
 
-        let fee = signed_transaction_length(&unsigned_tx) as u64 * fee_per_vbyte / 1000;
+        let fee = fake_sign(&unsigned_tx).vsize() as u64 * fee_per_vbyte / 1000;
 
         let inputs_value = unsigned_tx.inputs
             .iter()
@@ -394,7 +395,7 @@ proptest! {
         )
         .expect("failed to build transaction");
 
-        let fee = signed_transaction_length(&unsigned_tx) as u64 * fee_per_vbyte / 1000;
+        let fee = fake_sign(&unsigned_tx).vsize() as u64 * fee_per_vbyte / 1000;
 
         let inputs_value = unsigned_tx.inputs
             .iter()
