@@ -337,6 +337,7 @@ if __name__ == "__main__":
         {
             "rps": total_rate,
             "rps_max": total_rate,
+            "iter_duration": config["duration"],
             "target_load": FLAGS.target_rps,
             "t_median": 0,  # TODO correction
             "failure_rate": 0,  # TODO correction

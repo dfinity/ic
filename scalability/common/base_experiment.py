@@ -28,6 +28,7 @@ from common import flamegraphs
 from common import machine_failure
 from common import misc
 from common import prometheus
+from common import report
 from common import ssh
 from termcolor import colored
 
@@ -571,6 +572,9 @@ class BaseExperiment:
         The idea is that we write one after each iteration, so that we can
         generate reports from intermediate versions.
         """
+        # Attempt to parse experiment details to check "schema"
+        _ = report.parse_experiment_details(experiment_details)
+
         d = self._build_summary_file()
         d.update(
             {

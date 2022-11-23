@@ -78,7 +78,7 @@ class Test_Experiment(TestCase):
         exp._WorkloadExperiment__kill_workload_generator = MagicMock()
 
         exp.subnet_id = "abc"
-        exp.write_summary_file("test", {}, [], "some x value")
+        exp.write_summary_file("test", {"iter_duration": 300}, [], "some x value")
         exp.end_experiment()
 
         exp.install_canister.assert_called_once()

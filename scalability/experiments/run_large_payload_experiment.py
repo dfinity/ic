@@ -39,7 +39,7 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
             ),
             call_method="query",
             method="Query",
-            duration=FLAGS.iter_duration,
+            duration=config["iter_duration"],
         )
 
     def run_iterations(self, iterations=None):
@@ -47,10 +47,11 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
         print(f"🚀  running with {iterations}kb sized response messages")
         results = []
         rps_max = 0
+        iter_duration = FLAGS.iter_duration
         for idx, iteration in enumerate(iterations):
             summary = self.run_experiment(
                 # for labels of iteration headings
-                {"response_payload_size": iteration, "load_total": iteration}
+                {"response_payload_size": iteration, "load_total": iteration, "iter_duration": iter_duration}
             )
             if summary.total_number <= 0:
                 print(f"No workload generator results in iteration {idx} with payload size {iteration}, aborting")
@@ -87,6 +88,7 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
                     "t_median": summary.t_median[0],
                     "failure_rate": summary.failure_rate,
                     "is_update": True,
+                    "iter_duration": iter_duration,
                 },
                 iterations,
                 "response payload size [bytes]",

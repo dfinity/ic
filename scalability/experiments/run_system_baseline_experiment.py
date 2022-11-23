@@ -177,7 +177,7 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
                     "t_max": t_max,
                     "t_min": t_min,
                     "duration": duration,
-                    "target_duration": iter_duration,
+                    "iter_duration": iter_duration,
                     "target_load": load_total,
                     "allowable_failure_rate": workload_experiment.ALLOWABLE_FAILURE_RATE
                     if len(iterations) > 1

@@ -107,7 +107,9 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                     f"{d.get('start_delay', 0)}s for {d.get('duration', '')}s"
                     for d in self.raw_description["workload"]
                 ],
-                "target_duration": max([d.get("duration", 0) for d in self.raw_description["workload"]]),
+                "iter_duration": max(
+                    [d.get("duration", workload.WORKLOAD_DEFAULT_DURATION) for d in self.raw_description["workload"]]
+                ),
                 "description": self.raw_description["description"],
                 "title": self.raw_description["title"],
             },

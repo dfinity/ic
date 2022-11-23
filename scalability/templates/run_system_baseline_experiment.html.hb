@@ -43,7 +43,7 @@ The system is considered healthy iff:
     <li>Requests per second: <span class="w3-tag w3-light-grey exp_value">{{experiment_details.rps}}</span>
     <li>Duration of load generation in each iteration:
       <span class="w3-tag w3-light-grey exp_value">{{experiment_details.duration}}</span> vs. target duration of
-      <span class="w3-tag w3-light-grey exp_value">{{experiment_details.target_duration}}</span>
+      <span class="w3-tag w3-light-grey exp_value">{{experiment_details.iter_duration}}</span>
   </ul>
 </div>
 

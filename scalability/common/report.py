@@ -1,5 +1,7 @@
 import json
 import sys
+from dataclasses import dataclass
+from dataclasses import fields
 from statistics import mean
 
 from common.misc import mean_or_minus_one
@@ -193,3 +195,24 @@ def is_success(code):
     """List of status codes considered to be successful."""
     okay = [200, 202]
     return code in okay
+
+
+@dataclass
+class ExperimentDetails:
+    """
+    The dataclass acts as sort of a schema for experiment details.
+
+    Report generation should only use entries from this dataclass to render the report.
+    Extra data can be provided, but will be passed as is to the template
+    when rendering on now be interpreted by the scripts.
+    """
+
+    # Duration of a single iteration of the experiment
+    iter_duration: int
+
+
+def parse_experiment_details(experiment_details: dict):
+    schema_keys = [f.name for f in list(fields(ExperimentDetails))]
+    # Filter out key value pairs that are experiment specific
+    data = {k: v for k, v in experiment_details.items() if k in schema_keys}
+    return ExperimentDetails(**data)

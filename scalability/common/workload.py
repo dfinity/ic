@@ -1,6 +1,7 @@
 import codecs
 import json
 import os
+import sys
 import threading
 import time
 import uuid
@@ -9,6 +10,9 @@ from typing import NamedTuple
 
 from common import misc
 from common import ssh
+
+
+WORKLOAD_DEFAULT_DURATION = 300
 
 
 class BytesEncoder(json.JSONEncoder):
@@ -44,7 +48,7 @@ def workload_description_from_dict(values: list, canister_ids: dict):
             method=value.get("method", None),
             call_method=value.get("call_method", None),
             rps=float(value.get("rps", -1)),
-            duration=int(value.get("duration", 300)),
+            duration=int(value.get("duration", WORKLOAD_DEFAULT_DURATION)),
             raw_payload=value["raw_payload"].encode("utf-8") if "raw_payload" in value else None,
             json_payload=value.get("json_payload", None),
             arguments=value.get("arguments", []),
@@ -196,7 +200,9 @@ class Workload(threading.Thread):
         """Start running the given workloads as a thread."""
         time.sleep(self.workload.start_delay)
         commands = self.get_commands()
-        ssh.run_all_ssh_in_parallel(self.load_generators, commands, self.f_stdout, self.f_stderr)
+        rc = ssh.run_all_ssh_in_parallel(self.load_generators, commands, self.f_stdout, self.f_stderr)
+        # Note: error code 255 indicates an issue with SSH rather than the workload generator
+        print("Return codes of workload generators are: ", rc, list(zip(self.load_generators, rc)))
 
     def fetch_results(self):
         """Fetch results from workload generators."""
@@ -214,7 +220,9 @@ class Workload(threading.Thread):
 
         # If workload generators fail, the result of the experiment is invalid anyway.
         # Just abort in such a case.
-        assert rc == [0 for _ in range(len(destinations))], "Workload generator failed, aborting"
+        if rc != [0 for _ in range(len(destinations))]:
+            print("Failed to copy all summary files from workload generators: ", list(zip(self.load_generators, rc)))
+            sys.exit(1)
 
         self.__update_summary_map_file(destinations)
 
