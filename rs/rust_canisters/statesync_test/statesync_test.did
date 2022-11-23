@@ -1,0 +1,5 @@
+service : {
+  change_state : (nat32) -> (variant { Ok : nat64; Err : text });
+  expand_state : (nat32, nat32) -> (variant { Ok : nat64; Err : text });
+  read_state : (nat64) -> (variant { Ok : nat8; Err : text });
+}

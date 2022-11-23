@@ -60,6 +60,7 @@ rust_canister(
     rustc_env = {
         "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
     },
+    service_file = ":ckbtc_minter.did",
     deps = [
         ":ckbtc_minter_lib",
         "//rs/crypto/getrandom_for_wasm",

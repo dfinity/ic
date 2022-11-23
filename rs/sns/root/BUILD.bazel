@@ -77,6 +77,7 @@ rust_canister(
     aliases = ALIASES,
     compile_data = ["canister/root.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/root.did",
     deps = DEPENDENCIES + [
         ":build_script",
         ":root",

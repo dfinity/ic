@@ -97,6 +97,7 @@ rust_canister(
     aliases = ALIASES,
     compile_data = ["canister/sns-wasm.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/sns-wasm.did",
     deps = DEPENDENCIES + [":sns-wasm"],
 )
 

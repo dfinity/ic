@@ -138,6 +138,7 @@ rust_canister(
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/governance.did",
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
@@ -151,6 +152,7 @@ rust_canister(
     compile_data = ["canister/governance.did"],
     crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/governance.did",
     deps = DEPENDENCIES + [":governance"] + [":build_script"],
 )
 

@@ -30,6 +30,7 @@ rust_library(
 rust_canister(
     name = "memory_test_canister",
     srcs = ["src/main.rs"],
+    service_file = ":memory_test.did",
     deps = DEPENDENCIES,
 )
 

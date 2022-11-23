@@ -83,6 +83,7 @@ rust_library(
 rust_canister(
     name = "sns-test-dapp-canister",
     srcs = ["test_canisters/test_dapp_canister.rs"],
+    service_file = ":test_canisters/empty.did",
     deps = [
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_core",
@@ -92,6 +93,7 @@ rust_canister(
 rust_canister(
     name = "sns-governance-mem-test-canister",
     srcs = ["test_canisters/sns_governance_mem_test_canister.rs"],
+    service_file = ":test_canisters/empty.did",
     deps = [
         "//rs/nervous_system/common",
         "//rs/rosetta-api/icrc1",

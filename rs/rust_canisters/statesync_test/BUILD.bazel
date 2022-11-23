@@ -36,6 +36,7 @@ rust_canister(
     name = "statesync_test_canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":statesync_test.did",
     deps = DEPENDENCIES,
 )
 

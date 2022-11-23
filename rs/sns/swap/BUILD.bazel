@@ -125,6 +125,7 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/swap.did",
     deps = DEPENDENCIES + [
         ":build_script",
         ":swap",

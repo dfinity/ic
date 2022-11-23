@@ -36,6 +36,7 @@ rust_canister(
     srcs = ["test/wasm.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test/wasm.did",
     deps = DEPENDENCIES + [":dfn_candid"],
 )
 

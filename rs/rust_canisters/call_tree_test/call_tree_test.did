@@ -1,0 +1,5 @@
+type CallTree = record { canister_id : text; subtrees : vec CallTree };
+
+service : {
+  start : (record { calltrees : vec CallTree; debug : bool }) -> (vec record { sender : text; receiver : text }) query;
+}

@@ -91,6 +91,7 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/root.did",
     deps = DEPENDENCIES + [":root"] + [":build_script"],
 )
 
@@ -99,6 +100,7 @@ rust_canister(
     srcs = ["test_canisters/upgrade_test_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test_canisters/upgrade_test_canister.did",
     deps = DEPENDENCIES + [":root"] + [":build_script"],
 )
 

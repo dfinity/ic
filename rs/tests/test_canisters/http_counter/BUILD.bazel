@@ -23,6 +23,7 @@ rust_canister(
     aliases = ALIASES,
     crate_name = "http_counter",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":src/http_counter.did",
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
