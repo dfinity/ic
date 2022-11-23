@@ -252,6 +252,10 @@ impl UnsignedTransaction {
     pub fn txid(&self) -> [u8; 32] {
         Sha256::hash(&encode_into(self, Sha256::new()))
     }
+
+    pub fn serialized_len(&self) -> usize {
+        encode_into(self, CountBytes::default())
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -266,12 +270,56 @@ impl SignedTransaction {
         encode_into(self, Vec::<u8>::new())
     }
 
+    /// Returns the size (in bytes) of the transaction.
     pub fn serialized_len(&self) -> usize {
         encode_into(self, CountBytes::default())
     }
 
+    /// Returns the size (in bytes) of the base transaction (with the witness
+    /// data stripped off).
+    pub fn base_serialized_len(&self) -> usize {
+        encode_into(&BaseTxView(self), CountBytes::default())
+    }
+
     pub fn wtxid(&self) -> [u8; 32] {
         Sha256::hash(&encode_into(self, Sha256::new()))
+    }
+
+    /// Returns the virtual transaction size that nodes use to compute fees.
+    pub fn vsize(&self) -> usize {
+        // # Transaction size calculations
+        //
+        // Transaction weight is defined as Base transaction size * 3 + Total
+        // transaction size (ie. the same method as calculating Block weight from
+        // Base size and Total size).
+        //
+        // Virtual transaction size is defined as Transaction weight / 4 (rounded up
+        // to the next integer).
+        //
+        // Base transaction size is the size of the transaction serialised with the
+        // witness data stripped.
+        //
+        // Total transaction size is the transaction size in bytes serialized as
+        // described in BIP144, including base data and witness data.
+        //
+        // --
+        // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki#transaction-size-calculations
+
+        let base_tx_size = self.base_serialized_len();
+        let total_tx_size = self.serialized_len();
+        let tx_weight = base_tx_size * 3 + total_tx_size;
+        (tx_weight + 3) / 4
+    }
+}
+
+struct BaseTxView<'a>(&'a SignedTransaction);
+
+impl Encode for BaseTxView<'_> {
+    fn encode(&self, buf: &mut impl Buffer) {
+        TX_VERSION.encode(buf);
+        self.0.inputs.encode(buf);
+        self.0.outputs.encode(buf);
+        self.0.lock_time.encode(buf);
     }
 }
 

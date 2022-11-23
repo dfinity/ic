@@ -382,7 +382,7 @@ pub async fn sign_transaction(
     })
 }
 
-fn signed_transaction_length(unsigned_tx: &tx::UnsignedTransaction) -> usize {
+pub fn fake_sign(unsigned_tx: &tx::UnsignedTransaction) -> tx::SignedTransaction {
     tx::SignedTransaction {
         inputs: unsigned_tx
             .inputs
@@ -397,7 +397,6 @@ fn signed_transaction_length(unsigned_tx: &tx::UnsignedTransaction) -> usize {
         outputs: unsigned_tx.outputs.clone(),
         lock_time: unsigned_tx.lock_time,
     }
-    .serialized_len()
 }
 
 #[derive(Debug, PartialEq)]
@@ -509,7 +508,7 @@ pub fn build_unsigned_transaction(
         lock_time: 0,
     };
 
-    let tx_len = signed_transaction_length(&unsigned_tx);
+    let tx_len = fake_sign(&unsigned_tx).vsize();
     let fee = (tx_len as u64 * fee_per_vbyte) / 1000;
 
     if fee > amount {
