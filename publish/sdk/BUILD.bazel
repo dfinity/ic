@@ -1,26 +1,31 @@
-load("//gitlab-ci/src/artifacts:collect.bzl", "collect_artifacts")
+load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+
+SDK = [
+    "//rs/bitcoin/adapter:ic-btc-adapter",
+    "//rs/canister_http/adapter:ic-canister-http-adapter",
+    "//rs/canister_sandbox",
+    "//rs/canister_sandbox/sandbox_launcher",
+    "//rs/replica",
+    "//rs/starter:ic-starter",
+]
+
+[
+    gzip_compress(
+        name = source.split("/").pop().split(":").pop() + ".gz",
+        srcs = [source],
+    )
+    for source in SDK
+]
 
 filegroup(
     name = "sdk",
-    srcs = [
-        "//rs/bitcoin/adapter:ic-btc-adapter",
-        "//rs/canister_http/adapter:ic-canister-http-adapter",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
-        "//rs/replica",
-        "//rs/starter:ic-starter",
-    ],
-)
-
-collect_artifacts(
-    name = "collect_sdk",
-    srcs = [":sdk"],
+    srcs = [source.split("/").pop().split(":").pop() + ".gz" for source in SDK],
 )
 
 upload_artifacts(
     name = "upload",
-    inputs = [":collect_sdk"],
+    inputs = [":sdk"],
     # The actual list is on https://github.com/bazelbuild/platforms
     remote_subdir = "sdk-release-bazel/" + select({
         "@platforms//cpu:x86_64": "x86_64",
