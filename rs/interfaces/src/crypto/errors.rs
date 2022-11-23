@@ -50,7 +50,7 @@ impl ErrorReproducibility for CryptoError {
             // false, as the result may change if the DKG transcript is reloaded.
             CryptoError::ThresholdSigDataNotFound { .. } => false,
             CryptoError::RegistryClient(registry_client_error) => {
-                error_replication_of_registry_client_error(registry_client_error)
+                registry_client_error.is_reproducible()
             }
             // true, as the registry is guaranteed to be consistent across replicas
             CryptoError::DkgTranscriptNotFound { .. } => true,
@@ -82,7 +82,7 @@ impl ErrorReproducibility for DkgVerifyDealingError {
                 true
             }
             DkgVerifyDealingError::Registry(registry_client_error) => {
-                error_replication_of_registry_client_error(registry_client_error)
+                registry_client_error.is_reproducible()
             }
             DkgVerifyDealingError::MalformedFsEncryptionPublicKey(_) => {
                 // true, as the encryption public key is fetched from the registry and the
@@ -128,7 +128,7 @@ impl ErrorReproducibility for DkgLoadTranscriptError {
             // true, as the registry is guaranteed to be consistent across replicas
             DkgLoadTranscriptError::FsEncryptionPublicKeyNotInRegistry(_) => true,
             DkgLoadTranscriptError::Registry(registry_client_error) => {
-                error_replication_of_registry_client_error(registry_client_error)
+                registry_client_error.is_reproducible()
             }
             // true, as validity checks of arguments are stable across replicas
             DkgLoadTranscriptError::InvalidTranscript(_) => true,
@@ -155,7 +155,7 @@ impl ErrorReproducibility for DkgKeyRemovalError {
             // registry is guaranteed to be consistent across replicas
             DkgKeyRemovalError::MalformedFsEncryptionPublicKey(_) => true,
             DkgKeyRemovalError::Registry(registry_client_error) => {
-                error_replication_of_registry_client_error(registry_client_error)
+                registry_client_error.is_reproducible()
             }
             // true, as the private key remains missing despite retrying
             DkgKeyRemovalError::FsKeyNotInSecretKeyStoreError(_) => true,
@@ -249,7 +249,7 @@ impl ErrorReproducibility for IDkgVerifyComplaintError {
             // true, as (de)serialization is stable across replicas
             IDkgVerifyComplaintError::SerializationError { .. } => true,
             IDkgVerifyComplaintError::Registry(registry_client_error) => {
-                error_replication_of_registry_client_error(registry_client_error)
+                registry_client_error.is_reproducible()
             }
             // true, as the types of internal errors that may occur during complaint
             // verification are stable
@@ -265,7 +265,7 @@ impl ErrorReproducibility for IDkgVerifyDealingPrivateError {
         // Upon addition of any new error this match has to be updated.
         match self {
             IDkgVerifyDealingPrivateError::RegistryError(registry_client_error) => {
-                error_replication_of_registry_client_error(registry_client_error)
+                registry_client_error.is_reproducible()
             }
             // false, as an RPC error may be transient
             IDkgVerifyDealingPrivateError::CspVaultRpcError(_) => false,
@@ -348,20 +348,22 @@ impl ErrorReproducibility for IDkgVerifyOpeningError {
     }
 }
 
-fn error_replication_of_registry_client_error(registry_client_error: &RegistryClientError) -> bool {
-    match registry_client_error {
-        // false, as depends on the data available to the registry
-        RegistryClientError::VersionNotAvailable { .. } => false,
-        // false in both cases, these may be transient errors
-        RegistryClientError::DataProviderQueryFailed { source } => match source {
-            ic_types::registry::RegistryDataProviderError::Timeout => false,
-            ic_types::registry::RegistryDataProviderError::Transfer { .. } => false,
-        },
-        // may be a transient error
-        RegistryClientError::PollLockFailed { .. } => false,
-        // may be transient errors
-        RegistryClientError::PollingLatestVersionFailed { .. } => false,
-        // true, as the registry is guaranteed to be consistent accross replicas
-        RegistryClientError::DecodeError { .. } => true,
+impl ErrorReproducibility for RegistryClientError {
+    fn is_reproducible(&self) -> bool {
+        match &self {
+            // false, as depends on the data available to the registry
+            RegistryClientError::VersionNotAvailable { .. } => false,
+            // false in both cases, these may be transient errors
+            RegistryClientError::DataProviderQueryFailed { source } => match source {
+                ic_types::registry::RegistryDataProviderError::Timeout => false,
+                ic_types::registry::RegistryDataProviderError::Transfer { .. } => false,
+            },
+            // may be a transient error
+            RegistryClientError::PollLockFailed { .. } => false,
+            // may be transient errors
+            RegistryClientError::PollingLatestVersionFailed { .. } => false,
+            // true, as the registry is guaranteed to be consistent accross replicas
+            RegistryClientError::DecodeError { .. } => true,
+        }
     }
 }

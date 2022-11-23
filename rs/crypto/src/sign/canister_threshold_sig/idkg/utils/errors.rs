@@ -1,3 +1,4 @@
+use ic_interfaces::crypto::ErrorReproducibility;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
@@ -68,6 +69,17 @@ impl From<MegaKeyFromRegistryError> for IDkgOpenTranscriptError {
     fn from(e: MegaKeyFromRegistryError) -> Self {
         IDkgOpenTranscriptError::InternalError {
             internal_error: format!("Error retrieving public key: {:?}", e),
+        }
+    }
+}
+
+impl ErrorReproducibility for MegaKeyFromRegistryError {
+    fn is_reproducible(&self) -> bool {
+        match &self {
+            MegaKeyFromRegistryError::RegistryError(error) => error.is_reproducible(),
+            MegaKeyFromRegistryError::PublicKeyNotFound { .. } => true,
+            MegaKeyFromRegistryError::UnsupportedAlgorithm { .. } => true,
+            MegaKeyFromRegistryError::MalformedPublicKey { .. } => true,
         }
     }
 }

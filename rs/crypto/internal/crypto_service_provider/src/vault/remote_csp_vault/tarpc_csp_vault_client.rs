@@ -526,13 +526,15 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         })
     }
 
-    fn idkg_retain_threshold_keys_if_present(
+    fn idkg_retain_active_keys(
         &self,
         active_key_ids: BTreeSet<KeyId>,
+        oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
-        self.tokio_block_on(self.tarpc_csp_client.idkg_retain_threshold_keys_if_present(
+        self.tokio_block_on(self.tarpc_csp_client.idkg_retain_active_keys(
             context_with_timeout(self.rpc_timeout),
             active_key_ids,
+            oldest_public_key,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(IDkgRetainThresholdKeysError::InternalError {

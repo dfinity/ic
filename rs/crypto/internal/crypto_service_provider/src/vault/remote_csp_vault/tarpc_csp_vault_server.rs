@@ -432,13 +432,14 @@ impl<
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 
-    async fn idkg_retain_threshold_keys_if_present(
+    async fn idkg_retain_active_keys(
         self,
         _: context::Context,
         active_key_ids: BTreeSet<KeyId>,
+        oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.idkg_retain_threshold_keys_if_present(active_key_ids);
+        let job = move || vault.idkg_retain_active_keys(active_key_ids, oldest_public_key);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

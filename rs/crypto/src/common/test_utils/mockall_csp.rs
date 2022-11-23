@@ -322,9 +322,10 @@ mock! {
             transcript: &IDkgTranscriptInternal,
         ) -> Result<(), IDkgLoadTranscriptError>;
 
-        fn idkg_retain_threshold_keys_if_present(
+        fn idkg_retain_active_keys(
             &self,
-            active_keys: &std::collections::BTreeSet<IDkgTranscriptInternal>
+            active_transcripts: &std::collections::BTreeSet<IDkgTranscriptInternal>,
+            oldest_public_key: MEGaPublicKey,
         ) -> Result<(), IDkgRetainThresholdKeysError>;
 
         fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;

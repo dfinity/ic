@@ -192,11 +192,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         result
     }
 
-    fn idkg_retain_threshold_keys_if_present(
+    //TODO CRP-1729: use `oldest_public_key` to retain active public keys and corresponding private keys.
+    fn idkg_retain_active_keys(
         &self,
         active_key_ids: BTreeSet<KeyId>,
+        _oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
-        debug!(self.logger; crypto.method_name => "idkg_retain_threshold_keys_if_present");
+        debug!(self.logger; crypto.method_name => "idkg_retain_active_keys");
         let start_time = self.metrics.now();
         self.canister_sks_write_lock()
             .retain(
@@ -214,7 +216,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
             MetricsScope::Local,
-            "idkg_retain_threshold_keys_if_present",
+            "idkg_retain_active_keys",
             MetricsResult::Ok,
             start_time,
         );

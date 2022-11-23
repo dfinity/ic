@@ -231,19 +231,24 @@ pub trait IDkgProtocol {
         openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
     ) -> Result<(), IDkgLoadTranscriptError>;
 
-    /// Retains only the active canister IDKG threshold keys in the canister SKS.
+    /// Retains only the IDKG key material needed for the given transcripts.
+    /// If no transcript is given, no key material will be removed.
     ///
-    /// This:
-    /// * Calculates the key id of the canister IDKG threshold keys from each of the
-    ///   provided transcripts
-    /// * Retains all key ids identified using the transcripts
-    /// * Removes all other canister IDKG threshold keys that may exist
+    /// All other IDKG key material will be removed as follows:
+    /// * rotated IDKG public keys in the public key store which are no longer used.
+    ///   The oldest used IDKG public key is identified by the smallest registry version
+    ///   in the given transcripts. Older IDKG public key will be removed while the others
+    ///   will be kept.
+    /// * corresponding IDKG secret keys in the node secret key store
+    /// * IDKG threshold keys in the canister secret key store which are no longer used.
+    ///   Each given transcript uniquely identifies an IDKG threshold key.
+    ///   IDKG threshold keys not identified by a transcript will be removed.
     ///
     /// # Errors
     /// * `IDkgRetainThresholdKeysError::InternalError` if an internal error such as
     ///   an RPC error communicating with a remote CSP vault occurs
     /// * `IDkgRetainThresholdKeysError::SerializationError` if a transcript cannot
-    ///   be serialized into a key id
+    ///   be serialized into a key id to identify the IDKG threshold secret key
     fn retain_active_transcripts(
         &self,
         active_transcripts: &HashSet<IDkgTranscript>,

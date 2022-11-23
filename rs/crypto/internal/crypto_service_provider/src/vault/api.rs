@@ -555,12 +555,11 @@ pub trait IDkgProtocolCspVault {
         opener_key_id: &KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
 
-    /// Retains canister threshold keys identified by `active_key_ids`, and removes other
-    /// canister threshold keys within the same IDKG threshold keys scope from the
-    /// canister SKS.
-    fn idkg_retain_threshold_keys_if_present(
+    /// See [`crate::api::CspIDkgProtocol::idkg_retain_active_keys`].
+    fn idkg_retain_active_keys(
         &self,
         active_key_ids: BTreeSet<KeyId>,
+        oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainThresholdKeysError>;
 }
 

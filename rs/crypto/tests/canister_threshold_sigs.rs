@@ -1064,6 +1064,31 @@ mod verify_sig_share {
 
 mod retain_active_transcripts {
     use super::*;
+    use ic_interfaces::crypto::KeyManager;
+    use std::collections::HashSet;
+
+    #[test]
+    fn should_be_nop_when_transcripts_empty() {
+        let mut rng = thread_rng();
+        let subnet_size = rng.gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let retainer = crypto_for(random_receiver_id(&params), &env.crypto_components);
+        let public_keys_before_retaining = retainer.current_node_public_keys();
+        assert!(public_keys_before_retaining
+            .idkg_dealing_encryption_public_key
+            .is_some());
+
+        let empty_transcripts = HashSet::new();
+
+        assert!(retainer
+            .retain_active_transcripts(&empty_transcripts)
+            .is_ok());
+        assert_eq!(
+            public_keys_before_retaining,
+            retainer.current_node_public_keys()
+        );
+    }
 
     #[test]
     fn should_retain_active_transcripts_successfully() {
