@@ -18,5 +18,6 @@ rust_canister(
     name = "call-tree-test-canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":call_tree_test.did",
     deps = DEPENDENCIES,
 )

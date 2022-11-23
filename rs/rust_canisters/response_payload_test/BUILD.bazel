@@ -19,5 +19,6 @@ rust_canister(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":response_payload_test.did",
     deps = DEPENDENCIES,
 )

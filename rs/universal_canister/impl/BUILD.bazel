@@ -38,6 +38,7 @@ rust_canister(
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":interface.did",
     deps = LIB_DEPENDENCIES + DEPENDENCIES,
 )
 

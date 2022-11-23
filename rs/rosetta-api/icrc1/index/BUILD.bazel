@@ -44,6 +44,7 @@ rust_canister(
     rustc_env = {
         "INDEX_DID_PATH": "$(execpath :index.did)",
     },
+    service_file = ":index.did",
     deps = [":index"] + DEPENDENCIES,
 )
 

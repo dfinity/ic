@@ -1,0 +1,3 @@
+service : {
+  "query" : (record { response_size_bytes : nat64) }) -> (variant { Ok : blob; Err : text }) query;
+}

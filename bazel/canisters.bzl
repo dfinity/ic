@@ -49,11 +49,12 @@ wasm_rust_binary_rule = rule(
     },
 )
 
-def rust_canister(name, **kwargs):
+def rust_canister(name, service_file, **kwargs):
     """Defines a rust program that builds into a WebAssembly module.
 
     Args:
       name: the name of the target that produces a Wasm module.
+      service_file: the label pointing the canister candid interface file.
       **kwargs: additional arguments to pass a rust_binary rule.
     """
     wasm_name = "_wasm_" + name.replace(".", "_")
@@ -70,14 +71,17 @@ def rust_canister(name, **kwargs):
         binary = ":" + wasm_name,
     )
 
-    # Invokes canister WebAssembly module optimizer.
+    # Invokes canister WebAssembly module optimizer and attaches the candid file.
     native.genrule(
         name = name + ".opt",
-        srcs = [name + ".raw"],
+        srcs = [name + ".raw", service_file],
         outs = [name + ".opt.wasm"],
         message = "Shrinking canister " + name,
         exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
-        cmd_bash = "$(location @crate_index//:ic-wasm__ic-wasm) $< -o $@ shrink",
+        cmd_bash = """
+        $(location @crate_index//:ic-wasm__ic-wasm) $(location {input_wasm}) -o $@ shrink && \
+        $(location @crate_index//:ic-wasm__ic-wasm) $@ -o $@ metadata candid:service --visibility public --file $(location {service_file})
+        """.format(input_wasm = name + ".raw", service_file = service_file),
     )
 
     inject_version_into_wasm(
@@ -116,7 +120,7 @@ def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.
             "--visibility public",
 
             # Get value to inject from version_file.
-            "--data $$(cat $(location " + version_file + "))",
+            "--file $(location " + version_file + ")",
         ]),
         visibility = visibility,
     )

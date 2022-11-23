@@ -44,6 +44,7 @@ rust_canister(
     proc_macro_deps = [
         "@crate_index//:ic-cdk-macros",
     ],
+    service_file = ":icrc1.did",
     deps = [
         ":ledger",
         "//rs/monitoring/metrics_encoder",

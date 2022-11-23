@@ -68,6 +68,7 @@ rust_canister(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":cmc.did",
     deps = DEPENDENCIES + [
         ":cmc",
         ":build_script",

@@ -28,5 +28,6 @@ rust_doc_test(
 rust_canister(
     name = "xnet-test-canister",
     srcs = ["src/main.rs"],
+    service_file = ":xnet_test.did",
     deps = DEPENDENCIES + [":xnet_test"],
 )

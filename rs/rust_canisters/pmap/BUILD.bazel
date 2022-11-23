@@ -32,6 +32,7 @@ rust_canister(
     srcs = ["canister/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/pmap.did",
     deps = DEPENDENCIES,
 )
 

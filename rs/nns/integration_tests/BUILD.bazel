@@ -152,6 +152,7 @@ rust_canister(
     srcs = ["test_canisters/mem_utils_test.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test_canisters/empty.did",
     deps = DEPENDENCIES + [":integration_tests"],
 )
 
@@ -160,6 +161,7 @@ rust_canister(
     srcs = ["test_canisters/governance_mem_test_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test_canisters/empty.did",
     deps = DEPENDENCIES + [":integration_tests"],
 )
 

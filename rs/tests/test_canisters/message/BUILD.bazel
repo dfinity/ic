@@ -36,6 +36,7 @@ rust_canister(
     aliases = ALIASES,
     crate_name = "message",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":src/message.did",
     version = "0.1.0",
     deps = DEPENDENCIES + ["//rs/tests/test_canisters/message:lib"],
 )

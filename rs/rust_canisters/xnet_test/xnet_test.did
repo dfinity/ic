@@ -1,0 +1,5 @@
+service : {
+  start : (vec vec blob, nat64, nat64) -> (text);
+  stop : () -> (text);
+  return_cycles : () -> (text);
+}
