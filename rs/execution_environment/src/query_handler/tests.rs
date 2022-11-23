@@ -575,7 +575,7 @@ const COMPOSITE_QUERY_WAT: &str = r#"
 
 #[test]
 fn composite_query_works_in_non_replicated_mode() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
 
     let canister = test.canister_from_wat(COMPOSITE_QUERY_WAT).unwrap();
 
@@ -595,6 +595,34 @@ fn composite_query_works_in_non_replicated_mode() {
         .unwrap();
 
     assert_eq!(result, WasmResult::Reply("hello".as_bytes().to_vec()));
+}
+
+#[test]
+fn composite_query_fails_if_disabled() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister = test.canister_from_wat(COMPOSITE_QUERY_WAT).unwrap();
+
+    let result = test
+        .query(
+            UserQuery {
+                source: user_test_id(0),
+                receiver: canister,
+                method_name: "query".to_string(),
+                method_payload: vec![],
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap_err();
+
+    assert_eq!(result.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(
+        result.description(),
+        "Composite queries are not enabled yet"
+    );
 }
 
 #[test]

@@ -708,6 +708,7 @@ impl ValidatedConfig {
             rate_limiting_of_debug_prints: FlagStatus::Disabled,
             rate_limiting_of_heap_delta: FlagStatus::Disabled,
             rate_limiting_of_instructions: FlagStatus::Disabled,
+            composite_queries: FlagStatus::Enabled,
             ..HypervisorConfig::default()
         };
 

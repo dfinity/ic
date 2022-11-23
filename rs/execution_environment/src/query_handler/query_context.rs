@@ -152,6 +152,7 @@ pub(super) struct QueryContext<'a> {
     // Number of instructions to charge for each query call
     instructions_per_composite_query_call: NumInstructions,
     round_limits: RoundLimits,
+    composite_queries: FlagStatus,
 }
 
 impl<'a> QueryContext<'a> {
@@ -168,6 +169,7 @@ impl<'a> QueryContext<'a> {
         max_query_call_depth: usize,
         initial_instructions_for_composite_query: NumInstructions,
         instructions_per_composite_query_call: NumInstructions,
+        composite_queries: FlagStatus,
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let round_limits = RoundLimits {
@@ -192,6 +194,7 @@ impl<'a> QueryContext<'a> {
             remaining_instructions_for_composite_query: initial_instructions_for_composite_query,
             instructions_per_composite_query_call,
             round_limits,
+            composite_queries,
         }
     }
 
@@ -239,6 +242,12 @@ impl<'a> QueryContext<'a> {
             let method = WasmMethod::CompositeQuery(query.method_name.clone());
             match validate_method(&method, &old_canister) {
                 Ok(_) => {
+                    if self.composite_queries == FlagStatus::Disabled {
+                        return Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "Composite queries are not enabled yet",
+                        ));
+                    }
                     let query_kind = NonReplicatedQueryKind::Stateful {
                         call_origin: call_origin.clone(),
                     };

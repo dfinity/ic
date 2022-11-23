@@ -1272,6 +1272,7 @@ pub struct ExecutionTestBuilder {
     manual_execution: bool,
     rate_limiting_of_instructions: bool,
     deterministic_time_slicing: bool,
+    composite_queries: bool,
     allocatable_compute_capacity_in_percent: usize,
     subnet_features: String,
     bitcoin_privileged_access: Vec<CanisterId>,
@@ -1318,6 +1319,7 @@ impl Default for ExecutionTestBuilder {
             manual_execution: false,
             rate_limiting_of_instructions: false,
             deterministic_time_slicing: false,
+            composite_queries: false,
             allocatable_compute_capacity_in_percent: 100,
             subnet_features: String::default(),
             bitcoin_privileged_access: Vec::default(),
@@ -1488,6 +1490,13 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_composite_queries(self) -> Self {
+        Self {
+            composite_queries: true,
+            ..self
+        }
+    }
+
     pub fn with_allocatable_compute_capacity_in_percent(
         self,
         allocatable_compute_capacity_in_percent: usize,
@@ -1613,9 +1622,15 @@ impl ExecutionTestBuilder {
         } else {
             FlagStatus::Disabled
         };
+        let composite_queries = if self.composite_queries {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
         let config = Config {
             rate_limiting_of_instructions,
             deterministic_time_slicing,
+            composite_queries,
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
@@ -1671,6 +1686,7 @@ impl ExecutionTestBuilder {
             &metrics_registry,
             self.instruction_limit_without_dts,
             Arc::clone(&cycles_account_manager),
+            composite_queries,
         );
         ExecutionTest {
             state: Some(state),
