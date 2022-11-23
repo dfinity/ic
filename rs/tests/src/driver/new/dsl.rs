@@ -4,17 +4,14 @@
 use std::{
     collections::BTreeMap,
     panic::UnwindSafe,
-    path::{Path, PathBuf},
+    path::{Path},
 };
 
 use crate::driver::{
     pot_dsl::{PotSetupFn, SysTestFn},
     test_env::TestEnv,
 };
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use slog::Logger;
-use url::Url;
 
 #[macro_export]
 macro_rules! systest {
@@ -50,44 +47,18 @@ impl TestFunction {
     }
 }
 
-#[derive(Clone, Debug)]
-struct Dependencies(BTreeMap<String, Dependency>);
+pub trait ChildFn: FnOnce() + UnwindSafe + Send + Sync + 'static {}
+impl<T: FnOnce() + UnwindSafe + Send + Sync + 'static> ChildFn for T {}
 
-impl Dependencies {
-    // This function is essentially the interface between bazel and the test
-    // driver.
-
-    // btw, bazel allows assembling json objects
-    fn from_env() -> Result<Self> {
-        Ok(Self(Default::default()))
-    }
-}
-
-// this should be some internally stable representation of available
-// dependencies
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type")]
-pub enum Dependency {
-    RemoteApi { url: Url },
-    // for example, wasm files that are required by the test drivers are
-    // certainly locally available
-    LocalFile { path: PathBuf },
-    // for example, disk image
-    RemoteFile { url: Url, sha256: String },
-}
-
-pub trait ChildFn: FnOnce(Logger) + UnwindSafe + Send + Sync + 'static {}
-impl<T: FnOnce(Logger) + UnwindSafe + Send + Sync + 'static> ChildFn for T {}
-
-// (TestEnv -> ()) -> (WorkingDir -> ())
-fn lift<P, R, F: SysTestFn>(source_env: P, target_env: R, f: F) -> impl ChildFn
+// Create a ChildFn from source and target environment.
+fn lift<P, R, F: SysTestFn>(logger: Logger, source_env: P, target_env: R, f: F) -> impl ChildFn
 where
     P: AsRef<Path>,
     R: AsRef<Path>,
 {
     let source_env_path = source_env.as_ref().to_owned();
     let target_env_path = target_env.as_ref().to_owned();
-    move |logger: Logger| {
+    move || {
         let src_env = TestEnv::new(&source_env_path, logger.clone())
             .expect("could not create source environment");
         let test_env = src_env
