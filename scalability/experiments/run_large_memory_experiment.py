@@ -161,7 +161,7 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
                     "rps_max": rps_max,
                     "rps_max_in": rps_max_in,
                     "num_succ_per_iteration": num_succ_per_iteration,
-                    "target_duration": FLAGS.iter_duration,
+                    "iter_duration": FLAGS.iter_duration,
                     "success_rate": (num_success / total_requests) * 100,
                     "failure_rate": failure_rate * 100,
                     "failure_rate_color": "green" if failure_rate < 0.01 else "red",

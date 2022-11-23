@@ -80,7 +80,7 @@ class Test_Experiment(TestCase):
         exp.run_experiment({})
 
         exp.subnet_id = "abc"
-        exp.write_summary_file("test", {}, [], "some x value")
+        exp.write_summary_file("test", {"iter_duration": 300}, [], "some x value")
         exp.end_experiment()
 
         # We have two canisters in the description file

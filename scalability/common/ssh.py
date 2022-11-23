@@ -104,6 +104,8 @@ def run_all_ssh_in_parallel(
     """Run the given command in parallel on all given machines and wait for completion."""
     ps = []  # Array of type: [(str, str, subprocess.Popen)]
     for command, machine in zip(commands, machines):
+        this_f_stdout = f_stdout.format(machine) if f_stdout is not None else None
+        this_f_stderr = f_stderr.format(machine) if f_stderr is not None else None
         ps.append(
             (
                 machine,
@@ -111,19 +113,26 @@ def run_all_ssh_in_parallel(
                 run_ssh(
                     machine,
                     command,
-                    f_stdout.format(machine) if f_stdout is not None else None,
-                    f_stderr.format(machine) if f_stderr is not None else None,
+                    this_f_stdout,
+                    this_f_stderr,
                 ),
+                this_f_stdout,
+                this_f_stderr,
             )
         )
 
     rcs = []
-    for (machine, command, p) in ps:
+    for (machine, command, p, this_f_stdout, this_f_stderr) in ps:
         try:
+            # Note: timeout == None means no timeout (it's the default)
+            # Note 2: wait() is actually synchronous, see info here:
+            # https://docs.python.org/3/library/subprocess.html#subprocess.Popen.wait
             rc = p.wait(timeout)
             rcs.append(rc)
             status = colored("OK", "green") if rc == 0 else colored(f"rc={rc}", "red")
             print("{}: {} Done running {} on {}".format(colored(machine, "blue"), status, command, machine))
+            if rc != 0 and (this_f_stderr is not None or this_f_stdout is not None):
+                print(f"SSH failed, output is: err={this_f_stderr} out={this_f_stdout}")
         except subprocess.TimeoutExpired:
             print(
                 "{}: {} Timeout running {} on {}".format(

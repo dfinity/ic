@@ -97,6 +97,7 @@ if __name__ == "__main__":
                 "payload_size_max": payload_size_max,
                 "payload_size_max_in": payload_size_max_in,
                 "num_succ_per_iteration": num_succ_per_iteration,
+                "iter_duration": FLAGS.iter_duration,
             },
             payload_size,
             "payload size [bytes]",

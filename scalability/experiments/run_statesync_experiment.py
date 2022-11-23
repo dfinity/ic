@@ -186,7 +186,10 @@ if __name__ == "__main__":
     state_sync_duration = exp.run_experiment({})
 
     exp.write_summary_file(
-        "run_statesync_experiment", {"state_sync_duration": state_sync_duration}, ["n.a."], "no axis label"
+        "run_statesync_experiment",
+        {"state_sync_duration": state_sync_duration, "iter_duration": -1},
+        ["n.a."],
+        "no axis label",
     )
 
     exp.end_experiment()

@@ -192,9 +192,8 @@ def generate_report(base, githash, timestamp):
                 ) = evaluated_summaries.convert_tuple()
                 wg_summary_files.append(files)
 
-                aggregated_rates += evaluated_summaries.get_avg_success_rate(
-                    experiment["experiment_details"]["target_duration"]
-                )
+                experiment_details = report.parse_experiment_details(experiment["experiment_details"])
+                aggregated_rates += evaluated_summaries.get_avg_success_rate(experiment_details.iter_duration)
 
                 from statistics import mean
 
@@ -202,9 +201,7 @@ def generate_report(base, githash, timestamp):
                 t_average_agg = max(t_average)
                 t_max_agg = max(t_max)
                 t_min_agg = max(t_min)
-                rps_max = update_rps_max(
-                    rps_max, evaluated_summaries, experiment["experiment_details"]["target_duration"]
-                )
+                rps_max = update_rps_max(rps_max, evaluated_summaries, experiment_details.iter_duration)
 
                 iter_data.update(
                     {
