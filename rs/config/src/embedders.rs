@@ -49,7 +49,7 @@ impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            new_wasm_transform_lib: FlagStatus::Disabled,
+            new_wasm_transform_lib: FlagStatus::Enabled,
         }
     }
 }
