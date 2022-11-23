@@ -472,7 +472,12 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             ),
         );
         let start_time = self.metrics.now();
-        let result = retain_active_keys::retain_active_transcripts(&self.csp, active_transcripts);
+        let result = retain_active_keys::retain_keys_for_transcripts(
+            &self.csp,
+            &self.node_id,
+            &self.registry_client,
+            active_transcripts,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
             MetricsScope::Full,

@@ -184,9 +184,10 @@ pub trait TarpcCspVault {
         transcript: IDkgTranscriptInternal,
     ) -> Result<(), IDkgLoadTranscriptError>;
 
-    // Corresponds to `IDkgProtocolCspVault.idkg_retain_threshold_keys_if_present`
-    async fn idkg_retain_threshold_keys_if_present(
+    // Corresponds to `IDkgProtocolCspVault.idkg_retain_active_keys`
+    async fn idkg_retain_active_keys(
         active_key_ids: BTreeSet<KeyId>,
+        oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainThresholdKeysError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_gen_dealing_encryption_key_pair`

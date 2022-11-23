@@ -262,19 +262,22 @@ impl CspIDkgProtocol for Csp {
         })
     }
 
-    fn idkg_retain_threshold_keys_if_present(
+    fn idkg_retain_active_keys(
         &self,
-        active_keys: &BTreeSet<IDkgTranscriptInternal>,
+        active_transcripts: &BTreeSet<IDkgTranscriptInternal>,
+        oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
-        debug!(self.logger; crypto.method_name => "idkg_retain_threshold_keys_if_present");
+        debug!(self.logger; crypto.method_name => "idkg_retain_active_keys");
 
-        let active_key_ids = active_keys
+        let active_key_ids = active_transcripts
             .iter()
-            .map(|active_key| KeyId::from(active_key.combined_commitment.commitment()))
+            .map(|active_transcript| {
+                KeyId::from(active_transcript.combined_commitment.commitment())
+            })
             .collect();
 
         self.csp_vault
-            .idkg_retain_threshold_keys_if_present(active_key_ids)
+            .idkg_retain_active_keys(active_key_ids, oldest_public_key)
     }
 }
 

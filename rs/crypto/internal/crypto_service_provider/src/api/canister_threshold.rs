@@ -150,12 +150,11 @@ pub trait CspIDkgProtocol {
         opening: CommitmentOpening,
     ) -> Result<(), IDkgVerifyOpeningError>;
 
-    /// Retains canister threshold keys identified by `active_keys`, and removes other
-    /// canister threshold keys within the same IDKG threshold keys scope from the
-    /// canister SKS.
-    fn idkg_retain_threshold_keys_if_present(
+    /// Retains IDKG key material for the given transcripts.
+    fn idkg_retain_active_keys(
         &self,
-        active_keys: &BTreeSet<IDkgTranscriptInternal>,
+        active_transcripts: &BTreeSet<IDkgTranscriptInternal>,
+        oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainThresholdKeysError>;
 }
 
