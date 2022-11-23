@@ -30,11 +30,11 @@ use crate::ecdsa::payload_builder::{
     block_chain_cache, create_data_payload_helper, create_summary_payload,
     get_ecdsa_config_if_enabled,
 };
+use ic_crypto::MegaKeyFromRegistryError;
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_replicated_state::ReplicatedState;
-use ic_types::crypto::canister_threshold_sig::idkg::SignedIDkgDealing;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -47,7 +47,7 @@ use ic_types::{
             IDkgVerifyInitialDealingsError, IDkgVerifyTranscriptError,
             ThresholdEcdsaVerifyCombinedSignatureError,
         },
-        idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings},
+        idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings, SignedIDkgDealing},
         ThresholdEcdsaCombinedSignature,
     },
     registry::RegistryClientError,
@@ -68,6 +68,7 @@ pub enum TransientError {
 #[derive(Debug)]
 pub enum PermanentError {
     // wrapper of other errors
+    RegistryClientError(RegistryClientError),
     UnexpectedSummaryPayload(EcdsaPayloadError),
     UnexpectedDataPayload(Option<EcdsaPayloadError>),
     InvalidChainCacheError(InvalidChainCacheError),
@@ -76,6 +77,7 @@ pub enum PermanentError {
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
+    MegaKeyFromRegistryError(MegaKeyFromRegistryError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
@@ -108,11 +110,22 @@ impl From<TransientError> for EcdsaValidationError {
     }
 }
 
+fn from_registry_error(err: RegistryClientError) -> EcdsaValidationError {
+    match err {
+        RegistryClientError::DecodeError { .. } => PermanentError::RegistryClientError(err).into(),
+        _ => TransientError::RegistryClientError(err).into(),
+    }
+}
+
 impl From<MembershipError> for EcdsaValidationError {
     fn from(err: MembershipError) -> Self {
         match err {
-            MembershipError::RegistryClientError(err) => {
-                TransientError::RegistryClientError(err).into()
+            MembershipError::RegistryClientError(err) => from_registry_error(err),
+            MembershipError::MegaKeyFromRegistryError(MegaKeyFromRegistryError::RegistryError(
+                err,
+            )) => from_registry_error(err),
+            MembershipError::MegaKeyFromRegistryError(err) => {
+                PermanentError::MegaKeyFromRegistryError(err).into()
             }
             MembershipError::SubnetWithNoNodes(subnet_id, err) => {
                 PermanentError::SubnetWithNoNodes(subnet_id, err).into()

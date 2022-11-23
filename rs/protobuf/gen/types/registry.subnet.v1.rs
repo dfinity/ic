@@ -340,6 +340,10 @@ pub struct EcdsaConfig {
     /// Signature requests will timeout after the given number of nano seconds.
     #[prost(uint64, optional, tag = "5")]
     pub signature_request_timeout_ns: ::core::option::Option<u64>,
+    /// Key rotation period of a single node in milliseconds.
+    /// If none is specified key rotation is disabled.
+    #[prost(uint64, optional, tag = "6")]
+    pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
 }
 #[derive(
     serde::Serialize,

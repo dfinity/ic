@@ -48,7 +48,10 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
         system_subnets_pot(),
         request_auth_malicious_replica_pot(),
         system_api_security_pot(),
-        tecdsa_complaint_test_pot(),
+        // TODO CRP-1800: Re-enable this test once iDKG dealing encryption key
+        // rotation is not done any more by default and thus doesn’t affect the
+        // legacy system tests any more.
+        // tecdsa_complaint_test_pot(),
     ]
 }
 
@@ -131,15 +134,16 @@ fn system_api_security_pot() -> pot::Pot {
     )
 }
 
-fn tecdsa_complaint_test_pot() -> pot::Pot {
-    composable!(
-        "tecdsa_complaint_test",
-        tecdsa::tecdsa_complaint_test::config(),
-        steps! {
-            tecdsa::tecdsa_complaint_test::test_threshold_ecdsa_complaint => "tECDSA complaints test"
-        }
-    )
-}
+// TODO CRP-1800: Re-enable this test (see respective comment in `all_pots`)
+// fn tecdsa_complaint_test_pot() -> pot::Pot {
+//     composable!(
+//         "tecdsa_complaint_test",
+//         tecdsa::tecdsa_complaint_test::config(),
+//         steps! {
+//             tecdsa::tecdsa_complaint_test::test_threshold_ecdsa_complaint => "tECDSA complaints test"
+//         }
+//     )
+// }
 
 fn main() {
     let started_at = Instant::now();

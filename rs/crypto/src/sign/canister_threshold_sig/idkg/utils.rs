@@ -16,14 +16,13 @@ use ic_types::crypto::KeyPurpose;
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use std::sync::Arc;
 
 /// Query the registry for the MEGa public keys of all receivers.
 ///
 /// The returned map is keyed by the index of the receiver.
 pub fn idkg_encryption_keys_from_registry(
     receivers: &IDkgReceivers,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<BTreeMap<NodeIndex, MEGaPublicKey>, MegaKeyFromRegistryError> {
     receivers
@@ -38,7 +37,7 @@ pub fn idkg_encryption_keys_from_registry(
 /// Query the registry for the MEGa public key of `node_id` receiver.
 pub fn get_mega_pubkey(
     node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<MEGaPublicKey, MegaKeyFromRegistryError> {
     let pk_proto = fetch_idkg_dealing_encryption_public_key_from_registry(
@@ -62,7 +61,7 @@ pub fn get_mega_pubkey(
 
 pub fn fetch_idkg_dealing_encryption_public_key_from_registry(
     node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<PublicKey, MegaKeyFromRegistryError> {
     registry

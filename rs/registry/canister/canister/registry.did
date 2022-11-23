@@ -101,6 +101,7 @@ type EcdsaConfig = record {
   max_queue_size : opt nat32;
   key_ids : vec EcdsaKeyId;
   signature_request_timeout_ns : opt nat64;
+  idkg_key_rotation_period_ms : opt nat64;
 };
 type EcdsaCurve = variant { secp256k1 };
 type EcdsaInitialConfig = record {
@@ -108,6 +109,7 @@ type EcdsaInitialConfig = record {
   max_queue_size : opt nat32;
   keys : vec EcdsaKeyRequest;
   signature_request_timeout_ns : opt nat64;
+  idkg_key_rotation_period_ms : opt nat64;
 };
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
 type EcdsaKeyRequest = record {

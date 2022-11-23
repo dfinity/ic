@@ -245,6 +245,7 @@ mock! {
     }
 
     pub trait NodePublicKeyData {
+        fn pks_contains(&self, public_keys: CurrentNodePublicKeys) -> Result<bool, CryptoError>;
         fn current_node_public_keys(&self) -> CurrentNodePublicKeys;
         fn dkg_dealing_encryption_key_id(&self) -> KeyId;
     }

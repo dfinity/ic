@@ -22,10 +22,7 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{
-    crypto::KeyPurpose, messages::MessageId, registry::IDKG_KEY_UPDATE_FREQUENCY_SECS, NodeId,
-    RegistryVersion, SubnetId,
-};
+use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
 use prost::Message;
 use rand::prelude::*;
 use registry_canister::mutations::do_update_node_directly::UpdateNodeDirectlyPayload;
@@ -235,10 +232,22 @@ impl NodeRegistration {
         registry_version: RegistryVersion,
         subnet_id: SubnetId,
     ) -> bool {
-        if !self.is_tecdsa_subnet(subnet_id) {
-            warn!(self.log, "Node not part of tECDSA subnet.");
-            return false;
-        }
+        // If there is no ECDSA config or no key_ids, ECDSA is disabled.
+        // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
+        let delta = match self
+            .registry_client
+            .get_ecdsa_config(subnet_id, registry_version)
+        {
+            Ok(Some(config)) if !config.key_ids.is_empty() => {
+                match config.idkg_key_rotation_period_ms {
+                    Some(ms) => Duration::from_millis(ms),
+                    None => return false,
+                }
+            }
+            _ => {
+                return false;
+            }
+        };
 
         let own_key_timestamp = self
             .registry_client
@@ -279,8 +288,7 @@ impl NodeRegistration {
             .map(|ts| SystemTime::UNIX_EPOCH + Duration::from_millis(ts))
             .collect();
 
-        if !is_time_to_rotate(subnet_size, node_key_timestamps) {
-            warn!(self.log, "To early to register new key, aborting.");
+        if !is_time_to_rotate(delta, subnet_size, node_key_timestamps) {
             return false;
         }
 
@@ -288,8 +296,9 @@ impl NodeRegistration {
     }
 
     async fn try_to_register_key(&self, registry_version: RegistryVersion, idkg_pk: PublicKey) {
-        let node_id = self.node_id;
+        info!(self.log, "Trying to register rotated idkg key...");
 
+        let node_id = self.node_id;
         let nns_url = match self
             .get_random_nns_url()
             .or_else(|| self.get_random_nns_url_from_config())
@@ -467,8 +476,15 @@ impl NodeRegistration {
     }
 }
 
-pub(crate) fn is_time_to_rotate(subnet_size: usize, timestamps: Vec<SystemTime>) -> bool {
-    let delta = Duration::from_secs(IDKG_KEY_UPDATE_FREQUENCY_SECS);
+/// Given Δ (= key rotation period of a single node), calculates Ɣ = Δ/subnet_size * delay_compensation
+/// (= key rotation period of the subnet as a whole). Then determines if at least Ɣ time has passed
+/// since all of the given timestamps. Iff so, return true to indicate that the subnet is ready to accept
+/// a new key rotation.
+pub(crate) fn is_time_to_rotate(
+    delta: Duration,
+    subnet_size: usize,
+    timestamps: Vec<SystemTime>,
+) -> bool {
     // gamma determines the frequency at which the registry accepts key updates from the subnet as a whole
     let gamma = delta
         .div_f64(subnet_size as f64)
@@ -643,10 +659,11 @@ mod tests {
         let valid = vec![now - hours(25), now - hours(36), now - hours(48)];
         let too_recent = vec![now - hours(23), now - hours(25), now - hours(36)];
         let in_future = vec![now - hours(25), now - hours(36), now + hours(1)];
+        let delta = Duration::from_secs(14 * 24 * 60 * 60); //2 weeks
 
-        assert!(is_time_to_rotate(subnet_size, empty));
-        assert!(is_time_to_rotate(subnet_size, valid));
-        assert!(!is_time_to_rotate(subnet_size, too_recent));
-        assert!(!is_time_to_rotate(subnet_size, in_future));
+        assert!(is_time_to_rotate(delta, subnet_size, empty));
+        assert!(is_time_to_rotate(delta, subnet_size, valid));
+        assert!(!is_time_to_rotate(delta, subnet_size, too_recent));
+        assert!(!is_time_to_rotate(delta, subnet_size, in_future));
     }
 }

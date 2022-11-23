@@ -217,6 +217,7 @@ pub struct EcdsaConfig {
     pub key_ids: Vec<EcdsaKeyId>,
     pub max_queue_size: Option<u32>,
     pub signature_request_timeout_ns: Option<u64>,
+    pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
 impl From<EcdsaConfig> for pb::EcdsaConfig {
@@ -226,6 +227,7 @@ impl From<EcdsaConfig> for pb::EcdsaConfig {
             key_ids: item.key_ids.iter().map(|key| key.into()).collect(),
             max_queue_size: item.max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: item.signature_request_timeout_ns,
+            idkg_key_rotation_period_ms: item.idkg_key_rotation_period_ms,
         }
     }
 }
@@ -243,6 +245,7 @@ impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
             key_ids,
             max_queue_size: Some(value.max_queue_size),
             signature_request_timeout_ns: value.signature_request_timeout_ns,
+            idkg_key_rotation_period_ms: value.idkg_key_rotation_period_ms,
         })
     }
 }

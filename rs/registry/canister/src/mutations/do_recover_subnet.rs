@@ -306,6 +306,7 @@ mod test {
                 key_ids: vec![key_id.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
             }
             .into(),
         );
@@ -422,6 +423,7 @@ mod test {
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -453,6 +455,7 @@ mod test {
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -484,6 +487,7 @@ mod test {
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -513,6 +517,7 @@ mod test {
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
