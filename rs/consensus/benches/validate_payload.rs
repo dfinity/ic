@@ -10,7 +10,7 @@
 //!   in the past payloads, and the user signature is checked eventually, and
 //!   the message validates successfully
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::{
@@ -31,6 +31,7 @@ use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
@@ -352,6 +353,37 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, validate_payload_benchmark);
+fn serialization_benchmark(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("serialization");
+    group.sample_size(30);
+    group.measurement_time(std::time::Duration::from_secs(10));
+
+    for message_count in (2000..=8000).step_by(2000) {
+        run_test(
+            "serialization_benchmark",
+            |now: Time, _: &mut ConsensusPoolImpl, _: &dyn PayloadBuilder| {
+                let seed = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 10;
+                let ingress = prepare_ingress_payload(now, message_count, seed as u8);
+                let name = format!("serialization_{}_kb_payload", message_count);
+                group.bench_function(&name, |bench| {
+                    bench.iter(|| {
+                        let proto: pb::IngressPayload = (&ingress).into();
+                        black_box(proto);
+                    })
+                });
+                let name = format!("deserialization_{}_kb_payload", message_count);
+                group.bench_function(&name, |bench| {
+                    let p: pb::IngressPayload = (&ingress).into();
+                    bench.iter(|| {
+                        let proto = p.clone();
+                        let deser: IngressPayload = proto.try_into().unwrap();
+                        black_box(deser);
+                    })
+                });
+            },
+        )
+    }
+}
+criterion_group!(benches, serialization_benchmark, validate_payload_benchmark);
 
 criterion_main!(benches);
