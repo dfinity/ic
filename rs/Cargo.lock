@@ -1182,6 +1182,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "canister-creator"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "canister-test",
+ "dfn_core",
+ "dfn_json",
+ "dfn_macro",
+ "futures",
+ "ic-ic00-types",
+ "ic-state-machine-tests",
+ "ic-test-utilities",
+ "ic-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "canister-test"
 version = "0.8.0"
 dependencies = [

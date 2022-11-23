@@ -202,6 +202,7 @@ members = [
   "rosetta-api/icrc1/archive",
   "rosetta-api/hardware_wallet_tests",
   "rosetta-api/test_utils",
+  "rust_canisters/canister_creator",
   "rust_canisters/canister_test",
   "rust_canisters/dfn_core",
   "rust_canisters/dfn_candid",

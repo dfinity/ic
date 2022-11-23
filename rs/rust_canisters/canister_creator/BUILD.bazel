@@ -1,0 +1,61 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_json",
+    "//rs/types/ic00_types",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_pcg",
+    "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/rust_canisters/canister_test",
+    "//rs/state_machine_tests",
+    "//rs/test_utilities",
+    "//rs/types/types",
+]
+
+MACRO_DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_macro",
+]
+
+rust_library(
+    name = "canister_creator",
+    srcs = glob(["src/**"]),
+    crate_name = "canister_creator",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "canister_creator_canister",
+    srcs = ["src/main.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister_creator.did",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "canister_creator_integration_test",
+    srcs = ["test/test.rs"],
+    data = [
+        ":canister_creator_canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rust_canisters/canister_creator",
+        "CANISTER_CREATOR_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/canister_creator:canister_creator_canister)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
