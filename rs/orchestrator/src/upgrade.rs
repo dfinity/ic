@@ -114,7 +114,7 @@ impl Upgrade {
         let old_cup_height = local_cup.as_ref().map(|cup| cup.cup.content.height());
 
         // Get the latest available CUP from the disk, peers or registry and
-        // persist it if necesasry.
+        // persist it if necessary.
         let cup = self
             .cup_provider
             .get_latest_cup(local_cup, subnet_id)
