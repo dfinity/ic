@@ -86,6 +86,7 @@ pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
         C::SubnetOversubscribed => StatusCode::SERVICE_UNAVAILABLE,
         C::MaxNumberOfCanistersReached => StatusCode::SERVICE_UNAVAILABLE,
         C::CanisterOutputQueueFull => StatusCode::SERVICE_UNAVAILABLE,
+        C::CanisterQueueNotEmpty => StatusCode::SERVICE_UNAVAILABLE,
         C::IngressMessageTimeout => StatusCode::GATEWAY_TIMEOUT,
         C::CanisterNotFound => StatusCode::NOT_FOUND,
         C::CanisterMethodNotFound => StatusCode::NOT_FOUND,
