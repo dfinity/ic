@@ -11,7 +11,7 @@ use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::CryptoServiceProvider;
-use ic_crypto_internal_logmon::metrics::KeyCounts;
+use ic_crypto_internal_logmon::metrics::{KeyCounts, KeyRotationResult};
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
@@ -146,75 +146,10 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         &self,
         registry_version: RegistryVersion,
     ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError> {
-        let key_rotation_period: Duration = if let Some(key_rotation_period) =
-            self.get_rotation_period_for_current_node_if_key_rotation_enabled(registry_version)?
-        {
-            key_rotation_period
-        } else {
-            info!(
-                self.logger,
-                "iDKG dealing encryption key rotation not enabled"
-            );
-            return Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled);
-        };
-
-        let current_idkg_public_key_proto = (&self.current_node_public_keys().idkg_dealing_encryption_public_key
-            .expect("missing local IDKG public key! \
-            This should not happen because it's expected that check_keys_with_registry() was called before \
-            to ensure that rotation was needed.")).clone();
-        let idkg_public_key_from_registry = fetch_idkg_dealing_encryption_public_key_from_registry(
-            &self.node_id,
-            self.registry_client.as_ref(),
-            registry_version,
-        );
-        match idkg_public_key_from_registry {
-            Ok(registry_idkg_public_key_proto) => {
-                if !registry_idkg_public_key_proto
-                    .equal_ignoring_timestamp(&current_idkg_public_key_proto)
-                {
-                    return Ok(current_idkg_public_key_proto);
-                }
-                match registry_idkg_public_key_proto.timestamp {
-                    None => Ok(idkg_dealing_encryption_pk_to_proto(
-                        self.csp.idkg_gen_dealing_encryption_key_pair()?,
-                    )),
-                    Some(timestamp_in_millis) => {
-                        if self.is_current_key_too_old(timestamp_in_millis, key_rotation_period) {
-                            Ok(idkg_dealing_encryption_pk_to_proto(
-                                self.csp.idkg_gen_dealing_encryption_key_pair()?,
-                            ))
-                        } else {
-                            Err(IDkgDealingEncryptionKeyRotationError::LatestLocalRotationTooRecent)
-                        }
-                    }
-                }
-            }
-            Err(MegaKeyFromRegistryError::RegistryError(client_error)) => Err(
-                IDkgDealingEncryptionKeyRotationError::RegistryError(client_error),
-            ),
-            Err(error @ MegaKeyFromRegistryError::PublicKeyNotFound { .. }) => {
-                error!(
-                    self.logger,
-                    "IDKG dealing encryption public key not found in registry {:?}", error
-                );
-                Ok(current_idkg_public_key_proto)
-            }
-            Err(error @ MegaKeyFromRegistryError::UnsupportedAlgorithm { .. }) => {
-                error!(
-                    self.logger,
-                    "IDKG dealing encryption public key from registry uses an unsupported algorithm {:?}", error
-                );
-                Ok(current_idkg_public_key_proto)
-            }
-
-            Err(error @ MegaKeyFromRegistryError::MalformedPublicKey { .. }) => {
-                error!(
-                    self.logger,
-                    "IDKG dealing encryption public key from registry is malformed {:?}", error
-                );
-                Ok(current_idkg_public_key_proto)
-            }
-        }
+        let key_rotation_result =
+            self.rotate_idkg_dealing_encryption_keys_internal(registry_version);
+        self.record_key_rotation_metrics(&key_rotation_result);
+        convert_key_rotation_outcome(key_rotation_result)
     }
 }
 
@@ -254,6 +189,137 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             }
         }
         KeyCounts::new(pub_keys_in_reg, pub_keys_local, secret_keys_in_sks)
+    }
+
+    fn rotate_idkg_dealing_encryption_keys_internal(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<KeyRotationOutcome, IDkgDealingEncryptionKeyRotationError> {
+        let key_rotation_period: Duration = if let Some(key_rotation_period) =
+            self.get_rotation_period_for_current_node_if_key_rotation_enabled(registry_version)?
+        {
+            key_rotation_period
+        } else {
+            info!(
+                self.logger,
+                "iDKG dealing encryption key rotation not enabled"
+            );
+            return Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled);
+        };
+
+        let current_idkg_public_key_proto = (&self.current_node_public_keys().idkg_dealing_encryption_public_key
+            .expect("missing local IDKG public key! \
+            This should not happen because it's expected that check_keys_with_registry() was called before \
+            to ensure that rotation was needed.")).clone();
+        let idkg_public_key_from_registry = fetch_idkg_dealing_encryption_public_key_from_registry(
+            &self.node_id,
+            self.registry_client.as_ref(),
+            registry_version,
+        );
+        match idkg_public_key_from_registry {
+            Ok(registry_idkg_public_key_proto) => {
+                if !registry_idkg_public_key_proto
+                    .equal_ignoring_timestamp(&current_idkg_public_key_proto)
+                {
+                    return Ok(KeyRotationOutcome::KeyNotRotated {
+                        existing_key: current_idkg_public_key_proto,
+                    });
+                }
+                match registry_idkg_public_key_proto.timestamp {
+                    None => Ok(KeyRotationOutcome::KeyRotated {
+                        new_key: idkg_dealing_encryption_pk_to_proto(
+                            self.csp.idkg_gen_dealing_encryption_key_pair()?,
+                        ),
+                    }),
+                    Some(timestamp_in_millis) => {
+                        if self.is_current_key_too_old(timestamp_in_millis, key_rotation_period) {
+                            Ok(KeyRotationOutcome::KeyRotated {
+                                new_key: idkg_dealing_encryption_pk_to_proto(
+                                    self.csp.idkg_gen_dealing_encryption_key_pair()?,
+                                ),
+                            })
+                        } else {
+                            Err(IDkgDealingEncryptionKeyRotationError::LatestLocalRotationTooRecent)
+                        }
+                    }
+                }
+            }
+            Err(MegaKeyFromRegistryError::RegistryError(client_error)) => Err(
+                IDkgDealingEncryptionKeyRotationError::RegistryError(client_error),
+            ),
+            Err(error @ MegaKeyFromRegistryError::PublicKeyNotFound { .. }) => {
+                error!(
+                    self.logger,
+                    "IDKG dealing encryption public key not found in registry {:?}", error
+                );
+                Ok(KeyRotationOutcome::RegistryKeyBadOrMissing {
+                    existing_key: current_idkg_public_key_proto,
+                })
+            }
+            Err(error @ MegaKeyFromRegistryError::UnsupportedAlgorithm { .. }) => {
+                error!(
+                    self.logger,
+                    "IDKG dealing encryption public key from registry uses an unsupported algorithm {:?}", error
+                );
+                Ok(KeyRotationOutcome::RegistryKeyBadOrMissing {
+                    existing_key: current_idkg_public_key_proto,
+                })
+            }
+
+            Err(error @ MegaKeyFromRegistryError::MalformedPublicKey { .. }) => {
+                error!(
+                    self.logger,
+                    "IDKG dealing encryption public key from registry is malformed {:?}", error
+                );
+                Ok(KeyRotationOutcome::RegistryKeyBadOrMissing {
+                    existing_key: current_idkg_public_key_proto,
+                })
+            }
+        }
+    }
+
+    fn record_key_rotation_metrics(
+        &self,
+        key_rotation_result: &Result<KeyRotationOutcome, IDkgDealingEncryptionKeyRotationError>,
+    ) {
+        match key_rotation_result {
+            Ok(outcome) => {
+                match outcome {
+                    KeyRotationOutcome::KeyRotated { .. } => {
+                        self.metrics
+                            .observe_key_rotation_result(KeyRotationResult::KeyRotated);
+                    }
+                    KeyRotationOutcome::KeyNotRotated { .. } => {
+                        self.metrics
+                            .observe_key_rotation_result(KeyRotationResult::KeyNotRotated);
+                    }
+                    KeyRotationOutcome::RegistryKeyBadOrMissing { .. } => {
+                        self.metrics.observe_key_rotation_result(
+                            KeyRotationResult::RegistryKeyBadOrMissing,
+                        );
+                    }
+                };
+            }
+            Err(err) => match err {
+                IDkgDealingEncryptionKeyRotationError::LatestLocalRotationTooRecent => {
+                    self.metrics.observe_key_rotation_result(
+                        KeyRotationResult::LatestLocalRotationTooRecent,
+                    );
+                }
+                IDkgDealingEncryptionKeyRotationError::KeyGenerationError(_) => {
+                    self.metrics
+                        .observe_key_rotation_result(KeyRotationResult::KeyGenerationError);
+                }
+                IDkgDealingEncryptionKeyRotationError::RegistryError(_) => {
+                    self.metrics
+                        .observe_key_rotation_result(KeyRotationResult::RegistryError);
+                }
+                IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled => {
+                    self.metrics
+                        .observe_key_rotation_result(KeyRotationResult::KeyRotationNotEnabled);
+                }
+            },
+        }
     }
 
     fn ensure_node_signing_key_material_is_set_up(
@@ -382,6 +448,12 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         let current_time = self.time_source.get_current_time();
         current_time > time_of_registration + key_rotation_period
     }
+}
+
+enum KeyRotationOutcome {
+    KeyRotated { new_key: PublicKeyProto },
+    KeyNotRotated { existing_key: PublicKeyProto },
+    RegistryKeyBadOrMissing { existing_key: PublicKeyProto },
 }
 
 pub(crate) fn ensure_node_signing_key_material_is_set_up_correctly(
@@ -560,4 +632,20 @@ pub(crate) fn ensure_tls_key_material_is_set_up_correctly(
         });
     }
     Ok(())
+}
+
+fn convert_key_rotation_outcome(
+    key_rotation_result: Result<KeyRotationOutcome, IDkgDealingEncryptionKeyRotationError>,
+) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError> {
+    match key_rotation_result {
+        Ok(outcome) => {
+            let public_key_proto = match outcome {
+                KeyRotationOutcome::KeyRotated { new_key } => new_key,
+                KeyRotationOutcome::KeyNotRotated { existing_key } => existing_key,
+                KeyRotationOutcome::RegistryKeyBadOrMissing { existing_key } => existing_key,
+            };
+            Ok(public_key_proto)
+        }
+        Err(err) => Err(err),
+    }
 }
