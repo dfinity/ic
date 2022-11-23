@@ -334,7 +334,7 @@ def generate_report(base, githash, timestamp):
     # Update experiment.json with rps_max needed by notify_dashboard and verify_perf
     with open(os.path.join(base, "experiment.json"), "r") as experiment_file:
         j = json.loads(experiment_file.read())
-        j["experiment_details"]["rps_max"] = experiment_data["experiment_details"]["rps_max"]
+        j["experiment_details"]["rps_max"] = rps_max
         updated = json.dumps(j, indent=4)
     with open(os.path.join(base, "experiment.json"), "w") as experiment_file:
         experiment_file.write(updated)
