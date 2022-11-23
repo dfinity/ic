@@ -787,7 +787,7 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_msg_cycles_refunded128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_accept(0));
     assert_api_not_supported(api.ic0_msg_cycles_accept128(Cycles::zero(), 0, &mut []));
-    assert_api_supported(api.ic0_data_certificate_present());
+    assert_api_not_supported(api.ic0_data_certificate_present());
     assert_api_not_supported(api.ic0_data_certificate_size());
     assert_api_not_supported(api.ic0_data_certificate_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));

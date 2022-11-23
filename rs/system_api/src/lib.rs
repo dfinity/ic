@@ -2572,8 +2572,8 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_data_certificate_present(&self) -> HypervisorResult<i32> {
         let result = match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
+            ApiType::Start { .. } => Err(self.error_for("ic0_data_certificate_present")),
+            ApiType::Init { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
