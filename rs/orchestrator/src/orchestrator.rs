@@ -237,7 +237,7 @@ impl Orchestrator {
         })
     }
 
-    /// Starts two asynchronous tasks:
+    /// Starts four asynchronous tasks:
     ///
     /// 1. One that constantly monitors for a new CUP pointing to a newer
     /// replica version and executes the upgrade to this version if such a
@@ -249,6 +249,13 @@ impl Orchestrator {
     /// new data center is added, orchestrator will generate a new firewall
     /// configuration allowing access from the IP range specified in the DC
     /// record.
+    ///
+    /// 3. Third task starts listening for incoming requests to the orchestrator
+    /// dashboard.
+    ///
+    /// 4. Fourth task checks if this node is part of an tECDSA subnet. If so,
+    /// and it is also time to rotate the iDKG encryption key, instruct crypto
+    /// to do the rotation and attempt to register the rotated key.
     pub fn spawn_tasks(&mut self) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,

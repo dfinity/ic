@@ -245,7 +245,11 @@ impl CatchUpPackageProvider {
                 registry_version,
             ))?;
 
-        if Some(latest_cup.cup.content.height()) > local_cup_height {
+        let unsigned = latest_cup.cup.signature.signature.get_ref().0.is_empty();
+        let height = Some(latest_cup.cup.content.height());
+        // We recreate the local registry CUP everytime to avoid incompatibility issues
+        // in case an upgrade changes CUP (de)serialization.
+        if height > local_cup_height || height == local_cup_height && unsigned {
             self.persist_cup(&latest_cup)?;
         }
 
