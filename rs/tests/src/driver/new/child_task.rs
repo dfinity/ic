@@ -136,8 +136,7 @@ impl Task for ChildTask {
             .unwrap()
             .take()
             .expect("Task was already executed!");
-        let logger = self.group_ctx.logger();
-        panic_to_result(catch_unwind(move || (f)(logger)))
+        panic_to_result(catch_unwind(move || (f)()))
     }
 }
 
