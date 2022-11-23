@@ -7,7 +7,6 @@ setup-os-diskimg:
   extends:
     - .ubuntu-docker
     - .rules-parent-pipeline-autorun-on-trigger
-    - .rules-hostos
   stage: host-os-build
   variables:
       BUILD_EXTRA_ARGS: ""
