@@ -70,16 +70,16 @@ impl Orchestrator {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
         let config = args.get_ic_config();
-        let node_id = tokio::task::block_in_place({
-            let crypto_config = config.crypto.clone();
-            move || {
-                let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(
-                    &crypto_config,
-                    Some(tokio::runtime::Handle::current()),
-                );
-                node_id
-            }
-        });
+        let crypto_config = config.crypto.clone();
+        let node_id = tokio::task::spawn_blocking(move || {
+            get_node_keys_or_generate_if_missing(
+                &crypto_config,
+                Some(tokio::runtime::Handle::current()),
+            )
+            .1
+        })
+        .await
+        .unwrap();
 
         let (logger, _async_log_guard) =
             new_replica_logger_from_config(&config.orchestrator_logger);
@@ -117,21 +117,21 @@ impl Orchestrator {
             logger.clone(),
         ));
 
-        let crypto = tokio::task::block_in_place({
-            let c_log = logger.clone();
-            let c_registry = registry.clone();
-            let crypto_config = config.crypto.clone();
-            let c_metrics = metrics_registry.clone();
-            move || {
-                Arc::new(CryptoComponent::new_for_non_replica_process(
-                    &crypto_config,
-                    Some(tokio::runtime::Handle::current()),
-                    c_registry.get_registry_client(),
-                    c_log.clone(),
-                    Some(&c_metrics),
-                ))
-            }
-        });
+        let c_log = logger.clone();
+        let c_registry = registry.clone();
+        let crypto_config = config.crypto.clone();
+        let c_metrics = metrics_registry.clone();
+        let crypto = tokio::task::spawn_blocking(move || {
+            Arc::new(CryptoComponent::new_for_non_replica_process(
+                &crypto_config,
+                Some(tokio::runtime::Handle::current()),
+                c_registry.get_registry_client(),
+                c_log.clone(),
+                Some(&c_metrics),
+            ))
+        })
+        .await
+        .unwrap();
 
         let mut registration = NodeRegistration::new(
             logger.clone(),

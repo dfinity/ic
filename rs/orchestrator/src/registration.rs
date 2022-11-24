@@ -72,9 +72,13 @@ impl NodeRegistration {
     /// one of the nns nodes in `nns_node_list`.
     pub(crate) async fn register_node(&mut self) {
         let latest_version = self.registry_client.get_latest_version();
-        if let Err(e) = tokio::task::block_in_place(|| {
-            self.key_handler.check_keys_with_registry(latest_version)
-        }) {
+        let key_handler = self.key_handler.clone();
+        if let Err(e) = tokio::task::spawn_blocking(move || {
+            key_handler.check_keys_with_registry(latest_version)
+        })
+        .await
+        .unwrap()
+        {
             warn!(self.log, "Node keys are not setup: {:?}", e);
             self.retry_register_node().await;
             self.touch_eject_file();
@@ -95,7 +99,7 @@ impl NodeRegistration {
             res
         };
 
-        let add_node_payload = self.assemble_add_node_message();
+        let add_node_payload = self.assemble_add_node_message().await;
 
         let read_public_key = UtilityCommand::read_public_key(None, None);
         let hsm_pub_key = loop {
@@ -111,14 +115,14 @@ impl NodeRegistration {
             };
 
             UtilityCommand::try_to_detach_hsm();
-            if self.is_node_registered() {
+            if self.is_node_registered().await {
                 return;
             }
         };
         // we have the public key
 
         UtilityCommand::notify_host("Sending add_node request.", 1);
-        while !self.is_node_registered() {
+        while !self.is_node_registered().await {
             tokio::time::sleep(Duration::from_secs(2)).await;
             let sender = Sender::ExternalHsm {
                 pub_key: hsm_pub_key.clone(),
@@ -150,9 +154,12 @@ impl NodeRegistration {
         );
     }
 
-    fn assemble_add_node_message(&self) -> AddNodePayload {
+    async fn assemble_add_node_message(&self) -> AddNodePayload {
+        let key_handler = self.key_handler.clone();
         let node_pub_keys =
-            tokio::task::block_in_place(|| self.key_handler.current_node_public_keys());
+            tokio::task::spawn_blocking(move || key_handler.current_node_public_keys())
+                .await
+                .unwrap();
 
         AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...
@@ -198,9 +205,13 @@ impl NodeRegistration {
         if !self.is_tecdsa_and_time_to_rotate(registry_version, subnet_id) {
             return true;
         }
-        match tokio::task::block_in_place(|| {
-            self.key_handler.check_keys_with_registry(registry_version)
-        }) {
+        let key_handler = self.key_handler.clone();
+        match tokio::task::spawn_blocking(move || {
+            key_handler.check_keys_with_registry(registry_version)
+        })
+        .await
+        .unwrap()
+        {
             Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key)) => {
                 // Try to register a key that was previously rotated but is not yet registered.
                 self.try_to_register_key(registry_version, key).await
@@ -209,10 +220,13 @@ impl NodeRegistration {
                 // Call cypto to rotate the keys and try to register the new key.
                 // In case registration of the new key fails, we will enter the branch above
                 // during the next call and retry registration.
-                match tokio::task::block_in_place(|| {
-                    self.key_handler
-                        .rotate_idkg_dealing_encryption_keys(registry_version)
-                }) {
+                let key_handler = self.key_handler.clone();
+                match tokio::task::spawn_blocking(move || {
+                    key_handler.rotate_idkg_dealing_encryption_keys(registry_version)
+                })
+                .await
+                .unwrap()
+                {
                     Ok(key) => self.try_to_register_key(registry_version, key).await,
                     Err(e) => warn!(self.log, "Key rotation error: {:?}", e),
                 }
@@ -307,11 +321,15 @@ impl NodeRegistration {
             None => return,
         };
 
-        let node_pub_key = if let Some(pk) = tokio::task::block_in_place(|| {
-            self.key_handler
+        let key_handler = self.key_handler.clone();
+        let node_pub_key = if let Some(pk) = tokio::task::spawn_blocking(move || {
+            key_handler
                 .current_node_public_keys()
                 .node_signing_public_key
-        }) {
+        })
+        .await
+        .unwrap()
+        {
             pk
         } else {
             warn!(self.log, "Missing node signing key.");
@@ -439,11 +457,15 @@ impl NodeRegistration {
         }
     }
 
-    fn is_node_registered(&self) -> bool {
+    async fn is_node_registered(&self) -> bool {
         let latest_version = self.registry_client.get_latest_version();
-        match tokio::task::block_in_place(|| {
-            self.key_handler.check_keys_with_registry(latest_version)
-        }) {
+        let key_handler = self.key_handler.clone();
+        match tokio::task::spawn_blocking(move || {
+            key_handler.check_keys_with_registry(latest_version)
+        })
+        .await
+        .unwrap()
+        {
             Ok(_) => true,
             Err(e) => {
                 warn!(
