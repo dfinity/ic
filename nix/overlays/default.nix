@@ -137,8 +137,6 @@ sources:
 
         jemalloc_static = self.pkgsStatic.jemalloc;
 
-        ic-ref = (import self.sources.ic-ref { inherit (self) system; }).ic-ref;
-
         buf = super.callPackage ./buf {};
 
         clipboard = super.callPackage ./clipboard {};

@@ -86,9 +86,6 @@ in
         # For building Motoko canisters like nns/handlers/lifeline/lifeline.mo
         pkgs.moc
 
-        # used by the ic-ref-tests
-        pkgs.ic-ref
-
         # for minimizing wasm
         pkgs.wabt
 

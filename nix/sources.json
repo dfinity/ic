@@ -125,12 +125,6 @@
         "url_template": "https://static.crates.io/crates/ic-cdk-optimizer/ic-cdk-optimizer-<version>.crate",
         "version": "0.1.0"
     },
-    "ic-ref": {
-        "branch": "release-0.18.7",
-        "repo": "ssh://git@github.com/dfinity/ic-hs",
-        "rev": "ae80f76c2a2bdbae97e9aa2f8fab04e1551432f2",
-        "type": "git"
-    },
     "idl2json": {
         "branch": "main",
         "repo": "ssh://git@github.com/dfinity-lab/idl2json",

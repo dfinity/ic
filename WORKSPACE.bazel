@@ -311,3 +311,13 @@ new_git_repository(
     commit = "4f77306bb63151631d84f58dedf67958eb9911b9",
     remote = "git@github.com:WebAssembly/testsuite.git",
 )
+
+http_archive(
+    name = "ic-hs",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(name = "artifacts", srcs = glob(["bin/*", "test-data/*"]), visibility = ["//visibility:public"])
+      """,
+    sha256 = "12af7afae6a99decaf56f06aec35299280fe092a3a8d4660e53f34d6da649830",
+    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-0.0.1-c863b6ef-x86_64-linux.tar.gz"],
+)

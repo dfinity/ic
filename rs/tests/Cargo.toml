@@ -162,6 +162,14 @@ name = "ic-systest-canister-http"
 path = "bin/canister_http_test.rs"
 
 [[bin]]
+name = "ic-systest-spec-compliance-application"
+path = "bin/spec_compliance_application_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-system"
+path = "bin/spec_compliance_system_test.rs"
+
+[[bin]]
 name = "ic-systest-tecdsa-add-nodes"
 path = "bin/tecdsa_add_nodes_test.rs"
 
