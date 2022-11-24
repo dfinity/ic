@@ -79,14 +79,14 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
     let branch_version = format!("{}-test", original_branch_version);
 
     // Bless both replica versions
-    block_on(bless_replica_version(
+    block_on(bless_public_replica_version(
         &nns_node,
         &mainnet_version,
         UpdateImageType::Image,
         UpdateImageType::Image,
         &logger,
     ));
-    block_on(bless_replica_version(
+    block_on(bless_public_replica_version(
         &nns_node,
         &original_branch_version,
         UpdateImageType::ImageTest,

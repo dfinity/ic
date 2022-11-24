@@ -15,7 +15,7 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_message_canisters;
 use super::utils::ssh_access::execute_bash_command;
-use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
+use super::utils::upgrade::{bless_public_replica_version, update_subnet_replica_version};
 use crate::orchestrator::utils::rw_message::{
     can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
     store_message_with_retries,
@@ -69,7 +69,7 @@ pub fn test(test_env: TestEnv) {
         get_assigned_replica_version(&nns_node).expect("Failed to get assigned replica version");
     info!(logger, "Target version: {}", target_version);
 
-    block_on(bless_replica_version(
+    block_on(bless_public_replica_version(
         &nns_node,
         &target_version,
         UpdateImageType::ImageTest,

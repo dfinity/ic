@@ -186,34 +186,28 @@ pub(crate) fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<Stri
     }
 }
 
-pub(crate) async fn bless_replica_version(
+async fn bless_replica_version_with_sha(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
     image_type: UpdateImageType,
-    url_image_type: UpdateImageType, // normaly it is the same as above, unless we want to have bogus url
     logger: &Logger,
+    sha256: &String,
+    upgrade_url: Vec<String>,
 ) {
-    let upgrade_url = get_update_image_url(url_image_type, target_version);
-    info!(logger, "Upgrade URL: {}", upgrade_url);
-
     let nns = runtime_from_url(nns_node.get_public_url());
     let governance_canister = get_governance_canister(&nns);
-    let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
-    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-    info!(logger, "Initial: {:?}", blessed_versions);
-    let sha256 = fetch_update_file_sha256_with_retry(
-        logger,
-        target_version,
-        image_type == UpdateImageType::ImageTest,
-    )
-    .await;
+    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
 
     let replica_version = match image_type == UpdateImageType::ImageTest {
         true => ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap(),
         false => ReplicaVersion::try_from(target_version).unwrap(),
     };
+
+    let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
+    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
+    info!(logger, "Initial: {:?}", blessed_versions);
 
     info!(
         logger,
@@ -225,13 +219,53 @@ pub(crate) async fn bless_replica_version(
         proposal_sender.clone(),
         test_neuron_id,
         replica_version,
-        sha256,
-        vec![upgrade_url],
+        sha256.clone(),
+        upgrade_url,
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+
     let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
     info!(logger, "Updated: {:?}", blessed_versions);
+}
+
+pub(crate) async fn bless_replica_version(
+    nns_node: &IcNodeSnapshot,
+    target_version: &str,
+    image_type: UpdateImageType,
+    logger: &Logger,
+    sha256: &String,
+) {
+    bless_replica_version_with_sha(nns_node, target_version, image_type, logger, sha256, vec![])
+        .await;
+}
+
+pub(crate) async fn bless_public_replica_version(
+    nns_node: &IcNodeSnapshot,
+    target_version: &str,
+    image_type: UpdateImageType,
+    url_image_type: UpdateImageType, // normaly it is the same as above, unless we want to have bogus url
+    logger: &Logger,
+) {
+    let upgrade_url = get_update_image_url(url_image_type, target_version);
+    info!(logger, "Upgrade URL: {}", upgrade_url);
+
+    let sha256 = fetch_update_file_sha256_with_retry(
+        logger,
+        target_version,
+        image_type == UpdateImageType::ImageTest,
+    )
+    .await;
+
+    bless_replica_version_with_sha(
+        nns_node,
+        target_version,
+        image_type,
+        logger,
+        &sha256,
+        vec![upgrade_url.clone()],
+    )
+    .await;
 }
 
 pub(crate) async fn bless_replica_version_with_urls(
