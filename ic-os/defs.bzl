@@ -92,9 +92,6 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         dep = native.glob(["rootfs/**"] + ["dev-root-ca.crt"] if mode == "dev" else []),
         extra_args_before = dev_rootfs_args,
         extra_args_after = extra_args_docker,
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -182,9 +179,6 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
             "/run",
             "/boot",
         ],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
