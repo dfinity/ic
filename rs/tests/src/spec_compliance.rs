@@ -1,22 +1,11 @@
-/* tag::catalog[]
-Title:: Specification compliance test
-
-Goal:: Ensure that the replica implementation is compliant with the formal specification.
-
-Runbook::
-. Set up two subnets, each containing one node
-
-Success:: The ic-ref-test binary does not return an error.
-
-end::catalog[] */
-
 use crate::canister_http::lib::{
     get_pem_content, get_universal_vm_activation_script, get_universal_vm_address, PemType,
 };
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    IcNodeSnapshot,
 };
 use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -40,13 +29,15 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /metadata.absent/",
 ];
 
-pub fn config(env: TestEnv) {
+pub fn config_with_subnet_type(env: TestEnv, subnet_type: SubnetType) {
     use crate::driver::test_env_api::{retry, secs};
     use crate::util::block_on;
     use hyper::client::connect::HttpConnector;
     use hyper::Client;
     use hyper_tls::HttpsConnector;
     use std::env;
+
+    env.ensure_group_setup_created();
 
     // Set up Universal VM with HTTP Bin testing service
     let activate_script = &get_universal_vm_activation_script(&env)[..];
@@ -65,6 +56,7 @@ pub fn config(env: TestEnv) {
     );
     env::set_var("SSL_CERT_FILE", config_dir.as_path().join("cert.pem"));
     env::remove_var("NIX_SSL_CERT_FILE");
+    env::set_var("IC_TEST_DATA", env.get_dependency_path("rs/tests/ic-hs"));
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_dir(config_dir)
@@ -73,15 +65,7 @@ pub fn config(env: TestEnv) {
 
     InternetComputer::new()
         .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(1),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
+            Subnet::new(subnet_type)
                 .with_features(SubnetFeatures {
                     http_requests: true,
                     ..SubnetFeatures::default()
@@ -126,46 +110,46 @@ pub fn config(env: TestEnv) {
     .expect("Httpbin server should respond to incoming requests!");
 }
 
-pub fn test_system_subnet(env: TestEnv) {
+pub fn test_subnet(env: TestEnv, subnet_type: SubnetType) {
     let log = env.logger();
     let topology_snapshot = env.topology_snapshot();
-    let subnet = topology_snapshot.root_subnet();
-    let node = subnet.nodes().next().unwrap();
+    let node = match subnet_type {
+        SubnetType::VerifiedApplication | SubnetType::Application => {
+            let subnet = topology_snapshot
+                .subnets()
+                .find(|s| s.subnet_type() == SubnetType::Application)
+                .unwrap();
+            subnet.nodes().next().unwrap()
+        }
+        SubnetType::System => {
+            let subnet = topology_snapshot.root_subnet();
+            subnet.nodes().next().unwrap()
+        }
+    };
     let webserver_ipv6 = get_universal_vm_address(&env);
     let httpbin = format!("https://[{webserver_ipv6}]:20443");
-    with_endpoint(
-        node,
-        httpbin,
-        log,
-        [EXCLUDED.to_vec(), vec!["$0 ~ /only_application/"]].concat(),
-    );
-}
-
-pub fn test_app_subnet(env: TestEnv) {
-    let log = env.logger();
-    let topology_snapshot = env.topology_snapshot();
-    let subnet = topology_snapshot
-        .subnets()
-        .find(|s| s.subnet_type() == SubnetType::Application)
+    let ic_ref_test_path = env
+        .get_dependency_path("rs/tests/ic-hs/ic-ref-test")
+        .into_os_string()
+        .into_string()
         .unwrap();
-    let node = subnet.nodes().next().unwrap();
-    let webserver_ipv6 = get_universal_vm_address(&env);
-    let httpbin = format!("https://[{webserver_ipv6}]:20443");
-    with_endpoint(
-        node,
-        httpbin,
-        log,
-        [EXCLUDED.to_vec(), vec!["$0 ~ /only_system/"]].concat(),
-    );
+    let excl = match subnet_type {
+        SubnetType::VerifiedApplication | SubnetType::Application => {
+            [EXCLUDED.to_vec(), vec!["$0 ~ /only_system/"]].concat()
+        }
+        SubnetType::System => [EXCLUDED.to_vec(), vec!["$0 ~ /only_application/"]].concat(),
+    };
+    with_endpoint(node, httpbin, ic_ref_test_path, log, excl);
 }
 
 pub fn with_endpoint(
     endpoint: IcNodeSnapshot,
     httpbin: String,
+    ic_ref_test_path: String,
     log: Logger,
     excluded_tests: Vec<&str>,
 ) {
-    let status = Command::new("ic-ref-test")
+    let status = Command::new(ic_ref_test_path)
         .arg("-j8")
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests))

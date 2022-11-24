@@ -233,27 +233,6 @@ upgrade-compatibility-pre-master:
       export TARGET_VERSION
     - *run-farm-based-test
 
-spec-compliance-pre-master:
-  extends: .system-tests
-  script:
-    - |
-      # binaries are needed for run-system-tests.py
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
-          --out="artifacts/release"
-      # canisters are needed for run-system-tests.py
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="$CI_COMMIT_SHA" --remote-path="canisters" \
-          --out="artifacts/canisters"
-
-      # requirement of run-system-tests.py
-      IC_VERSION_ID=$CI_COMMIT_SHA
-      export IC_VERSION_ID
-
-      "$SHELL_WRAPPER" nix-shell -p "(import ./nix {}).ic-ref" --run "
-        ${CI_PROJECT_DIR}/rs/tests/run-system-tests.py --suite=spec_compliance
-      "
-
 .build-and-test-monpoly-docker-e2e: &build-and-test-monpoly-docker-e2e |
   # build monpoly_pipeline container image
   docker build --build-arg MONPOLY_PIPELINE_GIT_REVISION="${CI_COMMIT_SHA}" -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring

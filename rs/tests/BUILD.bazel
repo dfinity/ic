@@ -412,3 +412,37 @@ system_test(
         ],
     deps = DEPENDENCIES + [":tests"],
 )
+
+symlink_dir(
+    name = "ic-hs",
+    targets = {
+        "@ic-hs//:bin/ic-ref-test": "ic-ref-test",
+        "@ic-hs//:test-data/universal-canister.wasm": "universal-canister.wasm",
+    },
+)
+
+IC_HS_RUNTIME_DEPS = [
+    ":ic-hs",
+]
+
+system_test(
+    name = "spec_compliance_application_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_pre_master",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "spec_compliance_system_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_pre_master",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
