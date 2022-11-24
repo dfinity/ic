@@ -24,7 +24,8 @@ use crate::{
     call::CallService,
     catch_up_package::CatchUpPackageService,
     common::{
-        get_cors_headers, get_root_public_key, make_plaintext_response, map_box_error_to_response,
+        get_cors_headers, get_root_threshold_public_key, make_plaintext_response,
+        map_box_error_to_response,
     },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
@@ -58,9 +59,12 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
-use ic_registry_client_helpers::crypto::CryptoRegistry;
+use ic_registry_client_helpers::{
+    crypto::CryptoRegistry, node::NodeRegistry, node_operator::ConnectionEndpoint,
+    subnet::SubnetRegistry,
+};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{NodeTopology, ReplicatedState};
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
@@ -199,15 +203,7 @@ fn start_server_initialization(
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
-        match load_root_delegation(
-            &log,
-            subnet_id,
-            nns_subnet_id,
-            registry_client,
-            state_reader_executor,
-        )
-        .await
-        {
+        match load_root_delegation(&log, subnet_id, nns_subnet_id, registry_client).await {
             Err(err) => {
                 error!(log, "Could not load nns delegation: {}", err);
             }
@@ -351,7 +347,7 @@ pub fn start_server(
             log.clone(),
             config.clone(),
             nns_subnet_id,
-            state_reader_executor.clone(),
+            Arc::clone(&registry_client),
             Arc::clone(&health_status),
         );
         let dashboard_service = DashboardService::new_service(
@@ -736,7 +732,6 @@ async fn load_root_delegation(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    state_reader_executor: StateReaderExecutor,
 ) -> Result<Option<CertificateDelegation>, Error> {
     if subnet_id == nns_subnet_id {
         info!(log, "On the NNS subnet. Skipping fetching the delegation.");
@@ -767,7 +762,7 @@ async fn load_root_delegation(
         }
 
         let node =
-            match get_random_node_from_nns_subnet(&state_reader_executor, nns_subnet_id).await {
+            match get_random_node_from_nns_subnet(registry_client.clone(), nns_subnet_id).await {
                 Ok(node_topology) => node_topology,
                 Err(err) => {
                     fatal!(
@@ -805,11 +800,11 @@ async fn load_root_delegation(
 
         let body = serde_cbor::ser::to_vec(&envelope).unwrap();
         let http_client = Client::new();
-        let ip_addr = node.ip_address.parse().unwrap();
+        let ip_addr = node.ip_addr.parse().unwrap();
         // any effective canister id can be used when invoking read_state here
         let address = format!(
             "http://{}/api/v2/canister/aaaaa-aa/read_state",
-            SocketAddr::new(ip_addr, node.http_port)
+            SocketAddr::new(ip_addr, node.port as u16)
         );
         info!(
             log,
@@ -938,27 +933,23 @@ async fn load_root_delegation(
                         continue;
                     }
                 }
-                let root_pk_blob =
-                    match get_root_public_key(log, &state_reader_executor, &nns_subnet_id).await {
-                        Some(public_key) => public_key,
-                        None => {
-                            log_err_and_backoff(
-                                log,
-                                "could not retrieve root public key from replicated state"
-                                    .to_string(),
-                            )
-                            .await;
-                            continue;
-                        }
-                    };
-                let root_threshold_public_key =
-                    match parse_threshold_sig_key_from_der(&root_pk_blob) {
-                        Ok(pk) => pk,
-                        Err(err) => {
-                            log_err_and_backoff(log, &err).await;
-                            continue;
-                        }
-                    };
+                let root_threshold_public_key = match get_root_threshold_public_key(
+                    log,
+                    registry_client.clone(),
+                    registry_version,
+                    &nns_subnet_id,
+                ) {
+                    Some(public_key) => public_key,
+                    None => {
+                        log_err_and_backoff(
+                            log,
+                            "could not retrieve threshold root public key from registry"
+                                .to_string(),
+                        )
+                        .await;
+                        continue;
+                    }
+                };
                 if let Err(err) = validate_subnet_delegation_certificate(
                     &response.certificate,
                     &subnet_id,
@@ -989,32 +980,36 @@ async fn load_root_delegation(
 }
 
 async fn get_random_node_from_nns_subnet(
-    state_reader_executor: &StateReaderExecutor,
+    registry_client: Arc<dyn RegistryClient>,
     nns_subnet_id: SubnetId,
-) -> Result<NodeTopology, String> {
-    use rand::seq::IteratorRandom;
+) -> Result<ConnectionEndpoint, String> {
+    use rand::seq::SliceRandom;
 
-    let latest_state = state_reader_executor
-        .get_latest_state()
-        .await
-        .map_err(|_| "Latest state unavailable.".to_string())?;
-
-    let subnet_topologies = &latest_state.take().metadata.network_topology.subnets;
-
-    let nns_subnet_topology = subnet_topologies.get(&nns_subnet_id).ok_or_else(|| {
-        String::from("NNS subnet not found in network topology. Skipping fetching the delegation.")
-    })?;
+    let nns_nodes = match registry_client
+        .get_node_ids_on_subnet(nns_subnet_id, registry_client.get_latest_version())
+    {
+        Ok(Some(nns_nodes)) => Ok(nns_nodes),
+        Ok(None) => Err("No nns nodes found.".to_string()),
+        Err(err) => Err(format!("Failed to get nns nodes from registry: {}", err)),
+    }?;
 
     // Randomly choose a node from the nns subnet.
     let mut rng = rand::thread_rng();
-    nns_subnet_topology
-        .nodes
-        .values()
-        .choose(&mut rng)
-        .cloned()
-        .ok_or_else(|| {
-            String::from("NNS subnet contains no nodes. Skipping fetching the delegation.")
-        })
+    let nns_node = nns_nodes.choose(&mut rng).ok_or(format!(
+        "Failed to choose random nns node. NNS node list: {:?}",
+        nns_nodes
+    ))?;
+    match registry_client.get_transport_info(*nns_node, registry_client.get_latest_version()) {
+        Ok(Some(node)) => Ok(node.http.ok_or("No http endpoint for node")?),
+        Ok(None) => Err(format!(
+            "No transport info found for nns node. {}",
+            nns_node
+        )),
+        Err(err) => Err(format!(
+            "Failed to get transport info for nns node {}. Err: {}",
+            nns_node, err
+        )),
+    }
 }
 
 fn no_content_response() -> Response<Body> {

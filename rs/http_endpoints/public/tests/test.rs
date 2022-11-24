@@ -7,11 +7,16 @@ use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::registry::crypto::v1::{
+    AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
+};
+use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -32,13 +37,17 @@ use ic_types::{
         Block, Payload, Rank,
     },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        threshold_sig::{
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+            ThresholdSigPublicKey,
+        },
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
     },
     malicious_flags::MaliciousFlags,
     signature::ThresholdSignature,
     CryptoHashOfPartialState, Height, RegistryVersion,
 };
+use prost::Message;
 use std::{
     collections::BTreeMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -70,6 +79,7 @@ fn start_http_endpoint(
     port: u16,
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
+    registry_client: Arc<dyn RegistryClient>,
 ) {
     let metrics = MetricsRegistry::new();
     let config = Config {
@@ -82,7 +92,6 @@ fn start_http_endpoint(
     // Run test on "nns" to avoid fetching root delegation
     let subnet_id = subnet_test_id(1);
     let nns_subnet_id = subnet_test_id(1);
-    let registry_client = Arc::new(MockRegistryClient::new());
 
     let tls_handshake = Arc::new(MockTlsHandshake::new());
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
@@ -204,11 +213,35 @@ fn test_healthy_behind() {
             )
         });
 
+    let mut mock_registry_client = MockRegistryClient::new();
+    mock_registry_client
+        .expect_get_latest_version()
+        .return_const(RegistryVersion::from(1));
+    mock_registry_client
+        .expect_get_value()
+        .withf(move |key, version| {
+            key == make_crypto_threshold_signing_pubkey_key(subnet_test_id(1)).as_str()
+                && version == &RegistryVersion::from(1)
+        })
+        .return_const({
+            let pk = PublicKeyProto {
+                algorithm: AlgorithmIdProto::ThresBls12381 as i32,
+                key_value: [42; ThresholdSigPublicKey::SIZE].to_vec(),
+                version: 0,
+                proof_data: None,
+                timestamp: Some(42),
+            };
+            let mut v = Vec::new();
+            pk.encode(&mut v).unwrap();
+            Ok(Some(v))
+        });
+
     start_http_endpoint(
         rt.handle().clone(),
         port,
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
     );
 
     let agent = Agent::builder()
