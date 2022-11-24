@@ -131,7 +131,7 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
         let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
         let session = deployed_prometheus_vm
             .block_on_ssh_session(ADMIN)
-            .expect("Failed to setup SSH session to {vm_name}");
+            .unwrap_or_else(|e| panic!("Failed to setup SSH session to {vm_name} because: {e:?}!"));
 
         // scp the scraping target JSON files to prometheus VM.
         for name in &["replica", "orchestrator", "node_exporter"] {
