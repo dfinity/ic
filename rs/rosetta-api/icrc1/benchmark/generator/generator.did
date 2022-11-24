@@ -1,0 +1,23 @@
+
+type InitArgs = record {
+    ledger_id : principal;
+    index_id : principal;
+};
+
+type Scenario = variant {
+    Accounts;
+    Transactions;
+};
+
+type RunScenarioResult = record {
+    scenario: Scenario;
+    success: bool;
+    duration_sec: nat;
+    blocks: nat;
+};
+
+service : (InitArgs) -> {
+    run_scenario : (Scenario) -> (RunScenarioResult);
+    upload_index_wasm : (blob) -> (bool);
+    upload_worker_wasm : (blob) -> (bool);
+};

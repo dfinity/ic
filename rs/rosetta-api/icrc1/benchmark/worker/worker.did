@@ -1,0 +1,26 @@
+type InitArgs = record {
+    ledger_id : principal;
+    rand_seed: nat;
+};
+
+type Scenario = variant {
+    Accounts;
+    Transactions;
+};
+
+type BatchArgs = record {
+    transactions: nat64;
+    scenario: Scenario;
+    users: opt vec principal;
+};
+
+type BatchResult = record {
+    success: bool;
+    duration_sec: nat64;
+    blocks: nat64;
+    last_block: nat64;
+};
+
+service : (InitArgs) -> {
+    run_batch : (BatchArgs) -> (BatchResult);
+};

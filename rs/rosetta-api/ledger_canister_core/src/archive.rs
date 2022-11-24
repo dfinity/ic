@@ -33,7 +33,7 @@ pub struct ArchiveOptions {
 }
 
 /// A scope guard for block archiving.
-/// It sets archivating flag to true on the archive when constructed and disables the flag
+/// It sets archiving flag to true on the archive when constructed and disables the flag
 /// when dropped.
 pub struct ArchivingGuard<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     Arc<RwLock<Option<Archive<Rt, Wasm>>>>,

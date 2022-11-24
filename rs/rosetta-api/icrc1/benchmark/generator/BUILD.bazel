@@ -1,0 +1,49 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/monitoring/metrics_encoder",
+    "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/icrc1/benchmark/worker",
+    "//rs/rosetta-api/icrc1/client/cdk",
+    "//rs/rosetta-api/icrc1/ledger",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_http_metrics",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:ciborium",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:num-traits",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
+]
+
+rust_library(
+    name = "generator",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_icrc1_benchmark_generator",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "icrc1_benchmark_generator",
+    srcs = ["src/main.rs"],
+    crate_name = "ic_icrc1_benchmark_generator_canister",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":generator.did",
+    deps = [":generator"] + DEPENDENCIES,
+)

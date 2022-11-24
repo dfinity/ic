@@ -5955,6 +5955,67 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icrc1-benchmark-generator"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ciborium",
+ "dfn_http_metrics",
+ "futures",
+ "getrandom 0.2.8",
+ "hex",
+ "ic-base-types",
+ "ic-cdk",
+ "ic-cdk-macros",
+ "ic-crypto-tree-hash",
+ "ic-icrc1",
+ "ic-icrc1-benchmark-worker",
+ "ic-icrc1-client",
+ "ic-icrc1-client-cdk",
+ "ic-ledger-canister-core",
+ "ic-ledger-core",
+ "ic-metrics-encoder",
+ "num-traits",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "ring",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
+name = "ic-icrc1-benchmark-worker"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ciborium",
+ "dfn_http_metrics",
+ "futures",
+ "getrandom 0.2.8",
+ "hex",
+ "ic-base-types",
+ "ic-cdk",
+ "ic-cdk-macros",
+ "ic-crypto-tree-hash",
+ "ic-icrc1",
+ "ic-icrc1-client",
+ "ic-icrc1-client-cdk",
+ "ic-ledger-canister-core",
+ "ic-ledger-core",
+ "ic-metrics-encoder",
+ "num-traits",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "ring",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-icrc1-client"
 version = "0.8.0"
 dependencies = [

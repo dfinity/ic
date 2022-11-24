@@ -360,8 +360,7 @@ pub async fn archive_blocks<LA: LedgerAccess>(max_message_size: usize) {
             return; // Archiving not enabled
         }
         Err(ArchivingGuardError::AlreadyArchiving) => {
-            print::<LA>("[ledger] ledger is currently archiving, skipping archive_blocks()");
-            return;
+            return; // Ledger is currently archiving, skipping archive_blocks.
         }
     };
 
