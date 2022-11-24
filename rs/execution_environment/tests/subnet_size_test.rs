@@ -9,16 +9,19 @@ use ic_ic00_types::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{CanisterSettingsArgs, StateMachineBuilder, StateMachineConfig};
+use ic_state_machine_tests::{
+    CanisterSettingsArgs, StateMachine, StateMachineBuilder, StateMachineConfig,
+};
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_types::messages::{SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
-use ic_types::{ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId};
+
+use ic_types::{CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId};
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
 
 const TEST_SUBNET_SIZE_MAX: usize = 34;
-const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(10_000_000_000);
+const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100_000_000_000);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 996_000;
 const TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS: u64 = 30;
 
@@ -140,6 +143,23 @@ const TEST_HEARTBEAT_CANISTER: &str = r#"
     (export "canister_heartbeat" (func $x))
 )"#;
 
+/// Creates a canister with cycles and installs a wasm module on it.
+fn create_canister_with_cycles_install_wasm(
+    env: &StateMachine,
+    cycles: Cycles,
+    wasm: Vec<u8>,
+) -> CanisterId {
+    let canister_id = env.create_canister_with_cycles(cycles, None);
+    env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
+        .unwrap();
+    canister_id
+}
+
+/// Creates universal canister with cycles.
+fn create_universal_canister_with_cycles(env: &StateMachine, cycles: Cycles) -> CanisterId {
+    create_canister_with_cycles_install_wasm(env, cycles, UNIVERSAL_CANISTER_WASM.to_vec())
+}
+
 /// Simulates `execute_round` to get the storage cost of 1 GiB for 1 second
 /// with a given compute allocation.
 /// Since the duration between allocation charges may not be equal to 1 second
@@ -187,8 +207,8 @@ fn simulate_one_gib_per_second_cost(
 /// Specifies fees to keep in `CyclesAccountManagerConfig` for specific operations,
 /// eg. `ingress induction cost`, `execution cost` etc.
 enum KeepFeesFilter {
-    ExecutionCost,
-    IngressInductionCost,
+    Execution,
+    IngressInduction,
 }
 
 /// Helps to distinguish different costs that are withdrawn within the same execution round.
@@ -201,14 +221,14 @@ fn apply_filter(
 ) -> CyclesAccountManagerConfig {
     let mut filtered_config = CyclesAccountManagerConfig::system_subnet();
     match filter {
-        KeepFeesFilter::ExecutionCost => {
+        KeepFeesFilter::Execution => {
             filtered_config.update_message_execution_fee =
                 initial_config.update_message_execution_fee;
             filtered_config.ten_update_instructions_execution_fee =
                 initial_config.ten_update_instructions_execution_fee;
             filtered_config
         }
-        KeepFeesFilter::IngressInductionCost => {
+        KeepFeesFilter::IngressInduction => {
             filtered_config.ingress_message_reception_fee =
                 initial_config.ingress_message_reception_fee;
             filtered_config.ingress_byte_reception_fee = initial_config.ingress_byte_reception_fee;
@@ -241,7 +261,7 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .with_config(Some(StateMachineConfig::new(
-            filtered_subnet_config(subnet_type, KeepFeesFilter::ExecutionCost),
+            filtered_subnet_config(subnet_type, KeepFeesFilter::Execution),
             HypervisorConfig::default(),
         )))
         .build();
@@ -262,7 +282,7 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
 
 /// Simulates `execute_round` to get the cost during executing ingress.
 /// Filtered `CyclesAccountManagerConfig` is used to avoid irrelevant costs.
-fn simulate_execute_ingress(
+fn simulate_execute_ingress_cost(
     subnet_type: SubnetType,
     subnet_size: usize,
     filter: KeepFeesFilter,
@@ -276,14 +296,11 @@ fn simulate_execute_ingress(
             HypervisorConfig::default(),
         )))
         .build();
-    let canister_id = env.create_canister_with_cycles(DEFAULT_CYCLES_PER_NODE * subnet_size, None);
-    env.install_wasm_in_mode(
-        canister_id,
-        CanisterInstallMode::Install,
+    let canister_id = create_canister_with_cycles_install_wasm(
+        &env,
+        DEFAULT_CYCLES_PER_NODE * subnet_size,
         wabt::wat2wasm(TEST_CANISTER).expect("invalid WAT"),
-        vec![],
-    )
-    .unwrap();
+    );
 
     let balance_before = env.cycle_balance(canister_id);
     env.execute_ingress(canister_id, "inc", vec![]).unwrap();
@@ -293,15 +310,11 @@ fn simulate_execute_ingress(
 }
 
 fn simulate_ingress_induction_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
-    simulate_execute_ingress(
-        subnet_type,
-        subnet_size,
-        KeepFeesFilter::IngressInductionCost,
-    )
+    simulate_execute_ingress_cost(subnet_type, subnet_size, KeepFeesFilter::IngressInduction)
 }
 
 fn simulate_execute_message_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
-    simulate_execute_ingress(subnet_type, subnet_size, KeepFeesFilter::ExecutionCost)
+    simulate_execute_ingress_cost(subnet_type, subnet_size, KeepFeesFilter::Execution)
 }
 
 /// Simulates `execute_round` to get the cost of executing a heartbeat,
@@ -312,14 +325,11 @@ fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .build();
-    let canister_id = env.create_canister_with_cycles(DEFAULT_CYCLES_PER_NODE * subnet_size, None);
-    env.install_wasm_in_mode(
-        canister_id,
-        CanisterInstallMode::Install,
+    let canister_id = create_canister_with_cycles_install_wasm(
+        &env,
+        DEFAULT_CYCLES_PER_NODE * subnet_size,
         wabt::wat2wasm(TEST_HEARTBEAT_CANISTER).expect("invalid WAT"),
-        vec![],
-    )
-    .unwrap();
+    );
 
     let balance_before = env.cycle_balance(canister_id);
     env.tick();
@@ -344,14 +354,7 @@ fn simulate_sign_with_ecdsa_cost(subnet_type: SubnetType, subnet_size: usize) ->
         .build();
     // Create canister with initial cycles for some unrelated costs (eg. ingress induction, heartbeat).
     let canister_id =
-        env.create_canister_with_cycles(Cycles::new(100_000_000_000) * subnet_size, None);
-    env.install_wasm_in_mode(
-        canister_id,
-        CanisterInstallMode::Install,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-    )
-    .unwrap();
+        create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
     // SignWithECDSA is payed with cycles attached to the request.
     let payment_before = Cycles::new(1_000_000_000) * subnet_size;
@@ -395,7 +398,7 @@ fn simulate_sign_with_ecdsa_cost(subnet_type: SubnetType, subnet_size: usize) ->
 /// Simulates `execute_round` to get the cost of executing HTTP request.
 /// Payment is done via attaching cycles to request and the cost is subtracted from it
 /// after executing the message.
-fn simulate_http_request_fee_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
     let env = StateMachineBuilder::new()
         .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
@@ -404,14 +407,7 @@ fn simulate_http_request_fee_cost(subnet_type: SubnetType, subnet_size: usize) -
         .build();
     // Create canister with initial cycles for some unrelated costs (eg. ingress induction, heartbeat).
     let canister_id =
-        env.create_canister_with_cycles(Cycles::new(100_000_000_000) * subnet_size, None);
-    env.install_wasm_in_mode(
-        canister_id,
-        CanisterInstallMode::Install,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-    )
-    .unwrap();
+        create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
     // HttpRequest is payed with cycles attached to the request.
     let payment_before = Cycles::new(20_000_000_000) * subnet_size;
@@ -462,7 +458,7 @@ fn simulate_http_request_fee_cost(subnet_type: SubnetType, subnet_size: usize) -
     payment_before - payment_after
 }
 
-fn calculate_http_request_fee_cycles(
+fn calculate_http_request_cost(
     config: &CyclesAccountManagerConfig,
     request_size: NumBytes,
     response_size_limit: Option<NumBytes>,
@@ -481,7 +477,7 @@ fn calculate_http_request_fee_cycles(
     )
 }
 
-fn calculate_sign_with_ecdsa_cycles(
+fn calculate_sign_with_ecdsa_cost(
     config: &CyclesAccountManagerConfig,
     subnet_size: usize,
 ) -> Cycles {
@@ -595,7 +591,7 @@ fn refund_unused_execution_cycles(
     scale_cost(config, cycles, subnet_size).min(prepaid_execution_cycles)
 }
 
-fn calculate_execution_cycles(
+fn calculate_execution_cost(
     config: &CyclesAccountManagerConfig,
     instructions: NumInstructions,
     subnet_size: usize,
@@ -669,7 +665,7 @@ fn test_subnet_size_one_gib_storage_default_cost() {
 // - allocation cost always scales according to subnet size
 
 #[test]
-fn test_subnet_size_one_gib_storage_zero_compute_allocation() {
+fn test_subnet_size_one_gib_storage_zero_compute_allocation_cost() {
     let compute_allocation = ComputeAllocation::zero();
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
@@ -716,7 +712,7 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation() {
 }
 
 #[test]
-fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
+fn test_subnet_size_one_gib_storage_non_zero_compute_allocation_cost() {
     for compute_allocation in [
         ComputeAllocation::try_from(1).unwrap(),
         ComputeAllocation::try_from(50).unwrap(),
@@ -773,11 +769,11 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation() {
 }
 
 #[test]
-fn test_subnet_size_execute_install_code() {
+fn test_subnet_size_execute_install_code_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
-    let reference_cost = calculate_execution_cycles(
+    let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS),
         reference_subnet_size,
@@ -872,11 +868,11 @@ fn test_subnet_size_ingress_induction_cost() {
 }
 
 #[test]
-fn test_subnet_size_execute_message() {
+fn test_subnet_size_execute_message_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
-    let reference_cost = calculate_execution_cycles(
+    let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS),
         reference_subnet_size,
@@ -921,11 +917,11 @@ fn test_subnet_size_execute_message() {
 }
 
 #[test]
-fn test_subnet_size_execute_heartbeat() {
+fn test_subnet_size_execute_heartbeat_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
-    let reference_cost = calculate_execution_cycles(
+    let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS),
         reference_subnet_size,
@@ -995,11 +991,11 @@ fn test_subnet_size_execute_heartbeat_default_cost() {
 }
 
 #[test]
-fn test_subnet_size_sign_with_ecdsa() {
+fn test_subnet_size_sign_with_ecdsa_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
-    let reference_cost = calculate_sign_with_ecdsa_cycles(&config, reference_subnet_size);
+    let reference_cost = calculate_sign_with_ecdsa_cost(&config, reference_subnet_size);
 
     // Check default cost.
     assert_eq!(
@@ -1040,42 +1036,39 @@ fn test_subnet_size_sign_with_ecdsa() {
 }
 
 #[test]
-fn test_subnet_size_http_request_fee() {
+fn test_subnet_size_http_request_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost =
-        calculate_http_request_fee_cycles(&config, NumBytes::new(17), None, reference_subnet_size);
+        calculate_http_request_cost(&config, NumBytes::new(17), None, reference_subnet_size);
 
     // Check default cost.
     assert_eq!(
-        simulate_http_request_fee_cost(subnet_type, reference_subnet_size),
+        simulate_http_request_cost(subnet_type, reference_subnet_size),
         reference_cost
     );
 
     // Check if cost is increasing with subnet size.
     assert!(
-        simulate_http_request_fee_cost(subnet_type, 1)
-            < simulate_http_request_fee_cost(subnet_type, 2)
+        simulate_http_request_cost(subnet_type, 1) < simulate_http_request_cost(subnet_type, 2)
     );
     assert!(
-        simulate_http_request_fee_cost(subnet_type, 11)
-            < simulate_http_request_fee_cost(subnet_type, 12)
+        simulate_http_request_cost(subnet_type, 11) < simulate_http_request_cost(subnet_type, 12)
     );
     assert!(
-        simulate_http_request_fee_cost(subnet_type, 101)
-            < simulate_http_request_fee_cost(subnet_type, 102)
+        simulate_http_request_cost(subnet_type, 101) < simulate_http_request_cost(subnet_type, 102)
     );
     assert!(
-        simulate_http_request_fee_cost(subnet_type, 1_001)
-            < simulate_http_request_fee_cost(subnet_type, 1_002)
+        simulate_http_request_cost(subnet_type, 1_001)
+            < simulate_http_request_cost(subnet_type, 1_002)
     );
 
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size;
-    let reference_cost = simulate_http_request_fee_cost(subnet_type, reference_subnet_size);
+    let reference_cost = simulate_http_request_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
-        let simulated_cost = simulate_http_request_fee_cost(subnet_type, subnet_size);
+        let simulated_cost = simulate_http_request_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
@@ -1130,7 +1123,7 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
         );
 
         assert_eq!(
-            simulate_http_request_fee_cost(subnet_type, subnet_size),
+            simulate_http_request_cost(subnet_type, subnet_size),
             Cycles::zero(),
             "subnet_size={subnet_size}"
         );
