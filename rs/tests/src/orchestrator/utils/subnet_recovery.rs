@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::orchestrator::utils::rw_message::{
     can_store_msg, cert_state_makes_progress_with_retries,
 };
@@ -5,8 +7,8 @@ use crate::orchestrator::utils::ssh_access::execute_bash_command;
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::tecdsa::tecdsa_signature_test::{
     create_new_subnet_with_keys, empty_subnet_update, enable_ecdsa_signing,
-    execute_update_subnet_proposal, get_public_key_with_logger, get_signature_with_logger,
-    make_key, verify_signature, KEY_ID1,
+    enable_ecdsa_signing_with_timeout_and_rotation_period, execute_update_subnet_proposal,
+    get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature, KEY_ID1,
 };
 use crate::util::*;
 use crate::{
@@ -223,16 +225,19 @@ pub(crate) fn enable_ecdsa_on_nns(
     nns_node: &IcNodeSnapshot,
     canister: &MessageCanister,
     root_subnet_id: SubnetId,
+    rotation_period: Option<Duration>,
     logger: &Logger,
 ) -> VerifyingKey {
     info!(logger, "Enabling ECDSA signatures.");
     let nns_runtime = runtime_from_url(nns_node.get_public_url());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
-    block_on(enable_ecdsa_signing(
+    block_on(enable_ecdsa_signing_with_timeout_and_rotation_period(
         &governance,
         root_subnet_id,
         make_key(KEY_ID1),
+        None,
+        rotation_period,
     ));
 
     get_ecdsa_pub_key(canister, logger)

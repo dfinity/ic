@@ -567,6 +567,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             ),
             pot_with_setup(
+                "rotate_ecdsa_idkg_key_pot",
+                orchestrator::rotate_ecdsa_idkg_key::setup,
+                par(vec![sys_t(
+                    "rotate_ecdsa_idkg_key_test",
+                    orchestrator::rotate_ecdsa_idkg_key::test,
+                )]),
+            ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+            pot_with_setup(
                 "transaction_ledger_correctness_pot",
                 ledger_tests::transaction_ledger_correctness::config,
                 par(vec![sys_t(
