@@ -29,7 +29,11 @@ use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_logger::{replica_logger::ReplicaLogger, warn};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_types::{
-    artifact::ArtifactId, chunkable::Chunkable, crypto::CryptoHash, p2p::GossipAdvert, NodeId,
+    artifact::ArtifactId,
+    chunkable::Chunkable,
+    crypto::CryptoHash,
+    p2p::{GossipAdvert, MAX_ARTIFACT_TIMEOUT},
+    NodeId,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -179,12 +183,15 @@ impl ArtifactDownloadList for ArtifactDownloadListImpl {
                 // Calculate the worst-case time estimate for the artifact download, which
                 // assumes that all chunks for the artifact will time out for
                 // each peer that has advertised the artifact.
+                // In any case the worst-case estimate is bound to a constant.
                 //
                 // TODO: Revisit this in the context of subnets with many nodes: P2P-510
-                let download_eta_ms =
+                let download_eta_ms = std::cmp::min(
                     std::cmp::max(advert.size as u64 / gossip_config.max_chunk_size as u64, 1)
                         * max_advertizing_peer as u64
-                        * gossip_config.max_chunk_wait_ms as u64;
+                        * gossip_config.max_chunk_wait_ms as u64,
+                    MAX_ARTIFACT_TIMEOUT.as_millis() as u64,
+                );
                 let expiry_instant = requested_instant + Duration::from_millis(download_eta_ms);
                 self.artifacts.insert(
                     advert.integrity_hash.clone(),

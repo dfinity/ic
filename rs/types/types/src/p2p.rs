@@ -7,6 +7,7 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::registry::subnet::v1::{GossipAdvertConfig, GossipConfig};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
+use std::time::Duration;
 
 /// This is sent to peers to indicate that a node has a certain artifact
 /// in its artifact pool. The adverts of different artifact types may differ
@@ -27,6 +28,11 @@ pub struct GossipAdvert {
 /////////////////////////////
 // Gossip subnet constants //
 /////////////////////////////
+
+/// Maximumim timout for fetching an artifact. 10_000s.
+/// Reasoning: Block rate can be as low as 0.1 and we want to allow state sync
+/// to last for 1000 blocks (two checkopint intervals) -> 1000b/0.1b/s = 10000s
+pub const MAX_ARTIFACT_TIMEOUT: Duration = Duration::from_secs(10_000);
 
 /// Maximum number of artifact chunks that can be downloaded
 /// simultaneously from one peer
