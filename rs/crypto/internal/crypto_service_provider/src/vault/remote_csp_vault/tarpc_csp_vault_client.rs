@@ -411,7 +411,9 @@ impl TlsHandshakeCspVault for RemoteCspVault {
         // Here we cannot call `block_on` directly but have to wrap it in
         // `block_in_place` because this method here is called via a Rustls
         // callback (via our implementation of the `rustls::sign::Signer`
-        // trait) from the async function `tokio_rustls::TlsAcceptor::accept`.
+        // trait) from the async function `tokio_rustls::TlsAcceptor::accept`,
+        // which in turn is called from our async function
+        // `TlsHandshake::perform_tls_server_handshake`.
         tokio::task::block_in_place(|| {
             self.tokio_block_on(self.tarpc_csp_client.tls_sign(
                 context_with_timeout(self.rpc_timeout),
