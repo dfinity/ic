@@ -20,7 +20,8 @@ pkgs.mkCiShell {
     pkgs.git
     pkgs.gnugrep
     pkgs.gnutar
-    pkgs.gzip # and unzip IC tarballs.
+    pkgs.gzip # and unzip IC tarballs,
+    pkgs.zstd # and unzip more IC tarballs.
     pkgs.idl2json # to parse dfx result
     pkgs.jq
     pkgs.openssh # Ansible uses ssh to connect to the nodes.
