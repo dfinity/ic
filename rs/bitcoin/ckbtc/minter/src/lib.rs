@@ -96,10 +96,11 @@ async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     let btc_network = state::read_state(|s| s.btc_network);
     match management::get_current_fees(btc_network).await {
         Ok(fees) => {
+            if btc_network == Network::Regtest {
+                return Some(DEFAULT_FEE);
+            }
             if fees.len() >= 100 {
                 Some(fees[49])
-            } else if btc_network == Network::Regtest {
-                Some(DEFAULT_FEE)
             } else {
                 ic_cdk::print(format!(
                     "[heartbeat]: not enough data points ({}) to compute the fee",
