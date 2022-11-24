@@ -1219,7 +1219,7 @@ fn update_next_key_transcript(
                 // by the reshared param will be used.
                 info!(
                     log,
-                    "ECDSA Key transcript created from XnetReshareOfMasked {:?}, registry_version {:?}, height = {}",
+                    "ECDSA Key transcript created from XnetReshareOfUnmasked {:?}, registry_version {:?}, height = {}",
                     config.as_ref().transcript_id,
                     transcript.registry_version,
                     height,
