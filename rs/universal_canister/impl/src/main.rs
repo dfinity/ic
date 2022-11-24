@@ -354,6 +354,12 @@ fn query() {
     eval(&api::arg_data());
 }
 
+#[export_name = "canister_composite_query composite_query"]
+fn composite_query() {
+    setup();
+    eval(&api::arg_data());
+}
+
 #[export_name = "canister_query transform"]
 fn transform() {
     setup();
