@@ -32,8 +32,8 @@ use crate::{
             wait_until_authentication_is_granted, AuthMean,
         },
         upgrade::{
-            assert_assigned_replica_version, bless_replica_version, get_assigned_replica_version,
-            update_subnet_replica_version, UpdateImageType,
+            assert_assigned_replica_version, bless_public_replica_version,
+            get_assigned_replica_version, update_subnet_replica_version, UpdateImageType,
         },
     },
     util::{block_on, get_nns_node},
@@ -163,7 +163,7 @@ pub fn test(env: TestEnv) {
     let target_version =
         env::var("TARGET_VERSION").expect("Environment variable $TARGET_VERSION is not set!");
     info!(log, "TARGET_VERSION: {}", target_version);
-    block_on(bless_replica_version(
+    block_on(bless_public_replica_version(
         &nns_node,
         &target_version,
         UpdateImageType::Image,

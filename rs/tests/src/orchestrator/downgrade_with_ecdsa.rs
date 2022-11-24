@@ -31,6 +31,7 @@ const DKG_INTERVAL: u64 = 19;
 const SUBNET_SIZE: usize = 4;
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -56,8 +57,15 @@ pub fn downgrade_app_subnet(env: TestEnv) {
 // Downgrades a subnet to $TARGET_VERSION and back to branch version
 fn downgrade_test(env: TestEnv, subnet_type: SubnetType) {
     let logger = env.logger();
-    let mainnet_version =
-        env::var("TARGET_VERSION").expect("Environment variable $TARGET_VERSION is not set!");
+
+    // TODO: abandon the TARGET_VERSION approach once run-system-tests.py is deprecated [VER-1818]
+    let is_bazel = env::var("TARGET_VERSION").is_err();
+
+    // TODO: [VER-1818]
+    let mainnet_version = env::var("TARGET_VERSION")
+        .or_else(|_| env.read_dependency_to_string("testnet/mainnet_nns_revision.txt"))
+        .unwrap();
+
     // we expect to get a hash value here, so checking that is a hash number of at least 64 bits size
     assert!(mainnet_version.len() >= 2 * MIN_HASH_LENGTH);
     assert!(hex::decode(&mainnet_version).is_ok());
@@ -71,22 +79,42 @@ fn downgrade_test(env: TestEnv, subnet_type: SubnetType) {
         .unwrap();
 
     let original_branch_version = get_assigned_replica_version(&nns_node).unwrap();
+    info!(
+        &logger,
+        "original_branch_version: {:?}", original_branch_version
+    );
 
     // Bless both replica versions
-    block_on(bless_replica_version(
+    block_on(bless_public_replica_version(
         &nns_node,
         &mainnet_version,
         UpdateImageType::Image,
         UpdateImageType::Image,
         &logger,
     ));
-    block_on(bless_replica_version(
-        &nns_node,
-        &original_branch_version,
-        UpdateImageType::ImageTest,
-        UpdateImageType::ImageTest,
-        &logger,
-    ));
+
+    if is_bazel {
+        let sha256 = env
+            .read_dependency_to_string("ic-os/guestos/dev/upgrade.tar.zst.sha256")
+            .unwrap();
+        block_on(bless_replica_version(
+            &nns_node,
+            &original_branch_version,
+            UpdateImageType::ImageTest,
+            &logger,
+            &sha256,
+        ));
+    } else {
+        // TODO: [VER-1818]
+        block_on(bless_public_replica_version(
+            &nns_node,
+            &original_branch_version,
+            UpdateImageType::ImageTest,
+            UpdateImageType::ImageTest,
+            &logger,
+        ));
+    }
+
     info!(&logger, "Blessed all versions");
 
     let (handle, ctx) = get_ic_handle_and_ctx(env.clone());

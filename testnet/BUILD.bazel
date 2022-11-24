@@ -1,0 +1,10 @@
+load(":json.bzl", "jq_dep")
+
+package(default_visibility = ["//visibility:public"])
+
+jq_dep(
+    name = "mainnet_nns_revision",
+    json_path = ".subnets.\\\"tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe\\\"",
+    source = "mainnet_revisions.json",
+    target = "mainnet_nns_revision.txt",
+)

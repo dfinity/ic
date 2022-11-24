@@ -11,6 +11,8 @@ use std::{
 
 use super::constants;
 
+use slog::info;
+
 #[derive(Debug)]
 pub struct GroupContext {
     pub exec_path: PathBuf,
@@ -46,16 +48,15 @@ impl GroupContext {
         fs::read_dir(path.as_ref()).is_ok()
     }
 
-    fn ensure_dir<P: AsRef<Path>>(path: P) -> Result<()> {
-        let path = path.as_ref();
-        if Self::dir_exists(path) {
+    fn ensure_dir<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let path = self.group_dir.parent().unwrap().join(path.as_ref());
+        if Self::dir_exists(path.clone()) {
             println!("GroupContext: directory already exists: {:?}", path);
-            Ok(())
         } else {
             println!("GroupContext: creating directory: {:?}", path);
             fs::create_dir_all(path)?;
-            Ok(())
         }
+        Ok(())
     }
 
     /// Returns the path to the setup artifact directory,
@@ -69,7 +70,7 @@ impl GroupContext {
             TestEnv::shell_copy(&root_env_path, &setup_path)?;
         }
 
-        Self::ensure_dir(setup_path.clone()).map(|_| setup_path)
+        self.ensure_dir(setup_path.clone()).map(|_| setup_path)
     }
 
     /// Returns the path to the artifact directory for this [test_name],
@@ -85,7 +86,8 @@ impl GroupContext {
         );
 
         let test_path = self.group_dir.join(constants::TESTS_DIR).join(test_name);
-        Self::ensure_dir(test_path.clone()).map(|_| test_path)
+        info!(self.logger, "Ensuring directory {:?} exists ...", test_path);
+        self.ensure_dir(test_path.clone()).map(|_| test_path)
     }
 
     pub fn create_setup_env(&self) -> Result<TestEnv> {
@@ -134,7 +136,7 @@ pub struct ProcessContext {
 
 impl ProcessContext {
     pub fn new(group_context: GroupContext, command: Command) -> Result<Self> {
-        println!("ProcessContex.new");
+        println!("ProcessContext.new");
 
         let constructed_at = SystemTime::now();
 

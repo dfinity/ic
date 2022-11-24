@@ -200,3 +200,7 @@ path = "bin/rejoin_test.rs"
 [[bin]]
 name = "test-driver-e2e-scenarios"
 path = "bin/test_driver_e2e_scenarios.rs"
+
+[[bin]]
+name = "ic-systest-upgrade-compatibility"
+path = "bin/upgrade_compatibility_test.rs"
