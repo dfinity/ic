@@ -27,7 +27,7 @@ use crate::pb::v1::{
     VotingRewardsParameters,
 };
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
     fmt,
 };
@@ -702,7 +702,7 @@ impl NervousSystemParameters {
         let required_claimer_permissions = Self::REQUIRED_NEURON_CLAIMER_PERMISSIONS
             .iter()
             .cloned()
-            .collect::<HashSet<_>>();
+            .collect::<BTreeSet<_>>();
 
         let difference = required_claimer_permissions
             .difference(&neuron_claimer_permissions)
@@ -1490,15 +1490,15 @@ impl From<Vec<NeuronPermissionType>> for NeuronPermissionList {
     }
 }
 
-impl From<HashSet<NeuronPermissionType>> for NeuronPermissionList {
-    fn from(permissions: HashSet<NeuronPermissionType>) -> Self {
+impl From<BTreeSet<NeuronPermissionType>> for NeuronPermissionList {
+    fn from(permissions: BTreeSet<NeuronPermissionType>) -> Self {
         NeuronPermissionList {
             permissions: permissions.into_iter().map(|p| p as i32).collect(),
         }
     }
 }
 
-impl TryFrom<NeuronPermissionList> for HashSet<NeuronPermissionType> {
+impl TryFrom<NeuronPermissionList> for BTreeSet<NeuronPermissionType> {
     type Error = String;
 
     fn try_from(permissions: NeuronPermissionList) -> Result<Self, Self::Error> {
