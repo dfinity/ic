@@ -14,7 +14,7 @@ dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-cdk = "0.6.0"
 ic-cdk-macros = "0.6.0"
-ic-icrc1 = { path = "../" }
+ic-icrc1 = { path = ".." }
 ic-icrc1-ledger = { path = "../ledger" }
 ic-metrics-encoder = { path = "../../../monitoring/metrics_encoder" }
 num-traits = "0.2.14"
@@ -23,7 +23,6 @@ serde = "1.0.139"
 [dev-dependencies]
 candid = "0.8.1"
 ic-base-types = { path = "../../../types/base_types" }
-ic-icrc1 = { path = "../" }
 ic-icrc1-ledger = { path = "../ledger" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

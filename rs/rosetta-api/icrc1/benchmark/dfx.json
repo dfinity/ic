@@ -1,0 +1,44 @@
+{
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8026",
+      "type": "ephemeral"
+    },
+    "small05":{
+      "providers": [
+        "http://[2a00:fb01:400:42:5000:54ff:fef3:eb8]:8080"
+      ],
+      "type": "persistent"
+    }
+  },
+  "canisters": {
+    "icrc1-ledger": {
+      "type": "custom",
+      "candid": "../ledger/icrc1.did",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-icrc1-ledger",
+      "wasm": "../../../target/wasm32-unknown-unknown/release/ic-icrc1-ledger.wasm",
+      "shrink": true
+    },
+    "icrc1-index": {
+      "type": "custom",
+      "candid": "../index/index.did",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-icrc1-index",
+      "wasm": "../../../target/wasm32-unknown-unknown/release/ic-icrc1-index.wasm",
+      "shrink": true
+    },
+    "icrc1-benchmark-generator": {
+      "type": "custom",
+      "candid": "./generator/generator.did",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-icrc1-benchmark-generator",
+      "wasm": "../../../target/wasm32-unknown-unknown/release/ic-icrc1-benchmark-generator.wasm",
+      "shrink": true
+    },
+    "icrc1-benchmark-worker": {
+      "type": "custom",
+      "candid": "./worker/worker.did",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-icrc1-benchmark-worker",
+      "wasm": "../../../target/wasm32-unknown-unknown/release/ic-icrc1-benchmark-worker.wasm",
+      "shrink": true
+    }
+  }
+}

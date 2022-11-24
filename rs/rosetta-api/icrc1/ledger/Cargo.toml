@@ -19,7 +19,7 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
 ic-cdk = { version = "0.6.0" }
 ic-cdk-macros = { version = "0.6.0" }
-ic-icrc1 = { path = "../" }
+ic-icrc1 = { path = ".." }
 ic-icrc1-client = { path = "../client"}
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }

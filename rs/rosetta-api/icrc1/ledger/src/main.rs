@@ -320,9 +320,7 @@ fn check_candid_interface() {
     use std::path::PathBuf;
 
     let new_interface = __export_service();
-
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-
     for candid_file in ["icrc1.did", "txlog.did"].iter() {
         let old_interface = manifest_dir.join(candid_file);
         service_compatible(
