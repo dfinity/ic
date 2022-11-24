@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("fb6bf3bb700689e8eba4647accc0b6f9495fb443139a0d2171c6cac8013fa7c4");
+    hex!("9b978f0c402903e70e482f13b78e126c3ed3a3f928972d5a2ca6921859b91957");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -216,6 +216,11 @@ impl PayloadBuilder {
     /// A query from a UC to another UC.
     pub fn inter_query<P: AsRef<[u8]>>(self, callee: P, call_args: CallArgs) -> Self {
         self.call_simple(callee, "query", call_args)
+    }
+
+    /// A composite query from a UC to another UC.
+    pub fn composite_query<P: AsRef<[u8]>>(self, callee: P, call_args: CallArgs) -> Self {
+        self.call_simple(callee, "composite_query", call_args)
     }
 
     /// An update from a UC to another UC.

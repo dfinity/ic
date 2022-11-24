@@ -344,6 +344,86 @@ fn query_callgraph_depth_is_enforced() {
 }
 
 #[test]
+fn composite_query_callgraph_depth_is_enforced() {
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    const CANISTERS_MAX: usize = 20;
+
+    let mut canisters = vec![];
+    for _ in 0..CANISTERS_MAX {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    fn generate_composite_call_to(
+        canisters: &[ic_types::CanisterId],
+        canister_idx: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        assert!(canister_idx != 0 && canister_idx < canisters.len());
+        wasm().stable_grow(10).composite_query(
+            canisters[canister_idx],
+            call_args()
+                .other_side(generate_return(canisters, canister_idx - 1))
+                .on_reply(wasm().stable_size().reply_int()),
+        )
+    }
+
+    // Each canister should either just return or trigger another composite query
+    fn generate_return(
+        canisters: &[ic_types::CanisterId],
+        canister_idx: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        if canister_idx == 0 {
+            wasm().reply_data(b"ignore".as_ref())
+        } else {
+            generate_composite_call_to(canisters, canister_idx)
+        }
+    }
+
+    fn test_query(
+        test: &ExecutionTest,
+        canisters: &[ic_types::CanisterId],
+        num_calls: usize,
+    ) -> Result<WasmResult, UserError> {
+        test.query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canisters[0],
+                method_name: "composite_query".to_string(),
+                method_payload: generate_composite_call_to(canisters, num_calls).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+    }
+
+    // Those should succeed
+    for num_calls in 1..7 {
+        match &test_query(&test, &canisters, num_calls) {
+            Ok(_) => {}
+            Err(err) => panic!(
+                "Query with depth {} failed, when it should have succeeded: {:?}",
+                num_calls, err
+            ),
+        }
+    }
+
+    // Those should fail
+    for num_calls in 7..19 {
+        match test_query(&test, &canisters, num_calls) {
+            Ok(_) => panic!(
+                "Call with depth {} should have failed with call graph being too large",
+                num_calls
+            ),
+            Err(err) => {
+                assert_eq!(err.code(), ErrorCode::QueryCallGraphTooDeep)
+            }
+        }
+    }
+}
+
+#[test]
 fn query_callgraph_max_instructions_is_enforced() {
     const CANISTERS_MAX: usize = 20;
     const CANISTERS_MAX_SUCC: usize = 5; // Number of calls expected to succeed
