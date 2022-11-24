@@ -4,11 +4,12 @@ use hyper::{Body, HeaderMap, Response, StatusCode};
 use ic_crypto_tree_hash::Path;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label};
 use ic_error_types::UserError;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    messages::{Blob, MessageId},
-    SubnetId,
+    crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId, RegistryVersion, SubnetId,
 };
 use ic_validator::RequestValidationError;
 use serde::Serialize;
@@ -31,30 +32,22 @@ pub(crate) fn poll_ready(r: Poll<Result<(), Infallible>>) -> Poll<Result<(), Box
     }
 }
 
-pub(crate) async fn get_root_public_key(
+pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,
-    state_reader_executor: &StateReaderExecutor,
+    registry_client: Arc<dyn RegistryClient>,
+    version: RegistryVersion,
     nns_subnet_id: &SubnetId,
-) -> Option<Blob> {
-    let latest_state = match state_reader_executor.get_latest_state().await {
-        Ok(ls) => ls,
-        Err(_) => {
-            warn!(log, "Latest state unavailable.");
-            return None;
+) -> Option<ThresholdSigPublicKey> {
+    match registry_client.get_threshold_signing_public_key_for_subnet(*nns_subnet_id, version) {
+        Ok(Some(key)) => Some(key),
+        Err(err) => {
+            warn!(log, "Failed to get key for subnet {}", err);
+            None
         }
-    };
-
-    let subnets = &latest_state.take().metadata.network_topology.subnets;
-    if subnets.len() == 1 {
-        // In single-subnet instances (e.g. `dfx start`, which has no NNS)
-        // we use this single subnet’s key
-        Some(Blob(subnets.values().next().unwrap().public_key.clone()))
-    } else if let Some(snt) = subnets.get(nns_subnet_id) {
-        // NNS subnet
-        Some(Blob(snt.public_key.clone()))
-    } else {
-        warn!(log, "Cannot identify root subnet.");
-        None
+        Ok(None) => {
+            warn!(log, "Received no public key for subnet {}", nns_subnet_id);
+            None
+        }
     }
 }
 

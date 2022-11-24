@@ -52,11 +52,13 @@ MACRO_DEPENDENCIES = []
 BUILD_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/registry/routing_table",
-    "//rs/test_utilities",
+    "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/registry/mocks",
     "//rs/interfaces/state_manager/mocks",
-    "//rs/crypto/tls_interfaces/mocks",
+    "//rs/protobuf",
+    "//rs/registry/keys",
+    "//rs/registry/routing_table",
+    "//rs/test_utilities",
     "@crate_index//:bytes",
     "@crate_index//:ic-agent",
     "@crate_index//:maplit",

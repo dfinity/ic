@@ -1,11 +1,13 @@
 //! Module that deals with requests to /api/v2/status
-use crate::{common, state_reader_executor::StateReaderExecutor, EndpointService};
+use crate::{common, EndpointService};
 use crossbeam::atomic::AtomicCell;
 use hyper::{Body, Response};
 use ic_config::http_handler::Config;
-use ic_logger::ReplicaLogger;
+use ic_crypto_utils_threshold_sig_der::public_key_to_der;
+use ic_interfaces_registry::RegistryClient;
+use ic_logger::{warn, ReplicaLogger};
 use ic_types::{
-    messages::{HttpStatusResponse, ReplicaHealthStatus},
+    messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     replica_version::REPLICA_BINARY_HASH,
     ReplicaVersion, SubnetId,
 };
@@ -28,7 +30,7 @@ pub(crate) struct StatusService {
     log: ReplicaLogger,
     config: Config,
     nns_subnet_id: SubnetId,
-    state_reader_executor: StateReaderExecutor,
+    registry_client: Arc<dyn RegistryClient>,
     replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
 }
 
@@ -37,14 +39,14 @@ impl StatusService {
         log: ReplicaLogger,
         config: Config,
         nns_subnet_id: SubnetId,
-        state_reader_executor: StateReaderExecutor,
+        registry_client: Arc<dyn RegistryClient>,
         replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     ) -> EndpointService {
         let base_service = Self {
             log,
             config,
             nns_subnet_id,
-            state_reader_executor,
+            registry_client,
             replica_health_status,
         };
         BoxCloneService::new(
@@ -71,25 +73,33 @@ impl Service<Body> for StatusService {
         let log = self.log.clone();
         let nns_subnet_id = self.nns_subnet_id;
         let root_key_status = self.config.show_root_key_in_status;
-        let state_reader_executor = self.state_reader_executor.clone();
         let replica_health_status = self.replica_health_status.clone();
-        Box::pin(async move {
-            // The root key is the public key of this Internet Computer instance,
-            // and is the public key of the root (i.e. NNS) subnet.
-            let root_key = if root_key_status {
-                common::get_root_public_key(&log, &state_reader_executor, &nns_subnet_id).await
-            } else {
-                None
-            };
-            let response = HttpStatusResponse {
-                ic_api_version: IC_API_VERSION.to_string(),
-                root_key,
-                impl_version: Some(ReplicaVersion::default().to_string()),
-                impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
-                replica_health_status: Some(replica_health_status.load()),
-            };
-
-            Ok(common::cbor_response(&response))
-        })
+        // The root key is the public key of this Internet Computer instance,
+        // and is the public key of the root (i.e. NNS) subnet.
+        let root_key = if root_key_status {
+            common::get_root_threshold_public_key(
+                &log,
+                self.registry_client.clone(),
+                self.registry_client.get_latest_version(),
+                &nns_subnet_id,
+            )
+            .and_then(|key| {
+                public_key_to_der(&key.into_bytes())
+                    .map_err(|err| {
+                        warn!(self.log, "Failed to parse threshold root key to DER {err}")
+                    })
+                    .ok()
+            })
+        } else {
+            None
+        };
+        let response = HttpStatusResponse {
+            ic_api_version: IC_API_VERSION.to_string(),
+            root_key: root_key.map(Blob),
+            impl_version: Some(ReplicaVersion::default().to_string()),
+            impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
+            replica_health_status: Some(replica_health_status.load()),
+        };
+        Box::pin(async move { Ok(common::cbor_response(&response)) })
     }
 }
