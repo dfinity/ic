@@ -912,6 +912,9 @@ def external_crates_repository(name, annotations):
             "thiserror": crate.spec(
                 version = "^1.0",
             ),
+            "thousands": crate.spec(
+                version = "^0.2.0",
+            ),
             "thread_profiler": crate.spec(
                 version = "^0.3",
             ),

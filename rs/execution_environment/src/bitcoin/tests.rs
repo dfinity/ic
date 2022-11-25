@@ -205,7 +205,7 @@ fn get_balance_not_enough_cycles() {
         fake_get_balance_args().encode(),
         Cycles::new(100_000_000 - 1), // Not enough cycles given.
         Cycles::new(100_000_000 - 1), // Refund all.
-        "Received 99999999 cycles. 100000000 cycles are required.",
+        "Received 99_999_999 cycles. 100_000_000 cycles are required.",
     );
 }
 
@@ -362,7 +362,7 @@ fn get_utxos_not_enough_cycles() {
             .encode(),
             Cycles::new(100_000_000 - 1), // Not enough cycles given.
             Cycles::new(100_000_000 - 1), // Refund all.
-            "Received 99999999 cycles. 100000000 cycles are required.",
+            "Received 99_999_999 cycles. 100_000_000 cycles are required.",
         );
     }
 }
@@ -496,7 +496,7 @@ fn get_current_fee_percentiles_not_enough_cycles() {
         fake_get_current_fee_percentiles_args().encode(),
         Cycles::new(100_000_000 - 1), // Not enough cycles given.
         Cycles::new(100_000_000 - 1), // Refund all.
-        "Received 99999999 cycles. 100000000 cycles are required.",
+        "Received 99_999_999 cycles. 100_000_000 cycles are required.",
     );
 }
 
@@ -781,7 +781,7 @@ fn send_transaction_zero_len_not_enough_cycles() {
         .encode(),
         cycles_given,
         cycles_given, // Refund all.
-        "Received 4999999999 cycles. 5000000000 cycles are required.",
+        "Received 4_999_999_999 cycles. 5_000_000_000 cycles are required.",
     );
 }
 
@@ -800,7 +800,7 @@ fn send_transaction_non_zero_len_not_enough_cycles() {
         .encode(),
         cycles_given,
         cycles_given, // Refund all.
-        "Received 5059999999 cycles. 5060000000 cycles are required.",
+        "Received 5_059_999_999 cycles. 5_060_000_000 cycles are required.",
     );
 }
 

@@ -7,6 +7,7 @@ use std::{
     fmt,
     ops::{Add, AddAssign, Div, Mul, Sub, SubAssign},
 };
+use thousands::Separable;
 
 /// Struct to handle cycles on the IC. They are maintained as a
 /// simple u128. We implement our own arithmetic functions on them so that we
@@ -159,7 +160,7 @@ impl Div<usize> for Cycles {
 
 impl fmt::Display for Cycles {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.0.separate_with_underscores())
     }
 }
 
@@ -275,5 +276,25 @@ mod test {
     fn test_into_parts() {
         let nom = Cycles::new(123456789012345678901234567890);
         assert_eq!(nom.into_parts(), (nom.high64(), nom.low64()))
+    }
+
+    #[test]
+    fn test_formatting_with_underscore_saparators_small_number() {
+        let cycles = Cycles::new(1_234_567_890);
+        assert_eq!(format!("{}", cycles), "1_234_567_890");
+        assert_eq!(format!("{:?}", cycles), "Cycles(1234567890)");
+    }
+
+    #[test]
+    fn test_formatting_with_underscore_saparators_u128_max() {
+        let cycles = Cycles::new(u128::MAX);
+        assert_eq!(
+            format!("{}", cycles),
+            "340_282_366_920_938_463_463_374_607_431_768_211_455"
+        );
+        assert_eq!(
+            format!("{:?}", cycles),
+            "Cycles(340282366920938463463374607431768211455)"
+        );
     }
 }
