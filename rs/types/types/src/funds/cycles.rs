@@ -134,6 +134,14 @@ impl Mul<u64> for Cycles {
     }
 }
 
+impl Mul<u128> for Cycles {
+    type Output = Self;
+
+    fn mul(self, rhs: u128) -> Self {
+        Self(self.0.saturating_mul(Cycles::from(rhs).0))
+    }
+}
+
 impl Mul<usize> for Cycles {
     type Output = Self;
 
@@ -146,6 +154,14 @@ impl Div<u64> for Cycles {
     type Output = Self;
 
     fn div(self, rhs: u64) -> Self {
+        Self(self.0.saturating_div(Cycles::from(rhs).0))
+    }
+}
+
+impl Div<u128> for Cycles {
+    type Output = Self;
+
+    fn div(self, rhs: u128) -> Self {
         Self(self.0.saturating_div(Cycles::from(rhs).0))
     }
 }
@@ -208,20 +224,73 @@ mod test {
             Cycles::from(std::u128::MAX)
         );
         assert_eq!(
-            Cycles::from(std::u128::MAX) + Cycles::from(10u128),
+            Cycles::from(std::u128::MAX) + Cycles::from(10_u128),
             Cycles::from(std::u128::MAX)
         );
     }
 
     #[test]
-    fn test_multiplication() {
+    fn test_multiplication_u64() {
         assert_eq!(Cycles::zero() * std::u64::MAX, Cycles::zero());
         assert_eq!(
             Cycles::from(std::u128::MAX) * std::u64::MAX,
             Cycles::from(std::u128::MAX)
         );
         assert_eq!(
-            Cycles::from(std::u128::MAX) * 10u64,
+            Cycles::from(std::u128::MAX) * 10_u64,
+            Cycles::from(std::u128::MAX)
+        );
+    }
+
+    #[test]
+    fn test_multiplication_u128() {
+        assert_eq!(Cycles::zero() * std::u128::MAX, Cycles::zero());
+        assert_eq!(
+            Cycles::from(std::u128::MAX) * std::u128::MAX,
+            Cycles::from(std::u128::MAX)
+        );
+        assert_eq!(
+            Cycles::from(std::u128::MAX) * 10_u128,
+            Cycles::from(std::u128::MAX)
+        );
+    }
+
+    #[test]
+    fn test_multiplication_usize() {
+        assert_eq!(Cycles::zero() * std::usize::MAX, Cycles::zero());
+        assert_eq!(
+            Cycles::from(std::u128::MAX) * std::usize::MAX,
+            Cycles::from(std::u128::MAX)
+        );
+        assert_eq!(
+            Cycles::from(std::u128::MAX) * 10_usize,
+            Cycles::from(std::u128::MAX)
+        );
+    }
+
+    #[test]
+    fn test_division_u64() {
+        assert_eq!(Cycles::zero() / std::u64::MAX, Cycles::zero());
+        assert_eq!(
+            Cycles::from(std::u128::MAX) / 1_u64,
+            Cycles::from(std::u128::MAX)
+        );
+    }
+
+    #[test]
+    fn test_division_u128() {
+        assert_eq!(Cycles::zero() / std::u128::MAX, Cycles::zero());
+        assert_eq!(
+            Cycles::from(std::u128::MAX) / 1_u128,
+            Cycles::from(std::u128::MAX)
+        );
+    }
+
+    #[test]
+    fn test_division_usize() {
+        assert_eq!(Cycles::zero() / std::usize::MAX, Cycles::zero());
+        assert_eq!(
+            Cycles::from(std::u128::MAX) / 1_usize,
             Cycles::from(std::u128::MAX)
         );
     }
