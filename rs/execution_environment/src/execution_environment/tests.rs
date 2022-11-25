@@ -1713,7 +1713,7 @@ fn ecdsa_signature_rejected_without_fee() {
     let result = test.ingress(canister_id, "update", run).unwrap();
     assert_eq!(
         WasmResult::Reject(
-            "sign_with_ecdsa request sent with 1999999 cycles, but 2000000 cycles are required."
+            "sign_with_ecdsa request sent with 1_999_999 cycles, but 2_000_000 cycles are required."
                 .into()
         ),
         result

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/bitcoin/types/internal",
     "//rs/constants",
     "//rs/crypto/internal/crypto_lib/types",
@@ -32,10 +33,13 @@ DEPENDENCIES = [
     "@crate_index//:serde_with",
     "@crate_index//:strum",
     "@crate_index//:thiserror",
+    "@crate_index//:thousands",
     "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/test_utils/canister_threshold_sigs",
     "@crate_index//:anyhow",
     "@crate_index//:assert_matches",
     "@crate_index//:hex-literal",
@@ -43,7 +47,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:rusty-fork",
-    "//rs/crypto/test_utils/canister_threshold_sigs",
 ]
 
 MACRO_DEV_DEPENDENCIES = [

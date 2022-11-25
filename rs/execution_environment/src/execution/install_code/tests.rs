@@ -640,7 +640,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
             format!("Canister installation failed with `Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold 0 cycles`", canister_id, 
-            minimum_balance.get(), original_balance.get())
+            minimum_balance, original_balance)
         ))
     );
 }
