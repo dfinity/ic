@@ -431,21 +431,26 @@ impl CanisterState {
     /// system subnets; and execution memory plus system state memory (canister
     /// messages) for application subnets.
     pub fn memory_usage(&self, own_subnet_type: SubnetType) -> NumBytes {
-        self.memory_usage_impl(own_subnet_type != SubnetType::System)
+        let mut result = self.raw_memory_usage();
+        if own_subnet_type != SubnetType::System {
+            result += self.message_memory_usage();
+        }
+        result
     }
 
-    /// Internal `memory_usage()` implementation that allows the caller to
-    /// explicitly select whether message memory usage should be included.
-    pub(crate) fn memory_usage_impl(&self, with_messages: bool) -> NumBytes {
-        let message_memory_usage = if with_messages {
-            self.system_state.memory_usage()
-        } else {
-            0.into()
-        };
+    /// Returns the amount of raw memory currently used by the canister in bytes.
+    ///
+    /// This only includes execution memory (heap, stable, globals, Wasm).
+    pub(crate) fn raw_memory_usage(&self) -> NumBytes {
         self.execution_state
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.memory_usage())
-            + message_memory_usage
+    }
+
+    /// Returns the amount of system state memory used by the canister in bytes
+    /// (i.e. memory used by canister messages).
+    pub(crate) fn message_memory_usage(&self) -> NumBytes {
+        self.system_state.memory_usage()
     }
 
     /// Hack to get the dashboard templating working.

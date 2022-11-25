@@ -61,21 +61,25 @@ where
     f(state)
 }
 
-fn assert_total_memory_taken(queues_memory_usage: usize, state: &ReplicatedState) {
-    assert_eq!(queues_memory_usage as u64, state.total_memory_taken().get());
+fn assert_total_memory_taken(total_memory_usage: usize, state: &ReplicatedState) {
+    assert_eq!(
+        total_memory_usage as u64,
+        state.total_and_message_memory_taken().0.get()
+    );
 }
 
-fn assert_total_memory_taken_with_messages(queues_memory_usage: usize, state: &ReplicatedState) {
+fn assert_total_memory_taken_with_messages(total_memory_usage: usize, state: &ReplicatedState) {
+    let (raw_total_memory, message_memory_taken) = state.raw_total_and_message_memory_taken();
     assert_eq!(
-        queues_memory_usage as u64,
-        state.total_memory_taken_with_messages().get()
+        total_memory_usage as u64,
+        raw_total_memory.get() + message_memory_taken.get()
     );
 }
 
 fn assert_message_memory_taken(queues_memory_usage: usize, state: &ReplicatedState) {
     assert_eq!(
         queues_memory_usage as u64,
-        state.message_memory_taken().get()
+        state.raw_total_and_message_memory_taken().1.get()
     );
 }
 
@@ -91,12 +95,12 @@ fn assert_subnet_available_memory(
 }
 
 #[test]
-fn total_memory_taken_by_canister_queues() {
+fn memory_taken_by_canister_queues() {
     replicated_state_test(|mut state| {
         let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
         // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+        assert_eq!(0, state.total_and_message_memory_taken().0.get());
 
         // Push a request into a canister input queue.
         state
@@ -150,12 +154,12 @@ fn total_memory_taken_by_canister_queues() {
 }
 
 #[test]
-fn total_memory_taken_by_subnet_queues() {
+fn memory_taken_by_subnet_queues() {
     replicated_state_test(|mut state| {
         let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
         // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+        assert_eq!(0, state.total_and_message_memory_taken().0.get());
 
         // Push a request into the subnet input queues. Should ignore the
         // `max_canister_memory_size` argument.
@@ -203,10 +207,10 @@ fn total_memory_taken_by_subnet_queues() {
 }
 
 #[test]
-fn total_memory_taken_by_stream_responses() {
+fn memory_taken_by_stream_responses() {
     replicated_state_test(|mut state| {
         // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+        assert_eq!(0, state.total_and_message_memory_taken().0.get());
 
         // Push a request and a response into a stream.
         let mut streams = state.take_streams();
@@ -234,7 +238,7 @@ fn total_memory_taken_by_stream_responses() {
 }
 
 #[test]
-fn system_subnet_total_memory_taken_by_canister_queues() {
+fn system_subnet_memory_taken_by_canister_queues() {
     replicated_state_test(|mut state| {
         // Make it a system subnet.
         state.metadata.own_subnet_type = SubnetType::System;
@@ -242,7 +246,7 @@ fn system_subnet_total_memory_taken_by_canister_queues() {
         let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
         // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+        assert_eq!(0, state.total_and_message_memory_taken().0.get());
 
         // Push a request into a canister input queue.
         state
@@ -257,7 +261,7 @@ fn system_subnet_total_memory_taken_by_canister_queues() {
             )
             .unwrap();
 
-        // System subnets don't account for messages in `total_memory_taken()`.
+        // System subnets don't account for messages in `total_and_message_memory_taken()`.
         assert_total_memory_taken(0, &state);
         // But do in other `memory_taken()` methods.
         assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
@@ -272,7 +276,7 @@ fn system_subnet_total_memory_taken_by_canister_queues() {
 }
 
 #[test]
-fn system_subnet_total_memory_taken_by_subnet_queues() {
+fn system_subnet_memory_taken_by_subnet_queues() {
     replicated_state_test(|mut state| {
         // Make it a system subnet.
         state.metadata.own_subnet_type = SubnetType::System;
@@ -280,7 +284,7 @@ fn system_subnet_total_memory_taken_by_subnet_queues() {
         let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
         // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+        assert_eq!(0, state.total_and_message_memory_taken().0.get());
 
         // Push a request into the subnet input queues. Should ignore the
         // `max_canister_memory_size` argument.
@@ -296,7 +300,7 @@ fn system_subnet_total_memory_taken_by_subnet_queues() {
             )
             .unwrap();
 
-        // System subnets don't account for subnet queue messages in `total_memory_taken()`.
+        // System subnets don't account for subnet queue messages in `total_and_message_memory_taken()`.
         assert_total_memory_taken(0, &state);
         // But do in other `memory_taken()` methods.
         assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
@@ -311,13 +315,13 @@ fn system_subnet_total_memory_taken_by_subnet_queues() {
 }
 
 #[test]
-fn system_subnet_total_memory_taken_by_stream_responses() {
+fn system_subnet_memory_taken_by_stream_responses() {
     replicated_state_test(|mut state| {
         // Make it a system subnet.
         state.metadata.own_subnet_type = SubnetType::System;
 
         // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+        assert_eq!(0, state.total_and_message_memory_taken().0.get());
 
         // Push a request and a response into a stream.
         let mut streams = state.take_streams();
@@ -337,7 +341,7 @@ fn system_subnet_total_memory_taken_by_stream_responses() {
         streams.push(SUBNET_ID, response.clone());
         state.put_streams(streams);
 
-        // System subnets don't account for stream responses in `total_memory_taken()`.
+        // System subnets don't account for stream responses in `total_and_message_memory_taken()`.
         assert_total_memory_taken(0, &state);
         // But do in other `memory_taken()` methods.
         assert_total_memory_taken_with_messages(response.count_bytes(), &state);
@@ -352,7 +356,7 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
         let mut subnet_available_memory = initial_available_memory;
 
         // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+        assert_eq!(0, state.total_and_message_memory_taken().0.get());
 
         // Push a request into the subnet input queues. Should ignore the
         // `max_canister_memory_size` argument.
@@ -401,7 +405,7 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
         // Unchanged memory usage.
         assert_eq!(
             MAX_RESPONSE_COUNT_BYTES as u64,
-            state.total_memory_taken().get()
+            state.total_and_message_memory_taken().0.get()
         );
         assert_eq!(0, subnet_available_memory);
     })

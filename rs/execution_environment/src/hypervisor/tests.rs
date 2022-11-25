@@ -2043,7 +2043,7 @@ fn subnet_available_memory_is_updated_by_canister_init() {
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    let memory_used = test.state().total_memory_taken().get() as i64;
+    let memory_used = test.state().total_and_message_memory_taken().0.get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
         initial_subnet_available_memory.get_total_memory() - memory_used
@@ -2078,7 +2078,7 @@ fn subnet_available_memory_is_updated_by_canister_start() {
         mem_before_upgrade,
         test.subnet_available_memory().get_total_memory()
     );
-    let memory_used = test.state().total_memory_taken().get() as i64;
+    let memory_used = test.state().total_and_message_memory_taken().0.get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
         initial_subnet_available_memory.get_total_memory() - memory_used
@@ -2205,7 +2205,7 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
 
     test.install_canister_with_allocation(canister_id, binary, None, Some(memory_allocation.get()))
         .unwrap();
-    let initial_memory_used = test.state().total_memory_taken();
+    let initial_memory_used = test.state().total_and_message_memory_taken().0;
     assert_eq!(initial_memory_used.get(), memory_allocation.get());
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.ingress(canister_id, "test", vec![]);
@@ -2219,7 +2219,10 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    assert_eq!(initial_memory_used, test.state().total_memory_taken());
+    assert_eq!(
+        initial_memory_used,
+        test.state().total_and_message_memory_taken().0
+    );
 }
 
 #[test]

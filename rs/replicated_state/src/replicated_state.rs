@@ -509,49 +509,47 @@ impl ReplicatedState {
             .sum()
     }
 
-    /// Returns the total memory taken by canisters in bytes.
+    /// Returns:
+    ///   * the total memory taken by canisters in bytes
+    ///   * the memory taken by canister messages in bytes
     ///
-    /// This accounts for the canister memory reservation, where specified; and
-    /// the actual canister memory usage, where no explicit memory reservation
-    /// has been made. Canister message memory usage is included for application
-    /// subnets only.
-    pub fn total_memory_taken(&self) -> NumBytes {
-        self.total_memory_taken_impl(self.metadata.own_subnet_type != SubnetType::System)
+    /// Total memory taken accounts for the canister memory reservation, where
+    /// specified; and the actual canister memory usage, where no explicit
+    /// memory reservation has been made. Canister message memory usage is
+    /// included for application subnets only.
+    pub fn total_and_message_memory_taken(&self) -> (NumBytes, NumBytes) {
+        let (raw_total_memory_taken, message_memory_taken) =
+            self.raw_total_and_message_memory_taken();
+        let total_memory_taken = if self.metadata.own_subnet_type != SubnetType::System {
+            raw_total_memory_taken + message_memory_taken
+        } else {
+            raw_total_memory_taken
+        };
+        (total_memory_taken, message_memory_taken)
     }
 
-    /// Returns the total memory taken by canisters in bytes, always including
-    /// canister messages (regardless of subnet type).
-    ///
-    /// This accounts for the canister memory reservation, where specified; and
-    /// the actual canister memory usage, where no explicit memory reservation
-    /// has been made.
-    pub fn total_memory_taken_with_messages(&self) -> NumBytes {
-        self.total_memory_taken_impl(true)
-    }
-
-    /// Common implementation for `total_memory_taken()` and
-    /// `total_memory_taken_with_messages()`.
-    fn total_memory_taken_impl(&self, with_messages: bool) -> NumBytes {
-        let mut memory_taken = self
+    /// Returns:
+    ///   * the raw total memory taken by canisters in bytes, i.e. without
+    ///     including memory taken by canister messages
+    ///   * the memory taken by canister messages in bytes
+    pub fn raw_total_and_message_memory_taken(&self) -> (NumBytes, NumBytes) {
+        let (raw_memory_taken, mut message_memory_taken) = self
             .canisters_iter()
-            .map(|canister| match canister.memory_allocation() {
-                MemoryAllocation::Reserved(bytes) => bytes,
-                MemoryAllocation::BestEffort => canister.memory_usage_impl(with_messages),
+            .map(|canister| {
+                (
+                    match canister.memory_allocation() {
+                        MemoryAllocation::Reserved(bytes) => bytes,
+                        MemoryAllocation::BestEffort => canister.raw_memory_usage(),
+                    },
+                    canister.system_state.memory_usage(),
+                )
             })
-            .sum();
-        if with_messages {
-            memory_taken += (self.subnet_queues.memory_usage() as u64).into();
-        }
-        memory_taken
-    }
+            .reduce(|accum, val| (accum.0 + val.0, accum.1 + val.1))
+            .unwrap_or_default();
 
-    /// Returns the total memory taken by canister messages in bytes.
-    pub fn message_memory_taken(&self) -> NumBytes {
-        NumBytes::new(self.subnet_queues.memory_usage() as u64)
-            + self
-                .canisters_iter()
-                .map(|canister| canister.system_state.memory_usage())
-                .sum()
+        message_memory_taken += (self.subnet_queues.memory_usage() as u64).into();
+
+        (raw_memory_taken, message_memory_taken)
     }
 
     /// Returns the total memory taken by the ingress history in bytes.

@@ -524,10 +524,12 @@ impl StreamHandlerImpl {
         mut state: ReplicatedState,
         stream_slices: BTreeMap<SubnetId, StreamSlice>,
     ) -> ReplicatedState {
+        let (raw_memory_taken, message_memory_taken) = state.raw_total_and_message_memory_taken();
         let subnet_available_memory = self.subnet_memory_capacity.get() as i64
-            - state.total_memory_taken_with_messages().get() as i64;
-        let subnet_available_message_memory = self.subnet_message_memory_capacity.get() as i64
-            - state.message_memory_taken().get() as i64;
+            - raw_memory_taken.get() as i64
+            - message_memory_taken.get() as i64;
+        let subnet_available_message_memory =
+            self.subnet_message_memory_capacity.get() as i64 - message_memory_taken.get() as i64;
         let mut subnet_available_memory =
             subnet_available_memory.min(subnet_available_message_memory);
         let mut streams = state.take_streams();

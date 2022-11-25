@@ -363,7 +363,8 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
             WasmMetadata::default(),
         ));
         assert!(canister_state.memory_usage(own_subnet_type).get() > 0);
-        let initial_memory_usage = canister_state.memory_usage_impl(true);
+        let initial_memory_usage =
+            canister_state.raw_memory_usage() + canister_state.message_memory_usage();
 
         let request: RequestOrResponse = RequestBuilder::default()
             .sender(OTHER_CANISTER_ID)
@@ -384,7 +385,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
 
         assert_eq!(
             initial_memory_usage + NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-            canister_state.memory_usage_impl(true)
+            canister_state.raw_memory_usage() + canister_state.message_memory_usage(),
         );
         assert_eq!(
             SUBNET_AVAILABLE_MEMORY - MAX_RESPONSE_COUNT_BYTES as i64,
