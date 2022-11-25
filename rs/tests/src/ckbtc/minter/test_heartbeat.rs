@@ -1,6 +1,7 @@
 use crate::ckbtc::minter::utils::{
     ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
-    wait_for_mempool_change, wait_for_signed_tx, wait_for_update_balance, BTC_MIN_CONFIRMATIONS,
+    wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx, wait_for_update_balance,
+    BTC_MIN_CONFIRMATIONS,
 };
 use crate::{
     ckbtc::lib::{
@@ -184,5 +185,17 @@ pub fn test_heartbeat(env: TestEnv) {
 
         // Check that we can modify the fee
         assert!(get_tx_infos.bip125_replaceable);
+
+        // Generate more blocks and wait for the minter to finalize the retrieval.
+        generate_blocks(
+            &btc_rpc,
+            &logger,
+            BTC_MIN_CONFIRMATIONS,
+            &default_btc_address,
+        );
+
+        let finalized_txid =
+            wait_for_finalization(&minter_agent, &logger, retrieve_response.block_index).await;
+        assert_eq!(txid, finalized_txid);
     })
 }

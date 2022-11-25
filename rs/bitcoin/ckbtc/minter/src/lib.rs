@@ -247,6 +247,7 @@ async fn submit_pending_requests() {
                                 request: req.original_request,
                                 txid,
                                 used_utxos: req.utxos,
+                                submitted_at: ic_cdk::api::time(),
                             });
                         });
                     }
@@ -270,6 +271,99 @@ async fn submit_pending_requests() {
     }
 }
 
+fn finalization_time_estimate(min_confirmations: u32, network: Network) -> u64 {
+    const SEC_NANOS: u64 = 1_000_000_000;
+    const MIN_NANOS: u64 = 60 * SEC_NANOS;
+
+    min_confirmations as u64
+        * match network {
+            Network::Mainnet => 10 * MIN_NANOS,
+            Network::Testnet => MIN_NANOS,
+            Network::Regtest => SEC_NANOS,
+        }
+}
+
+async fn finalize_requests() {
+    if state::read_state(|s| s.submitted_requests.is_empty()) {
+        return;
+    }
+
+    let now = ic_cdk::api::time();
+
+    let (btc_network, min_confirmations, ecdsa_public_key, requests_to_finalize) =
+        state::read_state(|s| {
+            let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
+            let reqs: Vec<_> = s
+                .submitted_requests
+                .iter()
+                .filter(|req| req.submitted_at + wait_time >= now)
+                .cloned()
+                .collect();
+            (
+                s.btc_network,
+                s.min_confirmations,
+                s.ecdsa_public_key.clone(),
+                reqs,
+            )
+        });
+
+    let ecdsa_public_key = match ecdsa_public_key {
+        Some(key) => key,
+        None => {
+            ic_cdk::print(
+                "unreachable: have retrieve BTC requests but the ECDSA key is not initialized",
+            );
+            return;
+        }
+    };
+
+    for req in requests_to_finalize {
+        assert!(!req.used_utxos.is_empty());
+
+        let utxo = &req.used_utxos[0];
+        let account = match state::read_state(|s| s.outpoint_account.get(&utxo.outpoint).cloned()) {
+            Some(account) => account,
+            None => {
+                ic_cdk::println!("[BUG]: forgot the account for UTXO {:?}", utxo);
+                continue;
+            }
+        };
+
+        // Pick one of the accounts that we used to build the pending
+        // transaction and fetch UTXOs for that account.
+        let addr = address::account_to_p2wpkh_address(btc_network, &ecdsa_public_key, &account);
+        let utxos = match management::get_utxos(btc_network, &addr, min_confirmations).await {
+            Ok(utxos) => utxos,
+            Err(e) => {
+                ic_cdk::print(format!(
+                    "[heartbeat]: failed to fetch UTXOs for address {}: {}",
+                    addr, e
+                ));
+                continue;
+            }
+        };
+
+        // Check if the previous output that we used in the transaction appears
+        // in the list of UTXOs this account owns. If the UTXO is still in the
+        // list the transaction is not finalized yet.
+        if utxos.contains(utxo) {
+            continue;
+        }
+
+        state::mutate_state(|s| s.finalize_request(req.request.block_index));
+
+        let now = ic_cdk::api::time();
+
+        ic_cdk::println!(
+            "[heartbeat]: finalized request {} (amount = {}) at {} (after {} sec)",
+            req.request.block_index,
+            req.request.amount,
+            now,
+            (now - req.submitted_at) / 1_000_000_000
+        );
+    }
+}
+
 pub async fn heartbeat() {
     let _heartbeat_guard = match guard::HeartbeatGuard::new() {
         Some(guard) => guard,
@@ -277,6 +371,7 @@ pub async fn heartbeat() {
     };
 
     submit_pending_requests().await;
+    finalize_requests().await;
 }
 
 /// Builds the minimal OutPoint -> Account map required to sign a transaction.
