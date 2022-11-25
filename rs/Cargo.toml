@@ -267,6 +267,7 @@ members = [
   "utils",
   "utils/rustfmt",
   "validator",
+  "vector_config_generator",
   "workload_generator",
   "xnet/endpoint",
   "xnet/hyper",

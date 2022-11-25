@@ -11,6 +11,7 @@ use ic_config::metrics::Config as MetricsConfig;
 use ic_config::metrics::Exporter;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
+use service_discovery::config_generator::ConfigGenerator;
 use service_discovery::{
     file_sd::FileSd,
     mainnet_registry::{create_local_store_from_changelog, get_mainnet_delta_6d_c1},
@@ -66,7 +67,7 @@ fn main() -> Result<()> {
             let targets = ic_discovery.get_target_groups(job_name)?;
             file_sd.write_sd_config(job_name, targets)?;
         }
-        Some(file_sd)
+        Some(Box::new(file_sd) as Box<dyn ConfigGenerator>)
     } else {
         None
     };

@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::file_sd::FileSd;
+use crate::config_generator::ConfigGenerator;
 use crate::metrics::Metrics;
 use crate::IcServiceDiscovery;
 use crate::IcServiceDiscoveryImpl;
@@ -18,7 +18,7 @@ pub fn make_poll_loop(
     stop_signal: Receiver<()>,
     poll_interval: Duration,
     metrics: Metrics,
-    file_sd: Option<FileSd>,
+    config_generator: Option<Box<dyn ConfigGenerator>>,
     jobs: Vec<&'static str>,
 ) -> impl FnMut() {
     let interval = crossbeam::channel::tick(poll_interval);
@@ -51,7 +51,7 @@ pub fn make_poll_loop(
                     .inc();
                 err = true;
             }
-            if let Some(file_sd) = &file_sd {
+            if let Some(config_generator) = &config_generator {
                 for job_name in &jobs {
                     let targets = match ic_discovery.get_target_groups(job_name) {
                         Ok(t) => t,
@@ -64,7 +64,7 @@ pub fn make_poll_loop(
                             continue;
                         }
                     };
-                    if let Err(e) = file_sd.write_sd_config(job_name, targets) {
+                    if let Err(e) = config_generator.generate_config(job_name, targets) {
                         warn!(log, "Failed to write targets for job {}: {:?}", job_name, e);
                         err = true;
                     }

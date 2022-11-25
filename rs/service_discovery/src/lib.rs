@@ -39,7 +39,10 @@ use thiserror::Error;
 
 pub const REPLICA_JOB_NAME: &str = "replica";
 pub const HOST_NODE_EXPORTER_JOB_NAME: &str = "host_node_exporter";
+pub const NODE_EXPORTER_JOB_NAME: &str = "node_exporter";
+pub const ORCHESTRATOR_JOB_NAME: &str = "orchestrator";
 
+pub mod config_generator;
 pub mod file_sd;
 pub mod mainnet_registry;
 pub mod metrics;
