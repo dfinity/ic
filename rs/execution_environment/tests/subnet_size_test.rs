@@ -14,7 +14,10 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_types::messages::{SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
+use ic_types::messages::{
+    SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+};
 
 use ic_types::{CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId};
 use std::time::Duration;
@@ -209,6 +212,7 @@ fn simulate_one_gib_per_second_cost(
 enum KeepFeesFilter {
     Execution,
     IngressInduction,
+    XnetCall,
 }
 
 /// Helps to distinguish different costs that are withdrawn within the same execution round.
@@ -232,6 +236,11 @@ fn apply_filter(
             filtered_config.ingress_message_reception_fee =
                 initial_config.ingress_message_reception_fee;
             filtered_config.ingress_byte_reception_fee = initial_config.ingress_byte_reception_fee;
+            filtered_config
+        }
+        KeepFeesFilter::XnetCall => {
+            filtered_config.xnet_call_fee = initial_config.xnet_call_fee;
+            filtered_config.xnet_byte_transmission_fee = initial_config.xnet_byte_transmission_fee;
             filtered_config
         }
     }
@@ -456,6 +465,85 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
     let payment_after = context.request.payment;
 
     payment_before - payment_after
+}
+
+/// Simulates sending cycles from canister `Alice` to canister `Bob` to get the cost of xnet call.
+/// Filtered subnet config is used to avoid dealing with irrelevant costs.
+fn simulate_xnet_call_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    let env = StateMachineBuilder::new()
+        .with_use_cost_scaling_flag(true)
+        .with_subnet_type(subnet_type)
+        .with_subnet_size(subnet_size)
+        .with_config(Some(StateMachineConfig::new(
+            filtered_subnet_config(subnet_type, KeepFeesFilter::XnetCall),
+            HypervisorConfig::default(),
+        )))
+        .build();
+
+    // Create two identical canisters Alice and Bob.
+    let cycles = DEFAULT_CYCLES_PER_NODE * subnet_size;
+    let alice = create_universal_canister_with_cycles(&env, cycles);
+    let bob = create_universal_canister_with_cycles(&env, cycles);
+
+    // Preserve canister's balances before the operation.
+    let alice_balance_before = env.cycle_balance(alice);
+    let bob_balance_before = env.cycle_balance(bob);
+
+    // Canister Alice sends cycles to canister Bob, Bob accepts only a half of those cycles.
+    let cycles_to_send = Cycles::new(2_000);
+    let accept_cycles = Cycles::new(cycles_to_send.get() / 2);
+    env.execute_ingress(
+        alice,
+        "update",
+        wasm()
+            .call_with_cycles(
+                bob,
+                "update",
+                call_args().other_side(wasm().accept_cycles128(accept_cycles.into_parts())),
+                cycles_to_send.into_parts(),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    // Calculate xnet call cost as a difference between canister balance changes.
+    let alices_loss = alice_balance_before - env.cycle_balance(alice);
+    let bobs_gain = env.cycle_balance(bob) - bob_balance_before;
+    let xnet_call_cost = alices_loss - bobs_gain;
+
+    Cycles::new(xnet_call_cost)
+}
+
+fn calculate_xnet_call_cost(
+    config: &CyclesAccountManagerConfig,
+    request_size: NumBytes,
+    response_size: NumBytes,
+    subnet_size: usize,
+) -> Cycles {
+    // Prepayed cost.
+    let prepayment_for_response_transmission = scale_cost(
+        config,
+        config.xnet_byte_transmission_fee * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get(),
+        subnet_size,
+    );
+    let prepayment_for_response_execution = Cycles::new(0);
+    let prepayed = scale_cost(
+        config,
+        config.xnet_call_fee + config.xnet_byte_transmission_fee * request_size.get(),
+        subnet_size,
+    ) + prepayment_for_response_transmission
+        + prepayment_for_response_execution;
+
+    // Actually transmitted cost and refund.
+    let transmission_cost = scale_cost(
+        config,
+        config.xnet_byte_transmission_fee * response_size.get(),
+        subnet_size,
+    );
+    let refund = prepayment_for_response_transmission
+        - transmission_cost.min(prepayment_for_response_transmission);
+
+    prepayed - refund
 }
 
 fn calculate_http_request_cost(
@@ -1079,6 +1167,46 @@ fn test_subnet_size_http_request_cost() {
 }
 
 #[test]
+fn test_subnet_size_xnet_call_cost() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = calculate_xnet_call_cost(
+        &config,
+        NumBytes::new(25),
+        NumBytes::new(12),
+        reference_subnet_size,
+    );
+
+    // Check default cost.
+    assert_eq!(
+        simulate_xnet_call_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(simulate_xnet_call_cost(subnet_type, 1) < simulate_xnet_call_cost(subnet_type, 2));
+    assert!(simulate_xnet_call_cost(subnet_type, 11) < simulate_xnet_call_cost(subnet_type, 12));
+    assert!(simulate_xnet_call_cost(subnet_type, 101) < simulate_xnet_call_cost(subnet_type, 102));
+    assert!(
+        simulate_xnet_call_cost(subnet_type, 1_001) < simulate_xnet_call_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_xnet_call_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+        let simulated_cost = simulate_xnet_call_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={subnet_size}"
+        );
+    }
+}
+
+#[test]
 fn test_subnet_size_system_subnet_has_zero_cost() {
     let subnet_type = SubnetType::System;
 
@@ -1124,6 +1252,12 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
 
         assert_eq!(
             simulate_http_request_cost(subnet_type, subnet_size),
+            Cycles::zero(),
+            "subnet_size={subnet_size}"
+        );
+
+        assert_eq!(
+            simulate_xnet_call_cost(subnet_type, subnet_size),
             Cycles::zero(),
             "subnet_size={subnet_size}"
         );
