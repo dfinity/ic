@@ -1,0 +1,7 @@
+load("//ic-os:defs.bzl", "boundary_node_icos_build")
+
+boundary_node_icos_build(
+    name = "prod-sev",
+    mode = "prod",
+    sev = True,
+)

@@ -1,0 +1,15 @@
+package(default_visibility = ["__subpackages__"])
+
+exports_files([
+    "bootloader/extra_boot_args.template",
+    "partitions.csv",
+    "rootfs",
+])
+
+# All boundary-guest-os targets are named the same, just stay in different submodules.
+# To build or run specific target:
+#
+# bazel run   //ic-os/boundary-guestos/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
+# bazel build //ic-os/boundary-guestos/dev/...
+#
+# check //ic-os/defs.bzl for the full list of targets.

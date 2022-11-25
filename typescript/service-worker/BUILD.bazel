@@ -32,6 +32,10 @@ webpack(
         "package.json",
         "tsconfig.json",
     ],
+    visibility = [
+        "//ic-os/boundary-guestos/dev:__pkg__",
+        "//ic-os/boundary-guestos/dev-sev:__pkg__",
+    ],
 )
 
 jest_test(

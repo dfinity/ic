@@ -1,0 +1,10 @@
+load("//ic-os:defs.bzl", "boundary_node_icos_build")
+
+# The macro contains several targets.
+# Check
+#       //ic-os/boundary-guestos/BUILD.bazel for examples
+#    or //ic-os/defs.bzl for the full list of targets.
+boundary_node_icos_build(
+    name = "prod",
+    sev = False,
+)
