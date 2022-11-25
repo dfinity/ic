@@ -40,6 +40,7 @@ mod compilation;
 mod orthogonal_persistence;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
+const ONE_GIB: i64 = 1 << 30;
 
 // A Wasm module calling call_simple
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -262,14 +263,14 @@ fn output_requests_on_application_subnets_respect_subnet_total_memory() {
     let min_canister_memory = 65793;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_total_memory(min_canister_memory + 13)
-        .with_subnet_message_memory(1 << 30)
+        .with_subnet_message_memory(ONE_GIB)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
     assert_eq!(13, test.subnet_available_memory().get_total_memory());
-    assert_eq!(1 << 30, test.subnet_available_memory().get_message_memory());
+    assert_eq!(ONE_GIB, test.subnet_available_memory().get_message_memory());
     let system_state = &test.canister_state(canister_id).system_state;
     assert!(!system_state.queues().has_output());
 }
@@ -277,7 +278,7 @@ fn output_requests_on_application_subnets_respect_subnet_total_memory() {
 #[test]
 fn output_requests_on_application_subnets_respect_subnet_message_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(1 << 30)
+        .with_subnet_total_memory(ONE_GIB)
         .with_subnet_message_memory(13)
         .with_manual_execution()
         .build();
@@ -285,7 +286,7 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
     let available_memory_after_create = test.subnet_available_memory().get_total_memory();
     assert_eq!(
         available_memory_after_create,
-        (1 << 30) - test.state().total_memory_taken().get() as i64
+        ONE_GIB - test.state().total_and_message_memory_taken().0.get() as i64
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -301,15 +302,15 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
 #[test]
 fn output_requests_on_application_subnets_update_subnet_available_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(1 << 30)
-        .with_subnet_message_memory(1 << 30)
+        .with_subnet_total_memory(ONE_GIB)
+        .with_subnet_message_memory(ONE_GIB)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
     let available_memory_after_create = test.subnet_available_memory().get_total_memory();
     assert_eq!(
         available_memory_after_create,
-        (1 << 30) - test.state().total_memory_taken().get() as i64
+        ONE_GIB - test.state().total_and_message_memory_taken().0.get() as i64
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -324,7 +325,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
         subnet_total_memory
     );
     assert_eq!(
-        (1 << 30) - MAX_RESPONSE_COUNT_BYTES as i64,
+        ONE_GIB - MAX_RESPONSE_COUNT_BYTES as i64,
         subnet_message_memory
     );
     assert_correct_request(system_state, canister_id);
@@ -712,7 +713,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let result = test.ingress(controller, "update", get_canister_status);
     let reply = get_reply(result);
     let csr = CanisterStatusResultV2::decode(&reply).unwrap();
-    let one_gib: u128 = 1 << 30;
+    let one_gib: u128 = ONE_GIB as u128;
     let seconds_per_day = 24 * 3600;
     assert_eq!(
         csr.idle_cycles_burned_per_day(),
@@ -1370,33 +1371,33 @@ const MEMORY_ALLOCATION_WAT: &str = r#"(module
 #[test]
 fn subnet_available_memory_reclaimed_when_execution_fails() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(1 << 30)
-        .with_subnet_message_memory(1 << 30)
+        .with_subnet_total_memory(ONE_GIB)
+        .with_subnet_message_memory(ONE_GIB)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
-    let memory_after_create = test.state().total_memory_taken().get() as i64;
+    let memory_after_create = test.state().total_and_message_memory_taken().0.get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
-        (1 << 30) - memory_after_create
+        ONE_GIB - memory_after_create
     );
     let err = test.ingress(id, "test_with_trap", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     let memory = test.subnet_available_memory();
-    assert_eq!((1 << 30) - memory_after_create, memory.get_total_memory());
-    assert_eq!(1 << 30, memory.get_message_memory());
+    assert_eq!(ONE_GIB - memory_after_create, memory.get_total_memory());
+    assert_eq!(ONE_GIB, memory.get_message_memory());
 }
 
 #[test]
 fn test_allocating_memory_reduces_subnet_available_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(1 << 30)
-        .with_subnet_message_memory(1 << 30)
+        .with_subnet_total_memory(ONE_GIB)
+        .with_subnet_message_memory(ONE_GIB)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
-    let memory_after_create = test.state().total_memory_taken().get() as i64;
+    let memory_after_create = test.state().total_and_message_memory_taken().0.get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
-        (1 << 30) - memory_after_create
+        ONE_GIB - memory_after_create
     );
     let result = test.ingress(id, "test_without_trap", vec![]);
     assert_empty_reply(result);
@@ -1404,10 +1405,10 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
     let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
     let memory = test.subnet_available_memory();
     assert_eq!(
-        1 << 30,
+        ONE_GIB,
         memory.get_total_memory() + new_memory_allocated + memory_after_create
     );
-    assert_eq!(1 << 30, memory.get_message_memory());
+    assert_eq!(ONE_GIB, memory.get_message_memory());
 }
 
 #[test]

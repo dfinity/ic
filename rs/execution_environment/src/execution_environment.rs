@@ -326,11 +326,11 @@ impl ExecutionEnvironment {
 
     /// Look up the current amount of memory available on the subnet.
     pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
+        let (memory_taken, message_memory_taken) = state.total_and_message_memory_taken();
         SubnetAvailableMemory::new(
-            self.config.subnet_memory_capacity.get() as i64
-                - state.total_memory_taken().get() as i64,
+            self.config.subnet_memory_capacity.get() as i64 - memory_taken.get() as i64,
             self.config.subnet_message_memory_capacity.get() as i64
-                - state.message_memory_taken().get() as i64,
+                - message_memory_taken.get() as i64,
         )
     }
 
