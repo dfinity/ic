@@ -7,9 +7,10 @@ Purpose: Stress state sync mechanisms with large state changes
 Minimal topology: 13 node app subnet, 1 node NNS
 
 Runbook:
-. Deploy one instance of statesync canister
+. Deploy `num_canister` instances of statesync canister
 . Make an update call
 . Kill a node for > 3 * DKG interval update calls
+. Grow canisters `num_canister_grow` many times
 . Kill nodes in the same data center
 . Restart node
 . Make another update call
@@ -24,9 +25,11 @@ runtimes.
 import json
 import math
 import os
+import random
 import sys
 import time
 import traceback
+from multiprocessing import Pool
 
 import gflags
 from termcolor import colored
@@ -43,6 +46,20 @@ CANISTER = "statesync-test-canister.wasm"
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("subnet_index", 1, "index of the subnet to target")
 gflags.DEFINE_integer("num_canisters", 1, "number of canisters to install")
+gflags.DEFINE_integer("num_canister_grow", 0, "number of expansions")
+gflags.DEFINE_integer("batch_size", 1, "number of parallel expansions")
+gflags.DEFINE_boolean(
+    "grow_only",
+    False,
+    "Only grow the subnet state but do not trigger a state sync. For ad-hoc experiments with large state",
+)
+
+
+def expand_single_state(t):
+    (hostname, canister_id, index, seed) = t
+    agent = misc.get_anonymous_agent(hostname)
+    response = agent.update_raw(canister_id, "expand_state", json.dumps([index, seed]))
+    print("response", response)
 
 
 class StatesyncExperiment(base_experiment.BaseExperiment):
@@ -54,7 +71,7 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
         hostname = self.get_node_ip_address(self.get_subnet_members(FLAGS.subnet_index)[0])
         for i in range(FLAGS.num_canisters):
             self.install_canister(hostname, canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}"))
-        print("Successfully installed and expanded", FLAGS.num_canisters, "canisters.")
+        print("Successfully installed", FLAGS.num_canisters, "canisters.")
 
     def change_state(hostnames: [str], canister_ids: [str], seed):
         """Make an update call to the statesync canister to change the state."""
@@ -63,12 +80,17 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
             response = agent.update_raw(canister_id, "change_state", json.dumps(seed))
             print("response", response)
 
-    def expand_state(hostnames: [str], canister_ids: [str]):
+    def expand_state(hostnames: [str], canister_ids: [str], index, seed):
         """Make an update call to the statesync canister to expand the state."""
-        for (hostname, canister_id) in zip(hostnames, canister_ids):
-            agent = misc.get_anonymous_agent(hostname)
-            response = agent.update_raw(canister_id, "expand_state", json.dumps([0, 1]))
-            print("response", response)
+        random.seed(seed)
+
+        def extend(t):
+            (h, c) = t
+            return (h, c, index, random.randint(0, 2 ** 32 - 1))
+
+        arguments = list(map(extend, zip(hostnames, canister_ids)))
+        with Pool(FLAGS.batch_size) as p:
+            p.map(expand_single_state, arguments)
 
     def run_experiment_internal(self, config):
         print("Resolve members, IPs and dkg interval length for subnet 1...")
@@ -82,18 +104,20 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
             + " nodes."
         )
         assert len(members) > 2, error_msg
+
+        assert FLAGS.num_canister_grow <= 8, "Parameter num_canister_grow must be in the range [0,8]"
+
         nodes = [self.get_node_ip_address(node) for node in members]
         info = json.loads(self._get_subnet_info(1))
         dkg_len = info["records"][0]["value"]["dkg_interval_length"] + 1
         print("Dkg length", dkg_len)
         print("Make a change state call to canister", self.get_canister_ids(), "at node", nodes[0])
-        StatesyncExperiment.change_state([nodes[0]], self.get_canister_ids(), 0)
-        # print("Make a expand state call to canister", self.get_canister_ids(), "at node", nodes[0])
-        # StatesyncExperiment.expand_state([nodes[0]], self.get_canister_ids())
+        StatesyncExperiment.change_state([nodes[0]] * FLAGS.num_canisters, self.get_canister_ids(), 0)
 
-        print("Stop node with ip...", nodes[-1])
-        MachineFailure.kill_nodes([nodes[-1]])
-        print()
+        if not FLAGS.grow_only:
+            print("Stop node with ip...", nodes[-1])
+            MachineFailure.kill_nodes([nodes[-1]])
+            print()
 
         if dkg_len > 50:
             print(
@@ -102,7 +126,15 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
                     "yellow",
                 )
             )
-        print("Make 3*dkg_len change state calls to canister", self.get_canister_ids(), "at node", nodes[0])
+
+        for i in range(FLAGS.num_canister_grow):
+            StatesyncExperiment.expand_state([nodes[0]] * FLAGS.num_canisters, self.get_canister_ids(), i, i)
+            print("Expand state call number", i + 1, "out of", FLAGS.num_canister_grow)
+
+        if FLAGS.grow_only:
+            return 0
+
+        print("Make 3*dkg_len change state calls to canister", self.get_canister_ids()[0], "at node", nodes[0])
         for i in range(3 * dkg_len):
             # Each change_state update call has a latency of at least one block,
             # so calling it dkg_len times takes at least dkg_len blocks.
