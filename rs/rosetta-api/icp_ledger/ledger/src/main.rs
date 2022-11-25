@@ -923,52 +923,25 @@ mod tests {
     use candid::utils::{service_compatible, CandidSource};
     use std::path::PathBuf;
 
-    fn source_to_str(source: &CandidSource) -> String {
-        match source {
-            CandidSource::File(f) => std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string()),
-            CandidSource::Text(t) => t.to_string(),
-        }
-    }
-
-    fn check_service_compatible(
-        new_name: &str,
-        new: CandidSource,
-        old_name: &str,
-        old: CandidSource,
-    ) {
-        let new_str = source_to_str(&new);
-        let old_str = source_to_str(&old);
-        match service_compatible(new, old) {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!(
-                    "{} is not compatible with {}!\n\n\
-                {}:\n\
-                {}\n\n\
-                {}:\n\
-                {}\n",
-                    new_name, old_name, new_name, new_str, old_name, old_str
-                );
-                panic!("{:?}", e);
-            }
-        }
-    }
-
     #[test]
     fn check_candid_interface_compatibility() {
         candid::export_service!();
 
         let new_interface = __export_service();
+        let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let candid_file = "../ledger.did";
+        let old_interface = manifest_dir.join(candid_file);
 
-        // check the public interface against the actual one
-        let old_interface =
-            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../ledger.did");
-
-        check_service_compatible(
-            "actual ledger candid interface",
+        service_compatible(
             CandidSource::Text(&new_interface),
-            "declared candid interface in ledger.did file",
             CandidSource::File(old_interface.as_path()),
-        );
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "the ledger interface is not compatible with {}: {:?}",
+                old_interface.display(),
+                e
+            )
+        });
     }
 }
