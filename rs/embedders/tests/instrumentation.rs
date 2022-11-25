@@ -81,7 +81,7 @@ fn inject_and_cmp(testname: &str) {
         features,
     )
     .expect("couldn't convert metered Wasm to wat");
-    assert_snapshot!(out);
+    assert_snapshot!(testname, out);
     assert_eq!(out, out_old);
 }
 
