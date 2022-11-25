@@ -1,0 +1,53 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/async_utils",
+    "//rs/config",
+    "//rs/http_endpoints/metrics",
+    "//rs/monitoring/metrics",
+    "//rs/service_discovery",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:crossbeam",
+    "@crate_index//:crossbeam-channel",
+    "@crate_index//:futures-util",
+    "@crate_index//:humantime",
+    "@crate_index//:regex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-term",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "vector_config_generator",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "vector_config_generator_test",
+    aliases = ALIASES,
+    crate = ":vector_config_generator",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
