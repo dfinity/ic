@@ -45,7 +45,7 @@ use std::time::{Duration, Instant};
 pub const UNIVERSAL_VM_NAME: &str = "btc-node";
 
 pub const TIMEOUT_30S: Duration = Duration::from_secs(300);
-pub const RETREIEVE_BTC_STATUS_TIMEOUT: Duration = Duration::from_secs(600);
+pub const RETRIEVE_BTC_STATUS_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// The default value of minimum confirmations on the Bitcoin server.
 pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
@@ -124,8 +124,15 @@ pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) -> Vec<T
     }
 }
 
-/// Wait for minter to send a tx.
-/// Timeout after RETREIEVE_BTC_STATUS_TIMEOUT if the minter doesn't send a new tx.
+/// Wait for the minter to send a transaction for the retrieval with the
+/// specified block index.
+/// Returns the Bitcoin TXID of the transfer.
+///
+/// # Panics
+///
+/// This function panics if:
+/// * The transfer didn't finalize after `RETRIEVE_BTC_STATUS_TIMEOUT`.
+/// * The minter rejected the retrieval because the amount was too low to cover the fees.
 pub async fn wait_for_signed_tx(
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
@@ -133,7 +140,7 @@ pub async fn wait_for_signed_tx(
 ) -> [u8; 32] {
     let start = Instant::now();
     loop {
-        if start.elapsed() >= RETREIEVE_BTC_STATUS_TIMEOUT {
+        if start.elapsed() >= RETRIEVE_BTC_STATUS_TIMEOUT {
             panic!("No new signed tx emitted by minter");
         };
         match ckbtc_minter_agent
@@ -143,6 +150,9 @@ pub async fn wait_for_signed_tx(
         {
             RetrieveBtcStatus::Pending => {
                 info!(&logger, "[retrieve_btc_status] : Tx building (1/3)")
+            }
+            RetrieveBtcStatus::AmountTooLow => {
+                panic!("The minter rejected retrieve request {}", block_index);
             }
             RetrieveBtcStatus::Signing => {
                 info!(&logger, "[retrieve_btc_status] : Tx signing (2/3)")
@@ -155,6 +165,52 @@ pub async fn wait_for_signed_tx(
                 &logger,
                 "[retrieve_btc_status] unexpected status, got : {:?}", status
             ),
+        }
+    }
+}
+
+/// Wait for the minter to confirm the retrieval with the specified block index.
+/// Returns the Bitcoin TXID of the transfer.
+///
+/// # Panics
+///
+/// This function panics if:
+/// * The transfer didn't finalize after `RETRIEVE_BTC_STATUS_TIMEOUT`.
+/// * The minter rejected the retrieval because the amount was too low to cover the fees.
+pub async fn wait_for_finalization(
+    ckbtc_minter_agent: &CkBtcMinterAgent,
+    logger: &Logger,
+    block_index: u64,
+) -> [u8; 32] {
+    let start = Instant::now();
+    loop {
+        if start.elapsed() >= RETRIEVE_BTC_STATUS_TIMEOUT {
+            panic!(
+                "Retrieve btc request {} did not finalize in {:?}",
+                block_index, RETRIEVE_BTC_STATUS_TIMEOUT
+            );
+        };
+        match ckbtc_minter_agent
+            .retrieve_btc_status(block_index)
+            .await
+            .expect("failed to call retrieve_btc_status")
+        {
+            RetrieveBtcStatus::Confirmed { txid } => {
+                info!(
+                    &logger,
+                    "[retrieve_btc_status] finalized request {}", block_index
+                );
+                return txid;
+            }
+            RetrieveBtcStatus::AmountTooLow => {
+                panic!("The minter rejected retrieve request {}", block_index);
+            }
+            status => {
+                info!(
+                    &logger,
+                    "[retrieve_btc_status]: the status of request {} is {:?}", block_index, status
+                )
+            }
         }
     }
 }
