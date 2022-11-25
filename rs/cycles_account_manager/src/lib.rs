@@ -124,10 +124,7 @@ impl CyclesAccountManager {
     fn scale_cost(&self, cycles: Cycles, subnet_size: usize) -> Cycles {
         match self.use_cost_scaling_flag {
             false => cycles,
-            true => Cycles::from(
-                (cycles.get() * (subnet_size as u128))
-                    / (self.config.reference_subnet_size as u128),
-            ),
+            true => (cycles * subnet_size) / self.config.reference_subnet_size,
         }
     }
 
@@ -919,5 +916,11 @@ mod tests {
         assert_eq!(cam.scale_cost(cost, 6), Cycles::new(6_000));
         assert_eq!(cam.scale_cost(cost, 13), Cycles::new(13_000));
         assert_eq!(cam.scale_cost(cost, 26), Cycles::new(26_000));
+
+        // Check overflow case.
+        assert_eq!(
+            cam.scale_cost(Cycles::new(std::u128::MAX), 1_000_000),
+            Cycles::new(std::u128::MAX) / reference_subnet_size
+        );
     }
 }
