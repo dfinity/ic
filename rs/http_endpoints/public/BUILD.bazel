@@ -33,6 +33,8 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:http",
     "@crate_index//:hyper",
+    "@crate_index//:hyper-tls",
+    "@crate_index//:native-tls",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",

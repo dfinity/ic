@@ -42,7 +42,10 @@ use crate::{
 use byte_unit::Byte;
 use crossbeam::atomic::AtomicCell;
 use http::method::Method;
-use hyper::{server::conn::Http, Body, Client, Request, Response, StatusCode};
+use hyper::{
+    client::HttpConnector, server::conn::Http, Body, Client, Request, Response, StatusCode,
+};
+use hyper_tls::HttpsConnector;
 use ic_async_utils::{TcpAcceptor, WrappedTcpStream};
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
@@ -72,13 +75,13 @@ use ic_types::{
         HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus,
     },
     time::current_time_and_expiry_time,
-    SubnetId,
+    NodeId, SubnetId,
 };
 use metrics::HttpHandlerMetrics;
 use rand::Rng;
 use std::{
     convert::{Infallible, TryFrom},
-    io::{Error, Write},
+    io::Write,
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -203,27 +206,22 @@ fn start_server_initialization(
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
-        match load_root_delegation(&log, subnet_id, nns_subnet_id, registry_client).await {
-            Err(err) => {
-                error!(log, "Could not load nns delegation: {}", err);
-            }
-            Ok(loaded_delegation) => {
-                *delegation_from_nns.write().unwrap() = loaded_delegation;
-                metrics
-                    .health_status_transitions_total
-                    .with_label_values(&[
-                        &health_status.load().to_string(),
-                        &ReplicaHealthStatus::Healthy.to_string(),
-                    ])
-                    .inc();
-                health_status.store(ReplicaHealthStatus::Healthy);
-                // IMPORTANT: The system-tests relies on this log message to understand when it
-                // can start interacting with the replica. In the future, we plan to
-                // have a dedicated instrumentation channel to communicate between the
-                // replica and the testing framework, but for now, this is the best we can do.
-                info!(log, "Ready for interaction.");
-            }
-        }
+        let loaded_delegation =
+            load_root_delegation(&log, subnet_id, nns_subnet_id, registry_client).await;
+        *delegation_from_nns.write().unwrap() = loaded_delegation;
+        metrics
+            .health_status_transitions_total
+            .with_label_values(&[
+                &health_status.load().to_string(),
+                &ReplicaHealthStatus::Healthy.to_string(),
+            ])
+            .inc();
+        health_status.store(ReplicaHealthStatus::Healthy);
+        // IMPORTANT: The system-tests relies on this log message to understand when it
+        // can start interacting with the replica. In the future, we plan to
+        // have a dedicated instrumentation channel to communicate between the
+        // replica and the testing framework, but for now, this is the best we can do.
+        info!(log, "Ready for interaction.");
     });
 }
 
@@ -732,11 +730,11 @@ async fn load_root_delegation(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-) -> Result<Option<CertificateDelegation>, Error> {
+) -> Option<CertificateDelegation> {
     if subnet_id == nns_subnet_id {
         info!(log, "On the NNS subnet. Skipping fetching the delegation.");
         // On the NNS subnet. No delegation needs to be fetched.
-        return Ok(None);
+        return None;
     }
 
     let mut fetching_root_delagation_attempts = 0;
@@ -761,7 +759,7 @@ async fn load_root_delegation(
             sleep(backoff).await
         }
 
-        let node =
+        let (peer_id, node) =
             match get_random_node_from_nns_subnet(registry_client.clone(), nns_subnet_id).await {
                 Ok(node_topology) => node_topology,
                 Err(err) => {
@@ -799,10 +797,43 @@ async fn load_root_delegation(
         };
 
         let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-        let http_client = Client::new();
+
+        let registry_version = registry_client.get_latest_version();
+        let peer_cert = match registry_client.get_tls_certificate(peer_id, registry_version) {
+            Ok(Some(cert)) => cert.certificate_der,
+            Err(err) => {
+                log_err_and_backoff(log, err).await;
+                continue;
+            }
+            Ok(None) => {
+                log_err_and_backoff(log, &format!("Certificate for node_id = {} is missing from registry at registry version = {}.", peer_id, registry_version)).await;
+                continue;
+            }
+        };
+        let peer_cert = match native_tls::Certificate::from_der(&peer_cert) {
+            Ok(cert) => cert,
+            Err(err) => {
+                log_err_and_backoff(log, &err).await;
+                continue;
+            }
+        };
+        let native_tls_connector = native_tls::TlsConnector::builder()
+            .use_sni(false)
+            .add_root_certificate(peer_cert)
+            .disable_built_in_roots(true)
+            .build()
+            .expect("failed to build tls connector");
+        let mut http_connector = HttpConnector::new();
+        http_connector.enforce_http(false);
+        let mut https_connector =
+            HttpsConnector::from((http_connector, native_tls_connector.into()));
+        https_connector.https_only(false);
+        let http_client = Client::builder().build::<_, hyper::Body>(https_connector);
+
         let ip_addr = node.ip_addr.parse().unwrap();
         // any effective canister id can be used when invoking read_state here
         let address = format!(
+            // TODO(NET-1280)
             "http://{}/api/v2/canister/aaaaa-aa/read_state",
             SocketAddr::new(ip_addr, node.port as u16)
         );
@@ -832,157 +863,154 @@ async fn load_root_delegation(
             }
         };
 
-        match hyper::body::to_bytes(raw_response_res).await {
-            Ok(raw_response) => {
-                debug!(log, "Response from nns subnet: {:?}", raw_response);
+        let raw_response = match hyper::body::to_bytes(raw_response_res).await {
+            Ok(raw_response) => raw_response,
+            Err(err) => {
+                // Fetching the NNS delegation failed. Do a random backoff and try again.
+                log_err_and_backoff(log, &err).await;
+                continue;
+            }
+        };
 
-                let response: HttpReadStateResponse = match serde_cbor::from_slice(&raw_response) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        log_err_and_backoff(log, &e).await;
-                        continue;
-                    }
-                };
+        debug!(log, "Response from nns subnet: {:?}", raw_response);
 
-                let parsed_delegation: Certificate =
-                    match serde_cbor::from_slice(&response.certificate) {
-                        Ok(r) => r,
-                        Err(e) => {
-                            log_err_and_backoff(
-                                log,
-                                &format!("failed to parse delegation certificate: {}", e),
-                            )
-                            .await;
-                            continue;
-                        }
-                    };
+        let response: HttpReadStateResponse = match serde_cbor::from_slice(&raw_response) {
+            Ok(r) => r,
+            Err(e) => {
+                log_err_and_backoff(log, &e).await;
+                continue;
+            }
+        };
 
-                let labeled_tree = match LabeledTree::try_from(parsed_delegation.tree) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        log_err_and_backoff(
-                            log,
-                            &format!("invalid hash tree in the delegation certificate: {:?}", e),
-                        )
-                        .await;
-                        continue;
-                    }
-                };
-
-                let registry_version = registry_client.get_latest_version();
-                let own_public_key_from_registry = match registry_client
-                    .get_threshold_signing_public_key_for_subnet(subnet_id, registry_version)
-                {
-                    Ok(Some(pk)) => pk,
-                    Ok(None) => {
-                        log_err_and_backoff(
-                            log,
-                            &format!("subnet {} public key from registry is empty", subnet_id),
-                        )
-                        .await;
-                        continue;
-                    }
-                    Err(err) => {
-                        log_err_and_backoff(
-                            log,
-                            &format!(
-                                "subnet {} public key could not be extracted from registry: {:?}",
-                                subnet_id, err,
-                            ),
-                        )
-                        .await;
-                        continue;
-                    }
-                };
-
-                match lookup_path(
-                    &labeled_tree,
-                    &[b"subnet", subnet_id.get_ref().as_ref(), b"public_key"],
-                ) {
-                    Some(LabeledTree::Leaf(pk_bytes)) => {
-                        let public_key_from_certificate =
-                            match parse_threshold_sig_key_from_der(pk_bytes) {
-                                Ok(pk) => pk,
-                                Err(err) => {
-                                    log_err_and_backoff(log, &err).await;
-                                    continue;
-                                }
-                            };
-
-                        if public_key_from_certificate != own_public_key_from_registry {
-                            log_err_and_backoff(
-                                log,
-                                &format!(
-                                    "mismatch of registry and certificate public keys for subnet {}",
-                                    subnet_id
-                                ),
-                            )
-                            .await;
-                            continue;
-                        }
-                    }
-                    _ => {
-                        log_err_and_backoff(
-                            log,
-                            &format!(
-                                "subnet {} public key could not be extracted from certificate",
-                                subnet_id
-                            ),
-                        )
-                        .await;
-                        continue;
-                    }
-                }
-                let root_threshold_public_key = match get_root_threshold_public_key(
+        let parsed_delegation: Certificate = match serde_cbor::from_slice(&response.certificate) {
+            Ok(r) => r,
+            Err(e) => {
+                log_err_and_backoff(
                     log,
-                    registry_client.clone(),
-                    registry_version,
-                    &nns_subnet_id,
-                ) {
-                    Some(public_key) => public_key,
-                    None => {
-                        log_err_and_backoff(
-                            log,
-                            "could not retrieve threshold root public key from registry"
-                                .to_string(),
-                        )
-                        .await;
+                    &format!("failed to parse delegation certificate: {}", e),
+                )
+                .await;
+                continue;
+            }
+        };
+
+        let labeled_tree = match LabeledTree::try_from(parsed_delegation.tree) {
+            Ok(r) => r,
+            Err(e) => {
+                log_err_and_backoff(
+                    log,
+                    &format!("invalid hash tree in the delegation certificate: {:?}", e),
+                )
+                .await;
+                continue;
+            }
+        };
+
+        let own_public_key_from_registry = match registry_client
+            .get_threshold_signing_public_key_for_subnet(subnet_id, registry_version)
+        {
+            Ok(Some(pk)) => pk,
+            Ok(None) => {
+                log_err_and_backoff(
+                    log,
+                    &format!("subnet {} public key from registry is empty", subnet_id),
+                )
+                .await;
+                continue;
+            }
+            Err(err) => {
+                log_err_and_backoff(
+                    log,
+                    &format!(
+                        "subnet {} public key could not be extracted from registry: {:?}",
+                        subnet_id, err,
+                    ),
+                )
+                .await;
+                continue;
+            }
+        };
+
+        match lookup_path(
+            &labeled_tree,
+            &[b"subnet", subnet_id.get_ref().as_ref(), b"public_key"],
+        ) {
+            Some(LabeledTree::Leaf(pk_bytes)) => {
+                let public_key_from_certificate = match parse_threshold_sig_key_from_der(pk_bytes) {
+                    Ok(pk) => pk,
+                    Err(err) => {
+                        log_err_and_backoff(log, &err).await;
                         continue;
                     }
                 };
-                if let Err(err) = validate_subnet_delegation_certificate(
-                    &response.certificate,
-                    &subnet_id,
-                    &root_threshold_public_key,
-                ) {
+
+                if public_key_from_certificate != own_public_key_from_registry {
                     log_err_and_backoff(
                         log,
-                        &format!("invalid subnet delegation certificate: {:?} ", err),
+                        &format!(
+                            "mismatch of registry and certificate public keys for subnet {}",
+                            subnet_id
+                        ),
                     )
                     .await;
                     continue;
                 }
-
-                let delegation = CertificateDelegation {
-                    subnet_id: Blob(subnet_id.get().to_vec()),
-                    certificate: response.certificate,
-                };
-
-                info!(log, "Setting NNS delegation to: {:?}", delegation);
-                return Ok(Some(delegation));
             }
-            Err(err) => {
-                // Fetching the NNS delegation failed. Do a random backoff and try again.
-                log_err_and_backoff(log, &err).await;
+            _ => {
+                log_err_and_backoff(
+                    log,
+                    &format!(
+                        "subnet {} public key could not be extracted from certificate",
+                        subnet_id
+                    ),
+                )
+                .await;
+                continue;
             }
         }
+        let root_threshold_public_key = match get_root_threshold_public_key(
+            log,
+            registry_client.clone(),
+            registry_version,
+            &nns_subnet_id,
+        ) {
+            Some(public_key) => public_key,
+            None => {
+                log_err_and_backoff(
+                    log,
+                    "could not retrieve threshold root public key from registry".to_string(),
+                )
+                .await;
+                continue;
+            }
+        };
+        if let Err(err) = validate_subnet_delegation_certificate(
+            &response.certificate,
+            &subnet_id,
+            &root_threshold_public_key,
+        ) {
+            log_err_and_backoff(
+                log,
+                &format!("invalid subnet delegation certificate: {:?} ", err),
+            )
+            .await;
+            continue;
+        }
+
+        let delegation = CertificateDelegation {
+            subnet_id: Blob(subnet_id.get().to_vec()),
+            certificate: response.certificate,
+        };
+
+        info!(log, "Setting NNS delegation to: {:?}", delegation);
+        return Some(delegation);
     }
 }
 
 async fn get_random_node_from_nns_subnet(
     registry_client: Arc<dyn RegistryClient>,
     nns_subnet_id: SubnetId,
-) -> Result<ConnectionEndpoint, String> {
+) -> Result<(NodeId, ConnectionEndpoint), String> {
     use rand::seq::SliceRandom;
 
     let nns_nodes = match registry_client
@@ -1000,7 +1028,7 @@ async fn get_random_node_from_nns_subnet(
         nns_nodes
     ))?;
     match registry_client.get_transport_info(*nns_node, registry_client.get_latest_version()) {
-        Ok(Some(node)) => Ok(node.http.ok_or("No http endpoint for node")?),
+        Ok(Some(node)) => Ok((*nns_node, node.http.ok_or("No http endpoint for node")?)),
         Ok(None) => Err(format!(
             "No transport info found for nns node. {}",
             nns_node
