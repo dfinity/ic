@@ -7,12 +7,11 @@ use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, p
 use crate::driver::farm::FarmResult;
 use crate::driver::ic::{InternetComputer, Node};
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{HasDependencies, HasIcDependencies};
+use crate::driver::test_env_api::{HasDependencies, HasIcDependencies, NodesInfo};
 use ic_base_types::NodeId;
 use ic_fondue::ic_instance::{
     node_software_version::NodeSoftwareVersion, port_allocator::AddrType,
 };
-
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
     node::{InitializedNode, NodeConfiguration, NodeIndex},
@@ -20,11 +19,13 @@ use ic_prep_lib::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::{info, warn, Logger};
 use std::io::Write;
 use std::thread::{self, JoinHandle};
 use url::Url;
 
+use super::config::NODES_INFO;
 use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use super::resource::AllocatedVm;
 
@@ -129,8 +130,23 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let ic_os_update_img_url = test_env.get_ic_os_update_img_url()?;
-    let ic_os_update_img_sha256 = test_env.get_ic_os_update_img_sha256()?;
+    let (ic_os_update_img_sha256, ic_os_update_img_url) = {
+        if ic.has_malicious_behaviours() {
+            warn!(
+                logger,
+                "Using malicious guestos update image for IC config."
+            );
+            (
+                test_env.get_malicious_ic_os_update_img_sha256()?,
+                test_env.get_malicious_ic_os_update_img_url()?,
+            )
+        } else {
+            (
+                test_env.get_ic_os_update_img_sha256()?,
+                test_env.get_ic_os_update_img_url()?,
+            )
+        }
+    };
     let ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
@@ -157,7 +173,7 @@ use crate::driver::farm::Farm;
 
 pub fn setup_and_start_vms(
     initialized_ic: &InitializedIc,
-    ic_name: &str,
+    ic: &InternetComputer,
     env: &TestEnv,
     farm: &Farm,
     group_name: &str,
@@ -173,14 +189,17 @@ pub fn setup_and_start_vms(
     }
 
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
+    let mut nodes_info = NodesInfo::new();
     for node in nodes {
         let group_name = group_name.to_string();
         let vm_name = node.node_id.to_string();
         let t_farm = farm.clone();
         let t_env = env.clone();
-        let ic_name = ic_name.to_string();
+        let ic_name = ic.name();
+        let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        nodes_info.insert(node.node_id, malicious_behaviour.clone());
         join_handles.push(thread::spawn(move || {
-            create_config_disk_image(&ic_name, &node, &t_env, &group_name)?;
+            create_config_disk_image(&ic_name, &node, malicious_behaviour, &t_env, &group_name)?;
             let image_id = upload_config_disk_image(&node, &t_farm)?;
             // delete uncompressed file
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
@@ -190,6 +209,9 @@ pub fn setup_and_start_vms(
             Ok(())
         }));
     }
+    // In the tests we may need to identify, which node/s have malicious behavior.
+    // We dump this info into a file.
+    env.write_json_object(NODES_INFO, &nodes_info)?;
 
     let mut result = Ok(());
     // Wait for all threads to finish and return an error if any of them fails.
@@ -218,6 +240,7 @@ pub fn upload_config_disk_image(node: &InitializedNode, farm: &Farm) -> FarmResu
 pub fn create_config_disk_image(
     ic_name: &str,
     node: &InitializedNode,
+    malicious_behavior: Option<MaliciousBehaviour>,
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<()> {
@@ -238,6 +261,15 @@ pub fn create_config_disk_image(
         .arg(node.crypto_path())
         .arg("--journalbeat_tags")
         .arg(format!("system_test {}", group_name));
+
+    if let Some(malicious_behavior) = malicious_behavior {
+        info!(
+            test_env.logger(),
+            "Node with id={} has malicious behavior={:?}", node.node_id, malicious_behavior
+        );
+        cmd.arg("--malicious_behavior")
+            .arg(serde_json::to_string(&malicious_behavior)?);
+    }
 
     let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     if ssh_authorized_pub_keys_dir.exists() {

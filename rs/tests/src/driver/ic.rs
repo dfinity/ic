@@ -14,6 +14,7 @@ use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_regedit;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
@@ -173,7 +174,7 @@ impl InternetComputer {
         )
         .unwrap();
 
-        setup_and_start_vms(&init_ic, &self.name, env, &farm, &group_name)?;
+        setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
         Ok(())
     }
 
@@ -211,6 +212,41 @@ impl InternetComputer {
                         .ipv6,
                 );
             }
+        }
+    }
+
+    pub fn has_malicious_behaviours(&self) -> bool {
+        let has_malicious_nodes: bool = self
+            .subnets
+            .iter()
+            .any(|s| s.nodes.iter().any(|n| n.malicious_behaviour != None));
+        let has_malicious_unassigned_nodes = self
+            .unassigned_nodes
+            .iter()
+            .any(|n| n.malicious_behaviour != None);
+        has_malicious_nodes || has_malicious_unassigned_nodes
+    }
+
+    pub fn get_malicious_behavior_of_node(&self, node_id: NodeId) -> Option<MaliciousBehaviour> {
+        let node_filter_map = |n: &Node| {
+            if n.secret_key_store.as_ref().unwrap().node_id == node_id {
+                Some(n.malicious_behaviour.clone())
+            } else {
+                None
+            }
+        };
+        // extract malicious nodes all subnet nodes
+        let mut malicious_nodes: Vec<Option<MaliciousBehaviour>> = self
+            .subnets
+            .iter()
+            .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
+            .collect();
+        // extract malicious nodes from all unassigned nodes
+        malicious_nodes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        match malicious_nodes.len() {
+            0 => None,
+            1 => malicious_nodes.first().unwrap().clone(),
+            _ => panic!("more than one node has id={node_id}"),
         }
     }
 }
@@ -402,6 +438,18 @@ impl Subnet {
         self
     }
 
+    pub fn add_malicious_nodes(
+        mut self,
+        no_of_nodes: usize,
+        malicious_behaviour: MaliciousBehaviour,
+    ) -> Self {
+        for _ in 0..no_of_nodes {
+            let node = Node::new().with_malicious_behaviour(malicious_behaviour.clone());
+            self.nodes.push(node);
+        }
+        self
+    }
+
     /// provides a small summary of this subnet topology and config to be used
     /// as a part of a test environment identifier.
     pub fn summary(&self) -> String {
@@ -465,6 +513,7 @@ pub struct Node {
     pub required_host_features: Vec<HostFeature>,
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ipv6: Option<Ipv6Addr>,
+    pub malicious_behaviour: Option<MaliciousBehaviour>,
 }
 
 impl Node {
@@ -489,5 +538,10 @@ impl Node {
             .clone()
             .expect("no secret key store")
             .node_id
+    }
+
+    pub fn with_malicious_behaviour(mut self, malicious_behaviour: MaliciousBehaviour) -> Self {
+        self.malicious_behaviour = Some(malicious_behaviour);
+        self
     }
 }

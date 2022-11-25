@@ -2,6 +2,9 @@
 
 pub const N_THREADS_PER_SUITE: usize = 8;
 pub const N_THREADS_PER_POT: usize = 8;
+// File containing info about the nodes.
+// In particular, one can find whether some node has malicious behavior.
+pub const NODES_INFO: &str = "nodes_info.json";
 // File that describes the expectations of the test suite execution.
 // Namely, it defines, which suite/pots/tests are expected to be executed/skipped.
 pub const TEST_SUITE_CONTRACT_FILE: &str = "suite_execution_contract.json";

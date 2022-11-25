@@ -196,7 +196,14 @@ GUESTOS_RUNTIME_DEPS = [
     "//ic-os/guestos/dev:hash_and_upload_disk-img",
     "//ic-os/guestos/dev:hash_and_upload_upgrade-img",
     "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
-    "//ic-os/guestos/dev:ic_version_id",
+    "//bazel:version.txt",
+]
+
+GUESTOS_MALICIOUS_RUNTIME_DEPS = [
+    "//ic-os/guestos/dev-malicious:hash_and_upload_disk-img",
+    "//ic-os/guestos/dev-malicious:hash_and_upload_upgrade-img",
+    "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+    "//bazel:version.txt",
 ]
 
 exports_files([
@@ -245,6 +252,14 @@ rust_test(
     srcs = ["tests/test_driver_tests.rs"],
     crate_root = "tests/test_driver_tests.rs",
     deps = DEPENDENCIES + [":test-driver-e2e-scenarios"],
+)
+
+system_test(
+    name = "liveness_with_equivocation_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
 )
 
 system_test(
