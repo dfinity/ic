@@ -171,7 +171,7 @@ sed -e s/ROOT_HASH/$(cat "${TMPDIR}/partition-root-hash")/ <"${BASE_DIR}/bootloa
     "${TMPDIR}/version.txt:/boot/version.txt:0644" \
     "${TMPDIR}/extra_boot_args:/boot/extra_boot_args:0644"
 
-"${TOOL_DIR}"/build_disk_image.py -o "${TMPDIR}/disk.img.tar" -p "${BASE_DIR}/scripts/partitions.csv" \
+"${TOOL_DIR}"/build_disk_image.py -o "${TMPDIR}/disk.img.tar" -p "${BASE_DIR}/partitions.csv" \
     ${TMPDIR}/partition-esp.tar \
     ${TMPDIR}/partition-grub.tar \
     ${TMPDIR}/partition-config.tar \

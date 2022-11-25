@@ -7,9 +7,9 @@ ARG UID=1000
 
 ENV TZ=UTC
 
-RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \ 
+RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
-    curl build-essential git gnupg \ 
+    curl build-essential git gnupg uuid-dev \
     # GitLab CI \
     sudo gosu jq \
     # RUST \
