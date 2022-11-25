@@ -72,7 +72,7 @@ pub(crate) async fn create_canister(
         .execute_update(
             &IC_00,
             ic_ic00_types::Method::ProvisionalCreateCanisterWithCycles,
-            ProvisionalCreateCanisterWithCyclesArgs::new(Some(u64::MAX as u128)).encode(),
+            ProvisionalCreateCanisterWithCyclesArgs::new(Some(u64::MAX as u128), None).encode(),
             vec![],
         )
         .await?;

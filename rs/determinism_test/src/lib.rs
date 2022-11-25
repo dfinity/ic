@@ -155,7 +155,7 @@ fn install_canister(
     let signed_ingress = SignedIngressBuilder::new()
         .method_name(Ic00Method::ProvisionalCreateCanisterWithCycles)
         .canister_id(IC_00)
-        .method_payload(ProvisionalCreateCanisterWithCyclesArgs::new(None).encode())
+        .method_payload(ProvisionalCreateCanisterWithCyclesArgs::new(None, None).encode())
         .expiry_time(UNIX_EPOCH + Duration::from_secs(60))
         .nonce(nonce)
         .build();

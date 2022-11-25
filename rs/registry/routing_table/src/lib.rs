@@ -231,6 +231,16 @@ impl CanisterIdRanges {
             .next()
     }
 
+    /// Returns `true` if `canister_id` is contained in the ranges.
+    pub fn contains(&self, canister_id: &CanisterId) -> bool {
+        for range in self.iter() {
+            if range.contains(canister_id) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Given location 'loc' in the range [0, total_count()), select a Canister
     /// ID that falls into the Canister ID ranges.
     pub fn locate(&self, loc: u64) -> CanisterId {

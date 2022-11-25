@@ -215,7 +215,7 @@ fn parse_create(nonce: u64) -> Result<Message, String> {
     let signed_ingress = SignedIngressBuilder::new()
         .method_name(ic00::Method::ProvisionalCreateCanisterWithCycles)
         .canister_id(ic00::IC_00)
-        .method_payload(ic00::ProvisionalCreateCanisterWithCyclesArgs::new(None).encode())
+        .method_payload(ic00::ProvisionalCreateCanisterWithCyclesArgs::new(None, None).encode())
         .nonce(nonce)
         .build();
 

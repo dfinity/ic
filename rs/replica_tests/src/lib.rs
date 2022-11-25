@@ -516,7 +516,7 @@ impl LocalTestRuntime {
                 .method_name(Method::ProvisionalCreateCanisterWithCycles)
                 .canister_id(IC_00)
                 .method_payload(
-                    ProvisionalCreateCanisterWithCyclesArgs::new(Some(num_cycles)).encode(),
+                    ProvisionalCreateCanisterWithCyclesArgs::new(Some(num_cycles), None).encode(),
                 )
                 .nonce(nonce)
                 .build(),

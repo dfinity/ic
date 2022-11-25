@@ -966,6 +966,7 @@ impl StateMachine {
                 ic00::ProvisionalCreateCanisterWithCyclesArgs {
                     amount: Some(candid::Nat::from(cycles.get())),
                     settings,
+                    specified_id: None,
                 }
                 .encode(),
             )

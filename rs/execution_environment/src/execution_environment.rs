@@ -818,6 +818,7 @@ impl ExecutionEnvironment {
                                     *msg.sender(),
                                     cycles_amount,
                                     settings,
+                                    args.specified_id,
                                     &mut state,
                                     &registry_settings.provisional_whitelist,
                                     registry_settings.max_number_of_canisters,
