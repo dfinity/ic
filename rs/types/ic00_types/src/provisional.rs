@@ -8,13 +8,15 @@ use num_traits::ToPrimitive;
 pub struct ProvisionalCreateCanisterWithCyclesArgs {
     pub amount: Option<candid::Nat>,
     pub settings: Option<CanisterSettingsArgs>,
+    pub specified_id: Option<PrincipalId>,
 }
 
 impl ProvisionalCreateCanisterWithCyclesArgs {
-    pub fn new(amount: Option<u128>) -> Self {
+    pub fn new(amount: Option<u128>, specified_id: Option<PrincipalId>) -> Self {
         Self {
             amount: amount.map(candid::Nat::from),
             settings: None,
+            specified_id,
         }
     }
 

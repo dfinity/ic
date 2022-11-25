@@ -32,7 +32,9 @@ use ic_interfaces::{
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_routing_table::{
+    CanisterIdRange, RoutingTable, WellFormedError, CANISTER_IDS_PER_SUBNET,
+};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -373,7 +375,7 @@ impl ExecutionTest {
     /// Sends a `create_canister` message to the IC management canister.
     /// Consider using higher-level helpers like `canister_from_wat()`.
     pub fn create_canister(&mut self, cycles: Cycles) -> CanisterId {
-        let args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()));
+        let args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()), None);
         let result =
             self.subnet_message(Method::ProvisionalCreateCanisterWithCycles, args.encode());
         CanisterIdRecord::decode(&get_reply(result))
@@ -387,7 +389,7 @@ impl ExecutionTest {
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
     ) -> Result<CanisterId, UserError> {
-        let mut args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()));
+        let mut args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()), None);
         args.settings = Some(CanisterSettingsArgs::new(
             None,
             None,
@@ -1532,11 +1534,19 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn build_with_routing_table_for_specified_ids(self) -> ExecutionTest {
+        let mut routing_table = RoutingTable::default();
+        routing_table_insert_specified_ids_allocation_range(&mut routing_table, self.own_subnet_id)
+            .unwrap();
+        self.build_common(Arc::new(routing_table))
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
             end: CanisterId::from(2 * CANISTER_IDS_PER_SUBNET - 1),
         };
+
         let routing_table = Arc::new(match self.caller_canister_id {
             None => RoutingTable::try_from(btreemap! {
                 CanisterIdRange { start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => self.own_subnet_id,
@@ -1547,6 +1557,10 @@ impl ExecutionTestBuilder {
             }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {} is in the range {:?}", caller_canister, own_range)),
         });
 
+        self.build_common(routing_table)
+    }
+
+    fn build_common(self, routing_table: Arc<RoutingTable>) -> ExecutionTest {
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
         let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
@@ -1818,4 +1832,31 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
         .1
         .unwrap();
     serialized_module.compilation_cost
+}
+
+/// Insert allocation range for the creation of canisters with specified Canister IDs in the routing table.
+/// It is only used for tests for ProvisionalCreateCanisterWithCycles when specified ID is provided.
+pub fn routing_table_insert_specified_ids_allocation_range(
+    routing_table: &mut RoutingTable,
+    subnet_id: SubnetId,
+) -> Result<(), WellFormedError> {
+    let specified_ids_range_start: u64 = 0;
+    let specified_ids_range_end: u64 = u64::MAX / 2;
+
+    let specified_ids_range = CanisterIdRange {
+        start: CanisterId::from(specified_ids_range_start),
+        end: CanisterId::from(specified_ids_range_end),
+    };
+
+    let subnets_allocation_range_start =
+        ((specified_ids_range_end / CANISTER_IDS_PER_SUBNET) + 2) * CANISTER_IDS_PER_SUBNET;
+    let subnets_allocation_range_end = subnets_allocation_range_start + CANISTER_IDS_PER_SUBNET - 1;
+
+    let subnets_allocation_range = CanisterIdRange {
+        start: CanisterId::from(subnets_allocation_range_start),
+        end: CanisterId::from(subnets_allocation_range_end),
+    };
+
+    routing_table.insert(specified_ids_range, subnet_id)?;
+    routing_table.insert(subnets_allocation_range, subnet_id)
 }

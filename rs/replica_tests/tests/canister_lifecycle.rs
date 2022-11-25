@@ -307,7 +307,7 @@ fn provisional_create_canister_with_cycles_respects_whitelist() {
             test.ingress(
                 IC_00,
                 Method::ProvisionalCreateCanisterWithCycles,
-                ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(NUM_CYCLES)).encode(),
+                ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(NUM_CYCLES), None).encode(),
             )
             .unwrap();
         });
@@ -325,7 +325,7 @@ fn provisional_create_canister_with_cycles_respects_whitelist() {
                 test.ingress(
                     IC_00,
                     Method::ProvisionalCreateCanisterWithCycles,
-                    ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(NUM_CYCLES)).encode(),
+                    ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(NUM_CYCLES), None).encode(),
                 ),
                 Err(err) if err.code() == ErrorCode::CanisterMethodNotFound
             );
@@ -354,7 +354,7 @@ fn provisional_create_canister_with_cycles_respects_whitelist() {
                     ic00::IC_00,
                     Method::ProvisionalCreateCanisterWithCycles,
                     call_args().other_side(
-                        ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(NUM_CYCLES))
+                        ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(NUM_CYCLES), None)
                             .encode(),
                     ),
                 ),
@@ -371,7 +371,7 @@ fn provisional_create_canister_with_cycles_respects_whitelist() {
                     ic00::IC_00,
                     Method::ProvisionalCreateCanisterWithCycles,
                     call_args().other_side(
-                        ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(NUM_CYCLES))
+                        ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(NUM_CYCLES), None)
                             .encode(),
                     ),
                 ),
@@ -551,9 +551,10 @@ fn provisional_create_canister_with_cycles_and_top_up() {
                     IC_00,
                     Method::ProvisionalCreateCanisterWithCycles,
                     call_args().other_side(
-                        ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(
-                            canister_b_cycles_init,
-                        ))
+                        ic00::ProvisionalCreateCanisterWithCyclesArgs::new(
+                            Some(canister_b_cycles_init),
+                            None,
+                        )
                         .encode(),
                     ),
                 ),
@@ -614,7 +615,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
                     IC_00,
                     Method::ProvisionalCreateCanisterWithCycles,
                     call_args().other_side(
-                        ic00::ProvisionalCreateCanisterWithCyclesArgs::new(None).encode(),
+                        ic00::ProvisionalCreateCanisterWithCyclesArgs::new(None, None).encode(),
                     ),
                 ),
             )

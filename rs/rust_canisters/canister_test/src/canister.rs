@@ -300,7 +300,9 @@ impl<'a> Runtime {
             .update_(
                 ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
                 candid,
-                (ProvisionalCreateCanisterWithCyclesArgs::new(num_cycles),),
+                (ProvisionalCreateCanisterWithCyclesArgs::new(
+                    num_cycles, None,
+                ),),
             )
             .await;
         Ok(Canister {
