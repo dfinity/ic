@@ -1,11 +1,11 @@
-use candid::Encode;
+use candid::{Decode, Encode};
 use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_ic00_types::{
-    self as ic00, CanisterHttpRequestArgs, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, HttpMethod,
-    TransformContext, TransformFunc,
+    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallMode, EcdsaCurve,
+    EcdsaKeyId, HttpMethod, TransformContext, TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -14,6 +14,7 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
@@ -371,7 +372,7 @@ fn simulate_sign_with_ecdsa_cost(subnet_type: SubnetType, subnet_size: usize) ->
         create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
     // SignWithECDSA is payed with cycles attached to the request.
-    let payment_before = Cycles::new(1_000_000_000) * subnet_size;
+    let payment_before = Cycles::new((2 * B).into()) * subnet_size;
     let sign_with_ecdsa = wasm()
         .call_with_cycles(
             ic00::IC_00,
@@ -424,7 +425,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
         create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
     // HttpRequest is payed with cycles attached to the request.
-    let payment_before = Cycles::new(20_000_000_000) * subnet_size;
+    let payment_before = Cycles::new((20 * B).into()) * subnet_size;
     let http_request = wasm()
         .call_with_cycles(
             ic00::IC_00,
@@ -517,6 +518,48 @@ fn simulate_xnet_call_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycle
     let xnet_call_cost = alices_loss - bobs_gain;
 
     Cycles::new(xnet_call_cost)
+}
+
+/// Simulates creating canister B from canister A to get a canister creation cost.
+fn simulate_create_canister_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    let env = StateMachineBuilder::new()
+        .with_use_cost_scaling_flag(true)
+        .with_subnet_type(subnet_type)
+        .with_subnet_size(subnet_size)
+        .build();
+
+    // Create a canister A with enough cycles to create another canister B.
+    let canister_a_initial_balance = Cycles::new((200 * B).into()) * subnet_size;
+    let canister_b_initial_balance = Cycles::new((100 * B).into()) * subnet_size;
+    assert!(canister_b_initial_balance < canister_a_initial_balance);
+
+    let canister_a = create_universal_canister_with_cycles(&env, canister_a_initial_balance);
+
+    // Canister B creation fee is deduced from its initial balance sent as a payment with the request.
+    let create_canister = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            ic00::Method::CreateCanister,
+            call_args().other_side(Encode!(&ic00::CreateCanisterArgs { settings: None }).unwrap()),
+            canister_b_initial_balance.into_parts(),
+        )
+        .build();
+    let result = env
+        .execute_ingress(canister_a, "update", create_canister)
+        .unwrap();
+    let canister_b = match result {
+        WasmResult::Reply(bytes) => Decode!(&bytes, CanisterIdRecord).unwrap().get_canister_id(),
+        WasmResult::Reject(err) => panic!("Expected CreateCanister to succeed but got {}", err),
+    };
+
+    canister_b_initial_balance - Cycles::new(env.cycle_balance(canister_b))
+}
+
+fn calculate_create_canister_cost(
+    config: &CyclesAccountManagerConfig,
+    subnet_size: usize,
+) -> Cycles {
+    scale_cost(config, config.canister_creation_fee, subnet_size)
 }
 
 fn calculate_xnet_call_cost(
@@ -726,7 +769,7 @@ fn calculate_execution_cost(
     instructions: NumInstructions,
     subnet_size: usize,
 ) -> Cycles {
-    let instructions_limit = NumInstructions::from(200_000_000_000);
+    let instructions_limit = NumInstructions::from(200 * B);
     let instructions_left = instructions_limit - instructions;
 
     let prepaid_execution_cycles = prepay_execution_cycles(config, instructions_limit, subnet_size);
@@ -1249,6 +1292,51 @@ fn test_subnet_size_xnet_call_cost() {
 }
 
 #[test]
+fn test_subnet_size_create_canister_cost() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = calculate_create_canister_cost(&config, reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_create_canister_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_create_canister_cost(subnet_type, 1)
+            < simulate_create_canister_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_create_canister_cost(subnet_type, 11)
+            < simulate_create_canister_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_create_canister_cost(subnet_type, 101)
+            < simulate_create_canister_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_create_canister_cost(subnet_type, 1_001)
+            < simulate_create_canister_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_create_canister_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+        let simulated_cost = simulate_create_canister_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={subnet_size}"
+        );
+    }
+}
+
+#[test]
 fn test_subnet_size_system_subnet_has_zero_cost() {
     let subnet_type = SubnetType::System;
 
@@ -1300,6 +1388,12 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
 
         assert_eq!(
             simulate_xnet_call_cost(subnet_type, subnet_size),
+            Cycles::zero(),
+            "subnet_size={subnet_size}"
+        );
+
+        assert_eq!(
+            simulate_create_canister_cost(subnet_type, subnet_size),
             Cycles::zero(),
             "subnet_size={subnet_size}"
         );
