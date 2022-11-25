@@ -23,8 +23,13 @@ use ic_types::{CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions,
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
 
+const B: u64 = 1_000_000_000;
+
+const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
+pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
+
 const TEST_SUBNET_SIZE_MAX: usize = 34;
-const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100_000_000_000);
+const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 996_000;
 const TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS: u64 = 30;
 
@@ -579,11 +584,48 @@ fn trillion_cycles(value: f64) -> Cycles {
 
 fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountManagerConfig {
     match subnet_type {
-        SubnetType::System => CyclesAccountManagerConfig::system_subnet(),
-        SubnetType::Application => CyclesAccountManagerConfig::application_subnet(),
-        SubnetType::VerifiedApplication => {
-            CyclesAccountManagerConfig::verified_application_subnet()
-        }
+        SubnetType::System => CyclesAccountManagerConfig {
+            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
+            canister_creation_fee: Cycles::new(0),
+            compute_percent_allocated_per_second_fee: Cycles::new(0),
+            update_message_execution_fee: Cycles::new(0),
+            ten_update_instructions_execution_fee: Cycles::new(0),
+            xnet_call_fee: Cycles::new(0),
+            xnet_byte_transmission_fee: Cycles::new(0),
+            ingress_message_reception_fee: Cycles::new(0),
+            ingress_byte_reception_fee: Cycles::new(0),
+            gib_storage_per_second_fee: Cycles::new(0),
+            duration_between_allocation_charges: Duration::from_secs(10),
+            /// The ECDSA signature fee is the fee charged when creating a
+            /// signature on this subnet. The request likely came from a
+            /// different subnet which is not a system subnet. There is an
+            /// explicit exception for requests originating from the NNS when the
+            /// charging occurs.
+            ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            http_request_baseline_fee: Cycles::new(0),
+            http_request_per_byte_fee: Cycles::new(0),
+        },
+        SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
+            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
+            canister_creation_fee: Cycles::new(100_000_000_000),
+            compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
+
+            // The following fields are set based on a thought experiment where
+            // we estimated how many resources a representative benchmark on a
+            // verified subnet is using.
+            update_message_execution_fee: Cycles::new(590_000),
+            ten_update_instructions_execution_fee: Cycles::new(4),
+            xnet_call_fee: Cycles::new(260_000),
+            xnet_byte_transmission_fee: Cycles::new(1_000),
+            ingress_message_reception_fee: Cycles::new(1_200_000),
+            ingress_byte_reception_fee: Cycles::new(2_000),
+            // 4 SDR per GiB per year => 4e12 Cycles per year
+            gib_storage_per_second_fee: Cycles::new(127_000),
+            duration_between_allocation_charges: Duration::from_secs(10),
+            ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            http_request_baseline_fee: Cycles::new(400_000_000),
+            http_request_per_byte_fee: Cycles::new(100_000),
+        },
     }
 }
 
