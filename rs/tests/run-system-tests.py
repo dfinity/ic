@@ -313,7 +313,7 @@ def populate_dependencies_dir(
         ("farm_base_url", farm_base_url),
         ("journalbeat_hosts", journalbeat_hosts),
         ("replica_log_debug_overrides", replica_log_debug_overrides),
-        ("ic-os/guestos/dev/ic_version_id", ic_version_id),
+        ("bazel/version.txt", ic_version_id),
         ("ic-os/guestos/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url", ic_os_img_url),
         ("ic-os/guestos/dev/disk-img.tar.zst.sha256", ic_os_img_sha256),
         ("ic-os/guestos/dev/upload_update-img_upgrade.tar.zst.proxy-cache-url", ic_os_update_img_url),

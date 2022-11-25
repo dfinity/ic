@@ -134,6 +134,7 @@
 use super::cli::{
     bail_if_sha256_invalid, parse_journalbeat_hosts, parse_replica_log_debug_overrides,
 };
+use super::config::NODES_INFO;
 use super::driver_setup::{DEFAULT_FARM_BASE_URL, SSH_AUTHORIZED_PRIV_KEYS_DIR};
 use super::test_setup::GroupSetup;
 use crate::driver::farm::{Farm, GroupSpec};
@@ -164,6 +165,7 @@ use ic_registry_client_helpers::{
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
@@ -185,6 +187,8 @@ pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
+
+pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
 
 /// An immutable snapshot of the Internet Computer topology valid at a
 /// particular registry version.
@@ -373,6 +377,26 @@ pub struct IcNodeSnapshot {
 }
 
 impl IcNodeSnapshot {
+    pub fn is_malicious(&self) -> bool {
+        self.malicious_behavior().is_some()
+    }
+
+    pub fn malicious_behavior(&self) -> Option<MaliciousBehaviour> {
+        let nodes_info: NodesInfo = self
+            .env
+            .read_json_object(NODES_INFO)
+            .expect("Couldn't read info of the nodes from a file.");
+        nodes_info
+            .get(&self.node_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Node with id={} is not found in the {} file.",
+                    self.node_id, NODES_INFO
+                );
+            })
+            .clone()
+    }
+
     fn raw_node_record(&self) -> pb_node::NodeRecord {
         self.local_registry
             .get_transport_info(self.node_id, self.registry_version)
@@ -547,8 +571,12 @@ pub trait HasIcDependencies {
     fn get_replica_log_debug_overrides(&self) -> Result<Vec<String>>;
     fn get_ic_os_img_url(&self) -> Result<Url>;
     fn get_ic_os_img_sha256(&self) -> Result<String>;
+    fn get_malicious_ic_os_img_url(&self) -> Result<Url>;
+    fn get_malicious_ic_os_img_sha256(&self) -> Result<String>;
     fn get_ic_os_update_img_url(&self) -> Result<Url>;
     fn get_ic_os_update_img_sha256(&self) -> Result<String>;
+    fn get_malicious_ic_os_update_img_url(&self) -> Result<Url>;
+    fn get_malicious_ic_os_update_img_sha256(&self) -> Result<String>;
     fn get_boundary_node_snp_img_url(&self) -> Result<Url>;
     fn get_boundary_node_snp_img_sha256(&self) -> Result<String>;
     fn get_boundary_node_img_url(&self) -> Result<Url>;
@@ -573,7 +601,7 @@ impl<T: HasDependencies> HasIcDependencies for T {
     }
 
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let dep_rel_path = "ic-os/guestos/dev/ic_version_id";
+        let dep_rel_path = "bazel/version.txt";
         let replica_ver = self.read_dependency_to_string(dep_rel_path)?;
         Ok(ReplicaVersion::try_from(replica_ver)?)
     }
@@ -593,7 +621,21 @@ impl<T: HasDependencies> HasIcDependencies for T {
     fn get_ic_os_img_sha256(&self) -> Result<String> {
         let dep_rel_path = "ic-os/guestos/dev/disk-img.tar.zst.sha256";
         let sha256 = self.read_dependency_to_string(dep_rel_path)?;
-        bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
+        bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
+        Ok(sha256)
+    }
+
+    fn get_malicious_ic_os_img_url(&self) -> Result<Url> {
+        let dep_rel_path =
+            "ic-os/guestos/dev-malicious/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
+        let url = self.read_dependency_to_string(dep_rel_path)?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_malicious_ic_os_img_sha256(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/guestos/dev-malicious/disk-img.tar.zst.sha256";
+        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        bail_if_sha256_invalid(&sha256, "malicious_ic_os_img_sha256")?;
         Ok(sha256)
     }
 
@@ -607,6 +649,20 @@ impl<T: HasDependencies> HasIcDependencies for T {
         let dep_rel_path = "ic-os/guestos/dev/upgrade.tar.zst.sha256";
         let sha256 = self.read_dependency_to_string(dep_rel_path)?;
         bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
+        Ok(sha256)
+    }
+
+    fn get_malicious_ic_os_update_img_url(&self) -> Result<Url> {
+        let dep_rel_path =
+            "ic-os/guestos/dev-malicious/upload_update-img_upgrade.tar.zst.proxy-cache-url";
+        let url = self.read_dependency_to_string(dep_rel_path)?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_malicious_ic_os_update_img_sha256(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/guestos/dev-malicious/upgrade.tar.zst.sha256";
+        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        bail_if_sha256_invalid(&sha256, "malicious_ic_os_update_img_sha256")?;
         Ok(sha256)
     }
 
@@ -632,7 +688,7 @@ impl<T: HasDependencies> HasIcDependencies for T {
     fn get_boundary_node_img_sha256(&self) -> Result<String> {
         let dep_rel_path = "ic-os/boundary-guestos/boundary_node_img_sha256";
         let sha256 = self.read_dependency_to_string(dep_rel_path)?;
-        bail_if_sha256_invalid(&sha256, "boundary_node_snp_img_sha256")?;
+        bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
         Ok(sha256)
     }
 

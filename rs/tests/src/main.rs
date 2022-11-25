@@ -39,7 +39,6 @@ use std::time::Instant;
 fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
     vec![
-        consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
         cow_safety_pot(),
         replica_determinism_pot(),
@@ -72,16 +71,6 @@ fn system_subnets_pot() -> pot::Pot {
             execution::nns_shielding::non_nns_canister_attempt_to_create_canister_on_another_subnet_fails,
             execution::nns_shielding::nns_canister_attempt_to_create_canister_on_another_subnet_succeeds
         }
-    )
-}
-
-/// In case you want to choose the name of each composable step explicitely,
-/// you can use the more manual form by defining each step individually.
-fn consensus_liveness_with_equivocation_pot() -> pot::Pot {
-    composable!(
-        "consensus_liveness_with_equivocation_pot",
-        consensus::liveness_with_equivocation_test::config(),
-        steps! {consensus::liveness_with_equivocation_test::test => "consensus_liveness_with_equivocation_test"}
     )
 }
 
