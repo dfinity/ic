@@ -233,6 +233,16 @@ impl CkBtcMinterState {
             + self.submitted_requests.len()
     }
 
+    /// Count the total of BTC managed by the minter at the moment
+    pub fn count_total_btc(&self) -> u64 {
+        self.available_utxos.iter().map(|u| u.value).sum::<u64>()
+            + self
+                .submitted_requests
+                .iter()
+                .map(|s| s.request.amount)
+                .sum::<u64>()
+    }
+
     /// Returns true if there is a pending retrieve_btc request with the given
     /// identifier.
     fn has_pending_request(&self, block_index: u64) -> bool {
