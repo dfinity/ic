@@ -39,7 +39,6 @@ bazel-test-all:
 .scheduled-bazel-system-test:
   extends:
     - .bazel-test-all
-    - .bazel-rules-post-master
   variables:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=${BAZEL_TEST_TAG_FILTERS} --build_event_json_file=./build_event_file.json"
     BAZEL_TARGETS: "//..."
@@ -61,12 +60,14 @@ bazel-test-all:
 bazel-system-test-hourly:
   extends:
     - .scheduled-bazel-system-test
+    - .bazel-rules-post-master
   variables:
     BAZEL_TEST_TAG_FILTERS: "system_test_hourly"
 
 bazel-system-test-nightly:
   extends:
     - .scheduled-bazel-system-test
+    - .rules-rc-cut-schedule
   variables:
     BAZEL_TEST_TAG_FILTERS: "system_test_nightly"
 
