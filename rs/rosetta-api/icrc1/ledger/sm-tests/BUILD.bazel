@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "sm-tests",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_icrc1_ledger_sm_tests",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    version = "0.8.0",
+    deps = [
+        "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+    ],
+)

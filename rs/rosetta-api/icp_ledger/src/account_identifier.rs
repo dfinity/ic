@@ -44,6 +44,12 @@ impl From<AccountIdentifier> for proto::AccountIdentifier {
     }
 }
 
+impl From<ic_icrc1::Account> for AccountIdentifier {
+    fn from(account: ic_icrc1::Account) -> Self {
+        Self::new(account.owner, account.subaccount.map(Subaccount))
+    }
+}
+
 pub static SUB_ACCOUNT_ZERO: Subaccount = Subaccount([0; 32]);
 static ACCOUNT_DOMAIN_SEPERATOR: &[u8] = b"\x0Aaccount-id";
 

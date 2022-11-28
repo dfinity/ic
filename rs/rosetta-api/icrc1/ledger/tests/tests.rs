@@ -9,6 +9,11 @@ use ic_icrc1::{
     Account, Block, Memo, Operation, Transaction,
 };
 use ic_icrc1_ledger::InitArgs;
+use ic_icrc1_ledger_sm_tests::{
+    setup_and_test_name, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE,
+    INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE,
+    TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, TX_WINDOW,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
@@ -19,28 +24,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
-
-const FEE: u64 = 10_000;
-const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
-const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
-const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
-
-const MINTER: Account = Account {
-    owner: PrincipalId::new(0, [0u8; 29]),
-    subaccount: None,
-};
-
-// Metadata-related constants
-const TOKEN_NAME: &str = "Test Token";
-const TOKEN_SYMBOL: &str = "XTST";
-const TEXT_META_KEY: &str = "test:image";
-const TEXT_META_VALUE: &str = "grumpy_cat.png";
-const BLOB_META_KEY: &str = "test:blob";
-const BLOB_META_VALUE: &[u8] = b"\xca\xfe\xba\xbe";
-const NAT_META_KEY: &str = "test:nat";
-const NAT_META_VALUE: u128 = u128::MAX;
-const INT_META_KEY: &str = "test:int";
-const INT_META_VALUE: i128 = i128::MIN;
 
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -255,6 +238,18 @@ fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
 }
 
+fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> InitArgs {
+    InitArgs {
+        minting_account: args.minting_account,
+        initial_balances: args.initial_balances,
+        transfer_fee: args.transfer_fee,
+        token_name: args.token_name,
+        token_symbol: args.token_symbol,
+        metadata: args.metadata,
+        archive_options: args.archive_options,
+    }
+}
+
 #[test]
 fn test_metadata() {
     fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
@@ -263,24 +258,12 @@ fn test_metadata() {
             .unwrap_or_else(|| panic!("no metadata key {} in map {:?}", key, metadata))
     }
 
-    let env = StateMachine::new();
+    let (env, canister_id) = setup_and_test_name(ledger_wasm(), encode_init_args, vec![]);
 
-    let canister_id = install_ledger(&env, vec![]);
     assert_eq!(
         TOKEN_SYMBOL,
         Decode!(
             &env.query(canister_id, "icrc1_symbol", Encode!().unwrap())
-                .unwrap()
-                .bytes(),
-            String
-        )
-        .unwrap()
-    );
-
-    assert_eq!(
-        TOKEN_NAME,
-        Decode!(
-            &env.query(canister_id, "icrc1_name", Encode!().unwrap())
                 .unwrap()
                 .bytes(),
             String

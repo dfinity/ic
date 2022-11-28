@@ -1,0 +1,5 @@
+// temporary file until FI-482 is completed
+
+service : {
+    icrc1_name : () -> (text) query;
+}
