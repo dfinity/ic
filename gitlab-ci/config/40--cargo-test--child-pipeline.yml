@@ -4,7 +4,7 @@ check-bins-linux:
     - .rules-parent-pipeline
   stage: cargo-test
   needs:
-    - job: dfx-build-release-linux
+    - job: wait-for-bazel-test-all
       artifacts: false
   image:
     # 21.04
@@ -31,10 +31,10 @@ check-bins-linux:
 
 check-bins-darwin:
   extends:
-    - .rules-parent-pipeline-protected-branch-only
+    - .rules-parent-pipeline
   stage: cargo-test
   needs:
-    - job: dfx-build-release-darwin
+    - job: wait-for-bazel-test-all
       artifacts: false
   tags:
     - dfinity
