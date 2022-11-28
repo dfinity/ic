@@ -255,6 +255,14 @@ rust_test(
 )
 
 system_test(
+    name = "replica_determinism_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
     name = "liveness_with_equivocation_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

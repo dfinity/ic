@@ -41,7 +41,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     vec![
         consensus_safety_pot(),
         cow_safety_pot(),
-        replica_determinism_pot(),
         max_payload_pot(),
         dual_workload_pot(),
         system_subnets_pot(),
@@ -79,14 +78,6 @@ fn consensus_safety_pot() -> pot::Pot {
         "consensus_safety_pot",
         consensus::safety_test::config(),
         steps! {consensus::safety_test::test => "consensus_safety_test"}
-    )
-}
-
-fn replica_determinism_pot() -> pot::Pot {
-    composable!(
-        "replica_determinism_pot",
-        consensus::replica_determinism_test::config(),
-        steps! {consensus::replica_determinism_test::test => "replica_determinism_test"}
     )
 }
 
