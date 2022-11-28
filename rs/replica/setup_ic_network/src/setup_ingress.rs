@@ -98,7 +98,7 @@ impl Service<SignedIngress> for IngressEventHandler {
                     let advert = IngressArtifact::message_to_advert(&signed_ingress);
                     artifact_manager
                         .on_artifact(
-                            Artifact::IngressMessage(signed_ingress.into()),
+                            Artifact::IngressMessage(signed_ingress),
                             advert.into(),
                             &node_id,
                         )

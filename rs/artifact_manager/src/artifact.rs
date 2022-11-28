@@ -8,7 +8,6 @@ use ic_types::{
     consensus::ecdsa::{ecdsa_msg_id, EcdsaMessageAttribute},
     consensus::ConsensusMessageHashable,
     crypto::CryptoHashOf,
-    messages::SignedRequestBytes,
     CountBytes,
 };
 use serde::{Deserialize, Serialize};
@@ -22,7 +21,6 @@ impl ArtifactKind for ConsensusArtifact {
     const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
     type Id = ConsensusMessageId;
     type Message = ConsensusMessage;
-    type SerializeAs = ConsensusMessage;
     type Attribute = ConsensusMessageAttribute;
     type Filter = ConsensusMessageFilter;
 
@@ -50,7 +48,6 @@ impl ArtifactKind for IngressArtifact {
     const TAG: ArtifactTag = ArtifactTag::IngressArtifact;
     type Id = IngressMessageId;
     type Message = SignedIngress;
-    type SerializeAs = SignedRequestBytes;
     type Attribute = IngressMessageAttribute;
     type Filter = IngressMessageFilter;
 
@@ -75,7 +72,6 @@ impl ArtifactKind for CertificationArtifact {
     const TAG: ArtifactTag = ArtifactTag::CertificationArtifact;
     type Id = CertificationMessageId;
     type Message = CertificationMessage;
-    type SerializeAs = CertificationMessage;
     type Attribute = CertificationMessageAttribute;
     type Filter = CertificationMessageFilter;
 
@@ -121,7 +117,6 @@ impl ArtifactKind for DkgArtifact {
     const TAG: ArtifactTag = ArtifactTag::DkgArtifact;
     type Id = DkgMessageId;
     type Message = DkgMessage;
-    type SerializeAs = DkgMessage;
     type Attribute = DkgMessageAttribute;
     type Filter = ();
 
@@ -151,7 +146,6 @@ impl ArtifactKind for EcdsaArtifact {
     const TAG: ArtifactTag = ArtifactTag::EcdsaArtifact;
     type Id = EcdsaMessageId;
     type Message = EcdsaMessage;
-    type SerializeAs = EcdsaMessage;
     type Attribute = EcdsaMessageAttribute;
     type Filter = ();
 
@@ -178,7 +172,6 @@ impl ArtifactKind for CanisterHttpArtifact {
     const TAG: ArtifactTag = ArtifactTag::CanisterHttpArtifact;
     type Id = CanisterHttpResponseId;
     type Message = CanisterHttpResponseShare;
-    type SerializeAs = CanisterHttpResponseShare;
     type Attribute = CanisterHttpResponseAttribute;
     type Filter = ();
 

@@ -30,7 +30,7 @@ use ic_types::{
         HasVersion,
     },
     malicious_flags::MaliciousFlags,
-    messages::{SignedIngress, SignedRequestBytes},
+    messages::SignedIngress,
     p2p,
     single_chunked::*,
     NodeId, ReplicaVersion,
@@ -103,8 +103,10 @@ pub(crate) struct ArtifactManagerBackendImpl<Artifact: ArtifactKind + 'static> {
 /// Trait implementation for `ArtifactManagerBackend`.
 impl<Artifact: ArtifactKind> ArtifactManagerBackend for ArtifactManagerBackendImpl<Artifact>
 where
-    Artifact::SerializeAs: TryFrom<artifact::Artifact, Error = artifact::Artifact>,
-    Artifact::Message: ChunkableArtifact + Send + 'static,
+    Artifact::Message: ChunkableArtifact
+        + Send
+        + 'static
+        + TryFrom<artifact::Artifact, Error = artifact::Artifact>,
     Advert<Artifact>:
         Into<p2p::GossipAdvert> + TryFrom<p2p::GossipAdvert, Error = p2p::GossipAdvert> + Eq,
     for<'a> &'a Artifact::Id: TryFrom<&'a artifact::ArtifactId, Error = &'a artifact::ArtifactId>,
@@ -375,13 +377,9 @@ impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<Ingress
     /// neither in the past nor too far in the future.
     fn check_artifact_acceptance(
         &self,
-        bytes: SignedRequestBytes,
+        msg: SignedIngress,
         peer_id: &NodeId,
     ) -> Result<ArtifactAcceptance<SignedIngress>, ArtifactPoolError> {
-        let msg: SignedIngress = bytes
-            .try_into()
-            .map_err(|err| ArtifactPoolError::ArtifactRejected(Box::new(err)))?;
-
         #[cfg(feature = "malicious_code")]
         {
             if self.malicious_flags.maliciously_disable_ingress_validation {
