@@ -17,12 +17,15 @@
       if sha256sum -c SHA256SUMS; then return; fi
 
       CDN_BASE_URL="${CDN_URL}/blessed/ic/{{ ic_git_revision }}/guest-os/disk-img"
+      curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.gz" --output disk-img.tar.gz
       curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.zst" --output disk-img.tar.zst
       curl --retry 10 --fail "$CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS
 
+      chmod 0644 "disk-img.tar.gz"
+      chown root:root "disk-img.tar.gz"
       chmod 0644 "disk-img.tar.zst"
       chown root:root "disk-img.tar.zst"
-      sha256sum -c --ignore-missing SHA256SUMS
+      sha256sum -c SHA256SUMS
     }
 
     # Download the IC-OS guest disk image
@@ -36,13 +39,13 @@
   until: script_res is not failed
   tags: [ "ic_guest" ]
 
-- name: unarchive file disk-img.tar.zst
+- name: unarchive file disk-img.tar.gz
   shell: |
     set -eExuo pipefail
 
     # unarchive the disk
     cd "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
-    tar xavf disk-img.tar.zst --sparse
+    tar xavf disk-img.tar.gz --sparse
   args:
     executable: /bin/bash
   register: script_res

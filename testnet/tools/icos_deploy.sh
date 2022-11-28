@@ -59,9 +59,9 @@ function dateFromEpoch() {
 
 function disk_image_exists() {
     curl --output /dev/null --silent --head --fail \
-        "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img-dev/disk-img.tar.zst" \
+        "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img-dev/disk-img.tar.gz" \
         || curl --output /dev/null --silent --head --fail \
-            "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img.tar.zst"
+            "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img.tar.gz"
 }
 
 ANSIBLE_ARGS=()

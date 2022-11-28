@@ -1,23 +1,13 @@
 ---
 
 - name: Download disk images
-  vars:
-    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) }}"
-    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux  | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) | join(' ') }}"
   shell: |
     set -eExuo pipefail
     # check if disk image is available on the new or the old location for the given hash
-    PROXY_CDN_URL="http://download.proxy-global.dfinity.network:8080"
-    CDN_URL="https://download.dfinity.systems"
+    CDN_URL="http://download.proxy-global.dfinity.network:8080"
     DEFAULT_UNIVERSAL_VM_IMG_SHA256="ca2ddfab45f940564503e2edf3d2c02acc05988edde4e3a7400355bd22d69d44"
 
-    declare -A proxy_image_cdn=(
-      [replica]="${PROXY_CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
-      [aux]="${PROXY_CDN_URL}/farm/universal-vm/${DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux"
-      [boundary]="${PROXY_CDN_URL}/ic/{{ ic_git_revision }}/boundary-os/disk-img{{ bn_image_type }}"
-    )
-
+    disk_types=(aux replica boundary)
     declare -A image_cdn=(
       [replica]="${CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
       [aux]="${CDN_URL}/farm/universal-vm/${DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux"
@@ -38,41 +28,27 @@
       cd "$IMAGE_DIR"
 
       # Check if the disk image has already been downloaded
-      if sha256sum -c --ignore-missing SHA256SUMS; then return; fi
+      if sha256sum -c SHA256SUMS; then return; fi
 
-      PROXY_CDN_BASE_URL="${proxy_image_cdn[$disk_type]}"
       CDN_BASE_URL="${image_cdn[$disk_type]}"
       if [ "$disk_type" == "aux" ]; then
-          if ! curl --retry 5 --fail "$PROXY_CDN_BASE_URL/universal-vm.img.zst" --output disk-img.zst ; then
-              curl --retry 5 --fail "$CDN_BASE_URL/universal-vm.img.zst" --output disk-img.zst
-          fi
+          curl --retry 10 --fail "$CDN_BASE_URL/universal-vm.img.zst" --output disk-img.zst
 
           chmod 0644 "disk-img.zst"
           chown root:root "disk-img.zst"
       else
-          if ! curl --retry 5 --fail "$PROXY_CDN_BASE_URL/disk-img.tar.zst" --output disk-img.tar.zst ||
-             ! curl --retry 5 --fail "$PROXY_CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS ; then
-              curl --retry 5 --fail "$CDN_BASE_URL/disk-img.tar.zst" --output disk-img.tar.zst
-              curl --retry 5 --fail "$CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS
-          fi
+          curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.gz" --output disk-img.tar.gz
+          curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.zst" --output disk-img.tar.zst
+          curl --retry 10 --fail "$CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS
 
+          chmod 0644 "disk-img.tar.gz"
+          chown root:root "disk-img.tar.gz"
           chmod 0644 "disk-img.tar.zst"
           chown root:root "disk-img.tar.zst"
 
-          sha256sum -c --ignore-missing SHA256SUMS
+          sha256sum -c SHA256SUMS
       fi
     }
-
-    disk_types=()
-    if [ ! -z "{{ aux_nodes }}" ]; then
-        disk_types+=(aux)
-    fi
-    if [ ! -z "{{ boundary_nodes }}" ]; then
-        disk_types+=(replica)
-    fi
-    if [ ! -z "{{ replica_nodes }}" ]; then
-        disk_types+=(boundary)
-    fi
 
     # download the IC-OS disk images for replica, boundary and aux, in parallel
     set +x
@@ -88,44 +64,28 @@
   tags: [ "ic_guest" ]
 
 - name: unarchive image files # noqa risky-shell-pipe
-  vars:
-    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) }}"
-    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux  | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) | join(' ') }}"
   shell: |
     # if the unpacked file does not exist or if the archive is newer than the unpacked file
     set -eExuo pipefail
 
+    disk_types=(replica boundary)
     declare -A image_dir=(
         [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
         [aux]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
         [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
     )
 
-    disk_types=()
-    if [ ! -z "{{ aux_nodes }}" ]; then
-        disk_types+=(aux)
-    fi
-    if [ ! -z "{{ boundary_nodes }}" ]; then
-        disk_types+=(replica)
-    fi
-    if [ ! -z "{{ replica_nodes }}" ]; then
-        disk_types+=(boundary)
-    fi
-
     # unarchive each disk type
     for disk_type in "${disk_types[@]}"; do
-        if [ "$disk_type" == "aux" ]; then
-            IMAGE_DIR=${image_dir[$disk_type]}
-            cd "$IMAGE_DIR"
-            zstd -f -d disk-img.zst -o disk.img
-        else
-            IMAGE_DIR=${image_dir[$disk_type]}
-            cd "$IMAGE_DIR"
-            tar xavf disk-img.tar.zst --sparse
-        fi
+       IMAGE_DIR=${image_dir[$disk_type]}
+       cd "$IMAGE_DIR"
+       tar xavf disk-img.tar.gz --sparse
     done
 
+    # unarchive universal VM
+    IMAGE_DIR=${image_dir[aux]}
+    cd "$IMAGE_DIR"
+    zstd -f -d disk-img.zst -o disk.img
   args:
     executable: /bin/bash
   register: script_res
