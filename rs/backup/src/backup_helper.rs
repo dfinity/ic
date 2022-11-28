@@ -11,6 +11,8 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use slog::{error, info, warn, Logger};
 use std::ffi::OsStr;
+use std::fs::File;
+use std::io::Write;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -43,6 +45,10 @@ impl BackupHelper {
 
     fn binary_file(&self, executable: &str, replica_version: &ReplicaVersion) -> PathBuf {
         self.binary_dir(replica_version).join(executable)
+    }
+
+    fn logs_dir(&self) -> PathBuf {
+        self.root_dir.join("logs")
     }
 
     fn spool_root_dir(&self) -> PathBuf {
@@ -280,6 +286,9 @@ impl BackupHelper {
         if !self.state_dir().exists() {
             std::fs::create_dir_all(self.state_dir()).expect("Failure creating a directory");
         }
+        if !self.logs_dir().exists() {
+            std::fs::create_dir_all(self.logs_dir()).expect("Failure creating a directory");
+        }
 
         // replay the current version once, but if there is upgrade do it again
         while let Ok(ReplayResult::UpgradeRequired(upgrade_version)) =
@@ -368,8 +377,12 @@ impl BackupHelper {
                 Err(e.to_string())
             }
             Ok(Some(stdout)) => {
-                info!(self.log, "Replay result:");
-                info!(self.log, "{}", stdout);
+                let log_file_name = format!("{}_{}.log", self.subnet_id, start_height);
+                let mut file = File::create(self.logs_dir().join(log_file_name))
+                    .map_err(|err| format!("Error creating log file: {:?}", err))?;
+                file.write_all(stdout.as_bytes())
+                    .map_err(|err| format!("Error writing log file: {:?}", err))?;
+
                 if let Some(upgrade_version) = self.check_upgrade_request(stdout) {
                     info!(self.log, "Upgrade detected to: {}", upgrade_version);
                     Ok(ReplayResult::UpgradeRequired(
