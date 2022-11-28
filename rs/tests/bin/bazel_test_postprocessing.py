@@ -181,6 +181,8 @@ def main(config: Config) -> None:
     test_targets_results = process_bazel_results(config.build_event_json_path)
     honeycomb_events = []
     slack_alert_files = []
+    if len(test_targets_results) == 0:
+        logger.warn(f"No targets with `run_system_test rule` detected in {config.build_event_json_path}")
     for test_target_name, execution_status in test_targets_results.items():
         honeycomb_events.append(
             {"data": {"test_target": test_target_name, "execution_result": execution_status, "job_url": CI_JOB_URL}}
@@ -194,11 +196,11 @@ def main(config: Config) -> None:
             slack_alert_files.append(slack_filename)
             save_slack_alert(filename=slack_filename, test_name=test_target_name, slack_channels=[SLACK_ALERT_CHANNEL])
     # Send all slack alerts
-    if config.slack_webhook_url:
+    if len(slack_alert_files) != 0 and config.slack_webhook_url:
         for file in slack_alert_files:
             send_slack_alerts_from_file(webhook_url=config.slack_webhook_url, filename=file)
     # Send all Honeycomb notifications.
-    if config.honeycomb_api_token:
+    if len(honeycomb_events) != 0 and config.honeycomb_api_token:
         send_event_to_honeycomb(honeycomb_api_key=config.honeycomb_api_token, event_data=honeycomb_events)
 
 
