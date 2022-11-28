@@ -1,38 +1,52 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 
-SDK = [
-    "//rs/bitcoin/adapter:ic-btc-adapter",
-    "//rs/canister_http/adapter:ic-canister-http-adapter",
+NOSTRIP_SDK = [
     "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
+    "//rs/bitcoin/adapter:ic-btc-adapter",
     "//rs/replica",
+]
+
+STRIP_SDK = [
+    "//rs/canister_http/adapter:ic-canister-http-adapter",
+    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/starter:ic-starter",
 ]
+
+[release_nostrip_binary(
+    name = source.split("/").pop().split(":").pop(),
+    binary = source,
+) for source in NOSTRIP_SDK]
+
+[release_strip_binary(
+    name = source.split("/").pop().split(":").pop(),
+    binary = source,
+) for source in STRIP_SDK]
 
 [
     gzip_compress(
         name = source.split("/").pop().split(":").pop() + ".gz",
-        srcs = [source],
+        srcs = [":" + source.split("/").pop().split(":").pop()],
     )
-    for source in SDK
+    for source in NOSTRIP_SDK + STRIP_SDK
 ]
 
 filegroup(
     name = "sdk",
-    srcs = [source.split("/").pop().split(":").pop() + ".gz" for source in SDK],
+    srcs = [source.split("/").pop().split(":").pop() + ".gz" for source in NOSTRIP_SDK + STRIP_SDK],
 )
 
 upload_artifacts(
     name = "upload",
     inputs = [":sdk"],
     # The actual list is on https://github.com/bazelbuild/platforms
-    remote_subdir = "sdk-release-bazel/" + select({
+    remote_subdir = "sdk-release/" + select({
         "@platforms//cpu:x86_64": "x86_64",
         "@platforms//cpu:arm64": "arm64",
         "//conditions:default": "unknown",
     }) + "-" + select({
-        "@platforms//os:osx": "macos",
+        "@platforms//os:osx": "darwin",
         "@platforms//os:linux": "linux",
         "//conditions:default": "unknown",
     }),
