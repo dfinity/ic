@@ -604,45 +604,45 @@ def boundary_node_icos_build(name, mode = None, sev = False, visibility = None):
         tags = ["no-remote-cache"],
     )
 
-    # upload_suffix = ""
-    # if mode == "dev":
-    #     upload_suffix = "-dev"
-    # if sev:
-    #     upload_suffix = "-sev"
+    upload_suffix = ""
+    if sev:
+        upload_suffix += "-snp"
+    if mode == "dev":
+        upload_suffix += "-dev"
 
-    # upload_artifacts(
-    #     name = "upload_disk-img",
-    #     inputs = [
-    #         ":disk-img.tar.zst",
-    #         ":disk-img.tar.gz",
-    #     ],
-    #     remote_subdir = "guest-os/disk-img" + upload_suffix,
-    # )
+    upload_artifacts(
+        name = "upload_disk-img",
+        inputs = [
+            ":disk-img.tar.zst",
+            ":disk-img.tar.gz",
+        ],
+        remote_subdir = "boundary-os/disk-img" + upload_suffix,
+    )
 
-    # native.filegroup(
-    #     name = "hash_and_upload_disk-img",
-    #     srcs = [
-    #         ":upload_disk-img",
-    #         ":disk-img.tar.zst.sha256",
-    #     ],
-    #     visibility = ["//visibility:public"],
-    #     tags = ["manual"],
-    # )
+    native.filegroup(
+        name = "hash_and_upload_disk-img",
+        srcs = [
+            ":upload_disk-img",
+            ":disk-img.tar.zst.sha256",
+        ],
+        visibility = ["//visibility:public"],
+        tags = ["manual"],
+    )
 
-    # urls_test(
-    #     name = "upload_disk-img_test",
-    #     inputs = [":upload_disk-img"],
-    # )
+    urls_test(
+        name = "upload_disk-img_test",
+        inputs = [":upload_disk-img"],
+    )
 
-    # output_files(
-    #     name = "disk-img-url",
-    #     target = ":upload_disk-img",
-    #     basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-    #     tags = ["manual"],
-    # )
+    output_files(
+        name = "disk-img-url",
+        target = ":upload_disk-img",
+        basenames = ["upload_disk-img_disk-img.tar.zst.url"],
+        tags = ["manual"],
+    )
 
-    # native.filegroup(
-    #     name = name,
-    #     srcs = [":disk-img.tar.zst", ":disk-img.tar.gz", ":upgrade.tar.zst"],
-    #     visibility = visibility,
-    # )
+    native.filegroup(
+        name = name,
+        srcs = [":disk-img.tar.zst", ":disk-img.tar.gz"],
+        visibility = visibility,
+    )
