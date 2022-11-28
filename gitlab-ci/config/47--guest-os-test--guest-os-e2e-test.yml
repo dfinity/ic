@@ -58,12 +58,6 @@
       artifacts: false
     - job: guest-os-updateimg-build-dev
       artifacts: false
-    - job: boundary-os-diskimg
-      artifacts: false
-    - job: boundary-os-diskimg-dev
-      artifacts: false
-    - job: boundary-os-diskimg-snp-dev
-      artifacts: false
   artifacts:
     when: always
     paths:
@@ -206,8 +200,6 @@ upgrade-compatibility-pre-master:
     - job: guest-os-updateimg-build
       artifacts: false
     - job: guest-os-updateimg-build-dev
-      artifacts: false
-    - job: boundary-os-diskimg-dev
       artifacts: false
   artifacts:
     paths:
