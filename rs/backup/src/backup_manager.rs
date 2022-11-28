@@ -17,7 +17,6 @@ use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 use slog::{error, info, Logger};
 use tokio::runtime::Handle;
-use url::Url;
 
 use crate::config::Config;
 use crate::util::{block_on, sleep_secs};
@@ -31,11 +30,11 @@ pub struct SubnetBackup {
     pub sync_period: Duration,
     pub replay_last_time: Instant,
     pub replay_period: Duration,
+    pub replica_version: ReplicaVersion,
     pub backup_helper: BackupHelper,
 }
 pub struct BackupManager {
     pub root_dir: PathBuf,
-    pub nns_url: Url,
     pub local_store: Arc<LocalStoreImpl>,
     pub registry_client: Arc<RegistryClientImpl>,
     pub registry_replicator: Arc<RegistryReplicator>,
@@ -137,7 +136,6 @@ impl BackupManager {
                 log: log.clone(),
             };
             let backup_helper = BackupHelper {
-                replica_version,
                 subnet_id: s.subnet_id,
                 nns_url: nns_url.to_string(),
                 root_dir: config.root_dir.clone(),
@@ -167,12 +165,12 @@ impl BackupManager {
                 sync_period,
                 replay_last_time,
                 replay_period,
+                replica_version,
                 backup_helper,
             });
         }
         BackupManager {
             root_dir: config.root_dir,
-            nns_url,
             local_store,
             registry_client,
             registry_replicator, // it will be used as a background task, so keep it
@@ -188,7 +186,7 @@ impl BackupManager {
             let mut state = BackupManagerState::default();
             for b in &self.subnet_backups {
                 let s = SubnetState {
-                    replica_version: b.backup_helper.replica_version.clone(),
+                    replica_version: b.replica_version.clone(),
                     sync_last_time: b.sync_last_time,
                     replay_last_time: b.replay_last_time,
                 };
@@ -221,7 +219,7 @@ impl BackupManager {
                     }
                 }
                 if b.replay_last_time.elapsed() > b.replay_period {
-                    b.backup_helper.replay();
+                    b.replica_version = b.backup_helper.replay(b.replica_version.clone());
                     b.replay_last_time = Instant::now();
                     // save the updated state
                     let s = state
@@ -229,7 +227,7 @@ impl BackupManager {
                         .get_mut(&b.backup_helper.subnet_id)
                         .expect("HashMap should still contain the value");
                     s.replay_last_time = b.replay_last_time;
-                    s.replica_version = b.backup_helper.replica_version.clone();
+                    s.replica_version = b.replica_version.clone();
                     if let Err(err) = BackupManager::save_state(&state, &config_file) {
                         error!(self.log, "Error saving state: {:?}", err);
                     }

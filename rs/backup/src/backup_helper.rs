@@ -21,7 +21,6 @@ const RETRIES_RSYNC_HOST: u64 = 5;
 const RETRIES_BINARY_DOWNLOAD: u64 = 3;
 
 pub struct BackupHelper {
-    pub replica_version: ReplicaVersion,
     pub subnet_id: SubnetId,
     pub nns_url: String,
     pub root_dir: PathBuf,
@@ -38,13 +37,12 @@ enum ReplayResult {
 }
 
 impl BackupHelper {
-    fn binary_dir(&self) -> PathBuf {
-        self.root_dir
-            .join(format!("binaries/{}", self.replica_version))
+    fn binary_dir(&self, replica_version: &ReplicaVersion) -> PathBuf {
+        self.root_dir.join(format!("binaries/{}", replica_version))
     }
 
-    fn binary_file(&self, executable: &str) -> PathBuf {
-        self.binary_dir().join(executable)
+    fn binary_file(&self, executable: &str, replica_version: &ReplicaVersion) -> PathBuf {
+        self.binary_dir(replica_version).join(executable)
     }
 
     fn spool_root_dir(&self) -> PathBuf {
@@ -84,25 +82,26 @@ impl BackupHelper {
         "backup".to_string()
     }
 
-    fn download_binaries(&self) {
-        if !self.binary_dir().exists() {
-            std::fs::create_dir_all(self.binary_dir()).expect("Failure creating a directory");
+    fn download_binaries(&self, replica_version: &ReplicaVersion) {
+        if !self.binary_dir(replica_version).exists() {
+            std::fs::create_dir_all(self.binary_dir(replica_version))
+                .expect("Failure creating a directory");
         }
-        self.download_binary("ic-replay".to_string());
-        self.download_binary("sandbox_launcher".to_string());
-        self.download_binary("canister_sandbox".to_string());
+        self.download_binary("ic-replay".to_string(), replica_version);
+        self.download_binary("sandbox_launcher".to_string(), replica_version);
+        self.download_binary("canister_sandbox".to_string(), replica_version);
     }
 
-    fn download_binary(&self, binary_name: String) {
-        if self.binary_file(&binary_name).exists() {
+    fn download_binary(&self, binary_name: String, replica_version: &ReplicaVersion) {
+        if self.binary_file(&binary_name, replica_version).exists() {
             return;
         }
         for _ in 0..RETRIES_BINARY_DOWNLOAD {
             let res = block_on(download_binary(
                 &self.log,
-                self.replica_version.clone(),
+                replica_version.clone(),
                 binary_name.clone(),
-                self.binary_dir(),
+                self.binary_dir(replica_version),
             ));
             if res.is_ok() {
                 return;
@@ -118,7 +117,7 @@ impl BackupHelper {
             .report_failure_slack(format!("Couldn't download: {}", binary_name));
         panic!(
             "Binary {} is required for the replica {}",
-            binary_name, self.replica_version
+            binary_name, replica_version
         );
     }
 
@@ -273,20 +272,22 @@ impl BackupHelper {
         }
     }
 
-    pub fn replay(&mut self) {
+    pub fn replay(&self, replica_version: ReplicaVersion) -> ReplicaVersion {
         let start_height = self.last_checkpoint();
         let start_time = Instant::now();
+        let mut current_replica_version = replica_version;
 
         if !self.state_dir().exists() {
             std::fs::create_dir_all(self.state_dir()).expect("Failure creating a directory");
         }
 
         // replay the current version once, but if there is upgrade do it again
-        while let Ok(ReplayResult::UpgradeRequired(upgrade_version)) = self.replay_current_version()
+        while let Ok(ReplayResult::UpgradeRequired(upgrade_version)) =
+            self.replay_current_version(&current_replica_version)
         {
             self.notification_client.message_slack(format!(
                 "Replica version upgrade detected (current: {} new: {}): upgrading the ic-replay tool to retry... 🤞",
-                self.replica_version, upgrade_version
+                current_replica_version, upgrade_version
             ));
             // collect nodes from which we will fetch the config
             match self.collect_subnet_nodes() {
@@ -307,7 +308,7 @@ impl BackupHelper {
                     break;
                 }
             }
-            self.replica_version = upgrade_version;
+            current_replica_version = upgrade_version;
         }
 
         let finish_height = self.last_checkpoint();
@@ -330,20 +331,24 @@ impl BackupHelper {
                 "No height progress after the last replay detected!".to_string(),
             );
         }
+        current_replica_version
     }
 
-    fn replay_current_version(&self) -> Result<ReplayResult, String> {
+    fn replay_current_version(
+        &self,
+        replica_version: &ReplicaVersion,
+    ) -> Result<ReplayResult, String> {
         let start_height = self.last_checkpoint();
         info!(
             self.log,
             "Replaying from height #{} of subnet {:?} with version {}",
             start_height,
             self.subnet_id,
-            self.replica_version
+            replica_version
         );
-        self.download_binaries();
+        self.download_binaries(replica_version);
 
-        let ic_admin = self.binary_file("ic-replay");
+        let ic_admin = self.binary_file("ic-replay", replica_version);
         let mut cmd = Command::new(ic_admin);
         cmd.arg("--data-root")
             .arg(&self.data_dir())
@@ -353,7 +358,7 @@ impl BackupHelper {
             .arg("restore-from-backup2")
             .arg(&self.local_store_dir())
             .arg(&self.spool_root_dir())
-            .arg(&self.replica_version.to_string())
+            .arg(&replica_version.to_string())
             .arg(start_height.to_string())
             .stdout(Stdio::piped());
         info!(self.log, "Will execute: {:?}", cmd);
