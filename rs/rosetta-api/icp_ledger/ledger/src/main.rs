@@ -443,6 +443,11 @@ fn token_name() -> Name {
     }
 }
 
+#[candid_method(query)]
+fn icrc1_name() -> String {
+    LEDGER.read().unwrap().token_name.clone()
+}
+
 #[candid_method(query, rename = "decimals")]
 fn token_decimals() -> Decimals {
     Decimals {
@@ -726,6 +731,11 @@ fn token_name_candid() {
     over(candid_one, |()| token_name())
 }
 
+#[export_name = "canister_query icrc1_name"]
+fn icrc1_name_candid() {
+    over(candid_one, |()| icrc1_name())
+}
+
 #[export_name = "canister_query decimals"]
 fn token_decimals_candid() {
     over(candid_one, |()| token_decimals())
@@ -929,19 +939,20 @@ mod tests {
 
         let new_interface = __export_service();
         let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        let candid_file = "../ledger.did";
-        let old_interface = manifest_dir.join(candid_file);
+        for candid_file in ["../ledger.did", "icrc1_tmp.did"].iter() {
+            let old_interface = manifest_dir.join(candid_file);
 
-        service_compatible(
-            CandidSource::Text(&new_interface),
-            CandidSource::File(old_interface.as_path()),
-        )
-        .unwrap_or_else(|e| {
-            panic!(
-                "the ledger interface is not compatible with {}: {:?}",
-                old_interface.display(),
-                e
+            service_compatible(
+                CandidSource::Text(&new_interface),
+                CandidSource::File(old_interface.as_path()),
             )
-        });
+            .unwrap_or_else(|e| {
+                panic!(
+                    "the ledger interface is not compatible with {}: {:?}",
+                    old_interface.display(),
+                    e
+                )
+            });
+        }
     }
 }

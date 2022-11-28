@@ -1,0 +1,14 @@
+[package]
+name = "ic-icrc1-ledger-sm-tests"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+description = "StateMachines based tests for https://github.com/dfinity/ICRC-1 ledgers"
+edition = "2021"
+
+[dependencies]
+candid = "0.8.1"
+ic-base-types = { path = "../../../../types/base_types" }
+ic-icrc1 = { path = "../.." }
+ic-ledger-core = { path = "../../../ledger_core" }
+ic-ledger-canister-core = { path = "../../../ledger_canister_core" }
+ic-state-machine-tests = { path = "../../../../state_machine_tests" }

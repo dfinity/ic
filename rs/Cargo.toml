@@ -201,6 +201,7 @@ members = [
   "rosetta-api/icrc1/client/cdk",
   "rosetta-api/icrc1/index",
   "rosetta-api/icrc1/ledger",
+  "rosetta-api/icrc1/ledger/sm-tests",
   "rosetta-api/icrc1/archive",
   "rosetta-api/hardware_wallet_tests",
   "rosetta-api/test_utils",

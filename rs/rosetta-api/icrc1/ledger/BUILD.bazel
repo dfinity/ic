@@ -93,6 +93,7 @@ rust_test(
         ":ledger",
         "//rs/monitoring/metrics_encoder",
         "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/icrc1/ledger/sm-tests",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/dfn_http_metrics",

@@ -6082,6 +6082,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-icrc1",
  "ic-icrc1-client",
+ "ic-icrc1-ledger-sm-tests",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-metrics-encoder",
@@ -6092,6 +6093,18 @@ dependencies = [
  "proptest",
  "serde",
  "serde_bytes",
+]
+
+[[package]]
+name = "ic-icrc1-ledger-sm-tests"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-icrc1",
+ "ic-ledger-canister-core",
+ "ic-ledger-core",
+ "ic-state-machine-tests",
 ]
 
 [[package]]
@@ -9033,6 +9046,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-crypto-sha",
+ "ic-icrc1",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-test-utilities-compare-dirs",
@@ -9557,9 +9571,12 @@ dependencies = [
  "dfn_protobuf",
  "ic-base-types",
  "ic-constants",
+ "ic-icrc1-ledger-sm-tests",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-metrics-encoder",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
  "icp-ledger",
  "intmap",
  "lazy_static",

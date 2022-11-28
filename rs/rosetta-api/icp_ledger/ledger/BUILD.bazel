@@ -67,6 +67,7 @@ LEDGER_CANISTER_DEPS = [
 
 LEDGER_CANISTER_DATA = [
     "//rs/rosetta-api/icp_ledger:ledger.did",
+    "//rs/rosetta-api/icp_ledger/ledger:icrc1_tmp.did",
 ]
 
 LEDGER_CANISTER_RUSTC_ENV = {
@@ -103,4 +104,28 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/ledger",
     },
     rustc_env = LEDGER_CANISTER_RUSTC_ENV,
+)
+
+rust_test(
+    name = "ledger_canister_test",
+    srcs = ["tests/tests.rs"],
+    data = [
+        ":ledger-canister-wasm",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/ledger",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    deps = [
+        ":ledger",
+        "//rs/rosetta-api/icp_ledger",
+        "//rs/rosetta-api/icrc1/ledger/sm-tests",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+    ],
 )

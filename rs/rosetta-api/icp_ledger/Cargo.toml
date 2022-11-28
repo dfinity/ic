@@ -16,7 +16,8 @@ dfn_http_metrics = {path = "../../rust_canisters/dfn_http_metrics"}
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 hex = {version = "0.4.2", features = ["serde"] }
 ic-base-types = { path="../../types/base_types" }
-ic-crypto-sha = {path = "../../crypto/sha/"}
+ic-crypto-sha = { path = "../../crypto/sha/" }
+ic-icrc1 = { path = "../icrc1" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 lazy_static = "1.4.0"
