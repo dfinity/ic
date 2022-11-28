@@ -153,6 +153,12 @@ before_script:
     # set all git dirs safe
     git config --global --add safe.directory '*'
 
+    # docker login for RO to overcome anonymous pull limit of 100 pulls / 6h
+    # enterprise logged in account has 5000 pulls / 24h
+    if [ "$(uname)" == "Linux" ]; then
+      docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+    fi
+
   - echo -e "\e[0Ksection_end:$(date +%s):before_script\r\e[0K"
 
 
