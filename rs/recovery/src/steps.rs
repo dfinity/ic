@@ -199,7 +199,7 @@ impl Step for ReplayStep {
             .collect::<RecoveryResult<Vec<u64>>>()?;
 
         let delete_checkpoints = |except: &u64| {
-            checkpoints
+            Recovery::get_checkpoint_names(&checkpoint_path)?
                 .iter()
                 .filter(|c| parse_hex_str(c).unwrap() != *except)
                 .map(|c| {
