@@ -997,12 +997,15 @@ impl CanisterQueues {
     /// Updating the correct input queues schedule after enqueuing a reject response into a
     /// previously empty queue also requires the full set of local canisters to decide whether
     /// the destination canister was local or remote.
+    ///
+    /// Returns the number of requests that were timed out.
     pub fn time_out_requests(
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) {
+    ) -> u64 {
+        let mut timed_out_requests_count = 0;
         for (canister_id, (input_queue, output_queue)) in self.canister_queues.iter_mut() {
             for request in output_queue.time_out_requests(current_time) {
                 let response = generate_timeout_response(&request);
@@ -1027,11 +1030,15 @@ impl CanisterQueues {
                         self.remote_subnet_input_schedule.push_back(*canister_id);
                     }
                 }
+
+                timed_out_requests_count += 1;
             }
         }
 
         debug_assert!(self.stats_ok());
         debug_assert!(self.schedules_ok(own_canister_id, local_canisters));
+
+        timed_out_requests_count
     }
 }
 
