@@ -228,10 +228,6 @@ impl From<MalformedPeerCertificateError> for TlsClientHandshakeError {
 
 /// A stream over a secure connection protected by TLS.
 ///
-/// The main usage of this stream (or its halves obtained by
-/// [splitting](`Self::split()`) the stream) is via the methods provided by the
-/// `tokio::io::AsyncRead` and `tokio::io::AsyncWrite` traits.
-///
 /// Implementing streams are expected to behave like a `BufWriter`. This means
 /// that data written with `poll_write` are not guaranteed to be written to the
 /// underlying (TCP) stream and one must call `poll_flush` at appropriate
@@ -242,25 +238,7 @@ impl From<MalformedPeerCertificateError> for TlsClientHandshakeError {
 ///
 /// [tokio-rustls' documentation]: https://docs.rs/tokio-rustls/latest/tokio_rustls/
 /// [Why do I need to call poll_flush?]: https://docs.rs/tokio-rustls/latest/tokio_rustls/#why-do-i-need-to-call-poll_flush
-pub trait TlsStream: AsyncRead + AsyncWrite + Send + Unpin {
-    /// Splits the TLS stream into a read half and a write half.
-    ///
-    /// Note that `self` is of type `Box<Self>` rather than `Self`. This is
-    /// because in Rust, a value can only be moved when its size is known at
-    /// compile time, and the size of a value of type `dyn TlsStream` cannot
-    /// be statically determined, i.e., is not known at compile time (see,
-    /// e.g., [E0161]). `Box` was chosen for simplicity in favor of, e.g.,
-    /// `Arc` because currently there are no use-cases for shared ownership,
-    /// but any (smart) pointer would work.
-    ///
-    /// [E0161]: https://doc.rust-lang.org/error-index.html#E0161
-    fn split(self: Box<Self>) -> (Box<dyn TlsStreamReadHalf>, Box<dyn TlsStreamWriteHalf>);
-}
-
-/// The read half of a stream over a secure connection protected by TLS.
-pub trait TlsStreamReadHalf: AsyncRead + Send + Unpin {}
-/// The write half of a stream over a secure connection protected by TLS.
-pub trait TlsStreamWriteHalf: AsyncWrite + Send + Unpin {}
+pub trait TlsStream: AsyncRead + AsyncWrite + Send + Unpin {}
 
 #[async_trait]
 /// Implementors provide methods for transforming TCP streams into TLS stream.

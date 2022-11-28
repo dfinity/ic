@@ -22,10 +22,12 @@ use crate::{
     types::{ConnectedH2, ConnectionRole, SendQueueReader, TransportImplH2},
 };
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{TlsStream, TlsStreamReadHalf, TlsStreamWriteHalf};
+use ic_crypto_tls_interfaces::TlsStream;
 use ic_interfaces_transport::{TransportChannelId, TransportEventHandler};
 use std::net::SocketAddr;
 use std::sync::Weak;
+use tokio::io::ReadHalf;
+use tokio::io::WriteHalf;
 use tokio::task::JoinHandle;
 
 /// Per-flow send task. Reads the requests from the send queue and writes to
@@ -35,7 +37,7 @@ fn spawn_write_task(
     _channel_id: TransportChannelId,
     _peer_label: String,
     _send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
-    _writer: Box<dyn TlsStreamWriteHalf>,
+    _writer: WriteHalf<Box<dyn TlsStream>>,
     _data_plane_metrics: DataPlaneMetrics,
     _weak_self: Weak<TransportImplH2>,
     rt_handle: tokio::runtime::Handle,
@@ -50,7 +52,7 @@ fn spawn_read_task(
     _channel_id: TransportChannelId,
     _peer_label: String,
     _event_handler: TransportEventHandler,
-    _reader: Box<dyn TlsStreamReadHalf>,
+    _reader: ReadHalf<Box<dyn TlsStream>>,
     _data_plane_metrics: DataPlaneMetrics,
     _weak_self: Weak<TransportImplH2>,
     rt_handle: tokio::runtime::Handle,
@@ -72,7 +74,7 @@ pub(crate) fn create_connected_state_write_path(
     weak_self: Weak<TransportImplH2>,
     rt_handle: tokio::runtime::Handle,
 ) -> ConnectedH2 {
-    let (_tls_reader, tls_writer) = Box::new(tls_stream).split();
+    let (_tls_reader, tls_writer) = tokio::io::split(tls_stream);
     // Spawn write task
     let write_task = spawn_write_task(
         peer_id,
@@ -106,7 +108,7 @@ pub(crate) fn create_connected_state_read_path(
     weak_self: Weak<TransportImplH2>,
     rt_handle: tokio::runtime::Handle,
 ) -> ConnectedH2 {
-    let (tls_reader, _tls_writer) = Box::new(tls_stream).split();
+    let (tls_reader, _tls_writer) = tokio::io::split(tls_stream);
     // Spawn read task
     let read_task = spawn_read_task(
         peer_id,

@@ -456,7 +456,7 @@ pub(crate) async fn create_connected_state(
     use_h2: bool,
 ) -> Result<Connected, Box<dyn std::error::Error + Send + Sync>> {
     if !use_h2 {
-        let (tls_reader, tls_writer) = Box::new(tls_stream).split();
+        let (tls_reader, tls_writer) = tokio::io::split(tls_stream);
         let channel_reader = ChannelReader::new_with_legacy(tls_reader);
         let channel_writer = ChannelWriter::new_with_legacy(tls_writer);
         // Spawn write task
