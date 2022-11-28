@@ -152,3 +152,14 @@ pipenv run python3 -m pdb -c continue ./run_XXX_experiment.py
 
 This way, if an exception occurs, the debugger will be opened and the program state can be displayed at the point at
 which the exception has happened.
+
+# Run e2e tests
+
+Run the following command:
+
+```
+cd scalability
+pipenv run python3 common/tests/e2e-scalability-tests.py --ic_os_version $(../gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)  --artifacts_path ../artifacts/release/ --nns_canisters ../artifacts/canisters/ --install_nns_bin ../artifacts/release/ic-nns-init
+```
+
+For this to work, you need to have run the scalability suite at least once (so that `../artifacts`) is created.
