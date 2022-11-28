@@ -3,6 +3,7 @@ load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 CANISTERS = {
     "candid-test-canister.wasm": "//rs/rust_canisters/dfn_candid:candid-test-canister",
+    "canister-creator-canister.wasm": "//rs/rust_canisters/canister_creator:canister_creator_canister",
     "cycles-minting-canister.wasm": "//rs/nns/cmc:cycles-minting-canister",
     "genesis-token-canister.wasm": "//rs/nns/gtc:genesis-token-canister",
     "governance-canister.wasm": "//rs/nns/governance:governance-canister",
