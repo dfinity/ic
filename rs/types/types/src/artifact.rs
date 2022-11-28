@@ -19,7 +19,7 @@ use crate::{
     consensus::{certification::CertificationMessageHash, ConsensusMessageHash},
     crypto::{CryptoHash, CryptoHashOf},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
-    messages::{MessageId, SignedRequestBytes},
+    messages::MessageId,
     p2p::GossipAdvert,
     CryptoHashOfState, Height, Time,
 };
@@ -50,7 +50,7 @@ pub use crate::{
 #[allow(clippy::large_enum_variant)]
 pub enum Artifact {
     ConsensusMessage(ConsensusMessage),
-    IngressMessage(SignedRequestBytes),
+    IngressMessage(SignedIngress),
     CertificationMessage(CertificationMessage),
     DkgMessage(DkgMessage),
     EcdsaMessage(EcdsaMessage),
@@ -208,13 +208,10 @@ pub type ArtifactPriorityFn =
 /// parameterized by a type variable, which is of `ArtifactKind` trait.
 /// It is mostly a convenience to pass around a collection of types
 /// instead of all of them individually.
-// The Unpin constraint is because the Message type was used to define an actor
-// type, of which 'start_in_arbiter' is called, and actix requires Unpin.
 pub trait ArtifactKind: Sized {
     const TAG: ArtifactTag;
     type Id;
-    type Message: Unpin;
-    type SerializeAs;
+    type Message;
     type Attribute;
     type Filter: Default;
 

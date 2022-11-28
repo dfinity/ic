@@ -55,7 +55,7 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
     /// The default implementation is to accept unconditionally.
     fn check_artifact_acceptance(
         &self,
-        msg: Artifact::SerializeAs,
+        msg: Artifact::Message,
         peer_id: &NodeId,
     ) -> Result<ArtifactAcceptance<Artifact::Message>, ArtifactPoolError>;
 

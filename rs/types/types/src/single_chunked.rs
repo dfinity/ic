@@ -66,7 +66,7 @@ chunkable_artifact_impl! {ConsensusMessage, |self|
     ArtifactChunkData::UnitChunkData(Artifact::ConsensusMessage(*self))
 }
 chunkable_artifact_impl! {SignedIngress, |self|
-    ArtifactChunkData::UnitChunkData(Artifact::IngressMessage((*self).into()))
+    ArtifactChunkData::UnitChunkData(Artifact::IngressMessage(*self))
 }
 chunkable_artifact_impl! {CertificationMessage, |self|
     ArtifactChunkData::UnitChunkData(Artifact::CertificationMessage(*self))

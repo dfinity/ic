@@ -28,7 +28,6 @@ impl ArtifactKind for StateSyncArtifact {
     const TAG: ArtifactTag = ArtifactTag::StateSyncArtifact;
     type Id = StateSyncArtifactId;
     type Message = StateSyncMessage;
-    type SerializeAs = StateSyncMessage;
     type Attribute = StateSyncAttribute;
     type Filter = StateSyncFilter;
 

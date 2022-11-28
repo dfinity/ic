@@ -192,8 +192,8 @@ impl ArtifactManagerMaker {
         client: Arc<dyn ArtifactClient<Artifact>>,
         processor: ArtifactProcessorManager<Artifact>,
     ) where
-        Artifact::SerializeAs: TryFrom<artifact::Artifact, Error = artifact::Artifact>,
-        Artifact::Message: ChunkableArtifact + Send,
+        Artifact::Message:
+            ChunkableArtifact + Send + TryFrom<artifact::Artifact, Error = artifact::Artifact>,
         Advert<Artifact>:
             Into<p2p::GossipAdvert> + TryFrom<p2p::GossipAdvert, Error = p2p::GossipAdvert> + Eq,
         for<'b> &'b Artifact::Id:
@@ -217,8 +217,8 @@ impl ArtifactManagerMaker {
         processor: ArtifactProcessorManager<Artifact>,
     ) where
         Client: ArtifactClient<Artifact>,
-        Artifact::SerializeAs: TryFrom<artifact::Artifact, Error = artifact::Artifact>,
-        Artifact::Message: ChunkableArtifact + Send,
+        Artifact::Message:
+            ChunkableArtifact + Send + TryFrom<artifact::Artifact, Error = artifact::Artifact>,
         Advert<Artifact>:
             Into<p2p::GossipAdvert> + TryFrom<p2p::GossipAdvert, Error = p2p::GossipAdvert> + Eq,
         for<'b> &'b Artifact::Id:

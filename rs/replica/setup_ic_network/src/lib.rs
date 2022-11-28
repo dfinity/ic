@@ -551,7 +551,6 @@ pub type TestArtifactAttribute = FileTreeSyncAttribute;
 impl ArtifactKind for TestArtifact {
     const TAG: ArtifactTag = ArtifactTag::FileTreeSyncArtifact;
     type Message = TestArtifactMessage;
-    type SerializeAs = TestArtifactMessage;
     type Id = TestArtifactId;
     type Attribute = TestArtifactAttribute;
     type Filter = ();

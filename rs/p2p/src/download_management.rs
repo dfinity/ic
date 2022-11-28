@@ -367,7 +367,7 @@ impl GossipImpl {
         // may be updated in the future.
         let expected_ih = match &completed_artifact {
             Artifact::ConsensusMessage(msg) => ic_types::crypto::crypto_hash(msg).get(),
-            Artifact::IngressMessage(msg) => ic_types::crypto::crypto_hash(msg).get(),
+            Artifact::IngressMessage(msg) => ic_types::crypto::crypto_hash(msg.binary()).get(),
             Artifact::CertificationMessage(msg) => ic_types::crypto::crypto_hash(msg).get(),
             Artifact::DkgMessage(msg) => ic_types::crypto::crypto_hash(msg).get(),
             Artifact::EcdsaMessage(msg) => ic_types::crypto::crypto_hash(msg).get(),
