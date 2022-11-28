@@ -1646,7 +1646,10 @@ fn time_out_requests_pushes_correct_reject_responses() {
     };
 
     let current_time = deadline1 + REQUEST_LIFETIME;
-    canister_queues.time_out_requests(current_time, &own_canister_id, &local_canisters);
+    assert_eq!(
+        3,
+        canister_queues.time_out_requests(current_time, &own_canister_id, &local_canisters),
+    );
 
     // Check that each canister has one request timed out and removed from the output queue and one
     // reject response in the corresponding input queue.
@@ -1695,7 +1698,10 @@ fn time_out_requests_pushes_correct_reject_responses() {
     );
 
     let current_time = deadline2 + REQUEST_LIFETIME;
-    canister_queues.time_out_requests(current_time, &own_canister_id, &local_canisters);
+    assert_eq!(
+        1,
+        canister_queues.time_out_requests(current_time, &own_canister_id, &local_canisters),
+    );
 
     if let Some((input_queue, output_queue)) =
         canister_queues.canister_queues.get(&remote_canister_id)

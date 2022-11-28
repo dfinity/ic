@@ -787,11 +787,11 @@ impl ReplicatedState {
     }
 
     /// Times out requests in all `OutputQueues` found in the replicated state (except the subnet
-    /// queues).
+    /// queues). Returns the number of requests that were timed out.
     ///
     /// See `CanisterQueues::time_out_requests` for further details.
     #[allow(clippy::needless_collect)]
-    pub fn time_out_requests(&mut self, current_time: Time) {
+    pub fn time_out_requests(&mut self, current_time: Time) -> u64 {
         // Because the borrow checker requires us to remove each canister before
         // calling `time_out_requests()` on it and replace it afterwards; and removing
         // and replacing every canister on a large subnet is very costly; we first
@@ -808,15 +808,18 @@ impl ReplicatedState {
             .map(|(canister_id, _)| *canister_id)
             .collect::<Vec<_>>();
 
+        let mut timed_out_requests_count = 0;
         for canister_id in canister_ids_with_expired_deadlines {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            canister.system_state.time_out_requests(
+            timed_out_requests_count += canister.system_state.time_out_requests(
                 current_time,
                 &canister_id,
                 &self.canister_states,
             );
             self.canister_states.insert(canister_id, canister);
         }
+
+        timed_out_requests_count
     }
 }
 

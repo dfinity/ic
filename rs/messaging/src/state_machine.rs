@@ -18,6 +18,7 @@ const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
 const PHASE_REMOVE_CANISTERS: &str = "remove_canisters_not_in_rt";
+const PHASE_TIME_OUT_REQUESTS: &str = "time_out_requests";
 
 pub(crate) trait StateMachine: Send {
     fn execute_round(
@@ -55,7 +56,7 @@ impl StateMachineImpl {
     }
 
     /// Adds an observation to the `METRIC_PROCESS_BATCH_PHASE_DURATION`
-    /// histgram for the given phase.
+    /// histogram for the given phase.
     fn observe_phase_duration(&self, phase: &str, timer: &Timer) {
         self.metrics
             .process_batch_phase_duration
@@ -134,7 +135,15 @@ impl StateMachine for StateMachineImpl {
             )
         }
 
+        // Time out requests.
+        let timed_out_requests = state.time_out_requests(batch.time);
+        self.metrics
+            .timed_out_requests_total
+            .inc_by(timed_out_requests);
+        self.observe_phase_duration(PHASE_TIME_OUT_REQUESTS, &phase_timer);
+
         // Preprocess messages and add messages to the induction pool through the Demux.
+        let phase_timer = Timer::start();
         let mut state_with_messages = self.demux.process_payload(state, batch.payload);
 
         // Append additional responses to the consensus queue.

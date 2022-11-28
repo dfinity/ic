@@ -866,7 +866,10 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
     }
 
     // Time out everything, then check subnet input schedules are as expected.
-    state.time_out_requests(Time::from_nanos_since_unix_epoch(u64::MAX));
+    assert_eq!(
+        3,
+        state.time_out_requests(Time::from_nanos_since_unix_epoch(u64::MAX)),
+    );
 
     let local_schedule = state
         .canister_state(&local_canister_id1)

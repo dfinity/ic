@@ -889,7 +889,8 @@ impl SystemState {
         self.queues.has_expired_deadlines(current_time)
     }
 
-    /// Times out requests in the `OutputQueues` of `self.queues`.
+    /// Times out requests in the `OutputQueues` of `self.queues`. Returns the number of requests
+    /// that were timed out.
     ///
     /// See `CanisterQueues::time_out_requests` for further details.
     pub fn time_out_requests(
@@ -897,9 +898,9 @@ impl SystemState {
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) {
+    ) -> u64 {
         self.queues
-            .time_out_requests(current_time, own_canister_id, local_canisters);
+            .time_out_requests(current_time, own_canister_id, local_canisters)
     }
 }
 
