@@ -210,6 +210,10 @@ name = "ic-systest-liveness-with-equivocation-test"
 path = "bin/liveness_with_equivocation_test.rs"
 
 [[bin]]
+name = "ic-systest-replica-determinism-test"
+path = "bin/replica_determinism_test.rs"
+
+[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "bin/test_driver_e2e_scenarios.rs"
 

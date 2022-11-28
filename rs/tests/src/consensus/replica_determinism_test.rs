@@ -13,47 +13,61 @@ Success:: The restarted node reports block finalizations.
 
 end::catalog[] */
 
-use crate::util::*;
-use ic_fondue::{
-    ic_instance::{LegacyInternetComputer as InternetComputer, Subnet},
-    ic_manager::IcHandle,
+use crate::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+    },
+    util::*,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
 use ic_universal_canister::wasm;
+use slog::info;
 
 const DKG_INTERVAL: u64 = 9;
 const FAULT_HEIGHT: u64 = DKG_INTERVAL + 1;
 
-pub fn config() -> InternetComputer {
+pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
     let malicious_behaviour =
         MaliciousBehaviour::new(true).set_maliciously_corrupt_own_state_at_heights(FAULT_HEIGHT);
-
-    InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-            .add_nodes(3)
-            .add_malicious_nodes(1, malicious_behaviour),
-    )
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(3)
+                .add_malicious_nodes(1, malicious_behaviour),
+        )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 /// As the malicious behavior `CorruptOwnStateAtHeights` is enabled, this test
 /// waits for the state to diverge and makes sure that the faulty replica is
 /// restarted and that it can contribute to consensus afterwards.
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
-    let malicious_endpoint = handle
-        .as_permutation_malicious(&mut rng)
-        .next()
-        .expect("could not get a malicious node");
-
+pub fn test(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    info!(log, "Checking readiness of all nodes after the IC setup...");
+    topology.subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    info!(log, "All nodes are ready, IC setup succeeded.");
+    let malicious_node = topology
+        .root_subnet()
+        .nodes()
+        .find(|n| n.is_malicious())
+        .expect("No malicious node found in the subnet.");
+    let agent = malicious_node.with_default_agent(|agent| async move { agent });
     let rt = tokio::runtime::Runtime::new().expect("could not create tokio runtime");
     rt.block_on({
         async move {
-            malicious_endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(malicious_endpoint.url.as_str()).await;
             let canister =
-                UniversalCanister::new(&agent, malicious_endpoint.effective_canister_id()).await;
+                UniversalCanister::new(&agent, malicious_node.effective_canister_id()).await;
 
             // After N update&query requests the height of a subnet is >= N.
             // Thus, if N = FAULT_HEIGHT, it's guaranteed that divergence happens along the
@@ -78,7 +92,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             }
 
             // Wait until the malicious node restarts.
-            malicious_endpoint.assert_ready(ctx).await;
+            malicious_node
+                .await_status_is_healthy()
+                .expect("Node didn't report healthy");
 
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
