@@ -112,7 +112,7 @@ impl Server {
             .crypto
             .perform_tls_server_handshake(tcp_stream, self.allowed_clients.clone(), REG_V1)
             .await?;
-        let (mut rh, mut wh) = Box::new(tls_stream).split();
+        let (mut rh, mut wh) = tokio::io::split(tls_stream);
 
         self.send_msg_to_client_if_configured(&mut wh, &mut rh)
             .await;
@@ -128,7 +128,7 @@ impl Server {
             .crypto
             .perform_tls_server_handshake_without_client_auth(tcp_stream, REG_V1)
             .await?;
-        let (mut rh, mut wh) = tls_stream.split();
+        let (mut rh, mut wh) = tokio::io::split(tls_stream);
 
         self.send_msg_to_client_if_configured(&mut wh, &mut rh)
             .await;

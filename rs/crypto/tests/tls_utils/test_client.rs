@@ -79,7 +79,7 @@ impl Client {
             .crypto
             .perform_tls_client_handshake(tcp_stream, self.server_node_id, REG_V1)
             .await?;
-        let (mut rh, mut wh) = Box::new(tls_stream).split();
+        let (mut rh, mut wh) = tokio::io::split(tls_stream);
 
         self.expect_msg_from_server_if_configured(&mut rh, &mut wh)
             .await;

@@ -8,7 +8,7 @@ use h2::{RecvStream, SendStream};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_crypto_tls_interfaces::{TlsStreamReadHalf, TlsStreamWriteHalf};
+use ic_crypto_tls_interfaces::TlsStream;
 use ic_interfaces_transport::{TransportChannelId, TransportEventHandler, TransportPayload};
 use ic_logger::{warn, ReplicaLogger};
 use phantom_newtype::AmountOf;
@@ -23,6 +23,7 @@ use std::sync::{Arc, Weak};
 use std::task::Poll;
 use strum::AsRefStr;
 use tokio::{
+    io::{ReadHalf, WriteHalf},
     runtime::Handle,
     sync::{Mutex, RwLock},
     task::JoinHandle,
@@ -80,12 +81,12 @@ pub const H2_FRAME_SIZE: u32 = 16_777_215;
 pub const H2_WINDOW_SIZE: u32 = 1_000_000;
 
 pub(crate) enum ChannelReader {
-    Legacy(Box<dyn TlsStreamReadHalf>),
+    Legacy(ReadHalf<Box<dyn TlsStream>>),
     H2RecvStream(RecvStream),
 }
 
 impl ChannelReader {
-    pub fn new_with_legacy(tls_reader: Box<dyn TlsStreamReadHalf>) -> Self {
+    pub fn new_with_legacy(tls_reader: ReadHalf<Box<dyn TlsStream>>) -> Self {
         ChannelReader::Legacy(tls_reader)
     }
 
@@ -95,12 +96,12 @@ impl ChannelReader {
 }
 
 pub(crate) enum ChannelWriter {
-    Legacy(Box<dyn TlsStreamWriteHalf>),
+    Legacy(WriteHalf<Box<dyn TlsStream>>),
     H2SendStream(SendStream<Bytes>),
 }
 
 impl ChannelWriter {
-    pub fn new_with_legacy(tls_writer: Box<dyn TlsStreamWriteHalf>) -> Self {
+    pub fn new_with_legacy(tls_writer: WriteHalf<Box<dyn TlsStream>>) -> Self {
         ChannelWriter::Legacy(tls_writer)
     }
 
