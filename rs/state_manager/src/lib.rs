@@ -485,7 +485,7 @@ impl Drop for CheckpointContext {
         }
 
         let start = Instant::now();
-        if let Err(err) = self.state_layout.remove_checkpoint(self.height) {
+        if let Err(err) = self.state_layout.try_remove_checkpoint(self.height) {
             self.metrics
                 .state_manager_error_count
                 .with_label_values(&["remove_checkpoint"])
@@ -3059,7 +3059,7 @@ impl StateManager for StateManagerImpl {
         for h in heights {
             if h > height {
                 info!(self.log, "Removing diverged checkpoint @{}", h);
-                if let Err(err) = self.state_layout.remove_checkpoint(h) {
+                if let Err(err) = self.state_layout.force_remove_checkpoint(h) {
                     error!(
                         self.log,
                         "Failed to remove diverged checkpoint @{}: {}", h, err
@@ -3347,7 +3347,7 @@ pub enum CheckpointError {
     /// Wraps a PageMap error.
     Persistence(PersistenceError),
     /// Trying to remove the last checkpoint.
-    LastCheckpoint(Height),
+    LatestCheckpoint(Height),
 }
 
 impl std::error::Error for CheckpointError {
@@ -3396,9 +3396,9 @@ impl std::fmt::Display for CheckpointError {
 
             CheckpointError::Persistence(err) => write!(f, "persistence error: {}", err),
 
-            CheckpointError::LastCheckpoint(height) => write!(
+            CheckpointError::LatestCheckpoint(height) => write!(
                 f,
-                "Trying to remove the last checkpoint at height @{}",
+                "Trying to remove the latest checkpoint at height @{}",
                 height
             ),
         }
@@ -3428,7 +3428,7 @@ impl From<LayoutError> for CheckpointError {
             }
             LayoutError::NotFound(h) => CheckpointError::NotFound(h),
             LayoutError::AlreadyExists(h) => CheckpointError::AlreadyExists(h),
-            LayoutError::LastCheckpoint(h) => CheckpointError::LastCheckpoint(h),
+            LayoutError::LatestCheckpoint(h) => CheckpointError::LatestCheckpoint(h),
         }
     }
 }

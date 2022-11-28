@@ -3079,7 +3079,9 @@ fn debug_assert_last_checkpoint() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(1));
 
-        let _ = state_manager.state_layout().remove_checkpoint(height(1));
+        let _ = state_manager
+            .state_layout()
+            .try_remove_checkpoint(height(1));
     });
 }
 
