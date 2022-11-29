@@ -17,5 +17,6 @@ rust_library(
         "//rs/state_machine_tests",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:num-traits",
     ],
 )

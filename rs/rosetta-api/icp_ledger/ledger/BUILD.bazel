@@ -59,6 +59,7 @@ LEDGER_CANISTER_DEPS = [
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/monitoring/metrics_encoder",
+    "//rs/rosetta-api/icrc1",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
@@ -123,9 +124,11 @@ rust_test(
     deps = [
         ":ledger",
         "//rs/rosetta-api/icp_ledger",
+        "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger/sm-tests",
         "//rs/rosetta-api/ledger_core",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
     ],
 )

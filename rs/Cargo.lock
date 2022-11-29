@@ -6106,6 +6106,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-state-machine-tests",
+ "num-traits",
 ]
 
 [[package]]
@@ -9572,6 +9573,7 @@ dependencies = [
  "dfn_protobuf",
  "ic-base-types",
  "ic-constants",
+ "ic-icrc1",
  "ic-icrc1-ledger-sm-tests",
  "ic-ledger-canister-core",
  "ic-ledger-core",

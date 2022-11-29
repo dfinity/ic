@@ -1,8 +1,12 @@
-use candid::{CandidType, Decode, Encode};
+use candid::{CandidType, Decode, Encode, Nat};
 use ic_base_types::PrincipalId;
-use ic_icrc1::{endpoints::Value, Account};
+use ic_icrc1::{
+    endpoints::{StandardRecord, Value},
+    Account,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_state_machine_tests::{CanisterId, StateMachine};
+use num_traits::ToPrimitive;
 use std::time::Duration;
 
 pub const FEE: u64 = 10_000;
@@ -36,6 +40,42 @@ pub struct InitArgs {
     pub token_symbol: String,
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
+}
+
+pub fn total_supply(env: &StateMachine, ledger: CanisterId) -> u64 {
+    Decode!(
+        &env.query(ledger, "icrc1_total_supply", Encode!().unwrap())
+            .expect("failed to query total supply")
+            .bytes(),
+        Nat
+    )
+    .expect("failed to decode totalSupply response")
+    .0
+    .to_u64()
+    .unwrap()
+}
+
+pub fn supported_standards(env: &StateMachine, ledger: CanisterId) -> Vec<StandardRecord> {
+    Decode!(
+        &env.query(ledger, "icrc1_supported_standards", Encode!().unwrap())
+            .expect("failed to query supported standards")
+            .bytes(),
+        Vec<StandardRecord>
+    )
+    .expect("failed to decode icrc1_supported_standards response")
+}
+
+pub fn balance_of(env: &StateMachine, ledger: CanisterId, acc: impl Into<Account>) -> u64 {
+    Decode!(
+        &env.query(ledger, "icrc1_balance_of", Encode!(&acc.into()).unwrap())
+            .expect("failed to query balance")
+            .bytes(),
+        Nat
+    )
+    .expect("failed to decode balance_of response")
+    .0
+    .to_u64()
+    .unwrap()
 }
 
 fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
@@ -85,7 +125,7 @@ where
 //     has
 // Once FI-487 is done and the ICP Ledger supports all the metadata
 // endpoints this function will be merged back into test_metadata here.
-pub fn setup_and_test_name<T>(
+pub fn setup<T>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
     initial_balances: Vec<(Account, u64)>,
@@ -96,6 +136,50 @@ where
     let env = StateMachine::new();
 
     let canister_id = install_ledger(&env, ledger_wasm, encode_init_args, initial_balances);
+
+    (env, canister_id)
+}
+
+pub fn test_balance_of<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    assert_eq!(0, balance_of(&env, canister_id, p1));
+    assert_eq!(0, balance_of(&env, canister_id, p2));
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![
+            (Account::from(p1), 10_000_000),
+            (Account::from(p2), 5_000_000),
+        ],
+    );
+
+    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1));
+    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2));
+}
+
+pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    assert_eq!(
+        TOKEN_SYMBOL,
+        Decode!(
+            &env.query(canister_id, "icrc1_symbol", Encode!().unwrap())
+                .unwrap()
+                .bytes(),
+            String
+        )
+        .unwrap()
+    );
 
     assert_eq!(
         TOKEN_NAME,
@@ -108,5 +192,31 @@ where
         .unwrap()
     );
 
-    (env, canister_id)
+    assert_eq!(
+        8,
+        Decode!(
+            &env.query(canister_id, "icrc1_decimals", Encode!().unwrap())
+                .unwrap()
+                .bytes(),
+            u8
+        )
+        .unwrap()
+    );
+}
+
+pub fn test_total_supply<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![
+            (Account::from(p1), 10_000_000),
+            (Account::from(p2), 5_000_000),
+        ],
+    );
+    assert_eq!(15_000_000, total_supply(&env, canister_id));
 }

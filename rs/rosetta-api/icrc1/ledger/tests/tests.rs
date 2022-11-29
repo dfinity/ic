@@ -10,9 +10,9 @@ use ic_icrc1::{
 };
 use ic_icrc1_ledger::InitArgs;
 use ic_icrc1_ledger_sm_tests::{
-    setup_and_test_name, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE,
-    INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE,
-    TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, TX_WINDOW,
+    balance_of, setup, supported_standards, total_supply, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
+    BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE,
+    NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, TX_WINDOW,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
@@ -71,32 +71,6 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
         .unwrap()
 }
 
-fn balance_of(env: &StateMachine, ledger: CanisterId, acc: impl Into<Account>) -> u64 {
-    Decode!(
-        &env.query(ledger, "icrc1_balance_of", Encode!(&acc.into()).unwrap())
-            .expect("failed to query balance")
-            .bytes(),
-        Nat
-    )
-    .expect("failed to decode balance_of response")
-    .0
-    .to_u64()
-    .unwrap()
-}
-
-fn total_supply(env: &StateMachine, ledger: CanisterId) -> u64 {
-    Decode!(
-        &env.query(ledger, "icrc1_total_supply", Encode!().unwrap())
-            .expect("failed to query total supply")
-            .bytes(),
-        Nat
-    )
-    .expect("failed to decode totalSupply response")
-    .0
-    .to_u64()
-    .unwrap()
-}
-
 fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
     Decode!(
         &env.query(ledger, "icrc1_metadata", Encode!().unwrap())
@@ -107,16 +81,6 @@ fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
     .expect("failed to decode metadata response")
     .into_iter()
     .collect()
-}
-
-fn supported_standards(env: &StateMachine, ledger: CanisterId) -> Vec<StandardRecord> {
-    Decode!(
-        &env.query(ledger, "icrc1_supported_standards", Encode!().unwrap())
-            .expect("failed to query supported standards")
-            .bytes(),
-        Vec<StandardRecord>
-    )
-    .expect("failed to decode icrc1_supported_standards response")
 }
 
 fn send_transfer(
@@ -258,7 +222,7 @@ fn test_metadata() {
             .unwrap_or_else(|| panic!("no metadata key {} in map {:?}", key, metadata))
     }
 
-    let (env, canister_id) = setup_and_test_name(ledger_wasm(), encode_init_args, vec![]);
+    let (env, canister_id) = setup(ledger_wasm(), encode_init_args, vec![]);
 
     assert_eq!(
         TOKEN_SYMBOL,
