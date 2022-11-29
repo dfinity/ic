@@ -20,17 +20,23 @@ CUP height keeps on advancing
 end::catalog[] */
 
 use ic_agent::Agent;
-use ic_fondue::{
-    ic_instance::{LegacyInternetComputer as InternetComputer, Subnet},
-    ic_manager::IcManager,
-};
-use slog::{info, Logger};
+use rand_chacha::ChaCha8Rng;
+use slog::info;
 
 use ic_agent::export::Principal;
 use ic_types::Height;
 use rand::Rng;
 
-use crate::util::*;
+use crate::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
+        },
+    },
+    util::*,
+};
 use candid::{Decode, Encode};
 use ic_base_types::PrincipalId;
 use ic_registry_subnet_type::SubnetType;
@@ -40,8 +46,11 @@ const COW_SAFETY_CANISTER: &[u8] = include_bytes!("cow_safety.wasm");
 const MAX_MEM_SIZE: u128 = 128 * 1024;
 const TEST_MEM_SIZE: u128 = 64 * 1024;
 const MAX_NODES: usize = 4;
+// Seed for a random generator
+const RND_SEED: u64 = 42;
 
-pub fn config() -> InternetComputer {
+pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_subnet(
@@ -49,45 +58,38 @@ pub fn config() -> InternetComputer {
                 .with_dkg_interval_length(Height::from(20))
                 .add_nodes(MAX_NODES),
         )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-/// Here we define the test workflow. This particular test does change
-/// the environment, hence, it receives a `pot::MutContext`.
-pub fn test(mut man: IcManager, ctx: &ic_fondue::pot::Context) {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on(do_the_work(&ctx.logger, &mut man, ctx));
-}
-
-async fn do_the_work(logger: &Logger, mgr: &mut IcManager, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
-    let mut handle = mgr.handle();
-
-    let node = handle
-        .as_permutation(&mut rng)
-        .find(|ep| !ep.is_root_subnet)
-        .unwrap();
-    node.assert_ready(ctx).await;
-
-    let agent = assert_create_agent(node.url.as_str()).await;
-    let canister_id = install_canister(&agent, node.effective_canister_id()).await;
-
+pub fn test(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    info!(log, "Checking readiness of all nodes after the IC setup...");
+    topology.subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    info!(log, "All nodes are ready, IC setup succeeded.");
+    let node = topology.root_subnet().nodes().next().unwrap();
+    let agent = node.with_default_agent(|agent| async move { agent });
+    let canister_id =
+        block_on(async move { install_canister(&agent, node.effective_canister_id()).await });
     let mut should_match = 0;
-    for i in 0..MAX_NODES {
-        let mut node = handle.public_api_endpoints.pop().unwrap();
-
-        assert!(!node.is_root_subnet);
-        let agent = assert_create_agent(node.url.as_str()).await;
-
-        verify(&canister_id, &agent, should_match).await;
-
-        should_match = modify_mem_and_verify(&mut rng, &canister_id, &agent, i as u8).await;
-
-        info!(logger, "restarting node {:?}", node.runtime_descriptor);
-
-        mgr.restart_node(&mut node);
-
+    let mut rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
+    for (i, node) in topology.root_subnet().nodes().enumerate() {
+        let agent = node.with_default_agent(|agent| async move { agent });
+        should_match = block_on(async {
+            verify(&canister_id, &agent, should_match).await;
+            modify_mem_and_verify(&mut rng, &canister_id, &agent, i as u8).await
+        });
+        info!(log, "restarting the node with id={}", node.node_id);
+        node.vm().reboot();
         // Wait until the re-started node becomes ready.
-        node.assert_ready(ctx).await;
+        info!(log, "waiting for the node to be become ready...");
+        node.await_status_is_healthy().unwrap();
+        info!(log, "node with id={} is ready", node.node_id);
     }
 }
 
