@@ -152,8 +152,9 @@ impl<T: Persist> Persist for WithMetrics<T> {
 
         let status = match out {
             Ok(PersistStatus::Completed) => "completed",
-            Ok(PersistStatus::Skipped) => "skipped",
-            _ => "fail",
+            Ok(PersistStatus::SkippedUnchanged) => "skipped-unchanged",
+            Ok(PersistStatus::SkippedEmpty) => "skipped-empty",
+            Err(_) => "fail",
         };
         let duration = start_time.elapsed().as_secs_f64();
 

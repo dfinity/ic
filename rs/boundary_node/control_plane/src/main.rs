@@ -1,4 +1,5 @@
 use std::{
+    cmp::min,
     fs::File,
     io::BufWriter,
     net::SocketAddr,
@@ -18,7 +19,7 @@ use axum::{
 };
 use bytes::Buf;
 use clap::Parser;
-use dashmap::DashSet;
+use dashmap::{DashMap, DashSet};
 use futures::{future::TryFutureExt, stream::FuturesUnordered};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use opentelemetry::{baggage::BaggageExt, global, sdk::Resource, trace::FutureExt, KeyValue};
@@ -54,6 +55,11 @@ struct Cli {
 
     #[clap(long, default_value = "0")]
     min_registry_version: u64,
+
+    /// Minimum required OK health checks
+    /// for a replica to be included in the routing table
+    #[clap(long, default_value = "1")]
+    min_ok_count: u8,
 
     #[clap(long, default_value = "/tmp/routes")]
     routes_dir: PathBuf,
@@ -134,13 +140,18 @@ async fn main() -> Result<(), Error> {
 
     let persister = Persister::new(cli.routes_dir.clone());
     let persister = WithDedup(persister, None);
+    let persister = WithEmpty(persister);
     let persister = WithMetrics(
         persister,
         MetricParams::new(&meter, SERVICE_NAME, "persist"),
     );
 
-    let check_persist_runner =
-        CheckPersistRunner::new(Arc::clone(&routing_table), checker, persister);
+    let check_persist_runner = CheckPersistRunner::new(
+        Arc::clone(&routing_table), // routing_table
+        checker,                    // checker
+        persister,                  // persister
+        cli.min_ok_count,           // min_ok_count
+    );
     let check_persist_runner = WithMetrics(
         check_persist_runner,
         MetricParams::new(&meter, SERVICE_NAME, "run"),
@@ -258,7 +269,8 @@ impl Check for Checker {
 
 enum PersistStatus {
     Completed,
-    Skipped,
+    SkippedUnchanged,
+    SkippedEmpty,
 }
 
 #[async_trait]
@@ -326,17 +338,29 @@ impl<S: Snapshot> Run for SnapshotRunner<S> {
 }
 
 struct CheckPersistRunner<C: Check, P: Persist> {
+    // Dependencies
     routing_table: Arc<Mutex<Option<RoutingTable>>>,
+    checks: Arc<DashMap<(String, String), u8>>,
     checker: Arc<C>,
     persister: P,
+
+    // Configuration
+    min_ok_count: u8,
 }
 
 impl<C: Check, P: Persist> CheckPersistRunner<C, P> {
-    fn new(routing_table: Arc<Mutex<Option<RoutingTable>>>, checker: C, persister: P) -> Self {
+    fn new(
+        routing_table: Arc<Mutex<Option<RoutingTable>>>,
+        checker: C,
+        persister: P,
+        min_ok_count: u8,
+    ) -> Self {
         Self {
             routing_table,
+            checks: Arc::new(DashMap::new()),
             checker: Arc::new(checker),
             persister,
+            min_ok_count,
         }
     }
 }
@@ -350,15 +374,40 @@ impl<C: Check, P: Persist> Run for CheckPersistRunner<C, P> {
                 .ok_or_else(|| anyhow!("routing_table not available"))?
         };
 
-        let check_results: Arc<DashSet<(String, String)>> = Arc::new(DashSet::new());
+        // Clean checks of targets that no longer exist
+        let (current_targets, stale_targets): (
+            DashSet<(String, String)>,
+            DashSet<(String, String)>,
+        ) = (DashSet::new(), DashSet::new());
+
+        for subnet in routing_table.clone().subnets {
+            for node in subnet.nodes {
+                current_targets.insert((
+                    subnet.subnet_id.clone(), // subnet_id
+                    node.node_id.clone(),     // node_id
+                ));
+            }
+        }
+
+        for c in self.checks.iter() {
+            let k = c.key();
+            if !current_targets.contains(k) {
+                stale_targets.insert(k.to_owned());
+            }
+        }
+
+        for k in stale_targets.iter() {
+            self.checks.remove(&k);
+        }
 
         // Perform Health Checks
         let futs = FuturesUnordered::new();
 
         for subnet in routing_table.clone().subnets {
             for node in subnet.nodes {
+                let checks = Arc::clone(&self.checks);
                 let checker = Arc::clone(&self.checker);
-                let check_results = Arc::clone(&check_results);
+                let min_ok_count = self.min_ok_count.to_owned();
 
                 let (subnet_id, node_id, socket_addr) = (
                     subnet.subnet_id.clone(),
@@ -379,9 +428,22 @@ impl<C: Check, P: Persist> Run for CheckPersistRunner<C, P> {
                         .await
                         .context("failed to check node");
 
-                    if out.is_ok() {
-                        check_results.insert((subnet_id, node_id));
-                    }
+                    let k = (subnet_id, node_id);
+                    let ok_cnt = match checks.get(&k) {
+                        Some(c) => c.value().to_owned(),
+                        None => 0,
+                    };
+
+                    match out {
+                        Ok(_) => checks.insert(
+                            k,
+                            min(
+                                min_ok_count, // clamp to this value
+                                ok_cnt + 1,
+                            ),
+                        ),
+                        Err(_) => checks.insert(k, 0),
+                    };
 
                     out
                 }));
@@ -402,8 +464,17 @@ impl<C: Check, P: Persist> Run for CheckPersistRunner<C, P> {
                         .nodes
                         .into_iter()
                         .filter(|node| {
-                            check_results
-                                .contains(&(subnet.subnet_id.clone(), node.node_id.clone()))
+                            let k = (
+                                subnet.subnet_id.clone(), // subnet_id
+                                node.node_id.clone(),     // node_id
+                            );
+
+                            let ok_cnt = match self.checks.get(&k) {
+                                Some(c) => c.value().to_owned(),
+                                None => 0,
+                            };
+
+                            ok_cnt >= self.min_ok_count
                         })
                         .collect(),
                     ..subnet
@@ -475,9 +546,28 @@ struct WithDedup<T, U>(T, Option<U>);
 impl<T: Persist> Persist for WithDedup<T, RoutingTable> {
     async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error> {
         if self.1.as_ref() == Some(&rt) {
-            return Ok(PersistStatus::Skipped);
+            return Ok(PersistStatus::SkippedUnchanged);
         } else {
             self.1 = Some(rt.clone());
+        }
+
+        self.0.persist(rt).await
+    }
+}
+
+struct WithEmpty<T>(T);
+
+#[async_trait]
+impl<T: Persist> Persist for WithEmpty<T> {
+    async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error> {
+        if rt
+            .subnets
+            .iter()
+            .filter(|&s| !(*s).nodes.is_empty())
+            .count()
+            == 0
+        {
+            return Ok(PersistStatus::SkippedEmpty);
         }
 
         self.0.persist(rt).await
