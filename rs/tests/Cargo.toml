@@ -223,6 +223,10 @@ name = "ic-systest-safety-test"
 path = "bin/safety_test.rs"
 
 [[bin]]
+name = "ic-systest-tecdsa-complaint-test"
+path = "bin/tecdsa_complaint_test.rs"
+
+[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "bin/test_driver_e2e_scenarios.rs"
 
