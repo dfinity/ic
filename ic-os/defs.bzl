@@ -89,7 +89,7 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         visibility = visibility,
         name = "rootfs-tree.tar",
         src = "//ic-os/guestos:rootfs",
-        dep = native.glob(["rootfs/**"] + ["dev-root-ca.crt"] if mode == "dev" else []),
+        dep = ["//ic-os/guestos:rootfs-files"] + native.glob(["dev-root-ca.crt"] if mode == "dev" else []),
         extra_args_before = dev_rootfs_args,
         extra_args_after = extra_args_docker,
         target_compatible_with = [
@@ -450,7 +450,7 @@ def boundary_node_icos_build(name, mode = None, sev = False, visibility = None):
         visibility = visibility,
         name = "rootfs-tree.tar",
         src = "//ic-os/boundary-guestos:rootfs",
-        dep = native.glob(["rootfs/**"]),
+        dep = ["//ic-os/boundary-guestos:rootfs-files"],
         extra_args_before = [],
         extra_args_after = [
             "--build-arg",
