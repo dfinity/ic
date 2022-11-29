@@ -3,7 +3,8 @@ use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex, RwLock},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -24,21 +25,20 @@ use crate::{backup_helper::BackupHelper, notification_client::NotificationClient
 
 const STATE_FILE_NAME: &str = "backup_manager_state.json5";
 
-pub struct SubnetBackup {
+struct SubnetBackup {
     pub nodes_syncing: u32,
-    pub sync_last_time: Instant,
     pub sync_period: Duration,
-    pub replay_last_time: Instant,
     pub replay_period: Duration,
-    pub replica_version: ReplicaVersion,
     pub backup_helper: BackupHelper,
 }
+
 pub struct BackupManager {
     pub root_dir: PathBuf,
     pub local_store: Arc<LocalStoreImpl>,
     pub registry_client: Arc<RegistryClientImpl>,
     pub registry_replicator: Arc<RegistryReplicator>,
-    pub subnet_backups: Vec<SubnetBackup>,
+    subnet_backups: Vec<SubnetBackup>,
+    save_state: RwLock<BackupManagerState>,
     pub log: Logger,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -53,9 +53,12 @@ struct SubnetState {
     #[serde(with = "serde_millis")]
     pub replay_last_time: Instant,
 }
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct BackupManagerState {
     pub subnet_states: HashMap<SubnetId, SubnetState>,
+    #[serde(skip_serializing)]
+    pub dirty: bool,
 }
 
 fn fetch_value_or_default<T>(
@@ -78,7 +81,7 @@ impl BackupManager {
         let config = Config::load_config(config_file).expect("Updated config file can't be loaded");
         // Load the manager state
         let state_file = config.root_dir.join(STATE_FILE_NAME);
-        let manager_state = BackupManager::load_state(&state_file);
+        let manager_state = load_state_file(&state_file);
         info!(log, "Loaded manager state: {:?}", manager_state);
         let ssh_credentials_file = match config.ssh_private_key.into_os_string().into_string() {
             Ok(f) => f,
@@ -122,6 +125,10 @@ impl BackupManager {
         }
 
         let mut backups = Vec::new();
+        let mut save_state = BackupManagerState::default();
+
+        let downloads = Arc::new(Mutex::new(true));
+
         for s in config.subnets {
             let replica_version = fetch_value_or_default(
                 &manager_state,
@@ -143,6 +150,7 @@ impl BackupManager {
                 ssh_private_key: ssh_credentials_file.clone(),
                 registry_client: registry_client.clone(),
                 notification_client,
+                downloads: downloads.clone(),
                 log: log.clone(),
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
@@ -161,13 +169,18 @@ impl BackupManager {
             );
             backups.push(SubnetBackup {
                 nodes_syncing: s.nodes_syncing,
-                sync_last_time,
                 sync_period,
-                replay_last_time,
                 replay_period,
-                replica_version,
                 backup_helper,
             });
+            save_state.subnet_states.insert(
+                s.subnet_id,
+                SubnetState {
+                    replica_version,
+                    sync_last_time,
+                    replay_last_time,
+                },
+            );
         }
         BackupManager {
             root_dir: config.root_dir,
@@ -175,83 +188,115 @@ impl BackupManager {
             registry_client,
             registry_replicator, // it will be used as a background task, so keep it
             subnet_backups: backups,
+            save_state: RwLock::new(save_state),
             log,
         }
     }
 
-    pub fn do_backups(&mut self) {
+    pub fn do_backups(self: Arc<BackupManager>) {
+        let size = self.subnet_backups.len();
+
+        for i in 0..size {
+            let m = self.clone();
+            thread::spawn(move || sync_subnet(m, i));
+        }
+
+        for i in 0..size {
+            let m = self.clone();
+            thread::spawn(move || replay_subnet(m, i));
+        }
+
         let config_file = self.root_dir.join(STATE_FILE_NAME);
-
         loop {
-            let mut state = BackupManagerState::default();
-            for b in &self.subnet_backups {
-                let s = SubnetState {
-                    replica_version: b.replica_version.clone(),
-                    sync_last_time: b.sync_last_time,
-                    replay_last_time: b.replay_last_time,
-                };
-                state.subnet_states.insert(b.backup_helper.subnet_id, s);
-            }
-            for b in &mut self.subnet_backups {
-                if b.sync_last_time.elapsed() > b.sync_period {
-                    match b.backup_helper.collect_subnet_nodes() {
-                        Ok(nodes) => {
-                            let mut shuf_nodes = nodes;
-                            shuf_nodes.shuffle(&mut thread_rng());
-                            b.backup_helper.sync_files(
-                                &shuf_nodes
-                                    .iter()
-                                    .take(b.nodes_syncing as usize)
-                                    .collect::<Vec<_>>(),
-                            );
-                            b.sync_last_time = Instant::now();
-                            // save the updated state
-                            let s = state
-                                .subnet_states
-                                .get_mut(&b.backup_helper.subnet_id)
-                                .expect("HashMap should still contain the value");
-                            s.sync_last_time = b.sync_last_time;
-                            if let Err(err) = BackupManager::save_state(&state, &config_file) {
-                                error!(self.log, "Error saving state: {:?}", err);
-                            }
-                        }
-                        Err(e) => error!(self.log, "Error fetching subnet node list: {:?}", e),
-                    }
+            // Continuosly save the state
+            let mut save_state = self.save_state.write().expect("write lock failed");
+            if save_state.dirty {
+                if let Err(err) = save_state_file(&save_state, &config_file) {
+                    error!(self.log, "Error saving state: {:?}", err);
                 }
-                if b.replay_last_time.elapsed() > b.replay_period {
-                    b.replica_version = b.backup_helper.replay(b.replica_version.clone());
-                    b.replay_last_time = Instant::now();
-                    // save the updated state
-                    let s = state
-                        .subnet_states
-                        .get_mut(&b.backup_helper.subnet_id)
-                        .expect("HashMap should still contain the value");
-                    s.replay_last_time = b.replay_last_time;
-                    s.replica_version = b.replica_version.clone();
-                    if let Err(err) = BackupManager::save_state(&state, &config_file) {
-                        error!(self.log, "Error saving state: {:?}", err);
-                    }
-                }
+                save_state.dirty = false;
             }
+            drop(save_state);
 
-            // Have a small break before the next round of checks
+            // Have a small break before the next check for save
             sleep_secs(30);
         }
     }
 
-    fn save_state(state: &BackupManagerState, state_file: &PathBuf) -> Result<(), String> {
-        let json =
-            json5::to_string(state).map_err(|err| format!("Error serializing state: {:?}", err))?;
-        let mut file = File::create(state_file)
-            .map_err(|err| format!("Error creating state file: {:?}", err))?;
-        file.write_all(json.as_bytes())
-            .map_err(|err| format!("Error writing state: {:?}", err))
+    fn get_value<T>(&self, subnet_id: &SubnetId, getter: fn(&SubnetState) -> T) -> T {
+        let locked_state = self.save_state.read().expect("read lock failed");
+        let subnet_state = locked_state
+            .subnet_states
+            .get(subnet_id)
+            .expect("missing record for subnet_id");
+        getter(subnet_state)
     }
 
-    fn load_state(state_file: &PathBuf) -> Result<BackupManagerState, String> {
-        let cfg_str = fs::read_to_string(&state_file)
-            .map_err(|err| format!("Error loading state file: {:?}", err))?;
-        json5::from_str::<BackupManagerState>(&cfg_str)
-            .map_err(|err| format!("Error deserializing state: {:?}", err))
+    fn set_value<T>(&self, subnet_id: &SubnetId, setter: fn(&mut SubnetState, T), value: T) {
+        let mut locked_state = self.save_state.write().expect("write lock failed");
+        let subnet_state = locked_state
+            .subnet_states
+            .get_mut(subnet_id)
+            .expect("missing record for subnet_id");
+        setter(subnet_state, value);
+        locked_state.dirty = true;
     }
+}
+
+fn sync_subnet(m: Arc<BackupManager>, i: usize) {
+    let b = &m.subnet_backups[i];
+    let subnet_id = &b.backup_helper.subnet_id;
+    loop {
+        let sync_last_time = m.get_value(subnet_id, |s| s.sync_last_time);
+        if sync_last_time.elapsed() > b.sync_period {
+            match b.backup_helper.collect_subnet_nodes() {
+                Ok(nodes) => {
+                    let mut shuf_nodes = nodes;
+                    shuf_nodes.shuffle(&mut thread_rng());
+                    b.backup_helper.sync_files(
+                        &shuf_nodes
+                            .iter()
+                            .take(b.nodes_syncing as usize)
+                            .collect::<Vec<_>>(),
+                    );
+                    m.set_value(subnet_id, |s, v| s.sync_last_time = v, Instant::now())
+                }
+                Err(e) => error!(m.log, "Error fetching subnet node list: {:?}", e),
+            }
+        }
+        // Have a small break before the next check for sync
+        sleep_secs(30);
+    }
+}
+
+fn replay_subnet(m: Arc<BackupManager>, i: usize) {
+    let b = &m.subnet_backups[i];
+    let subnet_id = &b.backup_helper.subnet_id;
+    loop {
+        let replay_last_time = m.get_value(subnet_id, |s| s.replay_last_time);
+        if replay_last_time.elapsed() > b.replay_period {
+            let current_replica_version = m.get_value(subnet_id, |s| s.replica_version.clone());
+            let new_replica_version = b.backup_helper.replay(current_replica_version);
+            m.set_value(subnet_id, |s, v| s.replica_version = v, new_replica_version);
+            m.set_value(subnet_id, |s, v| s.replay_last_time = v, Instant::now());
+        }
+        // Have a small break before the next check for replay
+        sleep_secs(30);
+    }
+}
+
+fn save_state_file(state: &BackupManagerState, state_file: &PathBuf) -> Result<(), String> {
+    let json =
+        json5::to_string(state).map_err(|err| format!("Error serializing state: {:?}", err))?;
+    let mut file =
+        File::create(state_file).map_err(|err| format!("Error creating state file: {:?}", err))?;
+    file.write_all(json.as_bytes())
+        .map_err(|err| format!("Error writing state: {:?}", err))
+}
+
+fn load_state_file(state_file: &PathBuf) -> Result<BackupManagerState, String> {
+    let cfg_str = fs::read_to_string(&state_file)
+        .map_err(|err| format!("Error loading state file: {:?}", err))?;
+    json5::from_str::<BackupManagerState>(&cfg_str)
+        .map_err(|err| format!("Error deserializing state: {:?}", err))
 }
