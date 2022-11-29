@@ -138,6 +138,7 @@ pub fn test(env: TestEnv) {
         root_dir: backup_dir.clone(),
         excluded_dirs: vec![],
         ssh_private_key: private_key_path,
+        disk_threshold_warn: 75,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
         subnets: vec![subnet],
     };

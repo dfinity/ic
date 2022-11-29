@@ -21,6 +21,7 @@ use tokio::task::spawn_blocking;
 //         "tmp"
 //     ],
 //     "ssh_private_key": "/home/my_user/.ssh/id_ed25519_backup",
+//     "disk_threshold_warn": 75,
 //     "slack_token": "ABCD1234"
 //     "subnets": [
 //       {
