@@ -10,6 +10,11 @@ exports_files([
     "scripts/build-bootstrap-config-image.sh",
 ])
 
+filegroup(
+    name = "rootfs-files",
+    srcs = glob(["rootfs/**"]),
+)
+
 sh_test(
     name = "validate-ic-json5",
     srcs = ["rootfs/opt/ic/bin/validate-replica-config.sh"],

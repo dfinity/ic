@@ -1,4 +1,4 @@
-# BoundarGuestOS - Main Docker Image
+# BoundaryGuestOS - Main Docker Image
 #
 # Build step for exmaple:
 # - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev --build-arg SW=true \ `
