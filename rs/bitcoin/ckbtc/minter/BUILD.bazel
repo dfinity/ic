@@ -16,6 +16,7 @@ LIB_DEPS = [
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "@crate_index//:bech32",
+    "@crate_index//:bs58",
     "@crate_index//:ciborium",
     "@crate_index//:candid",
     "@crate_index//:hex",

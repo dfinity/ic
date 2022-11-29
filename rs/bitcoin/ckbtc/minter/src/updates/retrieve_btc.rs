@@ -9,7 +9,7 @@ use num_traits::cast::ToPrimitive;
 
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
 use crate::{
-    address::ParseAddressError,
+    address::{BitcoinAddress, ParseAddressError},
     guard::{retrieve_btc_guard, GuardError},
     state::{mutate_state, read_state, RetrieveBtcRequest},
 };
@@ -80,7 +80,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     if args.amount < min_amount {
         return Err(RetrieveBtcError::AmountTooLow(min_amount));
     }
-    let parsed_address = crate::address::parse_address(&args.address, btc_network)?;
+    let parsed_address = BitcoinAddress::parse(&args.address, btc_network)?;
     if read_state(|s| s.count_incomplete_retrieve_btc_requests() >= MAX_CONCURRENT_PENDING_REQUESTS)
     {
         return Err(RetrieveBtcError::TemporarilyUnavailable(
