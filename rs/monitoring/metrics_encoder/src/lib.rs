@@ -16,6 +16,12 @@ where
 
 impl<W: io::Write> LabeledMetricsBuilder<'_, W> {
     /// Encodes the metrics value observed for the specified values of labels.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if one of the labels does not match pattern
+    /// [a-zA-Z_][a-zA-Z0-9_]. See
+    /// https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels.
     pub fn value(self, labels: &[(&str, &str)], value: f64) -> io::Result<Self> {
         self.encoder
             .encode_value_with_labels(self.name, labels, value)?;
@@ -71,6 +77,7 @@ impl<W: io::Write> MetricsEncoder<W> {
         sum: f64,
         help: &str,
     ) -> io::Result<()> {
+        validate_prometheus_name(name);
         self.encode_header(name, help, "histogram")?;
         let mut total: f64 = 0.0;
         let mut saw_infinity = false;
@@ -109,27 +116,41 @@ impl<W: io::Write> MetricsEncoder<W> {
         value: f64,
         help: &str,
     ) -> io::Result<()> {
+        validate_prometheus_name(name);
         self.encode_header(name, help, typ)?;
         writeln!(self.writer, "{} {} {}", name, value, self.now_millis)
     }
 
     /// Encodes the metadata and the value of a counter.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the `name` argument does not match pattern [a-zA-Z_][a-zA-Z0-9_].
     pub fn encode_counter(&mut self, name: &str, value: f64, help: &str) -> io::Result<()> {
         self.encode_single_value("counter", name, value, help)
     }
 
     /// Encodes the metadata and the value of a gauge.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the `name` argument does not match pattern [a-zA-Z_][a-zA-Z0-9_].
     pub fn encode_gauge(&mut self, name: &str, value: f64, help: &str) -> io::Result<()> {
         self.encode_single_value("gauge", name, value, help)
     }
 
     /// Starts encoding of a counter that uses
     /// [labels](https://prometheus.io/docs/practices/naming/#labels).
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the `name` argument does not match pattern [a-zA-Z_][a-zA-Z0-9_].
     pub fn counter_vec<'a>(
         &'a mut self,
         name: &'a str,
         help: &'a str,
     ) -> io::Result<LabeledMetricsBuilder<'a, W>> {
+        validate_prometheus_name(name);
         self.encode_header(name, help, "counter")?;
         Ok(LabeledMetricsBuilder {
             encoder: self,
@@ -139,11 +160,16 @@ impl<W: io::Write> MetricsEncoder<W> {
 
     /// Starts encoding of a gauge that uses
     /// [labels](https://prometheus.io/docs/practices/naming/#labels).
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the `name` argument does not match pattern [a-zA-Z_][a-zA-Z0-9_].
     pub fn gauge_vec<'a>(
         &'a mut self,
         name: &'a str,
         help: &'a str,
     ) -> io::Result<LabeledMetricsBuilder<'a, W>> {
+        validate_prometheus_name(name);
         self.encode_header(name, help, "gauge")?;
         Ok(LabeledMetricsBuilder {
             encoder: self,
@@ -154,6 +180,7 @@ impl<W: io::Write> MetricsEncoder<W> {
     fn encode_labels(labels: &[(&str, &str)]) -> String {
         let mut buf = String::new();
         for (i, (k, v)) in labels.iter().enumerate() {
+            validate_prometheus_name(k);
             if i > 0 {
                 buf.push(',')
             }
@@ -196,5 +223,24 @@ impl<W: io::Write> MetricsEncoder<W> {
             value,
             self.now_millis
         )
+    }
+}
+
+/// Panics if the specified string is not a valid Prometheus metric/label name.
+/// See https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels.
+fn validate_prometheus_name(name: &str) {
+    if name.is_empty() {
+        panic!("Empty names are not allowed");
+    }
+    let bytes = name.as_bytes();
+    if (!bytes[0].is_ascii_alphabetic() && bytes[0] != b'_')
+        || !bytes[1..]
+            .iter()
+            .all(|c| c.is_ascii_alphanumeric() || *c == b'_')
+    {
+        panic!(
+            "Name '{}' does not match pattern [a-zA-Z_][a-zA-Z0-9_]",
+            name
+        );
     }
 }
