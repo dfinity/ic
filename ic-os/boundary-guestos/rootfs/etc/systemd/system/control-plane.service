@@ -15,6 +15,7 @@ EnvironmentFile=/run/ic-node/etc/default/control-plane
 ExecStart=/opt/ic/bin/boundary-node-control-plane    \
     --local-store          "/var/opt/registry/store" \
     --min-registry-version "${MIN_REGISTRY_VERSION}" \
+    --min-ok-count         "5" \
     --routes-dir           "/var/cache/ic_routes"    \
     --metrics-addr         "[::]:9312"
 
