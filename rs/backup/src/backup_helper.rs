@@ -16,7 +16,7 @@ use std::io::Write;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 const RETRIES_RSYNC_HOST: u64 = 5;
@@ -30,6 +30,7 @@ pub struct BackupHelper {
     pub ssh_private_key: String,
     pub registry_client: Arc<RegistryClientImpl>,
     pub notification_client: NotificationClient,
+    pub downloads: Arc<Mutex<bool>>,
     pub log: Logger,
 }
 
@@ -89,24 +90,25 @@ impl BackupHelper {
     }
 
     fn download_binaries(&self, replica_version: &ReplicaVersion) {
+        let _guard = self.downloads.lock().expect("downloads mutex lock failed");
         if !self.binary_dir(replica_version).exists() {
             std::fs::create_dir_all(self.binary_dir(replica_version))
                 .expect("Failure creating a directory");
+            self.download_binary("ic-replay", replica_version);
+            self.download_binary("sandbox_launcher", replica_version);
+            self.download_binary("canister_sandbox", replica_version);
         }
-        self.download_binary("ic-replay".to_string(), replica_version);
-        self.download_binary("sandbox_launcher".to_string(), replica_version);
-        self.download_binary("canister_sandbox".to_string(), replica_version);
     }
 
-    fn download_binary(&self, binary_name: String, replica_version: &ReplicaVersion) {
-        if self.binary_file(&binary_name, replica_version).exists() {
+    fn download_binary(&self, binary_name: &str, replica_version: &ReplicaVersion) {
+        if self.binary_file(binary_name, replica_version).exists() {
             return;
         }
         for _ in 0..RETRIES_BINARY_DOWNLOAD {
             let res = block_on(download_binary(
                 &self.log,
                 replica_version.clone(),
-                binary_name.clone(),
+                binary_name.to_string(),
                 self.binary_dir(replica_version),
             ));
             if res.is_ok() {
