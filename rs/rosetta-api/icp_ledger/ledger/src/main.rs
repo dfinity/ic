@@ -1,4 +1,4 @@
-use candid::candid_method;
+use candid::{candid_method, Nat};
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{
     api::{caller, data_certificate, print, set_certified_data, trap_with},
@@ -6,6 +6,7 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
+use ic_icrc1::Account;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{archive_blocks, block_locations, find_block_in_archive, LedgerAccess},
@@ -419,14 +420,36 @@ fn account_balance(account: AccountIdentifier) -> Tokens {
     LEDGER.read().unwrap().balances.account_balance(&account)
 }
 
+#[candid_method(query, rename = "icrc1_balance_of")]
+fn icrc1_balance_of(acc: Account) -> Nat {
+    Nat::from(
+        LEDGER
+            .read()
+            .unwrap()
+            .balances
+            .account_balance(&AccountIdentifier::from(acc))
+            .get_e8s(),
+    )
+}
+
 #[candid_method(query, rename = "transfer_fee")]
 fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
     LEDGER.read().unwrap().transfer_fee()
 }
 
+#[candid_method(query, rename = "icrc1_fee")]
+fn icrc1_fee() -> Nat {
+    Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s())
+}
+
 /// The total number of Tokens not inside the minting canister
 fn total_supply() -> Tokens {
     LEDGER.read().unwrap().balances.total_supply()
+}
+
+#[candid_method(query, rename = "icrc1_total_supply")]
+fn icrc1_total_supply() -> Nat {
+    Nat::from(LEDGER.read().unwrap().balances.total_supply().get_e8s())
 }
 
 #[candid_method(query, rename = "symbol")]
@@ -448,11 +471,22 @@ fn icrc1_name() -> String {
     LEDGER.read().unwrap().token_name.clone()
 }
 
+#[candid_method(query, rename = "icrc1_symbol")]
+fn icrc1_symbol() -> String {
+    LEDGER.read().unwrap().token_symbol.to_string()
+}
+
 #[candid_method(query, rename = "decimals")]
 fn token_decimals() -> Decimals {
     Decimals {
         decimals: DECIMAL_PLACES,
     }
+}
+
+#[candid_method(query, rename = "icrc1_decimals")]
+fn icrc1_decimals() -> u8 {
+    debug_assert!(ic_ledger_core::tokens::DECIMAL_PLACES <= u8::MAX as u32);
+    ic_ledger_core::tokens::DECIMAL_PLACES as u8
 }
 
 #[candid_method(init)]
@@ -711,9 +745,19 @@ fn account_balance_dfx() {
     over(candid_one, account_balance_dfx_);
 }
 
+#[export_name = "canister_query icrc1_balance_of"]
+fn icrc1_balance_of_candid() {
+    over(candid_one, icrc1_balance_of)
+}
+
 #[export_name = "canister_query transfer_fee"]
 fn transfer_fee_candid() {
     over(candid_one, transfer_fee)
+}
+
+#[export_name = "canister_query icrc1_fee"]
+fn icrc1_fee_candid() {
+    over(candid_one, |()| icrc1_fee())
 }
 
 #[export_name = "canister_query transfer_fee_pb"]
@@ -741,11 +785,21 @@ fn token_decimals_candid() {
     over(candid_one, |()| token_decimals())
 }
 
+#[export_name = "canister_query icrc1_decimals"]
+fn icrc1_decimals_candid() {
+    over(candid_one, |()| icrc1_decimals())
+}
+
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
     over(protobuf, |_: TotalSupplyArgs| {
         tokens_into_proto(total_supply())
     })
+}
+
+#[export_name = "canister_query icrc1_total_supply"]
+fn icrc1_total_supply_candid() {
+    over(candid_one, |()| icrc1_total_supply())
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
@@ -817,6 +871,11 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
 #[export_name = "canister_query query_blocks"]
 fn query_blocks_() {
     over(candid_one, query_blocks)
+}
+
+#[export_name = "canister_query icrc1_symbol"]
+fn icrc1_symbol_candid() {
+    over(candid_one, |()| icrc1_symbol())
 }
 
 #[candid_method(query, rename = "archives")]

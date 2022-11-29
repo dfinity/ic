@@ -12,3 +12,5 @@ ic-icrc1 = { path = "../.." }
 ic-ledger-core = { path = "../../../ledger_core" }
 ic-ledger-canister-core = { path = "../../../ledger_canister_core" }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
+num-traits = "0.2.14"
+

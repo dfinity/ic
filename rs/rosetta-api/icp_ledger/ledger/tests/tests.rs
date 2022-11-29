@@ -1,4 +1,3 @@
-use ic_icrc1_ledger_sm_tests::setup_and_test_name;
 use ic_ledger_core::Tokens;
 use icp_ledger::LedgerCanisterInitPayload as InitArgs;
 use std::collections::HashSet;
@@ -31,6 +30,16 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> InitArgs {
 }
 
 #[test]
-fn test_name() {
-    let _ = setup_and_test_name(ledger_wasm(), encode_init_args, vec![]);
+fn test_balance_of() {
+    ic_icrc1_ledger_sm_tests::test_balance_of(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_metadata() {
+    ic_icrc1_ledger_sm_tests::test_metadata(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_total_supply() {
+    ic_icrc1_ledger_sm_tests::test_total_supply(ledger_wasm(), encode_init_args)
 }
