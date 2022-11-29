@@ -1,5 +1,28 @@
 use std::io;
 
+#[cfg(test)]
+mod tests;
+
+/// A helper for encoding metrics that use
+/// [labels](https://prometheus.io/docs/practices/naming/#labels).
+/// See [MetricsEncoder::counter_vec] and [MetricsEncoder::gauge_vec].
+pub struct LabeledMetricsBuilder<'a, W>
+where
+    W: io::Write,
+{
+    encoder: &'a mut MetricsEncoder<W>,
+    name: &'a str,
+}
+
+impl<W: io::Write> LabeledMetricsBuilder<'_, W> {
+    /// Encodes the metrics value observed for the specified values of labels.
+    pub fn value(self, labels: &[(&str, &str)], value: f64) -> io::Result<Self> {
+        self.encoder
+            .encode_value_with_labels(self.name, labels, value)?;
+        Ok(self)
+    }
+}
+
 /// `MetricsEncoder` provides methods to encode metrics in a text format
 /// that can be understood by Prometheus.
 ///
@@ -98,5 +121,80 @@ impl<W: io::Write> MetricsEncoder<W> {
     /// Encodes the metadata and the value of a gauge.
     pub fn encode_gauge(&mut self, name: &str, value: f64, help: &str) -> io::Result<()> {
         self.encode_single_value("gauge", name, value, help)
+    }
+
+    /// Starts encoding of a counter that uses
+    /// [labels](https://prometheus.io/docs/practices/naming/#labels).
+    pub fn counter_vec<'a>(
+        &'a mut self,
+        name: &'a str,
+        help: &'a str,
+    ) -> io::Result<LabeledMetricsBuilder<'a, W>> {
+        self.encode_header(name, help, "counter")?;
+        Ok(LabeledMetricsBuilder {
+            encoder: self,
+            name,
+        })
+    }
+
+    /// Starts encoding of a gauge that uses
+    /// [labels](https://prometheus.io/docs/practices/naming/#labels).
+    pub fn gauge_vec<'a>(
+        &'a mut self,
+        name: &'a str,
+        help: &'a str,
+    ) -> io::Result<LabeledMetricsBuilder<'a, W>> {
+        self.encode_header(name, help, "gauge")?;
+        Ok(LabeledMetricsBuilder {
+            encoder: self,
+            name,
+        })
+    }
+
+    fn encode_labels(labels: &[(&str, &str)]) -> String {
+        let mut buf = String::new();
+        for (i, (k, v)) in labels.iter().enumerate() {
+            if i > 0 {
+                buf.push(',')
+            }
+            buf.push_str(k);
+            buf.push('=');
+            buf.push('"');
+            for c in v.chars() {
+                match c {
+                    '\\' => {
+                        buf.push('\\');
+                        buf.push('\\');
+                    }
+                    '\n' => {
+                        buf.push('\\');
+                        buf.push('n');
+                    }
+                    '"' => {
+                        buf.push('\\');
+                        buf.push('"');
+                    }
+                    _ => buf.push(c),
+                }
+            }
+            buf.push('"');
+        }
+        buf
+    }
+
+    fn encode_value_with_labels(
+        &mut self,
+        name: &str,
+        label_values: &[(&str, &str)],
+        value: f64,
+    ) -> io::Result<()> {
+        writeln!(
+            self.writer,
+            "{}{{{}}} {} {}",
+            name,
+            Self::encode_labels(label_values),
+            value,
+            self.now_millis
+        )
     }
 }
