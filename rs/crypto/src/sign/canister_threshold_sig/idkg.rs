@@ -10,8 +10,8 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
+    IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::NodeId;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -37,7 +37,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn create_dealing(
         &self,
         params: &IDkgTranscriptParams,
-    ) -> Result<IDkgDealing, IDkgCreateDealingError> {
+    ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,

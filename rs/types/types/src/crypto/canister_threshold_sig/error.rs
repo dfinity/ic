@@ -197,6 +197,9 @@ pub enum IDkgCreateDealingError {
     SerializationError {
         internal_error: String,
     },
+    SignatureError {
+        internal_error: String,
+    },
     InternalError {
         internal_error: String,
     },

@@ -41,8 +41,8 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
+    InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
@@ -704,7 +704,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
     fn create_dealing(
         &self,
         params: &IDkgTranscriptParams,
-    ) -> Result<IDkgDealing, IDkgCreateDealingError> {
+    ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
         IDkgProtocol::create_dealing(&self.crypto_component, params)
     }
 

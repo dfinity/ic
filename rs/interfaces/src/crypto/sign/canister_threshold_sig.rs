@@ -11,8 +11,8 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
+    InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
@@ -29,12 +29,13 @@ use std::collections::{BTreeMap, HashSet};
 ///   and `params2` respectively, then if `params1.transcript_id == params2.dkg_id`,
 ///   we must have `params1 == params2`.
 pub trait IDkgProtocol {
-    /// Create a dealing of a prescribed type.
+    /// Create a signed dealing of a prescribed type..
     ///
     /// A dealing contains a polynomial commitment and encryption of the secret
     /// shares of the receivers.
     /// In addition, for some transcript types, this contains a contextual proof
     /// for the secret value being shared.
+    /// The dealing is signed by the secret key of the node issuing the dealing (a.k.a the dealer).
     ///
     /// The type of dealing created is determined by the
     /// `IDkgTranscriptOperation` specified in the `params`.
@@ -44,7 +45,7 @@ pub trait IDkgProtocol {
     fn create_dealing(
         &self,
         params: &IDkgTranscriptParams,
-    ) -> Result<IDkgDealing, IDkgCreateDealingError>;
+    ) -> Result<SignedIDkgDealing, IDkgCreateDealingError>;
 
     /// Perform public verification of a dealing.
     ///

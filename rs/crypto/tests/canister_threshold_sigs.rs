@@ -42,6 +42,29 @@ use std::sync::Arc;
 
 mod create_dealing {
     use super::*;
+    use ic_interfaces::crypto::BasicSigVerifier;
+
+    #[test]
+    fn should_create_signed_dealing_with_correct_public_key() {
+        let subnet_size = thread_rng().gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let dealer_id = random_dealer_id(&params);
+        let dealer = crypto_for(dealer_id, &env.crypto_components);
+
+        let dealing = dealer
+            .create_dealing(&params)
+            .expect("could not create dealing");
+        assert_eq!(dealing.dealer_id(), dealer_id);
+
+        let verification_result = dealer.verify_basic_sig(
+            &dealing.signature.signature,
+            &dealing.content,
+            dealer_id,
+            params.registry_version(),
+        );
+        assert!(verification_result.is_ok());
+    }
 
     #[test]
     fn should_fail_create_dealing_if_registry_missing_mega_pubkey() {
@@ -2188,6 +2211,7 @@ mod verify_dealing_private {
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
         let dealer_id = random_dealer_id(&params);
+        let dealer = crypto_for(dealer_id, &env.crypto_components);
         let signed_dealing = create_signed_dealing(&params, &env.crypto_components, dealer_id);
         let receiver_id = random_receiver_id(&params);
         let receiver = crypto_for(receiver_id, &env.crypto_components);
@@ -2197,7 +2221,7 @@ mod verify_dealing_private {
             &signed_dealing
                 .into_builder()
                 .corrupt_transcript_id()
-                .build_with_signature(&params, &env.crypto_components, dealer_id),
+                .build_with_signature(&params, dealer, dealer_id),
         );
 
         assert!(
@@ -2211,6 +2235,7 @@ mod verify_dealing_private {
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
         let dealer_id = random_dealer_id(&params);
+        let dealer = crypto_for(dealer_id, &env.crypto_components);
         let signed_dealing = create_signed_dealing(&params, &env.crypto_components, dealer_id);
         let receiver_id = random_receiver_id(&params);
         let receiver = crypto_for(receiver_id, &env.crypto_components);
@@ -2219,8 +2244,8 @@ mod verify_dealing_private {
             &params,
             &signed_dealing
                 .into_builder()
-                .corrupt_internal_dealing_raw()
-                .build_with_signature(&params, &env.crypto_components, dealer_id),
+                .corrupt_internal_dealing_raw_by_flipping_bit()
+                .build_with_signature(&params, dealer, dealer_id),
         );
 
         assert!(
@@ -2303,10 +2328,11 @@ mod verify_dealing_public {
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
         let dealer_id = random_dealer_id(&params);
+        let dealer = crypto_for(dealer_id, &env.crypto_components);
         let signed_dealing = create_signed_dealing(&params, &env.crypto_components, dealer_id)
             .into_builder()
             .corrupt_transcript_id()
-            .build_with_signature(&params, &env.crypto_components, dealer_id);
+            .build_with_signature(&params, dealer, dealer_id);
 
         let verifier_id =
             random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
@@ -2335,10 +2361,11 @@ mod verify_dealing_public {
             .iter()
             .find(|node_id| **node_id != dealer_id)
             .expect("not enough nodes");
+        let non_dealer = crypto_for(non_dealer_node, &env.crypto_components);
         let signed_dealing = create_signed_dealing(&params, &env.crypto_components, dealer_id)
             .into_builder()
             .with_dealer_id(non_dealer_node)
-            .build_with_signature(&params, &env.crypto_components, non_dealer_node);
+            .build_with_signature(&params, non_dealer, non_dealer_node);
 
         let verifier_id =
             random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
@@ -2361,10 +2388,11 @@ mod verify_dealing_public {
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
         let dealer_id = random_dealer_id(&params);
+        let dealer = crypto_for(dealer_id, &env.crypto_components);
         let signed_dealing = create_signed_dealing(&params, &env.crypto_components, dealer_id)
             .into_builder()
-            .corrupt_internal_dealing_raw()
-            .build_with_signature(&params, &env.crypto_components, dealer_id);
+            .corrupt_internal_dealing_raw_by_flipping_bit()
+            .build_with_signature(&params, dealer, dealer_id);
 
         let verifier_id =
             random_node_id_excluding(&env.crypto_components.keys().cloned().collect());

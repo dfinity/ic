@@ -67,6 +67,7 @@ fn empty_ni_dkg_dealing() -> NiDkgDealing {
 }
 
 pub use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts_with_committee;
+use ic_types_test_utils::ids::NODE_1;
 
 pub fn dummy_idkg_transcript_id_for_tests(id: u64) -> IDkgTranscriptId {
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(314159));
@@ -481,12 +482,18 @@ impl IDkgProtocol for CryptoReturningOk {
     fn create_dealing(
         &self,
         params: &IDkgTranscriptParams,
-    ) -> Result<IDkgDealing, IDkgCreateDealingError> {
-        let dealing = IDkgDealing {
-            transcript_id: params.transcript_id(),
-            internal_dealing_raw: vec![],
+    ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
+        let signed_dealing = SignedIDkgDealing {
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
+                signer: NODE_1,
+            },
+            content: IDkgDealing {
+                transcript_id: params.transcript_id(),
+                internal_dealing_raw: vec![],
+            },
         };
-        Ok(dealing)
+        Ok(signed_dealing)
     }
 
     fn verify_dealing_public(
