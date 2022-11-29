@@ -44,7 +44,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
         system_subnets_pot(),
         request_auth_malicious_replica_pot(),
         system_api_security_pot(),
-        tecdsa_complaint_test_pot(),
     ]
 }
 
@@ -93,16 +92,6 @@ fn system_api_security_pot() -> pot::Pot {
         steps! {
             system_api_security_test::malicious_inputs => "malicious input - security",
             system_api_security_test::malicious_intercanister_calls => "malicious inter canister calls - security"
-        }
-    )
-}
-
-fn tecdsa_complaint_test_pot() -> pot::Pot {
-    composable!(
-        "tecdsa_complaint_test",
-        tecdsa::tecdsa_complaint_test::config(),
-        steps! {
-            tecdsa::tecdsa_complaint_test::test_threshold_ecdsa_complaint => "tECDSA complaints test"
         }
     )
 }
