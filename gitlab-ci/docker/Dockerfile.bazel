@@ -9,7 +9,7 @@ ENV TZ=UTC
 
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
-    curl build-essential git gnupg uuid-dev \
+    curl build-essential git gnupg node-json5 uuid-dev \
     # GitLab CI \
     sudo gosu jq \
     # RUST \
