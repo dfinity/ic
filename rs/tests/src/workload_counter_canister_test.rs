@@ -61,6 +61,7 @@ pub fn config(env: TestEnv) {
 
 /// SLO test configuration with a NNS subnet and an app subnet with the same number of nodes as used on mainnet
 pub fn two_third_latency_config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(40))
         .add_subnet(

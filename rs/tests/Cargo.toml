@@ -225,3 +225,7 @@ path = "bin/test_driver_e2e_scenarios.rs"
 [[bin]]
 name = "ic-systest-upgrade-compatibility"
 path = "bin/upgrade_compatibility_test.rs"
+
+[[bin]]
+name = "ic-systest-two-third-latency"
+path = "bin/two_third_latency_test.rs"

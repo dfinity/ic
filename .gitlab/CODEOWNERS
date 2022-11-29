@@ -201,6 +201,7 @@
 /rs/tests/bin/spec_compliance_system_test.rs       @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/tecdsa_add_nodes_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 /rs/tests/bin/rotate_ecdsa_idkg_key_test.rs     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/rs/tests/bin/two_third_latency_test.rs   @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/basic_health_test.rs      @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_integration/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/btc_integration/          @dfinity-lab/teams/execution-owners
