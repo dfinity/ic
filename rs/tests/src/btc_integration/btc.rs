@@ -17,6 +17,7 @@ Success::
 end::catalog[] */
 
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
 
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
@@ -146,22 +147,36 @@ pub fn get_balance(env: TestEnv) {
 
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
 
-    let btc_rpc = Client::new(
-        &format!(
-            "http://[{}]:8332",
-            deployed_universal_vm.get_vm().unwrap().ipv6
-        ),
-        Auth::UserPass(
-            "btc-dev-preview".to_string(),
-            "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=".to_string(),
-        ),
-    )
-    .unwrap();
+    let btc_rpc = Arc::new(
+        self::Client::new(
+            &format!(
+                "http://[{}]:8332",
+                deployed_universal_vm.get_vm().unwrap().ipv6
+            ),
+            Auth::UserPass(
+                "btc-dev-preview".to_string(),
+                "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=".to_string(),
+            ),
+        )
+        .unwrap(),
+    );
 
     // Create a wallet.
-    let _ = btc_rpc
-        .create_wallet("mywallet", None, None, None, None)
-        .unwrap();
+    // Retry since the bitcoind VM might not be up yet.
+    let logger_c = logger.clone();
+    let btc_rpc_c = btc_rpc.clone();
+    retry(
+        logger_c,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        move || match btc_rpc_c.create_wallet("mywallet", None, None, None, None) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                bail!("Connecting to btc rpc failed {err}")
+            }
+        },
+    )
+    .unwrap();
 
     // Generate an address.
     let btc_address = btc_rpc.get_new_address(None, None).unwrap();
