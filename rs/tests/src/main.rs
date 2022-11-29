@@ -39,7 +39,6 @@ use std::time::Instant;
 fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
     vec![
-        consensus_safety_pot(),
         max_payload_pot(),
         dual_workload_pot(),
         system_subnets_pot(),
@@ -65,14 +64,6 @@ fn system_subnets_pot() -> pot::Pot {
             execution::nns_shielding::non_nns_canister_attempt_to_create_canister_on_another_subnet_fails,
             execution::nns_shielding::nns_canister_attempt_to_create_canister_on_another_subnet_succeeds
         }
-    )
-}
-
-fn consensus_safety_pot() -> pot::Pot {
-    composable!(
-        "consensus_safety_pot",
-        consensus::safety_test::config(),
-        steps! {consensus::safety_test::test => "consensus_safety_test"}
     )
 }
 
