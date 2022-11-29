@@ -1,9 +1,10 @@
 //! Implementations of IDkgProtocol related to dealings
 
-use crate::sign::basic_sig::BasicSigVerifierInternal;
+use crate::sign::basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
 use crate::sign::canister_threshold_sig::idkg::utils::{
     get_mega_pubkey, idkg_encryption_keys_from_registry, MegaKeyFromRegistryError,
 };
+use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::{CspIDkgProtocol, CspSigner};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     IDkgDealingInternal, IDkgTranscriptOperationInternal,
@@ -16,16 +17,17 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
+use ic_types::signature::BasicSignature;
 use ic_types::NodeId;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-pub fn create_dealing<C: CspIDkgProtocol>(
+pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
     self_node_id: &NodeId,
     registry: &Arc<dyn RegistryClient>,
     params: &IDkgTranscriptParams,
-) -> Result<IDkgDealing, IDkgCreateDealingError> {
+) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
     let self_index =
         params
             .dealer_index(*self_node_id)
@@ -64,9 +66,40 @@ pub fn create_dealing<C: CspIDkgProtocol>(
                 internal_error: format!("{:?}", e),
             })?;
 
-    Ok(IDkgDealing {
+    let unsigned_dealing = IDkgDealing {
         transcript_id: params.transcript_id(),
         internal_dealing_raw,
+    };
+
+    sign_dealing(
+        csp_client,
+        registry,
+        unsigned_dealing,
+        *self_node_id,
+        params.registry_version(),
+    )
+}
+
+fn sign_dealing<S: CspSigner>(
+    csp_signer: &S,
+    registry: &Arc<dyn RegistryClient>,
+    dealing: IDkgDealing,
+    signer: NodeId,
+    registry_version: RegistryVersion,
+) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
+    BasicSignerInternal::sign_basic(
+        csp_signer,
+        registry.clone(),
+        &dealing,
+        signer,
+        registry_version,
+    )
+    .map(|signature| SignedIDkgDealing {
+        signature: BasicSignature { signature, signer },
+        content: dealing,
+    })
+    .map_err(|crypto_error| IDkgCreateDealingError::SignatureError {
+        internal_error: format!("{}", crypto_error),
     })
 }
 

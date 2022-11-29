@@ -1,7 +1,7 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
-use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, Seed};
+use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, NodeIndex, Seed};
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_interfaces::crypto::{
     BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
@@ -84,24 +84,12 @@ pub fn create_signed_dealing(
 ) -> SignedIDkgDealing {
     let dealer = crypto_for(dealer_id, crypto_components);
 
-    let dealing = dealer.create_dealing(params).unwrap_or_else(|error| {
+    dealer.create_dealing(params).unwrap_or_else(|error| {
         panic!(
             "failed to create IDkg dealing for {:?}: {:?}",
             dealer_id, error
         )
-    });
-
-    let signature = dealer
-        .sign_basic(&dealing, dealer_id, params.registry_version())
-        .expect("Failed to sign a dealing");
-
-    SignedIDkgDealing {
-        content: dealing,
-        signature: BasicSignature {
-            signature,
-            signer: dealer_id,
-        },
-    }
+    })
 }
 
 pub fn create_and_verify_signed_dealing(
@@ -579,28 +567,27 @@ fn crypto_for<T>(node_id: NodeId, crypto_components: &BTreeMap<NodeId, T>) -> &T
 }
 
 pub fn random_receiver_id(params: &IDkgTranscriptParams) -> NodeId {
-    *params
-        .receivers()
-        .get()
-        .iter()
-        .choose(&mut thread_rng())
+    *random_receiver_id_excluding_set(params.receivers(), &BTreeSet::new(), &mut thread_rng())
         .expect("receivers is empty")
 }
 
 pub fn random_receiver_id_excluding(receivers: &IDkgReceivers, exclusion: NodeId) -> NodeId {
-    if receivers.get().len() == 1 {
-        let (_receiver_idx, receiver_id) = receivers.iter().next().unwrap();
-        if receiver_id == exclusion {
-            panic!("the only possible receiver is excluded")
-        }
+    let mut excluded_receivers = BTreeSet::new();
+    excluded_receivers.insert(exclusion);
+    *random_receiver_id_excluding_set(receivers, &excluded_receivers, &mut thread_rng())
+        .expect("the only possible receiver is excluded")
+}
+
+pub fn random_receiver_id_excluding_set<'a, R: CryptoRng + RngCore>(
+    receivers: &'a IDkgReceivers,
+    excluded_receivers: &'a BTreeSet<NodeId>,
+    rng: &mut R,
+) -> Option<&'a NodeId> {
+    let acceptable_receivers: Vec<_> = receivers.get().difference(excluded_receivers).collect();
+    if acceptable_receivers.is_empty() {
+        return None;
     }
-    let rng = &mut thread_rng();
-    loop {
-        let random_receiver_id = *receivers.get().iter().choose(rng).expect("receivers empty");
-        if random_receiver_id != exclusion {
-            return random_receiver_id;
-        }
-    }
+    Some(acceptable_receivers[rng.gen_range(0..acceptable_receivers.len())])
 }
 
 pub fn random_dealer_id(params: &IDkgTranscriptParams) -> NodeId {
@@ -632,42 +619,31 @@ pub fn random_dealer_id_excluding(transcript: &IDkgTranscript, exclusion: NodeId
 
 /// Corrupts the dealing for a single randomly picked receiver.
 /// node_id is the self Node Id. The shares for the receivers specified
-/// in exclude_receivers won't be corrupted.
+/// in excluded_receivers won't be corrupted.
 /// The transcript params used to create the dealing is passed in with the
 /// dealing to be corrupted.
-pub fn corrupt_idkg_dealing<R: CryptoRng + RngCore>(
-    idkg_dealing: &IDkgDealing,
+pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDealing>>(
+    idkg_dealing: SignedIDkgDealing,
     transcript_params: &IDkgTranscriptParams,
-    exclude_receivers: &BTreeSet<NodeId>,
+    basic_signer: &T,
+    signer_id: NodeId,
+    excluded_receivers: &BTreeSet<NodeId>,
     rng: &mut R,
-) -> Result<IDkgDealing, CorruptIDkgDealingError> {
-    let internal_dealing = IDkgDealingInternal::deserialize(&idkg_dealing.internal_dealing_raw)
-        .map_err(|e| CorruptIDkgDealingError::SerializationError(format!("{:?}", e)))?;
-
-    let receivers: Vec<_> = transcript_params
-        .receivers()
-        .get()
-        .difference(exclude_receivers)
-        .collect();
-    if receivers.is_empty() {
-        return Err(CorruptIDkgDealingError::NoReceivers);
-    }
-    let receiver = receivers[rng.gen_range(0..receivers.len())];
+) -> Result<SignedIDkgDealing, CorruptSignedIDkgDealingError> {
+    let receiver =
+        random_receiver_id_excluding_set(transcript_params.receivers(), excluded_receivers, rng)
+            .ok_or(CorruptSignedIDkgDealingError::NoReceivers)?;
     let node_index = transcript_params.receivers().position(*receiver).unwrap();
-
     let seed = Seed::from_rng(rng);
-    let corrupted_dealing = corrupt_dealing(&internal_dealing, &[node_index], seed)
-        .map_err(|e| CorruptIDkgDealingError::FailedToCorruptDealing(format!("{:?}", e)))?;
-    let internal_dealing_raw = corrupted_dealing
-        .serialize()
-        .map_err(|e| CorruptIDkgDealingError::SerializationError(format!("{:?}", e)))?;
-    Ok(IDkgDealing {
-        transcript_id: idkg_dealing.transcript_id,
-        internal_dealing_raw,
-    })
+
+    Ok(idkg_dealing
+        .into_builder()
+        .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[node_index], seed)
+        .build_with_signature(transcript_params, basic_signer, signer_id))
 }
+
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CorruptIDkgDealingError {
+pub enum CorruptSignedIDkgDealingError {
     SerializationError(String),
     FailedToCorruptDealing(String),
     NoReceivers,
@@ -984,15 +960,14 @@ impl SignedIDkgDealingBuilder {
         self
     }
 
-    pub fn build_with_signature(
+    pub fn build_with_signature<T: BasicSigner<IDkgDealing>>(
         mut self,
         params: &IDkgTranscriptParams,
-        crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+        basic_signer: &T,
         signer_id: NodeId,
     ) -> SignedIDkgDealing {
-        let dealer = crypto_for(signer_id, crypto_components);
         self.signature = BasicSignature {
-            signature: dealer
+            signature: basic_signer
                 .sign_basic(&self.content, signer_id, params.registry_version())
                 .expect("Failed to sign a dealing"),
             signer: signer_id,
@@ -1013,9 +988,27 @@ impl SignedIDkgDealingBuilder {
         self
     }
 
-    pub fn corrupt_internal_dealing_raw(mut self) -> Self {
+    pub fn corrupt_internal_dealing_raw_by_flipping_bit(mut self) -> Self {
         self.content = IDkgDealing {
             internal_dealing_raw: self.content.internal_dealing_raw.clone_with_bit_flipped(),
+            ..self.content
+        };
+        self
+    }
+
+    pub fn corrupt_internal_dealing_raw_by_changing_ciphertexts(
+        mut self,
+        corruption_targets: &[NodeIndex],
+        seed: Seed,
+    ) -> Self {
+        let internal_dealing = IDkgDealingInternal::deserialize(&self.content.internal_dealing_raw)
+            .expect("error deserializing iDKG dealing internal");
+        let corrupted_dealing = corrupt_dealing(&internal_dealing, corruption_targets, seed)
+            .expect("error corrupting dealing");
+        self.content = IDkgDealing {
+            internal_dealing_raw: corrupted_dealing
+                .serialize()
+                .expect("error serializing corrupted dealing"),
             ..self.content
         };
         self

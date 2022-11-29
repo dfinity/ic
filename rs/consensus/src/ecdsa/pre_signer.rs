@@ -26,13 +26,18 @@ use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{Height, NodeId, SubnetId};
 
+use ic_types::crypto::canister_threshold_sig::error::IDkgCreateDealingError;
 use std::cell::RefCell;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
 #[cfg(feature = "malicious_code")]
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing;
+use {
+    ic_interfaces::crypto::BasicSigner, ic_registry_client_helpers::node::RegistryVersion,
+    ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing, ic_types::crypto::BasicSigOf,
+    ic_types::crypto::CryptoResult,
+};
 
 pub(crate) trait EcdsaPreSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
@@ -621,12 +626,28 @@ impl EcdsaPreSignerImpl {
         {
             return changes;
         }
-
-        // Create the dealing
-        let idkg_dealing = match IDkgProtocol::create_dealing(&*self.crypto, transcript_params) {
+        match IDkgProtocol::create_dealing(&*self.crypto, transcript_params) {
             Ok(idkg_dealing) => {
                 self.metrics.pre_sign_metrics_inc("dealing_created");
-                idkg_dealing
+
+                #[cfg(feature = "malicious_code")]
+                let idkg_dealing = self.crypto_corrupt_dealing(idkg_dealing, transcript_params);
+
+                self.metrics.pre_sign_metrics_inc("dealing_sent");
+                vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaSignedDealing(idkg_dealing),
+                )]
+            }
+            Err(IDkgCreateDealingError::SignatureError { internal_error }) => {
+                warn!(
+                    self.log,
+                    "Failed to sign dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
+                    transcript_params.transcript_id(),
+                    transcript_op_summary(transcript_params.operation_type()),
+                    internal_error
+                );
+                self.metrics.pre_sign_errors_inc("sign_dealing");
+                Default::default()
             }
             Err(err) => {
                 // TODO: currently, transcript creation will be retried the next time, which
@@ -640,39 +661,6 @@ impl EcdsaPreSignerImpl {
                     err
                 );
                 self.metrics.pre_sign_errors_inc("create_dealing");
-                return Default::default();
-            }
-        };
-
-        // Corrupt the dealing if malicious testing is enabled
-        #[cfg(feature = "malicious_code")]
-        let idkg_dealing = self.crypto_corrupt_dealing(idkg_dealing, transcript_params);
-
-        // Sign the dealing
-        match self.crypto.sign(
-            &idkg_dealing,
-            self.node_id,
-            transcript_params.registry_version(),
-        ) {
-            Ok(signature) => {
-                let signed_dealing = SignedIDkgDealing {
-                    signature,
-                    content: idkg_dealing,
-                };
-                self.metrics.pre_sign_metrics_inc("dealing_sent");
-                vec![EcdsaChangeAction::AddToValidated(
-                    EcdsaMessage::EcdsaSignedDealing(signed_dealing),
-                )]
-            }
-            Err(err) => {
-                warn!(
-                    self.log,
-                    "Failed to sign dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
-                    transcript_params.transcript_id(),
-                    transcript_op_summary(transcript_params.operation_type()),
-                    err
-                );
-                self.metrics.pre_sign_errors_inc("sign_dealing");
                 Default::default()
             }
         }
@@ -716,13 +704,13 @@ impl EcdsaPreSignerImpl {
             )
     }
 
-    /// Helper to corrupt the crypto dealing for malicious testing
+    /// Helper to corrupt the signed crypto dealing for malicious testing
     #[cfg(feature = "malicious_code")]
     fn crypto_corrupt_dealing(
         &self,
-        idkg_dealing: IDkgDealing,
+        idkg_dealing: SignedIDkgDealing,
         transcript_params: &IDkgTranscriptParams,
-    ) -> IDkgDealing {
+    ) -> SignedIDkgDealing {
         if !self.malicious_flags.maliciously_corrupt_ecdsa_dealings {
             return idkg_dealing;
         }
@@ -730,9 +718,11 @@ impl EcdsaPreSignerImpl {
         let mut rng = rand::thread_rng();
         let mut exclude_set = BTreeSet::new();
         exclude_set.insert(self.node_id);
-        match ic_crypto_test_utils_canister_threshold_sigs::corrupt_idkg_dealing(
-            &idkg_dealing,
+        match ic_crypto_test_utils_canister_threshold_sigs::corrupt_signed_idkg_dealing(
+            idkg_dealing,
             transcript_params,
+            self,
+            self.node_id,
             &exclude_set,
             &mut rng,
         ) {
@@ -754,7 +744,7 @@ impl EcdsaPreSignerImpl {
                     err
                 );
                 self.metrics.pre_sign_errors_inc("corrupt_dealing");
-                idkg_dealing
+                panic!("Failed to corrupt dealing")
             }
         }
     }
@@ -1041,6 +1031,32 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
             &purge_artifacts,
         ];
         self.schedule.call_next(&calls)
+    }
+}
+
+// A dealing is corrupted by changing some internal value.
+// Since a dealing is signed, the signature must be re-computed so that the corrupted dealing
+// is not trivially discarded and a proper complaint can be generated.
+// To sign a dealing we only need something that implements the trait BasicSigner<IDkgDealing>,
+// which `ConsensusCrypto` does.
+// However, for Rust something of type dyn ConsensusCrypto (self.crypto is of type
+// Arc<dyn ConsensusCrypto>, but the Arc<> is not relevant here) cannot be coerced into
+// something of type dyn BasicSigner<IDkgDealing>. This is true for any sub trait implemented
+// by ConsensusCrypto and is not specific to Crypto traits.
+// Doing so would require `dyn upcasting coercion`, see
+// https://github.com/rust-lang/rust/issues/65991 and
+// https://articles.bchlr.de/traits-dynamic-dispatch-upcasting.
+// As workaround a trivial implementation of BasicSigner<IDkgDealing> is provided by delegating to
+// self.crypto.
+#[cfg(feature = "malicious_code")]
+impl BasicSigner<IDkgDealing> for EcdsaPreSignerImpl {
+    fn sign_basic(
+        &self,
+        message: &IDkgDealing,
+        signer: NodeId,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<BasicSigOf<IDkgDealing>> {
+        self.crypto.sign_basic(message, signer, registry_version)
     }
 }
 

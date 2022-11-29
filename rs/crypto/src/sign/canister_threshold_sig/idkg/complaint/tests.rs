@@ -10,6 +10,7 @@ use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptType,
     SignedIDkgDealing,
