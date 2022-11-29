@@ -3,9 +3,7 @@
 set -euox pipefail
 source '/opt/ic/bin/exec_condition.shlib'
 
-readonly BOOT_DIR='/boot/config'
 readonly IDENTITY_PEM="${BOOT_DIR}/prober_identity.pem"
-readonly NNS_PEM="${BOOT_DIR}/nns_public_key.pem"
 
 readonly RUN_DIR='/run/ic-node/etc/prober'
 readonly ROOT_KEY="${RUN_DIR}/root_key.der"
@@ -16,10 +14,7 @@ function read_variables() {
         exit 1
     fi
 
-    if [ ! -f "${NNS_PEM}" ]; then
-        err "missing nns public key: ${NNS_PEM}"
-        exit 1
-    fi
+    check_nns_pem
 }
 
 function generate_prober_config() {
@@ -36,7 +31,7 @@ function generate_prober_config() {
     cp "${IDENTITY_PEM}" "${RUN_DIR}/identity.pem"
 
     # Setup network key
-    sed '1d;$d' <"${NNS_PEM}" | tr -d '\n' | base64 -d >"${ROOT_KEY}"
+    get_nns_der >"${ROOT_KEY}"
 }
 
 function main() {

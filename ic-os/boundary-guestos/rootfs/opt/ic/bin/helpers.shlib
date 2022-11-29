@@ -1,5 +1,33 @@
 # This file should only be `source`d at the beginning of a script.
 
+readonly BOOT_DIR='/boot/config'
+readonly IMAGE_NNS_PEM="/etc/nns_public_key.pem"
+readonly BOOT_NNS_PEM="${BOOT_DIR}/nns_public_key.pem"
+
 function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
+}
+
+function check_nns_pem() {
+    get_nns_pem_path >/dev/null
+}
+
+function get_nns_pem_path() {
+    # prod images have the NNS key baked in so check there first
+    if [[ -f "${IMAGE_NNS_PEM}" ]]; then
+        echo ${IMAGE_NNS_PEM}
+    # Fallback to the USB key for dev images
+    elif [[ -f "${BOOT_NNS_PEM}" ]]; then
+        echo ${BOOT_NNS_PEM}
+    else
+        err "missing nns public key: ${IMAGE_NNS_PEM}"
+        err "missing nns public key: ${BOOT_NNS_PEM}"
+        exit 1
+    fi
+}
+
+function get_nns_der() {
+    local -r NNS_PEM="$(get_nns_pem_path)"
+    local -r NNS_PEM_DATA="$(sed '1d;$d' <"${NNS_PEM}")"
+    echo "${NNS_PEM_DATA//[$'\t\r\n ']}" | base64 -d
 }

@@ -365,6 +365,7 @@ pub fn http_canister_test(env: TestEnv) {
             install_node = Some((node.get_public_url(), node.effective_canister_id()));
         }
     }
+    let install_node = install_node.expect("No install node");
 
     let boundary_node_vm = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -376,22 +377,15 @@ pub fn http_canister_test(env: TestEnv) {
 
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
-        let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
-
-        let http_counter_canister =
-            env.load_wasm("rs/tests/test_canisters/http_counter/http_counter.wasm");
+        let agent = assert_create_agent(install_node.0.as_str()).await;
+        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
 
         info!(&logger, "installing canister");
-        let canister_id = create_canister(
-            &agent,
-            install_node.unwrap().1,
-            &http_counter_canister,
-            None,
-        )
-        .await
-        .expect("Could not create http_counter canister");
+        let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
+            .await
+            .expect("Could not create kv_store canister");
 
-        info!(&logger, "created canister={canister_id}");
+        info!(&logger, "created kv_store canister={canister_id}");
 
         // Wait for the canisters to finish installing
         // TODO: maybe this should be status calls?
@@ -413,13 +407,36 @@ pub fn http_canister_test(env: TestEnv) {
 
         retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let res = client
-                .get(format!("https://{}/", host))
+                .get(format!("https://{}/foo", host))
+                .header("x-ic-test", "no-certificate")
                 .send()
                 .await?
                 .text()
                 .await?;
 
-            if res != "Counter is 0\n" {
+            if res != "'/foo' not found" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        // "x-ic-test", "no-certificate"
+        // "x-ic-test", "streaming-callback"
+        // "x-icx-require-certification", "1"
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .put(format!("https://{}/foo", host))
+                .body("bar")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "'/foo' set to 'bar'" {
                 bail!(res)
             }
 
@@ -430,13 +447,31 @@ pub fn http_canister_test(env: TestEnv) {
 
         retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let res = client
-                .get(format!("https://{}/stream", host))
+                .get(format!("https://{}/foo", host))
                 .send()
                 .await?
                 .text()
                 .await?;
 
-            if res != "Counter is 0 streaming\n" {
+            if res != "bar" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{}/foo", host))
+                .header("x-ic-test", "streaming-callback")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "bar" {
                 bail!(res)
             }
 

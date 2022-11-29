@@ -17,6 +17,7 @@ CANISTERS = {
     "ic-nervous-system-common-test-canister.wasm": "//rs/nervous_system/common/test_canister",
     "identity-canister.wasm": "//rs/nns/identity:identity-canister",
     "inter_canister_error_handling.wasm": "//rs/rust_canisters/tests:inter_canister_error_handling",
+    "kv_store.wasm": "//rs/tests/test_canisters/kv_store",
     "json.wasm": "//rs/rust_canisters/tests:json",
     "ledger-archive-node-canister.wasm": "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
     "ledger-canister.wasm": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",

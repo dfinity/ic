@@ -148,7 +148,7 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
+    local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS REQUIRE_SEO_CERTIFICATION REQUIRE_UNDERSCORE_CERTIFICATION
     while true; do
         if [ $# == 0 ]; then
             break
@@ -216,6 +216,12 @@ function build_ic_bootstrap_tar() {
                 ;;
             --ipv6_monitoring_ips)
                 IPV6_MONITORING_IPS="$2"
+                ;;
+            --require_seo_certification)
+                REQUIRE_SEO_CERTIFICATION="$2"
+                ;;
+            --require_underscore_certification)
+                REQUIRE_UNDERSCORE_CERTIFICATION="$2"
                 ;;
             *)
                 err "Unrecognized option: $1"
@@ -331,6 +337,8 @@ ipv4_http_ips=${IPV4_HTTP_IPS}
 ipv6_http_ips=${IPV6_HTTP_IPS}
 ipv6_debug_ips=${IPV6_DEBUG_IPS}
 ipv6_monitoring_ips=${IPV6_MONITORING_IPS}
+require_seo_certification=${REQUIRE_SEO_CERTIFICATION:-}
+require_underscore_certification=${REQUIRE_UNDERSCORE_CERTIFICATION:-}
 EOF
 
     # setup the prober identity

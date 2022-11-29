@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{borrow::Cow, io::Read};
 
 use candid::Principal;
 use flate2::read::{DeflateDecoder, GzDecoder};
@@ -19,12 +19,13 @@ const MAX_CHUNKS_TO_DECOMPRESS: u64 = 10_240;
 pub trait Validate: Sync + Send {
     fn validate(
         &self,
+        required: bool,
         headers_data: &HeadersData,
         canister_id: &Principal,
         agent: &Agent,
         uri: &Uri,
         response_body: &[u8],
-    ) -> Result<(), String>;
+    ) -> Result<(), Cow<'static, str>>;
 }
 
 pub struct Validator {}
@@ -38,48 +39,46 @@ impl Validator {
 impl Validate for Validator {
     fn validate(
         &self,
+        required: bool,
         headers_data: &HeadersData,
         canister_id: &Principal,
         agent: &Agent,
         uri: &Uri,
         response_body: &[u8],
-    ) -> Result<(), String> {
-        let body_sha = if let Some(body_sha) =
-            decode_body_to_sha256(response_body, headers_data.encoding.clone())
-        {
-            body_sha
-        } else {
-            return Err("Body could not be decoded".into());
-        };
+    ) -> Result<(), Cow<'static, str>> {
+        let body_sha = decode_body_to_sha256(response_body, headers_data.encoding.clone())
+            .ok_or("Body could not be decoded")?;
 
-        let body_valid = match (
-            headers_data.certificate.as_ref(),
-            headers_data.tree.as_ref(),
-        ) {
-            (Some(Ok(certificate)), Some(Ok(tree))) => match validate_body(
+        let cert = headers_data.certificate.as_ref();
+        let tree = headers_data.tree.as_ref();
+        let body_valid = match (required, cert, tree) {
+            // TODO: Remove this (FOLLOW-483)
+            // Canisters don't have to provide certified variables
+            // This should change in the future, grandfathering in current implementations
+            (false, None, None) => return Ok(()),
+
+            (_, Some(Ok(certificate)), Some(Ok(tree))) => validate_body(
                 Certificates { certificate, tree },
                 canister_id,
                 agent,
                 uri,
                 &body_sha,
-            ) {
-                Ok(true) => Ok(()),
-                Ok(false) => Err("Body does not pass verification".to_string()),
-                Err(e) => Err(format!("Certificate validation failed: {}", e)),
-            },
-            (Some(_), _) | (_, Some(_)) => Err("Body does not pass verification".to_string()),
+            )
+            .map_err(|e| format!("Certificate validation failed: {e}"))?,
 
-            // TODO: Remove this (FOLLOW-483)
-            // Canisters don't have to provide certified variables
-            // This should change in the future, grandfathering in current implementations
-            (None, None) => Ok(()),
+            (true, _, _) => return Err("Response verification required but not provided".into()),
+            (_, Some(_), _) => {
+                return Err("`Ic-Certificate` response header missing `tree` field".into())
+            }
+            (_, _, Some(_)) => {
+                return Err("`Ic-Certificate` response header missing `certificate` field".into())
+            }
         };
 
-        if cfg!(feature = "skip_body_verification") {
+        if cfg!(feature = "skip_body_verification") || body_valid {
             return Ok(());
         }
-
-        body_valid
+        Err("Body does not pass verification".into())
     }
 }
 
@@ -217,7 +216,7 @@ mod tests {
 
         let validator = Validator::new();
 
-        let out = validator.validate(&headers, &canister_id, &agent, &uri, &body);
+        let out = validator.validate(false, &headers, &canister_id, &agent, &uri, &body);
 
         assert_eq!(out, Ok(()));
     }

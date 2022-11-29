@@ -29,11 +29,11 @@ use itertools::Either;
 use crate::domain_addr::DomainAddr;
 
 /// The options for the HTTP client
-pub struct HttpClientOpts {
+pub struct HttpClientOpts<'a> {
     /// The list of custom root HTTPS certificates to use to talk to the replica. This can be used
     /// to connect to an IC that has a self-signed certificate, for example. Do not use this when
     /// talking to the Internet Computer blockchain mainnet as it is unsecure.
-    pub ssl_root_certificates: Vec<PathBuf>,
+    pub ssl_root_certificate: Vec<PathBuf>,
 
     /// Allows HTTPS connection to replicas with invalid HTTPS certificates. This can be used to
     /// connect to an IC that has a self-signed certificate, for example. Do not use this when
@@ -41,8 +41,7 @@ pub struct HttpClientOpts {
     pub danger_accept_invalid_ssl: bool,
 
     /// Override DNS resolution for specific replica domains to particular IP addresses.
-    /// Examples: ic0.app=[::1]:9090
-    pub domain_addrs: Vec<DomainAddr>,
+    pub replicas: &'a Vec<DomainAddr>,
 }
 
 pub type Body = hyper::Body;
@@ -93,8 +92,8 @@ where
 pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
     let HttpClientOpts {
         danger_accept_invalid_ssl,
-        ssl_root_certificates,
-        domain_addrs,
+        ssl_root_certificate,
+        replicas,
     } = opts;
 
     let builder = rustls::ClientConfig::builder().with_safe_defaults();
@@ -102,7 +101,7 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
         use rustls::{Certificate, RootCertStore};
 
         let mut root_cert_store = RootCertStore::empty();
-        for cert_path in ssl_root_certificates {
+        for cert_path in ssl_root_certificate {
             let mut buf = Vec::new();
 
             if let Err(e) = File::open(&cert_path).and_then(|mut v| v.read_to_end(&mut buf)) {
@@ -215,11 +214,12 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
     // Advertise support for HTTP/2
     //tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
-    let domain_addrs: HashMap<Uncased, SocketAddr> = domain_addrs
-        .into_iter()
-        .map(|v| Ok((Uncased(Name::from_str(&v.domain)?), v.addr)))
+    let domain_addrs: HashMap<Uncased, SocketAddr> = replicas
+        .iter()
+        .filter_map(|v| Some((v.domain.host()?, v.addr?)))
+        .map(|(domain, addr)| Ok((Uncased(Name::from_str(domain)?), addr)))
         .collect::<Result<_, Error>>()
-        .context("Invalid domain in `replica-resolve` flag")?;
+        .context("Invalid domain in `replicas` flag")?;
 
     let resolver = tower::service_fn(move |name: Name| {
         let domain_addrs = domain_addrs.clone();

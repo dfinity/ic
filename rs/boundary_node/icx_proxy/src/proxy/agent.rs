@@ -11,7 +11,11 @@ use anyhow::bail;
 use axum::{extract::ConnectInfo, Extension};
 use futures::StreamExt;
 use http_body::{LengthLimitError, Limited};
-use hyper::{body, http::header::CONTENT_TYPE, Body, Request, Response, StatusCode, Uri};
+use hyper::{
+    body,
+    http::header::{HeaderName, CONTENT_TYPE},
+    Body, Request, Response, StatusCode, Uri,
+};
 use ic_agent::{agent_error::HttpErrorPayload, Agent, AgentError};
 use ic_utils::{
     call::{AsyncCall, SyncCall},
@@ -40,6 +44,9 @@ const STREAM_CALLBACK_BUFFFER: usize = 2;
 // The maximum length of a body we should log as tracing.
 const MAX_LOG_BODY_SIZE: usize = 100;
 
+static REQUIRE_CERTIFICATION_HEADER: HeaderName =
+    HeaderName::from_static("x-icx-require-certification");
+
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec#reject-codes
 struct ReplicaErrorCodes;
 impl ReplicaErrorCodes {
@@ -52,7 +59,6 @@ pub struct ArgsInner {
     pub counter: AtomicUsize,
     pub replicas: Vec<(Agent, Uri)>,
     pub debug: bool,
-    pub fetch_root_key: bool,
 }
 
 pub struct Args {
@@ -93,27 +99,14 @@ pub async fn handler(
 ) -> Response<Body> {
     let agent = args.replica().0;
     let args = &args.args;
-    async {
-        if args.fetch_root_key && agent.fetch_root_key().await.is_err() {
-            unable_to_fetch_root_key()
-        } else {
-            process_request_inner(
-                request,
-                agent,
-                args.resolver.as_ref(),
-                args.validator.as_ref(),
-            )
-            .await
-        }
-    }
+    process_request_inner(
+        request,
+        agent,
+        args.resolver.as_ref(),
+        args.validator.as_ref(),
+    )
     .await
     .handle_error(args.debug)
-}
-
-fn unable_to_fetch_root_key() -> Result<Response<Body>, anyhow::Error> {
-    Ok(Response::builder()
-        .status(StatusCode::INTERNAL_SERVER_ERROR)
-        .body("Unable to fetch root key".into())?)
 }
 
 async fn process_request_inner(
@@ -133,6 +126,7 @@ async fn process_request_inner(
         }
         Some(x) => x,
     };
+    let certification_required = parts.headers.contains_key(&REQUIRE_CERTIFICATION_HEADER);
 
     trace!("<< {} {} {:?}", parts.method, parts.uri, parts.version);
 
@@ -315,6 +309,7 @@ async fn process_request_inner(
         builder.body(body)?
     } else {
         let body_valid = validator.validate(
+            certification_required,
             &headers_data,
             &canister_id,
             agent,

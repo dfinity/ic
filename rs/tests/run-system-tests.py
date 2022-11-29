@@ -347,6 +347,7 @@ def populate_dependencies_dir(
         "ic-ckbtc-minter.wasm": "rs/bitcoin/ckbtc/minter/ckbtc_minter.wasm",
         "ic-rosetta-api": "rs/rosetta-api/ic-rosetta-api",
         "http_counter.wasm": "rs/tests/test_canisters/http_counter/http_counter.wasm",
+        "kv_store.wasm": "rs/tests/test_canisters/kv_store/kv_store.wasm",
         "counter.wat": "rs/workload_generator/src/counter.wat",
         "proxy_canister.wasm": "rs/rust_canisters/proxy_canister/proxy_canister.wasm",
     }

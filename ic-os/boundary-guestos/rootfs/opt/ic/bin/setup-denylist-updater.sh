@@ -3,7 +3,6 @@
 set -euox pipefail
 source '/opt/ic/bin/exec_condition.shlib'
 
-readonly BOOT_DIR='/boot/config'
 readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
 
 readonly RUN_DIR='/run/ic-node/etc/default'

@@ -15,15 +15,15 @@ impl DnsCanisterConfig {
     /// dns_aliases: 0 or more entries of the form of dns.alias:canister-id
     /// dns_suffixes: 0 or more domain names which will match as a suffix
     pub fn new(
-        dns_aliases: &[String],
-        dns_suffixes: &[String],
+        dns_aliases: impl IntoIterator<Item = impl AsRef<str>>,
+        dns_suffixes: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> anyhow::Result<DnsCanisterConfig> {
         let mut rules = vec![];
-        for suffix in dns_suffixes {
-            rules.push(DnsCanisterRule::new_suffix(suffix));
+        for suffix in dns_suffixes.into_iter() {
+            rules.push(DnsCanisterRule::new_suffix(suffix.as_ref()));
         }
-        for alias in dns_aliases {
-            rules.push(DnsCanisterRule::new_alias(alias)?);
+        for alias in dns_aliases.into_iter() {
+            rules.push(DnsCanisterRule::new_alias(alias.as_ref())?);
         }
         // Check suffixes first (via stable sort), because they will only match
         // if actually preceded by a canister id.

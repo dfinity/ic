@@ -12,6 +12,8 @@ pub struct HeadersData {
     pub encoding: Option<String>,
 }
 
+const IC_CERTIFICATE_HEADER_NAME: &str = "Ic-Certificate";
+
 pub fn extract_headers_data(headers: &[HeaderField]) -> HeadersData {
     let mut headers_data = HeadersData {
         certificate: None,
@@ -20,7 +22,7 @@ pub fn extract_headers_data(headers: &[HeaderField]) -> HeadersData {
     };
 
     for HeaderField(name, value) in headers {
-        if name.eq_ignore_ascii_case("Ic-Certificate") {
+        if name.eq_ignore_ascii_case(IC_CERTIFICATE_HEADER_NAME) {
             for field in value.split(',') {
                 if let Some((_, name, b64_value)) = regex_captures!("^(.*)=:(.*):$", field.trim()) {
                     trace!(

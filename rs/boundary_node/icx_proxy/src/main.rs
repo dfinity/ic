@@ -1,10 +1,12 @@
+// TODO: Remove after inspect_err stabilizes (rust-lang/rust#91345)
+
+#![allow(unstable_name_collisions)]
+
 use std::{net::SocketAddr, path::PathBuf};
 
-use anyhow::{Context, Error};
+use anyhow::Context;
 use clap::{builder::ValueParser, crate_authors, crate_version, Parser};
 use futures::try_join;
-use hyper::Uri;
-use itertools::iproduct;
 use tracing::{error, Instrument};
 
 mod canister_alias;
@@ -25,6 +27,23 @@ use crate::{
     validate::Validator,
 };
 
+// TODO: Remove after inspect_err stabilizes (rust-lang/rust#91345)
+trait InspectErr {
+    type E;
+    fn inspect_err<F: FnOnce(&Self::E)>(self, f: F) -> Self;
+}
+
+impl<R, E> InspectErr for Result<R, E> {
+    type E = E;
+    fn inspect_err<F: FnOnce(&Self::E)>(self, f: F) -> Self {
+        if let Err(ref e) = self {
+            f(e);
+        }
+
+        self
+    }
+}
+
 #[derive(Parser)]
 #[clap(
     version = crate_version!(),
@@ -36,10 +55,10 @@ struct Opts {
     #[clap(long, default_value = "127.0.0.1:3000")]
     address: SocketAddr,
 
-    /// A list of mappings from domains to socket addresses for replica upstreams.
-    /// Format: domain:addr
+    /// A list of replica mappings from domains to socket addresses for replica upstreams.
+    /// Format: <URL>[|<IP>:<PORT>]
     #[clap(long, value_parser = ValueParser::new(parse_domain_addr))]
-    replica_domain_addr: Vec<DomainAddr>,
+    replicas: Vec<DomainAddr>,
 
     /// A list of domains that can be served. These are used for canister resolution.
     #[clap(long)]
@@ -59,6 +78,12 @@ struct Opts {
     /// talking to the Internet Computer blockchain mainnet as it is unsecure.
     #[clap(long)]
     ssl_root_certificate: Vec<PathBuf>,
+
+    /// The root key to use to communicate with the replica back end. By default, the Internet Computer
+    /// mainnet key is used (embedded in the binary). Ensure you know what you are doing before
+    /// using this option.
+    #[clap(long, conflicts_with("fetch_root_key"))]
+    root_key: Option<PathBuf>,
 
     /// Whether or not to fetch the root key from the replica back end. Do not use this when
     /// talking to the Internet Computer blockchain mainnet as it is unsecure.
@@ -88,7 +113,7 @@ struct Opts {
 fn main() -> Result<(), anyhow::Error> {
     let Opts {
         address,
-        replica_domain_addr,
+        replicas,
         domain,
         canister_alias,
         ignore_url_canister_param,
@@ -98,54 +123,31 @@ fn main() -> Result<(), anyhow::Error> {
         debug,
         log,
         metrics,
-        ..
+        root_key,
     } = Opts::parse();
 
     let _span = logging::setup(log);
 
     // Setup HTTP Client
     let client = http_client::setup(http_client::HttpClientOpts {
-        ssl_root_certificates: ssl_root_certificate,
+        ssl_root_certificate,
         danger_accept_invalid_ssl,
-        domain_addrs: replica_domain_addr.clone(),
+        replicas: &replicas,
     })?;
 
     // Setup Metrics
     let (meter, metrics) = metrics::setup(metrics);
 
     // Setup Canister ID Resolver
-    let dns_suffixes: Vec<String> = domain
-        .iter()
-        .flat_map(|domain| [domain.clone(), format!("raw.{domain}")])
-        .collect();
-
-    let dns_aliases: Vec<String> = iproduct!(canister_alias.iter(), domain.iter())
-        .flat_map(|(CanisterAlias { id, principal }, domain)| {
-            [
-                format!("{id}.{domain}:{principal}"),
-                format!("{id}.raw.{domain}:{principal}"),
-            ]
-        })
-        .collect();
-
     let resolver = canister_id::setup(canister_id::CanisterIdOpts {
-        dns_alias: dns_aliases,
-        dns_suffix: dns_suffixes,
+        canister_alias,
+        domain,
         ignore_url_canister_param,
     })?;
 
     // Setup Validator
     let validator = Validator::new();
     let validator = WithMetrics(validator, MetricParams::new(&meter, "validator"));
-
-    // Setup Proxy
-    let replica_uris: Vec<Uri> = replica_domain_addr
-        .iter()
-        .map(|v| {
-            let uri = format!("https://{}:{}/", v.domain, v.addr.port());
-            uri.parse::<Uri>().context("failed to parse uri")
-        })
-        .collect::<Result<_, Error>>()?;
 
     let proxy = proxy::setup(
         proxy::SetupArgs {
@@ -155,9 +157,10 @@ fn main() -> Result<(), anyhow::Error> {
         },
         proxy::ProxyOpts {
             address,
-            replica_uris,
+            replicas,
             debug,
             fetch_root_key,
+            root_key,
         },
     )?;
 
@@ -168,15 +171,13 @@ fn main() -> Result<(), anyhow::Error> {
 
     rt.block_on(
         async move {
-            let v = try_join!(
+            try_join!(
                 metrics.run().in_current_span(),
                 proxy.run().in_current_span(),
-            );
-            if let Err(v) = v {
-                error!("Runtime crashed: {v}");
-                return Err(v);
-            }
-            Ok(())
+            )
+            .context("Runtime crashed")
+            .inspect_err(|e| error!("{e}"))?;
+            Ok::<_, anyhow::Error>(())
         }
         .in_current_span(),
     )?;

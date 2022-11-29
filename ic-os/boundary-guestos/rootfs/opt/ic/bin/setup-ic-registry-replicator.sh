@@ -3,7 +3,6 @@
 set -euox pipefail
 source '/opt/ic/bin/helpers.shlib'
 
-readonly BOOT_DIR='/boot/config'
 readonly NNS_CONFIG="${BOOT_DIR}/nns.conf"
 readonly NNS_PEM="${BOOT_DIR}/nns_public_key.pem"
 

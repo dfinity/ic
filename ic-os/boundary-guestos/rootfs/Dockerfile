@@ -33,7 +33,7 @@ WORKDIR /tmp
 ARG sw_version
 ARG sw_sha256
 RUN \
-   curl -L  https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz -o service-worker.tgz && \
+   curl -L https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz -o service-worker.tgz && \
    echo "${sw_sha256}  service-worker.tgz" | shasum -c
 
 # Download Nginx NJS Plugins
@@ -49,22 +49,51 @@ RUN \
 
 #
 # Second build stage:
-# - Construct the actual target image (IC-OS root filesystem)
+# - Construct base images with the differences between dev and prod (IC-OS root filesystem)
 #
-FROM $BASE_IMAGE
+FROM $BASE_IMAGE as image-dev
+# nns public key will be on the USB stick
 
+FROM $BASE_IMAGE as image-prod
 USER root:root
 
-# Fetch and install npm ic service worker for production
+# Bake the nns public key into the image
+# For the dev image the public key will come from the usb stick
+# See get_nns_pem_path in ic-os/boundary-guestos/rootfs/opt/ic/bin/helpers.shlib
+RUN printf '%s\n' >/etc/nns_public_key.pem \
+    '-----BEGIN PUBLIC KEY-----' \
+    'MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9' \
+    'gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bW' \
+    'W5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg==' \
+    '-----END PUBLIC KEY-----'
+
+
+#
+# Third build stage:
+# - Construct base images with the differences between npm sw and local sw
+#
+FROM image-${BUILD_TYPE} as image-sw-false
+# /var/www/html/ files injected by caller
+
+FROM image-${BUILD_TYPE} as image-sw-true
+USER root:root
+
+# Fetch and install npm ic service worker for dev/prod
 COPY --from=download /tmp/service-worker.tgz /tmp/service-worker.tgz
-
-ARG SW=
 ARG BUILD_TYPE=
-RUN if [ "$SW" = "true" ] ; then cd /tmp && tar xfvz service-worker.tgz &&\
+RUN cd /tmp && \
+    tar xfvz service-worker.tgz && \
     mkdir -p /var/www/html/ &&\
-    cp -rf /tmp/package/dist-"$BUILD_TYPE"/* /var/www/html/ ; fi
+    cp -rf /tmp/package/dist-${BUILD_TYPE}/* /var/www/html/; \
+    rm -rf /tmp/package /tmp/service-worker.tgz
 
-RUN rm -rf /tmp/package /tmp/service-worker.tgz
+#
+# Fourth build stage:
+# - Construct the actual target image (IC-OS root filesystem)
+#
+FROM image-sw-${SW}
+
+USER root:root
 
 RUN mkdir -p /boot/config \
              /boot/efi \
@@ -163,23 +192,27 @@ RUN addgroup --system nonconfidential && \
     adduser admin systemd-journal && \
     adduser admin sudo && \
     # The "vector" account. Used to run vector binary
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Vector" vector && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home vector && \
     adduser vector vector
+
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Node Exporter" node_exporter && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home node_exporter && \
     adduser node_exporter node_exporter && \
     # The "socks" account for socks proxy
     # Also set correct permissions for dante and stunnel.
     # Stunnel4 cannot be started as a systemctl service so starting it as `stunnel4 start`
     addgroup socks && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Socks" socks && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home socks && \
     adduser socks socks && chmod +s /usr/sbin/danted && \
-    chmod 0755 /etc/init.d/stunnel4 && \
+    chmod 0755 /etc/init.d/stunnel4
+
+# Setup prober
+RUN \
     addgroup prober && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Prober" prober && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home prober && \
     adduser prober prober && \
     mkdir -p /var/log/prober && \
     chown prober:prober /var/log/prober && \
@@ -188,13 +221,8 @@ RUN addgroup node_exporter && \
 # Setup denylist-updater
 RUN \
     addgroup denylist-updater && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "denylist-updater" denylist-updater && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home denylist-updater && \
     adduser denylist-updater denylist-updater && \
-    mkdir -p /var/opt/nginx/denylist && \
-    chown denylist-updater:denylist-updater /var/opt/nginx/denylist && \
-    chmod 644 /var/opt/nginx/denylist
-
-RUN \
     mkdir -p /var/opt/nginx/denylist && \
     chown denylist-updater:denylist-updater /var/opt/nginx/denylist && \
     chmod 644 /var/opt/nginx/denylist

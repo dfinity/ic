@@ -5,7 +5,6 @@
 set -euox pipefail
 source '/opt/ic/bin/helpers.shlib'
 
-readonly BOOT_DIR='/boot/config'
 readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
 readonly NETWORK_CONFIG="${BOOT_DIR}/network.conf"
 
