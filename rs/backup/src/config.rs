@@ -25,6 +25,7 @@ pub struct Config {
     pub root_dir: PathBuf,
     pub excluded_dirs: Vec<String>,
     pub ssh_private_key: PathBuf,
+    pub disk_threshold_warn: u32,
     pub slack_token: String,
     pub subnets: Vec<SubnetConfig>,
 }
@@ -39,6 +40,9 @@ impl ConfigValidate for Config {
                 "Missing ssh credentials file: {:?}",
                 self.ssh_private_key
             ));
+        }
+        if self.disk_threshold_warn > 100 {
+            return Err("Disk threshhold warning value is > 100".to_string());
         }
         if self.subnets.is_empty() {
             return Err("No subnet configured for backup!".to_string());

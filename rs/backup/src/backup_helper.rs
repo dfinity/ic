@@ -31,12 +31,18 @@ pub struct BackupHelper {
     pub registry_client: Arc<RegistryClientImpl>,
     pub notification_client: NotificationClient,
     pub downloads: Arc<Mutex<bool>>,
+    pub disk_threshold_warn: u32,
     pub log: Logger,
 }
 
 enum ReplayResult {
     Done,
     UpgradeRequired(ReplicaVersion),
+}
+
+enum DiskStats {
+    Inodes,
+    Space,
 }
 
 impl BackupHelper {
@@ -80,9 +86,13 @@ impl BackupHelper {
         self.data_dir().join("ic_state")
     }
 
+    fn archive_root_dir(&self) -> PathBuf {
+        self.root_dir.join("archive")
+    }
+
     fn archive_dir(&self, last_height: u64) -> PathBuf {
-        self.root_dir
-            .join(format!("archive/{}/{}", self.subnet_id, last_height))
+        self.archive_root_dir()
+            .join(format!("{}/{}", self.subnet_id, last_height))
     }
 
     fn username(&self) -> String {
@@ -416,6 +426,48 @@ impl BackupHelper {
         }
         None
     }
+
+    fn get_disk_stats(&self, typ: DiskStats) -> Result<u32, String> {
+        let mut cmd = Command::new("df");
+        cmd.arg(match typ {
+            DiskStats::Inodes => "-i",
+            DiskStats::Space => "-k",
+        });
+        cmd.arg(self.archive_root_dir());
+        match exec_cmd(&mut cmd) {
+            Ok(str) => {
+                if let Some(val) = str
+                    .as_ref()
+                    .unwrap_or(&"".to_string())
+                    .lines()
+                    .next_back()
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .nth(4)
+                {
+                    let mut num_str = val.to_string();
+                    num_str.pop();
+                    if let Ok(n) = num_str.parse::<u32>() {
+                        if n >= self.disk_threshold_warn {
+                            let status = match typ {
+                                DiskStats::Inodes => "inodes",
+                                DiskStats::Space => "space",
+                            };
+                            self.notification_client
+                                .report_warning_slack(format!("{} usage is at {}%", status, n))
+                        }
+                        Ok(n)
+                    } else {
+                        Err(format!("Error converting number from: {:?}", str))
+                    }
+                } else {
+                    Err(format!("Error converting disk stats: {:?}", str))
+                }
+            }
+            Err(err) => Err(format!("Error fetching disk stats: {}", err)),
+        }
+    }
+
     fn archive_state(&self, last_height: u64) -> Result<(), String> {
         let state_dir = self.data_dir().join(".");
         let archive_dir = self.archive_dir(last_height);
@@ -436,7 +488,7 @@ impl BackupHelper {
         for dir in &self.excluded_dirs {
             cmd.arg("--exclude").arg(dir);
         }
-        cmd.arg(state_dir).arg(archive_dir);
+        cmd.arg(state_dir).arg(&archive_dir);
         info!(self.log, "Will execute: {:?}", cmd);
         if let Err(e) = exec_cmd(&mut cmd) {
             error!(self.log, "Error: {}", e);
@@ -445,7 +497,20 @@ impl BackupHelper {
             Err(e.to_string())
         } else {
             info!(self.log, "State archived!");
-            Ok(())
+
+            match (
+                self.get_disk_stats(DiskStats::Space),
+                self.get_disk_stats(DiskStats::Inodes),
+            ) {
+                (Ok(space), Ok(inodes)) => {
+                    info!(self.log, "Space: {} Inodes: {}", space, inodes);
+                    self.notification_client
+                        .push_metrics_disk_stats(space, inodes);
+                    Ok(())
+                }
+                (Err(err), Ok(_)) => Err(err),
+                (_, Err(err)) => Err(err),
+            }
         }
     }
 }

@@ -128,6 +128,7 @@ impl BackupManager {
         let mut save_state = BackupManagerState::default();
 
         let downloads = Arc::new(Mutex::new(true));
+        let disk_threshold_warn = config.disk_threshold_warn;
 
         for s in config.subnets {
             let replica_version = fetch_value_or_default(
@@ -151,6 +152,7 @@ impl BackupManager {
                 registry_client: registry_client.clone(),
                 notification_client,
                 downloads: downloads.clone(),
+                disk_threshold_warn,
                 log: log.clone(),
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);

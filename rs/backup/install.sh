@@ -20,7 +20,7 @@ SYNCING_PERIOD=3600 # 1 hour
 REPLAY_PERIOD=28800 # 8 hours
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="7c718140c1a7edefdc384e5047ab50f30cff1520"
+DEFAULT_BUILD_ID="7657b1f1762ddfc39d5ac63e00c7c54ecf2cf132"
 echo "Please enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -66,28 +66,28 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
-    "backup_instance":"${BACKUP_INSTANCE}",
-    "nns_url":"${NNS_URL}",
-    "nns_pem":"${WORK_DIR}/$PUBLIC_KEY_FILE",
-    "root_dir":"${ROOT_DIR}",
-    "excluded_dirs": ["backups", "diverged_checkpoints", "diverged_state_markers", "fs_tmp", "tip", "tmp" ],
-    "ssh_private_key":"${BACKUP_HOME}/.ssh/id_ed25519_backup",
-    "slack_token":"<INSERT SLACK TOKEN>",
+    "backup_instance": "${BACKUP_INSTANCE}",
+    "nns_url": "${NNS_URL}",
+    "nns_pem": "${WORK_DIR}/$PUBLIC_KEY_FILE",
+    "root_dir": "${ROOT_DIR}",
+    "excluded_dirs": ["backups", "diverged_checkpoints", "diverged_state_markers", "fs_tmp", "tip", "tmp"],
+    "ssh_private_key": "${BACKUP_HOME}/.ssh/id_ed25519_backup",
+    "slack_token": "<INSERT SLACK TOKEN>",
     "subnets":
     [
         {
-            "subnet_id":"<INSERT 1. SUBNET_ID>",
+            "subnet_id": "<INSERT 1. SUBNET_ID>",
             "initial_replica_version": "<INSERT REPLICA_VERSION>",
             "nodes_syncing": ${NODES_SYNCING},
-            "sync_period_secs":${SYNCING_PERIOD},
-            "replay_period_secs":${REPLAY_PERIOD}
+            "sync_period_secs": ${SYNCING_PERIOD},
+            "replay_period_secs": ${REPLAY_PERIOD}
         },
         {
-            "subnet_id":"<INSERT 2. SUBNET_ID>",
+            "subnet_id": "<INSERT 2. SUBNET_ID>",
             "initial_replica_version": "<INSERT REPLICA_VERSION>",
             "nodes_syncing": ${NODES_SYNCING},
-            "sync_period_secs":${SYNCING_PERIOD},
-            "replay_period_secs":${REPLAY_PERIOD}
+            "sync_period_secs": ${SYNCING_PERIOD},
+            "replay_period_secs": ${REPLAY_PERIOD}
         }
     ]
 }

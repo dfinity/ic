@@ -93,4 +93,15 @@ impl NotificationClient {
         );
         self.push_metrics(message)
     }
+
+    pub fn push_metrics_disk_stats(&self, space: u32, inodes: u32) {
+        let message = format!(
+            "# TYPE backup_disk_usage gauge\n\
+            # HELP backup_disk_usage The allocation percentage of some resource on a backup pod.\n\
+            backup_disk_usage{{ic=\"{}\", ic_subnet=\"{}\", resource=\"space\"}} {}\n\
+            backup_disk_usage{{ic=\"{}\", ic_subnet=\"{}\", resource=\"inodes\"}} {}\n",
+            self.backup_instance, self.subnet, space, self.backup_instance, self.subnet, inodes,
+        );
+        self.push_metrics(message)
+    }
 }
