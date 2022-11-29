@@ -40,7 +40,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
     vec![
         consensus_safety_pot(),
-        cow_safety_pot(),
         max_payload_pot(),
         dual_workload_pot(),
         system_subnets_pot(),
@@ -48,10 +47,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
         system_api_security_pot(),
         tecdsa_complaint_test_pot(),
     ]
-}
-
-fn cow_safety_pot() -> pot::Pot {
-    isolated_test!(cow_safety_test)
 }
 
 fn request_auth_malicious_replica_pot() -> pot::Pot {
