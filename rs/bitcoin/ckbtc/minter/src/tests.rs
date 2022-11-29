@@ -14,9 +14,10 @@ use proptest::{
     option,
     prelude::{any, Strategy},
 };
-use proptest::{prop_assert, prop_assert_eq, prop_assume};
+use proptest::{prop_assert, prop_assert_eq, prop_assume, prop_oneof};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeSet, HashMap};
+use std::str::FromStr;
 
 fn dummy_utxo_from_value(v: u64) -> Utxo {
     Utxo {
@@ -30,16 +31,9 @@ fn dummy_utxo_from_value(v: u64) -> Utxo {
 }
 
 fn address_to_script_pubkey(address: &BitcoinAddress) -> bitcoin::Script {
-    use std::str::FromStr;
-
-    match address {
-        BitcoinAddress::WitnessV0(pkhash) => {
-            let address_string =
-                crate::address::network_and_pkhash_to_p2wpkh(Network::Mainnet, pkhash);
-            let btc_address = bitcoin::Address::from_str(&address_string).unwrap();
-            btc_address.script_pubkey()
-        }
-    }
+    let address_string = address.display(Network::Mainnet);
+    let btc_address = bitcoin::Address::from_str(&address_string).unwrap();
+    btc_address.script_pubkey()
 }
 
 fn as_txid(hash: &[u8]) -> bitcoin::Txid {
@@ -165,11 +159,15 @@ fn arb_signed_input() -> impl Strategy<Value = tx::SignedInput> {
         )
 }
 
+fn arb_address() -> impl Strategy<Value = BitcoinAddress> {
+    prop_oneof![
+        uniform20(any::<u8>()).prop_map(BitcoinAddress::P2wpkhV0),
+        uniform20(any::<u8>()).prop_map(BitcoinAddress::P2pkh),
+    ]
+}
+
 fn arb_tx_out() -> impl Strategy<Value = tx::TxOut> {
-    (arb_amount(), uniform20(any::<u8>())).prop_map(|(value, pkhash)| tx::TxOut {
-        value,
-        address: BitcoinAddress::WitnessV0(pkhash),
-    })
+    (arb_amount(), arb_address()).prop_map(|(value, address)| tx::TxOut { value, address })
 }
 
 fn arb_utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utxo> {
@@ -353,8 +351,8 @@ proptest! {
         let target = total_value / 2;
         let (unsigned_tx, _) = build_unsigned_transaction(
             &mut utxos,
-            BitcoinAddress::WitnessV0(dst_pkhash),
-            BitcoinAddress::WitnessV0(main_pkhash),
+            BitcoinAddress::P2wpkhV0(dst_pkhash),
+            BitcoinAddress::P2wpkhV0(main_pkhash),
             target,
             fee_per_vbyte
         )
@@ -388,8 +386,8 @@ proptest! {
 
         let (unsigned_tx, _) = build_unsigned_transaction(
             &mut utxos,
-            BitcoinAddress::WitnessV0(dst_pkhash),
-            BitcoinAddress::WitnessV0(main_pkhash),
+            BitcoinAddress::P2wpkhV0(dst_pkhash),
+            BitcoinAddress::P2wpkhV0(main_pkhash),
             target,
             fee_per_vbyte
         )
@@ -407,11 +405,11 @@ proptest! {
             &vec![
                 tx::TxOut {
                     value: target - fee,
-                    address: BitcoinAddress::WitnessV0(dst_pkhash),
+                    address: BitcoinAddress::P2wpkhV0(dst_pkhash),
                 },
                 tx::TxOut {
                     value: inputs_value - target,
-                    address: BitcoinAddress::WitnessV0(main_pkhash),
+                    address: BitcoinAddress::P2wpkhV0(main_pkhash),
                 },
             ]
         );
@@ -431,8 +429,8 @@ proptest! {
         prop_assert_eq!(
             build_unsigned_transaction(
                 &mut utxos,
-                BitcoinAddress::WitnessV0(dst_pkhash),
-                BitcoinAddress::WitnessV0(main_pkhash),
+                BitcoinAddress::P2wpkhV0(dst_pkhash),
+                BitcoinAddress::P2wpkhV0(main_pkhash),
                 total_value * 2,
                 fee_per_vbyte
             ).expect_err("build transaction should fail because the amount is too high"),
@@ -443,8 +441,8 @@ proptest! {
         prop_assert_eq!(
             build_unsigned_transaction(
                 &mut utxos,
-                BitcoinAddress::WitnessV0(dst_pkhash),
-                BitcoinAddress::WitnessV0(main_pkhash),
+                BitcoinAddress::P2wpkhV0(dst_pkhash),
+                BitcoinAddress::P2wpkhV0(main_pkhash),
                 1,
                 fee_per_vbyte
             ).expect_err("build transaction should fail because the amount is too low to pay the fee"),
@@ -477,11 +475,54 @@ proptest! {
         use crate::address::network_and_public_key_to_p2wpkh;
         pkbytes.insert(0, 0x02);
 
-        let addr = network_and_public_key_to_p2wpkh(Network::Testnet, &pkbytes);
-        prop_assert_eq!(
-            Ok(BitcoinAddress::WitnessV0(tx::hash160(&pkbytes))),
-            crate::address::parse_address(&addr, Network::Testnet)
-        );
+        for network in [Network::Mainnet, Network::Testnet, Network::Regtest].iter() {
+            let addr = network_and_public_key_to_p2wpkh(*network, &pkbytes);
+            prop_assert_eq!(
+                Ok(BitcoinAddress::P2wpkhV0(tx::hash160(&pkbytes))),
+                BitcoinAddress::parse(&addr, *network)
+            );
+        }
+    }
+
+    #[test]
+    fn btc_address_parsing_model(mut pkbytes in pvec(any::<u8>(), 32)) {
+        use bitcoin::network::constants::Network as BtcNetwork;
+
+        pkbytes.insert(0, 0x02);
+
+        let pk_result = bitcoin::PublicKey::from_slice(&pkbytes);
+
+        prop_assume!(pk_result.is_ok());
+
+        let pk = pk_result.unwrap();
+        let pkhash = tx::hash160(&pkbytes);
+
+        for network in [Network::Mainnet, Network::Testnet, Network::Regtest].iter() {
+            let btc_net = match network {
+                Network::Mainnet => BtcNetwork::Bitcoin,
+                Network::Testnet => BtcNetwork::Testnet,
+                Network::Regtest => BtcNetwork::Regtest,
+            };
+            let btc_addr = bitcoin::Address::p2pkh(&pk, btc_net);
+            prop_assert_eq!(
+                Ok(BitcoinAddress::P2pkh(tx::hash160(&pkbytes))),
+                BitcoinAddress::parse(&btc_addr.to_string(), *network)
+            );
+
+            let btc_addr = bitcoin::Address::p2wpkh(&pk, btc_net).unwrap();
+            prop_assert_eq!(
+                Ok(BitcoinAddress::P2wpkhV0(pkhash)),
+                BitcoinAddress::parse(&btc_addr.to_string(), *network)
+            );
+        }
+    }
+
+    #[test]
+    fn address_roundtrip(address in arb_address()) {
+        for network in [Network::Mainnet, Network::Testnet, Network::Regtest].iter() {
+            let addr_str = address.display(*network);
+            prop_assert_eq!(BitcoinAddress::parse(&addr_str, *network), Ok(address.clone()));
+        }
     }
 
     #[test]

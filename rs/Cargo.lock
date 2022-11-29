@@ -4508,6 +4508,7 @@ dependencies = [
  "async-trait",
  "bech32 0.9.1",
  "bitcoin",
+ "bs58",
  "candid",
  "canister-test",
  "ciborium",

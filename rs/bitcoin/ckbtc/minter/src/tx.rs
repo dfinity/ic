@@ -22,6 +22,15 @@ const FLAGS: u8 = 1;
 // The signature applies to all inputs and outputs.
 pub const SIGHASH_ALL: u32 = 1;
 
+/// Bitcoin script opcodes.
+mod ops {
+    pub const PUSH_20: u8 = 0x14;
+    pub const DUP: u8 = 0x76;
+    pub const HASH160: u8 = 0xa9;
+    pub const EQUALVERIFY: u8 = 0x88;
+    pub const CHECKSIG: u8 = 0xac;
+}
+
 pub trait Buffer {
     type Output;
 
@@ -141,7 +150,8 @@ pub struct TxOut {
 /// Encodes the scriptPubkey required to unlock an output for the specified address.
 pub fn encode_address_scipt_pubkey(btc_address: &BitcoinAddress, buf: &mut impl Buffer) {
     match btc_address {
-        BitcoinAddress::WitnessV0(pkhash) => encode_p2wpkh_script_pubkey(pkhash, buf),
+        BitcoinAddress::P2wpkhV0(pkhash) => encode_p2wpkh_script_pubkey(pkhash, buf),
+        BitcoinAddress::P2pkh(pkhash) => encode_sighash_script_code(pkhash, buf),
     }
 }
 
@@ -149,9 +159,11 @@ pub fn encode_address_scipt_pubkey(btc_address: &BitcoinAddress, buf: &mut impl 
 pub fn encode_sighash_script_code(pkhash: &[u8; 20], buf: &mut impl Buffer) {
     // For P2WPKH witness program, the scriptCode is 0x1976a914{20-byte-pubkey-hash}88ac.
     // https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki#specification
-    buf.write(&[0x19, 0x76, 0xa9, 0x14][..]);
+    // It's the same as P2PKH script pubkey:
+    // OP_DUP OP_HASH160 <Public KeyHash> OP_EQUALVERIFY OP_CHECKSIG
+    buf.write(&[25, ops::DUP, ops::HASH160, ops::PUSH_20][..]);
     buf.write(pkhash);
-    buf.write(&[0x88, 0xac][..]);
+    buf.write(&[ops::EQUALVERIFY, ops::CHECKSIG][..]);
 }
 
 pub struct TxSigHasher<'a> {
@@ -384,7 +396,7 @@ fn encode_p2wpkh_script_pubkey(pkhash: &[u8; 20], buf: &mut impl Buffer) {
     // Encoding the scriptPubkey field for P2WPKH:
     //    scriptPubKey: 0 <20-byte-key-hash>
     //                 (0x0014{20-byte-key-hash})
-    buf.write(&[22, 0, 20]);
+    buf.write(&[22, 0, ops::PUSH_20]);
     buf.write(&pkhash[..]);
 }
 

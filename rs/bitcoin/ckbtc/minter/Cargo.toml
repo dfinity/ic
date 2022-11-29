@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 async-trait = "0.1.53"
 bech32 = "0.9.0"
+bs58 = "0.4.0"
 candid = "0.8.1"
 ciborium = { git = "https://github.com/enarx/ciborium", rev = "e719537c99b564c3674a56defe53713c702c6f46" }
 hex = "0.4.3"

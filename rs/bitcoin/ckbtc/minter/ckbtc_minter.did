@@ -5,6 +5,7 @@ type RetrieveBtcArgs = record {
     // The address to which ckBTC minter should deposit BTC.
     // Currently, the minter understands only the following types of addresses:
     //   * P2WPKH addresses (they start with the "bc1q" prefix on the Bitcoin mainnet).
+    //   * P2PKH addresses (they start with the "1" prefix on the Bitcoin mainnet).
     address : text;
     // The amount of BTC in Satoshis that client wants to withdraw.
     amount : nat64;
