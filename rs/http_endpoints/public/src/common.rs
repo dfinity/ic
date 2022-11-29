@@ -115,7 +115,7 @@ pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
         C::QueryCallGraphTooDeep => StatusCode::INTERNAL_SERVER_ERROR,
         C::QueryCallGraphTotalInstructionLimitExceeded => StatusCode::INTERNAL_SERVER_ERROR,
         C::CompositeQueryCalledInReplicatedMode => StatusCode::INTERNAL_SERVER_ERROR,
-        C::CanisterNotHostedBySubnet => StatusCode::BAD_REQUEST,
+        C::CanisterNotHostedBySubnet => StatusCode::NOT_FOUND,
     };
     make_plaintext_response(status, user_error.description().to_string())
 }

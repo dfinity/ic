@@ -145,7 +145,7 @@ fn main() -> Result<()> {
         // step for a specific deployment case in ic-prep: when we want to deploy
         // nodes without assigning them to subnets
 
-        let ic_config = IcConfig::new(
+        let mut ic_config = IcConfig::new(
             /* target_dir= */ config.state_dir.as_path(),
             topology_config,
             /* replica_version_id= */ None,
@@ -158,6 +158,9 @@ fn main() -> Result<()> {
             None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
         );
+
+        ic_config.set_use_specified_ids_allocation_range(config.use_specified_ids_allocation_range);
+
         ic_config.initialize()?;
     }
 
@@ -340,6 +343,11 @@ struct CliArgs {
     /// Unix Domain Socket for canister http adapter
     #[clap(long = "canister-http-uds-path")]
     canister_http_uds_path: Option<PathBuf>,
+
+    /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
+    /// Used only for local replicas.
+    #[clap(long = "use-specified-ids-allocation-range")]
+    use_specified_ids_allocation_range: bool,
 }
 
 impl CliArgs {
@@ -543,6 +551,7 @@ impl CliArgs {
             subnet_type,
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path,
             canister_http_uds_path: self.canister_http_uds_path,
+            use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
         })
     }
 }
@@ -652,6 +661,7 @@ struct ValidatedConfig {
     subnet_type: SubnetType,
     bitcoin_testnet_uds_path: Option<PathBuf>,
     canister_http_uds_path: Option<PathBuf>,
+    use_specified_ids_allocation_range: bool,
 
     // Not intended to ever be read: role is to keep the temp dir from being deleted.
     _state_dir_holder: Option<TempDir>,
