@@ -731,8 +731,10 @@ fn build_streams_with_oversized_payloads() {
             response_payload: Payload::Reject(RejectContext::new(
                 RejectCode::CanisterError,
                 format!(
-                    "Canister {} violated contract: payload too large",
-                    local_canister
+                    "Canister {} violated contract: attempted to send a message of size {} exceeding the limit {}",
+                    local_canister,
+                    remote_request.payload_size_bytes(),
+                    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                 ),
             )),
         };
@@ -754,8 +756,10 @@ fn build_streams_with_oversized_payloads() {
             response_payload: Payload::Reject(RejectContext::new(
                 RejectCode::CanisterError,
                 format!(
-                    "Canister {} violated contract: payload too large",
-                    local_canister
+                    "Canister {} violated contract: attempted to send a message of size {} exceeding the limit {}",
+                    local_canister,
+                    data_response.payload_size_bytes(),
+                    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                 ),
             )),
         };
