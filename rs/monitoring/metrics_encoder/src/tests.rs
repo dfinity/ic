@@ -1,4 +1,4 @@
-use super::MetricsEncoder;
+use super::{validate_prometheus_name, MetricsEncoder};
 
 fn as_string(encoder: MetricsEncoder<Vec<u8>>) -> String {
     String::from_utf8(encoder.into_inner()).unwrap()
@@ -44,4 +44,22 @@ cpu_temperature{core="2"} 43 1395066363000
 "#,
         as_string(encoder)
     );
+}
+
+#[test]
+#[should_panic(expected = "Empty names are not allowed")]
+fn validate_empty_name() {
+    validate_prometheus_name("")
+}
+
+#[test]
+#[should_panic(expected = "Name '⇒Γ' does not match pattern [a-zA-Z_][a-zA-Z0-9_]")]
+fn validate_unicode_name() {
+    validate_prometheus_name("⇒Γ")
+}
+
+#[test]
+#[should_panic(expected = "Name 'http:rule' does not match pattern [a-zA-Z_][a-zA-Z0-9_]")]
+fn validate_rule_name() {
+    validate_prometheus_name("http:rule")
 }
