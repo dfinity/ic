@@ -18,7 +18,15 @@ use ic_canister_http_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use std::collections::HashMap;
 use tonic::{Request, Response, Status};
+
+/// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
+/// and it panics if we try to allocate more headers. And since hyper sometimes grows the map by doubling the entries
+/// we choose a lower value to be safe.
+const HEADERS_LIMIT: usize = 1_024;
+/// Hyper also limits the size of the HeaderName to 32768. https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations.
+const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 
 /// implements RPC
 pub struct CanisterHttp<C: Clone + Connect + Send + Sync + 'static> {
@@ -98,28 +106,20 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             })?;
 
         // Build Http Request.
-        let mut request_size = req.body.len();
-        let mut http_req = hyper::Request::new(Body::from(req.body));
-        let headers: HeaderMap = HeaderMap::try_from(
-            &req.headers
-                .into_iter()
-                .map(|h| {
-                    request_size += h.name.len() + h.value.len();
-                    (h.name, h.value)
-                })
-                .collect(),
-        )
-        .map_err(|err| {
-            debug!(self.logger, "Failed to parse headers: {}", err);
+        let headers = validate_headers(req.headers).map_err(|err| {
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_REQUEST_HEADERS])
                 .inc();
-            Status::new(
-                tonic::Code::InvalidArgument,
-                format!("Failed to parse headers: {}", err),
-            )
+            err
         })?;
+        let mut request_size = req.body.len();
+        request_size += headers
+            .iter()
+            .map(|(name, value)| name.as_str().len() + value.len())
+            .sum::<usize>();
+
+        let mut http_req = hyper::Request::new(Body::from(req.body));
         *http_req.headers_mut() = headers;
         *http_req.method_mut() = method;
         *http_req.uri_mut() = uri;
@@ -225,5 +225,97 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             headers,
             content: body_bytes.to_vec(),
         }))
+    }
+}
+
+fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
+    // Check we are within limit for number of headers.
+    if raw_headers.len() > HEADERS_LIMIT {
+        return Err(Status::new(
+            tonic::Code::InvalidArgument,
+            format!("Too many headers. Maximum allowed: {}", HEADERS_LIMIT),
+        ));
+    }
+    // Check that header name and values are within limit.
+    if raw_headers
+        .iter()
+        .any(|h| h.name.len() > HEADER_NAME_VALUE_LIMIT || h.value.len() > HEADER_NAME_VALUE_LIMIT)
+    {
+        return Err(Status::new(
+            tonic::Code::InvalidArgument,
+            format!(
+                "Header name or value exceeds size limit of {}",
+                HEADER_NAME_VALUE_LIMIT
+            ),
+        ));
+    }
+
+    let headers: HeaderMap = HeaderMap::try_from(
+        &raw_headers
+            .into_iter()
+            .map(|h| (h.name, h.value))
+            .collect::<HashMap<String, String>>(),
+    )
+    .map_err(|err| {
+        Status::new(
+            tonic::Code::InvalidArgument,
+            format!("Failed to parse headers {err}",),
+        )
+    })?;
+
+    Ok(headers)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::distributions::Alphanumeric;
+    use rand::{thread_rng, Rng};
+
+    #[test]
+    // Verify that hyper does not panic within header limits.
+    fn test_max_headers() {
+        let mut header_vec = Vec::new();
+        for _ in 0..HEADERS_LIMIT {
+            let name: String = thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(HEADER_NAME_VALUE_LIMIT)
+                .map(char::from)
+                .collect();
+            let value: String = thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(HEADER_NAME_VALUE_LIMIT)
+                .map(char::from)
+                .collect();
+
+            header_vec.push(HttpHeader { name, value });
+        }
+        validate_headers(header_vec).unwrap();
+    }
+
+    #[test]
+    // Verify that hyper does not panic within header limits.
+    fn test_too_many_headers() {
+        let mut header_vec = Vec::new();
+        for i in 0..(HEADERS_LIMIT + 1) {
+            header_vec.push(HttpHeader {
+                name: i.to_string(),
+                value: "hi".to_string(),
+            });
+        }
+        validate_headers(header_vec).unwrap_err();
+    }
+
+    #[test]
+    // Verify that hyper does not panic within header limits.
+    fn test_too_big_header() {
+        let mut header_vec = Vec::new();
+        for i in 0..10 {
+            header_vec.push(HttpHeader {
+                name: i.to_string().repeat(HEADER_NAME_VALUE_LIMIT + 1),
+                value: "hi".to_string(),
+            });
+        }
+        validate_headers(header_vec).unwrap_err();
     }
 }
