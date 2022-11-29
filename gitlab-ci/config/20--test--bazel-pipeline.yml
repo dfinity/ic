@@ -67,7 +67,7 @@ bazel-system-test-hourly:
 bazel-system-test-nightly:
   extends:
     - .scheduled-bazel-system-test
-    - .rules-rc-cut-schedule
+    - .rules-rollout-pipeline-auto
   variables:
     BAZEL_TEST_TAG_FILTERS: "system_test_nightly"
 
