@@ -22,7 +22,6 @@ DEPENDENCIES = [
     "@crate_index//:itertools",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
@@ -37,6 +36,7 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "@crate_index//:once_cell",
+    "@crate_index//:rand_0_8_4",
     "@crate_index//:tempfile",
     "@crate_index//:uuid",
     "@crate_index//:warp",
