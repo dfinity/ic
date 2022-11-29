@@ -125,18 +125,13 @@ impl GetSuccessorsHandler {
                 .ok();
         }
 
-        if !request.processed_block_hashes.is_empty() {
-            // TODO: better handling of full channel as the receivers are never closed.
-            // As a part of the above TODO, prune old blocks should also receive the anchor hash.
-            // This would allow prune to remove blocks that are below the anchor hash in cases where
-            // the channel did fill completely and has caught up again.
-            self.command_sender
-                .try_send(BlockchainManagerRequest::PruneBlocks(
-                    request.anchor,
-                    request.processed_block_hashes,
-                ))
-                .ok();
-        }
+        // TODO: better handling of full channel as the receivers are never closed.
+        self.command_sender
+            .try_send(BlockchainManagerRequest::PruneBlocks(
+                request.anchor,
+                request.processed_block_hashes,
+            ))
+            .ok();
 
         Ok(response)
     }
