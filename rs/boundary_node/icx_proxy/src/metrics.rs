@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{borrow::Cow, net::SocketAddr};
 
 use anyhow::{Context, Error};
 use axum::{handler::Handler, routing::get, Extension, Router};
@@ -46,15 +46,21 @@ impl MetricParams {
 impl<T: Validate> Validate for WithMetrics<T> {
     fn validate(
         &self,
+        required: bool,
         headers_data: &HeadersData,
         canister_id: &Principal,
         agent: &Agent,
         uri: &Uri,
         response_body: &[u8],
-    ) -> Result<(), String> {
-        let out = self
-            .0
-            .validate(headers_data, canister_id, agent, uri, response_body);
+    ) -> Result<(), Cow<'static, str>> {
+        let out = self.0.validate(
+            required,
+            headers_data,
+            canister_id,
+            agent,
+            uri,
+            response_body,
+        );
 
         let mut status = if out.is_ok() { "ok" } else { "fail" };
         if cfg!(feature = "skip_body_verification") {

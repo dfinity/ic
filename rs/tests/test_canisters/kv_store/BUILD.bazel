@@ -1,0 +1,56 @@
+load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_rust//rust:defs.bzl", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-certified-map",
+    "@crate_index//:base64",
+    "@crate_index//:serde",
+    "@crate_index//:flate2",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:sha2",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:ic-cdk-macros",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_canister(
+    name = "kv_store",
+    srcs = [
+        "src/_wasm_kv_store.rs",
+        "src/cert.rs",
+        "src/chunk.rs",
+        "src/http.rs",
+        "src/kv_store.rs",
+        "src/lib.rs",
+    ],
+    aliases = ALIASES,
+    crate_name = "kv_store",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":src/kv_store.did",
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "kv_store_test",
+    srcs = [
+        "src/cert.rs",
+        "src/chunk.rs",
+        "src/http.rs",
+        "src/kv_store.rs",
+        "src/lib.rs",
+    ],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

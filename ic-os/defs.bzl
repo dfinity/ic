@@ -431,14 +431,14 @@ def boundary_node_icos_build(name, mode = None, sev = False, visibility = None):
             "--build-arg",
             "ROOT_PASSWORD=root",
             "--build-arg",
-            "SW='false'",
+            "SW=false",
         ]
     elif mode == "prod":
         rootfs_args = [
             "--build-arg",
             "ROOT_PASSWORD=",
             "--build-arg",
-            "SW='true'",
+            "SW=true",
         ]
 
     if sev:

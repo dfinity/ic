@@ -3,13 +3,13 @@
 set -euox pipefail
 source '/opt/ic/bin/helpers.shlib'
 
-readonly BOOT_DIR='/boot/config'
 readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
 readonly CERT_DIR="${BOOT_DIR}/certs"
 readonly CERTS=("fullchain.pem" "privkey.pem" "chain.pem")
 
-readonly RUN_DIR='/run/ic-node/etc/default'
-readonly ENV_FILE="${RUN_DIR}/icx-proxy"
+readonly RUN_DIR='/run/ic-node/etc/icx-proxy'
+readonly ENV_FILE="${RUN_DIR}/env"
+readonly ROOT_KEY="${RUN_DIR}/root_key.der"
 
 SYSTEM_DOMAINS=()
 APPLICATION_DOMAINS=()
@@ -53,6 +53,8 @@ function read_variables() {
         err "APPLICATION_DOMAINS variable not set. icx-proxy won't be configured."
         exit 1
     fi
+
+    check_nns_pem
 }
 
 function generate_icx_proxy_config() {
@@ -68,7 +70,7 @@ function generate_icx_proxy_config() {
     done
 
     for DOMAIN in "${SYSTEM_DOMAINS[@]}"; do
-        ARG_REPLICA_DOMAIN_ADDRS+=("--replica-domain-addr ${DOMAIN}=127.0.0.1:443")
+        ARG_REPLICA_DOMAIN_ADDRS+=("--replicas ${DOMAIN}|127.0.0.1:443")
     done
 
     for DOMAIN in "${!UNIQUE_DOMAINS[@]}"; do
@@ -76,6 +78,10 @@ function generate_icx_proxy_config() {
     done
 
     mkdir -p "${RUN_DIR}"
+
+    # Setup network key
+    get_nns_der >"${ROOT_KEY}"
+
     cat >"${ENV_FILE}" <<EOF
 REPLICA_DOMAIN_ADDRS=${ARG_REPLICA_DOMAIN_ADDRS[@]}
 DOMAINS=${ARG_DOMAINS[@]}

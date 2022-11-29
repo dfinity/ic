@@ -1,19 +1,20 @@
 use anyhow::Context;
 use hyper::{header::HOST, http::request::Parts, Uri};
 use ic_agent::export::Principal;
+use itertools::iproduct;
 use tracing::error;
 
-use crate::config::dns_canister_config::DnsCanisterConfig;
+use crate::{
+    canister_alias::CanisterAlias, config::dns_canister_config::DnsCanisterConfig, InspectErr,
+};
 
 /// The options for the canister resolver
 pub struct CanisterIdOpts {
-    /// A map of domain names to canister IDs.
-    /// Format: domain.name:canister-id
-    pub dns_alias: Vec<String>,
+    /// A list of mappings from canister names to canister principals.
+    pub canister_alias: Vec<CanisterAlias>,
 
-    /// A list of domain name suffixes.  If found, the next (to the left) subdomain
-    /// is used as the Principal, if it parses as a Principal.
-    pub dns_suffix: Vec<String>,
+    /// A list of domains that can be served. These are used for canister resolution.
+    pub domain: Vec<String>,
 
     /// Whether or not to ignore `canisterId=` when locating the canister.
     pub ignore_url_canister_param: bool,
@@ -101,18 +102,31 @@ impl Resolver for DefaultResolver {
 }
 
 pub fn setup(opts: CanisterIdOpts) -> Result<DefaultResolver, anyhow::Error> {
-    let dns = DnsCanisterConfig::new(&opts.dns_alias, &opts.dns_suffix)
-        .context("Failed to configure canister resolver DNS");
-    let dns = match dns {
-        Err(e) => {
-            error!("{e}");
-            Err(e)
-        }
-        Ok(v) => Ok(v),
-    }?;
+    let CanisterIdOpts {
+        canister_alias,
+        domain,
+        ignore_url_canister_param,
+    } = opts;
+
+    let dns_suffixes = domain
+        .iter()
+        .flat_map(|domain| [domain.clone(), format!("raw.{domain}")]);
+
+    let dns_aliases = iproduct!(canister_alias.iter(), domain.iter()).flat_map(
+        |(CanisterAlias { id, principal }, domain)| {
+            [
+                format!("{id}.{domain}:{principal}"),
+                format!("{id}.raw.{domain}:{principal}"),
+            ]
+        },
+    );
+
+    let dns = DnsCanisterConfig::new(dns_aliases, dns_suffixes)
+        .context("Failed to configure canister resolver DNS")
+        .inspect_err(|e| error!("{e}"))?;
     Ok(DefaultResolver {
         dns,
-        check_params: !opts.ignore_url_canister_param,
+        check_params: !ignore_url_canister_param,
     })
 }
 
