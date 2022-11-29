@@ -10,6 +10,13 @@ exports_files([
     "scripts/build-bootstrap-config-image.sh",
 ])
 
+sh_test(
+    name = "validate-ic-json5",
+    srcs = ["rootfs/opt/ic/bin/validate-replica-config.sh"],
+    args = ["$(execpath :rootfs/opt/ic/share/ic.json5.template)"],
+    data = [":rootfs/opt/ic/share/ic.json5.template"],
+)
+
 # All guest-os targets are named the same, just stay in different submodules.
 # To build or run specific target:
 #
