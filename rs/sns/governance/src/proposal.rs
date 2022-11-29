@@ -337,16 +337,19 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     let mut defects = vec![];
 
     // Inspect canister_id.
-    let canister_id = match validate_required_field("canister_id", &upgrade.canister_id) {
+    let mut canister_id = PrincipalId::new_user_test_id(0xDEADBEEF); // Initialize to garbage. This won't get used later.
+    match validate_required_field("canister_id", &upgrade.canister_id) {
         Err(err) => {
             defects.push(err);
         }
-        Ok(canister_id) => {
-            if let Err(err) = CanisterId::new(*canister_id) {
+        Ok(id) => {
+            if let Err(err) = CanisterId::new(*id) {
                 defects.push(format!("Specified canister ID was invalid: {}", err));
+            } else {
+                canister_id = *id;
             }
         }
-    };
+    }
 
     // Inspect wasm.
     const WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
