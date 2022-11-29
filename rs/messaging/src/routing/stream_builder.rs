@@ -392,8 +392,8 @@ impl StreamBuilderImpl {
                                     rep.response_payload = Payload::Reject(RejectContext {
                                         code: RejectCode::CanisterError,
                                         message: format!(
-                                            "Canister {} violated contract: payload too large",
-                                            rep.respondent
+                                            "Canister {} violated contract: attempted to send a message of size {} exceeding the limit {}",
+                                            rep.respondent, rep.payload_size_bytes(), MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                                         ),
                                     })
                                 }
@@ -464,7 +464,12 @@ impl StreamBuilderImpl {
                 &mut state,
                 &req,
                 RejectCode::CanisterError,
-                format!("Canister {} violated contract: payload too large", sender),
+                format!(
+                    "Canister {} violated contract: attempted to send a message of size {} exceeding the limit {}",
+                    sender,
+                    req.payload_size_bytes(),
+                    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
+                ),
             );
         }
 
