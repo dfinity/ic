@@ -199,13 +199,17 @@ impl BackupManager {
         let size = self.subnet_backups.len();
 
         for i in 0..size {
-            let m = self.clone();
-            thread::spawn(move || sync_subnet(m, i));
+            if self.subnet_backups[i].sync_period >= Duration::from_secs(1) {
+                let m = self.clone();
+                thread::spawn(move || sync_subnet(m, i));
+            }
         }
 
         for i in 0..size {
-            let m = self.clone();
-            thread::spawn(move || replay_subnet(m, i));
+            if self.subnet_backups[i].replay_period >= Duration::from_secs(1) {
+                let m = self.clone();
+                thread::spawn(move || replay_subnet(m, i));
+            }
         }
 
         let config_file = self.root_dir.join(STATE_FILE_NAME);
