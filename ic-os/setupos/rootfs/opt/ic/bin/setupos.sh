@@ -41,10 +41,6 @@ main() {
     start_setupos
     /opt/ic/bin/hardware.sh
     /opt/ic/bin/network.sh
-    # NOTE: Firmware up-/downgrades are currently applied manually
-    #/opt/ic/bin/firmware.sh
-    # NOTE: UEFI settings are currently applied manually
-    #/opt/ic/bin/uefi.sh
     /opt/ic/bin/disk.sh
     /opt/ic/bin/hostos.sh
     /opt/ic/bin/guestos.sh
