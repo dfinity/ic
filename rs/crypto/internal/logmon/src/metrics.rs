@@ -105,6 +105,15 @@ impl CryptoMetrics {
                 .inc();
         }
     }
+
+    pub fn observe_boolean_result(&self, operation: BooleanOperation, result: BooleanResult) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .crypto_boolean_results
+                .with_label_values(&[&format!("{}", operation), &format!("{}", result)])
+                .inc();
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
@@ -194,6 +203,48 @@ impl KeyCounts {
     }
 }
 
+pub enum BooleanResult {
+    True,
+    False,
+}
+
+impl Display for BooleanResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str_snake_case())
+    }
+}
+
+impl BooleanResult {
+    fn as_str_snake_case(&self) -> &str {
+        match self {
+            BooleanResult::True => "true",
+            BooleanResult::False => "false",
+        }
+    }
+}
+
+pub enum BooleanOperation {
+    KeyInRegistryMissingLocally,
+    LatestLocalIDkgKeyExistsInRegistry,
+}
+
+impl Display for BooleanOperation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str_snake_case())
+    }
+}
+
+impl BooleanOperation {
+    fn as_str_snake_case(&self) -> &str {
+        match self {
+            BooleanOperation::KeyInRegistryMissingLocally => "key_in_registry_missing_locally",
+            BooleanOperation::LatestLocalIDkgKeyExistsInRegistry => {
+                "latest_local_idkg_key_exists_in_registry"
+            }
+        }
+    }
+}
+
 struct Metrics {
     /// Histogram of crypto lock acquisition times. The 'access' label is either
     /// 'read' or 'write'.
@@ -222,6 +273,10 @@ struct Metrics {
     pub crypto_key_counts: BTreeMap<KeyType, IntGauge>,
 
     pub crypto_key_rotation_results: IntCounterVec,
+
+    /// Counter vector for crypto results that can be expressed as booleans. An additional label
+    /// is used to identify the type of operation.
+    pub crypto_boolean_results: IntCounterVec,
 }
 
 impl Display for MetricsDomain {
@@ -351,6 +406,11 @@ impl Metrics {
                 "crypto_key_rotation_results",
                 "Result from iDKG dealing encryption key rotations",
                 &["result"],
+            ),
+            crypto_boolean_results: r.int_counter_vec(
+                "crypto_boolean_results",
+                "Boolean results from crypto operations",
+                &["operation", "result"],
             ),
         }
     }
