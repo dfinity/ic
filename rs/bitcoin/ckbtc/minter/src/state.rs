@@ -120,6 +120,9 @@ pub struct CkBtcMinterState {
     /// Finalized retrieve_btc requests for which we received enough confirmations.
     pub finalized_requests: VecDeque<FinalizedBtcRetrieval>,
 
+    /// The total number of finalized requests.
+    pub finalized_requests_count: u64,
+
     /// The CanisterId of the ckBTC Ledger
     pub ledger_id: CanisterId,
 
@@ -233,16 +236,6 @@ impl CkBtcMinterState {
             + self.submitted_requests.len()
     }
 
-    /// Count the total of BTC managed by the minter at the moment
-    pub fn count_total_btc(&self) -> u64 {
-        self.available_utxos.iter().map(|u| u.value).sum::<u64>()
-            + self
-                .submitted_requests
-                .iter()
-                .map(|s| s.request.amount)
-                .sum::<u64>()
-    }
-
     /// Returns true if there is a pending retrieve_btc request with the given
     /// identifier.
     fn has_pending_request(&self, block_index: u64) -> bool {
@@ -282,6 +275,7 @@ impl CkBtcMinterState {
                     txid: submitted_req.txid,
                 },
             });
+            self.finalized_requests_count += 1;
         }
     }
 
@@ -353,6 +347,7 @@ impl From<InitArgs> for CkBtcMinterState {
             requests_in_flight: Default::default(),
             submitted_requests: Default::default(),
             finalized_requests: VecDeque::with_capacity(MAX_FINALIZED_REQUESTS),
+            finalized_requests_count: 0,
             ledger_id: args.ledger_id,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
