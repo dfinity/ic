@@ -36,15 +36,18 @@ impl TestEnvironment {
 /// Creates a fake DownloadState::Loading.
 /// We only use download states for comparison in tests, so it doesn't matter
 /// if the contents make sense.
-fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>) {
+fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>, FileGroupChunks) {
     let manifest = Manifest::new(seed, vec![], vec![]);
-    let fetch_chunks: HashSet<usize> = maplit::hashset! { (seed + 1) as usize };
+    let fetch_chunks: HashSet<usize> =
+        maplit::hashset! { (seed + 1) as usize, FILE_GROUP_CHUNK_ID_OFFSET as usize };
+    let state_sync_file_group =
+        FileGroupChunks::new(maplit::btreemap! { FILE_GROUP_CHUNK_ID_OFFSET => vec![3, 4]});
     let state = DownloadState::Loading {
         manifest: manifest.clone(),
-        state_sync_file_group: Default::default(),
+        state_sync_file_group: state_sync_file_group.clone(),
         fetch_chunks: fetch_chunks.clone(),
     };
-    (state, manifest, fetch_chunks)
+    (state, manifest, fetch_chunks, state_sync_file_group)
 }
 
 /// Creates a fake DownloadState::Completed for an empty state.
@@ -58,6 +61,21 @@ fn fake_complete() -> DownloadState {
         state_sync_file_group: Default::default(),
     });
     DownloadState::Complete(Box::new(artifact))
+}
+
+fn ungroup_fetch_chunks(
+    fetch_chunks: &HashSet<usize>,
+    file_groups: &FileGroupChunks,
+) -> HashSet<usize> {
+    let mut result: HashSet<usize> = fetch_chunks.iter().map(|i| i - 1).collect();
+    // Replace groups by their elements
+    for (key, chunks) in file_groups.iter() {
+        if fetch_chunks.contains(&(*key as usize)) {
+            result.remove(&(*key as usize - 1));
+            result.extend(chunks.iter().map(|i| *i as usize));
+        }
+    }
+    result
 }
 
 /// Creates an `IncompleteState` at `height` with download state `state`.
@@ -130,7 +148,7 @@ fn blank_sync() {
 fn loading_sync() {
     with_test_replica_logger(|log| {
         let env = TestEnvironment::new(log);
-        let (state, manifest, fetch_chunks) = fake_loading(1);
+        let (state, manifest, fetch_chunks, file_groups) = fake_loading(1);
 
         let sync = incomplete_state_for_tests(&env, Height::new(5), state);
         let scratchpad = sync.root.clone();
@@ -152,16 +170,17 @@ fn loading_sync() {
             let entry = lock.get().unwrap();
             assert_eq!(entry.height, Height::new(5));
             assert_eq!(entry.manifest, manifest);
+
             assert_eq!(
                 entry.missing_chunks,
-                fetch_chunks.iter().map(|i| i - 1).collect()
+                ungroup_fetch_chunks(&fetch_chunks, &file_groups)
             );
             assert!(entry.path.exists());
             assert!(entry.path.join("1").exists());
         }
 
         // Second sync at lower height, should be ignored by cache
-        let (state, _, _) = fake_loading(2);
+        let (state, _, _, _) = fake_loading(2);
         let sync = incomplete_state_for_tests(&env, Height::new(4), state);
         let scratchpad = sync.root.clone();
 
@@ -180,14 +199,14 @@ fn loading_sync() {
             assert_eq!(entry.manifest, manifest);
             assert_eq!(
                 entry.missing_chunks,
-                fetch_chunks.iter().map(|i| i - 1).collect()
+                ungroup_fetch_chunks(&fetch_chunks, &file_groups)
             );
             assert!(entry.path.exists());
             assert!(entry.path.join("1").exists());
         }
 
         // Third sync at the same height as the cache, should replace cache
-        let (state, manifest, fetch_chunks) = fake_loading(3);
+        let (state, manifest, fetch_chunks, file_groups) = fake_loading(3);
         let sync = incomplete_state_for_tests(&env, Height::new(5), state);
         let scratchpad = sync.root.clone();
 
@@ -206,7 +225,7 @@ fn loading_sync() {
             assert_eq!(entry.manifest, manifest);
             assert_eq!(
                 entry.missing_chunks,
-                fetch_chunks.iter().map(|i| i - 1).collect()
+                ungroup_fetch_chunks(&fetch_chunks, &file_groups)
             );
             assert!(entry.path.exists());
             assert!(entry.path.join("3").exists());
@@ -215,7 +234,7 @@ fn loading_sync() {
 
         // Fourth sync at higher height than cache, should replace
         let old_cache_path = env.cache.read().get().unwrap().path.clone();
-        let (state, manifest, fetch_chunks) = fake_loading(4);
+        let (state, manifest, fetch_chunks, file_groups) = fake_loading(4);
 
         let sync = incomplete_state_for_tests(&env, Height::new(6), state);
         let scratchpad = sync.root.clone();
@@ -235,7 +254,7 @@ fn loading_sync() {
             assert_eq!(entry.manifest, manifest);
             assert_eq!(
                 entry.missing_chunks,
-                fetch_chunks.iter().map(|i| i - 1).collect()
+                ungroup_fetch_chunks(&fetch_chunks, &file_groups)
             );
             assert!(entry.path.exists());
             assert!(entry.path.join("4").exists());
@@ -269,7 +288,7 @@ fn completed_sync() {
 
         // Populate cache
 
-        let (state, _, _) = fake_loading(1);
+        let (state, _, _, _) = fake_loading(1);
         let sync = incomplete_state_for_tests(&env, Height::new(5), state);
         drop(sync);
 
@@ -286,7 +305,7 @@ fn completed_sync() {
         assert!(env.cache.read().get().is_none());
 
         // Populate cache again
-        let (state, _, _) = fake_loading(1);
+        let (state, _, _, _) = fake_loading(1);
         let sync = incomplete_state_for_tests(&env, Height::new(5), state);
         drop(sync);
 
@@ -304,7 +323,7 @@ fn completed_sync() {
 fn existing_folder() {
     with_test_replica_logger(|log| {
         let env = TestEnvironment::new(log);
-        let (state, _, _) = fake_loading(1);
+        let (state, _, _, _) = fake_loading(1);
 
         let height = Height::new(5);
         let sync = incomplete_state_for_tests(&env, height, state);

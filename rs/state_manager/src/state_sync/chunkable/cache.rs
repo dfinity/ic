@@ -95,12 +95,30 @@ impl StateSyncCache {
         sync: &IncompleteState,
         manifest: Manifest,
         fetch_chunks: HashSet<usize>,
+        state_sync_file_group: FileGroupChunks,
     ) {
         // fetch_chunks, as stored by IncompleteState considers the manifest as chunk 0
         // For the cache we store indices into the manifest's chunk table as
         // missing_chunks.
         debug_assert!(!fetch_chunks.contains(&0));
-        let missing_chunks = fetch_chunks.into_iter().map(|i| i - 1).collect();
+        let mut missing_chunks: HashSet<usize> = Default::default();
+        for i in fetch_chunks.into_iter() {
+            assert_ne!(0, i);
+            if i < FILE_GROUP_CHUNK_ID_OFFSET as usize {
+                missing_chunks.insert(i - 1);
+            } else {
+                // If it's a chunk group, the individual chunks are missing in the manifest,
+                // not the group
+                let chunks = state_sync_file_group
+                    .get(&(i as u32))
+                    .expect("Unknown chunk group");
+                missing_chunks.extend(chunks.iter().map(|i| *i as usize));
+            }
+        }
+
+        debug_assert!(missing_chunks
+            .iter()
+            .all(|i| *i + 1 < FILE_GROUP_CHUNK_ID_OFFSET as usize));
 
         // We rename the folder to decouple the cache from active state syncs a bit.
         // Otherwise we'd have to assume that there won't be an active state sync at
@@ -164,14 +182,14 @@ impl StateSyncCache {
         match std::mem::replace(&mut sync.state, DownloadState::Blank) {
             DownloadState::Loading {
                 manifest,
-                state_sync_file_group: _,
+                state_sync_file_group,
                 fetch_chunks,
             } => {
                 if self.entry.is_some() {
                     // The current cache is newer
                     delete_folder(&self.log, &sync.root);
                 } else {
-                    self.push_inner(sync, manifest, fetch_chunks);
+                    self.push_inner(sync, manifest, fetch_chunks, state_sync_file_group);
                 }
             }
             DownloadState::Complete(_) | DownloadState::Blank => {

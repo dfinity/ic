@@ -1018,7 +1018,7 @@ pub fn diff_manifest(
         let chunk_info = manifest_old
             .chunk_table
             .get(*chunk_index)
-            .expect("Invalid chunk index");
+            .unwrap_or_else(|| panic!("Invalid chunk index {}", chunk_index));
 
         chunk_info.file_index as usize
     };

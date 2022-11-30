@@ -1751,13 +1751,14 @@ fn can_state_sync_from_cache() {
         assert_error_counters(src_metrics);
 
         state_manager_test(|dst_metrics, dst_state_manager| {
-            let omit: HashSet<ChunkId> = maplit::hashset! {ChunkId::new(1)};
+            let omit: HashSet<ChunkId> =
+                maplit::hashset! {ChunkId::new(1), ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
 
             // First state sync is destroyed before completion
             {
                 let mut chunkable = dst_state_manager.create_chunkable_state(&id);
 
-                // First fetch chunk 0 (the manifest), and then ask for chunk 1,2,3 afterwards,
+                // First fetch chunk 0 (the manifest), and then ask for chunk 1,2,3,FILE_GROUP_CHUNK_ID_OFFSET afterwards,
                 // but only receive 2,3
                 let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit);
                 assert!(completion.is_none(), "Unexpectedly completed state sync");
