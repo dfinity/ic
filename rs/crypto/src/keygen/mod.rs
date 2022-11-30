@@ -11,7 +11,9 @@ use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::CryptoServiceProvider;
-use ic_crypto_internal_logmon::metrics::{KeyCounts, KeyRotationResult};
+use ic_crypto_internal_logmon::metrics::{
+    BooleanOperation, BooleanResult, KeyCounts, KeyRotationResult,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
@@ -39,25 +41,34 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         self.collect_and_store_key_count_metrics(registry_version);
         // Get the public keys from the registry, and ensure that we have the
         // secret keys locally in the SKS.
-        let node_signing_key = self.ensure_node_signing_key_material_is_set_up(registry_version)?;
-        let committee_signing_key =
-            self.ensure_committee_signing_key_material_is_set_up(registry_version)?;
-        let dkg_dealing_encryption_key =
-            self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version)?;
-        let tls_certificate = self.ensure_tls_key_material_is_set_up(registry_version)?;
-        let idkg_dealing_encryption_key =
-            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version)?;
+        let keys_in_registry = match self
+            .ensure_keys_and_certs_set_up_and_get_current_node_public_keys(registry_version)
+        {
+            Ok(current_node_public_keys) => current_node_public_keys,
+            Err(err) => {
+                match err {
+                    CryptoError::SecretKeyNotFound { .. }
+                    | CryptoError::TlsSecretKeyNotFound { .. } => {
+                        self.metrics.observe_boolean_result(
+                            BooleanOperation::KeyInRegistryMissingLocally,
+                            BooleanResult::True,
+                        );
+                    }
+                    _ => {}
+                }
+                return Err(err);
+            }
+        };
+        let idkg_dealing_encryption_key = if let Some(ref idkg_dealing_encryption_key) =
+            keys_in_registry.idkg_dealing_encryption_public_key
+        {
+            idkg_dealing_encryption_key.clone()
+        } else {
+            unreachable!()
+        };
 
         // Make sure that for each public key found in the registry, we also have the public key
         // locally in the public key store.
-        let keys_in_registry = CurrentNodePublicKeys {
-            node_signing_public_key: Some(node_signing_key),
-            committee_signing_public_key: Some(committee_signing_key),
-            tls_certificate: Some(tls_certificate),
-            dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_key),
-            idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_key.clone()),
-        };
-
         if !self.csp.pks_contains(keys_in_registry)? {
             // This may be due to a malicious entity registering new key(s) for this node.
             // Some more drastic action should be taken here; at the moment, we just log and
@@ -65,6 +76,10 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
             error!(
                 self.logger,
                 "One or more node keys from the registry are missing locally"
+            );
+            self.metrics.observe_boolean_result(
+                BooleanOperation::KeyInRegistryMissingLocally,
+                BooleanResult::True,
             );
             return Err(CryptoError::PublicKeyNotFound {
                 node_id: self.node_id,
@@ -95,6 +110,10 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
             if idkg_dealing_encryption_key
                 .equal_ignoring_timestamp(&latest_local_idkg_dealing_encryption_key)
             {
+                self.metrics.observe_boolean_result(
+                    BooleanOperation::LatestLocalIDkgKeyExistsInRegistry,
+                    BooleanResult::True,
+                );
                 match idkg_dealing_encryption_key.timestamp {
                     None => {
                         // The key in the registry has no timestamp, so it shall be rotated
@@ -120,6 +139,10 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
                 info!(
                     self.logger,
                     "Local iDKG dealing encryption key needs registration"
+                );
+                self.metrics.observe_boolean_result(
+                    BooleanOperation::LatestLocalIDkgKeyExistsInRegistry,
+                    BooleanResult::False,
                 );
                 return Ok(
                     PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(
@@ -278,6 +301,28 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         }
     }
 
+    fn ensure_keys_and_certs_set_up_and_get_current_node_public_keys(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<CurrentNodePublicKeys> {
+        let node_signing_key = self.ensure_node_signing_key_material_is_set_up(registry_version)?;
+        let committee_signing_key =
+            self.ensure_committee_signing_key_material_is_set_up(registry_version)?;
+        let dkg_dealing_encryption_key =
+            self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version)?;
+        let tls_certificate = self.ensure_tls_key_material_is_set_up(registry_version)?;
+        let idkg_dealing_encryption_key =
+            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version)?;
+
+        Ok(CurrentNodePublicKeys {
+            node_signing_public_key: Some(node_signing_key),
+            committee_signing_public_key: Some(committee_signing_key),
+            tls_certificate: Some(tls_certificate),
+            dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_key),
+            idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_key),
+        })
+    }
+
     fn record_key_rotation_metrics(
         &self,
         key_rotation_result: &Result<KeyRotationOutcome, IDkgDealingEncryptionKeyRotationError>,
@@ -288,6 +333,10 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                     KeyRotationOutcome::KeyRotated { .. } => {
                         self.metrics
                             .observe_key_rotation_result(KeyRotationResult::KeyRotated);
+                        self.metrics.observe_boolean_result(
+                            BooleanOperation::LatestLocalIDkgKeyExistsInRegistry,
+                            BooleanResult::False,
+                        );
                     }
                     KeyRotationOutcome::KeyNotRotated { .. } => {
                         self.metrics
@@ -304,6 +353,10 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 IDkgDealingEncryptionKeyRotationError::LatestLocalRotationTooRecent => {
                     self.metrics.observe_key_rotation_result(
                         KeyRotationResult::LatestLocalRotationTooRecent,
+                    );
+                    self.metrics.observe_boolean_result(
+                        BooleanOperation::LatestLocalIDkgKeyExistsInRegistry,
+                        BooleanResult::True,
                     );
                 }
                 IDkgDealingEncryptionKeyRotationError::KeyGenerationError(_) => {
