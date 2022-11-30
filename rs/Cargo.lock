@@ -4188,11 +4188,16 @@ version = "0.8.0"
 dependencies = [
  "ed25519-consensus",
  "ic-base-types",
+ "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
+ "ic-crypto-internal-types",
+ "ic-crypto-secrets-containers",
  "ic-crypto-sha",
+ "ic-crypto-utils-basic-sig",
  "ic-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "simple_asn1 0.6.2",
 ]
 
 [[package]]
