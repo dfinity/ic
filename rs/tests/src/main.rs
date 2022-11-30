@@ -37,12 +37,7 @@ use std::time::Instant;
 /// here, just add another entry to the vector with the corresponding pot.
 fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
-    vec![
-        max_payload_pot(),
-        dual_workload_pot(),
-        system_subnets_pot(),
-        request_auth_malicious_replica_pot(),
-    ]
+    vec![system_subnets_pot(), request_auth_malicious_replica_pot()]
 }
 
 fn request_auth_malicious_replica_pot() -> pot::Pot {
@@ -60,25 +55,6 @@ fn system_subnets_pot() -> pot::Pot {
         steps! {
             execution::nns_shielding::non_nns_canister_attempt_to_create_canister_on_another_subnet_fails,
             execution::nns_shielding::nns_canister_attempt_to_create_canister_on_another_subnet_succeeds
-        }
-    )
-}
-
-fn dual_workload_pot() -> pot::Pot {
-    composable!(
-        "dual_workload_pot",
-        consensus::payload_builder_test::dual_workload_config(),
-        steps! {consensus::payload_builder_test::dual_workload_test}
-    )
-}
-
-fn max_payload_pot() -> pot::Pot {
-    composable!(
-        "max_payload_pod",
-        consensus::payload_builder_test::max_payload_size_config(),
-        steps! {
-            consensus::payload_builder_test::max_ingress_payload_size_test,
-            consensus::payload_builder_test::max_xnet_payload_size_test
         }
     )
 }
