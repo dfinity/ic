@@ -205,3 +205,19 @@ rust_bench(
         "//rs/types/types_test_utils",
     ] + BENCH_DEPENDENCIES,
 )
+
+rust_bench(
+    name = "100k_canisters_bench",
+    srcs = ["benchmarks/100k_canisters.rs"],
+    data = DATA + ["//rs/rust_canisters/canister_creator:canister_creator_canister"],
+    env = dict(ENV.items() + [
+        ("CANISTER_CREATOR_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/canister_creator:canister_creator_canister)"),
+    ]),
+    deps = [
+        ":execution_environment_bench",
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "//rs/types/types_test_utils",
+    ] + BENCH_DEPENDENCIES,
+)
