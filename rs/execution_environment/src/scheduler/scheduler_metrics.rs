@@ -5,7 +5,7 @@ use ic_metrics::{
     MetricsRegistry,
 };
 use ic_types::nominal_cycles::NominalCycles;
-use prometheus::{Gauge, Histogram, IntCounter, IntGauge, IntGaugeVec};
+use prometheus::{Gauge, Histogram, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 
 use crate::metrics::{
     cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
@@ -80,6 +80,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_aborted_execution: Histogram,
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
+    pub(super) inducted_messages: IntCounterVec,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -546,6 +547,11 @@ impl SchedulerMetrics {
                 "scheduler_canister_aborted_install_code",
                 "Number of canisters that have an aborted install code.",
                 metrics_registry,
+            ),
+            inducted_messages: metrics_registry.int_counter_vec(
+                "scheduler_inducted_messages_total",
+                "Number of messages inducted, by destination.",
+                &["destination"],
             ),
         }
     }

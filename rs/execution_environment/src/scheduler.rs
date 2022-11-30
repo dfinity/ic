@@ -35,9 +35,9 @@ use ic_types::{
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
-use std::cmp::Reverse;
 use std::{
     cell::RefCell,
+    cmp::Reverse,
     collections::{BTreeMap, BTreeSet},
     str::FromStr,
     sync::Arc,
@@ -936,6 +936,8 @@ impl SchedulerImpl {
             .map(|(canister_id, _)| *canister_id)
             .collect();
 
+        let mut inducted_messages_to_self = 0;
+        let mut inducted_messages_to_others = 0;
         for source_canister_id in canisters_with_outputs {
             // Remove the source canister from the map so that we can
             // `get_mut()` on the map further below for the destination canister.
@@ -948,12 +950,26 @@ impl SchedulerImpl {
                 Some(canister) => canister,
             };
 
+            let messages_before_induction = source_canister
+                .system_state
+                .queues()
+                .output_queues_message_count();
             source_canister.induct_messages_to_self(
                 max_canister_memory_size,
                 &mut subnet_available_memory,
                 state.metadata.own_subnet_type,
             );
+            let messages_after_induction = source_canister
+                .system_state
+                .queues()
+                .output_queues_message_count();
+            inducted_messages_to_self +=
+                messages_before_induction.saturating_sub(messages_after_induction);
 
+            let messages_before_induction = source_canister
+                .system_state
+                .queues()
+                .output_queues_message_count();
             source_canister
                 .system_state
                 .output_queues_for_each(|canister_id, msg| match canisters.get_mut(canister_id) {
@@ -971,13 +987,25 @@ impl SchedulerImpl {
                                 "Inducting {:?} on same subnet failed with error '{}'.", &msg, &err
                             );
                         }),
-
                     None => Err(()),
                 });
-
+            let messages_after_induction = source_canister
+                .system_state
+                .queues()
+                .output_queues_message_count();
+            inducted_messages_to_others +=
+                messages_before_induction.saturating_sub(messages_after_induction);
             canisters.insert(source_canister_id, source_canister);
         }
         state.put_canister_states(canisters);
+        self.metrics
+            .inducted_messages
+            .with_label_values(&["self"])
+            .inc_by(inducted_messages_to_self as u64);
+        self.metrics
+            .inducted_messages
+            .with_label_values(&["others"])
+            .inc_by(inducted_messages_to_others as u64);
     }
 
     // Iterates through the provided canisters and checks if the invariants are still valid.
