@@ -71,5 +71,5 @@ trap finalize EXIT
 
 truncate -s 1M "$tmp"
 mkfs.vfat -n CONFIG "$tmp"
-mcopy -i "$tmp" -o "$INPUT_DIR"/* ::
+mcopy -i "$tmp" -sQ "$INPUT_DIR"/* ::
 zstd -i "$tmp" -o "$OUTPUT_FILE" --force
