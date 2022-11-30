@@ -223,6 +223,10 @@ name = "ic-systest-safety-test"
 path = "bin/safety_test.rs"
 
 [[bin]]
+name = "ic-systest-system-api-security-test"
+path = "bin/system_api_security_test.rs"
+
+[[bin]]
 name = "ic-systest-tecdsa-complaint-test"
 path = "bin/tecdsa_complaint_test.rs"
 
