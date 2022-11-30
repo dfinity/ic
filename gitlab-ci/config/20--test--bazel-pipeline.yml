@@ -70,6 +70,7 @@ bazel-system-test-nightly:
     - .rules-rollout-pipeline-auto
   variables:
     BAZEL_TEST_TAG_FILTERS: "system_test_nightly"
+  allow_failure: true # TODO: remove this asap https://dfinity.atlassian.net/browse/VER-2040
 
 bazel-config-check-all-rebuild:
   extends:
