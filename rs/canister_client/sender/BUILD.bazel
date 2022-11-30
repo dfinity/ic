@@ -1,22 +1,45 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
+    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/secrets_containers",
+    "//rs/crypto/utils/basic_sig",
+    "//rs/crypto/sha",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:ed25519-consensus",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:simple_asn1",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {
+    "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1": "ecdsa_secp256k1",
+}
 
 rust_library(
     name = "sender",
     srcs = glob(["src/**"]),
-    aliases = {
-        "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1": "ecdsa_secp256k1",
-    },
+    aliases = ALIASES,
     crate_name = "ic_canister_client_sender",
     version = "0.8.0",
-    deps = [
-        "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
-        "//rs/crypto/sha",
-        "//rs/types/base_types",
-        "//rs/types/types",
-        "@crate_index//:ed25519-consensus",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "sender_test",
+    aliases = ALIASES,
+    crate = ":sender",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

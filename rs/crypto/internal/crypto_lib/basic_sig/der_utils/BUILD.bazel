@@ -5,7 +5,10 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_basic_sig_der_utils",
     version = "0.8.0",
-    visibility = ["//rs/crypto:__subpackages__"],
+    visibility = [
+        "//rs/canister_client/sender:__pkg__",
+        "//rs/crypto:__subpackages__",
+    ],
     deps = [
         "//rs/types/types",
         "@crate_index//:hex",
