@@ -178,9 +178,11 @@ pub async fn wait_for_signed_tx(
 /// * The transfer didn't finalize after `RETRIEVE_BTC_STATUS_TIMEOUT`.
 /// * The minter rejected the retrieval because the amount was too low to cover the fees.
 pub async fn wait_for_finalization(
+    btc_client: &Client,
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
     block_index: u64,
+    default_btc_address: &Address,
 ) -> [u8; 32] {
     let start = Instant::now();
     loop {
@@ -212,6 +214,8 @@ pub async fn wait_for_finalization(
                 )
             }
         }
+        // We continue to generate blocks if the status is yet updated
+        generate_blocks(btc_client, logger, 1, default_btc_address);
     }
 }
 

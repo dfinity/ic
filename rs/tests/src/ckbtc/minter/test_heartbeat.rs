@@ -194,8 +194,14 @@ pub fn test_heartbeat(env: TestEnv) {
             &default_btc_address,
         );
 
-        let finalized_txid =
-            wait_for_finalization(&minter_agent, &logger, retrieve_response.block_index).await;
+        let finalized_txid = wait_for_finalization(
+            &btc_rpc,
+            &minter_agent,
+            &logger,
+            retrieve_response.block_index,
+            &default_btc_address,
+        )
+        .await;
         assert_eq!(txid, finalized_txid);
     })
 }
