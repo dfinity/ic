@@ -231,6 +231,18 @@ name = "ic-systest-tecdsa-complaint-test"
 path = "bin/tecdsa_complaint_test.rs"
 
 [[bin]]
+name = "ic-systest-max-ingress-payload-size-test"
+path = "bin/max_ingress_payload_size_test.rs"
+
+[[bin]]
+name = "ic-systest-dual-workload-test"
+path = "bin/dual_workload_test.rs"
+
+[[bin]]
+name = "ic-systest-max-xnet-payload-size-test"
+path = "bin/max_xnet_payload_size_test.rs"
+
+[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "bin/test_driver_e2e_scenarios.rs"
 

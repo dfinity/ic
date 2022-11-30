@@ -263,6 +263,30 @@ system_test(
 )
 
 system_test(
+    name = "max_ingress_payload_size_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "max_xnet_payload_size_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "dual_workload_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
     name = "liveness_with_equivocation_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

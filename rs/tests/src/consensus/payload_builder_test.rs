@@ -21,17 +21,19 @@ Coverage::
 
 end::catalog[] */
 
-use crate::util::{
-    assert_all_ready, assert_create_agent, get_random_non_root_node_endpoint,
-    get_random_root_node_endpoint, UniversalCanister,
+use crate::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, TopologySnapshot,
+        },
+    },
+    util::UniversalCanister,
 };
 use futures::{join, stream::FuturesUnordered, StreamExt};
 use ic_agent::{Agent, AgentError};
 use ic_base_types::PrincipalId;
-use ic_fondue::{
-    ic_instance::{LegacyInternetComputer as InternetComputer, Subnet},
-    ic_manager::IcHandle,
-};
 use ic_registry_subnet_type::SubnetType;
 use ic_universal_canister::{call_args, wasm};
 use slog::{info, Logger};
@@ -52,7 +54,8 @@ const XNET_MSG_SIZE: usize = 2 * 1024 * 1024 - 20;
 /// This allows us to test, that in a misconfigured setting, the specified
 /// max_block_payload_size still fits through.
 /// It also allows us to test the limit in the XNet setting properly.
-pub fn max_payload_size_config() -> InternetComputer {
+pub fn max_payload_size_config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -66,6 +69,8 @@ pub fn max_payload_size_config() -> InternetComputer {
                 .with_max_block_payload_size(XNET_MAX_SIZE as u64)
                 .with_max_ingress_message_size(INGRESS_MAX_SIZE as u64),
         )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 const DW_NUM_MSGS: usize = 32;
@@ -74,7 +79,8 @@ const DW_MSG_SIZE: usize = 2 * 1000 * 1000;
 
 /// The configuration that is used for the dual workload test.
 /// In this configuration, all sizes are set to 2MiB.
-pub fn dual_workload_config() -> InternetComputer {
+pub fn dual_workload_config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -83,6 +89,8 @@ pub fn dual_workload_config() -> InternetComputer {
                 .with_max_ingress_message_size(DW_MAX_SIZE as u64),
         )
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 #[derive(Debug)]
@@ -94,14 +102,22 @@ enum PayloadType {
 /// Tests, that an ingress message that is close to the maximum size is accepted
 /// by the block maker, whereas a message this is exactly the maximum size is
 /// not accepted.
-pub fn max_ingress_payload_size_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn max_ingress_payload_size_test(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    info!(log, "Checking readiness of all nodes after the IC setup...");
+    topology.subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    info!(log, "All nodes are ready, IC setup succeeded.");
+    let (
+        (assist_agent, assist_effective_canister_id),
+        (target_agent, target_effective_canister_id),
+    ) = setup_agents(topology);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
     rt.block_on(async move {
-        let (
-            (assist_agent, assist_effective_canister_id),
-            (target_agent, target_effective_canister_id),
-        ) = setup_agents(&handle, ctx).await;
         let (_, target_unican) = setup_unicans(
             &assist_agent,
             assist_effective_canister_id,
@@ -120,14 +136,22 @@ pub fn max_ingress_payload_size_test(handle: IcHandle, ctx: &ic_fondue::pot::Con
 /// Tests, that a xnet message that is close to the maximum size is accepted
 /// by the block maker, whereas a message this is exactly the maximum size is
 /// not accepted.
-pub fn max_xnet_payload_size_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn max_xnet_payload_size_test(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    info!(log, "Checking readiness of all nodes after the IC setup...");
+    topology.subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    info!(log, "All nodes are ready, IC setup succeeded.");
+    let (
+        (assist_agent, assist_effective_canister_id),
+        (target_agent, target_effective_canister_id),
+    ) = setup_agents(topology);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
     rt.block_on(async move {
-        let (
-            (assist_agent, assist_effective_canister_id),
-            (target_agent, target_effective_canister_id),
-        ) = setup_agents(&handle, ctx).await;
         let (assist_unican, target_unican) = setup_unicans(
             &assist_agent,
             assist_effective_canister_id,
@@ -145,15 +169,22 @@ pub fn max_xnet_payload_size_test(handle: IcHandle, ctx: &ic_fondue::pot::Contex
 
 /// Tests, that the internet computer behaves well, when there is a high load of
 /// ingress messages and xnet messages on the same subnet.
-pub fn dual_workload_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let logger = &ctx.logger;
+pub fn dual_workload_test(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    info!(log, "Checking readiness of all nodes after the IC setup...");
+    topology.subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    info!(log, "All nodes are ready, IC setup succeeded.");
+    let (
+        (assist_agent, assist_effective_canister_id),
+        (target_agent, target_effective_canister_id),
+    ) = setup_agents(topology);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
     rt.block_on(async move {
-        let (
-            (assist_agent, assist_effective_canister_id),
-            (target_agent, target_effective_canister_id),
-        ) = setup_agents(&handle, ctx).await;
         let (assist_unican, target_unican) = setup_unicans(
             &assist_agent,
             assist_effective_canister_id,
@@ -169,7 +200,7 @@ pub fn dual_workload_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                     target_unican.clone(),
                     assist_unican.clone(),
                     report,
-                    logger.clone(),
+                    log.clone(),
                 )
             })
             .map(|(target_unican, assist_unican, report, logger)| {
@@ -178,33 +209,28 @@ pub fn dual_workload_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .collect::<FuturesUnordered<_>>()
             .collect::<Vec<_>>();
 
-        info!(logger, "Calls are setup, will be submitted now");
+        info!(log, "Calls are setup, will be submitted now");
         let reports = calls.await;
-        info!(logger, "Report: {:?}", reports)
+        info!(log, "Report: {:?}", reports)
     });
 }
 
-async fn setup_agents(
-    handle: &IcHandle,
-    ctx: &ic_fondue::pot::Context,
+fn setup_agents(
+    topology_snapshot: TopologySnapshot,
 ) -> ((Agent, PrincipalId), (Agent, PrincipalId)) {
-    let mut rng = ctx.rng.clone();
-
-    // Choose one node from each subnet
-    let assist_node = get_random_non_root_node_endpoint(handle, &mut rng);
-    let target_node = get_random_root_node_endpoint(handle, &mut rng);
-
-    // Check that they are ready for operation
-    assert_all_ready(&[target_node, assist_node], ctx).await;
-
-    // Create the agents
-    let (assist_agent, target_agent) = join!(
-        assert_create_agent(assist_node.url.as_str()),
-        assert_create_agent(target_node.url.as_str()),
-    );
+    let target_node_nns = topology_snapshot.root_subnet().nodes().next().unwrap();
+    let assist_node_app = topology_snapshot
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .next()
+        .unwrap();
+    let assist_agent_app = assist_node_app.with_default_agent(|agent| async move { agent });
+    let target_agent_nns = target_node_nns.with_default_agent(|agent| async move { agent });
     (
-        (assist_agent, assist_node.effective_canister_id()),
-        (target_agent, target_node.effective_canister_id()),
+        (assist_agent_app, assist_node_app.effective_canister_id()),
+        (target_agent_nns, target_node_nns.effective_canister_id()),
     )
 }
 
