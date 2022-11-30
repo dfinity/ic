@@ -4,7 +4,7 @@ Rules to return ic version.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 
-def _ic_version_or_git_sha_imtpl(ctx):
+def _ic_version_or_git_sha_impl(ctx):
     """
     Returns the file that contatins IC version.
 
@@ -30,7 +30,7 @@ def _ic_version_or_git_sha_imtpl(ctx):
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
 
 ic_version_or_git_sha = rule(
-    implementation = _ic_version_or_git_sha_imtpl,
+    implementation = _ic_version_or_git_sha_impl,
     attrs = {
         "ic_version": attr.label(default = ":ic_version"),
         "_ic_version_or_git_sha_sh": attr.label(executable = True, cfg = "exec", default = ":ic_version_or_git_sha_sh"),
