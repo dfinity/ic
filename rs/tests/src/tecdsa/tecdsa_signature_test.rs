@@ -632,8 +632,8 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
                 reject_code: 4,
                 reject_message: format!(
                     "sign_with_ecdsa request sent with {} cycles, but {} cycles are required.",
-                    ECDSA_SIGNATURE_FEE.get() - 1,
-                    ECDSA_SIGNATURE_FEE.get()
+                    ECDSA_SIGNATURE_FEE - Cycles::from(1u64),
+                    ECDSA_SIGNATURE_FEE,
                 )
             }
         )
