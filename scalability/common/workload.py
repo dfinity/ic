@@ -96,7 +96,7 @@ class Workload(threading.Thread):
 
         self.query_timeout_secs = 30
         self.ingress_timeout_secs = 6 * 60
-        self.uuids = [uuid.uuid4()] * len(self.load_generators)
+        self.uuids = [uuid.uuid4() for i in range(len(self.load_generators))]
 
         if not isinstance(self.workload.canister_ids, list):
             raise Exception(
@@ -120,7 +120,7 @@ class Workload(threading.Thread):
             raise Exception("Not using any workload generators, aborting")
 
         target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
-        cmd = f'./ic-workload-generator "{target_list}"' f" -n {self.workload.duration} --no-status-check"
+        cmd = f'./ic-workload-generator "{target_list}"' f" -n {self.workload.duration} --no-status-check "
         cmd += " " + " ".join(self.workload.arguments)
         cmd += " --query-timeout-secs " + str(self.query_timeout_secs)
         cmd += " --ingress-timeout-secs " + str(self.ingress_timeout_secs)
@@ -168,7 +168,7 @@ class Workload(threading.Thread):
                     cmd_file.write(commands[idx] + "\n")
                 break
             except FileExistsError:
-                print(f"Failed to open - file already exists: {filename}")
+                continue
 
     def __update_summary_map_file(self, destinations):
         summary_file_dir = os.path.join(self.outdir, "workload_command_summary_map.json")

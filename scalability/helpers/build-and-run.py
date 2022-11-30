@@ -173,7 +173,7 @@ def main(argv):
 
         duration = time.time() - t_start
         print(f"Deployment finished at: {duration}s")
-        print("Sleeping for 1h. CTRL+C to terminate immediately")
+        print("Sleeping for {}h. CTRL+C to terminate immediately".format(FLAGS.farm_ttl_secs / 3600.0))
         time.sleep(FLAGS.farm_ttl_secs)
 
     finally:

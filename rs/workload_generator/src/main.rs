@@ -56,8 +56,9 @@ fn get_logger() -> slog::Logger {
 fn write_output_json(filename: &str, summaries: &[Summary]) -> io::Result<()> {
     use std::fs::File;
 
-    let file = PathBuf::from(filename);
-    serde_json::to_writer(&File::create(file)?, summaries)?;
+    let path = PathBuf::from(filename);
+    let file = File::options().write(true).create_new(true).open(path);
+    serde_json::to_writer(&file?, summaries)?;
     Ok(())
 }
 

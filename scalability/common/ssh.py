@@ -1,4 +1,5 @@
 import subprocess
+import uuid
 
 from termcolor import colored
 
@@ -80,8 +81,8 @@ def spawn_ssh_in_parallel(machines, command, f_stdout=None, f_stderr=None):
                 run_ssh(
                     machine,
                     command,
-                    f_stdout.format(machine) if f_stdout is not None else None,
-                    f_stderr.format(machine) if f_stderr is not None else None,
+                    str(f_stdout.format(machine + str(uuid.uuid4()))) if f_stdout is not None else None,
+                    str(f_stderr.format(machine + str(uuid.uuid4()))) if f_stderr is not None else None,
                 ),
             )
         )
@@ -104,8 +105,8 @@ def run_all_ssh_in_parallel(
     """Run the given command in parallel on all given machines and wait for completion."""
     ps = []  # Array of type: [(str, str, subprocess.Popen)]
     for command, machine in zip(commands, machines):
-        this_f_stdout = f_stdout.format(machine) if f_stdout is not None else None
-        this_f_stderr = f_stderr.format(machine) if f_stderr is not None else None
+        this_f_stdout = f_stdout.format(machine + str(uuid.uuid4())) if f_stdout is not None else None
+        this_f_stderr = f_stderr.format(machine + str(uuid.uuid4())) if f_stderr is not None else None
         ps.append(
             (
                 machine,
@@ -130,9 +131,19 @@ def run_all_ssh_in_parallel(
             rc = p.wait(timeout)
             rcs.append(rc)
             status = colored("OK", "green") if rc == 0 else colored(f"rc={rc}", "red")
-            print("{}: {} Done running {} on {}".format(colored(machine, "blue"), status, command, machine))
+            print(
+                "{}: {} Done running {} on {} (timeout: {})".format(
+                    colored(machine, "blue"), status, command, machine, timeout
+                )
+            )
             if rc != 0 and (this_f_stderr is not None or this_f_stdout is not None):
                 print(f"SSH failed, output is: err={this_f_stderr} out={this_f_stdout}")
+                try:
+                    content_stderr = open(this_f_stderr).readlines()
+                    print(colored("".join(content_stderr[:10]), "red"))
+                except Exception:
+                    print(colored("Failed to read content of stderr file", "red"))
+
         except subprocess.TimeoutExpired:
             print(
                 "{}: {} Timeout running {} on {}".format(
