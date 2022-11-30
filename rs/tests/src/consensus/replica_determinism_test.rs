@@ -17,7 +17,10 @@ use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        },
     },
     util::*,
 };
@@ -66,8 +69,14 @@ pub fn test(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("could not create tokio runtime");
     rt.block_on({
         async move {
-            let canister =
-                UniversalCanister::new(&agent, malicious_node.effective_canister_id()).await;
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                malicious_node.effective_canister_id(),
+                &log,
+                READY_WAIT_TIMEOUT,
+                RETRY_BACKOFF,
+            )
+            .await;
 
             // After N update&query requests the height of a subnet is >= N.
             // Thus, if N = FAULT_HEIGHT, it's guaranteed that divergence happens along the
