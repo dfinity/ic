@@ -87,18 +87,17 @@ pub(crate) fn insert_cup_at_height(
 /// Deserializes the CUP at the given height and returns it.
 pub(crate) fn read_cup_at_height(backup_dir: &Path, height: Height) -> CatchUpPackage {
     let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
-    let buffer = read_file(
-        &backup_dir
-            .join(group_key.to_string())
-            .join(height.to_string())
-            .join("catch_up_package.bin"),
-    );
+    let file = &backup_dir
+        .join(group_key.to_string())
+        .join(height.to_string())
+        .join("catch_up_package.bin");
+    let buffer = read_file(file);
 
     let protobuf = ic_protobuf::types::v1::CatchUpPackage::decode(buffer.as_slice())
         .expect("Protobuf decoding failed");
 
     CatchUpPackage::try_from(&protobuf)
-        .unwrap_or_else(|_| panic!("{}", deserialization_error(height)))
+        .unwrap_or_else(|err| panic!("{}", deserialization_error(file, err)))
 }
 
 /// Read all files from the backup folder starting from the `start_height` and
@@ -216,11 +215,12 @@ pub(crate) fn deserialize_consensus_artifacts(
         if let Some(file_name) = &height_artifacts.finalizations.get(0) {
             // Save the hash of the finalized block proposal.
             finalized_block_hash = file_name.split('_').nth(1);
-            let buffer = read_file(&path.join(file_name));
+            let file = &path.join(file_name);
+            let buffer = read_file(file);
             let finalization = Finalization::try_from(
                 pb::Finalization::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
             )
-            .unwrap_or_else(|_| panic!("{}", deserialization_error(height)));
+            .unwrap_or_else(|err| panic!("{}", deserialization_error(file, err)));
 
             let unique_signers: BTreeSet<_> =
                 finalization.signature.signers.clone().into_iter().collect();
@@ -247,11 +247,12 @@ pub(crate) fn deserialize_consensus_artifacts(
             // Otherwise, insert all.
             .filter(|name| name.contains(finalized_block_hash.unwrap_or("")))
         {
-            let buffer = read_file(&path.join(file_name));
+            let file = &path.join(file_name);
+            let buffer = read_file(file);
             let proposal = BlockProposal::try_from(
                 pb::BlockProposal::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
             )
-            .unwrap_or_else(|_| panic!("{}", deserialization_error(height)));
+            .unwrap_or_else(|err| panic!("{}", deserialization_error(file, err)));
 
             let validation_context = &proposal.content.as_ref().context;
             let certified_height = validation_context.certified_height;
@@ -300,7 +301,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             RandomBeacon::try_from(
                 pb::RandomBeacon::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
             )
-            .unwrap_or_else(|_| panic!("{}", deserialization_error(height)))
+            .unwrap_or_else(|err| panic!("{}", deserialization_error(&rb_path, err)))
             .into_message(),
         );
 
@@ -317,18 +318,19 @@ pub(crate) fn deserialize_consensus_artifacts(
             RandomTape::try_from(
                 pb::RandomTape::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
             )
-            .unwrap_or_else(|_| panic!("{}", deserialization_error(height)))
+            .unwrap_or_else(|err| panic!("{}", deserialization_error(&rt_path, err)))
             .into_message(),
         );
 
         // Insert the notarizations.
         for file_name in &height_artifacts.notarizations {
-            let buffer = read_file(&path.join(file_name));
+            let file = &path.join(file_name);
+            let buffer = read_file(file);
             artifacts.push(
                 Notarization::try_from(
                     pb::Notarization::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
                 )
-                .unwrap_or_else(|_| panic!("{}", deserialization_error(height)))
+                .unwrap_or_else(|err| panic!("{}", deserialization_error(file, err)))
                 .into_message(),
             );
         }
@@ -388,6 +390,6 @@ pub(crate) fn deserialize_consensus_artifacts(
     }
 }
 
-fn deserialization_error(height: Height) -> String {
-    format!("Couldn't deserialize artifacts at height {:?}", height)
+fn deserialization_error(file: &Path, err: String) -> String {
+    format!("Couldn't deserialize artifact {:?}: {}", file, err)
 }
