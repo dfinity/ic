@@ -74,7 +74,8 @@ rust_test(
     crate = ":crypto_service_provider",
     data = [
         "test_resources/public_keys.pb",
-        "test_resources/sks_data.pb",
+        "test_resources/sks_data_v2.pb",
+        "test_resources/sks_data_v3.pb",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/crypto/internal/crypto_service_provider",
