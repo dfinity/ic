@@ -19,7 +19,7 @@ use ic_types::{ComputeAllocation, NumBytes, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 use lazy_static::lazy_static;
-use wasmtime::{Config, Engine, Module, Store, Val};
+use wasmtime::{Engine, Module, Store, Val};
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
@@ -29,8 +29,10 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 
 #[test]
 fn test_wasmtime_system_api() {
-    let config = Config::default();
-    let engine = Engine::new(&config).expect("Failed to initialize Wasmtime engine");
+    let engine = Engine::new(&WasmtimeEmbedder::initial_wasmtime_config(
+        &EmbeddersConfig::default(),
+    ))
+    .expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_for_start(canister_id);
     let sandbox_safe_system_state = SandboxSafeSystemState::new(

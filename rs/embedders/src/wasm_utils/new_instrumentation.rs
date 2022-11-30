@@ -95,15 +95,19 @@
 //! non-reentrant basic blocks.
 
 use super::{InstrumentationOutput, Segments};
+use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::NumWasmPages;
-use ic_types::methods::WasmMethod;
+use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
+use ic_types::{methods::WasmMethod, MAX_WASM_MEMORY_IN_BYTES};
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
+use wasmtime_environ::WASM_PAGE_SIZE;
 
 use crate::wasm_utils::wasm_transform::{self, Module};
+use crate::wasmtime_embedder::{WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME};
 use wasmparser::{
-    BlockType, ConstExpr, Export, ExternalKind, FuncType, Global, GlobalType, Import, Operator,
-    Type, TypeRef, ValType,
+    BlockType, ConstExpr, Export, ExternalKind, FuncType, Global, GlobalType, Import, MemoryType,
+    Operator, Type, TypeRef, ValType,
 };
 
 use std::convert::TryFrom;
@@ -147,9 +151,12 @@ const INSTRUMENTED_FUN_MODULE: &str = "__";
 const OUT_OF_INSTRUCTIONS_FUN_NAME: &str = "out_of_instructions";
 const UPDATE_MEMORY_FUN_NAME: &str = "update_available_memory";
 const TABLE_STR: &str = "table";
-const MEMORY_STR: &str = "memory";
 const CANISTER_COUNTER_INSTRUCTIONS_STR: &str = "canister counter_instructions";
 const CANISTER_START_STR: &str = "canister_start";
+
+/// There is one byte for each OS page in the wasm heap.
+const BYTEMAP_SIZE_IN_WASM_PAGES: u64 =
+    MAX_WASM_MEMORY_IN_BYTES / (PAGE_SIZE as u64) / (WASM_PAGE_SIZE as u64);
 
 fn add_type(module: &mut Module, ty: Type) -> u32 {
     let Type::Func(sig) = &ty;
@@ -240,10 +247,11 @@ pub struct ExportModuleData {
 pub(super) fn instrument(
     module: Module<'_>,
     cost_to_compile_wasm_instruction: NumInstructions,
+    write_barrier: FlagStatus,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let mut module = inject_helper_functions(module);
     module = export_table(module);
-    module = export_memory(module);
+    module = export_memory(module, write_barrier);
 
     let mut extra_strs: Vec<String> = Vec::new();
     module = export_mutable_globals(module, &mut extra_strs);
@@ -310,12 +318,17 @@ pub(super) fn instrument(
         .filter_map(|export| WasmMethod::try_from(export.name.to_string()).ok())
         .collect();
 
-    if module.memories.len() > 1 {
+    let expected_memories = match write_barrier {
+        FlagStatus::Enabled => 2,
+        FlagStatus::Disabled => 1,
+    };
+    if module.memories.len() > expected_memories {
         return Err(WasmInstrumentationError::IncorrectNumberMemorySections {
-            expected: 1,
+            expected: expected_memories,
             got: module.memories.len(),
         });
     }
+
     let initial_limit = if module.memories.is_empty() {
         // if Wasm does not declare any memory section (mostly tests), use this default
         0
@@ -723,22 +736,37 @@ fn export_table(mut module: Module) -> Module {
     module
 }
 
-fn export_memory(mut module: Module) -> Module {
+fn export_memory(mut module: Module, write_barrier: FlagStatus) -> Module {
     let mut memory_already_exported = false;
     for export in &mut module.exports {
         if let ExternalKind::Memory = export.kind {
             memory_already_exported = true;
-            export.name = MEMORY_STR;
+            export.name = WASM_HEAP_MEMORY_NAME;
         }
     }
 
     if !memory_already_exported && !module.memories.is_empty() {
         let memory_export = Export {
-            name: MEMORY_STR,
+            name: WASM_HEAP_MEMORY_NAME,
             kind: ExternalKind::Memory,
             index: 0,
         };
         module.exports.push(memory_export);
+    }
+
+    if write_barrier == FlagStatus::Enabled && !module.memories.is_empty() {
+        module.memories.push(MemoryType {
+            memory64: false,
+            shared: false,
+            initial: BYTEMAP_SIZE_IN_WASM_PAGES,
+            maximum: Some(BYTEMAP_SIZE_IN_WASM_PAGES),
+        });
+
+        module.exports.push(Export {
+            name: WASM_HEAP_BYTEMAP_MEMORY_NAME,
+            kind: ExternalKind::Memory,
+            index: 1,
+        });
     }
 
     module

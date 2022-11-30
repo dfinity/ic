@@ -182,7 +182,11 @@ fn validate_and_instrument(
             let (validation, module) = new_validation::validate_wasm_binary(wasm, config)?;
             (
                 validation,
-                new_instrumentation::instrument(module, config.cost_to_compile_wasm_instruction)?,
+                new_instrumentation::instrument(
+                    module,
+                    config.cost_to_compile_wasm_instruction,
+                    config.feature_flags.write_barrier,
+                )?,
             )
         } else {
             (

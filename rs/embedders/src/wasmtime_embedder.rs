@@ -13,7 +13,7 @@ use ic_system_api::ModificationTracking;
 use wasmtime::{unix::StoreExt, Engine, Memory, Module, Mutability, OptLevel, Store, Val, ValType};
 
 pub use host_memory::WasmtimeMemoryCreator;
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
@@ -40,8 +40,9 @@ use self::host_memory::{MemoryPageSize, MemoryStart};
 mod wasmtime_embedder_tests;
 
 const NUM_INSTRUCTION_GLOBAL_NAME: &str = "canister counter_instructions";
-
 const BAD_SIGNATURE_MESSAGE: &str = "function invocation does not match its signature";
+pub(crate) const WASM_HEAP_MEMORY_NAME: &str = "memory";
+pub(crate) const WASM_HEAP_BYTEMAP_MEMORY_NAME: &str = "bytemap_memory";
 
 fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
     match err.downcast::<wasmtime::Trap>() {
@@ -108,6 +109,7 @@ fn trap_code_to_hypervisor_error(trap_code: wasmtime::TrapCode) -> HypervisorErr
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterMemoryType {
     Heap,
+    HeapByteMap,
 }
 
 pub struct WasmtimeEmbedder {
@@ -129,15 +131,17 @@ impl WasmtimeEmbedder {
         }
     }
 
-    fn create_engine(&self) -> HypervisorResult<Engine> {
+    /// Only public for use in tests that create their own wasmtime engine. This
+    /// contains all the wasmtime configuration used to actually run the
+    /// canisters __except__ the `host_memory`.
+    #[doc(hidden)]
+    pub fn initial_wasmtime_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
         let mut config = wasmtime::Config::default();
         config.cranelift_opt_level(OptLevel::None);
         ensure_determinism(&mut config);
-        let mem_creator = Arc::new(WasmtimeMemoryCreator::new(Arc::clone(
-            &self.created_memories,
-        )));
-        config.with_host_memory(mem_creator);
-
+        if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled {
+            config.wasm_multi_memory(true);
+        }
         config
             // maximum size in bytes where a linear memory is considered
             // static. setting this to maximum Wasm memory size will guarantee
@@ -145,7 +149,17 @@ impl WasmtimeEmbedder {
             .static_memory_maximum_size(
                 wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM32_MAX_PAGES as u64,
             )
-            .max_wasm_stack(self.config.max_wasm_stack_size);
+            .max_wasm_stack(embedder_config.max_wasm_stack_size);
+
+        config
+    }
+
+    fn create_engine(&self) -> HypervisorResult<Engine> {
+        let mut config = Self::initial_wasmtime_config(&self.config);
+        let mem_creator = Arc::new(WasmtimeMemoryCreator::new(Arc::clone(
+            &self.created_memories,
+        )));
+        config.with_host_memory(mem_creator);
 
         wasmtime::Engine::new(&config).map_err(|_| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToInitializeEngine)
@@ -291,7 +305,7 @@ impl WasmtimeEmbedder {
 
         let instance_heap_memory =
             instance
-                .get_memory(&mut store, "memory")
+                .get_memory(&mut store, WASM_HEAP_MEMORY_NAME)
                 .map(|instance_memory| {
                     let current_heap_size = instance_memory.size(&store);
                     let requested_size = heap_memory.size.get() as u64;
@@ -310,6 +324,13 @@ impl WasmtimeEmbedder {
                     instance_memory
                 });
 
+        let instance_bytemap_memory =
+            if self.config.feature_flags.write_barrier == FlagStatus::Enabled {
+                instance.get_memory(&mut store, WASM_HEAP_BYTEMAP_MEMORY_NAME)
+            } else {
+                None
+            };
+
         let dirty_page_tracking = match modification_tracking {
             ModificationTracking::Ignore => DirtyPageTracking::Ignore,
             ModificationTracking::Track => DirtyPageTracking::Track,
@@ -320,12 +341,8 @@ impl WasmtimeEmbedder {
             None => HashMap::new(),
             Some(instance_memory) => {
                 let start = MemoryStart(instance_memory.data_ptr(&store) as usize);
-                match self
-                    .created_memories
-                    .lock()
-                    .ok()
-                    .and_then(|mut mems| mems.remove(&start))
-                {
+                let mut created_memories = self.created_memories.lock().unwrap();
+                let heap_current_size = match created_memories.remove(&start) {
                     None => {
                         error!(
                             self.log,
@@ -338,22 +355,55 @@ impl WasmtimeEmbedder {
                             store.into_data().system_api,
                         ));
                     }
-                    Some(current_memory_size_in_pages) => sigsegv_memory_tracker(
-                        [(
-                            CanisterMemoryType::Heap,
-                            (
-                                instance_memory,
-                                current_memory_size_in_pages,
-                                heap_memory.page_map.clone(),
-                            ),
-                        )]
-                        .into_iter()
-                        .collect(),
-                        &mut store,
-                        self.log.clone(),
+                    Some(current_memory_size_in_pages) => current_memory_size_in_pages,
+                };
+                let mut memories = [(
+                    CanisterMemoryType::Heap,
+                    MemorySigSegvInfo {
+                        instance_memory,
+                        current_memory_size_in_pages: heap_current_size,
+                        page_map: heap_memory.page_map.clone(),
                         dirty_page_tracking,
-                    ),
+                    },
+                )]
+                .into_iter()
+                .collect::<HashMap<_, _>>();
+
+                if self.config.feature_flags.write_barrier == FlagStatus::Enabled {
+                    match instance_bytemap_memory.and_then(|bytemap_instance_memory| {
+                        let start = MemoryStart(bytemap_instance_memory.data_ptr(&store) as usize);
+                        created_memories
+                            .remove(&start)
+                            .map(|s| (bytemap_instance_memory, s))
+                    }) {
+                        None => {
+                            error!(
+                                self.log,
+                                "Unable to find memory bytemap for canister {} when instantiating",
+                                canister_id
+                            );
+                            return Err((
+                                HypervisorError::WasmEngineError(
+                                    WasmEngineError::FailedToInstantiateModule,
+                                ),
+                                store.into_data().system_api,
+                            ));
+                        }
+                        Some((instance_memory, current_memory_size_in_pages)) => {
+                            memories.insert(
+                                CanisterMemoryType::HeapByteMap,
+                                MemorySigSegvInfo {
+                                    instance_memory,
+                                    current_memory_size_in_pages,
+                                    page_map: PageMap::default(),
+                                    dirty_page_tracking: DirtyPageTracking::Ignore,
+                                },
+                            );
+                        }
+                    }
                 }
+
+                sigsegv_memory_tracker(memories, &mut store, self.log.clone())
             }
         };
         let signal_stack = WasmtimeSignalStack::new();
@@ -386,15 +436,30 @@ struct StoreRef(*mut wasmtime::Store<()>);
 unsafe impl Sync for StoreRef {}
 unsafe impl Send for StoreRef {}
 
+pub struct MemorySigSegvInfo {
+    instance_memory: wasmtime::Memory,
+    current_memory_size_in_pages: MemoryPageSize,
+    page_map: PageMap,
+    dirty_page_tracking: DirtyPageTracking,
+}
+
 fn sigsegv_memory_tracker<S>(
-    memories: HashMap<CanisterMemoryType, (wasmtime::Memory, MemoryPageSize, PageMap)>,
+    memories: HashMap<CanisterMemoryType, MemorySigSegvInfo>,
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
-    dirty_page_tracking: DirtyPageTracking,
 ) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
     let mut tracked_memories = vec![];
     let mut result = HashMap::new();
-    for (mem_type, (instance_memory, current_memory_size_in_pages, page_map)) in memories {
+    for (
+        mem_type,
+        MemorySigSegvInfo {
+            instance_memory,
+            current_memory_size_in_pages,
+            page_map,
+            dirty_page_tracking,
+        },
+    ) in memories
+    {
         let base = instance_memory.data_ptr(&store);
         let size = instance_memory.data_size(&store);
 
@@ -508,13 +573,20 @@ impl<S: SystemApi> WasmtimeInstance<S> {
     }
 
     fn memory(&mut self) -> HypervisorResult<Memory> {
-        match self.instance.get_export(&mut self.store, "memory") {
+        match self
+            .instance
+            .get_export(&mut self.store, WASM_HEAP_MEMORY_NAME)
+        {
             Some(export) => export.into_memory().ok_or_else(|| {
-                HypervisorError::ContractViolation("export 'memory' is not a memory".to_string())
+                HypervisorError::ContractViolation(format!(
+                    "export '{}' is not a memory",
+                    WASM_HEAP_MEMORY_NAME
+                ))
             }),
-            None => Err(HypervisorError::ContractViolation(
-                "export 'memory' not found".to_string(),
-            )),
+            None => Err(HypervisorError::ContractViolation(format!(
+                "export '{}' not found",
+                WASM_HEAP_MEMORY_NAME
+            ))),
         }
     }
 

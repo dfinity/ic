@@ -1,4 +1,4 @@
-use crate::wasmtime_embedder::{system_api_complexity, StoreData};
+use crate::wasmtime_embedder::{system_api_complexity, StoreData, WASM_HEAP_MEMORY_NAME};
 
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
@@ -340,7 +340,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         f: impl Fn(&mut S, &mut [u8]) -> HypervisorResult<T>,
     ) -> Result<T, wasmtime::Trap> {
         let result = caller
-            .get_export("memory")
+            .get_export(WASM_HEAP_MEMORY_NAME)
             .ok_or_else(|| {
                 HypervisorError::ContractViolation(
                     "WebAssembly module must define memory".to_string(),
