@@ -54,6 +54,12 @@ stdout_handler.setFormatter(CustomFormatter(fmt))
 logger.addHandler(stdout_handler)
 
 
+class TargetExecutionResult:
+    def __init__(self, status: str, failure_message: str = "") -> None:
+        self.status = status
+        self.failure_message = failure_message
+
+
 def make_request(url, headers=None, data=None):
     request = urllib.request.Request(url, headers=headers or {}, data=data)
     try:
@@ -113,10 +119,10 @@ def send_slack_alerts_from_file(webhook_url: str, filename: str):
         send_slack_alert(webhook_url=webhook_url, channel=channel, message=data["message"])
 
 
-def save_slack_alert(filename: str, test_name: str, slack_channels: List[str]):
-    job_log_info = f"<{CI_JOB_URL}|log>" if CI_JOB_URL else " during *manual* run"
+def save_slack_alert(filename: str, test_name: str, failure_message: str, slack_channels: List[str]):
+    job_log_info = f"<{CI_JOB_URL}|log>" if CI_JOB_URL else "during *manual* run"
     message = (
-        f"Bazel test target *{test_name}* failed, {job_log_info}. :x:\n"
+        f"Bazel test target *{test_name}* {failure_message}, {job_log_info}. :x:\n"
         f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>."
     )
     json_string = {"channels": slack_channels, "message": message}
@@ -153,8 +159,8 @@ def find_system_test_targets_in_BEP(file_path: str) -> Set[str]:
     return system_test_targets
 
 
-def extract_execution_results_for_targets_in_BEP(file_path: str, targets: Set) -> Dict[str, str]:
-    results = dict.fromkeys(targets, "FAILED")
+def extract_execution_results_for_targets_in_BEP(file_path: str, targets: Set) -> Dict[str, TargetExecutionResult]:
+    results = dict.fromkeys(targets, TargetExecutionResult(status="FAILED", failure_message="couldn't start execution"))
     with open(file_path) as file:
         for line in file:
             line_dict = json.loads(line)
@@ -164,11 +170,12 @@ def extract_execution_results_for_targets_in_BEP(file_path: str, targets: Set) -
                 and line_dict["id"]["testSummary"]["label"] in targets
             ):
                 if "testSummary" in line_dict:
-                    results[line_dict["id"]["testSummary"]["label"]] = line_dict["testSummary"]["overallStatus"]
+                    key = line_dict["id"]["testSummary"]["label"]
+                    results[key] = TargetExecutionResult(status=line_dict["testSummary"]["overallStatus"])
     return results
 
 
-def process_bazel_results(file_path: str) -> Dict[str, str]:
+def process_bazel_results(file_path: str) -> Dict[str, TargetExecutionResult]:
     # build_event_json_file is not a JSON, but a line-delimited JSON file.
     # To extract test target names and their execution statuses, we parse each file line
     # into a dict and process it.
@@ -183,18 +190,33 @@ def main(config: Config) -> None:
     slack_alert_files = []
     if len(test_targets_results) == 0:
         logger.warn(f"No targets with `run_system_test rule` detected in {config.build_event_json_path}")
-    for test_target_name, execution_status in test_targets_results.items():
+    for test_target_name, target_result in test_targets_results.items():
         honeycomb_events.append(
-            {"data": {"test_target": test_target_name, "execution_result": execution_status, "job_url": CI_JOB_URL}}
+            {
+                "data": {
+                    "test_target": test_target_name,
+                    "execution_result": target_result.status,
+                    "execution_message": target_result.failure_message,
+                    "job_url": CI_JOB_URL,
+                }
+            }
         )
-        if execution_status == "PASSED":
+        if target_result.status == "PASSED":
             logger.info(f"Test target {test_target_name} was executed successfully.")
         else:
-            logger.error(f"Test target {test_target_name} has failed.")
+            failure_message = target_result.failure_message
+            if not target_result.failure_message:
+                failure_message = "failed"
+            logger.error(f"Test target {test_target_name} {failure_message}")
             test_name = test_target_name.replace("/", "_").replace(":", "_")
             slack_filename = f"{config.output_dir}/{test_name}_slack_alert.json"
             slack_alert_files.append(slack_filename)
-            save_slack_alert(filename=slack_filename, test_name=test_target_name, slack_channels=[SLACK_ALERT_CHANNEL])
+            save_slack_alert(
+                filename=slack_filename,
+                test_name=test_target_name,
+                failure_message=failure_message,
+                slack_channels=[SLACK_ALERT_CHANNEL],
+            )
     # Send all slack alerts
     if len(slack_alert_files) != 0 and config.slack_webhook_url:
         for file in slack_alert_files:
