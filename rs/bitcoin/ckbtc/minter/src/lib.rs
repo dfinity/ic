@@ -139,7 +139,7 @@ async fn submit_pending_requests() {
             )
         })
     }) {
-        Some((key, address)) => (key, address),
+        Some((address, key)) => (address, key),
         None => {
             ic_cdk::print(
                 "unreachable: have retrieve BTC requests but the ECDSA key is not initialized",
