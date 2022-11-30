@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/phantom_newtype",
     "//rs/types/base_types",
     "@crate_index//:bytes",
+    "@crate_index//:futures",
     "@crate_index//:h2",
     "@crate_index//:http",
     "@crate_index//:prometheus",

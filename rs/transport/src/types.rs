@@ -4,6 +4,7 @@ use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
 use crate::utils::SendQueueImpl;
 use async_trait::async_trait;
 use bytes::Bytes;
+use futures::future::poll_fn;
 use h2::{RecvStream, SendStream};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
@@ -15,13 +16,11 @@ use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Debug, Formatter};
-use std::future::Future;
 use std::net::IpAddr;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::{Arc, Weak};
-use std::task::Poll;
 use strum::AsRefStr;
+use strum::IntoStaticStr;
 use tokio::{
     io::{ReadHalf, WriteHalf},
     runtime::Handle,
@@ -82,7 +81,7 @@ pub const H2_WINDOW_SIZE: u32 = 1_000_000;
 
 pub(crate) enum ChannelReader {
     Legacy(ReadHalf<Box<dyn TlsStream>>),
-    H2RecvStream(RecvStream),
+    H2RecvStream(H2Reader),
 }
 
 impl ChannelReader {
@@ -91,13 +90,13 @@ impl ChannelReader {
     }
 
     pub fn new_with_h2_recv_stream(recv_stream: RecvStream) -> Self {
-        ChannelReader::H2RecvStream(recv_stream)
+        ChannelReader::H2RecvStream(H2Reader::new(recv_stream))
     }
 }
 
 pub(crate) enum ChannelWriter {
     Legacy(WriteHalf<Box<dyn TlsStream>>),
-    H2SendStream(SendStream<Bytes>),
+    H2SendStream(H2Writer),
 }
 
 impl ChannelWriter {
@@ -106,14 +105,8 @@ impl ChannelWriter {
     }
 
     pub fn new_with_h2_send_stream(send_stream: SendStream<Bytes>) -> Self {
-        ChannelWriter::H2SendStream(send_stream)
+        ChannelWriter::H2SendStream(H2Writer::new(send_stream))
     }
-}
-
-#[derive(Clone)]
-pub struct PayloadData {
-    pub header: Vec<u8>,
-    pub body: Vec<u8>,
 }
 
 /// Transport implementation state struct. The control and data planes provide
@@ -158,62 +151,103 @@ pub(crate) struct TransportImpl {
     pub use_h2: bool,
 }
 
+/// Error type for read errors
+#[derive(Debug, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
+pub enum StreamReadError {
+    Failed(std::io::Error),
+    TimeOut,
+    H2ReceiveStreamFailure(String),
+}
+
 // Wrapper around SendStream to ensure that we only send data if there is available capacity,
 // since send stream uses an unbounded buffer to handle data.
-pub(crate) struct SendStreamWrapper<'a> {
-    send_stream: &'a mut SendStream<Bytes>,
-    data: Vec<PayloadData>,
+pub(crate) struct H2Writer {
+    send_stream: SendStream<Bytes>,
 }
 
-impl<'a> SendStreamWrapper<'a> {
-    pub fn new(send_stream: &'a mut SendStream<Bytes>, data: Vec<PayloadData>) -> Self {
-        let capacity_needed = data.iter().map(|p| p.header.len() + p.body.len()).sum();
-        send_stream.reserve_capacity(capacity_needed);
-
-        Self { send_stream, data }
+impl H2Writer {
+    pub fn new(send_stream: SendStream<Bytes>) -> Self {
+        Self { send_stream }
     }
-}
-
-impl Future for SendStreamWrapper<'_> {
-    type Output = Result<(), std::io::Error>;
 
     // This is invoked to send data via sendstream. As a prerequisite, it checks available capacity
     // and waits until non-zero capacity is available before calling send to avoid overloading memory
-    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        loop {
-            match self.send_stream.poll_capacity(cx) {
-                Poll::Ready(Some(Ok(0))) => continue,
-                Poll::Ready(Some(Ok(_))) => break,
-                Poll::Ready(None) | Poll::Ready(Some(Err(_))) => {
+    pub async fn send_data(&mut self, mut data: Bytes) -> Result<(), std::io::Error> {
+        while !data.is_empty() {
+            let len = data.len();
+            self.send_stream.reserve_capacity(len);
+
+            match poll_fn(|cx| self.send_stream.poll_capacity(cx)).await {
+                None | Some(Err(_)) => {
                     let e = std::io::Error::new(std::io::ErrorKind::Other, "poll capacity failure");
-                    return Poll::Ready(Err(e));
+                    return Err(e);
                 }
-                Poll::Pending => return Poll::Pending,
-            }
-        }
-        // Send header and body as separate frames
-        for payload in self.data.clone() {
-            if !payload.header.is_empty() {
-                self.send_stream
-                    .send_data(Bytes::from(payload.header.into_boxed_slice()), false)
-                    .map_err(|err| {
+                Some(Ok(0)) => continue,
+                Some(Ok(cap)) => {
+                    let to_send = data.split_to(std::cmp::min(cap, len));
+                    self.send_stream.send_data(to_send, false).map_err(|err| {
                         err.into_io().unwrap_or_else(|| {
                             std::io::Error::new(std::io::ErrorKind::Other, "failed to send header")
                         })
                     })?;
-            }
-
-            if !payload.body.is_empty() {
-                self.send_stream
-                    .send_data(Bytes::from(payload.body.into_boxed_slice()), false)
-                    .map_err(|err| {
-                        err.into_io().unwrap_or_else(|| {
-                            std::io::Error::new(std::io::ErrorKind::Other, "failed to send body")
-                        })
-                    })?
+                }
             }
         }
-        Poll::Ready(Ok(()))
+        Ok(())
+    }
+}
+
+pub(crate) struct H2Reader {
+    receive_stream: RecvStream,
+    buffer: Vec<u8>,
+}
+
+impl H2Reader {
+    pub fn new(receive_stream: RecvStream) -> Self {
+        Self {
+            receive_stream,
+            buffer: vec![],
+        }
+    }
+
+    /// Reads frames until target length is reached.
+    /// After each frame is read, capacity is released.
+    /// Timeout is applied to each frame read.
+    /// If more bytes are read than the target, return that as an 'excess'
+    pub async fn get_message(
+        &mut self,
+        target_len: usize,
+        msg_type: String,
+        timeout: Duration,
+    ) -> Result<Vec<u8>, StreamReadError> {
+        while self.buffer.len() < target_len {
+            let read_future = self.receive_stream.data();
+            match tokio::time::timeout(timeout, read_future).await {
+                Err(_) => return Err(StreamReadError::TimeOut),
+                Ok(Some(Ok(chunk))) => {
+                    self.buffer.append(&mut chunk.to_vec());
+                    let _ = self
+                        .receive_stream
+                        .flow_control()
+                        .release_capacity(chunk.len());
+                }
+                // If stream returns empty frame, continue polling
+                Ok(None) => {}
+                Ok(Some(Err(h2_error))) => {
+                    return Err(StreamReadError::H2ReceiveStreamFailure(format!(
+                        "{:?} for {:?}",
+                        h2_error.to_string(),
+                        msg_type
+                    )));
+                }
+            }
+        }
+        let extra_buffer = self.buffer.split_off(target_len);
+
+        let message = self.buffer.to_vec();
+        self.buffer = extra_buffer;
+        Ok(message)
     }
 }
 
