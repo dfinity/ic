@@ -17,10 +17,11 @@ fn assert_memory_and_table_exports(module: &Module) {
     for e in export_section.entries() {
         if let parity_wasm::elements::Internal::Table(_) = e.internal() {
             assert_eq!(e.field(), "table");
-            memory_exported = true;
-        } else if let parity_wasm::elements::Internal::Memory(_) = e.internal() {
-            assert_eq!(e.field(), "memory");
             table_exported = true;
+        } else if let parity_wasm::elements::Internal::Memory(_) = e.internal() {
+            if e.field() == "memory" {
+                memory_exported = true;
+            }
         }
     }
     assert!(memory_exported && table_exported);

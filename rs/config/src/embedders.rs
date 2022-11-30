@@ -43,6 +43,8 @@ pub struct FeatureFlags {
     /// Use the `wasmparser` and `wasm-encoder` crates for instrumentation and
     /// validation instead of `parity-wasm`.
     pub new_wasm_transform_lib: FlagStatus,
+    /// Track dirty pages with a write barrier instead of the signal handler.
+    pub write_barrier: FlagStatus,
 }
 
 impl Default for FeatureFlags {
@@ -50,6 +52,7 @@ impl Default for FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             new_wasm_transform_lib: FlagStatus::Enabled,
+            write_barrier: FlagStatus::Disabled,
         }
     }
 }

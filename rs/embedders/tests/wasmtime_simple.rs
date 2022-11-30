@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use ic_config::embedders::Config as EmbeddersConfig;
+use ic_embedders::WasmtimeEmbedder;
 use wasmtime::{Config, Engine, Instance, Module, Store};
 
 use ic_wasm_types::BinaryEncodedWasm;
@@ -86,8 +88,10 @@ pub type ModuleRegistry = HashMap<String, (Instance, HashMap<String, usize>)>;
 #[allow(clippy::new_without_default)]
 impl WasmtimeSimple {
     pub fn new() -> Self {
-        let config = Config::default();
-        let engine = Engine::new(&config).expect("Failed to initialize Wasmtime engine");
+        let engine = Engine::new(&WasmtimeEmbedder::initial_wasmtime_config(
+            &EmbeddersConfig::default(),
+        ))
+        .expect("Failed to initialize Wasmtime engine");
         let store = Store::new(&engine, ());
         Self { engine, store }
     }

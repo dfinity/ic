@@ -15,7 +15,10 @@ use std::{
 };
 use wasmtime::Config;
 
-use crate::wasm_utils::wasm_transform::{DataSegment, DataSegmentKind, Module};
+use crate::{
+    wasm_utils::wasm_transform::{DataSegment, DataSegmentKind, Module},
+    wasmtime_embedder::WASM_HEAP_MEMORY_NAME,
+};
 use wasmparser::{ExternalKind, Operator, Type, TypeRef, ValType};
 
 /// Symbols that are reserved and cannot be exported by canisters.
@@ -786,7 +789,7 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                     }
                 }
                 TypeRef::Memory(_) => {
-                    if field == "memory" && import_module != "env" {
+                    if field == WASM_HEAP_MEMORY_NAME && import_module != "env" {
                         return Err(WasmValidationError::InvalidImportSection(
                             "Only memory imported from env.memory is allowed.".to_string(),
                         ));
