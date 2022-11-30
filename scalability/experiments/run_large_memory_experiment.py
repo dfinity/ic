@@ -52,7 +52,7 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
 
     def __init__(self):
         """Construct experiment 2."""
-        super().__init__(num_workload_gen=1)
+        super().__init__()
         for _ in range(FLAGS.num_canisters):
             self.install_canister(self.target_nodes[0], CANISTER)
 
@@ -62,15 +62,13 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
         load = config["load_total"]
         call_method = config["call_method"]
         t_start = int(time.time())
-        if len(self.machines) != 1:
-            raise Exception("Expected number of workload generator machines to be exactly 1")
         # The workload generator can only target a single canister.
         # If we want to target num_canister canisters, we hence need num_canister workload generators.
         # They can all be on the same machine.
         num_canisters_installed = len(list(itertools.chain.from_iterable([i for _, i in self.canister_ids.items()])))
         assert num_canisters_installed == FLAGS.num_canisters
         r = self.run_workload_generator(
-            [self.machines[0] for _ in range(FLAGS.num_canisters)],
+            [self.machines[i % len(self.machines)] for i in range(FLAGS.num_canisters)],
             self.target_nodes,
             load,
             payload=codecs.encode(json.dumps({"size": config["payload_size"]}).encode("utf-8"), "hex"),

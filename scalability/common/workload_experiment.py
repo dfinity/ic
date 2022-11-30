@@ -213,7 +213,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         destinations = ["admin@[{}]:".format(m) for m in machines]
         sources = [self.workload_generator_path for _ in machines]
         r = ssh.scp_in_parallel(sources, destinations)
-        ssh.run_ssh_in_parallel(machines, "chmod a+x ic-workload-generator")
+        ssh.run_ssh_in_parallel(machines, "chmod a+x ic-workload-generator; ulimit -S -n 4096")
 
         return r
 

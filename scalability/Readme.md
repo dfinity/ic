@@ -142,6 +142,15 @@ In order to add a new experiment:
   
 Consider other experiments `run_experiment_*.py` for inspiration. Notable `run_system_baseline_experiment.py` for an example of a workload experiment as well as `run_xnet_experiment.py` for one that doesn't.
 
+## Interactive development
+
+The scalability suite is designed such that it provides stable results and collect a lot of data for report generation.
+
+However, when running manually, it is sometimes desireable to skip some of those features to achieve a faster feedback cycles.
+
+ - Use `--iter_duration=60` or `--scale_duration=0.2` (for workload experiments) for shorter measurement duration
+ - Set `--no_prometheus=True --no_instrument=True` to disable some extra steps for acquiering more data
+
 ## Debugging
 
 For debugging purposes, it is normally useful to instruct python to pop up a debugger on any exception.

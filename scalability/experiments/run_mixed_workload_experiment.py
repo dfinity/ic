@@ -25,6 +25,7 @@ gflags.DEFINE_integer("increment_rps", 50, "Increment of requests per second per
 gflags.DEFINE_integer(
     "max_rps", 40000, "Maximum requests per second to be sent. Experiment will wrap up beyond this number."
 )
+gflags.DEFINE_float("scale_duration", -1, "Scale all durations by the given factor. Ignored if negative.")
 
 NUM_MACHINES_PER_WORKLOAD = 1  # TODO - make configurable in toml
 
@@ -59,6 +60,9 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         for wl_idx, wl in enumerate(self.workload_description):
             print(wl)
             rps = int(config["load_total"] * wl.rps_ratio)
+            if FLAGS.scale_duration > 0:
+                scaled_duration = int(wl.duration * FLAGS.scale_duration)
+                wl = wl._replace(duration=scaled_duration)
             if wl.rps < 0:
                 wl = wl._replace(rps=rps)
             if isinstance(wl.raw_payload, list):
