@@ -27,7 +27,6 @@ use slog::Logger;
 use ic_tests::cli::Options;
 use ic_tests::consensus::cow_safety_test;
 use ic_tests::execution;
-use ic_tests::execution::system_api_security_test;
 use ic_tests::nns_tests::nns_voting_fuzzing_poc_test;
 use ic_tests::tecdsa;
 use ic_tests::util::CYCLES_LIMIT_PER_CANISTER;
@@ -43,7 +42,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
         dual_workload_pot(),
         system_subnets_pot(),
         request_auth_malicious_replica_pot(),
-        system_api_security_pot(),
     ]
 }
 
@@ -81,17 +79,6 @@ fn max_payload_pot() -> pot::Pot {
         steps! {
             consensus::payload_builder_test::max_ingress_payload_size_test,
             consensus::payload_builder_test::max_xnet_payload_size_test
-        }
-    )
-}
-
-fn system_api_security_pot() -> pot::Pot {
-    composable!(
-        "system_security_tests",
-        system_api_security_test::config(),
-        steps! {
-            system_api_security_test::malicious_inputs => "malicious input - security",
-            system_api_security_test::malicious_intercanister_calls => "malicious inter canister calls - security"
         }
     )
 }

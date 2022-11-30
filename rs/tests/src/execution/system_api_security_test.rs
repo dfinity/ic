@@ -2,33 +2,37 @@
    These tests tries to provide malicious input to induce mistake in the application, disclose unauthorized
    data, write into unauthorized memory etc.
 */
+
+use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+};
 use crate::util::*;
 use core::fmt::Write;
 use ic_agent::export::Principal;
 use ic_agent::AgentError;
 use ic_agent::RequestId;
-use ic_fondue::{
-    ic_instance::{LegacyInternetComputer, Subnet}, // which is declared through these types
-    ic_manager::IcHandle,                          // we run the test on the IC
-};
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
-use slog::debug;
+use slog::{debug, Logger};
 use std::{time::Duration, time::Instant};
 use tokio::time::sleep_until;
 
-pub fn config() -> LegacyInternetComputer {
-    LegacyInternetComputer::new()
+pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 // Enables additional debug logs
 const ENABLE_DEBUG_LOG: bool = false;
 
-pub fn malicious_inputs(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+pub fn malicious_inputs(env: TestEnv) {
+    let logger = &env.logger();
     let wasm = wabt::wat2wasm(
         r#"(module
               (import "ic0" "msg_reply" (func $msg_reply))
@@ -92,7 +96,7 @@ pub fn malicious_inputs(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 (call $msg_reply_data_append (i32.const 1) (i32.load (i32.const 65532)))
                 (call $msg_reply))
 
-              ;; All the function below are not used 
+              ;; All the function below are not used
               (func $proxy_data_certificate_present
                 (i32.const 0)
                 (call $data_certificate_present)
@@ -139,15 +143,27 @@ pub fn malicious_inputs(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
               )"#,
     ).unwrap();
 
-    rt.block_on(async move {
-        let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-        endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(endpoint.url.as_str()).await;
+    let topology_snapshot = env.topology_snapshot();
+    let subnet = topology_snapshot
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let node = subnet.nodes().next().unwrap();
+
+    node.await_status_is_healthy().unwrap_or_else(|e| {
+        panic!(
+            "Node {:?} didn't become healthy in time because {e:?}",
+            node.node_id
+        )
+    });
+
+    block_on(async move {
+        let agent = assert_create_agent(node.get_public_url().as_str()).await;
         let mgr = ManagementCanister::create(&agent);
         let canister_id = mgr
             .create_canister()
             .as_provisional_create_with_amount(None)
-            .with_effective_canister_id(endpoint.effective_canister_id())
+            .with_effective_canister_id(node.effective_canister_id())
             .call_and_wait(delay())
             .await
             .expect("Error creating canister")
@@ -158,7 +174,7 @@ pub fn malicious_inputs(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap();
 
-        tests_for_illegal_wasm_memory_access(ctx, &agent, &canister_id).await;
+        tests_for_illegal_wasm_memory_access(logger, &agent, &canister_id).await;
 
         tests_for_stale_data_in_buffer_between_calls(&agent, &canister_id).await;
 
@@ -298,7 +314,7 @@ async fn tests_for_stale_data_in_buffer_between_calls(
 }
 
 async fn tests_for_illegal_wasm_memory_access(
-    ctx: &ic_fondue::pot::Context,
+    logger: &Logger,
     agent: &ic_agent::Agent,
     canister_id: &Principal,
 ) {
@@ -310,7 +326,7 @@ async fn tests_for_illegal_wasm_memory_access(
         .await;
     if ENABLE_DEBUG_LOG {
         print_result_or_error(
-            ctx,
+            logger,
             &ret_val,
             format!(
                 "proxy_msg_reply_data_appendInput => {} {} Ouput =>",
@@ -363,9 +379,8 @@ async fn tests_for_illegal_wasm_memory_access(
    by the client and canister B is called by Canister A. The intent is to test malicious
    inter-canister calls
 */
-pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+pub fn malicious_intercanister_calls(env: TestEnv) {
+    let logger = &env.logger();
     let canister_b_wasm = wabt::wat2wasm(
         r#"(module
             (import "ic0" "msg_arg_data_copy" (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
@@ -380,11 +395,24 @@ pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &ic_fondue::pot::Con
             (export "canister_query echo" (func $echo)))"#,
     ).unwrap();
 
-    rt.block_on(async move {
-        let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-        endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(endpoint.url.as_str()).await;
-        let canister_b = create_and_install(&agent, endpoint.effective_canister_id(), &canister_b_wasm).await;
+    let topology_snapshot = env.topology_snapshot();
+    let subnet = topology_snapshot
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let node = subnet.nodes().next().unwrap();
+
+    node.await_status_is_healthy().unwrap_or_else(|e| {
+        panic!(
+            "Node {:?} didn't become healthy in time because {e:?}",
+            node.node_id
+        )
+    });
+
+    block_on(async move {
+        let agent = assert_create_agent(node.get_public_url().as_str()).await;
+        let canister_b =
+            create_and_install(&agent, node.effective_canister_id(), &canister_b_wasm).await;
 
         let canister_a_wasm = wabt::wat2wasm(format!(
             r#"(module
@@ -508,67 +536,98 @@ pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &ic_fondue::pot::Con
             canister_b.as_slice().len(),
             canister_b.as_slice().len(),
             escape_for_wat(&canister_b))).unwrap();
-        let canister_a = create_and_install(&agent, endpoint.effective_canister_id(), &canister_a_wasm).await;
+        let canister_a =
+            create_and_install(&agent, node.effective_canister_id(), &canister_a_wasm).await;
 
         let ret_val = agent.query(&canister_a, "read_cycles").call().await;
-        let num_cycles_before = print_validate_num_cycles(ctx, &ret_val, "Before calling proxy()");
+        let num_cycles_before =
+            print_validate_num_cycles(logger, &ret_val, "Before calling proxy()");
 
-        let ret_val = agent.update(&canister_a, "proxy").with_arg(vec![1; 4]).call().await;
+        let ret_val = agent
+            .update(&canister_a, "proxy")
+            .with_arg(vec![1; 4])
+            .call()
+            .await;
         assert!(ret_val.is_ok());
 
         const NR_SLEEPS: usize = 3;
         for _ in 0..NR_SLEEPS {
             // Wait for few seconds before reading the data.
-            sleep_until(tokio::time::Instant::from_std(Instant::now() + Duration::from_secs(5))).await;
+            sleep_until(tokio::time::Instant::from_std(
+                Instant::now() + Duration::from_secs(5),
+            ))
+            .await;
             let ret_val = agent.query(&canister_a, "read").call().await;
             assert!(ret_val.is_ok());
             let result = ret_val.unwrap();
             // Initial value at mem location 60 is [0,0,0,0,0]
-            if result.as_slice() != [0,0,0,0,0] {
+            if result.as_slice() != [0, 0, 0, 0, 0] {
                 // The last (5th) byte having a value of 1 means that the inter-canister response was processed by on_reply
-                assert_eq!([1,1,1,1,1], result.as_slice(), "Expected result is [1,1,1,1,1]");
+                assert_eq!(
+                    [1, 1, 1, 1, 1],
+                    result.as_slice(),
+                    "Expected result is [1,1,1,1,1]"
+                );
                 break;
             }
         }
 
         let ret_val = agent.query(&canister_a, "read_cycles").call().await;
-        let num_cycles_after = print_validate_num_cycles(ctx,&ret_val, "After calling proxy()");
-        assert!((num_cycles_after < num_cycles_before), "num_cycles_after is not less than num_cycles_before");
+        let num_cycles_after = print_validate_num_cycles(logger, &ret_val, "After calling proxy()");
+        assert!(
+            (num_cycles_after < num_cycles_before),
+            "num_cycles_after is not less than num_cycles_before"
+        );
         let cycles_used_proxy = num_cycles_before - num_cycles_after;
         if ENABLE_DEBUG_LOG {
-            debug!(ctx.logger, "total cycles used = {}", cycles_used_proxy);
+            debug!(logger, "total cycles used = {}", cycles_used_proxy);
         }
 
         /* Now make intercanister call proxy_err that throws error  and check the cycles used */
         let ret_val = agent.query(&canister_a, "read_cycles").call().await;
-        let num_cycles_before = print_validate_num_cycles(ctx, &ret_val, "Before calling proxy_err()");
+        let num_cycles_before =
+            print_validate_num_cycles(logger, &ret_val, "Before calling proxy_err()");
 
-        let ret_val = agent.update(&canister_a, "proxy_err").with_arg(vec![2; 4]).call().await;
+        let ret_val = agent
+            .update(&canister_a, "proxy_err")
+            .with_arg(vec![2; 4])
+            .call()
+            .await;
         assert!(ret_val.is_ok());
 
         // Wait for few seconds before reading the data.
         for _ in 0..NR_SLEEPS {
-            sleep_until(tokio::time::Instant::from_std(Instant::now() + Duration::from_secs(5))).await;
+            sleep_until(tokio::time::Instant::from_std(
+                Instant::now() + Duration::from_secs(5),
+            ))
+            .await;
             let ret_val = agent.query(&canister_a, "read").call().await;
             assert!(ret_val.is_ok());
             let result = ret_val.unwrap();
             // The initial value is [1,1,1,1,1] because of the previous call that succeeded and copies [1,1,1,1,1] to mem location 60
-            if result.as_slice() != [1,1,1,1,1] {
+            if result.as_slice() != [1, 1, 1, 1, 1] {
                 // The last (5th) byte having a value of 1 means that the inter-canister response was processed by on_reply
-                assert_eq!([2,2,2,2,1], result.as_slice(), "Expected result is [2,2,2,2,1]");
+                assert_eq!(
+                    [2, 2, 2, 2, 1],
+                    result.as_slice(),
+                    "Expected result is [2,2,2,2,1]"
+                );
                 break;
             }
         }
 
         let ret_val = agent.query(&canister_a, "read_cycles").call().await;
-        let num_cycles_after = print_validate_num_cycles(ctx,&ret_val, "After calling proxy_err()");
-        assert!((num_cycles_after < num_cycles_before), "num_cycles_after is not less than num_cycles_before");
+        let num_cycles_after =
+            print_validate_num_cycles(logger, &ret_val, "After calling proxy_err()");
+        assert!(
+            (num_cycles_after < num_cycles_before),
+            "num_cycles_after is not less than num_cycles_before"
+        );
         let cycles_used_proxy_err = num_cycles_before - num_cycles_after;
         if ENABLE_DEBUG_LOG {
-            debug!(ctx.logger, "total cycles used = {}", cycles_used_proxy_err);
+            debug!(logger, "total cycles used = {}", cycles_used_proxy_err);
         }
         assert!(cycles_used_proxy > cycles_used_proxy_err);
-
     });
 }
 
@@ -607,26 +666,26 @@ fn convert_bytes_to_number(input: &[u8]) -> Option<u64> {
 }
 
 fn print_validate_num_cycles(
-    ctx: &ic_fondue::pot::Context,
+    logger: &Logger,
     ret_val: &Result<Vec<u8>, AgentError>,
     message: &str,
 ) -> u64 {
     assert!(ret_val.is_ok(), "{:?}", ret_val.as_ref().unwrap_err());
     // Prints the raw data returned from the canister
     if ENABLE_DEBUG_LOG {
-        print_result(ctx, ret_val, "Number of cycles raw");
+        print_result(logger, ret_val, "Number of cycles raw");
     }
     let result = ret_val.as_ref().unwrap_or(&vec![]).clone();
 
     let num_cycles = if let Some(num_cycles) = convert_bytes_to_number(result.as_slice()) {
         // Prints the number of cycles
         if ENABLE_DEBUG_LOG {
-            print_cycles(ctx, num_cycles, message);
+            print_cycles(logger, num_cycles, message);
         }
         num_cycles
     } else {
         debug!(
-            ctx.logger,
+            logger,
             "{} - Error while converting query result for read_cycles", message
         );
         0
@@ -634,25 +693,17 @@ fn print_validate_num_cycles(
     num_cycles
 }
 
-fn print_result_or_error(
-    ctx: &ic_fondue::pot::Context,
-    ret_val: &Result<Vec<u8>, AgentError>,
-    msg: &str,
-) {
+fn print_result_or_error(logger: &Logger, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {
     match ret_val {
         Ok(result) => {
-            debug!(ctx.logger, "{} - Message Length:{:?}", msg, result.len());
-            print_result_range(ctx, &Ok(result.clone()), msg);
+            debug!(logger, "{} - Message Length:{:?}", msg, result.len());
+            print_result_range(logger, &Ok(result.clone()), msg);
         }
-        Err(err) => debug!(ctx.logger, "{} {:?}", msg, err),
+        Err(err) => debug!(logger, "{} {:?}", msg, err),
     }
 }
 
-fn print_result_range(
-    ctx: &ic_fondue::pot::Context,
-    ret_val: &Result<Vec<u8>, AgentError>,
-    msg: &str,
-) {
+fn print_result_range(logger: &Logger, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {
     match ret_val {
         Ok(result) => {
             if result.len() > 32 {
@@ -662,24 +713,24 @@ fn print_result_range(
                     v1[i] = result[i];
                     v2[i] = result[result.len() - 16 + i];
                 }
-                debug!(ctx.logger, "{} {:?}..{:?}", msg, v1, v2)
+                debug!(logger, "{} {:?}..{:?}", msg, v1, v2)
             } else {
-                debug!(ctx.logger, "{} {:?}", msg, result);
+                debug!(logger, "{} {:?}", msg, result);
             }
         }
         Err(_) => (),
     }
 }
 
-fn print_result(ctx: &ic_fondue::pot::Context, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {
+fn print_result(logger: &Logger, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {
     match ret_val {
         Ok(result) => {
-            debug!(ctx.logger, "{} {:?}", msg, result);
+            debug!(logger, "{} {:?}", msg, result);
         }
         Err(_) => (),
     }
 }
 
-fn print_cycles(ctx: &ic_fondue::pot::Context, num_cycles: u64, message: &str) {
-    debug!(ctx.logger, "Number of cycles {} - {}", num_cycles, message);
+fn print_cycles(logger: &Logger, num_cycles: u64, message: &str) {
+    debug!(logger, "Number of cycles {} - {}", num_cycles, message);
 }
