@@ -38,7 +38,7 @@ pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
     "cycles_account_manager_execution_cycles_refund_error";
 
 /// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = false;
+const USE_COST_SCALING_FLAG: bool = true;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
