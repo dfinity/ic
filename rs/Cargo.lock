@@ -8656,6 +8656,7 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "futures",
  "h2",
  "http",
  "ic-base-types",

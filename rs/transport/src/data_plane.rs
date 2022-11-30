@@ -20,12 +20,11 @@
 use crate::{
     metrics::{DataPlaneMetrics, IntGaugeResource},
     types::{
-        ChannelReader, ChannelWriter, Connected, ConnectionRole, PayloadData, SendQueueReader,
-        SendStreamWrapper, TransportHeader, TransportImpl, H2_FRAME_SIZE, H2_WINDOW_SIZE,
+        ChannelReader, ChannelWriter, Connected, ConnectionRole, H2Reader, SendQueueReader,
+        StreamReadError, TransportHeader, TransportImpl, H2_FRAME_SIZE, H2_WINDOW_SIZE,
         TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
     },
 };
-use h2::RecvStream;
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::TlsStream;
 use ic_interfaces_transport::{
@@ -35,7 +34,6 @@ use ic_logger::{info, warn};
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::Weak;
-use strum::IntoStaticStr;
 use tokio::io::AsyncRead;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
@@ -69,15 +67,6 @@ const TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS: u64 = 5000;
 const READ_RESULT_ERROR: &str = "error";
 const READ_RESULT_HEARTBEAT: &str = "heartbeat";
 const READ_RESULT_MESSAGE: &str = "message";
-
-/// Error type for read errors
-#[derive(Debug, IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-enum StreamReadError {
-    Failed(std::io::Error),
-    TimeOut,
-    H2ReceiveStreamFailure(String),
-}
 
 /// Create header bytes to send with payload.
 fn pack_header(payload: Option<&TransportPayload>, heartbeat: bool) -> Vec<u8> {
@@ -153,16 +142,10 @@ fn spawn_write_task(
                 )
                 .await;
 
-            let mut payload_data_vec = vec![];
-            let mut total_msg_length = 0;
+            let mut bytes_to_send = Vec::<u8>::new();
             if dequeued.is_empty() {
                 // There is nothing to send, so issue a heartbeat message
-                let payload_data = PayloadData {
-                    header: pack_header(None, true),
-                    body: vec![],
-                };
-                total_msg_length = payload_data.header.len();
-                payload_data_vec.push(payload_data);
+                bytes_to_send.append(&mut pack_header(None, true));
 
                 arc_self
                     .data_plane_metrics
@@ -170,19 +153,18 @@ fn spawn_write_task(
                     .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
                     .inc();
             } else {
-                for payload in dequeued {
-                    let payload_data = PayloadData {
-                        header: pack_header(Some(&payload),false),
-                        body: payload.0,
-                    };
-                    total_msg_length += payload_data.header.len() + payload_data.body.len();
-                    payload_data_vec.push(payload_data);
+                for mut payload in dequeued {
+                    bytes_to_send.append(&mut pack_header(
+                        Some(&payload),
+                        false,
+                    ));
+                    bytes_to_send.append(&mut payload.0);
                 }
             }
             // Send the payload
             let start_time = Instant::now();
-
-            if let Err(err) = write_one_message(&mut writer, payload_data_vec).await {
+            let message_len = bytes_to_send.len();
+            if let Err(err) = write_one_message(&mut writer, bytes_to_send).await {
                 warn!(
                     arc_self.log,
                     "DataPlane::spawn_write_task(): failed to write payload: peer_id = {:?}, channel_id = {:?}, error ={:?}",
@@ -193,7 +175,6 @@ fn spawn_write_task(
                 arc_self.on_disconnect(peer_id, channel_id).await;
                 return;
             }
-
             arc_self
                 .data_plane_metrics
                 .send_message_duration
@@ -203,28 +184,23 @@ fn spawn_write_task(
                 .data_plane_metrics
                 .write_bytes_total
                 .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
-                .inc_by(total_msg_length as u64);
+                .inc_by(message_len as u64);
         }
     })
 }
 
 async fn write_one_message(
     writer: &mut ChannelWriter,
-    data: Vec<PayloadData>,
+    bytes_to_send: Vec<u8>,
 ) -> Result<(), std::io::Error> {
     match writer {
         ChannelWriter::Legacy(writer) => {
-            let mut bytes_to_send = vec![];
-            for mut payload in data {
-                bytes_to_send.append(&mut payload.header);
-                bytes_to_send.append(&mut payload.body);
-            }
             writer.write_all(&bytes_to_send).await?;
             writer.flush().await
         }
-        ChannelWriter::H2SendStream(send_stream) => {
+        ChannelWriter::H2SendStream(writer) => {
             // Use SendStreamWrapper to manage capacity and send data as capacity becomes available
-            SendStreamWrapper::new(send_stream, data).await
+            writer.send_data(bytes::Bytes::from(bytes_to_send)).await
         }
     }
 }
@@ -255,7 +231,7 @@ fn spawn_read_task(
             let read_message_start = Instant::now();
             let read_one_msg_result = match reader {
                 ChannelReader::Legacy(ref mut tls_reader) => read_one_message(tls_reader, heartbeat_timeout).await,
-                ChannelReader::H2RecvStream(ref mut receive_stream) => read_one_message_h2(receive_stream, heartbeat_timeout).await,
+                ChannelReader::H2RecvStream(ref mut h2_reader) => read_one_message_h2(h2_reader, heartbeat_timeout).await,
             };
 
             match read_one_msg_result {
@@ -357,23 +333,16 @@ async fn read_one_message<T: AsyncRead + Unpin>(
     Ok((header, payload))
 }
 
-/// Reads and returns the header and message payload.
-/// Note: both the header and message may come in as 1+ frames
-/// TODO: in final state, we cannot assume that there is exactly 1 message to read without an excess
+/// Reads and returns the next header and message payload.
+/// This requires reading frames until a full message is fully received.
 async fn read_one_message_h2(
-    receive_stream: &mut RecvStream,
+    reader: &mut H2Reader,
     timeout: Duration,
 ) -> Result<(TransportHeader, TransportPayload), StreamReadError> {
-    // First frame should be full or partial header.  From there, keeping reading frames until
-    // full header is processed.
-    let (complete_header, partial_body) = build_message(
-        receive_stream,
-        vec![],
-        TRANSPORT_HEADER_SIZE,
-        "header".to_string(),
-        timeout,
-    )
-    .await?;
+    // Read until we have the header
+    let complete_header = reader
+        .get_message(TRANSPORT_HEADER_SIZE, "header".to_string(), timeout)
+        .await?;
     let header = unpack_header(complete_header);
 
     if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
@@ -381,50 +350,19 @@ async fn read_one_message_h2(
         return Ok((header, TransportPayload::default()));
     }
 
-    let (complete_payload, _) = build_message(
-        receive_stream,
-        partial_body,
-        header.payload_length.try_into().unwrap(),
-        "body".to_string(),
-        timeout,
-    )
-    .await?;
+    // Continue reading until we have the body
+    let complete_payload = reader
+        .get_message(
+            header.payload_length.try_into().unwrap(),
+            "body".to_string(),
+            timeout,
+        )
+        .await?;
 
     let payload = TransportPayload(complete_payload);
-    Ok((header, payload))
-}
 
-/// Reads frames until target length is reached.
-/// After each frame is read, capacity is released.
-/// Timeout is applied to each frame read.
-async fn build_message(
-    receive_stream: &mut RecvStream,
-    mut buffer: Vec<u8>,
-    target_len: usize,
-    msg_type: String,
-    timeout: Duration,
-) -> Result<(Vec<u8>, Vec<u8>), StreamReadError> {
-    while buffer.len() < target_len {
-        let read_future = receive_stream.data();
-        match tokio::time::timeout(timeout, read_future).await {
-            Err(_) => return Err(StreamReadError::TimeOut),
-            Ok(Some(Ok(chunk))) => {
-                buffer.append(&mut chunk.to_vec());
-                let _ = receive_stream.flow_control().release_capacity(chunk.len());
-            }
-            // If stream returns empty frame, continue polling
-            Ok(None) => {}
-            Ok(Some(Err(h2_error))) => {
-                return Err(StreamReadError::H2ReceiveStreamFailure(format!(
-                    "{:?} for {:?}",
-                    h2_error.to_string(),
-                    msg_type
-                )));
-            }
-        }
-    }
-    let extra_buffer = buffer.split_off(target_len as usize);
-    Ok((buffer, extra_buffer))
+    // If we received part of additional messages, stash that for later use
+    Ok((header, payload))
 }
 
 /// Reads the requested bytes from the socket with a timeout

@@ -12,6 +12,7 @@ ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
+futures = "0.3.25"
 h2 = "0.3.14"
 http = "0.2.8"
 phantom_newtype = { path = "../phantom_newtype" }
