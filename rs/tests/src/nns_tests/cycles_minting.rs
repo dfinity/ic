@@ -58,7 +58,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use url::Url;
 
 /// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = false;
+const USE_COST_SCALING_FLAG: bool = true;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
