@@ -37,15 +37,7 @@ use std::time::Instant;
 /// here, just add another entry to the vector with the corresponding pot.
 fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
-    vec![system_subnets_pot(), request_auth_malicious_replica_pot()]
-}
-
-fn request_auth_malicious_replica_pot() -> pot::Pot {
-    composable!(
-        "request_auth_malicious_replica_pot",
-        consensus::request_auth_malicious_replica_test::config(),
-        steps! {consensus::request_auth_malicious_replica_test::test => "request_auth_malicious_replica_test"}
-    )
+    vec![system_subnets_pot()]
 }
 
 fn system_subnets_pot() -> pot::Pot {

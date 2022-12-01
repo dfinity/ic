@@ -25,12 +25,16 @@ Coverage::
 Authentication checks in block validation.
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+};
 use crate::execution::request_signature_test::{expiry_time, random_ecdsa_identity, sign_update};
 use crate::util::*;
 use ic_agent::export::Principal;
-use ic_agent::{agent::status::Value, Identity};
-use ic_fondue::ic_instance::{LegacyInternetComputer as InternetComputer, Subnet};
-use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
+use ic_agent::Identity;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
@@ -43,57 +47,53 @@ use slog::info;
 use std::convert::TryFrom;
 use url::Url;
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .add_nodes(3)
-            .add_malicious_nodes(
-                1,
-                MaliciousBehaviour::new(true).set_maliciously_disable_ingress_validation(),
-            ),
-    )
+pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .add_nodes(3)
+                .add_malicious_nodes(
+                    1,
+                    MaliciousBehaviour::new(true).set_maliciously_disable_ingress_validation(),
+                ),
+        )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(mut handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+pub fn test(env: TestEnv) {
+    let topology = env.topology_snapshot();
+    let logger = env.logger();
+    info!(
+        logger,
+        "Checking readiness of all nodes after the IC setup..."
+    );
+    topology.subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    info!(logger, "All nodes are ready");
+
+    let malicious_node = topology
+        .root_subnet()
+        .nodes()
+        .find(|n| n.is_malicious())
+        .expect("No malicious node found in the subnet.");
+
+    let agent = malicious_node.with_default_agent(|agent| async move { agent });
+
+    block_on({
         async move {
-            let malicious_node = handle
-                .take_one_malicious(&mut rng)
-                .expect("Not enough malicious nodes");
-            malicious_node.assert_ready(ctx).await;
-
-            let identity = random_ed25519_identity();
-
-            let agent = agent_with_identity(malicious_node.url.as_str(), identity)
-                .await
-                .unwrap();
-
-            // System tests do not automatically wait for malicious nodes to be healthy,
-            // so we have to manually wait for it to be healthy.
-            loop {
-                let status = agent.status().await.unwrap();
-
-                if let Value::String(health_status) =
-                    &**(status.values.get("replica_health_status").unwrap())
-                {
-                    if health_status.as_str() == "healthy" {
-                        // Node is ready.
-                        break;
-                    }
-                }
-
-                // Wait a bit and check the status again.
-                info!(
-                    ctx.logger,
-                    "Malicious node not yet ready. Checking again in a bit..."
-                );
-                std::thread::sleep(std::time::Duration::from_secs(2));
-            }
-
-            let canister =
-                UniversalCanister::new(&agent, malicious_node.effective_canister_id()).await;
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                malicious_node.effective_canister_id(),
+                &logger,
+                READY_WAIT_TIMEOUT,
+                RETRY_BACKOFF,
+            )
+            .await;
 
             // Set some random data in the canister's memory.
             agent
@@ -132,15 +132,15 @@ pub fn test(mut handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             std::thread::sleep(std::time::Duration::from_secs(30));
 
             // Query all the honest nodes and verify that the memory is unchanged.
-            let honest_nodes = vec![
-                handle.take_one(&mut rng).unwrap(),
-                handle.take_one(&mut rng).unwrap(),
-                handle.take_one(&mut rng).unwrap(),
-            ];
+
+            let honest_nodes: Vec<IcNodeSnapshot> = topology
+                .root_subnet()
+                .nodes()
+                .filter(|n| !n.is_malicious())
+                .collect();
 
             for node in &honest_nodes {
-                node.assert_ready(ctx).await;
-                let agent = assert_create_agent(node.url.as_str()).await;
+                let agent = assert_create_agent(node.get_public_url().as_str()).await;
 
                 assert_eq!(
                     agent
@@ -157,7 +157,7 @@ pub fn test(mut handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             // updated.
             test_request_with_delegation(
                 &random_ed25519_identity(),
-                &honest_nodes[0].url,
+                &honest_nodes[0].get_public_url(),
                 canister.canister_id(),
                 expiry_time().as_nanos() as u64,
                 Some(vec![canister.canister_id()]),
@@ -168,7 +168,7 @@ pub fn test(mut handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
             // Query all the honest nodes and verify that the memory has been updated.
             for node in honest_nodes {
-                let agent = assert_create_agent(node.url.as_str()).await;
+                let agent = assert_create_agent(node.get_public_url().as_str()).await;
 
                 assert_eq!(
                     agent
@@ -185,7 +185,7 @@ pub fn test(mut handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
 async fn play_malicious_requests<T: Identity + 'static>(
     identity: T,
-    malicious_node: &IcEndpoint,
+    malicious_node: &IcNodeSnapshot,
     canister_id: Principal,
 ) {
     test_request_with_no_signature_and_no_pubkey(&identity, malicious_node, canister_id).await;
@@ -210,7 +210,7 @@ async fn play_malicious_requests<T: Identity + 'static>(
 
     test_request_with_delegation(
         &identity,
-        &malicious_node.url,
+        &malicious_node.get_public_url(),
         canister_id,
         0,    // wrong expiry
         None, // no delegation targets (all canisters allowed)
@@ -219,7 +219,7 @@ async fn play_malicious_requests<T: Identity + 'static>(
 
     test_request_with_delegation(
         &identity,
-        &malicious_node.url,
+        &malicious_node.get_public_url(),
         canister_id,
         expiry_time().as_nanos() as u64, // valid expiration
         Some(vec![Principal::management_canister()]), // wrong target
@@ -229,7 +229,7 @@ async fn play_malicious_requests<T: Identity + 'static>(
 
 async fn test_request_with_no_signature_and_no_pubkey<T: Identity + 'static>(
     identity: &T,
-    malicious_node: &IcEndpoint,
+    malicious_node: &IcNodeSnapshot,
     canister_id: Principal,
 ) {
     // An update call to set the global data to [4, 5, 6].
@@ -257,7 +257,7 @@ async fn test_request_with_no_signature_and_no_pubkey<T: Identity + 'static>(
     let res = client
         .post(&format!(
             "{}api/v2/canister/{}/call",
-            malicious_node.url,
+            malicious_node.get_public_url(),
             canister_id.to_text()
         ))
         .header("Content-Type", "application/cbor")
@@ -272,7 +272,7 @@ async fn test_request_with_no_signature_and_no_pubkey<T: Identity + 'static>(
 
 async fn test_request_with_correct_signature_and_incorrect_pubkey<T: Identity + 'static>(
     identity: &T,
-    malicious_node: &IcEndpoint,
+    malicious_node: &IcNodeSnapshot,
     canister_id: Principal,
 ) {
     let wrong_identity = random_ed25519_identity();
@@ -304,7 +304,7 @@ async fn test_request_with_correct_signature_and_incorrect_pubkey<T: Identity + 
     let res = client
         .post(&format!(
             "{}api/v2/canister/{}/call",
-            malicious_node.url,
+            malicious_node.get_public_url(),
             canister_id.to_text()
         ))
         .header("Content-Type", "application/cbor")
@@ -319,7 +319,7 @@ async fn test_request_with_correct_signature_and_incorrect_pubkey<T: Identity + 
 
 async fn test_request_with_incorrect_signature_and_correct_pubkey<T: Identity + 'static>(
     identity: &T,
-    malicious_node: &IcEndpoint,
+    malicious_node: &IcNodeSnapshot,
     canister_id: Principal,
 ) {
     let wrong_identity = random_ed25519_identity();
@@ -351,7 +351,7 @@ async fn test_request_with_incorrect_signature_and_correct_pubkey<T: Identity + 
     let res = client
         .post(&format!(
             "{}api/v2/canister/{}/call",
-            malicious_node.url,
+            malicious_node.get_public_url(),
             canister_id.to_text()
         ))
         .header("Content-Type", "application/cbor")
@@ -366,7 +366,7 @@ async fn test_request_with_incorrect_signature_and_correct_pubkey<T: Identity + 
 
 async fn test_request_with_incorrect_sender<T: Identity + 'static>(
     identity: &T,
-    malicious_node: &IcEndpoint,
+    malicious_node: &IcNodeSnapshot,
     canister_id: Principal,
 ) {
     let wrong_identity = random_ed25519_identity();
@@ -397,7 +397,7 @@ async fn test_request_with_incorrect_sender<T: Identity + 'static>(
     let res = client
         .post(&format!(
             "{}api/v2/canister/{}/call",
-            malicious_node.url,
+            malicious_node.get_public_url(),
             canister_id.to_text()
         ))
         .header("Content-Type", "application/cbor")
@@ -412,7 +412,7 @@ async fn test_request_with_incorrect_sender<T: Identity + 'static>(
 
 async fn test_request_with_expired_ingress<T: Identity + 'static>(
     identity: &T,
-    malicious_node: &IcEndpoint,
+    malicious_node: &IcNodeSnapshot,
     canister_id: Principal,
 ) {
     // An update call to set the global data to [4, 5, 6].
@@ -441,7 +441,7 @@ async fn test_request_with_expired_ingress<T: Identity + 'static>(
     let res = client
         .post(&format!(
             "{}api/v2/canister/{}/call",
-            malicious_node.url,
+            malicious_node.get_public_url(),
             canister_id.to_text()
         ))
         .header("Content-Type", "application/cbor")
