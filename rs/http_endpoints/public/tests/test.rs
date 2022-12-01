@@ -1,7 +1,10 @@
 use crate::common::{
     setup_ingress_filter_mock, setup_ingress_ingestion_mock, setup_query_execution_mock,
 };
-use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, Agent};
+use ic_agent::{
+    agent::http_transport::ReqwestHttpReplicaV2Transport, agent_error::HttpErrorPayload,
+    export::Principal, hash_tree::Label, Agent, AgentError,
+};
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
 use ic_crypto_tree_hash::MixedHashTree;
@@ -268,4 +271,171 @@ fn test_healthy_behind() {
         status.replica_health_status,
         Some("certified_state_behind".to_string())
     );
+}
+
+// Check spec enforcement for read_state requests. https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state
+// Paths containing `.../canister_id/..` require the `canister_id` to be the same as the effective canister id
+// specified through the url `/api/v2/canister/<effective_canister_id>/read_state`. Read state requests that request paths
+// with different canister ids should be rejected.
+#[test]
+fn test_unathorized_controller() {
+    let rt = Runtime::new().unwrap();
+    let port = get_free_port().expect("No ports available on host");
+
+    let mut mock_state_manager = MockStateManager::new();
+    let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
+    let network_topology = NetworkTopology {
+        subnets: BTreeMap::new(),
+        routing_table: Arc::new(RoutingTable::default()),
+        canister_migrations: Arc::new(CanisterMigrations::default()),
+        nns_subnet_id: subnet_test_id(1),
+        ecdsa_signing_subnets: Default::default(),
+        bitcoin_mainnet_canister_id: None,
+        bitcoin_testnet_canister_id: None,
+    };
+    metadata.network_topology = network_topology;
+    mock_state_manager
+        .expect_get_latest_state()
+        .returning(move || {
+            let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
+            metadata.batch_time = mock_time();
+            Labeled::new(
+                Height::from(1),
+                Arc::new(ReplicatedState::new_from_checkpoint(
+                    BTreeMap::new(),
+                    metadata,
+                    CanisterQueues::default(),
+                    Vec::new(),
+                    BitcoinState::default(),
+                )),
+            )
+        });
+    mock_state_manager
+        .expect_latest_certified_height()
+        .returning(move || Height::from(1));
+    mock_state_manager
+        .expect_read_certified_state()
+        .returning(move |_labeled_tree| {
+            let rs: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
+            let mht = MixedHashTree::Leaf(Vec::new());
+            let cert = Certification {
+                height: Height::from(1),
+                signed: Signed {
+                    signature: ThresholdSignature {
+                        signer: NiDkgId {
+                            start_block_height: Height::from(0),
+                            dealer_subnet: subnet_test_id(0),
+                            dkg_tag: NiDkgTag::HighThreshold,
+                            target_subnet: NiDkgTargetSubnet::Local,
+                        },
+                        signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+                    },
+                    content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                        vec![],
+                    ))),
+                },
+            };
+            Some((rs, mht, cert))
+        });
+
+    // We use this atomic to make sure that the health transistion is from healthy -> certified_state_behind
+    let mut mock_consensus_cache = MockConsensusCache::new();
+    mock_consensus_cache
+        .expect_finalized_block()
+        .returning(move || {
+            Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    (
+                        BatchPayload::default(),
+                        Dealings::new_empty(Height::from(1)),
+                        None,
+                    )
+                        .into(),
+                ),
+                Height::from(1),
+                Rank(456),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(99),
+                    certified_height: Height::from(1),
+                    time: mock_time(),
+                },
+            )
+        });
+
+    let mut mock_registry_client = MockRegistryClient::new();
+    mock_registry_client
+        .expect_get_latest_version()
+        .return_const(RegistryVersion::from(1));
+    mock_registry_client
+        .expect_get_value()
+        .withf(move |key, version| {
+            key == make_crypto_threshold_signing_pubkey_key(subnet_test_id(1)).as_str()
+                && version == &RegistryVersion::from(1)
+        })
+        .return_const({
+            let pk = PublicKeyProto {
+                algorithm: AlgorithmIdProto::ThresBls12381 as i32,
+                key_value: [42; ThresholdSigPublicKey::SIZE].to_vec(),
+                version: 0,
+                proof_data: None,
+                timestamp: Some(42),
+            };
+            let mut v = Vec::new();
+            pk.encode(&mut v).unwrap();
+            Ok(Some(v))
+        });
+
+    start_http_endpoint(
+        rt.handle().clone(),
+        port,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+    );
+
+    let agent = Agent::builder()
+        .with_transport(
+            ReqwestHttpReplicaV2Transport::create(format!("http://127.0.0.1:{}", port)).unwrap(),
+        )
+        .build()
+        .unwrap();
+
+    let canister1 = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
+    let canister2 = Principal::from_text("224lq-3aaaa-aaaaf-ase7a-cai").unwrap();
+    let paths: Vec<Vec<Label>> = vec![vec![
+        "canister".into(),
+        canister2.into(),
+        "metadata".into(),
+        "time".into(),
+    ]];
+
+    let expected_error = AgentError::HttpError(HttpErrorPayload {
+        status: 400,
+        content_type: None,
+        content: format!(
+            "Effective canister id in URL {} does not match requested canister id: {}.",
+            canister1, canister2
+        )
+        .as_bytes()
+        .to_vec(),
+    });
+    rt.block_on(async {
+        loop {
+            match agent.read_state_raw(paths.clone(), canister1).await {
+                Err(err) => {
+                    if err == expected_error {
+                        break;
+                    }
+                    println!("Received unexpeceted error: {:?}", err);
+                    sleep(Duration::from_millis(250)).await
+                }
+                Ok(r) => {
+                    println!("Received unexpeceted success: {:?}", r);
+                    sleep(Duration::from_millis(250)).await
+                }
+            }
+        }
+    });
 }

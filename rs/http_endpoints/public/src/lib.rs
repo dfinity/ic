@@ -75,7 +75,7 @@ use ic_types::{
         HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus,
     },
     time::current_time_and_expiry_time,
-    NodeId, SubnetId,
+    CanisterId, NodeId, SubnetId,
 };
 use metrics::HttpHandlerMetrics;
 use rand::Rng;
@@ -84,6 +84,7 @@ use std::{
     io::Write,
     net::SocketAddr,
     path::PathBuf,
+    str::FromStr,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -153,7 +154,7 @@ pub(crate) struct HttpError {
     pub message: String,
 }
 
-pub(crate) type EndpointService = BoxCloneService<Body, Response<Body>, BoxError>;
+pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>, BoxError>;
 
 /// The struct that handles incoming HTTP requests for the IC replica.
 /// This is collection of thread-safe data members.
@@ -363,7 +364,6 @@ pub fn start_server(
             consensus_pool_cache,
             state_reader_executor.clone(),
         );
-
         info!(log, "Binding HTTP server to address {}", addr);
         let tcp_listener = TcpListener::bind(addr).await.unwrap();
 
@@ -593,7 +593,7 @@ fn set_timer_labels(
 
 async fn make_router(
     http_handler: HttpHandler,
-    (req, mut timer): RequestWithTimer,
+    (mut req, mut timer): RequestWithTimer,
 ) -> ResponseWithTimer {
     let call_service = http_handler.call_service.clone();
     let query_service = http_handler.query_service.clone();
@@ -628,34 +628,57 @@ async fn make_router(
 
             // Check the path
             let path = req.uri().path();
-            match *path.split('/').collect::<Vec<&str>>().as_slice() {
-                ["", "api", "v2", "canister", _, "call"] => {
-                    set_timer_labels(&mut timer, ApiReqType::Call);
-                    call_service
-                }
-                ["", "api", "v2", "canister", _, "query"] => {
-                    set_timer_labels(&mut timer, ApiReqType::Query);
-                    query_service
-                }
-                ["", "api", "v2", "canister", _, "read_state"] => {
-                    set_timer_labels(&mut timer, ApiReqType::ReadState);
-                    read_state_service
-                }
-                ["", "_", "catch_up_package"] => {
-                    set_timer_labels(&mut timer, ApiReqType::CatchUpPackage);
-                    catch_up_package_service
-                }
-                _ => {
-                    set_timer_labels(&mut timer, ApiReqType::InvalidArgument);
-                    return (
-                        make_plaintext_response(
-                            StatusCode::NOT_FOUND,
-                            "Unexpected POST request path.".to_string(),
-                        ),
-                        timer,
-                    );
+            let (svc, effective_canister_id) =
+                match *path.split('/').collect::<Vec<&str>>().as_slice() {
+                    ["", "api", "v2", "canister", effective_canister_id, "call"] => {
+                        set_timer_labels(&mut timer, ApiReqType::Call);
+                        (call_service, Some(effective_canister_id))
+                    }
+                    ["", "api", "v2", "canister", effective_canister_id, "query"] => {
+                        set_timer_labels(&mut timer, ApiReqType::Query);
+                        (query_service, Some(effective_canister_id))
+                    }
+                    ["", "api", "v2", "canister", effective_canister_id, "read_state"] => {
+                        set_timer_labels(&mut timer, ApiReqType::ReadState);
+                        (read_state_service, Some(effective_canister_id))
+                    }
+                    ["", "_", "catch_up_package"] => {
+                        set_timer_labels(&mut timer, ApiReqType::CatchUpPackage);
+                        (catch_up_package_service, None)
+                    }
+                    _ => {
+                        set_timer_labels(&mut timer, ApiReqType::InvalidArgument);
+                        return (
+                            make_plaintext_response(
+                                StatusCode::NOT_FOUND,
+                                "Unexpected POST request path.".to_string(),
+                            ),
+                            timer,
+                        );
+                    }
+                };
+
+            // If url contains effective canister id we attach it to the request.
+            if let Some(effective_canister_id) = effective_canister_id {
+                match CanisterId::from_str(effective_canister_id) {
+                    Ok(effective_canister_id) => {
+                        req.extensions_mut().insert(effective_canister_id);
+                    }
+                    Err(e) => {
+                        return (
+                            make_plaintext_response(
+                                StatusCode::BAD_REQUEST,
+                                format!(
+                                    "Malformed request: Invalid efffective canister id {}: {}",
+                                    effective_canister_id, e
+                                ),
+                            ),
+                            timer,
+                        );
+                    }
                 }
             }
+            svc
         }
         Method::GET => match req.uri().path() {
             "/api/v2/status" => {
@@ -716,7 +739,7 @@ async fn make_router(
             .ready()
             .await
             .expect("The load shedder must always be ready.")
-            .call(req.into_body())
+            .call(req)
             .await
             .unwrap_or_else(|err| map_box_error_to_response(err)),
         timer,

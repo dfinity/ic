@@ -3,6 +3,7 @@ use crate::{
     MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES,
 };
 use byte_unit::Byte;
+use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_async_utils::{receive_body, BodyReceiveError};
 use std::convert::Infallible;
@@ -51,10 +52,10 @@ pub(crate) struct BodyReceiverService<S> {
     inner: S,
 }
 
-impl<S> Service<Body> for BodyReceiverService<S>
+impl<S> Service<Request<Body>> for BodyReceiverService<S>
 where
     S: Service<
-            Vec<u8>,
+            Request<Vec<u8>>,
             Response = Response<Body>,
             Error = Infallible,
             Future = Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>>,
@@ -70,7 +71,7 @@ where
         poll_ready(self.inner.poll_ready(cx))
     }
 
-    fn call(&mut self, body: Body) -> Self::Future {
+    fn call(&mut self, request: Request<Body>) -> Self::Future {
         let inner = self.inner.clone();
 
         // In case the inner service has state that's driven to readiness and
@@ -91,6 +92,7 @@ where
 
         let max_request_receive_duration = self.max_request_receive_duration;
         let max_request_body_size_bytes = self.max_request_body_size_bytes;
+        let (parts, body) = request.into_parts();
         Box::pin(async move {
             match receive_body(
                 body,
@@ -110,7 +112,10 @@ where
                         Ok(make_plaintext_response(StatusCode::BAD_REQUEST, e))
                     }
                 },
-                Ok(body) => Ok(inner.call(body).await.expect("Can't panic on infallible.")),
+                Ok(body) => Ok(inner
+                    .call(Request::from_parts(parts, body))
+                    .await
+                    .expect("Can't panic on infallible.")),
             }
         })
     }

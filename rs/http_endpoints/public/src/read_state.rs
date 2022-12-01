@@ -9,10 +9,11 @@ use crate::{
     EndpointService, HttpError, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
 use crossbeam::atomic::AtomicCell;
+use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{trace, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
     malicious_flags::MaliciousFlags,
@@ -85,7 +86,7 @@ impl ReadStateService {
     }
 }
 
-impl Service<Vec<u8>> for ReadStateService {
+impl Service<Request<Vec<u8>>> for ReadStateService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -95,8 +96,7 @@ impl Service<Vec<u8>> for ReadStateService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, body: Vec<u8>) -> Self::Future {
-        trace!(self.log, "in handle read_state");
+    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
             .requests_body_size_bytes
             .with_label_values(&[
@@ -104,7 +104,7 @@ impl Service<Vec<u8>> for ReadStateService {
                 ApiReqType::ReadState.into(),
                 UNKNOWN_LABEL,
             ])
-            .observe(body.len() as f64);
+            .observe(request.body().len() as f64);
 
         if self.health_status.load() != ReplicaHealthStatus::Healthy {
             let res = make_plaintext_response(
@@ -116,6 +116,23 @@ impl Service<Vec<u8>> for ReadStateService {
             );
             return Box::pin(async move { Ok(res) });
         }
+        let (mut parts, body) = request.into_parts();
+        // By removing the canister id we get ownership and avoid having to clone it when creating the future.
+        let effective_canister_id = match parts.extensions.remove::<CanisterId>() {
+            Some(canister_id) => canister_id,
+            _ => {
+                error!(
+                    self.log,
+                    "Effective canister ID is not attached to read state request. This is a bug."
+                );
+                let res = make_plaintext_response(
+                    StatusCode::BAD_REQUEST,
+                    "Malformed request".to_string(),
+                );
+                return Box::pin(async move { Ok(res) });
+            }
+        };
+
         let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
 
         let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
@@ -171,6 +188,7 @@ impl Service<Vec<u8>> for ReadStateService {
                 &read_state.source,
                 &read_state.paths,
                 &targets,
+                effective_canister_id,
             )
             .await
             {
@@ -214,6 +232,7 @@ async fn verify_paths(
     user: &UserId,
     paths: &[Path],
     targets: &CanisterIdSet,
+    effective_canister_id: CanisterId,
 ) -> Result<(), HttpError> {
     let state = state_reader_executor.get_latest_state().await?.take();
     let mut num_request_ids = 0;
@@ -227,26 +246,29 @@ async fn verify_paths(
     for path in paths {
         match path.as_slice() {
             [b"time"] => {}
-            [b"canister", _canister_id, b"controller"] => {}
-            [b"canister", _canister_id, b"controllers"] => {}
-            [b"canister", _canister_id, b"module_hash"] => {}
+            [b"canister", canister_id, b"controller"] => {
+                let canister_id = parse_canister_id(canister_id)?;
+                verify_canister_ids(&canister_id, &effective_canister_id)?;
+            }
+            [b"canister", canister_id, b"controllers"] => {
+                let canister_id = parse_canister_id(canister_id)?;
+                verify_canister_ids(&canister_id, &effective_canister_id)?;
+            }
+            [b"canister", canister_id, b"module_hash"] => {
+                let canister_id = parse_canister_id(canister_id)?;
+                verify_canister_ids(&canister_id, &effective_canister_id)?;
+            }
             [b"canister", canister_id, b"metadata", name] => {
                 let name = String::from_utf8(Vec::from(*name)).map_err(|err| HttpError {
                     status: StatusCode::BAD_REQUEST,
                     message: format!("Could not parse the custom section name: {}.", err),
                 })?;
 
-                match CanisterId::try_from(*canister_id) {
-                    Ok(canister_id) => {
-                        can_read_canister_metadata(user, &canister_id, &name, &state)?
-                    }
-                    Err(err) => {
-                        return Err(HttpError {
-                            status: StatusCode::BAD_REQUEST,
-                            message: format!("Could not parse Canister ID: {}.", err),
-                        })
-                    }
-                }
+                // Get canister id from byte slice.
+                let canister_id = parse_canister_id(canister_id)?;
+                // Verify that canister id and effective canister id match.
+                verify_canister_ids(&canister_id, &effective_canister_id)?;
+                can_read_canister_metadata(user, &canister_id, &name, &state)?
             }
             [b"subnet"] => {}
             [b"subnet", _subnet_id, b"public_key"] => {}
@@ -300,6 +322,34 @@ async fn verify_paths(
         }
     }
 
+    Ok(())
+}
+
+fn parse_canister_id(canister_id: &[u8]) -> Result<CanisterId, HttpError> {
+    match CanisterId::try_from(canister_id) {
+        Ok(canister_id) => Ok(canister_id),
+        Err(err) => {
+            return Err(HttpError {
+                status: StatusCode::BAD_REQUEST,
+                message: format!("Could not parse Canister ID: {}.", err),
+            })
+        }
+    }
+}
+
+fn verify_canister_ids(
+    canister_id: &CanisterId,
+    effective_canister_id: &CanisterId,
+) -> Result<(), HttpError> {
+    if canister_id != effective_canister_id {
+        return Err(HttpError {
+            status: StatusCode::BAD_REQUEST,
+            message: format!(
+                "Effective canister id in URL {} does not match requested canister id: {}.",
+                effective_canister_id, canister_id
+            ),
+        });
+    }
     Ok(())
 }
 
@@ -512,7 +562,8 @@ mod test {
                 &sre,
                 &user_test_id(1),
                 &[Path::from(Label::from("time"))],
-                &CanisterIdSet::All
+                &CanisterIdSet::All,
+                canister_test_id(1)
             )
             .await,
             Ok(())

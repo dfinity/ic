@@ -6,6 +6,7 @@ use crate::{
     types::{to_legacy_request_type, ApiReqType},
     EndpointService, HttpHandlerMetrics, UNKNOWN_LABEL,
 };
+use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_types::consensus::catchup::CatchUpPackageParam;
@@ -68,7 +69,7 @@ fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
     response
 }
 
-impl Service<Vec<u8>> for CatchUpPackageService {
+impl Service<Request<Vec<u8>>> for CatchUpPackageService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -78,7 +79,7 @@ impl Service<Vec<u8>> for CatchUpPackageService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, body: Vec<u8>) -> Self::Future {
+    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
             .requests_body_size_bytes
             .with_label_values(&[
@@ -86,8 +87,9 @@ impl Service<Vec<u8>> for CatchUpPackageService {
                 ApiReqType::CatchUpPackage.into(),
                 UNKNOWN_LABEL,
             ])
-            .observe(body.len() as f64);
+            .observe(request.body().len() as f64);
 
+        let body = request.into_body();
         let cup = self.consensus_pool_cache.cup_with_protobuf();
         let res = if body.is_empty() {
             Ok(protobuf_response(&cup.protobuf))

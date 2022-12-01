@@ -9,6 +9,7 @@ use crate::{
 };
 use crossbeam::atomic::AtomicCell;
 use futures_util::FutureExt;
+use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_registry::RegistryClient;
@@ -69,7 +70,7 @@ impl QueryService {
     }
 }
 
-impl Service<Vec<u8>> for QueryService {
+impl Service<Request<Vec<u8>>> for QueryService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -79,7 +80,7 @@ impl Service<Vec<u8>> for QueryService {
         self.query_execution_service.poll_ready(cx)
     }
 
-    fn call(&mut self, body: Vec<u8>) -> Self::Future {
+    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         trace!(self.log, "in handle query");
         self.metrics
             .requests_body_size_bytes
@@ -88,7 +89,7 @@ impl Service<Vec<u8>> for QueryService {
                 ApiReqType::Query.into(),
                 UNKNOWN_LABEL,
             ])
-            .observe(body.len() as f64);
+            .observe(request.body().len() as f64);
         if self.health_status.load() != ReplicaHealthStatus::Healthy {
             let res = make_plaintext_response(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -102,7 +103,7 @@ impl Service<Vec<u8>> for QueryService {
         let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
 
         let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
-            &SignedRequestBytes::from(body),
+            &SignedRequestBytes::from(request.into_body()),
         ) {
             Ok(request) => request,
             Err(e) => {
