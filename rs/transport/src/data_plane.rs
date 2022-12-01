@@ -179,7 +179,7 @@ fn spawn_write_task(
                 .data_plane_metrics
                 .send_message_duration
                 .with_label_values(&[&channel_id_str,  arc_self.transport_api_label()])
-                .observe(start_time.elapsed().as_secs() as f64);
+                .observe(start_time.elapsed().as_secs_f64());
             arc_self
                 .data_plane_metrics
                 .write_bytes_total
@@ -246,7 +246,7 @@ fn spawn_read_task(
                     arc_self.data_plane_metrics
                         .read_message_duration
                         .with_label_values(&[&channel_id_str, READ_RESULT_ERROR, arc_self.transport_api_label()])
-                        .observe(read_message_start.elapsed().as_secs() as f64);
+                        .observe(read_message_start.elapsed().as_secs_f64());
 
                     arc_self.data_plane_metrics
                         .message_read_errors_total
@@ -265,13 +265,13 @@ fn spawn_read_task(
                         arc_self.data_plane_metrics
                             .read_message_duration
                             .with_label_values(&[&channel_id_str, READ_RESULT_HEARTBEAT, arc_self.transport_api_label()])
-                            .observe(read_message_start.elapsed().as_secs() as f64);
+                            .observe(read_message_start.elapsed().as_secs_f64());
                         continue;
                     }
                     arc_self.data_plane_metrics
                         .read_message_duration
                         .with_label_values(&[&channel_id_str, READ_RESULT_MESSAGE, arc_self.transport_api_label()])
-                        .observe(read_message_start.elapsed().as_secs() as f64);
+                        .observe(read_message_start.elapsed().as_secs_f64());
 
                     // Pass up the received message.
                     // Errors out for unsolicited messages, decoding errors and p2p

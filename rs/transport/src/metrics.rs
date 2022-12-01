@@ -111,31 +111,23 @@ impl DataPlaneMetrics {
                 &[LABEL_CHANNEL_ID, TRANSPORT_API],
             )
             .unwrap(),
-            read_message_duration: HistogramVec::new(
-                HistogramOpts::new(
-                    "read_message_duration_seconds",
-                    "Time spent to parse a full message.",
-                )
-                .buckets(decimal_buckets(-3, 1)),
+            read_message_duration: metrics_registry.histogram_vec(
+                "transport_read_message_duration_seconds",
+                "Time spent to parse a full message.",
+                decimal_buckets(-3, 1),
                 &[LABEL_CHANNEL_ID, LABEL_DETAIL, TRANSPORT_API],
-            )
-            .unwrap(),
+            ),
             write_bytes_total: metrics_registry.int_counter_vec(
                 "transport_write_bytes_total",
                 "Total bytes written at the application-level",
                 &[LABEL_CHANNEL_ID, TRANSPORT_API],
             ),
-            send_message_duration: HistogramVec::new(
-                HistogramOpts::new(
-                    "transport_send_message_duration_seconds",
-                    "Time it takes for a single message to be flushed into the lower level transport",
-                )
-                .buckets(
-                    decimal_buckets(-3, 1),
-                ),
+            send_message_duration: metrics_registry.histogram_vec(
+                "transport_send_message_duration_seconds",
+                "Time it takes for a single message to be flushed into the lower level transport",
+                decimal_buckets(-3, 1),
                 &[LABEL_CHANNEL_ID, TRANSPORT_API],
-            )
-            .unwrap(),
+            ),
             read_bytes_total: metrics_registry.int_counter_vec(
                 "transport_read_bytes_total",
                 "Total bytes read at the application-level",
