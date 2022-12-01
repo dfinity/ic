@@ -149,7 +149,7 @@ impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
             StepType::DownloadState => {
                 if let Some(node_ip) = self.params.download_node {
                     Ok(Box::new(
-                        self.recovery.get_download_state_step(node_ip, false),
+                        self.recovery.get_download_state_step(node_ip, false, false),
                     ))
                 } else {
                     Err(RecoveryError::StepSkipped)

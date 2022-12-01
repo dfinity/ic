@@ -60,6 +60,7 @@ pub struct DownloadIcStateStep {
     pub node_ip: IpAddr,
     pub target: String,
     pub working_dir: String,
+    pub keep_downloaded_state: bool,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
 }
@@ -68,10 +69,17 @@ impl Step for DownloadIcStateStep {
     fn descr(&self) -> String {
         let data_src = format!("[{}]:{}", self.node_ip, IC_DATA_PATH);
         let config_src = format!("[{}]:{}", self.node_ip, IC_JSON5_PATH);
-        format!(
-            "Copy ic data from {} and config from {} to {}. Then copy to {}",
-            data_src, config_src, self.target, self.working_dir
-        )
+        if self.keep_downloaded_state {
+            format!(
+                "Copy node state from {} and config from {} to {}. Then copy to {}",
+                data_src, config_src, self.target, self.working_dir
+            )
+        } else {
+            format!(
+                "Copy config from {} to {}. Then copy to {}",
+                config_src, self.target, self.working_dir
+            )
+        }
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -127,11 +135,17 @@ impl Step for DownloadIcStateStep {
             excludes.push(cp);
         });
 
+        let target = if self.keep_downloaded_state {
+            &self.target
+        } else {
+            &self.working_dir
+        };
+
         rsync(
             &self.logger,
             excludes,
             &data_src,
-            &self.target,
+            target,
             self.require_confirmation,
             self.key_file.as_ref(),
         )?;
@@ -140,19 +154,21 @@ impl Step for DownloadIcStateStep {
             &self.logger,
             vec![],
             &config_src,
-            &self.target,
+            target,
             self.require_confirmation,
             self.key_file.as_ref(),
         )?;
 
-        rsync(
-            &self.logger,
-            vec![],
-            &format!("{}/", self.target),
-            &self.working_dir,
-            false,
-            None,
-        )?;
+        if self.keep_downloaded_state {
+            rsync(
+                &self.logger,
+                vec![],
+                &format!("{}/", self.target),
+                &self.working_dir,
+                false,
+                None,
+            )?;
+        }
 
         Ok(())
     }

@@ -379,12 +379,18 @@ impl Recovery {
 
     /// Return a [DownloadIcStateStep] downloading the ic_state of the given
     /// node to the recovery data directory using the given account.
-    pub fn get_download_state_step(&self, node_ip: IpAddr, try_readonly: bool) -> impl Step {
+    pub fn get_download_state_step(
+        &self,
+        node_ip: IpAddr,
+        try_readonly: bool,
+        keep_downloaded_state: bool,
+    ) -> impl Step {
         DownloadIcStateStep {
             logger: self.logger.clone(),
             try_readonly,
             node_ip,
             target: self.data_dir.display().to_string(),
+            keep_downloaded_state,
             working_dir: self.work_dir.display().to_string(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
@@ -934,9 +940,14 @@ impl Recovery {
 }
 
 pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetrics> {
-    let res = match reqwest::get(format!("http://[{}]:9090", ip)).await {
-        Ok(res) => res,
-        Err(e) => {
+    let response = tokio::time::timeout(
+        Duration::from_secs(5),
+        reqwest::get(format!("http://[{}]:9090", ip)),
+    )
+    .await;
+    let res = match response {
+        Ok(Ok(res)) => res,
+        e => {
             warn!(logger, "Http request failed: {:?}", e);
             return None;
         }

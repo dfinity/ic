@@ -172,13 +172,20 @@ pub fn print_step(logger: &Logger, title: &str) {
 }
 
 /// Prints a question to the user and returns `true`
-/// if the user replied with a yes.
+/// if the user replied with a yes. Returns `false` if the user replied with a no.
+/// Skips all other inputs.
 pub fn consent_given(logger: &Logger, question: &str) -> bool {
-    info!(logger, "{} [y/N] ", question);
-    let _ = stdout().flush();
-    let mut s = String::new();
-    stdin().read_line(&mut s).expect("Couldn't read user input");
-    matches!(s.as_str(), "y\n" | "Y\n")
+    info!(logger, "{} [y/n] ", question);
+    loop {
+        let _ = stdout().flush();
+        let mut s = String::new();
+        stdin().read_line(&mut s).expect("Couldn't read user input");
+        match s.as_str() {
+            "y\n" | "Y\n" => return true,
+            "n\n" | "N\n" => return false,
+            _ => continue,
+        }
+    }
 }
 
 /// Prints a question to the user and returns `true`
