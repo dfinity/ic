@@ -142,9 +142,7 @@ impl EnumerateInnerFileDescriptors for MappingSerialization {
 // canister-sandbox.
 impl EnumerateInnerFileDescriptors for PageAllocatorSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        match self {
-            PageAllocatorSerialization(fd) => fds.push(&mut fd.fd),
-        }
+        fds.push(&mut self.fd.fd);
     }
 }
 

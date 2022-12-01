@@ -33,10 +33,11 @@ fn duplicate_file_descriptors(
                 },
                 ..mapping
             });
-    serialized_page_map.page_allocator = match serialized_page_map.page_allocator {
-        PageAllocatorSerialization(file_descriptor) => PageAllocatorSerialization(FileDescriptor {
-            fd: dup(file_descriptor.fd).unwrap(),
-        }),
+    serialized_page_map.page_allocator = PageAllocatorSerialization {
+        id: serialized_page_map.page_allocator.id,
+        fd: FileDescriptor {
+            fd: dup(serialized_page_map.page_allocator.fd.fd).unwrap(),
+        },
     };
     serialized_page_map
 }

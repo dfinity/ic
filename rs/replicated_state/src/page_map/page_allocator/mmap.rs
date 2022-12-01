@@ -1,5 +1,6 @@
 use crate::page_map::{FileDescriptor, FileOffset};
 
+use super::page_allocator_registry::PageAllocatorRegistry;
 use super::{
     MmapPageSerialization, Page, PageAllocatorSerialization, PageDeltaSerialization,
     PageValidation, ALLOCATED_PAGES,
@@ -8,8 +9,10 @@ use cvt::{cvt, cvt_r};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use libc::{c_void, close};
 use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
+use serde::{Deserialize, Serialize};
 use std::os::raw::c_int;
 use std::os::unix::io::RawFd;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 const MIN_PAGES_TO_FREE: usize = 10000;
@@ -166,18 +169,24 @@ impl PageAllocatorInner {
     pub fn serialize(&self) -> PageAllocatorSerialization {
         let mut guard = self.0.lock().unwrap();
         let core = guard.get_or_insert_with(MmapBasedPageAllocatorCore::new);
-        PageAllocatorSerialization(FileDescriptor {
-            fd: core.file_descriptor,
-        })
+        PageAllocatorSerialization {
+            id: core.id,
+            fd: FileDescriptor {
+                fd: core.file_descriptor,
+            },
+        }
     }
 
-    // See the comments of the corresponding method in `PageAllocator`.
-    pub fn deserialize(serialized_page_allocator: PageAllocatorSerialization) -> Self {
-        match serialized_page_allocator {
-            PageAllocatorSerialization(file_descriptor) => {
-                Self::open(file_descriptor, BackingFileOwner::AnotherAllocator)
-            }
-        }
+    // If the page allocator with the given id has already been deserialized and
+    // exists in the global `PageAllocatorRegistry`, then the function returns a
+    // reference to that page allocator.
+    // Otherwise, the function creates a new page allocator and registers it in the
+    // global `PageAllocatorRegistry`.
+    pub fn deserialize(serialized_page_allocator: PageAllocatorSerialization) -> Arc<Self> {
+        let PageAllocatorSerialization { id, fd } = serialized_page_allocator;
+        PageAllocatorRegistry::lookup_or_insert_with(&id, || {
+            Arc::new(Self::open(id, fd, BackingFileOwner::AnotherAllocator))
+        })
     }
 
     // See the comments of the corresponding method in `PageAllocator`.
@@ -231,8 +240,13 @@ impl PageAllocatorInner {
         Self(Mutex::new(None))
     }
 
-    fn open(file_descriptor: FileDescriptor, backing_file_owner: BackingFileOwner) -> Self {
+    fn open(
+        id: PageAllocatorId,
+        file_descriptor: FileDescriptor,
+        backing_file_owner: BackingFileOwner,
+    ) -> Self {
         Self(Mutex::new(Some(MmapBasedPageAllocatorCore::open(
+            id,
             file_descriptor,
             backing_file_owner,
         ))))
@@ -319,6 +333,25 @@ impl AllocationArea {
     }
 }
 
+/// The unique identifier of a page allocator. It is used to ensure the 1:1
+/// correspondence of page allocators in the replica and sandbox processes.
+/// If there was a 1:n correspondence, then that would cause data corruption
+/// due to multiple page allocators in the sandbox process sharing the same
+/// backing file.
+/// See `PageAllocatorRegistry`.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PageAllocatorId(usize);
+
+impl Default for PageAllocatorId {
+    fn default() -> Self {
+        // Each active canister creates a few page allocators per a checkpoint
+        // interval, so overflowing a 64-bit counter is practically impossible.
+        static MONOTONICALLY_INCREASING_COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let id = MONOTONICALLY_INCREASING_COUNTER.fetch_add(1, Ordering::SeqCst);
+        Self(id)
+    }
+}
+
 // Indicates whether the backing file is owned by the current allocator or
 // another allocator. The owner is responsible for freeing the physical memory
 // of dropped pages by punching holes in the backing file.
@@ -343,6 +376,8 @@ enum BackingFileOwner {
 /// It is expected that almost all pages take the fast path.
 #[derive(Debug)]
 struct MmapBasedPageAllocatorCore {
+    // The unique id of the page allocator.
+    id: PageAllocatorId,
     // The bump-pointer allocation area.
     allocation_area: AllocationArea,
     // The number of already allocated pages.
@@ -389,23 +424,27 @@ impl Drop for MmapBasedPageAllocatorCore {
 impl MmapBasedPageAllocatorCore {
     fn new() -> Self {
         let fd = create_backing_file();
-        Self::open(FileDescriptor { fd }, BackingFileOwner::CurrentAllocator)
+        Self::open(
+            PageAllocatorId::default(),
+            FileDescriptor { fd },
+            BackingFileOwner::CurrentAllocator,
+        )
     }
 
-    fn open(file_descriptor: FileDescriptor, backing_file_owner: BackingFileOwner) -> Self {
+    fn open(
+        id: PageAllocatorId,
+        file_descriptor: FileDescriptor,
+        backing_file_owner: BackingFileOwner,
+    ) -> Self {
         // SAFETY: The file descriptor is valid.
         let file_len = unsafe { get_file_length(file_descriptor.fd) };
-        // The page allocator can be created only with an empty file.
-        assert_eq!(
-            file_len, 0,
-            "The page allocator was initialized with non-empty file"
-        );
         Self {
+            id,
             allocation_area: Default::default(),
             allocated_pages: 0,
             deserialized_pages: 0,
             file_descriptor: file_descriptor.fd,
-            file_len: 0,
+            file_len,
             chunks: vec![],
             dropped_pages: vec![],
             backing_file_owner,
