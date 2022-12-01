@@ -7,7 +7,7 @@ use ic_icrc1::{
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use num_traits::ToPrimitive;
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 pub const FEE: u64 = 10_000;
 pub const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
@@ -76,6 +76,18 @@ pub fn balance_of(env: &StateMachine, ledger: CanisterId, acc: impl Into<Account
     .0
     .to_u64()
     .unwrap()
+}
+
+pub fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
+    Decode!(
+        &env.query(ledger, "icrc1_metadata", Encode!().unwrap())
+            .expect("failed to query metadata")
+            .bytes(),
+        Vec<(String, Value)>
+    )
+    .expect("failed to decode metadata response")
+    .into_iter()
+    .collect()
 }
 
 fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
@@ -164,10 +176,16 @@ where
     assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2));
 }
 
-pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+//Not all ICRC-1 impelmentations have the same metadata entries. Thus only certain basic fields are shared by all ICRC-1 implementaions
+pub fn test_basic_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
 {
+    fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
+        metadata
+            .get(key)
+            .unwrap_or_else(|| panic!("no metadata key {} in map {:?}", key, metadata))
+    }
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
 
     assert_eq!(
@@ -202,6 +220,14 @@ where
         )
         .unwrap()
     );
+
+    let metadata = metadata(&env, canister_id);
+    assert_eq!(lookup(&metadata, "icrc1:name"), &Value::from(TOKEN_NAME));
+    assert_eq!(
+        lookup(&metadata, "icrc1:symbol"),
+        &Value::from(TOKEN_SYMBOL)
+    );
+    assert_eq!(lookup(&metadata, "icrc1:decimals"), &Value::from(8u64));
 }
 
 pub fn test_total_supply<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)

@@ -6,7 +6,7 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
-use ic_icrc1::Account;
+use ic_icrc1::{endpoints::Value, Account};
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{archive_blocks, block_locations, find_block_in_archive, LedgerAccess},
@@ -435,6 +435,19 @@ fn icrc1_balance_of(acc: Account) -> Nat {
 #[candid_method(query, rename = "transfer_fee")]
 fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
     LEDGER.read().unwrap().transfer_fee()
+}
+
+#[candid_method(query, rename = "icrc1_metadata")]
+fn icrc1_metadata() -> Vec<(String, Value)> {
+    vec![
+        Value::entry("icrc1:decimals", DECIMAL_PLACES as u64),
+        Value::entry("icrc1:name", LEDGER.read().unwrap().token_name.to_string()),
+        Value::entry(
+            "icrc1:symbol",
+            LEDGER.read().unwrap().token_symbol.to_string(),
+        ),
+        Value::entry("icrc1:fee", LEDGER.read().unwrap().transfer_fee.get_e8s()),
+    ]
 }
 
 #[candid_method(query, rename = "icrc1_fee")]
@@ -909,6 +922,11 @@ fn get_nodes_() {
 #[export_name = "canister_query archives"]
 fn archives_candid() {
     over(candid_one, |()| archives());
+}
+
+#[export_name = "canister_query icrc1_metadata"]
+fn icrc1_metadata_candid() {
+    over(candid_one, |()| icrc1_metadata())
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
