@@ -1,5 +1,5 @@
 use crate::cli::{
-    print_height_info, read_optional, read_optional_ip, read_optional_node_ids,
+    consent_given, print_height_info, read_optional, read_optional_ip, read_optional_node_ids,
     read_optional_subnet_id, read_optional_version, wait_for_confirmation,
 };
 use crate::recovery_iterator::RecoveryIterator;
@@ -52,6 +52,10 @@ pub struct AppSubnetRecoveryArgs {
     /// IP address of the node to download the subnet state from
     #[clap(long)]
     pub download_node: Option<IpAddr>,
+
+    /// If the downloaded state should be backed up locally
+    #[clap(long)]
+    pub keep_downloaded_state: Option<bool>,
 
     /// IP address of the node to upload the new subnet state to
     #[clap(long)]
@@ -140,6 +144,11 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
                     self.params.download_node =
                         read_optional_ip(&self.logger, "Enter download IP:");
                 }
+
+                self.params.keep_downloaded_state = Some(consent_given(
+                    &self.logger,
+                    "Preserve original downloaded state locally?",
+                ));
             }
 
             StepType::BlessVersion => {
@@ -195,6 +204,7 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
                     Ok(Box::new(self.recovery.get_download_state_step(
                         node_ip,
                         self.params.pub_key.is_some(),
+                        self.params.keep_downloaded_state == Some(true),
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)
