@@ -91,7 +91,8 @@ impl RemoteCspVault {
                 server_address: socket_path.to_string_lossy().to_string(),
                 message: e.to_string(),
             })?;
-        let codec_builder = LengthDelimitedCodec::builder();
+        let mut codec_builder = LengthDelimitedCodec::builder();
+        codec_builder.max_frame_length(32 * 1024 * 1024);
         let transport = serde_transport::new(codec_builder.new_framed(conn), Bincode::default());
         let client = {
             let _enter_guard = rt_handle.enter();

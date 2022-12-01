@@ -582,7 +582,8 @@ impl<
 {
     pub async fn run(self) {
         // Wrap data in telegrams with a length header.
-        let codec_builder = LengthDelimitedCodec::builder();
+        let mut codec_builder = LengthDelimitedCodec::builder();
+        codec_builder.max_frame_length(32 * 1024 * 1024);
 
         // Listen for connections; spawns one `tokio` task per client.
         loop {
