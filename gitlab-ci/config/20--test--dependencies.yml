@@ -1,19 +1,28 @@
-# dependencies-check:
-#   extends: .ubuntu-nix-docker-k8s
-#   needs: []  # don't wait on other jobs
-#   stage: test
-#   variables: 
-#     PYTHONPATH : ${CI_PROJECT_DIR}/gitlab-ci/src
-#     CARGO_AUDIT_VERSION : "0.16.0"
-#     CARGO_WORKSPACES_VERSION : "0.2.31"
-#   script:
-#     - |
-#       set -euo pipefail
-#       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
-#       $SHELL_WRAPPER cargo install cargo-workspaces --version "${CARGO_WORKSPACES_VERSION}"
-#       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/
-#       $SHELL_WRAPPER python3 dependencies/merge_hook.py
-#   allow_failure: true
+dependencies-check:
+    # TODO(PSEC-970)
+    # we want to skip this job on the merge_train for now
+    # When we grant exceptions, the exception is based on the 
+    # latest commit in the branch obtained from CI_COMMIT_SHA. 
+    # On the merge_train, this will be different i.e the merge
+    # commit in the master branch. This would cause the job to
+    # fail even if it has successfully passed. 
+  extends: 
+    - .ubuntu-docker-k8s
+    - .rules-prs-only
+  needs: []  # don't wait on other jobs
+  stage: test
+  variables: 
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
+    CARGO_AUDIT_VERSION : "0.16.0"
+  script:
+    - |
+      set -euo pipefail
+      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
+      $SHELL_WRAPPER python3 scanner/bazel_ic_scanner_merge_job.py
+  # TODO(PSEC-970)
+  # Remove allow_failure : true after testing on the CI
+  allow_failure: true
 
 dependency-scan-nightly:
   extends: 
@@ -29,6 +38,27 @@ dependency-scan-nightly:
       set -euo pipefail
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
-      $SHELL_WRAPPER python3 scanner/bazel_ic_scanner_periodic_job.py 
+      $SHELL_WRAPPER python3 scanner/bazel_ic_scanner_periodic_job.py
+  # TODO(PSEC-970)
+  # Remove allow_failure : true after testing on the CI
+  allow_failure: true
+
+dependency-scan-release-cut:
+  extends: 
+    - .ubuntu-docker-k8s
+    - .rules-dependency-scan-release-cut
+  needs: []  # don't wait on other jobs
+  stage: test
+  variables: 
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
+    CARGO_AUDIT_VERSION : "0.16.0"
+  script:
+    - |
+      set -euo pipefail
+      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
+      $SHELL_WRAPPER python3 scanner/bazel_ic_scanner_release_job.py
+  # TODO(PSEC-970)
+  # Remove allow_failure : true after testing on the CI
   allow_failure: true
 

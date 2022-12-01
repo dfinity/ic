@@ -32,6 +32,12 @@ def test_dependency_to_transitive_bazel_string(bazel_test):
     assert bazel_string == "@crate_index__chrono-0.4.19//:*"
 
 
+def test_transitive_bazel_string_to_dependency_random(bazel_test):
+    bazel_string = "@com_google_protobuf_protoc_linux_aarch64//"
+    dependency = bazel_test._Bazel__transitive_bazel_string_to_dependency(bazel_string)
+    assert dependency is None
+
+
 def test_transitive_bazel_string_to_dependency(bazel_test):
     bazel_string = "@crate_index__chrono-0.4.19//"
     dependency = bazel_test._Bazel__transitive_bazel_string_to_dependency(bazel_string)
@@ -51,6 +57,13 @@ def test_transitive_bazel_string_to_dependency_versioned(bazel_test):
     dependency = bazel_test._Bazel__transitive_bazel_string_to_dependency(bazel_string_versioned_crate)
     assert dependency.name == "rand_chacha"
     assert dependency.version == "0.4.19"
+
+
+def test_transitive_bazel_string_to_dependency_zstd(bazel_test):
+    bazel_string = "@crate_index__zstd-sys-2.0.2-zstd.1.5.2//"
+    dependency = bazel_test._Bazel__transitive_bazel_string_to_dependency(bazel_string)
+    assert dependency.name == "zstd-sys"
+    assert dependency.version == "2.0.2"
 
 
 def test_dependency_to_direct_bazel_string(bazel_test):

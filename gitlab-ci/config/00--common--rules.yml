@@ -25,6 +25,11 @@
     - when: manual # always allow to manually run bazel job as last resort
       allow_failure: true
 
+.rules-dependency-scan-release-cut:
+  rules :
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+      when: manual
+
 .bazel-rules-post-master:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'

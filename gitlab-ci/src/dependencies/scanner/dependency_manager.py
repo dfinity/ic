@@ -1,4 +1,5 @@
 import abc
+import fnmatch
 import json
 import logging
 import os
@@ -8,12 +9,16 @@ import subprocess
 import traceback
 import typing
 
+import git
 import parse
 from cvss import CVSS3
 from model.dependency import Dependency
 from model.finding import Finding
 from model.vulnerability import Vulnerability
+from packaging import version
 from scanner.process_executor import ProcessExecutor
+
+import git_changes
 
 PROJECT_ROOT = pathlib.Path(
     os.environ.get("CI_PROJECT_DIR", pathlib.Path(__file__).absolute().parent.parent.parent.parent.parent)
@@ -26,7 +31,7 @@ class DependencyManager(abc.ABC):
     """Base class for helper classes for different package managers."""
 
     @abc.abstractmethod
-    def get_dependency_diff(self) -> typing.Dict[str, str]:
+    def get_dependency_diff(self) -> typing.List[Dependency]:
         """Return list of dependency diffs for modified packages."""
         raise NotImplementedError
 
@@ -40,6 +45,11 @@ class DependencyManager(abc.ABC):
         """Return list of modified internal packages"""
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def has_dependencies_changed(self) -> typing.Dict[str, bool]:
+        """Return true if dependencies have changed in a MR"""
+        raise NotImplementedError
+
 
 class Bazel(DependencyManager):
     """Helper for Bazel-related functions."""
@@ -48,25 +58,29 @@ class Bazel(DependencyManager):
         """Construct default object."""
         self.root = root
 
-    # TODO : Needed when we work on merge requests
-    def get_dependency_diff(self):
-        raise NotImplementedError
-
-    # TODO : Needed when we work on merge requests
-    def get_modified_packages(self):
-        raise NotImplementedError
-
     @staticmethod
     def __dependency_to_transitive_bazel_string(dep: Dependency) -> str:
         return f"@crate_index__{dep.name}-{dep.version}//:*"
 
     @staticmethod
-    def __transitive_bazel_string_to_dependency(bazel_string: str) -> Dependency:
+    def __transitive_bazel_string_to_dependency(bazel_string: str) -> typing.Optional[Dependency]:
+        # @crate_index__zstd-sys-2.0.2-zstd.1.5.2//
         result = parse.parse("@crate_index__{0}//", bazel_string)
-        result = result[0].rsplit("-", 1)
-        return Dependency(
-            id=f"{CRATES_IO_URL}{result[0]}", name=result[0], version=result[1], fix_version_for_vulnerability={}
-        )
+        # <Result ('zstd-sys-2.0.2-zstd.1.5.2',) {}>
+        if result:
+            parse_result = result[0].split("-")
+            # ['zstd', 'sys', '2.0.2', 'zstd.1.5.2']
+            for split_string in parse_result:
+                # 2.0.2
+                if isinstance(version.parse(split_string), version.Version):
+                    version_str = split_string
+            # split with -2.0.2
+            name = result[0].split(f"-{version_str}", 1)[0]
+            # ['zstd-sys', '-zstd.1.5.2'] -> 'zstd-sys'
+            return Dependency(
+                id=f"{CRATES_IO_URL}{name}", name=name, version=version_str, fix_version_for_vulnerability={}
+            )
+        return
 
     @staticmethod
     def __dependency_to_direct_bazel_string(dep: Dependency) -> str:
@@ -147,6 +161,77 @@ class Bazel(DependencyManager):
         result = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
         audit_out = json.loads(result)
         return audit_out
+
+    def has_dependencies_changed(self) -> typing.Dict[str, bool]:
+
+        external_crates_bzl = (self.root / "bazel" / "external_crates.bzl").as_posix()
+        cargo_lock_toml = (self.root / "Cargo.Bazel.toml.lock").as_posix()
+
+        dependency_changes = {"external_crates_bzl": False, "cargo_lock_toml": False}
+
+        for changed_file in git_changes.get_changed_files(self.root, [""]):
+            if changed_file == external_crates_bzl:
+                dependency_changes["external_crates_bzl"] = True
+
+            if changed_file == cargo_lock_toml:
+                dependency_changes["cargo_lock_toml"] = True
+
+        return dependency_changes
+
+    def get_dependency_diff(self) -> typing.List[Dependency]:
+        dependency_builder = []
+
+        bazel_query = '"deps(@crate_index//:all)"'
+        branch_dependencies = self.__get_bazel_query_output(bazel_query)
+        branch_dependencies = branch_dependencies.split("\n")
+
+        # Reset any modified files
+        logging.info("Resetting local git changes")
+        repo = git.Repo(self.root)
+        repo.git.reset("--hard")
+
+        # Reset to head creates an exception on CI
+        try:
+            active_branch = repo.active_branch
+        except Exception:
+            logging.info(f"Running on CI, usuing HEAD hexsha instead of branch name to revert {traceback.format_exc()}")
+            active_branch = repo.head.commit
+
+        logging.info("Checking out merge base")
+        repo.git.checkout(git_changes.get_merge_base(repo)[0].hexsha)
+
+        base_dependencies = self.__get_bazel_query_output(bazel_query)
+        base_dependencies = base_dependencies.split("\n")
+
+        logging.info("Resetting local git changes")
+        repo.git.reset("--hard")
+        logging.info("Checking out merge top")
+        repo.git.checkout(active_branch)
+
+        dependencies_diff = list(set(branch_dependencies).difference(set(base_dependencies)))
+
+        if not dependencies_diff:
+            return []
+
+        for dependency in dependencies_diff:
+            parsed_dependency = self.__transitive_bazel_string_to_dependency(dependency)
+            if parsed_dependency:
+                dependency_builder.append(parsed_dependency)
+        return dependency_builder
+
+    def get_modified_packages(self) -> typing.List[str]:
+        changed = []
+
+        for changed_file in git_changes.get_changed_files(self.root, ["rs/"]):
+            if fnmatch.fnmatch(changed_file, "*/BUILD.bazel"):
+                file_path = pathlib.Path(changed_file)
+                changed.append(str(file_path.parent.relative_to(self.root)))
+
+        if not changed:
+            logging.info("No bazel build files modified.")
+            return []
+
+        return changed
 
     def get_findings(self, repository: str, scanner: str) -> typing.List[Finding]:
         finding_builder: typing.List[Finding] = []
@@ -256,9 +341,9 @@ class Bazel(DependencyManager):
             # direct_dependency
             return dependecy_builder
         result.remove("@crate_index//")
-        for transitive_bazel_string in result:
+        for transitive_bazel_string in sorted(result):
             transitive_dependency = self.__transitive_bazel_string_to_dependency(transitive_bazel_string)
-            if self.__is_transitive_dependency_first_level_dependency(transitive_dependency):
+            if transitive_dependency and self.__is_transitive_dependency_first_level_dependency(transitive_dependency):
                 dependecy_builder.append(transitive_dependency)
         return dependecy_builder
 
