@@ -193,7 +193,7 @@ class JiraFindingDataSource(FindingDataSource):
     @staticmethod
     def __finding_to_jira_patch_version_labels(
         dependencies: List[Dependency], vulnerabilities: List[Vulnerability]
-    ) -> (str, List[str]):
+    ) -> Tuple[str, List[str]]:
         patch_published_for_all_vulns_main_dep: bool = False
         patch_published_for_all_vulns_dep_ctr: int = 0
         patch_table: str = "||*dep / vuln*||"
