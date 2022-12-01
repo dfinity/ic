@@ -36,7 +36,7 @@ fn test_balance_of() {
 
 #[test]
 fn test_metadata() {
-    ic_icrc1_ledger_sm_tests::test_metadata(ledger_wasm(), encode_init_args)
+    ic_icrc1_ledger_sm_tests::test_basic_metadata(ledger_wasm(), encode_init_args)
 }
 
 #[test]

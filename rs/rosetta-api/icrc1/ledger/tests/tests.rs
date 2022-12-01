@@ -10,9 +10,10 @@ use ic_icrc1::{
 };
 use ic_icrc1_ledger::InitArgs;
 use ic_icrc1_ledger_sm_tests::{
-    balance_of, setup, supported_standards, total_supply, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
-    BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE,
-    NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, TX_WINDOW,
+    balance_of, metadata, setup, supported_standards, total_supply, ARCHIVE_TRIGGER_THRESHOLD,
+    BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
+    NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
+    TOKEN_SYMBOL, TX_WINDOW,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
@@ -69,18 +70,6 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
     };
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
-}
-
-fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
-    Decode!(
-        &env.query(ledger, "icrc1_metadata", Encode!().unwrap())
-            .expect("failed to query metadata")
-            .bytes(),
-        Vec<(String, Value)>
-    )
-    .expect("failed to decode metadata response")
-    .into_iter()
-    .collect()
 }
 
 fn send_transfer(
