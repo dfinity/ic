@@ -697,12 +697,11 @@ pub(crate) fn syscalls<S: SystemApi>(
                     rate_limiting_of_debug_prints,
                 ) {
                     // Debug print is a no-op on non-system subnets with rate limiting.
+                    (SubnetType::Application, FlagStatus::Enabled) => Ok(()),
                     (SubnetType::VerifiedApplication, FlagStatus::Enabled) => Ok(()),
                     // If rate limiting is disabled or the subnet is a system subnet, then
                     // debug print produces output.
-                    (_, FlagStatus::Disabled)
-                    | (SubnetType::System, FlagStatus::Enabled)
-                    | (SubnetType::Application, FlagStatus::Enabled) => {
+                    (_, FlagStatus::Disabled) | (SubnetType::System, FlagStatus::Enabled) => {
                         with_memory_and_system_api(&mut caller, |system_api, memory| {
                             system_api.ic0_debug_print(offset as u32, length as u32, memory)
                         })
