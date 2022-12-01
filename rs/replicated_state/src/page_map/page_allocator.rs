@@ -7,9 +7,11 @@ use std::{
 };
 mod page_bytes;
 
+mod page_allocator_registry;
+
 pub mod mmap;
 
-use mmap::{PageAllocatorInner, PageInner};
+use mmap::{PageAllocatorId, PageAllocatorInner, PageInner};
 
 use super::{FileDescriptor, FileOffset};
 
@@ -89,7 +91,7 @@ impl PageAllocator {
     /// Creates a page allocator from the given serialization-friendly
     /// representation.
     pub fn deserialize(page_allocator: PageAllocatorSerialization) -> Self {
-        Self(Arc::new(PageAllocatorInner::deserialize(page_allocator)))
+        Self(PageAllocatorInner::deserialize(page_allocator))
     }
 
     /// Returns a serialization-friendly representation of the given page-delta.
@@ -139,11 +141,13 @@ pub fn allocated_pages_count() -> usize {
 /// Serialization-friendly representation of `PageAllocator`.
 ///
 /// It contains sufficient information to reconstruct the page allocator
-/// in another process. There is only one possible case:
-/// - `Mmap`: the page allocator is `MmapBasedPageAllocator` backed by a file
-///   with the given file descriptor.
+/// in another process ensuring that there are no two page allocators
+/// with the same id.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PageAllocatorSerialization(pub FileDescriptor);
+pub struct PageAllocatorSerialization {
+    pub id: PageAllocatorId,
+    pub fd: FileDescriptor,
+}
 
 /// Serialization-friendly representation of an indexed page.
 #[derive(Serialize, Deserialize, Clone, Debug)]

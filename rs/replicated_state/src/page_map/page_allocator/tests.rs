@@ -1,5 +1,19 @@
-use super::{PageAllocator, PageSerialization};
+use crate::page_map::FileDescriptor;
+
+use super::{PageAllocator, PageAllocatorSerialization, PageSerialization};
 use ic_sys::{PageIndex, PAGE_SIZE};
+use nix::unistd::dup;
+
+fn duplicate_file_descriptors(
+    page_allocator: PageAllocatorSerialization,
+) -> PageAllocatorSerialization {
+    PageAllocatorSerialization {
+        id: page_allocator.id,
+        fd: FileDescriptor {
+            fd: dup(page_allocator.fd.fd).unwrap(),
+        },
+    }
+}
 
 #[test]
 fn test_page_allocation() {
@@ -40,4 +54,23 @@ fn test_page_serialization() {
     let result: PageSerialization = serde::de::Deserialize::deserialize(&mut deserializer).unwrap();
     assert_eq!(page.index, result.index);
     assert_eq!(page.bytes, result.bytes);
+}
+
+#[test]
+fn test_page_deserialize_twice() {
+    let page_allocator: PageAllocator = PageAllocator::default();
+    let page = (PageIndex::new(1), &[1u8; PAGE_SIZE]);
+    page_allocator.allocate(&[page]);
+
+    let serialized1 = duplicate_file_descriptors(page_allocator.serialize());
+    let serialized2 = duplicate_file_descriptors(page_allocator.serialize());
+
+    let deserialized1 = PageAllocator::deserialize(serialized1);
+    let deserialized2 = PageAllocator::deserialize(serialized2);
+
+    assert_eq!(deserialized1.serialize().id, deserialized2.serialize().id);
+    assert_eq!(
+        deserialized1.serialize().fd.fd,
+        deserialized2.serialize().fd.fd
+    );
 }
