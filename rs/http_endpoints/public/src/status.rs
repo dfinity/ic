@@ -1,6 +1,7 @@
 //! Module that deals with requests to /api/v2/status
 use crate::{common, EndpointService};
 use crossbeam::atomic::AtomicCell;
+use http::Request;
 use hyper::{Body, Response};
 use ic_config::http_handler::Config;
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
@@ -59,7 +60,7 @@ impl StatusService {
     }
 }
 
-impl Service<Body> for StatusService {
+impl Service<Request<Body>> for StatusService {
     type Response = Response<Body>;
     type Error = BoxError;
     #[allow(clippy::type_complexity)]
@@ -69,7 +70,7 @@ impl Service<Body> for StatusService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _unused: Body) -> Self::Future {
+    fn call(&mut self, _unused: Request<Body>) -> Self::Future {
         let log = self.log.clone();
         let nns_subnet_id = self.nns_subnet_id;
         let root_key_status = self.config.show_root_key_in_status;

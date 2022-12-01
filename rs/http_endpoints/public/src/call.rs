@@ -7,6 +7,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
 };
+use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces_p2p::{IngressError, IngressIngestionService};
 use ic_interfaces_registry::RegistryClient;
@@ -119,7 +120,7 @@ fn get_registry_data(
 }
 
 /// Handles a call to /api/v2/canister/../call
-impl Service<Vec<u8>> for CallService {
+impl Service<Request<Vec<u8>>> for CallService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -129,7 +130,7 @@ impl Service<Vec<u8>> for CallService {
         self.ingress_sender.poll_ready(cx)
     }
 
-    fn call(&mut self, body: Vec<u8>) -> Self::Future {
+    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         // Actual parsing.
         self.metrics
             .requests_body_size_bytes
@@ -138,8 +139,8 @@ impl Service<Vec<u8>> for CallService {
                 ApiReqType::Call.into(),
                 UNKNOWN_LABEL,
             ])
-            .observe(body.len() as f64);
-        let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
+            .observe(request.body().len() as f64);
+        let msg: SignedIngress = match SignedRequestBytes::from(request.into_body()).try_into() {
             Ok(msg) => msg,
             Err(e) => {
                 let res = make_plaintext_response(

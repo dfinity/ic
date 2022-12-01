@@ -7,6 +7,7 @@ use crate::{
     EndpointService,
 };
 use askama::Template;
+use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
 use ic_registry_subnet_type::SubnetType;
@@ -52,7 +53,7 @@ impl DashboardService {
     }
 }
 
-impl Service<Body> for DashboardService {
+impl Service<Request<Body>> for DashboardService {
     type Response = Response<Body>;
     type Error = BoxError;
     #[allow(clippy::type_complexity)]
@@ -62,7 +63,7 @@ impl Service<Body> for DashboardService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _unused: Body) -> Self::Future {
+    fn call(&mut self, _unused: Request<Body>) -> Self::Future {
         use hyper::header;
         let http_config = self.config.clone();
         let subnet_type = self.subnet_type;
