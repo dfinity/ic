@@ -2,6 +2,7 @@ use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
+use ic_icrc1::Account;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::{
@@ -276,6 +277,7 @@ impl Default for TransferFee {
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct LedgerCanisterInitPayload {
     pub minting_account: AccountIdentifier,
+    pub minting_account_icrc1: Option<Account>,
     pub initial_values: HashMap<AccountIdentifier, Tokens>,
     pub max_message_size_bytes: Option<usize>,
     pub transaction_window: Option<Duration>,
@@ -294,6 +296,7 @@ impl LedgerCanisterInitPayload {
 
 pub struct LedgerCanisterInitPayloadBuilder {
     minting_account: Option<AccountIdentifier>,
+    minting_account_icrc1: Option<Account>,
     initial_values: HashMap<AccountIdentifier, Tokens>,
     max_message_size_bytes: Option<usize>,
     transaction_window: Option<Duration>,
@@ -308,6 +311,7 @@ impl LedgerCanisterInitPayloadBuilder {
     fn new() -> Self {
         Self {
             minting_account: None,
+            minting_account_icrc1: None,
             initial_values: Default::default(),
             max_message_size_bytes: None,
             transaction_window: None,
@@ -321,6 +325,11 @@ impl LedgerCanisterInitPayloadBuilder {
 
     pub fn minting_account(mut self, minting_account: AccountIdentifier) -> Self {
         self.minting_account = Some(minting_account);
+        self
+    }
+
+    pub fn minting_account_icrc1(mut self, minting_account: Account) -> Self {
+        self.minting_account_icrc1 = Some(minting_account);
         self
     }
 
@@ -380,6 +389,7 @@ impl LedgerCanisterInitPayloadBuilder {
 
         Ok(LedgerCanisterInitPayload {
             minting_account,
+            minting_account_icrc1: self.minting_account_icrc1,
             initial_values: self.initial_values,
             max_message_size_bytes: self.max_message_size_bytes,
             transaction_window: self.transaction_window,
