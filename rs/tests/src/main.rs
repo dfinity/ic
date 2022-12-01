@@ -37,18 +37,7 @@ use std::time::Instant;
 /// here, just add another entry to the vector with the corresponding pot.
 fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
-    vec![system_subnets_pot()]
-}
-
-fn system_subnets_pot() -> pot::Pot {
-    composable!(
-        "system_subnets_pot",
-        execution::legacy_config_many_system_subnets(),
-        steps! {
-            execution::nns_shielding::non_nns_canister_attempt_to_create_canister_on_another_subnet_fails,
-            execution::nns_shielding::nns_canister_attempt_to_create_canister_on_another_subnet_succeeds
-        }
-    )
+    vec![]
 }
 
 fn main() {

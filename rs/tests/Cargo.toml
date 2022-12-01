@@ -209,6 +209,9 @@ path = "bin/rejoin_test.rs"
 name = "ic-systest-liveness-with-equivocation-test"
 path = "bin/liveness_with_equivocation_test.rs"
 
+[[bin]]
+name = "ic-systest-system-subnets-test"
+path = "bin/system_subnets_test.rs"
 
 [[bin]]
 name = "ic-systest-cow-safety-test"

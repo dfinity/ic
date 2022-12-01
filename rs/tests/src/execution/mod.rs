@@ -17,6 +17,7 @@ pub mod upgraded_pots;
 use crate::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
+    test_env_api::HasGroupSetup,
 };
 use ic_fondue::ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet};
 use ic_registry_subnet_type::SubnetType;
@@ -55,22 +56,15 @@ pub fn legacy_config_system_verified_subnets() -> LegacyInternetComputer {
         ))
 }
 
-pub fn config_many_system_subnets() -> InternetComputer {
+pub fn config_many_system_subnets(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
-}
-
-pub fn legacy_config_many_system_subnets() -> LegacyInternetComputer {
-    LegacyInternetComputer::new()
-        .add_subnet(LegacySubnet::fast_single_node(SubnetType::System))
-        .add_subnet(LegacySubnet::fast_single_node(
-            SubnetType::VerifiedApplication,
-        ))
-        .add_subnet(LegacySubnet::fast_single_node(SubnetType::Application))
-        .add_subnet(LegacySubnet::fast_single_node(SubnetType::System))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 // A special configuration for testing memory capacity limits.

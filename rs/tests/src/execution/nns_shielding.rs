@@ -8,7 +8,6 @@ use crate::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use candid::{Decode, Encode, Principal};
 use ic_agent::AgentError;
 use ic_base_types::RegistryVersion;
-use ic_fondue::ic_manager::IcHandle;
 use ic_ic00_types::SetupInitialDKGArgs;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -216,10 +215,8 @@ pub fn config() -> InternetComputer {
 
 /// Tests whether creating a canister on a subnet other than self fails when not
 /// on the NNS subnet.
-pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
     rt.block_on(async move {
@@ -370,10 +367,8 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
 
 /// Tests whether creating a canister on another subnet is possible from an NNS
 /// canister.
-pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(env: TestEnv) {
+    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
     rt.block_on(async move {
