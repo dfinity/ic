@@ -201,6 +201,7 @@
 /rs/tests/bin/spec_compliance_application_test.rs  @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/spec_compliance_system_test.rs       @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/tecdsa_add_nodes_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
+/rs/tests/bin/request_auth_malicious_replica_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 /rs/tests/bin/tecdsa_complaint_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 /rs/tests/bin/dual_workload_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 /rs/tests/bin/max_ingress_payload_size_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners

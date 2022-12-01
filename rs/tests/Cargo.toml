@@ -219,6 +219,10 @@ name = "ic-systest-replica-determinism-test"
 path = "bin/replica_determinism_test.rs"
 
 [[bin]]
+name = "ic-systest-request-auth-malicious-replica-test"
+path = "bin/request_auth_malicious_replica_test.rs"
+
+[[bin]]
 name = "ic-systest-safety-test"
 path = "bin/safety_test.rs"
 
