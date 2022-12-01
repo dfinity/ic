@@ -25,11 +25,12 @@ use anyhow::bail;
 use candid;
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, NumBytes};
 use ic_cdk::api::call::RejectionCode;
 use ic_ic00_types::{
     CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext, TransformFunc,
 };
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities::{mock_time, types::messages::RequestBuilder};
 use ic_types::canister_http::CanisterHttpRequestContext;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
@@ -38,7 +39,12 @@ use std::convert::TryFrom;
 use std::time::Duration;
 
 /// Pricing function of canister http requests.
-fn expected_cycle_cost(proxy_canister: CanisterId, request: CanisterHttpRequestArgs) -> u64 {
+fn expected_cycle_cost(
+    proxy_canister: CanisterId,
+    request: CanisterHttpRequestArgs,
+    subnet_size: usize,
+) -> u64 {
+    let cm = CyclesAccountManagerBuilder::new().build();
     let response_size = request.max_response_bytes.unwrap_or(2 * 1024 * 1024);
 
     let dummy_context = CanisterHttpRequestContext::try_from((
@@ -50,15 +56,16 @@ fn expected_cycle_cost(proxy_canister: CanisterId, request: CanisterHttpRequestA
         request,
     ))
     .unwrap();
-    let req_size = dummy_context.variable_parts_size().get();
-
-    // 400M is the base fee for a requests
-    // 100k is the dynamic factor to represent resource usage
-    400_000_000 + (req_size as u64 + response_size) * 100_000
+    let req_size = dummy_context.variable_parts_size();
+    let cycle_fee = cm.http_request_fee(req_size, Some(NumBytes::from(response_size)), subnet_size);
+    cycle_fee.get().try_into().unwrap()
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
+    // Subnet size is used for cost scaling.
+    let subnet_size = get_node_snapshots(&env).count();
+    // Get application subnet node to deploy canister to.
     let mut nodes = get_node_snapshots(&env);
     let node = nodes.next().expect("there is no application node");
     let runtime = get_runtime_from_node(&node);
@@ -174,7 +181,11 @@ pub fn test(env: TestEnv) {
                 &proxy_canister,
                 RemoteHttpRequest {
                     request: request.clone(),
-                    cycles: expected_cycle_cost(proxy_canister.canister_id(), request.clone()),
+                    cycles: expected_cycle_cost(
+                        proxy_canister.canister_id(),
+                        request.clone(),
+                        subnet_size,
+                    ),
                 },
                 |response| matches!(response, Ok(r) if r.status==200),
             )
@@ -187,7 +198,11 @@ pub fn test(env: TestEnv) {
                 &proxy_canister,
                 RemoteHttpRequest {
                     request: request.clone(),
-                    cycles: expected_cycle_cost(proxy_canister.canister_id(), request.clone()) - 1,
+                    cycles: expected_cycle_cost(
+                        proxy_canister.canister_id(),
+                        request.clone(),
+                        subnet_size,
+                    ) - 1,
                 },
                 |response| matches!(response, Err((RejectionCode::CanisterReject, _))),
             )
@@ -216,7 +231,11 @@ pub fn test(env: TestEnv) {
                 &proxy_canister,
                 RemoteHttpRequest {
                     request: request.clone(),
-                    cycles: expected_cycle_cost(proxy_canister.canister_id(), request.clone()),
+                    cycles: expected_cycle_cost(
+                        proxy_canister.canister_id(),
+                        request.clone(),
+                        subnet_size,
+                    ),
                 },
                 |response| matches!(response, Ok(r) if r.status==200),
             )
@@ -229,7 +248,11 @@ pub fn test(env: TestEnv) {
                 &proxy_canister,
                 RemoteHttpRequest {
                     request: request.clone(),
-                    cycles: expected_cycle_cost(proxy_canister.canister_id(), request.clone()) - 1,
+                    cycles: expected_cycle_cost(
+                        proxy_canister.canister_id(),
+                        request.clone(),
+                        subnet_size,
+                    ) - 1,
                 },
                 |response| matches!(response, Err((RejectionCode::CanisterReject, _))),
             )
