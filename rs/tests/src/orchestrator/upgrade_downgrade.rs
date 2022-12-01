@@ -78,6 +78,9 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
     // download URL in the registry.
     let branch_version = format!("{}-test", original_branch_version);
 
+    // Check that the two versions do not initially match, which could hide failures.
+    assert!(mainnet_version != original_branch_version);
+
     // Bless both replica versions
     block_on(bless_public_replica_version(
         &nns_node,
