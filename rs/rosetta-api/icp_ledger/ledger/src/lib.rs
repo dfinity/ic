@@ -1,5 +1,6 @@
 use dfn_core::api::now;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1::Account;
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
 use ic_ledger_canister_core::blockchain::Blockchain;
 use ic_ledger_canister_core::ledger::{self as core_ledger, LedgerData, TransactionInfo};
@@ -68,6 +69,7 @@ pub struct Ledger {
     // accounts with lowest balances are removed
     accounts_overflow_trim_quantity: usize,
     pub minting_account_id: Option<AccountIdentifier>,
+    pub minting_account_icrc1: Option<Account>,
     // This is a set of BlockIndexs that have been notified
     #[serde(default)]
     pub blocks_notified: IntMap<()>,
@@ -179,6 +181,7 @@ impl Default for Ledger {
             maximum_number_of_accounts: 28_000_000,
             accounts_overflow_trim_quantity: 100_000,
             minting_account_id: None,
+            minting_account_icrc1: None,
             blocks_notified: IntMap::new(),
             transaction_window: Duration::from_secs(24 * 60 * 60),
             transactions_by_hash: BTreeMap::new(),
@@ -269,6 +272,7 @@ impl Ledger {
         &mut self,
         initial_values: HashMap<AccountIdentifier, Tokens>,
         minting_account: AccountIdentifier,
+        minting_account_icrc1: Option<Account>,
         timestamp: TimeStamp,
         transaction_window: Option<Duration>,
         send_whitelist: HashSet<CanisterId>,
@@ -280,6 +284,7 @@ impl Ledger {
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
         self.balances.token_pool = Tokens::MAX;
         self.minting_account_id = Some(minting_account);
+        self.minting_account_icrc1 = minting_account_icrc1;
         if let Some(t) = transaction_window {
             self.transaction_window = t;
         }

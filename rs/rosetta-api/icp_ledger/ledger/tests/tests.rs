@@ -17,7 +17,8 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> InitArgs {
         .map(|(account, amount)| (account.into(), Tokens::from_e8s(amount)))
         .collect();
     InitArgs {
-        minting_account: args.minting_account.into(),
+        minting_account: args.minting_account.clone().into(),
+        minting_account_icrc1: Some(args.minting_account),
         initial_values,
         max_message_size_bytes: None,
         transaction_window: None,
@@ -42,4 +43,9 @@ fn test_metadata() {
 #[test]
 fn test_total_supply() {
     ic_icrc1_ledger_sm_tests::test_total_supply(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_minting_account() {
+    ic_icrc1_ledger_sm_tests::test_minting_account(ledger_wasm(), encode_init_args)
 }

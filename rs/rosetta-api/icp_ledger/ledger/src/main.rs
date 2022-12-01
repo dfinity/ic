@@ -53,6 +53,7 @@ use std::{
 #[allow(clippy::too_many_arguments)]
 fn init(
     minting_account: AccountIdentifier,
+    minting_account_icrc1: Option<Account>,
     initial_values: HashMap<AccountIdentifier, Tokens>,
     max_message_size_bytes: Option<usize>,
     transaction_window: Option<Duration>,
@@ -69,6 +70,7 @@ fn init(
     LEDGER.write().unwrap().from_init(
         initial_values,
         minting_account,
+        minting_account_icrc1,
         dfn_core::api::now().into(),
         transaction_window,
         send_whitelist,
@@ -432,6 +434,11 @@ fn icrc1_balance_of(acc: Account) -> Nat {
     )
 }
 
+#[candid_method(query, rename = "icrc1_minting_account")]
+fn icrc1_minting_account() -> Option<Account> {
+    LEDGER.read().unwrap().minting_account_icrc1.clone()
+}
+
 #[candid_method(query, rename = "transfer_fee")]
 fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
     LEDGER.read().unwrap().transfer_fee()
@@ -506,6 +513,7 @@ fn icrc1_decimals() -> u8 {
 fn canister_init(arg: LedgerCanisterInitPayload) {
     init(
         arg.minting_account,
+        arg.minting_account_icrc1,
         arg.initial_values,
         arg.max_message_size_bytes,
         arg.transaction_window,
@@ -884,6 +892,11 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
 #[export_name = "canister_query query_blocks"]
 fn query_blocks_() {
     over(candid_one, query_blocks)
+}
+
+#[export_name = "canister_query icrc1_minting_account"]
+fn icrc1_minting_account_candid() {
+    over(candid_one, |()| icrc1_minting_account())
 }
 
 #[export_name = "canister_query icrc1_symbol"]

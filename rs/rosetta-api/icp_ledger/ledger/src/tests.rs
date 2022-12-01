@@ -208,6 +208,7 @@ fn serialize() {
         .into_iter()
         .collect(),
         PrincipalId::new_user_test_id(1000).into(),
+        Some(PrincipalId::new_user_test_id(1000).into()),
         SystemTime::UNIX_EPOCH.into(),
         None,
         HashSet::new(),
@@ -541,6 +542,7 @@ fn get_blocks_returns_correct_blocks() {
         .into_iter()
         .collect(),
         PrincipalId::new_user_test_id(1000).into(),
+        Some(PrincipalId::new_user_test_id(1000).into()),
         SystemTime::UNIX_EPOCH.into(),
         None,
         HashSet::new(),
@@ -601,6 +603,7 @@ fn test_purge() {
         .into_iter()
         .collect(),
         PrincipalId::new_user_test_id(1000).into(),
+        Some(PrincipalId::new_user_test_id(1000).into()),
         genesis,
         Some(Duration::from_millis(10)),
         HashSet::new(),

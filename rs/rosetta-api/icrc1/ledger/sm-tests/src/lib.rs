@@ -65,6 +65,16 @@ pub fn supported_standards(env: &StateMachine, ledger: CanisterId) -> Vec<Standa
     .expect("failed to decode icrc1_supported_standards response")
 }
 
+pub fn minting_account(env: &StateMachine, ledger: CanisterId) -> Option<Account> {
+    Decode!(
+        &env.query(ledger, "icrc1_minting_account", Encode!().unwrap())
+            .expect("failed to query minting account icrc1")
+            .bytes(),
+        Option<Account>
+    )
+    .expect("failed to decode icrc1_minting_account response")
+}
+
 pub fn balance_of(env: &StateMachine, ledger: CanisterId, acc: impl Into<Account>) -> u64 {
     Decode!(
         &env.query(ledger, "icrc1_balance_of", Encode!(&acc.into()).unwrap())
@@ -245,4 +255,12 @@ where
         ],
     );
     assert_eq!(15_000_000, total_supply(&env, canister_id));
+}
+
+pub fn test_minting_account<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    assert_eq!(Some(MINTER), minting_account(&env, canister_id));
 }
