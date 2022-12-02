@@ -78,15 +78,15 @@ pub fn config_with_multiple_app_subnets(env: TestEnv) {
         .expect("failed to setup IC under test");
 }
 
-// TODO(EXC-1168): remove after cost scaling is fully implemented.
+// TODO(EXC-1168): cleanup after cost scaling is fully implemented.
 fn scale_cycles(cycles: Cycles) -> Cycles {
-    let subnet_size: u128 = match USE_COST_SCALING_FLAG {
-        true => 1, // Subnet has only a single node, see usage of `add_fast_single_node_subnet` in `config()`.
-        false => SMALL_APP_SUBNET_MAX_SIZE as u128,
-    };
-    let reference_subnet_size = SMALL_APP_SUBNET_MAX_SIZE as u128;
-
-    Cycles::from((cycles.get() * subnet_size) / reference_subnet_size)
+    match USE_COST_SCALING_FLAG {
+        false => cycles,
+        true => {
+            let subnet_size: usize = 1; // Subnet has only a single node, see usage of `add_fast_single_node_subnet` in `config()`.
+            (cycles * subnet_size) / SMALL_APP_SUBNET_MAX_SIZE
+        }
+    }
 }
 
 pub fn test(env: TestEnv) {
