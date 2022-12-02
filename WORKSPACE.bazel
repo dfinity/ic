@@ -309,7 +309,7 @@ new_git_repository(
         visibility = ["//visibility:public"]
     )""",
     commit = "4f77306bb63151631d84f58dedf67958eb9911b9",
-    remote = "git@github.com:WebAssembly/testsuite.git",
+    remote = "https://github.com/WebAssembly/testsuite.git",
 )
 
 http_archive(
