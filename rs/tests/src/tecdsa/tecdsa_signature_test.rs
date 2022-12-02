@@ -32,6 +32,7 @@ use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_ic00_types::{
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, Payload, SignWithECDSAArgs,
@@ -60,6 +61,10 @@ pub(crate) const KEY_ID2: &str = "some_other_key";
 /// The default DKG interval takes too long before the keys are created and
 /// passed to execution.
 pub(crate) const DKG_INTERVAL: u64 = 19;
+
+/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
+const USE_COST_SCALING_FLAG: bool = true;
+const NUMBER_OF_NODES: usize = 4;
 
 pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
@@ -112,14 +117,14 @@ pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(19))
-                .add_nodes(4),
+                .add_nodes(NUMBER_OF_NODES),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(4),
+                .add_nodes(NUMBER_OF_NODES),
         )
-        .with_unassigned_nodes(4)
+        .with_unassigned_nodes(NUMBER_OF_NODES as i32)
         .setup_and_start(&test_env)
         .expect("Could not start IC!");
     test_env.topology_snapshot().subnets().for_each(|subnet| {
@@ -151,19 +156,19 @@ pub fn config(test_env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(4),
+                .add_nodes(NUMBER_OF_NODES),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(4),
+                .add_nodes(NUMBER_OF_NODES),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(4),
+                .add_nodes(NUMBER_OF_NODES),
         )
-        .with_unassigned_nodes(4)
+        .with_unassigned_nodes(NUMBER_OF_NODES as i32)
         .setup_and_start(&test_env)
         .expect("Could not start IC!");
     test_env.topology_snapshot().subnets().for_each(|subnet| {
@@ -188,6 +193,16 @@ pub fn config(test_env: TestEnv) {
         .expect("Failed to install NNS canisters");
 }
 
+// TODO(EXC-1168): cleanup after cost scaling is fully implemented.
+fn scale_cycles(cycles: Cycles) -> Cycles {
+    match USE_COST_SCALING_FLAG {
+        false => cycles,
+        true => {
+            // Subnet is constructed with `NUMBER_OF_NODES`, see `config()` and `config_without_ecdsa_on_nns()`.
+            (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
+        }
+    }
+}
 struct Endpoints {
     nns_endpoint: IcEndpoint,
     app_endpoint_1: IcEndpoint,
@@ -524,7 +539,7 @@ pub fn test_threshold_ecdsa_signature_same_subnet(handle: IcHandle, ctx: &ic_fon
             .unwrap();
         let signature = get_signature(
             &message_hash,
-            ECDSA_SIGNATURE_FEE,
+            scale_cycles(ECDSA_SIGNATURE_FEE),
             make_key(KEY_ID1),
             &msg_can,
             ctx,
@@ -570,7 +585,7 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(
             .unwrap();
         let signature = get_signature(
             &message_hash,
-            ECDSA_SIGNATURE_FEE,
+            scale_cycles(ECDSA_SIGNATURE_FEE),
             make_key(KEY_ID2),
             &msg_can,
             ctx,
@@ -619,7 +634,7 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
         info!(ctx.logger, "Checking that signature request fails");
         let error = get_signature(
             &message_hash,
-            ECDSA_SIGNATURE_FEE - Cycles::from(1u64),
+            scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
             make_key(KEY_ID1),
             &msg_can,
             ctx,
@@ -632,8 +647,8 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
                 reject_code: 4,
                 reject_message: format!(
                     "sign_with_ecdsa request sent with {} cycles, but {} cycles are required.",
-                    ECDSA_SIGNATURE_FEE - Cycles::from(1u64),
-                    ECDSA_SIGNATURE_FEE,
+                    scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
+                    scale_cycles(ECDSA_SIGNATURE_FEE),
                 )
             }
         )
@@ -715,7 +730,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         assert_eq!(
             get_signature_with_logger(
                 &message_hash,
-                ECDSA_SIGNATURE_FEE,
+                scale_cycles(ECDSA_SIGNATURE_FEE),
                 make_key(KEY_ID2),
                 &msg_can,
                 log,
@@ -744,7 +759,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             .unwrap();
         let signature = get_signature_with_logger(
             &message_hash,
-            ECDSA_SIGNATURE_FEE,
+            scale_cycles(ECDSA_SIGNATURE_FEE),
             make_key(KEY_ID2),
             &msg_can,
             log,
@@ -803,7 +818,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         for _ in 0..20 {
             sig_result = get_signature_with_logger(
                 &message_hash,
-                ECDSA_SIGNATURE_FEE,
+                scale_cycles(ECDSA_SIGNATURE_FEE),
                 make_key(KEY_ID2),
                 &msg_can,
                 log,
@@ -818,7 +833,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         assert_eq!(
             get_signature_with_logger(
                 &message_hash,
-                ECDSA_SIGNATURE_FEE,
+                scale_cycles(ECDSA_SIGNATURE_FEE),
                 make_key(KEY_ID2),
                 &msg_can,
                 log,
@@ -850,7 +865,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         assert_eq!(public_key, new_public_key);
         let new_signature = get_signature_with_logger(
             &message_hash,
-            ECDSA_SIGNATURE_FEE,
+            scale_cycles(ECDSA_SIGNATURE_FEE),
             make_key(KEY_ID2),
             &msg_can,
             log,
@@ -889,7 +904,7 @@ pub fn test_threshold_ecdsa_signature_timeout(handle: IcHandle, ctx: &ic_fondue:
             .unwrap();
         let error = get_signature(
             &message_hash,
-            ECDSA_SIGNATURE_FEE,
+            scale_cycles(ECDSA_SIGNATURE_FEE),
             make_key(KEY_ID1),
             &msg_can,
             ctx,
