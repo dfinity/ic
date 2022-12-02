@@ -17,35 +17,10 @@
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
     - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
 
-.bazel-rules-pipeline:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-    - when: manual # always allow to manually run bazel job as last resort
-      allow_failure: true
-
 .rules-dependency-scan-release-cut:
   rules :
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
       when: manual
-
-.bazel-rules-post-master:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-    - if: '$SCHEDULE_NAME == "run-all-master"'
-
-.bazel-rules-test-parity:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-      changes:
-        - 'rs/**/*.rs'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-    - if: '$SCHEDULE_NAME == "run-all-master"'
 
 .cargo-rules-autorun-on-trigger:
   # References (anchors) do not work for 'rules' (yet), so we need to copy the `.cargo-rules`

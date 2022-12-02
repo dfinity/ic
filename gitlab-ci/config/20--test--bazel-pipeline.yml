@@ -1,3 +1,36 @@
+.bazel-rules-pipeline:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - when: manual # always allow to manually run bazel job as last resort
+      allow_failure: true
+
+.bazel-rules-pipeline-no-merge-train:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - when: manual # always allow to manually run bazel job as last resort
+      allow_failure: true
+
+.bazel-rules-post-master:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$SCHEDULE_NAME == "run-all-master"'
+
+.bazel-rules-test-parity:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      changes:
+        - 'rs/**/*.rs'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$SCHEDULE_NAME == "run-all-master"'
+
 .bazel-test-all:
   extends:
     - .bazel-rules-pipeline
@@ -31,6 +64,7 @@
 bazel-test-all:
   extends:
     - .bazel-test-all
+    - .bazel-rules-pipeline-no-merge-train
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going"
     BAZEL_TARGETS: "//..."
@@ -100,6 +134,7 @@ bazel-test-all-macos:
   extends:
     - .build-env-base
     - .bazel-test-all
+    - .bazel-rules-pipeline-no-merge-train
   tags:
     - macos
   variables:
