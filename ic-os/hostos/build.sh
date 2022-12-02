@@ -32,11 +32,12 @@ while getopts "p:v:" OPT; do
 done
 
 BASE_DIR=$(dirname "${BASH_SOURCE[0]}")
+TMPDIR=$(mktemp -d)
 SCRIPTS_DIR=$BASE_DIR/../scripts
 
 docker version
 
-trap "rm -rf bootloader.tar rootfs.tar cid" EXIT
+trap "rm -rf bootloader.tar rootfs.tar" EXIT
 
 VERSION=${VERSION:-$(git rev-parse HEAD)}
 echo "Set version"
@@ -48,11 +49,13 @@ $SCRIPTS_DIR/build-docker-save.sh \
     --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
     $BASE_DIR/rootfs >$BASE_DIR/rootfs.tar
 
-docker build --iidfile iidfile -q -f $BASE_DIR/build/Dockerfile $BASE_DIR/.. 2>&1
-IMAGE_ID=$(cat iidfile | cut -d':' -f2)
+docker build --iidfile $TMPDIR/iidfile -q -f $BASE_DIR/build/Dockerfile $BASE_DIR/.. 2>&1
+IMAGE_ID=$(cat $TMPDIR/iidfile | cut -d':' -f2)
 
-docker run -h builder --cidfile cid --privileged $IMAGE_ID
-CONTAINER_ID=$(cat cid)
+docker run -h builder --cidfile $TMPDIR/cid --privileged $IMAGE_ID
+CONTAINER_ID=$(cat $TMPDIR/cid)
 docker cp $CONTAINER_ID:/ic-os/disk-img.tar.gz disk-img.tar.gz
 docker cp $CONTAINER_ID:/ic-os/update-img.tar.gz update-img.tar.gz
 docker rm $CONTAINER_ID
+
+rm -rf $TMPDIR

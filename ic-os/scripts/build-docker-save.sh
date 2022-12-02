@@ -5,6 +5,8 @@
 #
 # Arguments to this script are passed verbatim to "docker build".
 
+TMPDIR=$(mktemp -d)
+
 # We implicitly pull dependent image.
 ARGS=(--pull)
 if [ "${CI_JOB_NAME:-}" == "docker-build-ic"* ]; then
@@ -13,8 +15,10 @@ if [ "${CI_JOB_NAME:-}" == "docker-build-ic"* ]; then
 fi
 
 echo "docker build ${ARGS[@]} $@" >&2
-docker build --iidfile iidfile "${ARGS[@]}" "$@" >&2
-IMAGE_ID=$(cat iidfile | cut -d':' -f2)
+docker build --iidfile $TMPDIR/iidfile "${ARGS[@]}" "$@" >&2
+IMAGE_ID=$(cat $TMPDIR/iidfile | cut -d':' -f2)
 
-docker save "$IMAGE_ID" -o "$IMAGE_ID.tar"
-cat "$IMAGE_ID.tar"
+docker save "$IMAGE_ID" -o "$TMPDIR/$IMAGE_ID.tar"
+cat "$TMPDIR/$IMAGE_ID.tar"
+
+rm -rf $TMPDIR
