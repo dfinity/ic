@@ -1,3 +1,5 @@
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
@@ -26,4 +28,21 @@ alias(
 alias(
     name = "rustfmt",
     actual = "@rules_rust//:rustfmt",
+)
+
+# See https://github.com/bazelbuild/bazel-gazelle#running-gazelle-with-bazel
+# gazelle:prefix github.com/dfinity/ic
+# gazelle:proto disable
+gazelle(
+    name = "gazelle",
+)
+
+gazelle(
+    name = "gazelle-update-repos",
+    args = [
+        "-from_file=go.mod",
+        "-to_macro=go_deps.bzl%go_dependencies",
+        "-prune",
+    ],
+    command = "update-repos",
 )

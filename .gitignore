@@ -116,6 +116,8 @@ scalability/results/
 # Bazel outdir dirs
 /bazel-*
 bazel-build-log.json
+bazel-bep.pb
+bazel-bep.txt
 user.bazelrc
 
 # Visual Studio Code

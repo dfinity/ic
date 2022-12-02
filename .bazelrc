@@ -31,7 +31,9 @@ build --remote_timeout=30s # Defauilt is 60s.
 build:ci --remote_timeout=5m # Defauilt is 60s.
 
 
+# Does not produce valid JSON. See https://github.com/bazelbuild/bazel/issues/14209
 build --execution_log_json_file=bazel-build-log.json
+build --build_event_binary_file=bazel-bep.pb
 
 build --bes_results_url=https://dash.buildfarm.dfinity.systems/invocation/
 build --bes_backend=bes.buildfarm.dfinity.systems
