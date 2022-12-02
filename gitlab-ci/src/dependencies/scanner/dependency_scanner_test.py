@@ -1,5 +1,4 @@
 import datetime
-import os
 import typing
 from unittest.mock import Mock
 from unittest.mock import patch
@@ -206,24 +205,6 @@ def test_on_merge_request_changes_to_dependency_files_but_not_external_crates(ji
     sub2.on_scan_job_failed.assert_not_called()
 
 
-def test_on_merge_request_changes_to_dependency_files_but_modified_packages(jira_lib_mock):
-    sub1 = Mock()
-    sub2 = Mock()
-    fake_bazel = Mock()
-    fake_bazel.has_dependencies_changed.return_value = {"external_crates_bzl": True, "cargo_lock_toml": True}
-    fake_bazel.get_modified_packages.return_value = []
-    scanner_job = BazelICScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-
-    scanner_job.on_merge_request_scan()
-    fake_bazel.get_modified_packages.assert_called_once()
-    fake_bazel.get_dependency_diff.assert_called_once()
-    fake_bazel.get_findings.assert_not_called()
-    sub1.on_scan_job_succeeded.assert_called_once()
-    sub2.on_scan_job_succeeded.assert_called_once()
-    sub1.on_scan_job_failed.assert_not_called()
-    sub2.on_scan_job_failed.assert_not_called()
-
-
 def test_on_merge_request_changes_no_findings(jira_lib_mock):
     sub1 = Mock()
     sub2 = Mock()
@@ -335,7 +316,6 @@ def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(git
 
 @patch("scanner.gitlab_comment.GitlabComment.comment_on_gitlab")
 def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gitlab_comment_mock, jira_lib_mock):
-    os.environ["CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"] = "vsekar/test"
     scanner = "BAZEL_IC"
     repository = "ic"
     sub1 = Mock()
@@ -364,7 +344,11 @@ def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gitl
     jira_lib_mock.commit_has_block_exception.return_value = None
     scanner_job = BazelICScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.on_merge_request_scan()
+    with pytest.raises(SystemExit) as e:
+        scanner_job.on_merge_request_scan()
+    assert e.type == SystemExit
+    assert e.value.code == 1
+
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()

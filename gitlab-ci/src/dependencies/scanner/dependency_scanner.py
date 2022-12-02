@@ -2,6 +2,7 @@ import abc
 import datetime
 import logging
 import os
+import sys
 import traceback
 import typing
 
@@ -59,7 +60,7 @@ class BazelICScanner(DependencyScanner):
             modified_packages = self.dependency_manager.get_modified_packages()
             dependency_diff = self.dependency_manager.get_dependency_diff()
 
-            if not dependency_changes["external_crates_bzl"] or not modified_packages:
+            if not dependency_changes["external_crates_bzl"]:
                 return
 
             # developer has added made changes to dependencies.
@@ -102,16 +103,15 @@ class BazelICScanner(DependencyScanner):
                     dep for dep in temp_first_level_dependencies if dep in dependency_diff
                 ]
 
-            # TODO : Remove after testing
-            branch_name = os.environ.get("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME", "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME")
-            if branch_name.startswith("tmu") or branch_name.startswith("vsekar"):
-                gitlab_comment = GitlabComment(job_type=ScannerJobType.MERGE_SCAN)
-                gitlab_comment.comment_on_gitlab(info=findings_to_flag)
+            gitlab_comment = GitlabComment(job_type=ScannerJobType.MERGE_SCAN)
+            gitlab_comment.comment_on_gitlab(info=findings_to_flag)
 
             merge_request_id = os.environ.get("CI_MERGE_REQUEST_IID", "CI_MERGE_REQUEST_IID")
             for subscriber in self.subscribers:
                 subscriber.on_merge_request_blocked(self.job_id, merge_request_id)
             logging.error(f"There were new findings in the MR and no exceptions were granted. {findings_to_flag}")
+
+            sys.exit(1)
         except Exception as err:
             should_fail_job = True
             logging.error(
@@ -120,13 +120,9 @@ class BazelICScanner(DependencyScanner):
             for subscriber in self.subscribers:
                 subscriber.on_scan_job_failed(ScannerJobType.MERGE_SCAN, self.job_id, str(err))
         finally:
-            # TODO : for now, the job would log the new findings in the console
-            # Once tested enough, we can start failing the jobs
             if not should_fail_job:
                 for subscriber in self.subscribers:
                     subscriber.on_scan_job_succeeded(ScannerJobType.MERGE_SCAN, self.job_id)
-            # else :
-            #   sys.exit(1)
 
     def on_periodic_scan(self):
         try:

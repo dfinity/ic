@@ -8,7 +8,8 @@ dependencies-check:
     # fail even if it has successfully passed. 
   extends: 
     - .ubuntu-docker-k8s
-    - .rules-prs-only
+  rules :
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
   needs: []  # don't wait on other jobs
   stage: test
   variables: 
