@@ -296,7 +296,7 @@ function assemble_and_populate_image() {
         "${TMP_DIR}/version.txt:/boot/version.txt:0644" \
         "${BASE_DIR}/bootloader/extra_boot_args:/boot/extra_boot_args:0644"
 
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-root.tar" -s 1750M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" \
+    "${TOOL_DIR}"/build_ext4_image.py --strip-paths /run /boot -o "${TMP_DIR}/partition-root.tar" -s 1750M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" \
         "${TMP_DIR}/version.txt:/opt/ic/share/version.txt:0644"
 
     "${TOOL_DIR}"/build_disk_image.py -o "${TMP_DIR}/disk.img.tar" -p "${BASE_DIR}/scripts/partitions.csv" \
