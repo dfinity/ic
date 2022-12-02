@@ -33,7 +33,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// Please also keep this in sync with the PROMETHEUS_VM_DISK_IMG_SHA256 variable in:
 /// /scalability/common/farm.py.
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "209b6e695adcea30edf70910abfd5f93d4462ca1eaa91774c8bd1c7f02f07e4d";
+    "877d80e66e5827e7d59c441254ede0e916f5950742fac71bdba1e3dd882bb51d";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
