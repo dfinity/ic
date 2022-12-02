@@ -137,10 +137,6 @@ xnet-test = { path = "../rust_canisters/xnet_test" }
 ic-agent = "=0.22.0"
 ic-utils = "=0.22.0"
 
-[[bin]]
-name = "system-tests"
-path = "src/main.rs"
-
 [lib]
 name = "ic_tests"
 path = "src/lib.rs"

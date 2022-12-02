@@ -35,7 +35,6 @@ STRIP_BINARIES = {
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
     "sns": "//rs/sns/cli:sns",
     "state-tool": "//rs/state_tool:state-tool",
-    "system-tests": "//rs/tests:system-tests",
     "vector-config-generator": "//rs/vector_config_generator:vector_config_generator",
     "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
     "log-scraper": "//rs/log_scraper:log_scraper",

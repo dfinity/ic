@@ -52,7 +52,6 @@ RUST_BINARIES = [
     "sandbox_launcher",
     "sns",
     "state-tool",
-    "system-tests",
     "vsock_agent",
 ]
 

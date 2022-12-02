@@ -166,15 +166,6 @@ rust_library(
 )
 
 rust_binary(
-    name = "system-tests",
-    srcs = ["src/main.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    deps = DEPENDENCIES + [":tests"],
-)
-
-rust_binary(
     name = "prod-test-driver",
     srcs = ["bin/prod_test_driver.rs"],
     aliases = ALIASES,
