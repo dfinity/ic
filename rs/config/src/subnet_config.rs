@@ -118,6 +118,7 @@ pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
+/// IMPORTANT: never set this value to zero.
 const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 
 /// Costs for each newly created dirty page in stable memory.

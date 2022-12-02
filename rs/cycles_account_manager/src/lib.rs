@@ -923,4 +923,22 @@ mod tests {
             Cycles::new(std::u128::MAX) / reference_subnet_size
         );
     }
+
+    #[test]
+    fn test_reference_subnet_size_is_not_zero() {
+        // `reference_subnet_size` is used to scale cost according to a subnet size.
+        // It should never be equal to zero.
+        assert_ne!(
+            CyclesAccountManagerConfig::application_subnet().reference_subnet_size,
+            0
+        );
+        assert_ne!(
+            CyclesAccountManagerConfig::verified_application_subnet().reference_subnet_size,
+            0
+        );
+        assert_ne!(
+            CyclesAccountManagerConfig::system_subnet().reference_subnet_size,
+            0
+        );
+    }
 }
