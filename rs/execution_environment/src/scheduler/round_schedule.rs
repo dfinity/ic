@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
-use ic_types::LongExecutionMode;
+use ic_types::{AccumulatedPriority, ComputeAllocation, LongExecutionMode};
 
 /// Round metrics required to prioritize a canister.
 #[derive(Clone, Debug)]
@@ -11,9 +11,9 @@ pub(super) struct CanisterRoundState {
     /// Copy of Canister ID
     pub(super) canister_id: CanisterId,
     /// Copy of Canister SchedulerState::accumulated_priority
-    pub(super) accumulated_priority: i64,
+    pub(super) accumulated_priority: AccumulatedPriority,
     /// Copy of Canister SchedulerState::compute_allocation
-    pub(super) compute_allocation: i64,
+    pub(super) compute_allocation: ComputeAllocation,
     /// Copy of Canister SchedulerState::long_execution_mode
     pub(super) long_execution_mode: LongExecutionMode,
     /// True when there is an aborted or paused long update execution.

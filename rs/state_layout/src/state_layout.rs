@@ -1302,7 +1302,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             last_full_execution_round: item.last_full_execution_round.get(),
             call_context_manager: item.call_context_manager.as_ref().map(|v| v.into()),
             compute_allocation: item.compute_allocation.as_percent(),
-            accumulated_priority: item.accumulated_priority.value(),
+            accumulated_priority: item.accumulated_priority.get(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
             memory_allocation: item.memory_allocation.bytes().get(),
             freeze_threshold: item.freeze_threshold.get(),

@@ -155,17 +155,16 @@ impl SchedulerImpl {
                 canister.scheduler_state.long_execution_mode = LongExecutionMode::Opportunistic;
             }
 
-            let compute_allocation =
-                canister.scheduler_state.compute_allocation.as_percent() as i64;
+            let compute_allocation = canister.scheduler_state.compute_allocation;
             round_states.push(CanisterRoundState {
                 canister_id,
-                accumulated_priority: canister.scheduler_state.accumulated_priority.value(),
+                accumulated_priority: canister.scheduler_state.accumulated_priority,
                 compute_allocation,
                 long_execution_mode: canister.scheduler_state.long_execution_mode,
                 has_aborted_or_paused_execution,
             });
 
-            total_compute_allocation += compute_allocation;
+            total_compute_allocation += compute_allocation.as_percent() as i64;
         }
         // DTS Scheduler: (Always ensure 𝚺RCi <= N * 100 - 1)
         debug_assert!(total_compute_allocation < compute_capacity);
@@ -180,11 +179,12 @@ impl SchedulerImpl {
         let mut total_long_executions = 0;
         for rs in round_states.iter_mut() {
             // De-facto compute allocation includes bonus allocation
-            let factual = rs.compute_allocation * multiplier + free_capacity_per_canister;
+            let factual =
+                rs.compute_allocation.as_percent() as i64 * multiplier + free_capacity_per_canister;
             let canister = canister_states.get_mut(&rs.canister_id).unwrap();
             // DTS Scheduler: round priority = accumulated priority + ACi
-            rs.accumulated_priority += factual;
-            canister.scheduler_state.accumulated_priority = rs.accumulated_priority.into();
+            rs.accumulated_priority += factual.into();
+            canister.scheduler_state.accumulated_priority = rs.accumulated_priority;
             if rs.has_aborted_or_paused_execution {
                 long_executions_compute_allocation += factual;
                 total_long_executions += 1;
@@ -225,10 +225,8 @@ impl SchedulerImpl {
                 // When handling top canisters, decrease their priority by
                 // `multiplier * capacity / scheduler_cores`
                 // DTS Scheduler: postpone the decrease until the end of the round.
-                canister_state.scheduler_state.priority_credit =
-                    (canister_state.scheduler_state.priority_credit.value()
-                        + compute_capacity * multiplier / active_cores as i64)
-                        .into();
+                canister_state.scheduler_state.priority_credit +=
+                    (compute_capacity * multiplier / active_cores as i64).into();
                 if i < round_schedule.long_execution_cores {
                     canister_state.scheduler_state.long_execution_mode =
                         LongExecutionMode::Prioritized;
@@ -1057,8 +1055,8 @@ impl SchedulerImpl {
                 if canister.has_paused_execution() {
                     Some(CanisterRoundState {
                         canister_id: canister.canister_id(),
-                        accumulated_priority: canister.scheduler_state.accumulated_priority.value(),
-                        compute_allocation: 0, // not used
+                        accumulated_priority: canister.scheduler_state.accumulated_priority,
+                        compute_allocation: Default::default(), // not used
                         long_execution_mode: canister.scheduler_state.long_execution_mode,
                         has_aborted_or_paused_execution: true,
                     })

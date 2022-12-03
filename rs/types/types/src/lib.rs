@@ -218,28 +218,8 @@ pub type NumPages = AmountOf<NumPagesTag, u64>;
 /// where a canister is scheduled and incremented by the canister allocation in
 /// each round where the canister is not scheduled.
 // Note [Scheduler and AccumulatedPriority]
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct AccumulatedPriority(i64);
-
-impl AccumulatedPriority {
-    pub fn value(self) -> i64 {
-        self.0
-    }
-}
-
-// The initial accumulated priority is 0.
-#[allow(clippy::derivable_impls)]
-impl Default for AccumulatedPriority {
-    fn default() -> Self {
-        AccumulatedPriority(0)
-    }
-}
-
-impl From<i64> for AccumulatedPriority {
-    fn from(value: i64) -> Self {
-        AccumulatedPriority(value)
-    }
-}
+pub enum AccumulatedPriorityTag {}
+pub type AccumulatedPriority = AmountOf<AccumulatedPriorityTag, i64>;
 
 #[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash)]
 /// Type to track how much budget the IC can spend on executing queries on
