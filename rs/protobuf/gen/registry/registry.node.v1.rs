@@ -1,5 +1,7 @@
 /// A connection endpoint.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConnectionEndpoint {
     /// The IP address. Senders SHOULD use dotted-quad notation for IPv4 addresses
     /// and RFC5952 representation for IPv6 addresses (which means that IPv6
@@ -19,19 +21,9 @@ pub struct ConnectionEndpoint {
 }
 /// Nested message and enum types in `ConnectionEndpoint`.
 pub mod connection_endpoint {
-    #[derive(
-        serde::Serialize,
-        serde::Deserialize,
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration,
-    )]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Protocol {
         Unspecified = 0,
@@ -54,7 +46,9 @@ pub mod connection_endpoint {
         }
     }
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlowEndpoint {
     /// The flow identifier (tag). This has to be unique per NodeRecord.
     #[prost(uint32, tag = "1")]
@@ -64,7 +58,9 @@ pub struct FlowEndpoint {
     pub endpoint: ::core::option::Option<ConnectionEndpoint>,
 }
 /// A node: one machine running a replica instance.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRecord {
     /// The endpoint where this node receives xnet messages.
     #[prost(message, optional, tag = "5")]

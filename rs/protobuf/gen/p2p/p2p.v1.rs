@@ -1,11 +1,15 @@
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GossipMessage {
     #[prost(oneof = "gossip_message::Body", tags = "1, 2, 3, 5")]
     pub body: ::core::option::Option<gossip_message::Body>,
 }
 /// Nested message and enum types in `GossipMessage`.
 pub mod gossip_message {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Body {
         #[prost(message, tag = "1")]
         Advert(super::GossipAdvert),
@@ -17,7 +21,9 @@ pub mod gossip_message {
         RetransmissionRequest(super::ArtifactFilter),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GossipAdvert {
     #[prost(bytes = "vec", tag = "1")]
     pub attribute: ::prost::alloc::vec::Vec<u8>,
@@ -28,7 +34,9 @@ pub struct GossipAdvert {
     #[prost(bytes = "vec", tag = "4")]
     pub integrity_hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GossipChunkRequest {
     #[prost(bytes = "vec", tag = "1")]
     pub artifact_id: ::prost::alloc::vec::Vec<u8>,
@@ -37,7 +45,9 @@ pub struct GossipChunkRequest {
     #[prost(bytes = "vec", tag = "3")]
     pub integrity_hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ArtifactFilter {
     #[prost(message, optional, tag = "1")]
     pub consensus_filter: ::core::option::Option<ConsensusMessageFilter>,
@@ -48,27 +58,37 @@ pub struct ArtifactFilter {
     #[prost(message, optional, tag = "4")]
     pub state_sync_filter: ::core::option::Option<StateSyncFilter>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusMessageFilter {
     #[prost(uint64, tag = "1")]
     pub height: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressMessageFilter {
     #[prost(uint64, tag = "1")]
     pub time: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationMessageFilter {
     #[prost(uint64, tag = "1")]
     pub height: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StateSyncFilter {
     #[prost(uint64, tag = "1")]
     pub height: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GossipChunk {
     #[prost(bytes = "vec", tag = "1")]
     pub artifact_id: ::prost::alloc::vec::Vec<u8>,
@@ -81,7 +101,9 @@ pub struct GossipChunk {
 }
 /// Nested message and enum types in `GossipChunk`.
 pub mod gossip_chunk {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Response {
         #[prost(message, tag = "3")]
         Chunk(super::ArtifactChunk),
@@ -89,7 +111,9 @@ pub mod gossip_chunk {
         Error(i32),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ArtifactChunk {
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub witnesses: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
@@ -98,7 +122,9 @@ pub struct ArtifactChunk {
 }
 /// Nested message and enum types in `ArtifactChunk`.
 pub mod artifact_chunk {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Data {
         /// TODO(P2P-483): bincode-encoded Artifact to proto-encoding
         #[prost(bytes, tag = "2")]
@@ -107,19 +133,9 @@ pub mod artifact_chunk {
         Chunk(::prost::alloc::vec::Vec<u8>),
     }
 }
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum P2pError {
     Unspecified = 0,

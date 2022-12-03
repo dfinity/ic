@@ -938,7 +938,7 @@ const MAX_KEY: [u8; KEY_SIZE] = [0xff; KEY_SIZE];
 /// Makes a key from a height and a hash (in Vec<u8> form).
 fn make_key(height: u64, hash: &[u8]) -> Vec<u8> {
     let mut key = Vec::with_capacity(KEY_SIZE);
-    key.extend(&height.to_be_bytes());
+    key.extend(height.to_be_bytes());
     key.extend(hash);
     key
 }

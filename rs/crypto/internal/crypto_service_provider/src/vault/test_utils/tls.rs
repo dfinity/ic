@@ -202,7 +202,7 @@ pub fn should_fail_to_sign_if_secret_key_not_found(csp_vault: Arc<dyn CspVault>)
     let result = csp_vault.tls_sign(b"message", &non_existent_key_id);
 
     assert_eq!(
-        result.unwrap_err(),
+        result.expect_err("Unexpected success."),
         CspTlsSignError::SecretKeyNotFound {
             key_id: non_existent_key_id
         }
@@ -218,7 +218,7 @@ pub fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Arc<
     let result = csp_vault.tls_sign(&msg, &KeyId::from(&wrong_csp_pub_key));
 
     assert_eq!(
-        result.unwrap_err(),
+        result.expect_err("Unexpected success."),
         CspTlsSignError::WrongSecretKeyType {
             algorithm: AlgorithmId::Tls,
             secret_key_variant: "Ed25519".to_string()
@@ -233,7 +233,7 @@ pub fn should_fail_to_sign_if_secret_key_in_store_has_invalid_encoding(
     assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
     let result = csp_vault.tls_sign(&random_message(), &key_id);
     assert_eq!(
-        result.unwrap_err(),
+        result.expect_err("Unexpected success."),
         CspTlsSignError::MalformedSecretKey {
             error: "Failed to convert TLS secret key DER from key store to OpenSSL private key"
                 .to_string()
@@ -247,7 +247,7 @@ pub fn should_fail_to_sign_if_secret_key_in_store_has_invalid_length(
 ) {
     let result = csp_vault.tls_sign(&random_message(), &key_id);
     assert_eq!(
-        result.unwrap_err(),
+        result.expect_err("Unexpected success."),
         CspTlsSignError::MalformedSecretKey {
             error: "Invalid length of raw OpenSSL private key: expected 32 bytes, but got 57"
                 .to_string()

@@ -141,7 +141,7 @@ fn should_fail_convert_pubkey_nodeid_bad_bytes() {
     let result = derive_node_id(&bad_proto_key);
 
     assert!(matches!(
-        result.unwrap_err(),
+        result.expect_err("Unexpected success."),
         InvalidNodePublicKey::MalformedRawBytes { internal_error: _ }
     ));
 }

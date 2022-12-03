@@ -121,7 +121,7 @@ pub fn should_not_multi_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn Cs
             assert_eq!(
                 csp_vault
                     .multi_sign(algorithm_id, &msg, key_id)
-                    .unwrap_err(),
+                    .expect_err("Unexpected success."),
                 CspMultiSignatureError::UnsupportedAlgorithm {
                     algorithm: algorithm_id,
                 }
@@ -143,7 +143,7 @@ pub fn should_not_multi_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Ar
     );
 
     assert_eq!(
-        result.unwrap_err(),
+        result.expect_err("Unexpected success."),
         CspMultiSignatureError::WrongSecretKeyType {
             algorithm: AlgorithmId::MultiBls12_381,
             secret_key_variant: "Ed25519".to_string()

@@ -103,9 +103,9 @@ impl Scalar {
     /// Create a scalar from a small integer value
     pub fn from_i32(v: i32) -> Self {
         if v < 0 {
-            Self::from_u64((v as i64).abs() as u64).neg()
+            Self::from_u64((v as i64).unsigned_abs()).neg()
         } else {
-            Self::from_u64(v.abs() as u64)
+            Self::from_u64(v.unsigned_abs() as u64)
         }
     }
 
@@ -117,9 +117,9 @@ impl Scalar {
     /// Create a scalar from a small integer value
     pub fn from_isize(v: isize) -> Self {
         if v < 0 {
-            Self::from_u64((v as i64).abs() as u64).neg()
+            Self::from_u64((v as i64).unsigned_abs()).neg()
         } else {
-            Self::from_u64(v.abs() as u64)
+            Self::from_u64(v.unsigned_abs() as u64)
         }
     }
 

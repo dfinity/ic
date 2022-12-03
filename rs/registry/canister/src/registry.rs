@@ -734,9 +734,9 @@ mod tests {
     fn test_count_fitting_deltas() {
         let mut registry = Registry::new();
 
-        let mutation1 = upsert(&[90; 50], &[1; 50]);
-        let mutation2 = upsert(&[90; 100], &[1; 100]);
-        let mutation3 = upsert(&[89; 200], &[1; 200]);
+        let mutation1 = upsert([90; 50], [1; 50]);
+        let mutation2 = upsert([90; 100], [1; 100]);
+        let mutation3 = upsert([89; 200], [1; 200]);
 
         for mutation in [&mutation1, &mutation2, &mutation3] {
             assert_empty!(apply_mutations_skip_invariant_checks(
@@ -769,9 +769,9 @@ mod tests {
 
         let max_value = vec![0; max_mutation_value_size(version, key)];
 
-        let mutation1 = upsert(&[90; 50], &[1; 50]);
+        let mutation1 = upsert([90; 50], [1; 50]);
         let mutation2 = upsert(key, &max_value);
-        let mutation3 = upsert(&[89; 200], &[1; 200]);
+        let mutation3 = upsert([89; 200], [1; 200]);
 
         for mutation in [&mutation1, &mutation2, &mutation3] {
             assert_empty!(apply_mutations_skip_invariant_checks(

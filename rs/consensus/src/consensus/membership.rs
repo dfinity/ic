@@ -290,7 +290,7 @@ pub mod test {
                     .filter(|node| {
                         matches!(
                             Membership::get_block_maker_rank_from_shuffled_nodes(
-                                *node,
+                                node,
                                 &subnet_members,
                             ),
                             Ok(Some(_))

@@ -144,7 +144,7 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
 
             retry(self.logger(), SCP_RETRY_TIMEOUT, SCP_RETRY_BACKOFF, || {
                 let mut remote_file = session.scp_send(to, 0o644, size, None)?;
-                let mut from_file = File::open(&from)?;
+                let mut from_file = File::open(from)?;
                 std::io::copy(&mut from_file, &mut remote_file)?;
                 Ok(())
             })

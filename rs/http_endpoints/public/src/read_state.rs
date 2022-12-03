@@ -328,12 +328,10 @@ async fn verify_paths(
 fn parse_canister_id(canister_id: &[u8]) -> Result<CanisterId, HttpError> {
     match CanisterId::try_from(canister_id) {
         Ok(canister_id) => Ok(canister_id),
-        Err(err) => {
-            return Err(HttpError {
-                status: StatusCode::BAD_REQUEST,
-                message: format!("Could not parse Canister ID: {}.", err),
-            })
-        }
+        Err(err) => Err(HttpError {
+            status: StatusCode::BAD_REQUEST,
+            message: format!("Could not parse Canister ID: {}.", err),
+        }),
     }
 }
 

@@ -320,7 +320,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
 
     Rt::print("[archive] calling install_code()");
 
-    let () = spawn::install_code::<Rt>(
+    spawn::install_code::<Rt>(
         node_canister_id,
         Wasm::archive_wasm().into_owned(),
         Encode!(

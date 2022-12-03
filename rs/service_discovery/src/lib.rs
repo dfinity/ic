@@ -9,6 +9,7 @@
 //! * `node_exporter`      -> 9100
 //! * `orchestrator`       -> 9091
 //! * `replica`            -> 9090
+#![allow(clippy::await_holding_lock, clippy::result_large_err)]
 use std::{
     collections::{btree_map::Entry, BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
@@ -513,7 +514,7 @@ mod tests {
             .map(|g| g.targets.iter().next().unwrap().to_string())
             .collect();
 
-        let expected_nns_targets: HashSet<_> = (&[
+        let expected_nns_targets: HashSet<_> = [
             "[2001:920:401a:1706:5000:87ff:fe11:a9a0]:9090",
             "[2001:920:401a:1708:5000:4fff:fe92:48f1]:9090",
             "[2001:920:401a:1708:5000:5fff:fec1:9ddb]:9090",
@@ -551,10 +552,10 @@ mod tests {
             "[2a04:9dc0:0:108:5000:96ff:fe4a:be10]:9090",
             "[2a0f:cd00:2:1:5000:3fff:fe36:cab8]:9090",
             "[2a0f:cd00:2:1:5000:87ff:fe58:ceba]:9090",
-        ])
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        ]
+        .iter()
+        .map(ToString::to_string)
+        .collect();
 
         assert_eq!(nns_targets.len(), 37);
         assert_eq!(nns_targets, expected_nns_targets);

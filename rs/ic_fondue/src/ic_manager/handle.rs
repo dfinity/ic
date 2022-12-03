@@ -197,8 +197,7 @@ impl<'a> IcEndpoint {
             &response
                 .bytes()
                 .await
-                .expect("failed to convert a response to bytes")
-                .to_vec(),
+                .expect("failed to convert a response to bytes"),
         )
         .expect("response is not encoded as cbor");
         let status = serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response)

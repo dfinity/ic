@@ -1,6 +1,10 @@
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusUnknown {}
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusProcessing {
     #[prost(message, optional, tag = "1")]
     pub user_id: ::core::option::Option<super::super::super::types::v1::UserId>,
@@ -9,7 +13,9 @@ pub struct IngressStatusProcessing {
     #[prost(message, optional, tag = "3")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusReceived {
     #[prost(message, optional, tag = "1")]
     pub user_id: ::core::option::Option<super::super::super::types::v1::UserId>,
@@ -18,7 +24,9 @@ pub struct IngressStatusReceived {
     #[prost(message, optional, tag = "3")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusCompleted {
     #[prost(message, optional, tag = "1")]
     pub user_id: ::core::option::Option<super::super::super::types::v1::UserId>,
@@ -31,7 +39,9 @@ pub struct IngressStatusCompleted {
 }
 /// Nested message and enum types in `IngressStatusCompleted`.
 pub mod ingress_status_completed {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum WasmResult {
         #[prost(bytes, tag = "2")]
         Reply(::prost::alloc::vec::Vec<u8>),
@@ -39,7 +49,9 @@ pub mod ingress_status_completed {
         Reject(::prost::alloc::string::String),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusFailed {
     #[prost(message, optional, tag = "1")]
     pub user_id: ::core::option::Option<super::super::super::types::v1::UserId>,
@@ -52,7 +64,9 @@ pub struct IngressStatusFailed {
     #[prost(message, optional, tag = "5")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusDone {
     #[prost(message, optional, tag = "1")]
     pub user_id: ::core::option::Option<super::super::super::types::v1::UserId>,
@@ -61,21 +75,27 @@ pub struct IngressStatusDone {
     #[prost(message, optional, tag = "3")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PruningEntry {
     #[prost(uint64, tag = "1")]
     pub time_nanos: u64,
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub messages: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatus {
     #[prost(oneof = "ingress_status::Status", tags = "1, 2, 3, 4, 5, 6")]
     pub status: ::core::option::Option<ingress_status::Status>,
 }
 /// Nested message and enum types in `IngressStatus`.
 pub mod ingress_status {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Status {
         #[prost(message, tag = "1")]
         Unknown(super::IngressStatusUnknown),
@@ -91,14 +111,18 @@ pub mod ingress_status {
         Done(super::IngressStatusDone),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusEntry {
     #[prost(bytes = "vec", tag = "1")]
     pub message_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "2")]
     pub status: ::core::option::Option<IngressStatus>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressHistoryState {
     #[prost(message, repeated, tag = "1")]
     pub statuses: ::prost::alloc::vec::Vec<IngressStatusEntry>,
@@ -109,7 +133,9 @@ pub struct IngressHistoryState {
     #[prost(uint64, tag = "3")]
     pub next_terminal_time: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Ingress {
     #[prost(message, optional, tag = "1")]
     pub source: ::core::option::Option<super::super::super::types::v1::UserId>,

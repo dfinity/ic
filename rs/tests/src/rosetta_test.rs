@@ -3528,7 +3528,7 @@ fn create_neuron(id: u64) -> Neuron {
 fn rosetta_cli_construction_check(env: &TestEnv, conf_file: &str) {
     let rosetta_cli = rosetta_cli_bin_path(env);
     let output = std::process::Command::new("timeout")
-        .args(&[
+        .args([
             "300s",
             &rosetta_cli,
             "check:construction",
@@ -3554,7 +3554,7 @@ fn rosetta_cli_construction_check(env: &TestEnv, conf_file: &str) {
 fn rosetta_cli_data_check(env: &TestEnv, conf_file: &str) {
     let rosetta_cli = rosetta_cli_bin_path(env);
     let output = std::process::Command::new("timeout")
-        .args(&[
+        .args([
             "300s",
             &rosetta_cli,
             "check:data",

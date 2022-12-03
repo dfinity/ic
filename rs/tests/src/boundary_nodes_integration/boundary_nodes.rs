@@ -1477,7 +1477,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
 
             let Status {
                 replica_health_status,
-            } = serde_cbor::from_slice::<Status>(&body.to_vec())?;
+            } = serde_cbor::from_slice::<Status>(&body)?;
 
             if replica_health_status != "healthy" {
                 bail!("{name} failed: status check failed: {replica_health_status}")
@@ -1810,7 +1810,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
 
             let Status {
                 replica_health_status,
-            } = serde_cbor::from_slice::<Status>(&body.to_vec())?;
+            } = serde_cbor::from_slice::<Status>(&body)?;
 
             if replica_health_status != "healthy" {
                 bail!("{name} failed: status check failed: {replica_health_status}")

@@ -76,7 +76,7 @@ fn parse_x509_v3_certificate(
     if !remainder.is_empty() {
         return Err(invalid_tls_certificate_error(format!(
             "DER not fully consumed when parsing. Remainder: 0x{}",
-            hex::encode(&remainder)
+            hex::encode(remainder)
         )));
     }
     if x509_cert.version() != X509Version::V3 {
@@ -177,7 +177,7 @@ fn single_cn_as_str<'a>(name: &'a X509Name<'_>) -> Result<&'a str, String> {
         .ok_or("missing common name (CN)")?
         .as_str()
         .map_err(|e| format!("common name (CN) not a string: {:?}", e))?;
-    if cn_iter.next() != None {
+    if cn_iter.next().is_some() {
         return Err("found second common name (CN) entry, but expected a single one".to_string());
     }
     Ok(first_cn_str)

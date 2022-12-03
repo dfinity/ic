@@ -133,7 +133,7 @@ impl From<RequestResultMetadata> for Object {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct RequestResultMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]

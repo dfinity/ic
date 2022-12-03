@@ -1011,7 +1011,7 @@ impl ExecutionEnvironment {
         };
 
         let round = RoundContext {
-            network_topology: &*network_topology,
+            network_topology: &network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
             execution_refund_error_counter: self.metrics.execution_cycles_refund_error_counter(),
@@ -1338,7 +1338,7 @@ impl ExecutionEnvironment {
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
         let round = RoundContext {
-            network_topology: &*network_topology,
+            network_topology: &network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
             execution_refund_error_counter: self.metrics.execution_cycles_refund_error_counter(),
@@ -2202,12 +2202,12 @@ impl ExecutionEnvironment {
     /// For testing purposes only.
     #[doc(hidden)]
     pub fn hypervisor_for_testing(&self) -> &Hypervisor {
-        &*self.hypervisor
+        &self.hypervisor
     }
 
     #[doc(hidden)]
     pub fn clear_compilation_cache_for_testing(&self) {
-        (&*self.hypervisor).clear_compilation_cache_for_testing()
+        (*self.hypervisor).clear_compilation_cache_for_testing()
     }
 }
 

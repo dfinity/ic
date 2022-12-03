@@ -66,8 +66,8 @@ where
 
         // Construct Query
         let q = redis::pipe()
-            .set(format!("registration:{id}:crt"), &certificate_chain)
-            .set(format!("registration:{id}:key"), &private_key)
+            .set(format!("registration:{id}:crt"), certificate_chain)
+            .set(format!("registration:{id}:key"), private_key)
             .to_owned();
 
         // Execute Query

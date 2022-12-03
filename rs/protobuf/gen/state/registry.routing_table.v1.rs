@@ -1,4 +1,5 @@
 /// Represents a closed range of canister ids.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterIdRange {
     #[prost(message, optional, tag = "3")]
@@ -7,12 +8,14 @@ pub struct CanisterIdRange {
     pub end_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
 }
 /// A list of closed ranges of canister Ids.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterIdRanges {
     #[prost(message, repeated, tag = "1")]
     pub ranges: ::prost::alloc::vec::Vec<CanisterIdRange>,
 }
 /// Maps a closed range of canister Ids to a subnet id.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RoutingTable {
     /// Defined as `repeated` instead of `map` in order to preserve ordering.
@@ -21,6 +24,7 @@ pub struct RoutingTable {
 }
 /// Nested message and enum types in `RoutingTable`.
 pub mod routing_table {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Entry {
         #[prost(message, optional, tag = "1")]
@@ -30,6 +34,7 @@ pub mod routing_table {
     }
 }
 /// In-progress canister migrations.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterMigrations {
     /// Defined as `repeated` instead of `map` in order to preserve ordering.
@@ -43,6 +48,7 @@ pub mod canister_migrations {
     /// The canisters in `range` are being sequentially migrated between the subnet
     /// IDs in the list (usually only two, i.e. `A -> B`; but not necessarily, e.g.
     /// `A -> B -> C` or even `A -> B -> A`).
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Entry {
         /// Canister ID range being migrated.

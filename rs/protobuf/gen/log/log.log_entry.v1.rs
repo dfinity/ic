@@ -1,4 +1,6 @@
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogEntry {
     #[prost(string, tag = "1")]
     pub level: ::prost::alloc::string::String,

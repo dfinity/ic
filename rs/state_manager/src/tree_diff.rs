@@ -61,8 +61,8 @@ impl From<&HashTree> for RoseHashTree {
                     right_tree,
                     ..
                 } => {
-                    collect_children(&*left_tree, children);
-                    collect_children(&*right_tree, children);
+                    collect_children(left_tree, children);
+                    collect_children(right_tree, children);
                 }
             }
         }

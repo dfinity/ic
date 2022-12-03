@@ -231,7 +231,7 @@ pub fn is_called_in_query(env: TestEnv) {
                 .on_reply(
                     wasm()
                         .stable_read(0, 1)
-                        .trap_if_eq(&[0], "")
+                        .trap_if_eq([0], "")
                         .stable_read(0, 1)
                         .append_and_reply(),
                 )

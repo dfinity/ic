@@ -79,14 +79,14 @@ impl AdapterMetricsRegistry {
                     a.scrape(timeout).then(move |adapter_metrics| async move {
                         match adapter_metrics {
                             Ok(m) => {
-                                let _ = scrape_metrics
+                                scrape_metrics
                                     .with_label_values(&[&adapter_name, "success"])
                                     .observe(now.elapsed().as_secs_f64());
                                 m
                             }
                             Err(err) => {
                                 // Avoid panic if we can't get metric.
-                                let _ = scrape_metrics
+                                scrape_metrics
                                     .with_label_values(&[&adapter_name, &err.code().to_string()])
                                     .observe(now.elapsed().as_secs_f64());
                                 Vec::new()

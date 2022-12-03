@@ -25,14 +25,14 @@ thread_local! {
 }
 
 // A pending retrieve btc request
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetrieveBtcRequest {
     pub amount: u64,
     pub address: BitcoinAddress,
     pub block_index: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubmittedBtcRetrieval {
     /// The original retrieve_btc request that initiated the transaction.
     pub request: RetrieveBtcRequest,
@@ -44,7 +44,7 @@ pub struct SubmittedBtcRetrieval {
     pub submitted_at: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FinalizedBtcRetrieval {
     /// The original retrieve_btc request that initiated the transaction.
     pub request: RetrieveBtcRequest,
@@ -52,7 +52,7 @@ pub struct FinalizedBtcRetrieval {
     pub state: FinalizedStatus,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FinalizedStatus {
     /// The request amount was to low to cover the fees.
     AmountTooLow,
@@ -63,13 +63,13 @@ pub enum FinalizedStatus {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InFlightStatus {
     Signing,
     Sending { txid: [u8; 32] },
 }
 
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Deserialize)]
+#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
 pub enum RetrieveBtcStatus {
     Unknown,
     Pending,
@@ -208,7 +208,7 @@ impl CkBtcMinterState {
         if let Some(txid) = self
             .submitted_requests
             .iter()
-            .find_map(|req| (req.request.block_index == block_index).then(|| req.txid))
+            .find_map(|req| (req.request.block_index == block_index).then_some(req.txid))
         {
             return RetrieveBtcStatus::Submitted { txid };
         }

@@ -570,12 +570,12 @@ impl LedgerAccess for Access {
 
     fn with_ledger<R>(f: impl FnOnce(&Self::Ledger) -> R) -> R {
         let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
-        f(&*ledger_guard)
+        f(&ledger_guard)
     }
 
     fn with_ledger_mut<R>(f: impl FnOnce(&mut Self::Ledger) -> R) -> R {
         let mut ledger = LEDGER.write().expect("Failed to get ledger write lock");
-        f(&mut *ledger)
+        f(&mut ledger)
     }
 }
 

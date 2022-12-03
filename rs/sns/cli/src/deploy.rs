@@ -380,7 +380,7 @@ fn should_save_canister_ids() {
     );
     // ... verify that writing to an empty file dumps the data without modification
     let file = NamedTempFile::new().unwrap();
-    SnsWasmSnsDeployer::merge_into_json_file(&file.path(), &new_canisters_json)
+    SnsWasmSnsDeployer::merge_into_json_file(file.path(), &new_canisters_json)
         .expect("Failed to save changes to file");
     let file_content =
         serde_json::from_reader(&mut BufReader::new(file.reopen().unwrap())).unwrap();

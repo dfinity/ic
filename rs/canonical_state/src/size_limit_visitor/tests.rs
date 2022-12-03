@@ -40,10 +40,10 @@ fn traverse_streams<V: Visitor>(
         named_subtree(v, "streams", |v| {
             for i in 0..stream_count {
                 named_subtree(v, i.to_string(), |v| {
-                    named_blob(v, "header", &[b'H', i as u8])?;
+                    named_blob(v, "header", [b'H', i as u8])?;
                     named_subtree(v, "messages", |v| {
                         for j in 0..msg_count {
-                            named_blob(v, j.to_string(), &[b'M', i as u8, j as u8])?;
+                            named_blob(v, j.to_string(), [b'M', i as u8, j as u8])?;
                         }
                         Ok(())
                     })

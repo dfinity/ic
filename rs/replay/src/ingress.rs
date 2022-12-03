@@ -179,7 +179,7 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
     ];
 
     for (principal, neuron_id) in trusted_neurons {
-        let principal = PrincipalId::from_str(*principal).expect("Invalid principal");
+        let principal = PrincipalId::from_str(principal).expect("Invalid principal");
         let follow_payload = Encode!(&ManageNeuron {
             id: None,
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {

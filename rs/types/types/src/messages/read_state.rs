@@ -9,7 +9,7 @@ use maplit::btreemap;
 use std::convert::TryFrom;
 
 /// A `read_state` request sent from the user.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReadState {
     pub source: UserId,
     pub paths: Vec<Path>,

@@ -129,7 +129,7 @@ impl std::cmp::Ord for Utxo {
 }
 
 /// A filter used when requesting UTXOs.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub enum UtxosFilter {
     MinConfirmations(u32),
     Page(Page),
@@ -149,7 +149,7 @@ impl From<UtxosFilterInRequest> for UtxosFilter {
 /// A UtxosFilter enum that allows both upper and lowercase variants.
 /// Supporting both variants allows us to be compatible with the spec (lowercase)
 /// while not breaking current dapps that are using uppercase variants.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub enum UtxosFilterInRequest {
     MinConfirmations(u32),
     #[allow(non_camel_case_types)]
@@ -160,7 +160,7 @@ pub enum UtxosFilterInRequest {
 }
 
 /// A request for getting the UTXOs for a given address.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct GetUtxosRequest {
     pub address: Address,
     pub network: NetworkInRequest,
@@ -168,7 +168,7 @@ pub struct GetUtxosRequest {
 }
 
 /// The response returned for a request to get the UTXOs of a given address.
-#[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct GetUtxosResponse {
     pub utxos: Vec<Utxo>,
     pub tip_block_hash: BlockHash,
@@ -177,7 +177,7 @@ pub struct GetUtxosResponse {
 }
 
 /// Errors when processing a `get_utxos` request.
-#[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq, Clone)]
 pub enum GetUtxosError {
     MalformedAddress,
     MinConfirmationsTooLarge { given: u32, max: u32 },
@@ -186,7 +186,7 @@ pub enum GetUtxosError {
 }
 
 /// A request for getting the current fee percentiles.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct GetCurrentFeePercentilesRequest {
     pub network: NetworkInRequest,
 }
@@ -218,14 +218,14 @@ impl std::fmt::Display for GetUtxosError {
     }
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct GetBalanceRequest {
     pub address: Address,
     pub network: NetworkInRequest,
     pub min_confirmations: Option<u32>,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq, Clone)]
 pub enum GetBalanceError {
     MalformedAddress,
     MinConfirmationsTooLarge { given: u32, max: u32 },
@@ -248,14 +248,14 @@ impl std::fmt::Display for GetBalanceError {
     }
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct SendTransactionRequest {
     #[serde(with = "serde_bytes")]
     pub transaction: Vec<u8>,
     pub network: NetworkInRequest,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub enum SendTransactionError {
     /// Can't deserialize transaction.
     MalformedTransaction,

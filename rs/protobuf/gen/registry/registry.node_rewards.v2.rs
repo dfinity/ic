@@ -1,7 +1,7 @@
 /// The reward rate for a node
-#[derive(
-    candid::CandidType, serde::Serialize, candid::Deserialize, Clone, PartialEq, ::prost::Message,
-)]
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRewardRate {
     /// The number of 10,000ths of IMF SDR (currency code XDR) to be rewarded per
     /// node per month.
@@ -9,9 +9,9 @@ pub struct NodeRewardRate {
     pub xdr_permyriad_per_node_per_month: u64,
 }
 /// The reward rates for a set of node types
-#[derive(
-    candid::CandidType, serde::Serialize, candid::Deserialize, Clone, PartialEq, ::prost::Message,
-)]
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRewardRates {
     /// Maps node types to the reward rate for that node type
     #[prost(btree_map = "string, message", tag = "1")]
@@ -19,9 +19,9 @@ pub struct NodeRewardRates {
         ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, NodeRewardRate>,
 }
 /// Contains the node reward rates for each region where IC nodes are operated
-#[derive(
-    candid::CandidType, serde::Serialize, candid::Deserialize, Clone, PartialEq, ::prost::Message,
-)]
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRewardsTable {
     /// Maps regions to the node reward rates in that region
     #[prost(btree_map = "string, message", tag = "1")]
@@ -29,9 +29,9 @@ pub struct NodeRewardsTable {
         ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, NodeRewardRates>,
 }
 /// The payload of a proposal to update the node rewards table
-#[derive(
-    candid::CandidType, serde::Serialize, candid::Deserialize, Clone, PartialEq, ::prost::Message,
-)]
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateNodeRewardsTableProposalPayload {
     /// Maps regions to the node reward rates in that region
     #[prost(btree_map = "string, message", tag = "1")]

@@ -63,7 +63,7 @@ impl std::fmt::Display for BitcoinStateError {
 
 /// Represents the queues for requests to and responses from the Bitcoin Adapter.
 /// See `ic_protobuf::bitcoin::v1` for documentation of the fields.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdapterQueues {
     next_callback_id: u64,
     requests: BTreeMap<u64, BitcoinAdapterRequest>,
@@ -138,7 +138,7 @@ impl AdapterQueues {
 
 /// The Bitcoin network's UTXO set.
 /// See `ic_btc_canister::state` for more documentation.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UtxoSet {
     /// PageMap storing all the UTXOs that are small in size.
     pub utxos_small: PageMap,
@@ -399,7 +399,7 @@ impl TryFrom<pb_bitcoin::UnstableBlocks> for UnstableBlocks {
 /// Cache for storing last calculated fee percentiles
 ///
 /// Stores last tip block hash and fee percentiles associated with it.
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct FeePercentilesCache {
     pub tip_block_hash: BlockHash,
     pub fee_percentiles: Vec<MillisatoshiPerByte>,

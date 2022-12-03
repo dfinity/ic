@@ -8,7 +8,7 @@ use serde_json::Value;
 use crate::models::operation::{Operation, OperationType};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TransactionOperationResults {
     pub operations: Vec<Operation>,
 }

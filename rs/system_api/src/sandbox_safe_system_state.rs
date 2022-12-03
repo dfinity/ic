@@ -594,6 +594,7 @@ impl SandboxSafeSystemState {
         result
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn push_output_request(
         &mut self,
         canister_current_memory_usage: NumBytes,

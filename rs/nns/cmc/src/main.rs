@@ -138,7 +138,7 @@ struct State {
 
 impl State {
     fn encode(&self) -> Vec<u8> {
-        candid::encode_one(&self).unwrap()
+        candid::encode_one(self).unwrap()
     }
 
     fn decode(bytes: &[u8]) -> Result<Self, String> {
@@ -1495,12 +1495,10 @@ async fn create_canister(
                 .expect("subnet types to subnets mapping is not `None`");
             match subnet_types_to_subnets.get(&subnet_type) {
                 Some(s) => Ok(s.iter().copied().collect()),
-                None => {
-                    return Err(format!(
-                        "Provided subnet type {} does not exist",
-                        subnet_type
-                    ))
-                }
+                None => Err(format!(
+                    "Provided subnet type {} does not exist",
+                    subnet_type
+                )),
             }
         }),
         None => Ok(get_subnets_for(&controller_id)),

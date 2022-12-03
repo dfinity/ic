@@ -68,8 +68,7 @@ async fn install_random_canister(
     effective_canister_id: PrincipalId,
     canister_path: &Path,
 ) -> Principal {
-    let random_canister: Vec<u8> =
-        fs::read(&canister_path).expect("could not load random canister");
+    let random_canister: Vec<u8> = fs::read(canister_path).expect("could not load random canister");
 
     let mgr = ManagementCanister::create(agent);
     let cid = mgr

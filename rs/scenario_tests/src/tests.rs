@@ -171,11 +171,7 @@ pub async fn cleanup(canisters: Vec<CanisterLocator<'_>>, delete_canister_retrie
         )
         .await;
 
-        refunded
-            .into_iter()
-            .filter(|x| x.is_ok())
-            .map(|x| x.unwrap())
-            .collect()
+        refunded.into_iter().filter_map(|x| x.ok()).collect()
     } else {
         canisters.iter().map(|locator| locator.canister()).collect()
     };
@@ -191,8 +187,7 @@ pub async fn cleanup(canisters: Vec<CanisterLocator<'_>>, delete_canister_retrie
     let _: Vec<Result<Canister, String>> = parallel_async(
         canisters
             .into_iter()
-            .filter(|x| x.is_ok())
-            .map(|x| x.unwrap())
+            .filter_map(|x| x.ok())
             .collect::<Vec<Canister>>(),
         |canister| delete_canister(canister, delete_canister_retries),
         |i, res| print_error("Deleting canister", i, res),

@@ -805,7 +805,7 @@ pub struct UniversalCanister {
     pub canister_id: CanisterId,
 }
 
-impl<'a> UniversalCanister {
+impl UniversalCanister {
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
     }

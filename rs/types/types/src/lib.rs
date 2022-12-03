@@ -431,7 +431,7 @@ fn display_canister_id() {
 }
 
 /// Represents Canister timer.
-#[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum CanisterTimer {
     /// The canister timer is not set.
     Inactive,

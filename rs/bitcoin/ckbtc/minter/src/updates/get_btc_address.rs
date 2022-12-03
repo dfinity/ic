@@ -8,7 +8,7 @@ use ic_ic00_types::{ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, Ecds
 use ic_icrc1::{Account, Subaccount};
 use serde::Serialize;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GetBtcAddressArgs {
     pub subaccount: Option<Subaccount>,
 }

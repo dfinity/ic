@@ -257,6 +257,7 @@ pub enum IngressHistoryError {
 }
 
 /// Interface for reading the history of ingress messages.
+#[allow(clippy::type_complexity)]
 pub trait IngressHistoryReader: Send + Sync {
     /// Returns a function that can be used to query the status for a given
     /// `message_id` using the latest execution state.

@@ -1,5 +1,7 @@
 /// Combined threshold signature.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ThresholdSignature {
     #[prost(bytes = "vec", tag = "1")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
@@ -7,13 +9,17 @@ pub struct ThresholdSignature {
     pub signer: ::core::option::Option<super::super::super::types::v1::NiDkgId>,
 }
 /// State tree root hash.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationContent {
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// Certification of state tree root hash.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Certification {
     #[prost(uint64, tag = "1")]
     pub height: u64,
@@ -23,7 +29,9 @@ pub struct Certification {
     pub signature: ::core::option::Option<ThresholdSignature>,
 }
 /// XNet stream slice with certification and matching Merkle proof.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertifiedStreamSlice {
     /// Serialized part of the state tree containing the stream data.
     #[prost(bytes = "vec", tag = "1")]

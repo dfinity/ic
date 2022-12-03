@@ -219,11 +219,11 @@ impl InternetComputer {
         let has_malicious_nodes: bool = self
             .subnets
             .iter()
-            .any(|s| s.nodes.iter().any(|n| n.malicious_behaviour != None));
+            .any(|s| s.nodes.iter().any(|n| n.malicious_behaviour.is_some()));
         let has_malicious_unassigned_nodes = self
             .unassigned_nodes
             .iter()
-            .any(|n| n.malicious_behaviour != None);
+            .any(|n| n.malicious_behaviour.is_some());
         has_malicious_nodes || has_malicious_unassigned_nodes
     }
 

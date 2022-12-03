@@ -110,7 +110,7 @@ fn wasm_compilation(c: &mut Criterion) {
 
 fn wasm_deserialization(c: &mut Criterion) {
     // Enable using less threads for the rayon wasm compilation.
-    let _result = rayon::ThreadPoolBuilder::new()
+    rayon::ThreadPoolBuilder::new()
         .num_threads(EmbeddersConfig::default().num_rayon_compilation_threads)
         .build_global()
         .unwrap_or_else(|err| {
@@ -145,7 +145,7 @@ fn wasm_deserialization(c: &mut Criterion) {
 
 fn wasm_validation_instrumentation(c: &mut Criterion) {
     // Enable using less threads for the rayon wasm compilation.
-    let _result = rayon::ThreadPoolBuilder::new()
+    rayon::ThreadPoolBuilder::new()
         .num_threads(EmbeddersConfig::default().num_rayon_compilation_threads)
         .build_global()
         .unwrap_or_else(|err| {

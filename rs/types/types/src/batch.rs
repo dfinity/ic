@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto};
 
 /// The `Batch` provided to Message Routing for deterministic processing.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Batch {
     /// The sequence number attached to the batch.
     pub batch_number: Height,
@@ -104,6 +104,7 @@ impl BatchPayload {
     /// Extract and return the set of ingress and xnet messages in a
     /// BatchPayload.
     /// Return error if deserialization of ingress payload fails.
+    #[allow(clippy::result_large_err)]
     pub fn into_messages(self) -> Result<BatchMessages, InvalidIngressPayload> {
         Ok((
             self.ingress.try_into()?,

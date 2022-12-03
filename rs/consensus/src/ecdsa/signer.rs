@@ -449,7 +449,7 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
         stats: &dyn EcdsaStats,
     ) -> Option<ThresholdEcdsaCombinedSignature> {
         let start = std::time::Instant::now();
-        let ret = ThresholdEcdsaSigVerifier::combine_sig_shares(&*self.crypto, inputs, shares);
+        let ret = ThresholdEcdsaSigVerifier::combine_sig_shares(self.crypto, inputs, shares);
         stats.record_sig_share_aggregation(request_id, start.elapsed());
 
         ret.map_or_else(

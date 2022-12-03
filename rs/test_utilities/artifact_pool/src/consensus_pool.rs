@@ -25,6 +25,7 @@ use ic_types::{consensus::*, crypto::*, *};
 use std::sync::Arc;
 use std::sync::RwLock;
 
+#[allow(clippy::type_complexity)]
 pub struct TestConsensusPool {
     registry_client: Arc<dyn RegistryClient>,
     pool: ConsensusPoolImpl,
@@ -126,6 +127,7 @@ impl<'a> Round<'a> {
 }
 
 // Return a closure building DKG payloads. Used in tests only.
+#[allow(clippy::type_complexity)]
 fn dkg_payload_builder_fn(
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
@@ -464,10 +466,9 @@ impl TestConsensusPool {
                 add_catch_up_package_if_needed = false;
             }
             block.rank = Rank(i as u64);
-            match certfied_height {
-                Some(height) => block.context.certified_height = height,
-                None => (),
-            };
+            if let Some(height) = certfied_height {
+                block.context.certified_height = height;
+            }
             let block_proposal = BlockProposal::fake(
                 block.clone(),
                 node_test_id((*rand_num.next().unwrap() % max_replicas as usize) as u64),

@@ -567,7 +567,7 @@ impl RoutingTable {
     pub fn ranges(&self, subnet_id: SubnetId) -> CanisterIdRanges {
         let ranges = CanisterIdRanges(
             self.iter()
-                .filter_map(|(range, sid)| (*sid == subnet_id).then(|| *range))
+                .filter_map(|(range, sid)| (*sid == subnet_id).then_some(*range))
                 .collect(),
         );
         debug_assert_eq!(ranges.well_formed(), Ok(()));

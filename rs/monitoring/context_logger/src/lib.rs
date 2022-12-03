@@ -1,7 +1,7 @@
 pub mod macros;
 
 /// Metadata about the log entry
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogMetadata {
     pub level: slog::Level,
     pub module_path: &'static str,

@@ -527,7 +527,7 @@ pub fn create_payload(
         return create_summary_payload(
             subnet_id,
             registry_client,
-            &*crypto,
+            crypto,
             pool_reader,
             last_dkg_summary,
             parent,

@@ -36,7 +36,7 @@ const CONF_IMG_FNAME: &str = "config_disk.img";
 const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
 
 fn mk_compressed_img_path() -> std::string::String {
-    return format!("{}.gz", CONF_IMG_FNAME);
+    format!("{}.gz", CONF_IMG_FNAME)
 }
 
 pub fn init_ic(

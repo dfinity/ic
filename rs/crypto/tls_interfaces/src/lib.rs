@@ -459,7 +459,7 @@ impl SomeOrAllNodes {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// An authenticated Node ID
 pub enum AuthenticatedPeer {
     /// Authenticated Node ID

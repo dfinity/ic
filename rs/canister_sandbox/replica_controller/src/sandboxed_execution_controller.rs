@@ -561,7 +561,7 @@ impl WasmExecutor for SandboxedExecutionController {
         // Ensure that Wasm is compiled.
         let (wasm_id, compilation_result) = match open_wasm(
             &sandbox_process,
-            &*execution_state.wasm_binary,
+            &execution_state.wasm_binary,
             compilation_cache,
             &self.metrics,
         ) {
@@ -768,7 +768,7 @@ impl WasmExecutor for SandboxedExecutionController {
         observe_metrics(&self.metrics, &serialized_module.imports_details);
 
         cache_opened_wasm(
-            &mut *wasm_binary.embedder_cache.lock().unwrap(),
+            &mut wasm_binary.embedder_cache.lock().unwrap(),
             &sandbox_process,
             wasm_id,
         );
@@ -1267,21 +1267,21 @@ fn open_wasm(
                 .0
             {
                 Ok((compilation_result, serialized_module)) => {
-                    cache_opened_wasm(&mut *embedder_cache, sandbox_process, wasm_id);
+                    cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
                     observe_metrics(metrics, &serialized_module.imports_details);
                     compilation_cache.insert(&wasm_binary.binary, Ok(Arc::new(serialized_module)));
                     Ok((wasm_id, Some(compilation_result)))
                 }
                 Err(err) => {
                     compilation_cache.insert(&wasm_binary.binary, Err(err.clone()));
-                    cache_errored_wasm(&mut *embedder_cache, err.clone());
+                    cache_errored_wasm(&mut embedder_cache, err.clone());
                     Err(err)
                 }
             }
         }
         Some(Err(err)) => {
             metrics.inc_cache_lookup(COMPILATION_CACHE_HIT_COMPILATION_ERROR);
-            cache_errored_wasm(&mut *embedder_cache, err.clone());
+            cache_errored_wasm(&mut embedder_cache, err.clone());
             Err(err)
         }
         Some(Ok(serialized_module)) => {
@@ -1297,7 +1297,7 @@ fn open_wasm(
                     serialized_module: Arc::clone(&serialized_module.bytes),
                 })
                 .on_completion(|_| ());
-            cache_opened_wasm(&mut *embedder_cache, sandbox_process, wasm_id);
+            cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
             Ok((wasm_id, None))
         }
     }

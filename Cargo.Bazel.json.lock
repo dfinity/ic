@@ -1,5 +1,5 @@
 {
-  "checksum": "462fb32f17106cf1af0500a34d686cf636e10f20a63dffc7aa2a065d1bfeeadf",
+  "checksum": "7e395de3a6f08f61997137b500c7921c074bace4827873db1efebcdd2992eb6d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2376,7 +2376,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -2487,13 +2487,13 @@
       },
       "license": "MIT"
     },
-    "async-trait 0.1.58": {
+    "async-trait 0.1.59": {
       "name": "async-trait",
-      "version": "0.1.58",
+      "version": "0.1.59",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/async-trait/0.1.58/download",
-          "sha256": "1e805d94e6b5001b651426cf4cd446b1ab5f319d27bab5c644f61de0a804360c"
+          "url": "https://crates.io/api/v1/crates/async-trait/0.1.59/download",
+          "sha256": "31e6e93155431f3931513b243d371981bb2770112b370c82745a1d19d2f99364"
         }
       },
       "targets": [
@@ -2530,7 +2530,7 @@
         "deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "build_script_build"
             },
             {
@@ -2549,7 +2549,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.58"
+        "version": "0.1.59"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -2826,7 +2826,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -2836,13 +2836,13 @@
       },
       "license": "MIT"
     },
-    "axum 0.6.0": {
+    "axum 0.6.1": {
       "name": "axum",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum/0.6.0/download",
-          "sha256": "744864363a200a5e724a7e61bc8c11b6628cf2e3ec519c8a1a48e609a8156b40"
+          "url": "https://crates.io/api/v1/crates/axum/0.6.1/download",
+          "sha256": "08b108ad2665fa3f6e6a517c3d80ec3e77d224c47d605167aefaa5d7ef97fa48"
         }
       },
       "targets": [
@@ -2879,7 +2879,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.6.0",
+              "id": "axum 0.6.1",
               "target": "build_script_build"
             },
             {
@@ -2915,7 +2915,7 @@
               "target": "itoa"
             },
             {
-              "id": "matchit 0.6.0",
+              "id": "matchit 0.7.0",
               "target": "matchit"
             },
             {
@@ -2965,13 +2965,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
           "selects": {}
         },
-        "version": "0.6.0"
+        "version": "0.6.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -3054,7 +3054,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -3145,7 +3145,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -7436,13 +7436,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.0.27": {
+    "clap 4.0.28": {
       "name": "clap",
-      "version": "4.0.27",
+      "version": "4.0.28",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.0.27/download",
-          "sha256": "0acbd8d28a0a60d7108d7ae850af6ba34cf2d1257fc646980e5f97ce14275966"
+          "url": "https://crates.io/api/v1/crates/clap/4.0.28/download",
+          "sha256": "f94eecf2f2d0e0220737d9e6d8530da1e903b97dde58ebaf749262e85ce133c9"
         }
       },
       "targets": [
@@ -7497,7 +7497,7 @@
               "target": "clap_lex"
             },
             {
-              "id": "is-terminal 0.4.0",
+              "id": "is-terminal 0.4.1",
               "target": "is_terminal"
             },
             {
@@ -7525,7 +7525,7 @@
           ],
           "selects": {}
         },
-        "version": "4.0.27"
+        "version": "4.0.28"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -7874,7 +7874,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -12150,7 +12150,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.0.27",
+              "id": "clap 4.0.28",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -13082,7 +13082,7 @@
               "target": "async_recursion"
             },
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             },
             {
@@ -19150,7 +19150,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -19780,7 +19780,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             },
             {
@@ -21307,13 +21307,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "is-terminal 0.4.0": {
+    "is-terminal 0.4.1": {
       "name": "is-terminal",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/is-terminal/0.4.0/download",
-          "sha256": "aae5bc6e2eb41c9def29a3e0f1306382807764b9b53112030eff57435667352d"
+          "url": "https://crates.io/api/v1/crates/is-terminal/0.4.1/download",
+          "sha256": "927609f78c2913a6f6ac3c27a4fe87f43e2a35367c0c4b0f8265e8f49a104330"
         }
       },
       "targets": [
@@ -21343,9 +21343,9 @@
             }
           ],
           "selects": {
-            "cfg(not(any(windows, target_os = \"hermit\")))": [
+            "cfg(not(any(windows, target_os = \"hermit\", target_os = \"unknown\")))": [
               {
-                "id": "rustix 0.36.3",
+                "id": "rustix 0.36.4",
                 "target": "rustix"
               }
             ],
@@ -21364,7 +21364,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       "license": "MIT"
     },
@@ -24936,13 +24936,13 @@
       },
       "license": "MIT"
     },
-    "matchit 0.6.0": {
+    "matchit 0.7.0": {
       "name": "matchit",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/matchit/0.6.0/download",
-          "sha256": "3dfc802da7b1cf80aefffa0c7b2f77247c8b32206cc83c270b61264f5b360a80"
+          "url": "https://crates.io/api/v1/crates/matchit/0.7.0/download",
+          "sha256": "b87248edafb776e59e6ee64a79086f65890d3510f2c656c000bf2a7e8a0aea40"
         }
       },
       "targets": [
@@ -24967,8 +24967,8 @@
         "crate_features": [
           "default"
         ],
-        "edition": "2018",
-        "version": "0.6.0"
+        "edition": "2021",
+        "version": "0.7.0"
       },
       "license": "MIT"
     },
@@ -29118,7 +29118,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -29228,7 +29228,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -29561,7 +29561,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -35494,7 +35494,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             }
           ],
@@ -37494,13 +37494,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "rustix 0.36.3": {
+    "rustix 0.36.4": {
       "name": "rustix",
-      "version": "0.36.3",
+      "version": "0.36.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustix/0.36.3/download",
-          "sha256": "0b1fbb4dfc4eb1d390c02df47760bb19a84bb80b301ecc947ab5406394d8223e"
+          "url": "https://crates.io/api/v1/crates/rustix/0.36.4/download",
+          "sha256": "cb93e85278e08bb5788653183213d3a60fc242b10cb9be96586f5a73dcb67c23"
         }
       },
       "targets": [
@@ -37553,7 +37553,7 @@
               "target": "io_lifetimes"
             },
             {
-              "id": "rustix 0.36.3",
+              "id": "rustix 0.36.4",
               "target": "build_script_build"
             }
           ],
@@ -37594,7 +37594,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.36.3"
+        "version": "0.36.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -45647,7 +45647,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.6.0",
+              "id": "axum 0.6.1",
               "target": "axum"
             },
             {
@@ -45738,7 +45738,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             },
             {
@@ -46874,7 +46874,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.58",
+              "id": "async-trait 0.1.59",
               "target": "async_trait"
             },
             {
@@ -48265,18 +48265,6 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -48291,6 +48279,18 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -52627,7 +52627,7 @@
     "cc 1.0.77",
     "cddl 0.9.1",
     "clap 3.2.23",
-    "clap 4.0.27",
+    "clap 4.0.28",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
@@ -52980,7 +52980,7 @@
       "x86_64-unknown-freebsd",
       "x86_64-unknown-linux-gnu"
     ],
-    "cfg(not(any(windows, target_os = \"hermit\")))": [
+    "cfg(not(any(windows, target_os = \"hermit\", target_os = \"unknown\")))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
@@ -52996,7 +52996,6 @@
       "powerpc-unknown-linux-gnu",
       "riscv32imc-unknown-none-elf",
       "s390x-unknown-linux-gnu",
-      "wasm32-unknown-unknown",
       "wasm32-wasi",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",

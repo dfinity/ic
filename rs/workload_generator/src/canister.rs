@@ -113,7 +113,7 @@ pub(crate) async fn install_canister(
     let bytes = if let Some(wasm_file_path) = wasm_file_path {
         // Buffer to store bytes of the canister code
         let mut bytes_buffer = Vec::new();
-        let mut f = File::open(&wasm_file_path).map_err(|err| {
+        let mut f = File::open(wasm_file_path).map_err(|err| {
             format!(
                 "Failed to open canister file: {:?} - try running from the rs directory. {}",
                 wasm_file_path, err

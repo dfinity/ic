@@ -29,7 +29,7 @@ use ic_types::{
 use ic_validator::{validate_request, RequestValidationError};
 use std::{collections::BTreeMap, sync::Arc};
 
-impl<'a> IngressSelector for IngressManager {
+impl IngressSelector for IngressManager {
     fn get_ingress_payload(
         &self,
         past_ingress: &dyn IngressSetQuery,

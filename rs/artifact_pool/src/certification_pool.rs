@@ -286,7 +286,7 @@ impl GossipPool<CertificationMessage, ChangeSet> for CertificationPoolImpl {
         match &id.hash {
             CertificationMessageHash::CertificationShare(hash) => self
                 .shares_at_height(id.height)
-                .find(|share| &crypto_hash(&*share) == hash)
+                .find(|share| &crypto_hash(share) == hash)
                 .map(CertificationMessage::CertificationShare),
             CertificationMessageHash::Certification(hash) => {
                 self.certification_at_height(id.height).and_then(|cert| {

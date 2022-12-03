@@ -146,14 +146,14 @@ fn decode_governance_stable_memory(gov_pb: PathBuf, output: &Path, rs: &Path) {
     let mut cmd_base = std::process::Command::new("protoc");
     let cmd = cmd_base
         // -I: where to find included protos (transitively)
-        .args(&["-I", "nns/governance/proto"])
-        .args(&["-I", "rosetta-api/icp_ledger/proto"])
-        .args(&["-I", "types/base_types/proto"])
-        .args(&["-I", "nns/common/proto"])
+        .args(["-I", "nns/governance/proto"])
+        .args(["-I", "rosetta-api/icp_ledger/proto"])
+        .args(["-I", "types/base_types/proto"])
+        .args(["-I", "nns/common/proto"])
         // Main arg: the main proto file
         .arg("nns/governance/proto/ic_nns_governance/pb/v1/governance.proto")
         // the actual command
-        .args(&["--decode", "ic_nns_governance.pb.v1.Governance"])
+        .args(["--decode", "ic_nns_governance.pb.v1.Governance"])
         .current_dir(rs)
         .stdin(File::open(gov_pb.clone()).unwrap())
         .stdout(File::create(output.join("governance_stable_memory.textproto")).unwrap());
@@ -225,15 +225,15 @@ fn decode_gtc_stable_memory(gtc_pb: PathBuf, output: &Path, rs: &Path) {
     let mut cmd_base = std::process::Command::new("protoc");
     let cmd = cmd_base
         // -I: where to find included protos (transitively)
-        .args(&["-I", "nns/governance/proto"])
-        .args(&["-I", "rosetta-api/icp_ledger/proto"])
-        .args(&["-I", "types/base_types/proto"])
-        .args(&["-I", "nns/common/proto"])
-        .args(&["-I", "nns/gtc/proto"])
+        .args(["-I", "nns/governance/proto"])
+        .args(["-I", "rosetta-api/icp_ledger/proto"])
+        .args(["-I", "types/base_types/proto"])
+        .args(["-I", "nns/common/proto"])
+        .args(["-I", "nns/gtc/proto"])
         // Main arg: the main proto file
         .arg("nns/gtc/proto/ic_nns_gtc/pb/v1/gtc.proto")
         // the actual command
-        .args(&["--decode", "ic_nns_gtc.pb.v1.Gtc"])
+        .args(["--decode", "ic_nns_gtc.pb.v1.Gtc"])
         .current_dir(rs)
         .stdin(File::open(gtc_pb.clone()).unwrap())
         .stdout(File::create(output.join("gtc_stable_memory.textproto")).unwrap());

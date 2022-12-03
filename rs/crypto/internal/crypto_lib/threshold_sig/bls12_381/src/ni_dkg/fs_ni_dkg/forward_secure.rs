@@ -750,12 +750,7 @@ fn is_prefix(xs: &[Bit], ys: &[Bit]) -> bool {
 }
 
 fn find_prefix<'a>(dks: &'a SecretKey, tau: &[Bit]) -> Option<&'a BTENode> {
-    for node in dks.bte_nodes.iter() {
-        if is_prefix(&node.tau, tau) {
-            return Some(node);
-        }
-    }
-    None
+    dks.bte_nodes.iter().find(|&node| is_prefix(&node.tau, tau))
 }
 
 /// Error while decrypting

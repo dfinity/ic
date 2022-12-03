@@ -560,13 +560,7 @@ struct WithEmpty<T>(T);
 #[async_trait]
 impl<T: Persist> Persist for WithEmpty<T> {
     async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error> {
-        if rt
-            .subnets
-            .iter()
-            .filter(|&s| !(*s).nodes.is_empty())
-            .count()
-            == 0
-        {
+        if rt.subnets.iter().filter(|&s| !s.nodes.is_empty()).count() == 0 {
             return Ok(PersistStatus::SkippedEmpty);
         }
 

@@ -33,8 +33,8 @@ fn public_to_array(v: Vec<u8>) -> [u8; PublicKey::SIZE] {
 /// Generates the key and returns the (secret, public) pair encoded as PEM and
 /// DER, respectively.
 pub fn generate_key() -> (String, Vec<u8>) {
-    let mut csprng = OsRng {};
-    let signing_key = ed25519_consensus::SigningKey::new(&mut csprng);
+    let csprng = OsRng {};
+    let signing_key = ed25519_consensus::SigningKey::new(csprng);
 
     let secret_key: SecretKey = {
         let sk = signing_key.to_bytes().to_vec();

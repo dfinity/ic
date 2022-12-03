@@ -282,7 +282,7 @@ impl SendQueueReader for SendQueueReaderImpl {
 pub(crate) fn get_peer_label(node_ip: &str, node_id: &NodeId) -> String {
     // 35: Includes the first 6 groups of 5 chars each + the 5 separators
     let prefix = node_id.to_string().chars().take(35).collect::<String>();
-    return format!("{}_{}", node_ip, prefix);
+    format!("{}_{}", node_ip, prefix)
 }
 
 // Sets up the server side socket with the node IP:port

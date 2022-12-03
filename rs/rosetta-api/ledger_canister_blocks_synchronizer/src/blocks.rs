@@ -627,7 +627,7 @@ impl HashedBlock {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BlockStoreError {
     NotFound(BlockIndex),
     NotAvailable(BlockIndex),
@@ -757,7 +757,7 @@ impl Blocks {
     ) -> Result<u64, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
 
-        database_access::get_block_idx_by_block_hash(&mut *connection, hash)
+        database_access::get_block_idx_by_block_hash(&mut connection, hash)
     }
 
     pub fn get_block_idx_by_transaction_hash(
@@ -765,7 +765,7 @@ impl Blocks {
         hash: &HashOf<icp_ledger::Transaction>,
     ) -> Result<u64, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_block_idx_by_transaction_hash(&mut *connection, hash)
+        database_access::get_block_idx_by_transaction_hash(&mut connection, hash)
     }
     pub fn get_account_balance_history(
         &self,
@@ -773,17 +773,17 @@ impl Blocks {
         limit_num_blocks: Option<u64>,
     ) -> Result<Vec<(u64, Tokens)>, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_account_balance_history(&mut *connection, acc, limit_num_blocks)
+        database_access::get_account_balance_history(&mut connection, acc, limit_num_blocks)
     }
 
     /// Sanity check (sum of tokens equal pool size).
     fn sanity_check(&self, latest_hb: &HashedBlock) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        let accounts = database_access::get_all_accounts(&mut *connection)?;
+        let accounts = database_access::get_all_accounts(&mut connection)?;
         let mut total = Tokens::ZERO;
         for account in accounts {
             let amount = database_access::get_account_balance(
-                &mut *connection,
+                &mut connection,
                 &latest_hb.index.clone(),
                 &account,
             )?;
@@ -799,8 +799,8 @@ impl Blocks {
     ) -> Result<Option<HashOf<icp_ledger::Transaction>>, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
 
-        if database_access::contains_block(&mut *connection, block_idx)? {
-            database_access::get_transaction_hash(&mut *connection, block_idx)
+        if database_access::contains_block(&mut connection, block_idx)? {
+            database_access::get_transaction_hash(&mut connection, block_idx)
         } else {
             Err(BlockStoreError::NotAvailable(*block_idx))
         }
@@ -808,11 +808,11 @@ impl Blocks {
 
     pub fn get_first_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_first_hashed_block(&mut *connection, Some(true))
+        database_access::get_first_hashed_block(&mut connection, Some(true))
     }
     pub fn get_hashed_block(&self, block_idx: &u64) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_hashed_block(&mut *connection, block_idx)
+        database_access::get_hashed_block(&mut connection, block_idx)
     }
 
     pub fn get_transaction(
@@ -820,16 +820,16 @@ impl Blocks {
         block_idx: &u64,
     ) -> Result<icp_ledger::Transaction, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_transaction(&mut *connection, block_idx)
+        database_access::get_transaction(&mut connection, block_idx)
     }
     fn check_table_coherence(&self) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
         let mut block_indices =
-            database_access::get_all_block_indices_from_blocks_table(&mut *connection)?;
+            database_access::get_all_block_indices_from_blocks_table(&mut connection)?;
         let mut transaction_block_indices =
-            database_access::get_all_block_indices_from_transactions_table(&mut *connection)?;
+            database_access::get_all_block_indices_from_transactions_table(&mut connection)?;
         let mut account_balances_block_indices =
-            database_access::get_all_block_indices_from_account_balances_table(&mut *connection)?;
+            database_access::get_all_block_indices_from_account_balances_table(&mut connection)?;
         let vec_sorted_diff = |blocks_indices: &mut [u64],
                                other_indices: &mut [u64]|
          -> Result<Vec<u64>, BlockStoreError> {
@@ -884,9 +884,9 @@ impl Blocks {
             )?;
             for missing_index in difference_transaction_indices {
                 let missing_block =
-                    database_access::get_hashed_block(&mut *connection, &missing_index)?;
+                    database_access::get_hashed_block(&mut connection, &missing_index)?;
                 database_access::push_transaction(
-                    &mut *connection,
+                    &mut connection,
                     &Block::decode(missing_block.block).unwrap().transaction,
                     &missing_index,
                 )?;
@@ -897,8 +897,8 @@ impl Blocks {
             )?;
             for missing_index in difference_account_balances_indices {
                 let missing_block =
-                    database_access::get_hashed_block(&mut *connection, &missing_index)?;
-                database_access::update_balance_book(&mut *connection, &missing_block)?;
+                    database_access::get_hashed_block(&mut connection, &missing_index)?;
+                database_access::update_balance_book(&mut connection, &missing_block)?;
             }
         }
         Ok(())
@@ -910,7 +910,7 @@ impl Blocks {
         let block_idx = self.get_block_idx_by_block_hash(hash)?;
         let mut con = self.connection.lock().unwrap();
         match database_access::contains_block(&mut con, &block_idx)? {
-            true => database_access::is_verified(&mut *con, &block_idx),
+            true => database_access::is_verified(&mut con, &block_idx),
             false => Err(BlockStoreError::NotFound(block_idx)),
         }
     }
@@ -918,7 +918,7 @@ impl Blocks {
     pub fn is_verified_by_idx(&self, idx: &u64) -> Result<bool, BlockStoreError> {
         let mut con = self.connection.lock().unwrap();
         match database_access::contains_block(&mut con, idx)? {
-            true => database_access::is_verified(&mut *con, idx),
+            true => database_access::is_verified(&mut con, idx),
             false => Err(BlockStoreError::NotFound(*idx)),
         }
     }
@@ -926,18 +926,18 @@ impl Blocks {
     pub fn get_first_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
 
-        database_access::get_first_hashed_block(&mut *connection, None)
+        database_access::get_first_hashed_block(&mut connection, None)
     }
 
     pub fn get_latest_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
 
-        database_access::get_latest_hashed_block(&mut *connection, None)
+        database_access::get_latest_hashed_block(&mut connection, None)
     }
 
     pub fn get_latest_verified_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_latest_hashed_block(&mut *connection, Some(true))
+        database_access::get_latest_hashed_block(&mut connection, Some(true))
     }
     pub fn get_account_balance(
         &self,
@@ -946,8 +946,7 @@ impl Blocks {
     ) -> Result<Tokens, BlockStoreError> {
         if self.is_verified_by_idx(block_idx)? {
             let mut connection = self.connection.lock().unwrap();
-            let amount =
-                database_access::get_account_balance(&mut *connection, block_idx, account)?;
+            let amount = database_access::get_account_balance(&mut connection, block_idx, account)?;
             match amount {
                 Some(a) => Ok(Tokens::from_e8s(a)),
                 None => Ok(Tokens::ZERO),
@@ -963,7 +962,7 @@ impl Blocks {
     ) -> Result<Vec<HashedBlock>, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
         if range.end > range.start
-            && database_access::contains_block(&mut *connection, &range.start).unwrap_or(false)
+            && database_access::contains_block(&mut connection, &range.start).unwrap_or(false)
         {
             let mut stmt = connection
                 .prepare(
@@ -1001,11 +1000,11 @@ impl Blocks {
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
         database_access::push_hashed_block(&mut con, hb)?;
         database_access::push_transaction(
-            &mut *con,
+            &mut con,
             &Block::decode(hb.block.clone()).unwrap().transaction,
             &hb.index,
         )?;
-        database_access::update_balance_book(&mut *con, hb)?;
+        database_access::update_balance_book(&mut con, hb)?;
         con.execute_batch("COMMIT TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
         drop(con);
@@ -1014,7 +1013,7 @@ impl Blocks {
     }
     pub fn get_all_accounts(&self) -> Result<Vec<AccountIdentifier>, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-        database_access::get_all_accounts(&mut *connection)
+        database_access::get_all_accounts(&mut connection)
     }
 
     pub fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
@@ -1110,8 +1109,8 @@ impl Blocks {
     ) -> Result<(), BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
         let last_verified =
-            database_access::get_latest_hashed_block(&mut *connection, Some(true)).ok();
-        let last_block = database_access::get_latest_hashed_block(&mut *connection, None)?;
+            database_access::get_latest_hashed_block(&mut connection, Some(true)).ok();
+        let last_block = database_access::get_latest_hashed_block(&mut connection, None)?;
         match last_verified {
             Some(verified) => {
                 assert!(verified.index <= *block_height);

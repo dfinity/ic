@@ -90,8 +90,8 @@ fn test_node_operator_records_can_be_added_and_removed() {
             ProposalStatus::Executed
         );
 
-        add_node_operator(&nns_canisters, &*TEST_NEURON_1_OWNER_PRINCIPAL).await;
-        add_node_operator(&nns_canisters, &*TEST_NEURON_2_OWNER_PRINCIPAL).await;
+        add_node_operator(&nns_canisters, &TEST_NEURON_1_OWNER_PRINCIPAL).await;
+        add_node_operator(&nns_canisters, &TEST_NEURON_2_OWNER_PRINCIPAL).await;
 
         // Assert that a Node Operator with no nodes can be removed
         let (payload, _, _) = prepare_add_node_payload();

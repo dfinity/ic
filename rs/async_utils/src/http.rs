@@ -5,7 +5,7 @@ use hyper::{body::HttpBody, Body};
 use std::time::Duration;
 use tokio::time::timeout;
 
-#[derive(Debug, PartialEq, Display)]
+#[derive(Debug, PartialEq, Eq, Display)]
 pub enum BodyReceiveError {
     TooLarge(String),
     Timeout(String),

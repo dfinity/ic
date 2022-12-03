@@ -440,7 +440,7 @@ impl fmt::Debug for CryptoError {
             CryptoError::TlsSecretKeyNotFound { certificate_der } => write!(
                 f,
                 "Cannot find TLS secret key for certificate (DER encoding) 0x{}",
-                hex::encode(&certificate_der)
+                hex::encode(certificate_der)
             ),
 
             CryptoError::MalformedSecretKey { algorithm, .. } => {
@@ -455,7 +455,7 @@ impl fmt::Debug for CryptoError {
                 f,
                 "Malformed {:?} public key: {}, error: {}",
                 algorithm,
-                hex::encode(&key_bytes),
+                hex::encode(key_bytes),
                 internal_error,
             ),
             CryptoError::MalformedPublicKey {
@@ -476,7 +476,7 @@ impl fmt::Debug for CryptoError {
                 f,
                 "Malformed {:?} signature: [{}] error: '{}'",
                 algorithm,
-                hex::encode(&sig_bytes),
+                hex::encode(sig_bytes),
                 internal_error
             ),
             CryptoError::MalformedPop {
@@ -487,7 +487,7 @@ impl fmt::Debug for CryptoError {
                 f,
                 "Malformed {:?} PoP: [{}] error: '{}'",
                 algorithm,
-                hex::encode(&pop_bytes),
+                hex::encode(pop_bytes),
                 internal_error
             ),
 
@@ -500,8 +500,8 @@ impl fmt::Debug for CryptoError {
                 f,
                 "{:?} signature could not be verified: public key {}, signature {}, error: {}",
                 algorithm,
-                hex::encode(&public_key_bytes),
-                hex::encode(&sig_bytes),
+                hex::encode(public_key_bytes),
+                hex::encode(sig_bytes),
                 internal_error,
             ),
             CryptoError::PopVerification {
@@ -513,8 +513,8 @@ impl fmt::Debug for CryptoError {
                 f,
                 "{:?} PoP could not be verified: public key {}, pop {}, error: {}",
                 algorithm,
-                hex::encode(&public_key_bytes),
-                hex::encode(&pop_bytes),
+                hex::encode(public_key_bytes),
+                hex::encode(pop_bytes),
                 internal_error,
             ),
 

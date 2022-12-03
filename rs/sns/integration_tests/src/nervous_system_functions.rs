@@ -213,7 +213,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         assert_eq!(
             list_nervous_system_functions_response
                 .reserved_ids
-                .get(0)
+                .first()
                 .unwrap(),
             &nervous_system_function.id,
         );

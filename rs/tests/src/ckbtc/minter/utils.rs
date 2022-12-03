@@ -258,11 +258,10 @@ pub async fn update_balance(
 pub async fn update_balance_without_subaccount(
     ckbtc_minter_agent: &CkBtcMinterAgent,
 ) -> Result<UpdateBalanceResult, UpdateBalanceError> {
-    let result = ckbtc_minter_agent
+    ckbtc_minter_agent
         .update_balance(UpdateBalanceArgs { subaccount: None })
         .await
-        .expect("Error while calling update_balance");
-    result
+        .expect("Error while calling update_balance")
 }
 
 /// Get the Bitcoin address for the given subaccount.

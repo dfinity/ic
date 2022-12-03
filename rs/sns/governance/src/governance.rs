@@ -2031,7 +2031,7 @@ impl Governance {
         if let Some(new_url) = manage_sns_metadata.url {
             log += &format!(
                 "Url:\n- old value: {}\n- new value: {}",
-                sns_metadata.url.unwrap_or_else(|| "".to_string()),
+                sns_metadata.url.unwrap_or_default(),
                 new_url
             );
             sns_metadata.url = Some(new_url);
@@ -2039,7 +2039,7 @@ impl Governance {
         if let Some(new_name) = manage_sns_metadata.name {
             log += &format!(
                 "Name:\n- old value: {}\n- new value: {}",
-                sns_metadata.name.unwrap_or_else(|| "".to_string()),
+                sns_metadata.name.unwrap_or_default(),
                 new_name
             );
             sns_metadata.name = Some(new_name);
@@ -2047,7 +2047,7 @@ impl Governance {
         if let Some(new_description) = manage_sns_metadata.description {
             log += &format!(
                 "Description:\n- old value: {}\n- new value: {}",
-                sns_metadata.description.unwrap_or_else(|| "".to_string()),
+                sns_metadata.description.unwrap_or_default(),
                 new_description
             );
             sns_metadata.description = Some(new_description);
@@ -4286,7 +4286,7 @@ fn err_if_another_upgrade_is_in_progress(
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
-#[derive(PartialEq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
 pub struct TimeWarp {
     pub delta_s: i64,
 }
@@ -4938,7 +4938,8 @@ mod tests {
         // generous limit is twofold: 1. avoid flakes in CI, while at the same
         // time 2. do not run forever if something goes wrong.
         let give_up = || now() < start + std::time::Duration::from_secs(30);
-        let final_proposal_data = loop {
+
+        loop {
             let result = governance
                 .get_proposal(&GetProposal {
                     proposal_id: Some(ProposalId { id: proposal_id }),
@@ -4963,8 +4964,7 @@ mod tests {
             }
 
             std::thread::sleep(std::time::Duration::from_millis(100));
-        };
-        final_proposal_data
+        }
     }
 
     fn canister_status_for_test(

@@ -97,7 +97,7 @@ impl ConfigSource {
             }
 
             ConfigSource::File(path) => {
-                fs::read_to_string(&path).map_err(|io_error| ConfigError::IoError {
+                fs::read_to_string(path).map_err(|io_error| ConfigError::IoError {
                     source: self.clone(),
                     io_error,
                 })?

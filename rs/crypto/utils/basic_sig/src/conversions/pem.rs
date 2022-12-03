@@ -61,7 +61,7 @@ pub fn pem_to_der(pem: &str, label: &str) -> io::Result<Vec<u8>> {
         .iter()
         .enumerate()
         .skip(start_line_index)
-        .find(|(_index, line)| line.starts_with(&end_prefix))
+        .find(|(_index, line)| line.starts_with(end_prefix))
         .ok_or_else(|| {
             invalid_data_err(format!(
                 "PEM file does not have an END line to match {expect_start}"

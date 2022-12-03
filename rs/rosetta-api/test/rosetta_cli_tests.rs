@@ -57,7 +57,7 @@ async fn rosetta_cli_data_test() {
     }));
 
     let output = Command::new(rosetta_cli())
-        .args(&[
+        .args([
             "check:data",
             "--configuration-file",
             local("test/rosetta-cli_data_test.json").as_str(),
@@ -122,7 +122,7 @@ async fn rosetta_cli_construction_create_account_test() {
     }));
 
     let output = Command::new(rosetta_cli())
-        .args(&[
+        .args([
             "check:construction",
             "--configuration-file",
             local("test/rosetta-cli_construction_create_account_test.json").as_str(),
@@ -206,7 +206,7 @@ async fn rosetta_cli_construction_test() {
     }));
 
     let output = Command::new(rosetta_cli())
-        .args(&[
+        .args([
             "check:construction",
             "--configuration-file",
             local("test/rosetta-cli_construction_test.json").as_str(),

@@ -136,7 +136,7 @@ pub fn validate_encoded_signature(sig: &[u8]) -> Result<(), String> {
         return Err(format!(
             "expected the signature to have at most {} bytes, got: {}",
             MAX_ENCODED_SIGNATURE_LEN,
-            hex::encode(&sig)
+            hex::encode(sig)
         ));
     };
 

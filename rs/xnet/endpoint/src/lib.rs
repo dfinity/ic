@@ -139,7 +139,7 @@ impl Drop for XNetEndpoint {
 const API_URL_STREAMS: &str = "/api/v1/streams";
 const API_URL_STREAM_PREFIX: &str = "/api/v1/stream/";
 
-impl<'a> XNetEndpoint {
+impl XNetEndpoint {
     /// Creates and starts an `XNetEndpoint` to publish XNet `Streams`.
     pub fn new(
         runtime_handle: runtime::Handle,

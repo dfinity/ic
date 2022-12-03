@@ -244,7 +244,7 @@ impl CanisterAccess {
         let mut archive_entry;
         {
             let mut alist = self.archive_list.lock().await;
-            archive_entry = locate_archive(&*alist, start);
+            archive_entry = locate_archive(&alist, start);
             if archive_entry.is_none() {
                 let al: ArchiveIndexResponse = self
                     .query("get_archive_index_pb", ())
@@ -252,7 +252,7 @@ impl CanisterAccess {
                     .map_err(|e| format!("In get archive index: {}", e))?;
                 trace!("updating archive list to: {:?}", al);
                 *alist = Some(al);
-                archive_entry = locate_archive(&*alist, start);
+                archive_entry = locate_archive(&alist, start);
             }
         }
 

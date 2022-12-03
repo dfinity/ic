@@ -148,7 +148,7 @@ impl CustomClient {
         let result = Pin::new(&mut tls_stream).connect().await;
 
         if let Some(expected_error) = &self.expected_error {
-            let error = result.err().expect("expected error");
+            let error = result.expect_err("expected error");
             if !error.to_string().contains(expected_error) {
                 panic!(
                     "expected the client error to contain \"{}\" but got error: {:?}",

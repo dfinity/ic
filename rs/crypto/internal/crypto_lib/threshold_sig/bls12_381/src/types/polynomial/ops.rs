@@ -49,7 +49,7 @@ impl<B: Borrow<Polynomial>> ops::Add<B> for Polynomial {
     }
 }
 
-impl<'a> ops::Add<Scalar> for Polynomial {
+impl ops::Add<Scalar> for Polynomial {
     type Output = Polynomial;
 
     fn add(mut self, rhs: Scalar) -> Self::Output {
@@ -98,7 +98,7 @@ impl<B: Borrow<Polynomial>> ops::Sub<B> for Polynomial {
 
 // Clippy thinks using `+` in a `Sub` implementation is suspicious.
 #[allow(clippy::suspicious_arithmetic_impl)]
-impl<'a> ops::Sub<Scalar> for Polynomial {
+impl ops::Sub<Scalar> for Polynomial {
     type Output = Polynomial;
 
     fn sub(self, rhs: Scalar) -> Self::Output {

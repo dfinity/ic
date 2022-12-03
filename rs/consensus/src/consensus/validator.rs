@@ -582,17 +582,17 @@ impl Validator {
         let validate_catch_up_package_shares =
             || self.validate_catch_up_package_shares(pool_reader);
         let calls: [&'_ dyn Fn() -> ChangeSet; 11] = [
-            &|| self.call_with_metrics("Finalization", &validate_finalization),
-            &|| self.call_with_metrics("Notarization", &validate_notarization),
-            &|| self.call_with_metrics("BlockProposal", &validate_blocks),
-            &|| self.call_with_metrics("RandomBeacon", &validate_beacons),
-            &|| self.call_with_metrics("RandomTape", &validate_tapes),
-            &|| self.call_with_metrics("CUP", &validate_catch_up_packages),
-            &|| self.call_with_metrics("FinalizationShare", &validate_finalization_shares),
-            &|| self.call_with_metrics("NotarizationShare", &validate_notarization_shares),
-            &|| self.call_with_metrics("RandomBeaconShare", &validate_beacon_shares),
-            &|| self.call_with_metrics("RandomTapeShare", &validate_tape_shares),
-            &|| self.call_with_metrics("CUPShare", &validate_catch_up_package_shares),
+            &|| self.call_with_metrics("Finalization", validate_finalization),
+            &|| self.call_with_metrics("Notarization", validate_notarization),
+            &|| self.call_with_metrics("BlockProposal", validate_blocks),
+            &|| self.call_with_metrics("RandomBeacon", validate_beacons),
+            &|| self.call_with_metrics("RandomTape", validate_tapes),
+            &|| self.call_with_metrics("CUP", validate_catch_up_packages),
+            &|| self.call_with_metrics("FinalizationShare", validate_finalization_shares),
+            &|| self.call_with_metrics("NotarizationShare", validate_notarization_shares),
+            &|| self.call_with_metrics("RandomBeaconShare", validate_beacon_shares),
+            &|| self.call_with_metrics("RandomTapeShare", validate_tape_shares),
+            &|| self.call_with_metrics("CUPShare", validate_catch_up_package_shares),
         ];
         self.schedule.call_next(&calls)
     }

@@ -5,7 +5,7 @@ use tracing::{trace, warn};
 const MAX_LOG_CERT_NAME_SIZE: usize = 100;
 const MAX_LOG_CERT_B64_SIZE: usize = 2000;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct HeadersData {
     pub certificate: Option<Result<Vec<u8>, ()>>,
     pub tree: Option<Result<Vec<u8>, ()>>,

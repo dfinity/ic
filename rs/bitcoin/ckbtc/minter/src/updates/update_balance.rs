@@ -17,12 +17,12 @@ use crate::{
     updates::get_btc_address,
 };
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct UpdateBalanceArgs {
     pub subaccount: Option<Subaccount>,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct UpdateBalanceResult {
     pub amount: u64,
     pub block_index: u64,
@@ -31,7 +31,7 @@ enum ErrorCode {
     ConfigurationError = 1,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub enum UpdateBalanceError {
     TemporarilyUnavailable(String),
     AlreadyProcessing,

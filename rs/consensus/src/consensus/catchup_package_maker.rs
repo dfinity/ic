@@ -35,7 +35,7 @@ pub struct CatchUpPackageMaker {
     log: ReplicaLogger,
 }
 
-impl<'a> CatchUpPackageMaker {
+impl CatchUpPackageMaker {
     /// Instantiate a new CatchUpPackage maker and save a copy of the config.
     pub fn new(
         replica_config: ReplicaConfig,

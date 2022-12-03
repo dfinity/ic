@@ -240,7 +240,7 @@ fn check_ecdsa_signing_subnet_lists(
                         })?
                         .key_ids
                         .contains(&(&ecdsa_key_id).into())
-                        .then(|| ())
+                        .then_some(())
                         .ok_or(InvariantCheckError {
                             msg: format!(
                                 "The subnet {} does not have the key with {} in its ecdsa configurations",

@@ -1,16 +1,22 @@
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Cycles {
     #[prost(bytes = "vec", tag = "2")]
     pub raw_cycles: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Funds {
     #[prost(uint64, tag = "2")]
     pub icp: u64,
     #[prost(message, optional, tag = "3")]
     pub cycles_struct: ::core::option::Option<Cycles>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Stream {
     #[prost(uint64, tag = "1")]
     pub messages_begin: u64,
@@ -21,14 +27,18 @@ pub struct Stream {
     #[prost(uint64, repeated, tag = "6")]
     pub reject_signals: ::prost::alloc::vec::Vec<u64>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamEntry {
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     #[prost(message, optional, tag = "2")]
     pub subnet_stream: ::core::option::Option<Stream>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Request {
     #[prost(message, optional, tag = "1")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::CanisterId>,
@@ -45,14 +55,18 @@ pub struct Request {
     #[prost(message, optional, tag = "7")]
     pub cycles_payment: ::core::option::Option<Cycles>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RejectContext {
     #[prost(uint64, tag = "1")]
     pub reject_code: u64,
     #[prost(string, tag = "2")]
     pub reject_message: ::prost::alloc::string::String,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Response {
     #[prost(message, optional, tag = "1")]
     pub originator: ::core::option::Option<super::super::super::types::v1::CanisterId>,
@@ -69,7 +83,9 @@ pub struct Response {
 }
 /// Nested message and enum types in `Response`.
 pub mod response {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum ResponsePayload {
         #[prost(bytes, tag = "5")]
         Data(::prost::alloc::vec::Vec<u8>),
@@ -77,14 +93,18 @@ pub mod response {
         Reject(super::RejectContext),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestOrResponse {
     #[prost(oneof = "request_or_response::R", tags = "1, 2")]
     pub r: ::core::option::Option<request_or_response::R>,
 }
 /// Nested message and enum types in `RequestOrResponse`.
 pub mod request_or_response {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum R {
         #[prost(message, tag = "1")]
         Request(super::Request),
@@ -92,14 +112,18 @@ pub mod request_or_response {
         Response(super::Response),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MessageDeadline {
     #[prost(uint64, tag = "1")]
     pub deadline: u64,
     #[prost(uint64, tag = "2")]
     pub index: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InputOutputQueue {
     #[prost(message, repeated, tag = "1")]
     pub queue: ::prost::alloc::vec::Vec<RequestOrResponse>,
@@ -119,14 +143,18 @@ pub struct InputOutputQueue {
     #[prost(uint64, tag = "6")]
     pub timeout_index: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueueEntry {
     #[prost(message, optional, tag = "1")]
     pub canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag = "2")]
     pub queue: ::core::option::Option<InputOutputQueue>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueues {
     #[prost(message, repeated, tag = "2")]
     pub ingress_queue: ::prost::alloc::vec::Vec<super::super::ingress::v1::Ingress>,
@@ -150,19 +178,9 @@ pub struct CanisterQueues {
 }
 /// Nested message and enum types in `CanisterQueues`.
 pub mod canister_queues {
-    #[derive(
-        serde::Serialize,
-        serde::Deserialize,
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration,
-    )]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum NextInputQueue {
         Unspecified = 0,

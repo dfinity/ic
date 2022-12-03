@@ -166,7 +166,7 @@ pub fn update_settings_with_controller_and_controllers_fails(env: TestEnv) {
                 canister_a
                     .update(
                         wasm().call(
-                            management::update_settings(&canister_b)
+                            management::update_settings(canister_b)
                                 // Setting both of these should result in an error.
                                 .with_controllers(vec![canister_a.canister_id()])
                                 .with_controller(canister_a.canister_id()),
@@ -273,7 +273,7 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
             // B cannot access C's canister status
             assert_reject(
                 canister_b
-                    .update(wasm().call(management::canister_status(&canister_c)))
+                    .update(wasm().call(management::canister_status(canister_c)))
                     .await,
                 RejectCode::CanisterReject,
             );
@@ -288,7 +288,7 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
             let controllers = vec![canister_b.canister_id(), user_principal];
             canister_a
                 .update(wasm().call(
-                    management::update_settings(&canister_c).with_controllers(controllers.clone()),
+                    management::update_settings(canister_c).with_controllers(controllers.clone()),
                 ))
                 .await
                 .unwrap();
@@ -296,14 +296,14 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
             // Now A cannot access the canister's status.
             assert_reject(
                 canister_a
-                    .update(wasm().call(management::canister_status(&canister_c)))
+                    .update(wasm().call(management::canister_status(canister_c)))
                     .await,
                 RejectCode::CanisterReject,
             );
 
             // B and `user` should be able to access the canister status.
             canister_b
-                .update(wasm().call(management::canister_status(&canister_c)))
+                .update(wasm().call(management::canister_status(canister_c)))
                 .await
                 .map(|res| {
                     let res = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
@@ -333,7 +333,7 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
             canister_b
                 .update(
                     wasm().call(
-                        management::update_settings(&canister_c)
+                        management::update_settings(canister_c)
                             .with_controllers(Vec::<Principal>::new()), // No controllers
                     ),
                 )
@@ -348,7 +348,7 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
 
             assert_reject(
                 canister_b
-                    .update(wasm().call(management::canister_status(&canister_c)))
+                    .update(wasm().call(management::canister_status(canister_c)))
                     .await,
                 RejectCode::CanisterReject,
             )
@@ -429,7 +429,7 @@ pub fn create_canister_with_multiple_controllers(env: TestEnv) {
 
             // Check that A can ask for the status.
             canister_a
-                .update(wasm().call(management::canister_status(&canister_c)))
+                .update(wasm().call(management::canister_status(canister_c)))
                 .await
                 .map(|res| {
                     let res = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
@@ -451,7 +451,7 @@ pub fn create_canister_with_multiple_controllers(env: TestEnv) {
 
             // Check that B can ask for the status.
             canister_b
-                .update(wasm().call(management::canister_status(&canister_c)))
+                .update(wasm().call(management::canister_status(canister_c)))
                 .await
                 .map(|res| {
                     let res = Decode!(res.as_slice(), CanisterStatusResult).unwrap();

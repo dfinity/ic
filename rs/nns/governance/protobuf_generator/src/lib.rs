@@ -25,7 +25,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // - the reverse iterator can be used to access the greatest proposal ID
     // - there are public methods that return several proposals. For those, it
     // is useful to have them ordered.
-    config.btree_map(&[".ic_nns_governance.pb.v1.Governance.proposals"]);
+    config.btree_map([".ic_nns_governance.pb.v1.Governance.proposals"]);
 
     config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");

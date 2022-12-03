@@ -173,7 +173,7 @@ impl Orchestrator {
 
         metrics
             .orchestrator_info
-            .with_label_values(&[&replica_version.to_string()])
+            .with_label_values(&[replica_version.as_ref()])
             .set(1);
 
         let upgrade = Some(

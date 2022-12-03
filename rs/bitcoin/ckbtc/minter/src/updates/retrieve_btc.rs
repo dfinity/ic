@@ -16,7 +16,7 @@ use crate::{
 
 const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct RetrieveBtcArgs {
     // amount to retrieve in satoshi
     pub amount: u64,
@@ -25,13 +25,13 @@ pub struct RetrieveBtcArgs {
     pub address: String,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct RetrieveBtcOk {
     // the index of the burn block on the ckbtc ledger
     pub block_index: u64,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub enum RetrieveBtcError {
     /// There is another request for this principal.
     AlreadyProcessing,

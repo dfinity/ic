@@ -16,7 +16,7 @@ impl TryFrom<&PublicKeyBytes> for PublicKey {
     type Error = PublicKeyFromBytesError;
 
     fn try_from(pubkey_bytes: &PublicKeyBytes) -> Result<Self, Self::Error> {
-        let canister_id_len = match pubkey_bytes.0.get(0) {
+        let canister_id_len = match pubkey_bytes.0.first() {
             Some(length_byte) => usize::from(*length_byte),
             None => return Err(PublicKeyFromBytesError::MissingCanisterIdLengthByte),
         };

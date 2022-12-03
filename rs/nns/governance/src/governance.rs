@@ -8048,7 +8048,7 @@ mod tests {
     #[tokio::test]
     async fn validate_open_sns_token_swap_ok() {
         let result =
-            validate_open_sns_token_swap(&*OPEN_SNS_TOKEN_SWAP, &mut MockEnvironment::default())
+            validate_open_sns_token_swap(&OPEN_SNS_TOKEN_SWAP, &mut MockEnvironment::default())
                 .await;
         assert!(result.is_ok(), "{:#?}", result);
     }
@@ -8174,7 +8174,7 @@ mod tests {
         ]);
 
         static ref ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT: u64 = {
-            let result = total_community_fund_maturity_e8s_equivalent(&*ID_TO_NEURON);
+            let result = total_community_fund_maturity_e8s_equivalent(&ID_TO_NEURON);
             assert_eq!(result, 600);
             result
         };
@@ -8383,7 +8383,7 @@ mod tests {
             ]),
         );
 
-        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &*ID_TO_NEURON);
+        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
     }
 
     #[test]
@@ -8437,7 +8437,7 @@ mod tests {
             ]),
         );
 
-        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &*ID_TO_NEURON);
+        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
     }
 
     #[test]
@@ -8491,7 +8491,7 @@ mod tests {
             ]),
         );
 
-        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &*ID_TO_NEURON);
+        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
     }
 
     #[test]
@@ -8564,7 +8564,7 @@ mod tests {
             ]),
         );
 
-        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &*ID_TO_NEURON);
+        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
     }
 
     #[test]
@@ -8617,7 +8617,7 @@ mod tests {
             ]),
         );
 
-        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &*ID_TO_NEURON);
+        assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
     }
 
     #[test]
@@ -8692,10 +8692,10 @@ mod tests {
 
         #[test]
         fn ok() {
-            let result = validate_settle_community_fund_participation(&*COMMITTED);
+            let result = validate_settle_community_fund_participation(&COMMITTED);
             assert!(result.is_ok(), "{:?}", result);
 
-            let result = validate_settle_community_fund_participation(&*ABORTED);
+            let result = validate_settle_community_fund_participation(&ABORTED);
             assert!(result.is_ok(), "{:?}", result);
         }
 

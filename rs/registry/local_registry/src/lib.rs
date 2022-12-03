@@ -9,13 +9,7 @@
 //! the certified time stored in the local store. However, the certified time is
 //! not exposed through the interface of `LocalRegistry`.
 
-use std::{
-    net::IpAddr,
-    path::Path,
-    str::FromStr,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{net::IpAddr, path::Path, str::FromStr, sync::Arc, time::Duration};
 
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult, ZERO_REGISTRY_VERSION};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint as PbConnectionEndpoint;
@@ -29,6 +23,7 @@ use ic_types::{
     SubnetId,
 };
 use thiserror::Error;
+use tokio::sync::RwLock;
 use url::Url;
 
 use ic_registry_client_helpers::{
@@ -100,7 +95,7 @@ impl LocalRegistry {
         // invariants are retained.
         let latest_cached_version = self.registry_cache.get_latest_version();
         let (mut raw_changelog, certified_time) = {
-            let guard = self.cached_registry_canister.read().unwrap();
+            let guard = self.cached_registry_canister.read().await;
             let (raw_changelog, _, t) = guard
                 .1
                 .get_certified_changes_since(
@@ -139,21 +134,21 @@ impl LocalRegistry {
         self.local_store_writer
             .update_certified_time(certified_time.as_nanos_since_unix_epoch())
             .expect("Could not store certified time");
-        self.sync_with_local_store()
+        self.sync_with_local_store().await
     }
 
     /// Updates the in-memory cache with the current state of the local store.
     ///
     /// Note that the in-memory cache ignores the state of the local store
     /// unless this method is called.
-    pub fn sync_with_local_store(&self) -> Result<(), LocalRegistryError> {
+    pub async fn sync_with_local_store(&self) -> Result<(), LocalRegistryError> {
         // update cache to reflect state of the local store
         self.registry_cache.update_to_latest_version();
         let latest_version = self.registry_cache.get_latest_version();
         {
             // the write lock guarantees that updates to the registry canister
             // are ordered across all threads
-            let mut guard = self.cached_registry_canister.write().unwrap();
+            let mut guard = self.cached_registry_canister.write().await;
             // invariant: the registry version of the memoized urls grows monotonically.
             // Thus, this is robust wrt. concurrent updates to the cache that
             // might have happend before we obtained the lock.

@@ -263,7 +263,7 @@ pub fn to_model_account_identifier(aid: &icp_ledger::AccountIdentifier) -> Accou
 pub fn from_model_account_identifier(
     aid: &AccountIdentifier,
 ) -> Result<icp_ledger::AccountIdentifier, String> {
-    icp_ledger::AccountIdentifier::from_hex(&aid.address).map_err(|e| e)
+    icp_ledger::AccountIdentifier::from_hex(&aid.address)
 }
 
 const LAST_HEIGHT: &str = "last_height";

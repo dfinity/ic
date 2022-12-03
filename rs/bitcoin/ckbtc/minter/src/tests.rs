@@ -308,7 +308,7 @@ proptest! {
 
             let sighash = sighasher.sighash(i, &pkhash);
             let btc_sighash = btc_sighasher.segwit_signature_hash(i, &script_code, utxo.value, bitcoin::EcdsaSighashType::All).unwrap();
-            prop_assert_eq!(hex::encode(&sighash), hex::encode(&btc_sighash));
+            prop_assert_eq!(hex::encode(sighash), hex::encode(btc_sighash));
         }
     }
 

@@ -244,7 +244,7 @@ impl Engine {
         n: usize,
     ) -> Option<u32> {
         let time_query_start = Instant::now();
-        let response = agent.execute_query(&plan.canister_id, &*method, arg).await;
+        let response = agent.execute_query(&plan.canister_id, &method, arg).await;
         let time_query_end = Instant::now();
         debug!("Sent query ({}). Response was: {:?}", n, response);
 

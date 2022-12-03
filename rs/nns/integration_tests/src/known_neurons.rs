@@ -141,8 +141,7 @@ fn test_known_neurons() {
             .expect("Error calling the neuron_info api.");
         assert_eq!(
             "NeuronTwo",
-            (&ni)
-                .as_ref()
+            ni.as_ref()
                 .unwrap()
                 .known_neuron_data
                 .as_ref()

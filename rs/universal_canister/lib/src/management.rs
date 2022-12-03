@@ -338,7 +338,7 @@ pub enum Network {
     Regtest,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct GetBalanceRequest {
     pub address: String,
     pub network: Network,

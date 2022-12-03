@@ -19,7 +19,7 @@ pub struct RandomBeaconMaker {
     log: ReplicaLogger,
 }
 
-impl<'a> RandomBeaconMaker {
+impl RandomBeaconMaker {
     /// Instantiate a new random beacon maker and save a copy of the config.
     pub fn new(
         replica_config: ReplicaConfig,

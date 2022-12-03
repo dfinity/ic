@@ -529,7 +529,8 @@ fn sns_wait_for_upgrade_finished(
     // Now we attempt to get the status for the canister (but the canister may be updating or stopped)
     // which will cause the GetSnsCanistersSummaryRequest to fail.
     let mut attempt_count = 0;
-    let statuses = loop {
+
+    loop {
         attempt_count += 1;
         machine.tick();
         let statuses = get_canister_statuses(canister_type, machine, root);
@@ -543,8 +544,7 @@ fn sns_wait_for_upgrade_finished(
         }
 
         assert!(attempt_count < 250, "status: {:?}", statuses);
-    };
-    statuses
+    }
 }
 
 /// Get the canister status(es) for the given `canister_type`

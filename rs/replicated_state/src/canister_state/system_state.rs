@@ -35,7 +35,7 @@ lazy_static! {
         PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc").unwrap();
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
 // For semantics of the fields please check
 // protobuf/def/state/canister_state_bits/v1/canister_state_bits.proto:
@@ -53,7 +53,7 @@ pub struct CanisterMetrics {
 /// Contains structs needed for running and maintaining the canister on the IC.
 /// The state here cannot be directly modified by the Wasm module in the
 /// canister but can be indirectly via the SystemApi interface.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SystemState {
     pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,
@@ -115,7 +115,7 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CanisterStatus {
     Running {
         call_context_manager: CallContextManager,
@@ -201,7 +201,7 @@ pub struct PausedExecutionId(pub u64);
 
 /// Represents a task that needs to be executed before processing canister
 /// inputs.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecutionTask {
     // A heartbeat task exists only within an execution round. It is never
     // serialized.
@@ -853,7 +853,7 @@ impl SystemState {
 
         while let Some(msg) = self.queues.peek_output(&self.canister_id) {
             // Ensure that enough memory is available for inducting `msg`.
-            if own_subnet_type != SubnetType::System && can_push(&*msg, available_memory).is_err() {
+            if own_subnet_type != SubnetType::System && can_push(msg, available_memory).is_err() {
                 // Bail out if not enough memory available for message.
                 return;
             }

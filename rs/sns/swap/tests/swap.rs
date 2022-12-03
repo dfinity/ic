@@ -449,7 +449,7 @@ fn test_min_icp() {
                     LedgerExpect::TransferFunds(
                         2 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
                         DEFAULT_TRANSFER_FEE.get_e8s(),
-                        Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
+                        Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL)),
                         Account {
                             owner: *TEST_USER2_PRINCIPAL,
                             subaccount: None,
@@ -460,7 +460,7 @@ fn test_min_icp() {
                     LedgerExpect::TransferFunds(
                         2 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
                         DEFAULT_TRANSFER_FEE.get_e8s(),
-                        Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
+                        Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL)),
                         Account {
                             owner: *TEST_USER1_PRINCIPAL,
                             subaccount: None,
@@ -852,7 +852,7 @@ fn test_scenario_happy() {
                     LedgerExpect::TransferFunds(
                         600 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
                         DEFAULT_TRANSFER_FEE.get_e8s(),
-                        Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
+                        Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL)),
                         Account {
                             owner: SNS_GOVERNANCE_CANISTER_ID.get(),
                             subaccount: None,
@@ -863,7 +863,7 @@ fn test_scenario_happy() {
                     LedgerExpect::TransferFunds(
                         400 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
                         DEFAULT_TRANSFER_FEE.get_e8s(),
-                        Some(principal_to_subaccount(&*TEST_USER3_PRINCIPAL)),
+                        Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL)),
                         Account {
                             owner: SNS_GOVERNANCE_CANISTER_ID.get(),
                             subaccount: None,
@@ -874,7 +874,7 @@ fn test_scenario_happy() {
                     LedgerExpect::TransferFunds(
                         900 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
                         DEFAULT_TRANSFER_FEE.get_e8s(),
-                        Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
+                        Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL)),
                         Account {
                             owner: SNS_GOVERNANCE_CANISTER_ID.get(),
                             subaccount: None,
@@ -899,7 +899,7 @@ fn test_scenario_happy() {
                 &mock_stub(vec![LedgerExpect::TransferFunds(
                     600 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
                     DEFAULT_TRANSFER_FEE.get_e8s(),
-                    Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
+                    Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL)),
                     Account {
                         owner: SNS_GOVERNANCE_CANISTER_ID.get(),
                         subaccount: None,
@@ -1727,7 +1727,7 @@ fn test_error_refund() {
                 LedgerExpect::AccountBalance(
                     Account {
                         owner: SWAP_CANISTER_ID.into(),
-                        subaccount: Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
+                        subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL)),
                     },
                     Ok(Tokens::from_e8s(10 * E8)),
                 ),
@@ -1842,7 +1842,7 @@ fn test_error_refund() {
             &mock_stub(vec![LedgerExpect::TransferFunds(
                 6 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
                 DEFAULT_TRANSFER_FEE.get_e8s(),
-                Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
+                Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL)),
                 Account {
                     owner: SNS_GOVERNANCE_CANISTER_ID.get(),
                     subaccount: None,

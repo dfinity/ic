@@ -60,7 +60,7 @@ mod tests {
     fn listen_helper(port_allocation: &NodePort) -> Result<(), Box<dyn Error>> {
         let socket =
             bind_tcp_socket_with_reuse(SocketAddr::from(([127, 0, 0, 1], port_allocation.port)))?;
-        let _ = socket.listen(1)?;
+        socket.listen(1)?;
         Ok(())
     }
 

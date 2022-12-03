@@ -64,12 +64,12 @@ impl StableMemory for FakeStableMemory {
         if range_end > vec.len() {
             vec.resize(range_end, 0);
         }
-        (&mut vec[offset..range_end]).copy_from_slice(content)
+        vec[offset..range_end].copy_from_slice(content)
     }
 
     fn read(&mut self, offset: u32, size: u32) -> Vec<u8> {
         let vec = self.0.lock().unwrap();
-        (&vec[offset as usize..(offset + size) as usize]).to_vec()
+        vec[offset as usize..(offset + size) as usize].to_vec()
     }
 
     fn length(&self) -> u32 {

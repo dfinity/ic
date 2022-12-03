@@ -673,7 +673,7 @@ fn test_spec_file(
     config: &Config,
     parsing_multi_memory_enabled: bool,
 ) -> Result<(), String> {
-    let contents = fs::read_to_string(&path).unwrap();
+    let contents = fs::read_to_string(path).unwrap();
     let buf = ParseBuffer::new(&contents).unwrap();
 
     let wast = wast::parser::parse::<Wast>(&buf).unwrap();

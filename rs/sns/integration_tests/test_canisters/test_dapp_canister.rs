@@ -5,7 +5,7 @@ fn main() {}
 
 #[export_name = "canister_query test_dapp_method_validate"]
 fn test_dapp_method_validate() {
-    over(candid_one, test_dapp_method_validate_)
+    over(candid_one, test_dapp_method_validate_);
 }
 
 fn test_dapp_method_validate_(payload: i64) -> Result<String, String> {
@@ -18,9 +18,9 @@ fn test_dapp_method_validate_(payload: i64) -> Result<String, String> {
 
 #[export_name = "canister_update test_dapp_method"]
 fn test_dapp_method() {
-    over(candid_one, test_dapp_method_)
+    over(candid_one, test_dapp_method_);
 }
 
 fn test_dapp_method_(payload: i64) {
-    println!("Executed with value: {}", payload)
+    println!("Executed with value: {}", payload);
 }

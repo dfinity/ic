@@ -79,7 +79,7 @@ async fn main() {
     if !opts.start_only {
         let wasm_bytes = read_file_fully(&opts.wasm);
 
-        let _stopped: () = management_canister
+        management_canister
             .stop_canister(&governance_canister_id)
             .call_and_wait(delay())
             .await
@@ -94,7 +94,7 @@ async fn main() {
         eprintln!("The call to install_code returned: {:?}", upgraded);
     }
 
-    let _started: () = management_canister
+    management_canister
         .start_canister(&governance_canister_id)
         .call_and_wait(delay())
         .await

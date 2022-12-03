@@ -84,7 +84,7 @@ fn test_wasmtime_system_api() {
       (data (i32.const 5) "Hi!")
     )"#;
     let wasm_binary =
-        BinaryEncodedWasm::new(wabt::wat2wasm(&wat).expect("failed to compile Wasm source"));
+        BinaryEncodedWasm::new(wabt::wat2wasm(wat).expect("failed to compile Wasm source"));
     // Exports the global `counter_instructions`.
     let config = EmbeddersConfig::default();
     let (_, instrumentation_output) = validate_and_instrument_for_testing(

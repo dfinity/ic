@@ -1423,10 +1423,7 @@ impl ProposalTitleAndPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCu
             .clone()
             .map(|nodes| nodes.into_iter().map(NodeId::from).collect());
 
-        let hash = self
-            .registry_store_hash
-            .clone()
-            .unwrap_or_else(|| "".to_string());
+        let hash = self.registry_store_hash.clone().unwrap_or_default();
 
         let registry_version = self.registry_version.unwrap_or(0);
 
@@ -2074,7 +2071,7 @@ impl ProposalTitleAndPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
         )
         .await;
 
-        let canister_type = SnsCanisterType::from_str(&*self.canister_type).expect(
+        let canister_type = SnsCanisterType::from_str(&self.canister_type).expect(
             "Invalid canister_type, expected one of: \
                         Root, Governance, Ledger, Swap, Archive, Index",
         ) as i32;
@@ -2521,7 +2518,7 @@ impl ProposalTitleAndPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperato
             node_operator_principal_id: Some(self.node_operator_principal_id),
             node_allowance: self.node_allowance,
             node_provider_principal_id: Some(self.node_provider_principal_id),
-            dc_id: self.dc_id.clone().unwrap_or_else(|| "".to_string()),
+            dc_id: self.dc_id.clone().unwrap_or_default(),
             rewardable_nodes,
             ipv6: self.ipv6.clone(),
         }

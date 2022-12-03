@@ -3887,7 +3887,7 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
     // 'now'.
     neuron
         .configure(
-            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            &TEST_NEURON_1_OWNER_PRINCIPAL,
             driver.now(),
             &Configure {
                 operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
@@ -3946,7 +3946,7 @@ fn test_set_dissolve_delay() {
     // fail.
     assert!(neuron
         .configure(
-            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            &TEST_NEURON_1_OWNER_PRINCIPAL,
             driver.now(),
             &Configure {
                 operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
@@ -3959,7 +3959,7 @@ fn test_set_dissolve_delay() {
     // Try to set the dissolve delay to a value in the future, should succeed.
     neuron
         .configure(
-            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            &TEST_NEURON_1_OWNER_PRINCIPAL,
             driver.now(),
             &Configure {
                 operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
@@ -3977,7 +3977,7 @@ fn test_set_dissolve_delay() {
     // current one, should fail.
     assert!(neuron
         .configure(
-            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            &TEST_NEURON_1_OWNER_PRINCIPAL,
             driver.now(),
             &Configure {
                 operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
@@ -3992,7 +3992,7 @@ fn test_set_dissolve_delay() {
     // should fail.
     assert!(neuron
         .configure(
-            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            &TEST_NEURON_1_OWNER_PRINCIPAL,
             driver.now(),
             &Configure {
                 operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
@@ -4009,7 +4009,7 @@ fn test_set_dissolve_delay() {
     // should cap the value to 8y, but succeed.
     neuron
         .configure(
-            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            &TEST_NEURON_1_OWNER_PRINCIPAL,
             driver.now(),
             &Configure {
                 operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
@@ -4027,7 +4027,7 @@ fn test_set_dissolve_delay() {
     // Set the neuron to dissolve
     neuron
         .configure(
-            &*TEST_NEURON_1_OWNER_PRINCIPAL,
+            &TEST_NEURON_1_OWNER_PRINCIPAL,
             driver.now(),
             &Configure {
                 operation: Some(Operation::StartDissolving(StartDissolving {})),
@@ -8443,7 +8443,7 @@ fn test_merge_maturity_of_neuron_new(start in 56u64..56_000_000,
     // Assert that maturity can't be merged by someone who doesn't control the
     // neuron
     assert!(nns
-        .merge_maturity(&id, &*TEST_NEURON_2_OWNER_PRINCIPAL, 10)
+        .merge_maturity(&id, &TEST_NEURON_2_OWNER_PRINCIPAL, 10)
         .is_err());
 
     // Assert percents outside of (0, 100] are rejected
@@ -8539,7 +8539,7 @@ fn test_merge_maturity_of_neuron(
 
     // Assert that maturity can't be merged by someone who doesn't control the
     // neuron
-    prop_assert!(merge_maturity(&mut gov, id.clone(), &*TEST_NEURON_2_OWNER_PRINCIPAL, 10).is_err());
+    prop_assert!(merge_maturity(&mut gov, id.clone(), &TEST_NEURON_2_OWNER_PRINCIPAL, 10).is_err());
 
     // Assert percents outside of (0, 100] are rejected
     prop_assert!(merge_maturity(&mut gov, id.clone(), &controller, 0).is_err());
@@ -11002,7 +11002,7 @@ async fn test_open_sns_token_swap_proposal_happy() {
     gov.make_proposal(
         &NeuronId { id: 1 },
         &principal(1),
-        &*OPEN_SNS_TOKEN_SWAP_PROPOSAL,
+        &OPEN_SNS_TOKEN_SWAP_PROPOSAL,
     )
     .await
     .unwrap();
@@ -11101,7 +11101,7 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
     gov.make_proposal(
         &NeuronId { id: 1 },
         &principal(1),
-        &*OPEN_SNS_TOKEN_SWAP_PROPOSAL,
+        &OPEN_SNS_TOKEN_SWAP_PROPOSAL,
     )
     .await
     .unwrap();

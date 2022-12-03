@@ -299,7 +299,7 @@ impl SchedulerConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CyclesAccountManagerConfig {
     /// Reference value of a subnet size that all the fees below are calculated for.
     /// Fees for a real subnet are calculated proportionally to this reference value.

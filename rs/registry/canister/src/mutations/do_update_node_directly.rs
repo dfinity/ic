@@ -126,21 +126,16 @@ impl Registry {
         // 5. Disallow updating if the most recent key update on the subnet is not old enough.
         //    If the node has no timestamp, skip all checks.
         if previous_timestamp_set {
-            match self.last_key_update_on_subnet(subnet_record) {
+            if let Some(last_key_update_timestamp) = self.last_key_update_on_subnet(subnet_record) {
                 // The node is on ECDSA subnet, and has a timestamp
-                Some(last_key_update_timestamp) => {
-                    let key_rotation_period_on_subnet =
-                        (idkg_key_rotation_period_ms as f64 / subnet_size as f64
-                            * DELAY_COMPENSATION) as u64;
-                    if Duration::from_millis(
-                        last_key_update_timestamp + key_rotation_period_on_subnet,
-                    ) > duration_since_unix_epoch
-                    {
-                        return Err("the ECDSA subnet had a key update recently".to_string());
-                    }
+                let key_rotation_period_on_subnet =
+                    (idkg_key_rotation_period_ms as f64 / subnet_size as f64 * DELAY_COMPENSATION)
+                        as u64;
+                if Duration::from_millis(last_key_update_timestamp + key_rotation_period_on_subnet)
+                    > duration_since_unix_epoch
+                {
+                    return Err("the ECDSA subnet had a key update recently".to_string());
                 }
-                // No node has a timestamp.
-                None => {}
             }
         }
 

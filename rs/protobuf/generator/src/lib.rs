@@ -13,7 +13,7 @@ fn base_config(out: &Path, prefix: &str) -> Config {
         .unwrap_or_else(|e| panic!("Failed to create directory {}: {}", proto_out.display(), e));
     config.out_dir(&proto_out);
     // Use BTreeMap for all proto map fields.
-    config.btree_map(&["."]);
+    config.btree_map(["."]);
     config.protoc_arg("--experimental_allow_proto3_optional");
     config
 }
@@ -389,5 +389,7 @@ fn build_canister_http_proto(def: &Path, out: &Path) {
 
 /// Compiles the given `proto_files`.
 fn compile_protos<P: AsRef<Path>>(mut config: Config, def: &Path, proto_files: &[P]) {
+    // https://github.com/tokio-rs/prost/issues/661
+    config.type_attribute(".", "#[allow(clippy::derive_partial_eq_without_eq)]");
     config.compile_protos(proto_files, &[def]).unwrap();
 }

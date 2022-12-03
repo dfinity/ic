@@ -960,8 +960,7 @@ where
         let default_principals: HashSet<PrincipalId> = DEFAULT_ALLOWED_PRINCIPALS
             .iter()
             .map(|&p| PrincipalId::from_str(p))
-            .filter(|result| result.is_ok())
-            .map(|result| result.unwrap())
+            .filter_map(|result| result.ok())
             .collect();
 
         let current_set: HashSet<PrincipalId> =
@@ -1026,7 +1025,7 @@ pub fn vec_to_hash(v: Vec<u8>) -> Result<[u8; 32], String> {
 }
 
 /// Specifies the upgrade path for SNS instances
-#[derive(Clone, Default, Debug, candid::CandidType, candid::Deserialize, PartialEq)]
+#[derive(Clone, Default, Debug, candid::CandidType, candid::Deserialize, PartialEq, Eq)]
 pub struct UpgradePath {
     /// The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
     /// this version.

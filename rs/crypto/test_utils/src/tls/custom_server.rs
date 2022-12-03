@@ -112,7 +112,7 @@ impl CustomServer {
         let result = Pin::new(&mut tls_stream).accept().await;
 
         if let Some(expected_error) = &self.expected_error {
-            let error = result.as_ref().err().expect("expected error");
+            let error = result.as_ref().expect_err("expected error");
             if !error.to_string().contains(expected_error) {
                 panic!(
                     "expected the server error to contain \"{}\" but got error: {:?}",

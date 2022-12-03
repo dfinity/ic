@@ -207,7 +207,7 @@ pub struct XNetPayloadBuilderImpl {
 }
 
 /// Represents the location of a peer
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PeerLocation {
     /// Peer in the same datacenter
     Local,
@@ -226,7 +226,7 @@ impl From<PeerLocation> for &str {
 }
 
 /// Metadata describing a replica's XNet endpoint.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct EndpointLocator {
     /// The ID of the node hosting the replica.
     node_id: NodeId,
@@ -242,7 +242,7 @@ pub struct EndpointLocator {
 ///
 /// Used when computing the expected indices of a stream during payload building
 /// and validation. Or as cutoff points when dealing with stream slices.
-#[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd)]
 pub struct ExpectedIndices {
     pub message_index: StreamIndex,
     pub signal_index: StreamIndex,

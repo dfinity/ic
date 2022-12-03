@@ -359,7 +359,7 @@ impl CallContextManager {
                         if response.respondent != respondent
                             || response.originator != originator =>
                     {
-                        return Err(StateError::NonMatchingResponse {
+                        Err(StateError::NonMatchingResponse {
                                 err_str: format!(
                                     "invalid details, expected => [originator => {}, respondent => {}], but got response with",
                                     originator, respondent,
@@ -367,7 +367,7 @@ impl CallContextManager {
                                 originator: response.originator,
                                 callback_id: response.originator_reply_callback,
                                 respondent: response.respondent,
-                            });
+                            })
                     }
                     _ => Ok(()),
                 }

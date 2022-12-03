@@ -49,5 +49,5 @@
 //! 'mercury') would be placed under <discovery_targets>/mercury.
 //!
 //! *Note*: As of now, dynamic target acquisition is not implemented.
-
+#![allow(clippy::await_holding_lock, clippy::result_large_err)]
 pub mod titanium;

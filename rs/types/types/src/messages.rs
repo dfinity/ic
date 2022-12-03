@@ -82,7 +82,7 @@ pub struct UserSignature {
 
 /// Stores info needed for processing and tracking requests to
 /// stop canisters.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StopCanisterContext {
     Ingress {
         sender: UserId,

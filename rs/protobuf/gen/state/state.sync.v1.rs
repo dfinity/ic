@@ -1,3 +1,4 @@
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FileInfo {
     #[prost(string, tag = "1")]
@@ -7,6 +8,7 @@ pub struct FileInfo {
     #[prost(bytes = "vec", tag = "3")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChunkInfo {
     #[prost(uint32, tag = "1")]
@@ -18,6 +20,7 @@ pub struct ChunkInfo {
     #[prost(bytes = "vec", tag = "4")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Manifest {
     #[prost(uint32, tag = "1")]

@@ -285,6 +285,7 @@ pub fn get_notarization_delay_settings(
 ///
 /// * `artifact_shares` - A vector of artifact shares, e.g.
 ///   `Vec<&RandomBeaconShare>`
+#[allow(clippy::type_complexity)]
 pub fn aggregate<
     Message: Eq + Ord + Clone + std::fmt::Debug + HasHeight + HasCommittee,
     CryptoMessage,

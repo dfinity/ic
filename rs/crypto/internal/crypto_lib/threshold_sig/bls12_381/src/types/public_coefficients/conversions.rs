@@ -55,7 +55,7 @@ pub fn try_number_of_nodes_from_csp_pub_coeffs(
 ) -> CryptoResult<NumberOfNodes> {
     match value {
         CspPublicCoefficients::Bls12_381(public_coefficients) => {
-            try_number_of_nodes_from_pub_coeff_bytes(public_coefficients).map_err(|e| e)
+            try_number_of_nodes_from_pub_coeff_bytes(public_coefficients)
         }
     }
 }
