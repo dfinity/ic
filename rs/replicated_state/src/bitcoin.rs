@@ -137,7 +137,7 @@ fn maybe_split_response(
         let mut i = first_response_block_size;
         while i < block.len() {
             let follow_up_length = min(MAX_RESPONSE_SIZE, block.len() - i);
-            follow_ups.push((&block[i..i + follow_up_length]).to_vec());
+            follow_ups.push(block[i..i + follow_up_length].to_vec());
             i += follow_up_length;
         }
 
@@ -148,7 +148,7 @@ fn maybe_split_response(
         };
 
         let initial_response = CanisterGetSuccessorsResponsePartial {
-            partial_block: (&block[0..first_response_block_size]).to_vec(),
+            partial_block: block[0..first_response_block_size].to_vec(),
             next: response.next,
             remaining_follow_ups,
         };

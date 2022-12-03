@@ -784,9 +784,7 @@ impl CanisterManager {
         // canister. The governance canister can forcefully
         // uninstall the code of any canister.
         if sender != GOVERNANCE_CANISTER_ID.get() {
-            if let Err(err) = validate_controller(canister, &sender) {
-                return Err(err);
-            }
+            validate_controller(canister, &sender)?
         }
 
         let rejects = uninstall_canister(&self.log, canister, time);
@@ -920,9 +918,7 @@ impl CanisterManager {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
         if sender != canister.canister_id().get() {
-            if let Err(err) = validate_controller(canister, &sender) {
-                return Err(err);
-            }
+            validate_controller(canister, &sender)?
         }
 
         let controller = canister.system_state.controller();

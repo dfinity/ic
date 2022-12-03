@@ -1151,7 +1151,7 @@ impl From<&ConsensusMessage> for ConsensusMessageAttribute {
 
 /// Indicates one of the consensus committees that are responsible for creating
 /// signature shares on various types of artifacts
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Committee {
     /// LowThreshold indicates the committee that creates threshold signatures
     /// with a low threshold. That is, f+1 out the 3f+1 committee members can

@@ -152,7 +152,7 @@ impl LogScraper {
     }
 
     async fn stop(self) -> std::io::Result<()> {
-        let _ = self.should_run.store(false, Ordering::Relaxed);
+        self.should_run.store(false, Ordering::Relaxed);
         self.join_handle.await?
     }
 }

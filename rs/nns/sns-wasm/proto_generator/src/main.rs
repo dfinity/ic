@@ -11,7 +11,7 @@ fn main() {
     let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
     let sns_init_proto = manifest_dir.join("../../../sns/init/proto");
 
-    match std::fs::remove_dir_all(&out) {
+    match std::fs::remove_dir_all(out) {
         Ok(_) => (),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         Err(e) => panic!(

@@ -1,7 +1,7 @@
 /// Firewall configuration - Deprecated
-#[derive(
-    candid::CandidType, serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message,
-)]
+#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FirewallConfig {
     /// The firewall configuration content
     #[prost(string, tag = "1")]
@@ -13,9 +13,9 @@ pub struct FirewallConfig {
     #[prost(string, repeated, tag = "3")]
     pub ipv6_prefixes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
-#[derive(
-    candid::CandidType, serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message,
-)]
+#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FirewallRule {
     #[prost(string, repeated, tag = "1")]
     pub ipv4_prefixes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
@@ -32,28 +32,17 @@ pub struct FirewallRule {
     #[prost(enumeration = "FirewallRuleDirection", optional, tag = "7")]
     pub direction: ::core::option::Option<i32>,
 }
-#[derive(
-    candid::CandidType, serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message,
-)]
+#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FirewallRuleSet {
     #[prost(message, repeated, tag = "1")]
     pub entries: ::prost::alloc::vec::Vec<FirewallRule>,
 }
 /// Available actions for firewall rules
-#[derive(
-    candid::CandidType,
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum FirewallAction {
     Unspecified = 0,
@@ -78,20 +67,9 @@ impl FirewallAction {
         }
     }
 }
-#[derive(
-    candid::CandidType,
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum FirewallRuleDirection {
     Unspecified = 0,

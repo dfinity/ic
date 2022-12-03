@@ -7,7 +7,7 @@ use strum_macros::{Display, EnumIter};
 /// Operations contain all balance-changing information within a transaction.
 /// They are always one-sided (only affect 1 AccountIdentifier) and can succeed
 /// or fail independently from a Transaction.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Operation {
     #[serde(rename = "operation_identifier")]
@@ -83,7 +83,7 @@ impl Operation {
 
 /// The operation_identifier uniquely identifies an operation within a
 /// transaction.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct OperationIdentifier {
     /// The operation index is used to ensure each operation has a unique
@@ -113,7 +113,7 @@ impl OperationIdentifier {
     }
 }
 
-#[derive(Display, Debug, Clone, PartialEq, EnumIter, Serialize, Deserialize)]
+#[derive(Display, Debug, Clone, PartialEq, Eq, EnumIter, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub enum OperationType {
     #[serde(rename = "TRANSACTION")]

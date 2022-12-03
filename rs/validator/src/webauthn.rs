@@ -59,7 +59,7 @@ fn basic_sig_from_webauthn_sig(
             // RSA signatures are not DER wrapped, see https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
             Ok(rsa_signature_from_bytes(&webauthn_sig.signature()))
         }
-        _ => return Err(format!(
+        _ => Err(format!(
             "Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {:?}",
             algorithm_id
         ))

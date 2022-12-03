@@ -15,7 +15,7 @@ pub(crate) enum ConfigError {
 }
 
 /// External mechanism for configuring registry client
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, GFlags)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, GFlags)]
 #[serde(default)]
 #[gflags(prefix = "nns_")]
 pub struct Config {

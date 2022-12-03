@@ -1387,8 +1387,8 @@ impl NafLut {
     /// Checks that the scalar index is in bounds, i.e., the multiplication with `i` has been
     /// computed and stored in `self.multiplications`.
     fn is_in_bounds(window_size: usize, i: i8) -> bool {
-        (i.abs() as usize) > Self::BOUND[window_size - 1]
-            && (i.abs() as usize) < (Self::BOUND[window_size] + 1)
+        (i.unsigned_abs() as usize) > Self::BOUND[window_size - 1]
+            && (i.unsigned_abs() as usize) < (Self::BOUND[window_size] + 1)
     }
 
     /// Computes the LUT for NAF values of length of exactly `window_size`.
@@ -1414,7 +1414,7 @@ impl NafLut {
 
         let to_array_index = |real_index: i8| -> usize {
             if real_index.is_negative() {
-                num_negatives - (real_index.abs() as usize - lower_bound)
+                num_negatives - (real_index.unsigned_abs() as usize - lower_bound)
             } else {
                 // is positive
                 real_index as usize - lower_bound + num_negatives - 1
@@ -1451,9 +1451,9 @@ impl NafLut {
         let lower_bound = Self::BOUND[self.window_size - 1];
         let num_negatives = self.multiplications.len() / 2;
         let array_index: usize = if i.is_negative() {
-            num_negatives - (i + (lower_bound as i8)).abs() as usize
+            num_negatives - (i + (lower_bound as i8)).unsigned_abs() as usize
         } else {
-            num_negatives + (i.abs() as usize) - lower_bound - 1
+            num_negatives + (i.unsigned_abs() as usize) - lower_bound - 1
         };
         &self.multiplications[array_index]
     }

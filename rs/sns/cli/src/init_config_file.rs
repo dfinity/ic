@@ -401,7 +401,7 @@ fn load_logo(logo_path: &PathBuf) -> Result<String, anyhow::Error> {
     // The image is base 64 encoded:
     {
         let mut writer = base64::write::EncoderWriter::new(&mut buffer, base64::STANDARD);
-        let file = match File::open(&logo_path) {
+        let file = match File::open(logo_path) {
             Ok(file) => file,
             Err(err) => {
                 return Err(anyhow!(

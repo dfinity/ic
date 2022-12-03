@@ -43,7 +43,7 @@ impl fmt::Display for Blob {
     }
 }
 
-impl<'a, T: AsRef<[u8]>> From<T> for Blob {
+impl<T: AsRef<[u8]>> From<T> for Blob {
     fn from(v: T) -> Blob {
         Blob(v.as_ref().to_vec())
     }

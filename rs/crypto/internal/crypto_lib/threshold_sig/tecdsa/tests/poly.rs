@@ -260,7 +260,7 @@ fn poly_lagrange_coefficients_at_zero_are_correct() {
     fn int_to_scalars(curve: EccCurveType, ints: &[i64]) -> Vec<EccScalar> {
         let mut scalars = Vec::with_capacity(ints.len());
         for i in ints {
-            let s = EccScalar::from_u64(curve, i.abs() as u64);
+            let s = EccScalar::from_u64(curve, i.unsigned_abs());
             scalars.push(if i.is_negative() { s.negate() } else { s });
         }
         scalars

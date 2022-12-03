@@ -149,10 +149,8 @@ impl IcInnerHandle {
     }
 
     pub fn from_testnet_with_principal_from_file(testnet: Testnet, key_file: String) -> Self {
-        let key_file = std::fs::read_to_string(key_file.clone()).expect(&*format!(
-            "Failed to load principal key from file {}",
-            key_file
-        ));
+        let key_file = std::fs::read_to_string(key_file.clone())
+            .unwrap_or_else(|_| panic!("Failed to load principal key from file {}", key_file));
         let (secret_key, public_key) =
             InternalSecretKey::from_pem(&key_file).expect("Invalid secret key.");
 

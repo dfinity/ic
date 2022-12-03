@@ -419,7 +419,7 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
         .flat_map(|archive| archive.index().into_iter())
         .filter_map(|((from, to), canister_id)| {
             let slice = range_utils::intersect(&(from..to + 1), &requested_range).ok()?;
-            (!slice.is_empty()).then(|| (canister_id, slice))
+            (!slice.is_empty()).then_some((canister_id, slice))
         })
         .collect();
 

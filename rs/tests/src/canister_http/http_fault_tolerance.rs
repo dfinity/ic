@@ -186,18 +186,18 @@ pub fn test(env: TestEnv) {
                         &logger,
                         "Http service didn't return 200 response: {:?}", queried
                     );
-                    let _ = tokio::time::sleep(BACKOFF_DELAY).await;
+                    tokio::time::sleep(BACKOFF_DELAY).await;
                 }
                 Ok(None) => {
                     warn!(&logger, "Request to http endpoint has not been made yet");
-                    let _ = tokio::time::sleep(BACKOFF_DELAY).await;
+                    tokio::time::sleep(BACKOFF_DELAY).await;
                 }
                 Ok(Some(Err((_, error)))) | Err(error) => {
                     warn!(
                         &logger,
                         "Restarted node hasn't caught up. Got inner error: {error}. Retrying.."
                     );
-                    let _ = tokio::time::sleep(BACKOFF_DELAY).await;
+                    tokio::time::sleep(BACKOFF_DELAY).await;
                 }
             }
         }

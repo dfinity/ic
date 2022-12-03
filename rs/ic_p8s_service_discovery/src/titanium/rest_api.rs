@@ -112,7 +112,7 @@ impl Service<Request<Body>> for RestApi {
         }
 
         let res = match req.uri().path() {
-            s if !s.is_empty() && (&s[1..]).bytes().all(is_ident) => {
+            s if !s.is_empty() && s[1..].bytes().all(is_ident) => {
                 // strip leading `/`
                 let job_name = &s[1..];
                 let targets = self.scraper.get_prometheus_target_groups(job_name);

@@ -1259,7 +1259,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
 
         let start = std::time::Instant::now();
         let ret =
-            IDkgProtocol::create_transcript(&*self.crypto, transcript_params, verified_dealings);
+            IDkgProtocol::create_transcript(self.crypto, transcript_params, verified_dealings);
         self.ecdsa_pool
             .stats()
             .record_transcript_creation(transcript_params, start.elapsed());

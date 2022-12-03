@@ -91,12 +91,7 @@ mod tests {
 
         // A sub-sequence search function
         fn find(array: &[u8], subseq: &[u8]) -> Option<usize> {
-            for i in 0..array.len() - subseq.len() + 1 {
-                if array[i..i + subseq.len()] == subseq[..] {
-                    return Some(i);
-                }
-            }
-            None
+            (0..array.len() - subseq.len() + 1).find(|&i| array[i..i + subseq.len()] == subseq[..])
         }
 
         // Mutate some byte, deserialization works, but casting back to messages fail.

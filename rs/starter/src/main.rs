@@ -190,7 +190,7 @@ fn main() -> Result<()> {
         .arg("--replica-version")
         .arg(config.replica_version)
         .arg("--config-file")
-        .args(&[config_path.to_str().unwrap()]);
+        .args([config_path.to_str().unwrap()]);
     info!(log, "Executing {:?}", cmd);
     cmd.exec();
 

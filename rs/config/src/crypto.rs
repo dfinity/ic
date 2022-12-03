@@ -132,7 +132,7 @@ impl CryptoConfig {
                 dir.display()
             ));
         }
-        let metadata = fs::metadata(&dir).map_err(|err| {
+        let metadata = fs::metadata(dir).map_err(|err| {
             format!(
                 "Cannot get the metadata of the crypto state directory {}: {:?}",
                 dir.display(),
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn should_set_correct_path_permissions() {
         CryptoConfig::run_with_temp_config(|config| {
-            CryptoConfig::check_dir_has_required_permissions(&*config.crypto_root)
+            CryptoConfig::check_dir_has_required_permissions(&config.crypto_root)
                 .expect("Wrong direcotry permissions");
         })
     }

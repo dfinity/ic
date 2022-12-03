@@ -160,8 +160,8 @@ fn lookup_path_in_tree(
                 sig_bytes: sig.0.clone(),
                 internal_error: format!(
                     "the signature tree doesn't contain sig/{}/{} path",
-                    hex::encode(&seed_hash),
-                    hex::encode(&msg_hash)
+                    hex::encode(seed_hash),
+                    hex::encode(msg_hash)
                 ),
             })?;
     match tree {

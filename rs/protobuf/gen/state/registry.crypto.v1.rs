@@ -1,11 +1,13 @@
 /// A list of subnets that can sign with this ECDSA key.
 /// This allows replicas to route their signing requests to the right subnets.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaSigningSubnetList {
     #[prost(message, repeated, tag = "2")]
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
 /// A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PublicKey {
     #[prost(uint32, tag = "1")]
@@ -21,11 +23,13 @@ pub struct PublicKey {
     pub timestamp: ::core::option::Option<u64>,
 }
 /// DER-encoded X509 public key certificate
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct X509PublicKeyCert {
     #[prost(bytes = "vec", tag = "1")]
     pub certificate_der: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaKeyId {
     #[prost(enumeration = "EcdsaCurve", tag = "1")]
@@ -34,6 +38,7 @@ pub struct EcdsaKeyId {
     pub name: ::prost::alloc::string::String,
 }
 /// An algorithm ID. This is used to specify the signature algorithm associated with a public key.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum AlgorithmId {
@@ -83,6 +88,7 @@ impl AlgorithmId {
     }
 }
 /// Types of curves that can be used for ECDSA signatures.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum EcdsaCurve {

@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 pub type NumTokens = Nat;
 pub type BlockIndex = Nat;
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum TransferError {
     BadFee { expected_fee: NumTokens },
     BadBurn { min_burn_amount: NumTokens },
@@ -46,7 +46,7 @@ impl From<CoreTransferError> for TransferError {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransferArg {
     #[serde(default)]
     pub from_subaccount: Option<Subaccount>,
@@ -61,7 +61,7 @@ pub struct TransferArg {
 }
 
 /// Variant type for the `metadata` endpoint values.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Nat(Nat),
     Int(Int),
@@ -123,7 +123,7 @@ impl<'a> From<&'a [u8]> for Value {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct StandardRecord {
     pub name: String,
     pub url: String,
@@ -131,14 +131,14 @@ pub struct StandardRecord {
 
 // Non-standard queries
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchiveInfo {
     pub canister_id: CanisterId,
     pub block_range_start: BlockIndex,
     pub block_range_end: BlockIndex,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetTransactionsRequest {
     pub start: BlockIndex,
     pub length: Nat,
@@ -166,7 +166,7 @@ impl GetTransactionsRequest {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Mint {
     pub amount: Nat,
     pub to: Account,
@@ -174,7 +174,7 @@ pub struct Mint {
     pub created_at_time: Option<u64>,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Burn {
     pub amount: Nat,
     pub from: Account,
@@ -182,7 +182,7 @@ pub struct Burn {
     pub created_at_time: Option<u64>,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Transfer {
     pub amount: Nat,
     pub from: Account,
@@ -192,7 +192,7 @@ pub struct Transfer {
     pub created_at_time: Option<u64>,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
     pub kind: String,
     pub mint: Option<Mint>,
@@ -201,14 +201,14 @@ pub struct Transaction {
     pub timestamp: u64,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchivedTransactionRange {
     pub start: Nat,
     pub length: Nat,
     pub callback: QueryArchiveFn,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetTransactionsResponse {
     pub log_length: Nat,
     pub first_index: Nat,
@@ -216,12 +216,12 @@ pub struct GetTransactionsResponse {
     pub archived_transactions: Vec<ArchivedTransactionRange>,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransactionRange {
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "candid::types::reference::Func")]
 pub struct QueryArchiveFn {
     pub canister_id: CanisterId,

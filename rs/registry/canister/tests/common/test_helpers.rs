@@ -150,15 +150,15 @@ pub fn prepare_registry_with_nodes(node_count: u64) -> (RegistryAtomicMutateRequ
             let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
             let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
             mutations.push(insert(
-                &make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
+                make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
                 encode_or_panic(&node_pks.dkg_dealing_encryption_public_key.unwrap()),
             ));
             mutations.push(insert(
-                &make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
+                make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
                 encode_or_panic(&node_pks.node_signing_public_key.unwrap()),
             ));
             mutations.push(insert(
-                &make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
+                make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
                 encode_or_panic(&node_pks.idkg_dealing_encryption_public_key.unwrap()),
             ));
 

@@ -7,7 +7,7 @@ use std::convert::TryFrom;
 
 /// Amount is some Value of a Currency. It is considered invalid to specify a
 /// Value without a Currency.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Amount {
     /// Value of the transaction in atomic units represented as an

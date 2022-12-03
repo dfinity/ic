@@ -57,7 +57,7 @@ fn assert_malformed_fs_encryption_pubkey_error_containing(
     result: &Result<ClibFsNiDkgPublicKey, FsNiDkgPubkeyFromPubkeyProtoError>,
     substring: &str,
 ) {
-    let error = result.clone().unwrap_err();
+    let error = result.clone().expect_err("Unexpected success.");
     if let FsNiDkgPubkeyFromPubkeyProtoError::PublicKeyConversion { error } = error {
         assert!(error.contains(substring))
     } else {
@@ -72,7 +72,7 @@ fn assert_malformed_fs_encryption_pop_error_containing(
     result: &Result<ClibFsNiDkgPublicKey, FsNiDkgPubkeyFromPubkeyProtoError>,
     substring: &str,
 ) {
-    let error = result.clone().unwrap_err();
+    let error = result.clone().expect_err("Unexpected success.");
     if let FsNiDkgPubkeyFromPubkeyProtoError::PopConversion { error } = error {
         assert!(error.contains(substring))
     } else {
@@ -84,7 +84,7 @@ fn assert_malformed_fs_encryption_pop_error_containing(
 fn assert_internal_conversion_error(
     result: &Result<ClibFsNiDkgPublicKey, FsNiDkgPubkeyFromPubkeyProtoError>,
 ) {
-    let error = result.clone().unwrap_err();
+    let error = result.clone().expect_err("Unexpected success.");
     if let FsNiDkgPubkeyFromPubkeyProtoError::InternalConversion = error {
         assert!(true)
     } else {

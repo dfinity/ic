@@ -1,8 +1,10 @@
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Time {
     #[prost(uint64, tag = "1")]
     pub time_nanos: u64,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeTopology {
     #[prost(string, tag = "1")]
@@ -10,6 +12,7 @@ pub struct NodeTopology {
     #[prost(uint32, tag = "2")]
     pub http_port: u32,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetTopologyEntry {
     #[prost(message, optional, tag = "1")]
@@ -17,6 +20,7 @@ pub struct SubnetTopologyEntry {
     #[prost(message, optional, tag = "2")]
     pub node_topology: ::core::option::Option<NodeTopology>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetTopology {
     #[prost(message, repeated, tag = "1")]
@@ -37,6 +41,7 @@ pub struct SubnetTopology {
     pub ecdsa_keys_held:
         ::prost::alloc::vec::Vec<super::super::super::registry::crypto::v1::EcdsaKeyId>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
     #[prost(message, optional, tag = "1")]
@@ -44,6 +49,7 @@ pub struct SubnetsEntry {
     #[prost(message, optional, tag = "2")]
     pub subnet_topology: ::core::option::Option<SubnetTopology>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaKeyEntry {
     #[prost(message, optional, tag = "3")]
@@ -51,6 +57,7 @@ pub struct EcdsaKeyEntry {
     #[prost(message, repeated, tag = "2")]
     pub subnet_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkTopology {
     #[prost(message, repeated, tag = "1")]
@@ -73,6 +80,7 @@ pub struct NetworkTopology {
     pub bitcoin_mainnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {
     #[prost(message, optional, tag = "1")]
@@ -86,6 +94,7 @@ pub struct SetupInitialDkgContext {
     #[prost(message, optional, tag = "6")]
     pub time: ::core::option::Option<Time>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContextTree {
     #[prost(uint64, tag = "1")]
@@ -93,6 +102,7 @@ pub struct SetupInitialDkgContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<SetupInitialDkgContext>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignWithEcdsaContext {
     #[prost(message, optional, tag = "1")]
@@ -108,6 +118,7 @@ pub struct SignWithEcdsaContext {
     #[prost(message, optional, tag = "7")]
     pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignWithEcdsaContextTree {
     #[prost(uint64, tag = "1")]
@@ -115,6 +126,7 @@ pub struct SignWithEcdsaContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<SignWithEcdsaContext>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpHeader {
     #[prost(string, tag = "1")]
@@ -122,6 +134,7 @@ pub struct HttpHeader {
     #[prost(string, tag = "2")]
     pub value: ::prost::alloc::string::String,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContext {
     #[prost(message, optional, tag = "1")]
@@ -143,6 +156,7 @@ pub struct CanisterHttpRequestContext {
     #[prost(message, optional, tag = "10")]
     pub transform_context: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContextTree {
     #[prost(uint64, tag = "1")]
@@ -150,6 +164,7 @@ pub struct CanisterHttpRequestContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<CanisterHttpRequestContext>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaDealingsContext {
     #[prost(message, optional, tag = "1")]
@@ -163,6 +178,7 @@ pub struct EcdsaDealingsContext {
     #[prost(message, optional, tag = "6")]
     pub time: ::core::option::Option<Time>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaDealingsContextTree {
     #[prost(uint64, tag = "1")]
@@ -170,6 +186,7 @@ pub struct EcdsaDealingsContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<EcdsaDealingsContext>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinGetSuccessorsContext {
     #[prost(message, optional, tag = "1")]
@@ -181,6 +198,7 @@ pub struct BitcoinGetSuccessorsContext {
     #[prost(message, optional, tag = "3")]
     pub time: ::core::option::Option<Time>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinGetSuccessorsContextTree {
     #[prost(uint64, tag = "1")]
@@ -188,6 +206,7 @@ pub struct BitcoinGetSuccessorsContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<BitcoinGetSuccessorsContext>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinSendTransactionInternalContext {
     #[prost(message, optional, tag = "1")]
@@ -198,6 +217,7 @@ pub struct BitcoinSendTransactionInternalContext {
     #[prost(message, optional, tag = "3")]
     pub time: ::core::option::Option<Time>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinSendTransactionInternalContextTree {
     #[prost(uint64, tag = "1")]
@@ -205,6 +225,7 @@ pub struct BitcoinSendTransactionInternalContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<BitcoinSendTransactionInternalContext>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetCallContextManager {
     #[prost(uint64, tag = "1")]
@@ -223,12 +244,14 @@ pub struct SubnetCallContextManager {
     pub bitcoin_send_transaction_internal_contexts:
         ::prost::alloc::vec::Vec<BitcoinSendTransactionInternalContextTree>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetMetrics {
     #[prost(message, optional, tag = "1")]
     pub consumed_cycles_by_deleted_canisters:
         ::core::option::Option<super::super::super::types::v1::NominalCycles>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinGetSuccessorsFollowUpResponses {
     #[prost(message, optional, tag = "1")]
@@ -236,6 +259,7 @@ pub struct BitcoinGetSuccessorsFollowUpResponses {
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub payloads: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SystemMetadata {
     #[prost(message, optional, tag = "2")]
@@ -284,11 +308,13 @@ pub struct SystemMetadata {
     pub bitcoin_get_successors_follow_up_responses:
         ::prost::alloc::vec::Vec<BitcoinGetSuccessorsFollowUpResponses>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {
     #[prost(bytes = "vec", tag = "1")]
     pub memory: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum HttpMethod {

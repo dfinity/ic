@@ -1,4 +1,6 @@
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecutionLogEntry {
     #[prost(message, optional, tag = "1")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -8,6 +10,7 @@ pub struct ExecutionLogEntry {
 }
 /// Nested message and enum types in `ExecutionLogEntry`.
 pub mod execution_log_entry {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum MessageType {

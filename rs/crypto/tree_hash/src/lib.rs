@@ -462,7 +462,7 @@ impl MixedHashTree {
                 other => other,
             },
             Self::Labeled(l, t) => match label.cmp(l.as_bytes()) {
-                Ordering::Equal => SearchStatus::Found(&*t),
+                Ordering::Equal => SearchStatus::Found(t),
                 Ordering::Less => SearchStatus::Lt,
                 Ordering::Greater => SearchStatus::Gt,
             },

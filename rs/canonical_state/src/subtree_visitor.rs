@@ -104,7 +104,7 @@ where
     fn enter_edge(&mut self, name: &[u8]) -> Result<Control, V::Output> {
         let next_item = match self.pos.last().expect("unbalanced tree traversal") {
             p @ PatternKind::All => *p,
-            PatternKind::Any(p) => &*p,
+            PatternKind::Any(p) => p,
             PatternKind::MatchFinite(map) => match map.get(name) {
                 Some(pattern) => pattern,
                 None => {
@@ -115,7 +115,7 @@ where
                 if name < &from[..] || &to[..] <= name {
                     return Ok(Control::Skip);
                 }
-                &*pattern
+                pattern
             }
         };
 

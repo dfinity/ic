@@ -147,7 +147,7 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
     let result = csp_vault.sign(AlgorithmId::Ed25519, &msg, key_id);
 
     assert_eq!(
-        result.unwrap_err(),
+        result.expect_err("Unexpected success."),
         CspBasicSignatureError::WrongSecretKeyType {
             algorithm: AlgorithmId::Ed25519,
             secret_key_variant: "ThresBls12_381".to_string()

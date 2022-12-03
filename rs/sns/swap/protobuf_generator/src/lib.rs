@@ -28,7 +28,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     // Use BTreeMap for all maps to enforce determinism and to be able to use reverse
     // iterators.
-    config.btree_map(&["."]);
+    config.btree_map(["."]);
 
     // Candid-ify Rust types generated from swap.proto.
     config.type_attribute(

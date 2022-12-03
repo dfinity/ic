@@ -101,7 +101,7 @@ pub fn should_not_basic_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn Cs
                 KeyId::from(&public_key),
             );
             assert!(sign_result.is_err());
-            let err = sign_result.err().expect("Expected an error.");
+            let err = sign_result.expect_err("Expected an error.");
             match err {
                 CspBasicSignatureError::UnsupportedAlgorithm { .. } => {}
                 _ => panic!("Expected UnsupportedAlgorithm, got {:?}", err),

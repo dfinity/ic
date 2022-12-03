@@ -89,7 +89,7 @@ pub const CERT_ANY: CertificationMask = CertificationMask::new(1 | 2);
 
 /// A node state with a `height` attached to it, indicating that the state was
 /// obtained by executing a block with the given `height`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Labeled<State> {
     height: Height,
     state: State,

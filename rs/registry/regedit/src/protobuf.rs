@@ -109,7 +109,7 @@ fn get_transformer(key: &str) -> Transformers {
 }
 
 fn unknown_message_to_value(data: &[u8]) -> Value {
-    serde_json::to_value(&data).expect("Could not serialize byte array to json Value.")
+    serde_json::to_value(data).expect("Could not serialize byte array to json Value.")
 }
 
 fn value_to_bytes(value: Value) -> Vec<u8> {

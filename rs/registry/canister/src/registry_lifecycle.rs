@@ -38,7 +38,7 @@ pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
     if registry_storage.pre_upgrade_version.is_some() {
         let pre_upgrade_version = registry_storage.pre_upgrade_version.unwrap()
            // TODO remove this after enabling CRP-1449 invariants and upgrading with this code in place
-            + (if did_execute_cleanup { 1 } else { 0 });
+            + u64::from(did_execute_cleanup);
 
         assert_eq!(
             pre_upgrade_version,

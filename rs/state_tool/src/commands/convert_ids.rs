@@ -24,8 +24,7 @@ pub fn do_canister_id_from_hex(canister_id: String) -> Result<(), String> {
 pub fn do_principal_from_byte_string(bytes: String) -> Result<(), String> {
     let bytes: Vec<u8> = bytes
         .trim()
-        .replace('[', "")
-        .replace(']', "")
+        .replace(['[', ']'], "")
         .split(',')
         .map(|byte| byte.trim().parse().unwrap())
         .collect();

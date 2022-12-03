@@ -244,7 +244,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         pub_key: Some(pub_key),
         download_node: None,
         upload_node: Some(upload_node.get_ip_addr()),
-        ecdsa_subnet_id: ecdsa.then(|| root_subnet_id),
+        ecdsa_subnet_id: ecdsa.then_some(root_subnet_id),
     };
 
     let mut subnet_recovery =

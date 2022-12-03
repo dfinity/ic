@@ -22,6 +22,7 @@ mock! {
     trait IngressHistoryReader {
         fn get_latest_status(&self) -> Box<dyn Fn(&MessageId) -> IngressStatus>;
 
+        #[allow(clippy::type_complexity)]
         fn get_status_at_height(
             &self,
             height: Height,

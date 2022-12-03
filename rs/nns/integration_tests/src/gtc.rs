@@ -96,7 +96,7 @@ pub fn test_claim_neurons() {
         assert_neurons_can_be_donated(
             &nns_canisters,
             donate_account_recipient_neuron_id,
-            &*TEST_NEURON_1_OWNER_KEYPAIR,
+            &TEST_NEURON_1_OWNER_KEYPAIR,
             &TEST_IDENTITY_3,
         )
         .await;
@@ -111,7 +111,7 @@ pub fn test_claim_neurons() {
         assert_unclaimed_neurons_can_be_forwarded(
             &nns_canisters,
             forward_all_unclaimed_accounts_recipient_neuron_id,
-            &*TEST_NEURON_2_OWNER_KEYPAIR,
+            &TEST_NEURON_2_OWNER_KEYPAIR,
         )
         .await;
 

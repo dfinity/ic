@@ -240,20 +240,10 @@ impl PrincipalId {
             Some(data)
         }
         pub const fn range(data: &[u8], r: Range<usize>) -> &[u8] {
-            let (start, end) = (r.start, r.end);
             match get(data, r) {
                 Some(v) => v,
                 None => {
-                    // TODO: remove (blocked by rust-lang/rust#85194)
-                    // Give good panic messages
-                    let _ = &data[start];
-                    let _ = &data[end];
-                    let _ = &data[end - start];
-                    const ASSERT: [(); 1] = [()];
-                    #[allow(unconditional_panic)]
-                    let _ = ASSERT[1];
-
-                    data
+                    panic!("Out of bounds range access.",);
                 }
             }
         }

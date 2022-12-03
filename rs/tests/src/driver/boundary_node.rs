@@ -42,7 +42,7 @@ const BOUNDARY_NODE_VM_PATH: &str = "vm.json";
 const CONF_IMG_FNAME: &str = "config_disk.img";
 
 fn mk_compressed_img_path() -> std::string::String {
-    return format!("{}.gz", CONF_IMG_FNAME);
+    format!("{}.gz", CONF_IMG_FNAME)
 }
 /// A builder for the initial configuration of an IC boundary node.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

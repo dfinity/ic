@@ -12,7 +12,7 @@ mod tests;
 ///
 /// This enum can be extended to support alternate types as required
 /// when different algorithms are implemented
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PkixAlgorithmParameters {
     /// An ASN.1 object identifier
     ObjectIdentifier(OID),
@@ -21,7 +21,7 @@ pub enum PkixAlgorithmParameters {
 }
 
 /// An AlgorithmIdentifier as described in RFC 5480
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PkixAlgorithmIdentifier {
     pub oid: OID,
     pub params: Option<PkixAlgorithmParameters>,
@@ -329,7 +329,7 @@ impl KeyDerParser {
     fn secret_key_bytes(key_part: &ASN1Block) -> Result<Vec<u8>, KeyDerParsingError> {
         if let ASN1Block::OctetString(_offset, key_bytes_string) = key_part {
             let key_bytes_block = simple_asn1::from_der(key_bytes_string)
-                .map_err(|e| Self::parsing_error(&*format!("Error in DER encoding: {}", e)))?;
+                .map_err(|e| Self::parsing_error(&format!("Error in DER encoding: {}", e)))?;
             if key_bytes_block.len() != 1 {
                 return Err(Self::parsing_error("Expected single block"));
             }
@@ -350,7 +350,7 @@ impl KeyDerParser {
     /// parses the entire DER-string provided upon construction.
     fn parse_pk(&self) -> Result<Vec<ASN1Block>, KeyDerParsingError> {
         simple_asn1::from_der(&self.key_der)
-            .map_err(|e| Self::parsing_error(&*format!("Error in DER encoding: {}", e)))
+            .map_err(|e| Self::parsing_error(&format!("Error in DER encoding: {}", e)))
     }
 
     /// Verifies that the specified `parts` contain exactly one ASN1Block, and

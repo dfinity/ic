@@ -526,9 +526,7 @@ impl<'a> Canister<'a> {
         }
         .bytes(Input::from_inner(input).into_bytes()?)
         .await?;
-        FromWire::from_bytes(res)
-            .map_err(|e| e)
-            .map(|r: ReturnType| r.into_inner())
+        FromWire::from_bytes(res).map(|r: ReturnType| r.into_inner())
     }
 
     pub async fn update_from_sender<S, Input, ReturnType, Witness>(
@@ -550,9 +548,7 @@ impl<'a> Canister<'a> {
         }
         .bytes_with_sender(Input::from_inner(input).into_bytes()?, sender)
         .await?;
-        FromWire::from_bytes(res)
-            .map_err(|e| e)
-            .map(|r: ReturnType| r.into_inner())
+        FromWire::from_bytes(res).map(|r: ReturnType| r.into_inner())
     }
 
     pub async fn query_from_sender<S, Input, ReturnType, Witness>(
@@ -574,9 +570,7 @@ impl<'a> Canister<'a> {
         }
         .bytes_with_sender(Input::from_inner(input).into_bytes()?, sender)
         .await?;
-        FromWire::from_bytes(res)
-            .map_err(|e| e)
-            .map(|r: ReturnType| r.into_inner())
+        FromWire::from_bytes(res).map(|r: ReturnType| r.into_inner())
     }
 
     /// Runs the upgrade process, but with the new binary being identical to the

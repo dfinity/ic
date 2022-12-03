@@ -1,4 +1,5 @@
 /// A subnet: A logical group of nodes that run consensus
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetRecord {
     #[prost(bytes = "vec", repeated, tag = "3")]
@@ -76,6 +77,7 @@ pub struct SubnetRecord {
     #[prost(message, optional, tag = "27")]
     pub ecdsa_config: ::core::option::Option<EcdsaConfig>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
     #[prost(message, optional, tag = "1")]
@@ -86,6 +88,7 @@ pub struct EcdsaInitialization {
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 /// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
 /// construct the genesis CUP or a recovery CUP in the event of a subnet stall.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpPackageContents {
     /// Initial non-interactive low-threshold DKG transcript
@@ -112,6 +115,7 @@ pub struct CatchUpPackageContents {
     #[prost(message, repeated, tag = "7")]
     pub ecdsa_initializations: ::prost::alloc::vec::Vec<EcdsaInitialization>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryStoreUri {
     /// / The uri at which the registry store data should be retrieved. The data
@@ -127,6 +131,7 @@ pub struct RegistryStoreUri {
     pub registry_version: u64,
 }
 /// Contains information pertaining to all subnets in the IC and their params.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetListRecord {
     /// A list of subnet ids of all subnets present in this instance of the IC.
@@ -134,6 +139,7 @@ pub struct SubnetListRecord {
     pub subnets: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// Initial non-interactive DKG transcript record
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InitialNiDkgTranscriptRecord {
     #[prost(message, optional, tag = "1")]
@@ -147,6 +153,7 @@ pub struct InitialNiDkgTranscriptRecord {
     #[prost(bytes = "vec", tag = "5")]
     pub internal_csp_transcript: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscriptId {
     #[prost(uint64, tag = "1")]
@@ -156,6 +163,7 @@ pub struct IDkgTranscriptId {
     #[prost(uint64, tag = "3")]
     pub source_height: u64,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VerifiedIDkgDealing {
     #[prost(uint32, tag = "1")]
@@ -165,6 +173,7 @@ pub struct VerifiedIDkgDealing {
     #[prost(message, repeated, tag = "7")]
     pub support_tuples: ::prost::alloc::vec::Vec<SignatureTuple>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscript {
     #[prost(message, optional, tag = "1")]
@@ -186,6 +195,7 @@ pub struct IDkgTranscript {
     #[prost(bytes = "vec", tag = "8")]
     pub raw_transcript: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DealerTuple {
     #[prost(message, optional, tag = "1")]
@@ -193,6 +203,7 @@ pub struct DealerTuple {
     #[prost(uint32, tag = "2")]
     pub dealer_index: u32,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignatureTuple {
     #[prost(message, optional, tag = "1")]
@@ -200,6 +211,7 @@ pub struct SignatureTuple {
     #[prost(bytes = "vec", tag = "2")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscriptParams {
     #[prost(message, optional, tag = "1")]
@@ -218,6 +230,7 @@ pub struct IDkgTranscriptParams {
     #[prost(message, repeated, tag = "7")]
     pub idkg_transcript_operation_args: ::prost::alloc::vec::Vec<IDkgTranscript>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgDealing {
     #[prost(message, optional, tag = "1")]
@@ -226,6 +239,7 @@ pub struct IDkgDealing {
     #[prost(bytes = "vec", tag = "2")]
     pub raw_dealing: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgSignedDealingTuple {
     #[prost(message, optional, tag = "1")]
@@ -235,6 +249,7 @@ pub struct IDkgSignedDealingTuple {
     #[prost(bytes = "vec", tag = "3")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InitialIDkgDealings {
     #[prost(uint32, tag = "1")]
@@ -244,6 +259,7 @@ pub struct InitialIDkgDealings {
     #[prost(message, repeated, tag = "4")]
     pub signed_dealings: ::prost::alloc::vec::Vec<IDkgSignedDealingTuple>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExtendedDerivationPath {
     #[prost(message, optional, tag = "1")]
@@ -253,6 +269,7 @@ pub struct ExtendedDerivationPath {
 }
 /// Per subnet P2P configuration
 /// Note: protoc is mangling the name P2PConfig to P2pConfig
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GossipConfig {
     /// max outstanding request per peer MIN/DEFAULT/MAX 1/20/200
@@ -285,6 +302,7 @@ pub struct GossipConfig {
     pub advert_config: ::core::option::Option<GossipAdvertConfig>,
 }
 /// Per subnet config for advert distribution.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GossipAdvertConfig {
     /// The subset of peers to broadcast to, specified in percentage.
@@ -296,6 +314,7 @@ pub struct GossipAdvertConfig {
     #[prost(uint32, tag = "1")]
     pub best_effort_percentage: u32,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinFeatureInfo {
     /// The network for which the bitcoin feature is enabled.
@@ -305,6 +324,7 @@ pub struct BitcoinFeatureInfo {
     #[prost(enumeration = "BitcoinFeatureStatus", tag = "2")]
     pub status: i32,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetFeatures {
     /// This feature flag controls whether canister execution happens
@@ -326,6 +346,7 @@ pub struct SubnetFeatures {
     pub bitcoin: ::core::option::Option<BitcoinFeatureInfo>,
 }
 /// Per subnet ECDSA configuration
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaConfig {
     /// Number of quadruples to create in advance.
@@ -345,6 +366,7 @@ pub struct EcdsaConfig {
     #[prost(uint64, optional, tag = "6")]
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum IDkgTranscriptOperation {
@@ -378,6 +400,7 @@ impl IDkgTranscriptOperation {
 /// Represents the type of subnet. Subnets of different type might exhibit different
 /// behavior, e.g. being more restrictive in what operations are allowed or privileged
 /// compared to other subnet types.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum SubnetType {
@@ -408,6 +431,7 @@ impl SubnetType {
 }
 /// TODO(EXC-1114): This type is kept temporarily for backward compatibility and can safely
 /// be removed once this commit is released.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum BitcoinFeature {
@@ -429,6 +453,7 @@ impl BitcoinFeature {
     }
 }
 /// The status of the bitcoin feature.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum BitcoinFeatureStatus {

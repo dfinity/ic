@@ -301,7 +301,7 @@ fn save_state_file(state: &BackupManagerState, state_file: &PathBuf) -> Result<(
 }
 
 fn load_state_file(state_file: &PathBuf) -> Result<BackupManagerState, String> {
-    let cfg_str = fs::read_to_string(&state_file)
+    let cfg_str = fs::read_to_string(state_file)
         .map_err(|err| format!("Error loading state file: {:?}", err))?;
     json5::from_str::<BackupManagerState>(&cfg_str)
         .map_err(|err| format!("Error deserializing state: {:?}", err))

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 /// Represents a Query that is sent by an end user to a canister.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct UserQuery {
     pub source: UserId,
     pub receiver: CanisterId,
@@ -74,7 +74,7 @@ impl HasCanisterId for UserQuery {
 }
 
 /// Represents a Query that is sent by the IC.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct AnonymousQuery {
     pub receiver: CanisterId,
     pub method_name: String,

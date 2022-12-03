@@ -17,7 +17,7 @@ use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, Sub
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NotarizationDelaySettings {
     pub unit_delay: Duration,
     pub initial_notary_delay: Duration,

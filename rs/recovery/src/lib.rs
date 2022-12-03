@@ -705,18 +705,12 @@ impl Recovery {
                 RecoveryError::invalid_output_error(format!("Failed to create request: {}", err))
             })?;
 
-        let cbor_response = serde_cbor::from_slice(
-            &response
-                .bytes()
-                .await
-                .map_err(|e| {
-                    RecoveryError::invalid_output_error(format!(
-                        "failed to convert a response to bytes: {}",
-                        e
-                    ))
-                })?
-                .to_vec(),
-        )
+        let cbor_response = serde_cbor::from_slice(&response.bytes().await.map_err(|e| {
+            RecoveryError::invalid_output_error(format!(
+                "failed to convert a response to bytes: {}",
+                e
+            ))
+        })?)
         .map_err(|e| {
             RecoveryError::invalid_output_error(format!("response is not encoded as cbor: {}", e))
         })?;

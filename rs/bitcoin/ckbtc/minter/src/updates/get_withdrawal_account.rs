@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use super::get_btc_address::init_ecdsa_public_key;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GetWithdrawalAccountResult {
     pub account: Account,
 }

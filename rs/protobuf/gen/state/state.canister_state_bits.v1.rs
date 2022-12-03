@@ -1,3 +1,4 @@
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallContext {
     #[prost(bool, tag = "5")]
@@ -13,6 +14,7 @@ pub struct CallContext {
 }
 /// Nested message and enum types in `CallContext`.
 pub mod call_context {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Ingress {
         #[prost(message, optional, tag = "1")]
@@ -20,6 +22,7 @@ pub mod call_context {
         #[prost(bytes = "vec", tag = "2")]
         pub message_id: ::prost::alloc::vec::Vec<u8>,
     }
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct CanisterUpdateOrQuery {
         #[prost(message, optional, tag = "1")]
@@ -28,8 +31,10 @@ pub mod call_context {
         pub callback_id: u64,
     }
     /// System task is either a Heartbeat or a GlobalTimer.
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct SystemTask {}
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum CallOrigin {
         #[prost(message, tag = "1")]
@@ -44,6 +49,7 @@ pub mod call_context {
         SystemTask(SystemTask),
     }
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallContextEntry {
     #[prost(uint64, tag = "1")]
@@ -51,6 +57,7 @@ pub struct CallContextEntry {
     #[prost(message, optional, tag = "2")]
     pub call_context: ::core::option::Option<CallContext>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WasmClosure {
     #[prost(uint32, tag = "1")]
@@ -58,6 +65,7 @@ pub struct WasmClosure {
     #[prost(uint32, tag = "2")]
     pub env: u32,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Callback {
     #[prost(uint64, tag = "1")]
@@ -80,6 +88,7 @@ pub struct Callback {
     pub prepayment_for_response_transmission:
         ::core::option::Option<super::super::queues::v1::Cycles>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackEntry {
     #[prost(uint64, tag = "1")]
@@ -87,6 +96,7 @@ pub struct CallbackEntry {
     #[prost(message, optional, tag = "2")]
     pub callback: ::core::option::Option<Callback>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallContextManager {
     #[prost(uint64, tag = "1")]
@@ -98,12 +108,14 @@ pub struct CallContextManager {
     #[prost(message, repeated, tag = "4")]
     pub callbacks: ::prost::alloc::vec::Vec<CallbackEntry>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CyclesAccount {
     /// Cycle balance is stored as u128::to_bytes_le()
     #[prost(bytes = "vec", tag = "1")]
     pub cycles_balance: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Global {
     #[prost(oneof = "global::Global", tags = "1, 2, 3, 4")]
@@ -111,6 +123,7 @@ pub struct Global {
 }
 /// Nested message and enum types in `Global`.
 pub mod global {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Global {
         #[prost(int32, tag = "1")]
@@ -123,6 +136,7 @@ pub mod global {
         F64(f64),
     }
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WasmMethod {
     #[prost(oneof = "wasm_method::WasmMethod", tags = "1, 2, 3, 4")]
@@ -130,6 +144,7 @@ pub struct WasmMethod {
 }
 /// Nested message and enum types in `WasmMethod`.
 pub mod wasm_method {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum SystemMethod {
@@ -162,6 +177,7 @@ pub mod wasm_method {
             }
         }
     }
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum WasmMethod {
         #[prost(string, tag = "1")]
@@ -174,6 +190,7 @@ pub mod wasm_method {
         CompositeQuery(::prost::alloc::string::String),
     }
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WasmCustomSection {
     #[prost(enumeration = "CustomSectionType", tag = "1")]
@@ -181,12 +198,14 @@ pub struct WasmCustomSection {
     #[prost(bytes = "vec", tag = "2")]
     pub content: ::prost::alloc::vec::Vec<u8>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WasmMetadata {
     #[prost(btree_map = "string, message", tag = "1")]
     pub custom_sections:
         ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, WasmCustomSection>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecutionStateBits {
     #[prost(message, repeated, tag = "1")]
@@ -202,6 +221,7 @@ pub struct ExecutionStateBits {
     #[prost(bytes = "vec", optional, tag = "6")]
     pub binary_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StopCanisterContext {
     #[prost(oneof = "stop_canister_context::Context", tags = "1, 2")]
@@ -209,6 +229,7 @@ pub struct StopCanisterContext {
 }
 /// Nested message and enum types in `StopCanisterContext`.
 pub mod stop_canister_context {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Ingress {
         #[prost(message, optional, tag = "1")]
@@ -216,6 +237,7 @@ pub mod stop_canister_context {
         #[prost(bytes = "vec", tag = "2")]
         pub message_id: ::prost::alloc::vec::Vec<u8>,
     }
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Canister {
         #[prost(message, optional, tag = "1")]
@@ -227,6 +249,7 @@ pub mod stop_canister_context {
         #[prost(message, optional, tag = "4")]
         pub cycles: ::core::option::Option<super::super::super::queues::v1::Cycles>,
     }
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Context {
         #[prost(message, tag = "1")]
@@ -235,11 +258,13 @@ pub mod stop_canister_context {
         Canister(Canister),
     }
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStatusRunning {
     #[prost(message, optional, tag = "1")]
     pub call_context_manager: ::core::option::Option<CallContextManager>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStatusStopping {
     #[prost(message, optional, tag = "1")]
@@ -247,8 +272,10 @@ pub struct CanisterStatusStopping {
     #[prost(message, repeated, tag = "2")]
     pub stop_contexts: ::prost::alloc::vec::Vec<StopCanisterContext>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStatusStopped {}
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecutionTask {
     #[prost(oneof = "execution_task::Task", tags = "1, 2")]
@@ -256,6 +283,7 @@ pub struct ExecutionTask {
 }
 /// Nested message and enum types in `ExecutionTask`.
 pub mod execution_task {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct AbortedExecution {
         /// The execution cost that has already been charged from the canister.
@@ -268,6 +296,7 @@ pub mod execution_task {
     }
     /// Nested message and enum types in `AbortedExecution`.
     pub mod aborted_execution {
+        #[allow(clippy::derive_partial_eq_without_eq)]
         #[derive(Clone, PartialEq, ::prost::Oneof)]
         pub enum Message {
             #[prost(message, tag = "1")]
@@ -278,6 +307,7 @@ pub mod execution_task {
             Ingress(super::super::super::super::ingress::v1::Ingress),
         }
     }
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct AbortedInstallCode {
         /// The execution cost that has already been charged from the canister.
@@ -290,6 +320,7 @@ pub mod execution_task {
     }
     /// Nested message and enum types in `AbortedInstallCode`.
     pub mod aborted_install_code {
+        #[allow(clippy::derive_partial_eq_without_eq)]
         #[derive(Clone, PartialEq, ::prost::Oneof)]
         pub enum Message {
             #[prost(message, tag = "1")]
@@ -298,6 +329,7 @@ pub mod execution_task {
             Ingress(super::super::super::super::ingress::v1::Ingress),
         }
     }
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Task {
         #[prost(message, tag = "1")]
@@ -306,6 +338,7 @@ pub mod execution_task {
         AbortedInstallCode(AbortedInstallCode),
     }
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -372,6 +405,7 @@ pub struct CanisterStateBits {
 }
 /// Nested message and enum types in `CanisterStateBits`.
 pub mod canister_state_bits {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum CanisterStatus {
         #[prost(message, tag = "11")]
@@ -382,6 +416,7 @@ pub mod canister_state_bits {
         Stopped(super::CanisterStatusStopped),
     }
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CustomSectionType {

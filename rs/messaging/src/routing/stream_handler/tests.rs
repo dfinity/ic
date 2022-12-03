@@ -2593,7 +2593,7 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             fetch_histogram_vec_count(&metrics_registry, METRIC_TIME_IN_STREAM),
         );
         assert_eq!(
-            metric_vec(&[(&[(&LABEL_REMOTE, &&*REMOTE_SUBNET.to_string().as_str())], 2)]),
+            metric_vec(&[(&[(&LABEL_REMOTE, &REMOTE_SUBNET.to_string().as_str())], 2)]),
             fetch_histogram_vec_count(&metrics_registry, METRIC_TIME_IN_BACKLOG),
         );
     });
@@ -2847,7 +2847,7 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
         );
         // Check the number of inducted messages in the slice from the remote subnet.
         assert_eq!(
-            metric_vec(&[(&[(&LABEL_REMOTE, &&*REMOTE_SUBNET.to_string().as_str())], 5)]),
+            metric_vec(&[(&[(&LABEL_REMOTE, &REMOTE_SUBNET.to_string().as_str())], 5)]),
             fetch_histogram_vec_count(&metrics_registry, METRIC_TIME_IN_BACKLOG),
         );
     });

@@ -97,7 +97,7 @@ impl Buffer for CountBytes {
 /// SHA-256 followed by Ripemd160, also known as HASH160.
 pub fn hash160(bytes: &[u8]) -> [u8; 20] {
     use ripemd::{Digest, Ripemd160};
-    Ripemd160::digest(&Sha256::hash(bytes)).into()
+    Ripemd160::digest(Sha256::hash(bytes)).into()
 }
 
 /// Encodes a variable-size integer using the bitcoin encoding.
@@ -440,10 +440,10 @@ impl Encode for SignedTransaction {
         self.inputs.encode(buf);
         self.outputs.encode(buf);
         for txin in self.inputs.iter() {
-            (&[
+            [
                 Bytes::new(txin.signature.as_slice()),
                 Bytes::new(&txin.pubkey),
-            ][..])
+            ][..]
                 .encode(buf);
         }
         self.lock_time.encode(buf)

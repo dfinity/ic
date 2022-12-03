@@ -15,7 +15,7 @@ struct Block {
 
 mod pb {
     // Pretend Prost-generated message,
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(Clone, PartialEq, Eq, ::prost::Message)]
     pub struct Block {
         #[prost(uint64, tag = "1")]
         pub height: u64,

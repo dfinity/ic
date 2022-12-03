@@ -1,3 +1,4 @@
+use ic_cup_explorer::get_catchup_content;
 use ic_protobuf::registry::{
     node::v1::connection_endpoint, node::v1::NodeRecord, subnet::v1::SubnetRecord,
 };
@@ -11,8 +12,6 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::task;
-
-mod lib;
 
 /// Returns the list of nodes assigned to the specified subnet_id.
 async fn get_nodes(
@@ -106,7 +105,7 @@ async fn main() {
     println!("\nDetecting the latest CUP...");
 
     let tasks = node_records.into_iter().map(|(node_id, node)| {
-        task::spawn(async move { (node_id, lib::get_catchup_content(&http_url(&node)).await) })
+        task::spawn(async move { (node_id, get_catchup_content(&http_url(&node)).await) })
     });
 
     let mut latest_height = 0;

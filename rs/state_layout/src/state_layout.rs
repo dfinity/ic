@@ -855,7 +855,7 @@ impl StateLayout {
                 FSync::Yes,
                 thread_pool,
             )?;
-            std::fs::rename(&scratchpad, &dst)?;
+            std::fs::rename(&scratchpad, dst)?;
             match dst.parent() {
                 Some(parent) => sync_path(parent),
                 None => Ok(()),
@@ -1683,7 +1683,7 @@ fn copy_recursively(
     //   2. We only invoke this function with DST being a child of a
     //   directory that is wiped out on replica start, so we don't care much
     //   about this temporary directory being properly synced.
-    std::fs::create_dir_all(&root_dst)?;
+    std::fs::create_dir_all(root_dst)?;
     match thread_pool {
         Some(thread_pool) => {
             let results = parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
@@ -1739,9 +1739,9 @@ fn copy_file_and_set_permissions(
         FilePermissions::ReadOnly => permissions.set_readonly(true),
         FilePermissions::ReadWrite => permissions.set_readonly(false),
     }
-    std::fs::set_permissions(&dst, permissions)?;
+    std::fs::set_permissions(dst, permissions)?;
     match fsync {
-        FSync::Yes => sync_path(&dst),
+        FSync::Yes => sync_path(dst),
         FSync::No => Ok(()),
     }
 }

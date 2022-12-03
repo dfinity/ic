@@ -168,7 +168,7 @@ fn main() -> io::Result<()> {
             &["ic_active_version", "ic_replica_binary_hash"],
         );
         g.with_label_values(&[
-            &ReplicaVersion::default().to_string(),
+            ReplicaVersion::default().as_ref(),
             &get_replica_binary_hash()
                 .map(|x| x.1)
                 .unwrap_or_else(|_| "na".to_string()),

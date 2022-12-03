@@ -21,7 +21,7 @@ pub const NEURON_MANAGEMENT_PSEUDO_HASH: &str =
 ///
 /// The transaction_identifier uniquely identifies a transaction in a particular
 /// network and block or in the mempool.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct TransactionIdentifier {
     /// Any transactions that are attributable only to a block (ex: a block

@@ -395,7 +395,7 @@ impl<Cfg: ManagedProcessCfg> ProcessPool<Cfg> {
         // responding to signals, and the only way to see them is polling the
         // associated object. In this case, this thread stops responding
         // to SIGINT and SIGTERM.
-        let signals = Signals::new(&[SIGINT, SIGTERM]).expect("Couldn't create signals");
+        let signals = Signals::new([SIGINT, SIGTERM]).expect("Couldn't create signals");
         debug!(self.logger, "Created signal handler");
         self.start_with_signal_filter(env, signals)
     }

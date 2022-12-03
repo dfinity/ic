@@ -101,7 +101,7 @@ pub fn init(init_args: InitArgs) {
     INDEX.with(|idx| *idx.borrow_mut() = Some(Index::from(init_args)));
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct GetAccountTransactionsArgs {
     pub account: Account,
     // The txid of the last transaction seen by the client.
@@ -112,27 +112,27 @@ pub struct GetAccountTransactionsArgs {
     pub max_results: Nat,
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct TransactionWithId {
     pub id: Nat,
     pub transaction: Transaction,
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct GetTransactions {
     pub transactions: Vec<TransactionWithId>,
     // The txid of the oldest transaction the account has
     pub oldest_tx_id: Option<TxId>,
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct GetTransactionsErr {
     pub message: String,
 }
 
 pub type GetTransactionsResult = Result<GetTransactions, GetTransactionsErr>;
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct ListSubaccountsArgs {
     pub owner: PrincipalId,
     // The last subaccount seen by the client for the given principal.
@@ -306,7 +306,7 @@ fn add_tx(txid: u64, account: Account) {
 /// start=0     max_results=2 => []         // start is before oldest txid
 fn get_account_transactions_ids(args: GetAccountTransactionsArgs) -> Vec<u64> {
     // The SNS Ledger txid (or block index) is a u64
-    if args.start.is_some() && (&args.start).as_ref().unwrap() > &Nat::from(u64::MAX) {
+    if args.start.is_some() && args.start.as_ref().unwrap() > &Nat::from(u64::MAX) {
         return vec![];
     }
     let max_results = (&args.max_results)

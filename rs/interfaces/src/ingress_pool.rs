@@ -137,6 +137,7 @@ pub enum SelectResult<T> {
 }
 
 /// A query interface that selects qualifying artifacts from the validated pool.
+#[allow(clippy::type_complexity)]
 pub trait IngressPoolSelect: Send + Sync {
     /// Select qualifying objects from the validated pool.
     fn select_validated<'a>(

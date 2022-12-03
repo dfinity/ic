@@ -27,7 +27,7 @@ use std::convert::From;
 use std::sync::Arc;
 use std::time::Duration;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
     /// The last full round that a canister got the chance to execute. This
@@ -529,7 +529,7 @@ impl CanisterState {
 ///   continue it.
 /// - `ContinueInstallCode`: the canister has a long-running execution of
 /// `install_code` subnet message and will continue it.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NextExecution {
     None,
     StartNew,

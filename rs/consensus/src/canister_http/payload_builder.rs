@@ -172,9 +172,9 @@ fn group_shares_by_callback_id<'a, Shares: Iterator<Item = &'a CanisterHttpRespo
     > = BTreeMap::new();
     for share in shares {
         map.entry(share.content.id)
-            .or_insert(BTreeMap::new())
+            .or_default()
             .entry(share.content.clone())
-            .or_insert(Vec::new())
+            .or_default()
             .push(share);
     }
     map

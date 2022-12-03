@@ -6,7 +6,7 @@ use hyper::{
     Uri,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DomainAddr {
     pub domain: Uri,
     pub addr: Option<SocketAddr>,

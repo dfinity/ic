@@ -229,7 +229,7 @@ pub struct AddFirewallRulesPayload {
 /// The payload of a proposal to remove firewall rules
 ///
 /// See /rs/protobuf/def/registry/firewall/v1/firewall.proto
-#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct RemoveFirewallRulesPayload {
     /// Scope of application (with node/subnet prefix as applicable)
     pub scope: FirewallRulesScope,

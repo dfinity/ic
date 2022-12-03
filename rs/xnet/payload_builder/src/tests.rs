@@ -400,7 +400,7 @@ impl PayloadBuilderTestFixture {
         let state_manager = Arc::new(FakeStateManager::new());
         let tls_handshake = Arc::new(FakeTlsHandshake::new());
 
-        let (payloads, expected_indices) = get_xnet_state_for_testing(&*state_manager);
+        let (payloads, expected_indices) = get_xnet_state_for_testing(&state_manager);
         let (registry, _) = get_registry_and_urls_for_test(subnet_count, expected_indices);
 
         PayloadBuilderTestFixture {

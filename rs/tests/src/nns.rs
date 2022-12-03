@@ -420,7 +420,7 @@ pub async fn await_replica_status_change(
 async fn get_replica_status(
     endpoint: &IcEndpoint,
 ) -> Result<ic_agent::agent::status::Status, ic_agent::AgentError> {
-    match create_agent(&endpoint.url.to_string()).await {
+    match create_agent(endpoint.url.as_ref()).await {
         Ok(agent) => agent.status().await,
         Err(e) => Err(e),
     }
@@ -432,7 +432,7 @@ async fn get_replica_status(
 async fn get_replica_status_from_snapshot(
     endpoint: &IcNodeSnapshot,
 ) -> Result<ic_agent::agent::status::Status, ic_agent::AgentError> {
-    match create_agent(&endpoint.get_public_url().to_string()).await {
+    match create_agent(endpoint.get_public_url().as_ref()).await {
         Ok(agent) => agent.status().await,
         Err(e) => Err(e),
     }

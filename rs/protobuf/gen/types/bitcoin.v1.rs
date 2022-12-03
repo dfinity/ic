@@ -1,4 +1,6 @@
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Transaction {
     #[prost(int32, tag = "1")]
     pub version: i32,
@@ -9,7 +11,9 @@ pub struct Transaction {
     #[prost(message, repeated, tag = "4")]
     pub output: ::prost::alloc::vec::Vec<TxOut>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TxIn {
     #[prost(message, optional, tag = "1")]
     pub previous_output: ::core::option::Option<OutPoint>,
@@ -20,21 +24,27 @@ pub struct TxIn {
     #[prost(bytes = "vec", repeated, tag = "4")]
     pub witness: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TxOut {
     #[prost(uint64, tag = "1")]
     pub value: u64,
     #[prost(bytes = "vec", tag = "2")]
     pub script_pubkey: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OutPoint {
     #[prost(bytes = "vec", tag = "1")]
     pub txid: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint32, tag = "2")]
     pub vout: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockHeader {
     #[prost(int32, tag = "1")]
     pub version: i32,
@@ -49,14 +59,18 @@ pub struct BlockHeader {
     #[prost(uint32, tag = "6")]
     pub nonce: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Block {
     #[prost(message, optional, tag = "1")]
     pub header: ::core::option::Option<BlockHeader>,
     #[prost(message, repeated, tag = "2")]
     pub txdata: ::prost::alloc::vec::Vec<Transaction>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSuccessorsRequest {
     /// Used by the adapter to filter out previously sent blocks from its
     /// `GetSuccessorsResponse`.
@@ -68,7 +82,9 @@ pub struct GetSuccessorsRequest {
     #[prost(bytes = "vec", tag = "2")]
     pub anchor: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSuccessorsResponse {
     /// The blocks that the adapter has knowledge of based on the anchor and processed
     /// block hashes provided in the `GetSuccessorsRequest`.
@@ -79,29 +95,39 @@ pub struct GetSuccessorsResponse {
     #[prost(message, repeated, tag = "2")]
     pub next: ::prost::alloc::vec::Vec<BlockHeader>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendTransactionRequest {
     #[prost(bytes = "vec", tag = "1")]
     pub transaction: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterSendTransactionRequest {
     #[prost(enumeration = "Network", tag = "1")]
     pub network: i32,
     #[prost(bytes = "vec", tag = "2")]
     pub transaction: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendTransactionResponse {}
 /// Wraps the different types of requests to the Bitcoin Adapter.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterRequestWrapper {
     #[prost(oneof = "bitcoin_adapter_request_wrapper::R", tags = "1, 2, 3, 4")]
     pub r: ::core::option::Option<bitcoin_adapter_request_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterRequestWrapper`.
 pub mod bitcoin_adapter_request_wrapper {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum R {
         #[prost(message, tag = "1")]
         GetSuccessorsRequest(super::GetSuccessorsRequest),
@@ -114,14 +140,18 @@ pub mod bitcoin_adapter_request_wrapper {
     }
 }
 /// Wraps the different types of responses from the Bitcoin Adapter.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterResponseWrapper {
     #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "1, 2, 3, 4")]
     pub r: ::core::option::Option<bitcoin_adapter_response_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterResponseWrapper`.
 pub mod bitcoin_adapter_response_wrapper {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum R {
         #[prost(message, tag = "1")]
         GetSuccessorsResponse(super::GetSuccessorsResponse),
@@ -135,7 +165,9 @@ pub mod bitcoin_adapter_response_wrapper {
 }
 /// A Bitcoin Adapter request, used to store the requests in the
 /// `ReplicatedState`.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterRequest {
     /// The wrapped Bitcoin request to the Adapter.
     #[prost(message, optional, tag = "1")]
@@ -147,7 +179,9 @@ pub struct BitcoinAdapterRequest {
 }
 /// A Bitcoin Adapter response, used to store the responses in the
 /// `ReplicatedState`.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterResponse {
     /// The wrapped Bitcoin response from the Adapter.
     #[prost(message, optional, tag = "1")]
@@ -157,7 +191,9 @@ pub struct BitcoinAdapterResponse {
     #[prost(uint64, tag = "2")]
     pub callback_id: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AdapterQueues {
     /// Tracks the callback id that will be generated for the next request.
     /// Used to match incoming responses to existing requests.
@@ -173,21 +209,27 @@ pub struct AdapterQueues {
     #[prost(uint32, tag = "4")]
     pub requests_queue_capacity: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UnstableBlocks {
     #[prost(uint32, tag = "1")]
     pub stability_threshold: u32,
     #[prost(message, optional, tag = "2")]
     pub tree: ::core::option::Option<BlockTree>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockTree {
     #[prost(message, optional, tag = "1")]
     pub root: ::core::option::Option<Block>,
     #[prost(message, repeated, tag = "2")]
     pub children: ::prost::alloc::vec::Vec<BlockTree>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Utxo {
     #[prost(message, optional, tag = "1")]
     pub outpoint: ::core::option::Option<OutPoint>,
@@ -200,7 +242,9 @@ pub struct Utxo {
 /// NOTE: This request is specific to the Bitcoin wasm canister. It supersedes the
 /// `GetSuccessorsRequest` above, which will be deleted once the  Bitcoin replica canister is
 /// phased out.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterGetSuccessorsRequestInitial {
     #[prost(enumeration = "Network", tag = "1")]
     pub network: i32,
@@ -213,7 +257,9 @@ pub struct CanisterGetSuccessorsRequestInitial {
 /// NOTE: This response is specific to the Bitcoin wasm canister. It supersedes the
 /// `GetSuccessorsResponse` above, which will be deleted once the  Bitcoin replica canister is
 /// phased out.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterGetSuccessorsResponseComplete {
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub blocks: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
@@ -221,7 +267,9 @@ pub struct CanisterGetSuccessorsResponseComplete {
     pub next: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// Represents the Bitcoin state that isn't stored in PageMaps.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinStateBits {
     /// The queues that maintain the requests to and responses from the Bitcoin
     /// Adapter.
@@ -236,19 +284,9 @@ pub struct BitcoinStateBits {
     #[prost(message, repeated, tag = "5")]
     pub utxos_large: ::prost::alloc::vec::Vec<Utxo>,
 }
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Network {
     Unspecified = 0,

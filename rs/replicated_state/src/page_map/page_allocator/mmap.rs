@@ -159,6 +159,8 @@ impl PageAllocatorInner {
             .iter()
             .map(|(page_index, contents)| {
                 let mut page = core.allocate_page(page_allocator);
+                // Lint suggestion leads to non-compiling a bug. Rustc 1.65
+                #[allow(clippy::explicit_auto_deref)]
                 page.copy_from_slice(0, *contents);
                 (*page_index, Page(Arc::new(page)))
             })

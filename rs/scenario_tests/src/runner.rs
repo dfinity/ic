@@ -105,6 +105,7 @@ pub enum Test {
     Failing(TestDescAndFn, String, Option<String>),
 }
 
+#[allow(clippy::result_large_err)]
 fn passing(t: Test) -> Result<TestDescAndFn, Test> {
     match t {
         Test::Passing(t) => Ok(t),

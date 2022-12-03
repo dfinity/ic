@@ -59,7 +59,7 @@ const FILE_TO_GROUP: &str = "canister.pbuf";
 ///     will decrease by at least two orders of magnitude, which is significant enough.
 const MAX_FILE_SIZE_TO_GROUP: u32 = 1 << 13; // 8 KiB
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ManifestValidationError {
     InvalidRootHash {
         expected_hash: Vec<u8>,
@@ -101,7 +101,7 @@ impl fmt::Display for ManifestValidationError {
 
 impl std::error::Error for ManifestValidationError {}
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ChunkValidationError {
     InvalidChunkHash {
         chunk_ix: usize,
@@ -672,7 +672,7 @@ fn default_hash_plan(files: &[FileWithSize], max_chunk_size: u32) -> Vec<ChunkAc
         .iter()
         .map(|FileWithSize(_, size_bytes)| count_chunks(*size_bytes, max_chunk_size))
         .sum();
-    return vec![ChunkAction::Recompute; chunks_total];
+    vec![ChunkAction::Recompute; chunks_total]
 }
 
 fn dirty_chunks_of_file(

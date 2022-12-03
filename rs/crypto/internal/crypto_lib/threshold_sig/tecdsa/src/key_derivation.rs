@@ -24,7 +24,7 @@ impl DerivationIndex {
         for w in &mut n {
             let (v, c) = w.overflowing_add(carry);
             *w = v;
-            carry = if c { 1 } else { 0 };
+            carry = u8::from(c);
         }
 
         if carry != 0 {

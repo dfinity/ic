@@ -448,7 +448,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         impl Drop for UnixListenerDrop {
             fn drop(&mut self) {
                 // There's no way to return a useful error here
-                let _ = std::fs::remove_file(&self.path).unwrap();
+                std::fs::remove_file(&self.path).unwrap();
             }
         }
 

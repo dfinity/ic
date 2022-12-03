@@ -303,15 +303,15 @@ fn valid_routing_table() {
 
     assert_eq!(rt.well_formed(), Ok(()));
 
-    assert!(rt.route(CanisterId::from(0).get()) == None);
-    assert!(rt.route(CanisterId::from(0x99).get()) == None);
+    assert!(rt.route(CanisterId::from(0).get()).is_none());
+    assert!(rt.route(CanisterId::from(0x99).get()).is_none());
     assert!(rt.route(CanisterId::from(0x100).get()) == Some(subnet_test_id(1)));
     assert!(rt.route(CanisterId::from(0x10000).get()) == Some(subnet_test_id(1)));
     assert!(rt.route(CanisterId::from(0x100ff).get()) == Some(subnet_test_id(1)));
-    assert!(rt.route(CanisterId::from(0x10100).get()) == None);
+    assert!(rt.route(CanisterId::from(0x10100).get()).is_none());
     assert!(rt.route(CanisterId::from(0x20500).get()) == Some(subnet_test_id(2)));
     assert!(rt.route(CanisterId::from(0x50050).get()) == Some(subnet_test_id(1)));
-    assert!(rt.route(CanisterId::from(0x100000).get()) == None);
+    assert!(rt.route(CanisterId::from(0x100000).get()).is_none());
     assert!(rt.route(CanisterId::from(0x80500).get()) == Some(subnet_test_id(8)));
     assert!(rt.route(CanisterId::from(0x8ffff).get()) == Some(subnet_test_id(8)));
     assert!(rt.route(CanisterId::from(0x90000).get()) == Some(subnet_test_id(9)));

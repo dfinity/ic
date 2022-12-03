@@ -757,7 +757,7 @@ struct ProvisionalWhitelistFile {
 }
 
 fn fetch_replica_version_sha256(version_id: ReplicaVersion) -> Result<String> {
-    let url = UPD_IMG_DEFAULT_SHA256_URL.replace("<REPLICA_VERSION>", &version_id.to_string());
+    let url = UPD_IMG_DEFAULT_SHA256_URL.replace("<REPLICA_VERSION>", version_id.as_ref());
     let url = Url::parse(&url)?;
     let c = ClientBuilder::new().timeout(REQUEST_TIMEOUT).build()?;
 

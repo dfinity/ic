@@ -1247,7 +1247,7 @@ mod tests {
 
             let group_path = &path.join("0");
             // We expect 3 folders for heights 0 to 2.
-            assert_eq!(fs::read_dir(&group_path).unwrap().count(), 3);
+            assert_eq!(fs::read_dir(group_path).unwrap().count(), 3);
             insert_dirs(&[&subnet_id.to_string(), "0", "1", "2"]);
 
             // Let's sleep so that the previous heights are close to being purged.
@@ -1269,7 +1269,7 @@ mod tests {
             pool.backup.as_ref().unwrap().sync_backup();
 
             // We expect 5 folders for heights 0 to 4.
-            assert_eq!(fs::read_dir(&group_path).unwrap().count(), 5);
+            assert_eq!(fs::read_dir(group_path).unwrap().count(), 5);
             insert_dirs(&["3", "4"]);
 
             // We sleep just enough so that purging is overdue and the oldest artifacts are
@@ -1286,7 +1286,7 @@ mod tests {
             pool.backup.as_ref().unwrap().sync_purging();
 
             // We expect only 2 folders to survive the purging: 3, 4
-            assert_eq!(fs::read_dir(&group_path).unwrap().count(), 2);
+            assert_eq!(fs::read_dir(group_path).unwrap().count(), 2);
             assert!(group_path.join("3").exists());
             assert!(group_path.join("4").exists());
 
@@ -1304,7 +1304,7 @@ mod tests {
             // We deleted all artifacts, but the group folder was updated by this and needs
             // to age now.
             assert!(group_path.exists());
-            assert_eq!(fs::read_dir(&group_path).unwrap().count(), 0);
+            assert_eq!(fs::read_dir(group_path).unwrap().count(), 0);
 
             let sleep_time = purging_interval + purging_interval / 10 * 3;
             time_source

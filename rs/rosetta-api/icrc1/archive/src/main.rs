@@ -106,12 +106,12 @@ fn with_archive_opts<R>(f: impl FnOnce(&ArchiveConfig) -> R) -> R {
 
 /// A helper function to access the memory manager.
 fn with_memory_manager<R>(f: impl FnOnce(&MemoryManager<Memory>) -> R) -> R {
-    MEMORY_MANAGER.with(|cell| f(&*cell.borrow()))
+    MEMORY_MANAGER.with(|cell| f(&cell.borrow()))
 }
 
 /// A helper function to access the block list.
 fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
-    BLOCKS.with(|cell| f(&*cell.borrow()))
+    BLOCKS.with(|cell| f(&cell.borrow()))
 }
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
@@ -208,7 +208,7 @@ fn remaining_capacity() -> usize {
 #[candid_method(query)]
 fn get_transaction(index: BlockIndex) -> Option<Transaction> {
     let idx_offset = with_archive_opts(|opts| opts.block_index_offset);
-    let relative_idx = (idx_offset < index).then(|| (index - idx_offset) as usize)?;
+    let relative_idx = (idx_offset < index).then_some((index - idx_offset) as usize)?;
 
     let block = with_blocks(|blocks| blocks.get(relative_idx))?;
     Some(decode_transaction(index, block))

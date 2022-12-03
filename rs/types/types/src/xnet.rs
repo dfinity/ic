@@ -129,7 +129,7 @@ impl<T> StreamIndexedQueue<T> {
     }
 
     /// Returns an iterator over the items in the queue, with their indices.
-    pub fn iter<'a>(&'a self) -> impl std::iter::Iterator<Item = (StreamIndex, &T)> + 'a {
+    pub fn iter(&self) -> impl std::iter::Iterator<Item = (StreamIndex, &T)> {
         (self.begin.get()..)
             .zip(self.queue.iter())
             .map(|(index, item)| (StreamIndex::from(index), item))

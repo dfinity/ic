@@ -473,8 +473,8 @@ impl Load for RoutesLoader {
         }
         let path = path.unwrap();
 
-        let f = File::open(&path)
-            .with_context(|| format!("failed to open file {}", &path.display()))?;
+        let f =
+            File::open(path).with_context(|| format!("failed to open file {}", &path.display()))?;
         let routes: Routes = serde_json::from_reader(f).context("failed to parse json")?;
 
         Ok(routes)

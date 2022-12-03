@@ -126,7 +126,7 @@ pub trait MutableCertificationPool: CertificationPool {
 }
 
 /// Enumeration of all permanent errors the verifier component can return.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CertificationPermanentError {
     CryptoError(CryptoError),
     UnexpectedCertificationHash(CryptoHashOfPartialState),
@@ -134,7 +134,7 @@ pub enum CertificationPermanentError {
 }
 
 /// Enumeration of all transient errors the verifier component can return.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CertificationTransientError {
     CryptoError(CryptoError),
 }

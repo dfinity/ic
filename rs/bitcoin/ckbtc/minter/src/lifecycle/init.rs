@@ -6,7 +6,7 @@ use serde::Serialize;
 
 pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct InitArgs {
     /// The bitcoin network that the minter will connect to
     pub btc_network: Network,

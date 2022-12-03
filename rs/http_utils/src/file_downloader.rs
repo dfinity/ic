@@ -94,12 +94,12 @@ impl FileDownloader {
                                 e
                             );
                         }
-                        fs::remove_file(&file_path)
+                        fs::remove_file(file_path)
                             .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
                     }
                 }
             } else {
-                fs::remove_file(&file_path)
+                fs::remove_file(file_path)
                     .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
             }
         }

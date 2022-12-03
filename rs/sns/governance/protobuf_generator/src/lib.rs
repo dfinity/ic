@@ -18,7 +18,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     // Use BTreeMap for all maps to enforce determinism and to be able to use reverse
     // iterators.
-    config.btree_map(&["."]);
+    config.btree_map(["."]);
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
 

@@ -166,7 +166,7 @@ impl Swap {
     /// Retrieve a reference to the `init` field. The `init` field
     /// must always be not-`None` given how `new` is implemented.
     pub fn init(&self) -> &Init {
-        (&self.init).as_ref().unwrap()
+        self.init.as_ref().unwrap()
     }
 
     /// The number of SNS tokens for sale, or zero if the sale hasn't

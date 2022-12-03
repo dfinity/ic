@@ -134,15 +134,15 @@ impl RosettaApiHandle {
     pub fn generate_rosetta_cli_config(&self, cli_json: &Path, cli_ros: &Path) -> String {
         use std::fs::write;
 
-        let ic_address = hex::encode(&self.ledger_can_id);
+        let ic_address = hex::encode(self.ledger_can_id);
         let dst_dir: PathBuf = self.workspace.path().to_owned();
 
         let cli_json = std::fs::read_to_string(cli_json).expect("Reading rosetta cli json failed");
         let cli_ros = std::fs::read_to_string(cli_ros).expect("Reading rosetta cli ros failed");
 
-        let cli_json = (&cli_json).replace("PUT_ROSETTA_API_URL_HERE", &self.api_url.to_string());
-        let cli_json = (&cli_json).replace("PUT_LEDGER_ADDRESS_HERE", &ic_address);
-        let cli_ros = (&cli_ros).replace("PUT_LEDGER_ADDRESS_HERE", &ic_address);
+        let cli_json = cli_json.replace("PUT_ROSETTA_API_URL_HERE", &self.api_url.to_string());
+        let cli_json = cli_json.replace("PUT_LEDGER_ADDRESS_HERE", &ic_address);
+        let cli_ros = cli_ros.replace("PUT_LEDGER_ADDRESS_HERE", &ic_address);
 
         write(dst_dir.join("ros_cli.json"), cli_json).expect("Writing rosetta cli json failed");
         write(dst_dir.join("ros_workflows.ros"), cli_ros).expect("Writing rosetta cli ros failed");

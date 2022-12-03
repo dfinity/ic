@@ -230,10 +230,10 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             return Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled);
         };
 
-        let current_idkg_public_key_proto = (&self.current_node_public_keys().idkg_dealing_encryption_public_key
+        let current_idkg_public_key_proto = self.current_node_public_keys().idkg_dealing_encryption_public_key
             .expect("missing local IDKG public key! \
             This should not happen because it's expected that check_keys_with_registry() was called before \
-            to ensure that rotation was needed.")).clone();
+            to ensure that rotation was needed.");
         let idkg_public_key_from_registry = fetch_idkg_dealing_encryption_public_key_from_registry(
             &self.node_id,
             self.registry_client.as_ref(),

@@ -300,7 +300,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             last_block_hash,
             stopped,
             tip,
-            &mut *blockchain,
+            &mut blockchain,
         )
         .await?;
 

@@ -274,7 +274,7 @@ pub fn convert_to_api_error(err: Error, token_name: &str) -> ApiError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ICError {
     #[serde(skip)]
     pub retriable: bool,
@@ -312,7 +312,7 @@ impl TryFrom<Option<Object>> for ICError {
 
 /// A arbitrary JSON object passed to `RosettaError`.
 /// More specific error variants should be preferred.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Details {
     /// An extra, more detailed error message.
     /// This is distinct from Rosetta `Error.message`.

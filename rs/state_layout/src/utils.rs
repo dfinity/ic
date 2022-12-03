@@ -76,7 +76,7 @@ pub fn do_copy(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<(
 /// it exists
 pub fn do_copy_overwrite(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<()> {
     if dst.exists() {
-        std::fs::remove_file(&dst)?;
+        std::fs::remove_file(dst)?;
     }
     do_copy(log, src, dst)
 }

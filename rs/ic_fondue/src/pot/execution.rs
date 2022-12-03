@@ -129,7 +129,7 @@ pub fn execute(config: &Config, mut tasks: Vec<pot::Pot>) -> Option<ExecutionRes
     // Installs our signal handler. From this point onwards, this thread stops
     // responding to SIGINT and SIGTERM. Be very careful moving this line and
     // even more careful spawning threads before this point.
-    let mut signals = Signals::new(&[SIGINT, SIGTERM]).expect("Couldn't create signals");
+    let mut signals = Signals::new([SIGINT, SIGTERM]).expect("Couldn't create signals");
 
     executor
         .poll

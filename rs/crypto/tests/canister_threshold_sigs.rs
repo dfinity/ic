@@ -3065,7 +3065,7 @@ fn generate_complaints<'a>(
     let complainer_id = random_receiver_id(params);
     let complainer_index = params
         .receiver_index(complainer_id)
-        .expect(&*format!("Missing receiver {:?}", complainer_id));
+        .unwrap_or_else(|| panic!("Missing receiver {:?}", complainer_id));
     dealing_indices_to_corrupt
         .iter()
         .for_each(|index_to_corrupt| {

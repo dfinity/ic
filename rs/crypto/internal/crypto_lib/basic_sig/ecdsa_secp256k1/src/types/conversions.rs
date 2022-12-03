@@ -48,7 +48,9 @@ mod tests {
         let bytes = vec![0; SignatureBytes::SIZE + 1];
         let result = SignatureBytes::try_from(bytes);
         assert!(result.is_err());
-        assert!(result.unwrap_err().is_malformed_signature());
+        assert!(result
+            .expect_err("Unexpected success.")
+            .is_malformed_signature());
     }
 
     #[test]
@@ -56,6 +58,8 @@ mod tests {
         let bytes = vec![0; SignatureBytes::SIZE - 1];
         let result = SignatureBytes::try_from(bytes);
         assert!(result.is_err());
-        assert!(result.unwrap_err().is_malformed_signature());
+        assert!(result
+            .expect_err("Unexpected success.")
+            .is_malformed_signature());
     }
 }

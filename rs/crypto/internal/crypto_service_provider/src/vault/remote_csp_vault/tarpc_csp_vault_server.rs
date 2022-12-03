@@ -142,7 +142,7 @@ impl<
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.sign(algorithm_id, &*msg, key_id);
+        let job = move || vault.sign(algorithm_id, &msg, key_id);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 
@@ -164,7 +164,7 @@ impl<
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.multi_sign(algorithm_id, &*message, key_id);
+        let job = move || vault.multi_sign(algorithm_id, &message, key_id);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 
@@ -186,7 +186,7 @@ impl<
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.threshold_sign(algorithm_id, &*message, key_id);
+        let job = move || vault.threshold_sign(algorithm_id, &message, key_id);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 
@@ -199,7 +199,7 @@ impl<
     ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError> {
         let vault = self.local_csp_vault;
         let job = move || {
-            vault.threshold_keygen_for_test(algorithm_id, threshold, &*signatory_eligibility)
+            vault.threshold_keygen_for_test(algorithm_id, threshold, &signatory_eligibility)
         };
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
@@ -333,7 +333,7 @@ impl<
         key_id: KeyId,
     ) -> Result<CspSignature, CspTlsSignError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.tls_sign(&*message, &key_id);
+        let job = move || vault.tls_sign(&message, &key_id);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

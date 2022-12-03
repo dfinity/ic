@@ -79,6 +79,6 @@ fuzz_target!(|data: &[u8]| {
     if data.len() != 64 {
         return;
     }
-    let _ = sqrt_ratio_fuzz_run(EccCurveType::K256, data);
-    let _ = sqrt_ratio_fuzz_run(EccCurveType::P256, data);
+    sqrt_ratio_fuzz_run(EccCurveType::K256, data);
+    sqrt_ratio_fuzz_run(EccCurveType::P256, data);
 });

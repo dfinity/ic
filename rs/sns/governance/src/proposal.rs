@@ -568,10 +568,10 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
             }
             _ => {
                 defects.push("NervousSystemFunction must have a function_type set to GenericNervousSystemFunction".to_string());
-                return Err(format!(
+                Err(format!(
                     "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
                     defects.join("\n")
-                ));
+                ))
             }
         }
     }

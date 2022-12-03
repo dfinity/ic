@@ -461,13 +461,13 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
 
 fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signature {
     let mut msg = b"\x0Aic-request".to_vec();
-    msg.extend(&content.representation_independent_hash());
+    msg.extend(content.representation_independent_hash());
     identity.sign(&msg).unwrap()
 }
 
 pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signature {
     let mut msg = b"\x0Aic-request".to_vec();
-    msg.extend(&content.representation_independent_hash());
+    msg.extend(content.representation_independent_hash());
     identity.sign(&msg).unwrap()
 }
 

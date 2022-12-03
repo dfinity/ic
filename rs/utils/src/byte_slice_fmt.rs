@@ -2,7 +2,7 @@
 /// hexadecimal.
 pub fn truncate_and_format(slice: &[u8], max_bytes_to_format: usize) -> String {
     let truncated = &slice[..slice.len().min(max_bytes_to_format)];
-    let content_hex = hex::encode(&truncated);
+    let content_hex = hex::encode(truncated);
     let ellipsis = if truncated.len() < slice.len() {
         "…"
     } else {

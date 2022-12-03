@@ -1,4 +1,5 @@
 /// The reward rate for a specific node type
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRewardRate {
     /// The number of 10,000ths of IMF SDR (currency code XDR) to be rewarded per
@@ -9,12 +10,14 @@ pub struct NodeRewardRate {
     pub node_reward_type: i32,
 }
 /// The reward rates for a set of node types
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRewardRates {
     #[prost(message, repeated, tag = "1")]
     pub rates: ::prost::alloc::vec::Vec<NodeRewardRate>,
 }
 /// Contains the node reward rates for each region where IC nodes are operated
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRewardsTable {
     /// Maps regions to the node reward rates in that region
@@ -23,6 +26,7 @@ pub struct NodeRewardsTable {
         ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, NodeRewardRates>,
 }
 /// The payload of a proposal to update the node rewards table
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateNodeRewardsTableProposalPayload {
     /// Maps regions to the node reward rates in that region
@@ -32,6 +36,7 @@ pub struct UpdateNodeRewardsTableProposalPayload {
 }
 /// Some nodes will have different properties (e.g. upgraded storage capacity)
 /// that require a unique reward rate.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NodeRewardType {

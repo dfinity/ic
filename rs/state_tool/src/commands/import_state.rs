@@ -28,7 +28,7 @@ fn copy_recursively(src: &Path, dst: &Path) -> Result<(), String> {
                 .read_dir()
                 .map_err(|e| format!("failed to read directory {}: {}", src.display(), e))?;
 
-            fs::create_dir_all(&dst)
+            fs::create_dir_all(dst)
                 .map_err(|e| format!("failed to create directory {}: {}", dst.display(), e))?;
 
             for entry_result in entries {

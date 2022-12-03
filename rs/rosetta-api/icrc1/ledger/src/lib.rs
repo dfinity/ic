@@ -90,7 +90,7 @@ impl From<Value> for StoredValue {
     }
 }
 
-#[derive(Deserialize, CandidType, Clone, Debug, PartialEq)]
+#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct InitArgs {
     pub minting_account: Account,
     pub initial_balances: Vec<(Account, u64)>,
