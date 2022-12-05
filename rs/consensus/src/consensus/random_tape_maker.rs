@@ -164,6 +164,7 @@ impl RandomTapeMaker {
             next_batch_height + RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE,
             finalized_height + 1,
         );
+
         (next_batch_height..=max_height)
             .filter(|h| self.should_create_share(pool, Height::from(*h)))
             .filter_map(|h| self.create_random_tape_share(Height::from(h), pool))

@@ -240,7 +240,6 @@ impl<'a> ConsensusRunner<'a> {
                 break;
             }
         }
-
         if stopped {
             NetworkStatus::Stopped
         } else if delivered {
