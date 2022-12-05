@@ -14,7 +14,6 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{ReplicaVersion, SubnetId};
-use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 use slog::{error, info, Logger};
 use tokio::runtime::Handle;
@@ -26,7 +25,7 @@ use crate::{backup_helper::BackupHelper, notification_client::NotificationClient
 const STATE_FILE_NAME: &str = "backup_manager_state.json5";
 
 struct SubnetBackup {
-    pub nodes_syncing: u32,
+    pub nodes_syncing: usize,
     pub sync_period: Duration,
     pub replay_period: Duration,
     pub backup_helper: BackupHelper,
@@ -57,7 +56,7 @@ struct SubnetState {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct BackupManagerState {
     pub subnet_states: HashMap<SubnetId, SubnetState>,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub dirty: bool,
 }
 
@@ -255,16 +254,9 @@ fn sync_subnet(m: Arc<BackupManager>, i: usize) {
     loop {
         let sync_last_time = m.get_value(subnet_id, |s| s.sync_last_time);
         if sync_last_time.elapsed() > b.sync_period {
-            match b.backup_helper.collect_subnet_nodes() {
+            match b.backup_helper.collect_nodes(b.nodes_syncing) {
                 Ok(nodes) => {
-                    let mut shuf_nodes = nodes;
-                    shuf_nodes.shuffle(&mut thread_rng());
-                    b.backup_helper.sync_files(
-                        &shuf_nodes
-                            .iter()
-                            .take(b.nodes_syncing as usize)
-                            .collect::<Vec<_>>(),
-                    );
+                    b.backup_helper.sync_files(&nodes);
                     m.set_value(subnet_id, |s, v| s.sync_last_time = v, Instant::now())
                 }
                 Err(e) => error!(m.log, "Error fetching subnet node list: {:?}", e),

@@ -12,7 +12,7 @@ pub struct SubnetConfig {
         serialize_with = "crate::util::replica_to_string"
     )]
     pub initial_replica_version: ReplicaVersion,
-    pub nodes_syncing: u32,
+    pub nodes_syncing: usize,
     pub sync_period_secs: u64,
     pub replay_period_secs: u64,
 }
