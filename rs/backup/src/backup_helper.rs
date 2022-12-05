@@ -74,12 +74,8 @@ impl BackupHelper {
         self.root_dir.join(format!("data/{}", self.subnet_id))
     }
 
-    fn ic_config_dir(&self) -> PathBuf {
-        self.data_dir().join("config")
-    }
-
-    fn ic_config_file_local(&self) -> PathBuf {
-        self.ic_config_dir().join("ic.json5")
+    fn ic_config_file_local(&self, replica_version: &ReplicaVersion) -> PathBuf {
+        self.binary_dir(replica_version).join("ic.json5")
     }
 
     fn state_dir(&self) -> PathBuf {
@@ -99,20 +95,51 @@ impl BackupHelper {
         "backup".to_string()
     }
 
-    fn download_binaries(&self, replica_version: &ReplicaVersion) {
+    fn download_binaries(&self, replica_version: &ReplicaVersion) -> Result<(), String> {
+        info!(self.log, "Check if there are new artifacts.");
+        // Make sure that some artifacts from this replica version are already synced from the node.
+        // That way it is guaranteed that the node is running the new replica version and
+        // has the latest version of the ic.json5 file.
+        while !self.spool_dir().join(replica_version.to_string()).exists() {
+            sleep_secs(30);
+        }
+        info!(self.log, "Start downloading binaries.");
         let _guard = self.downloads.lock().expect("downloads mutex lock failed");
         if !self.binary_dir(replica_version).exists() {
             std::fs::create_dir_all(self.binary_dir(replica_version))
                 .expect("Failure creating a directory");
-            self.download_binary("ic-replay", replica_version);
-            self.download_binary("sandbox_launcher", replica_version);
-            self.download_binary("canister_sandbox", replica_version);
+        }
+        self.download_binary("ic-replay", replica_version)?;
+        self.download_binary("sandbox_launcher", replica_version)?;
+        self.download_binary("canister_sandbox", replica_version)?;
+
+        if !self.ic_config_file_local(replica_version).exists() {
+            // collect nodes from which we will fetch the config
+            match self.collect_nodes(1) {
+                Ok(nodes) => {
+                    // fetch the ic.json5 file from the first node
+                    // TODO: fetch from another f nodes and compare them
+                    if let Some(node_ip) = nodes.get(0) {
+                        self.rsync_config(node_ip, replica_version);
+                        Ok(())
+                    } else {
+                        Err("Error getting first node.".to_string())
+                    }
+                }
+                Err(e) => Err(format!("Error fetching subnet node list: {:?}", e)),
+            }
+        } else {
+            Ok(())
         }
     }
 
-    fn download_binary(&self, binary_name: &str, replica_version: &ReplicaVersion) {
+    fn download_binary(
+        &self,
+        binary_name: &str,
+        replica_version: &ReplicaVersion,
+    ) -> Result<(), String> {
         if self.binary_file(binary_name, replica_version).exists() {
-            return;
+            return Ok(());
         }
         for _ in 0..RETRIES_BINARY_DOWNLOAD {
             let res = block_on(download_binary(
@@ -122,7 +149,7 @@ impl BackupHelper {
                 self.binary_dir(replica_version),
             ));
             if res.is_ok() {
-                return;
+                return Ok(());
             }
             warn!(
                 self.log,
@@ -133,10 +160,10 @@ impl BackupHelper {
         // Without the binaries we can't replay...
         self.notification_client
             .report_failure_slack(format!("Couldn't download: {}", binary_name));
-        panic!(
+        Err(format!(
             "Binary {} is required for the replica {}",
             binary_name, replica_version
-        );
+        ))
     }
 
     fn rsync_node_backup(&self, node_ip: &IpAddr) {
@@ -166,7 +193,7 @@ impl BackupHelper {
             .report_failure_slack("Couldn't pull artefacts from the nodes!".to_string());
     }
 
-    fn rsync_config(&self, node_ip: &IpAddr) {
+    fn rsync_config(&self, node_ip: &IpAddr, replica_version: &ReplicaVersion) {
         info!(self.log, "Sync ic.json5 from the node: {}", node_ip);
         let remote_dir = format!(
             "{}@[{}]:/run/ic-node/config/ic.json5",
@@ -176,7 +203,7 @@ impl BackupHelper {
         for _ in 0..RETRIES_RSYNC_HOST {
             match self.rsync_cmd(
                 remote_dir.clone(),
-                &self.ic_config_file_local().into_os_string(),
+                &self.ic_config_file_local(replica_version).into_os_string(),
                 &["-q"],
             ) {
                 Ok(_) => return,
@@ -215,19 +242,13 @@ impl BackupHelper {
         }
     }
 
-    pub fn sync_files(&self, nodes: &Vec<&IpAddr>) {
+    pub fn sync_files(&self, nodes: &Vec<IpAddr>) {
         let start_time = Instant::now();
 
         if !self.spool_dir().exists() {
             std::fs::create_dir_all(self.spool_dir()).expect("Failure creating a directory");
         }
-        if !self.ic_config_dir().exists() {
-            std::fs::create_dir_all(self.ic_config_dir()).expect("Failure creating a directory");
-        }
 
-        for n in nodes {
-            self.rsync_config(n);
-        }
         for n in nodes {
             self.rsync_node_backup(n);
         }
@@ -236,7 +257,17 @@ impl BackupHelper {
         self.notification_client.push_metrics_sync_time(minutes);
     }
 
-    pub fn collect_subnet_nodes(&self) -> Result<Vec<IpAddr>, String> {
+    pub fn collect_nodes(&self, num_nodes: usize) -> Result<Vec<IpAddr>, String> {
+        let mut shuf_nodes = self.collect_all_subnet_nodes()?;
+        shuf_nodes.shuffle(&mut thread_rng());
+        Ok(shuf_nodes
+            .iter()
+            .take(num_nodes)
+            .cloned()
+            .collect::<Vec<_>>())
+    }
+
+    fn collect_all_subnet_nodes(&self) -> Result<Vec<IpAddr>, String> {
         let subnet_id = self.subnet_id;
         let version = self.registry_client.get_latest_version();
         let result = match self
@@ -302,6 +333,24 @@ impl BackupHelper {
             std::fs::create_dir_all(self.logs_dir()).expect("Failure creating a directory");
         }
 
+        loop {
+            match self.replay_current_version(&current_replica_version) {
+                Ok(ReplayResult::UpgradeRequired(upgrade_version)) => {
+                    // replayed the current version, but if there is upgrade try to do it again
+                    self.notification_client.message_slack(format!(
+                        "Replica version upgrade detected (current: {} new: {}): upgrading the ic-replay tool to retry... 🤞",
+                        current_replica_version, upgrade_version
+                    ));
+                    current_replica_version = upgrade_version;
+                }
+                Ok(_) => break,
+                Err(err) => {
+                    error!(self.log, "Error replaying: {}", err);
+                    break;
+                }
+            }
+        }
+
         // replay the current version once, but if there is upgrade do it again
         while let Ok(ReplayResult::UpgradeRequired(upgrade_version)) =
             self.replay_current_version(&current_replica_version)
@@ -310,25 +359,6 @@ impl BackupHelper {
                 "Replica version upgrade detected (current: {} new: {}): upgrading the ic-replay tool to retry... 🤞",
                 current_replica_version, upgrade_version
             ));
-            // collect nodes from which we will fetch the config
-            match self.collect_subnet_nodes() {
-                Ok(nodes) => {
-                    let mut shuf_nodes = nodes;
-                    shuf_nodes.shuffle(&mut thread_rng());
-                    // fetch the ic.json5 file from the first node
-                    // TODO: fetch from another f nodes and compare them
-                    if let Some(node_ip) = shuf_nodes.get(0) {
-                        self.rsync_config(node_ip)
-                    } else {
-                        error!(self.log, "Error getting first node.");
-                        break;
-                    }
-                }
-                Err(e) => {
-                    error!(self.log, "Error fetching subnet node list: {:?}", e);
-                    break;
-                }
-            }
             current_replica_version = upgrade_version;
         }
 
@@ -367,7 +397,8 @@ impl BackupHelper {
             self.subnet_id,
             replica_version
         );
-        self.download_binaries(replica_version);
+        self.download_binaries(replica_version)?;
+        info!(self.log, "Binaries are downloaded.");
 
         let ic_admin = self.binary_file("ic-replay", replica_version);
         let mut cmd = Command::new(ic_admin);
@@ -375,7 +406,7 @@ impl BackupHelper {
             .arg(&self.data_dir())
             .arg("--subnet-id")
             .arg(&self.subnet_id.to_string())
-            .arg(&self.ic_config_file_local())
+            .arg(&self.ic_config_file_local(replica_version))
             .arg("restore-from-backup2")
             .arg(&self.local_store_dir())
             .arg(&self.spool_root_dir())
@@ -503,7 +534,7 @@ impl BackupHelper {
                 self.get_disk_stats(DiskStats::Inodes),
             ) {
                 (Ok(space), Ok(inodes)) => {
-                    info!(self.log, "Space: {} Inodes: {}", space, inodes);
+                    info!(self.log, "Space: {}% Inodes: {}%", space, inodes);
                     self.notification_client
                         .push_metrics_disk_stats(space, inodes);
                     Ok(())
