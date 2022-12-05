@@ -570,20 +570,24 @@ message WaitForQuietState {
 // The ProposalData that contains everything related to a proposal:
 // the proposal itself (immutable), as well as mutable data such as ballots.
 message ProposalData {
-  // TODO: update comments when clear
   // The proposal's action.
   // Types 0-999 are reserved for current (and future) core governance
-  // proposals that are not generic NervousSystemFunctions.
+  // proposals that are of type NativeNervousSystemFunction.
   //
-  // If the proposal is not a core governance proposal, the type will
+  // If the proposal is not a core governance proposal, the action will
   // be the same as the id of the NervousSystemFunction.
   //
   // Current set of reserved ids:
   // Id 0 - Unspecified catch all id for following purposes.
   // Id 1 - Motion proposals.
-  // Id 2 - Nervous System parameters proposals.
-  // Id 3 - Upgrade governance controlled canister proposals.
-  // Id 4 - Execute functions outside of the Governance canister.
+  // Id 2 - ManageNervousSystemParameters proposals.
+  // Id 3 - UpgradeSnsControlledCanister proposals.
+  // Id 4 - AddGenericNervousSystemFunction proposals.
+  // Id 5 - RemoveGenericNervousSystemFunction proposals.
+  // Id 6 - ExecuteGenericNervousSystemFunction proposals.
+  // Id 7 - UpgradeSnsToNextVersion proposals.
+  // Id 8 - ManageSnsMetadata proposals.
+  // Id 9 - TransferSnsTreasuryFunds proposals.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map
@@ -592,7 +596,7 @@ message ProposalData {
   // The unique id for this proposal.
   ProposalId id = 2;
 
-  // The ID of the neuron that made this proposal.
+  // The NeuronId of the Neuron that made this proposal.
   NeuronId proposer = 3;
 
   // The amount of governance tokens in e8s to be
@@ -655,6 +659,13 @@ message ProposalData {
 
   // The proposal's payload rendered as text, for display in text/UI frontends.
   // This is set if the proposal is considered valid at time of submission.
+  //
+  // Proposals with action of type NativeNervousSystemFunction (action 0-999)
+  // render the payload in Markdown.
+  //
+  // Proposals with action of type GenericNervousSystemFunction provide no
+  // guarantee on the style of rendering as this is performed by the
+  // GenericNervousSystemFunction validator_canister.
   optional string payload_text_rendering = 15;
 
   // True if NervousSystemParameters.voting_rewards_parameters was set when the

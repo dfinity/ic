@@ -675,20 +675,24 @@ pub struct WaitForQuietState {
     ::prost::Message,
 )]
 pub struct ProposalData {
-    /// TODO: update comments when clear
     /// The proposal's action.
     /// Types 0-999 are reserved for current (and future) core governance
-    /// proposals that are not generic NervousSystemFunctions.
+    /// proposals that are of type NativeNervousSystemFunction.
     ///
-    /// If the proposal is not a core governance proposal, the type will
+    /// If the proposal is not a core governance proposal, the action will
     /// be the same as the id of the NervousSystemFunction.
     ///
     /// Current set of reserved ids:
     /// Id 0 - Unspecified catch all id for following purposes.
     /// Id 1 - Motion proposals.
-    /// Id 2 - Nervous System parameters proposals.
-    /// Id 3 - Upgrade governance controlled canister proposals.
-    /// Id 4 - Execute functions outside of the Governance canister.
+    /// Id 2 - ManageNervousSystemParameters proposals.
+    /// Id 3 - UpgradeSnsControlledCanister proposals.
+    /// Id 4 - AddGenericNervousSystemFunction proposals.
+    /// Id 5 - RemoveGenericNervousSystemFunction proposals.
+    /// Id 6 - ExecuteGenericNervousSystemFunction proposals.
+    /// Id 7 - UpgradeSnsToNextVersion proposals.
+    /// Id 8 - ManageSnsMetadata proposals.
+    /// Id 9 - TransferSnsTreasuryFunds proposals.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
@@ -697,7 +701,7 @@ pub struct ProposalData {
     /// The unique id for this proposal.
     #[prost(message, optional, tag = "2")]
     pub id: ::core::option::Option<ProposalId>,
-    /// The ID of the neuron that made this proposal.
+    /// The NeuronId of the Neuron that made this proposal.
     #[prost(message, optional, tag = "3")]
     pub proposer: ::core::option::Option<NeuronId>,
     /// The amount of governance tokens in e8s to be
@@ -760,6 +764,13 @@ pub struct ProposalData {
     pub wait_for_quiet_state: ::core::option::Option<WaitForQuietState>,
     /// The proposal's payload rendered as text, for display in text/UI frontends.
     /// This is set if the proposal is considered valid at time of submission.
+    ///
+    /// Proposals with action of type NativeNervousSystemFunction (action 0-999)
+    /// render the payload in Markdown.
+    ///
+    /// Proposals with action of type GenericNervousSystemFunction provide no
+    /// guarantee on the style of rendering as this is performed by the
+    /// GenericNervousSystemFunction validator_canister.
     #[prost(string, optional, tag = "15")]
     pub payload_text_rendering: ::core::option::Option<::prost::alloc::string::String>,
     /// True if NervousSystemParameters.voting_rewards_parameters was set when the
