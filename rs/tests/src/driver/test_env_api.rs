@@ -693,11 +693,11 @@ impl<T: HasDependencies> HasIcDependencies for T {
     }
 
     fn get_canister_http_test_ca_cert(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/dev/certs/canister_http_test_ca.cert";
+        let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert";
         self.read_dependency_to_string(dep_rel_path)
     }
     fn get_canister_http_test_ca_key(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/dev/certs/canister_http_test_ca.key";
+        let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.key";
         self.read_dependency_to_string(dep_rel_path)
     }
 }

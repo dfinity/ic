@@ -8,10 +8,19 @@ def _docker_tar_impl(ctx):
     tar_file = ctx.actions.declare_file(ctx.label.name)
     hash_list_file = ctx.actions.declare_file(ctx.label.name + ".hash-list")
 
+    arguments = ["--dockerfile", ctx.file.dockerfile.path] if ctx.file.dockerfile else []
+    arguments.extend(["-o", tar_file.path])
+    arguments.extend(["--", in_dir.path])
+    arguments.extend(ctx.attr.extra_args)
+
+    inputs = [in_dir] + ctx.files.dep
+    if ctx.file.dockerfile:
+        inputs.append(ctx.file.dockerfile)
+
     ctx.actions.run(
         executable = tool.path,
-        arguments = ["-o", tar_file.path] + ctx.attr.extra_args_before + ["--", in_dir.path] + ctx.attr.extra_args_after,
-        inputs = [in_dir] + ctx.files.dep,
+        arguments = arguments,
+        inputs = inputs,
         outputs = [tar_file, hash_list_file],
         tools = [tool],
     )
@@ -28,8 +37,10 @@ docker_tar = rule(
         "dep": attr.label_list(
             allow_files = True,
         ),
-        "extra_args_before": attr.string_list(),
-        "extra_args_after": attr.string_list(),
+        "extra_args": attr.string_list(),
+        "dockerfile": attr.label(
+            allow_single_file = True,
+        ),
         "_build_docker_save_tool": attr.label(
             allow_files = True,
             default = ":docker_tar.py",

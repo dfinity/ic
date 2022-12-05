@@ -6,6 +6,8 @@ exports_files([
     "partitions.csv",
     "rootfs",
     "rootfs/allow_console_root",
+    "rootfs/dev-certs/canister_http_test_ca.cert",
+    "rootfs/dev-certs/canister_http_test_ca.key",
     "rootfs/opt/ic/share/ic.json5.template",
     "scripts/build-bootstrap-config-image.sh",
 ])

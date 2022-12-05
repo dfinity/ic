@@ -478,8 +478,8 @@ exports_files([
 
 CANISTER_HTTP_RUNTIME_DEPS = [
     ":src/canister_http/universal_vm_activation.sh",
-    "//ic-os/guestos/dev:certs/canister_http_test_ca.cert",
-    "//ic-os/guestos/dev:certs/canister_http_test_ca.key",
+    "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+    "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.key",
 ]
 
 system_test(
