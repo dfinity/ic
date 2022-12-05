@@ -568,9 +568,10 @@ def external_crates_repository(name, annotations):
                 version = "^0.11.0",
             ),
             "p256": crate.spec(
-                version = "^0.10",
+                version = "^0.11.1",
                 features = [
                     "arithmetic",
+                    "ecdsa",
                 ],
                 default_features = False,
             ),
