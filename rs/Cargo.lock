@@ -4848,6 +4848,7 @@ dependencies = [
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-protobuf",
  "ic-types",
  "num-bigint 0.4.3",

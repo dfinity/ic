@@ -1,9 +1,7 @@
 mod secretkeybytes {
     use crate::api::keypair_from_rng;
     use crate::types::SecretKeyBytes;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
-    use std::time::SystemTime;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
     #[test]
     fn should_deserialize_from_backwards_compat() {
@@ -20,12 +18,7 @@ mod secretkeybytes {
 
     #[test]
     fn should_deserialize_from_serialized() {
-        let seed = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("failed to convert current time to Unix");
-        let mut csprng = ChaCha20Rng::seed_from_u64(seed.as_secs());
-
-        let (sk, _pk) = keypair_from_rng(&mut csprng);
+        let (sk, _pk) = keypair_from_rng(&mut reproducible_rng());
 
         let serialized = serde_cbor::to_vec(&sk).expect("failed to serialize SecretKeyBytes");
         println!("Serialized: {:?}", serialized);
