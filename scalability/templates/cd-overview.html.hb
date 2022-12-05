@@ -21,88 +21,38 @@
 <body onload="display_times()">
   <div class="w3-container">
     <div style="position: absolute; top: 0px; right: 0px; padding: 2em;">
-      <img src="fully_on_chain-default-bg_dark.svg" alt="On-chain logo" style="width: 20em;" />
+      <img src="fully_on_chain-default-bg_dark.svg" alt="On-chain logo" style="width: 10em;" />
     </div>
-    <h1>Estimated mainnet performance</h1>
-
-    <div>
-      Based on numbers from: <span class="timestamp">{{last_generated}}</span><br />
-      Assuming mainnet has <span class="w3-tag w3-light-grey exp_value">{{num_app_subnets}}</span> application subnets running
-      <span class="w3-tag w3-light-grey exp_value">{{num_app_nodes}}</span> nodes.
-    </div>
-
-    Per subnet, that is: 
-    <div class="w3-btn w3-green w3-large">
-      {{latest_approx_mainnet_subnet_update_performance}} updates/s
-    </div>
-
-    and per IC node:
-    <div class="w3-btn w3-green w3-large">
-      {{latest_approx_mainnet_node_query_performance}} querys/s
-    </div>
-    
-    <div>
-      Extrapolated from those latest performance runs, mainnet would sustain the following load:
-    </div>
-
-    <div class="w3-btn w3-green w3-large">
-      {{latest_approx_mainnet_update_performance}} updates/s
-    </div>
-
-    <div class="w3-btn w3-green w3-large">
-      {{latest_approx_mainnet_query_performance}} querys/s
-    </div>
-
-    <h1>Energy consumption</h1>
-
-    <div>
-      The following is an approximation of mainnet power consumption.
-      The peak power consumption of our nodes is <span class="w3-tag w3-light-grey exp_value">{{watts_per_node}}W</span>.
-    </div>
-    
-    <div>
-      If we assume a power usage effectiveness (PUE)
-      <sup>
-        <a href="https://en.wikipedia.org/wiki/Power_usage_effectiveness">1,</a>
-        <a href="https://energyinnovation.org/2020/03/17/how-much-energy-do-data-centers-really-use/">2</a>,
-      </sup>
-      of, <span class="w3-tag w3-light-grey exp_value">{{pue}}</span>
-      that leads to a total power consumption of <span class="w3-tag w3-light-grey exp_value">{{watts_per_node_total}}W</span>
-      including cooling and other data center operations csosts.
-    </div>
-    
-    <div>
-      Given a total of <span class="w3-tag w3-light-grey exp_value">{{num_nodes}}</span> nodes
-      and <span class="w3-tag w3-light-grey exp_value">{{num_boundary_nodes}}</span> boundary nodes in mainnet, that results in a
-      worst case of <span class="w3-tag w3-light-grey exp_value">{{watts_ic}}W</span> to operate all IC nodes for mainnet.
-      That's a worst case analysis for power consumption of nodes because we would normally expect them to throttle
-      when not fully utilized and thereby reducing power consumption.
-    </div>
-    
-    <div>
-      Given the maximum rate of upates and queries that we can
-      currently support in the IC, one update call would consume
-      <span class="w3-tag w3-light-grey exp_value">{{joules_per_update_at_capacity}}J</span> (Joules) and one query call
-      <span class="w3-tag w3-light-grey exp_value">{{joules_per_query_at_capacity}}J</span>. Those numbers are for a
-      hypothetical fully utilized IC.
-    </div>
-    
-    <div>
-      With the current approximate rate of <span class="w3-tag w3-light-grey exp_value">{{transaction_current}}</span> transactions/s,
-      the IC needs <span class="w3-tag w3-light-grey exp_value">{{joules_per_transaction_current}}J</span> per transaction.
-    </div>
-    
     <h1>CD performance results</h1>
+
+    <p>
+      This page containes history data of our internal performance evaluation pipeline.
+      We run our benchmarks on a dedicated testnet, which aims to accurately represent
+      performance of a mainnet subnet (hoever, in reality, though, testnets only have about half
+      of the compute capacity as nodes on mainnet).<br />
+      Data on this page is aggregated from individual benchmark runs.
+    </p>
 
     <h2>Experiment 1: System baseline under load</h2>
 
     <p>
       Purpose: Measure system overhead using a canister that does
-      essentially nothing for typical application subnetworks.
+      essentially nothing for typical application subnetworks.<br />
+      Therefore, the expectation is that we will be bottlenecked by the system overhead in those benchmarks.
+      It is trivially possible to move the bottleneck elsewhere, e.g. to the runtime component for
+      heavy queries.
+    </p>
+    <p>
+      We measure the maximum throughput of successful requests at various input request rates.
+      If the failure rate and the p90 latency becomes inacceptable, we stop to increase the load further.
     </p>
 
-    <h3>Query calls</h3>
+    <h3>Query call maximum capacity</h3>
 
+    <p>
+      For query workloads we currently target 4000 queries/second per node in each subnetwork (red line in the plot).
+    </p>
+    
     <div id="plot-exp1-query" class="plot"></div>
     <script>
       const plot_exp1_links = new Map();
@@ -125,6 +75,10 @@
 
     <h3>Update calls</h3>
 
+    <p>
+      We currently expect to see around 800 updates/second per subnetwork (red line in the plot)
+    </p>
+    
     <div id="plot-exp1-update" class="plot"></div>
     <script>
       const plot_exp1_update_links = new Map();
@@ -147,14 +101,16 @@
     <h2>Experiment 2: Memory under load</h2>
 
     <p>
-      Purpose: Measure memory performance for a canister that has a high memory demand.
+      Purpose: Measure memory performance for a canister that has a high memory demand.<br />
+      Memory management on the IC is an expensive operation and this workload is expected to stress the memory subsystem.
+      We expect a much lower request rate in this benchmark.
     </p>
 
     <h3>Update</h3>
 
-    <p>In contrast to query calls, when executing the memory load benchmark with update calls,
-      orthogonal persistence and snapshots needs to be done for the memory pages touched.</p>
-
+    <p>When executing the memory load benchmark with update calls,
+      orthogonal persistence and snapshots needs to be done for the memory pages touched.<br />
+    </p>
 
     <div id="plot-exp2-update" class="plot"></div>
     <script>
@@ -175,29 +131,7 @@
 
       }, false);
     </script>
-
-    <h3>Query</h3>
-
-    <div id="plot-exp2-query" class="plot"></div>
-    <script>
-      const plot_exp2_query_links = new Map();
-      {{#each plot_exp2_query.data}}
-        plot_exp2_query_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
-      {{/each}}
-      window.addEventListener("load", function(event) {
-          plot = document.getElementById('plot-exp2-query');
-          Plotly.newPlot( plot, {{{ plot_exp2_query.plot }}},  {{{plot_exp2_query.layout}}});
-          plot.on('plotly_click', function(data) {
-              var link = '';
-              for(var i=0; i < data.points.length; i++){
-                  link = plot_exp2_query_links.get((data.points[i].x, data.points[i].y));
-              }
-              window.open(link, "_self");
-          });
-
-      }, false);
-    </script>
-
+    
     <h2>State Sync duration</h2>
 
     <p>
@@ -228,8 +162,28 @@
     <h2>Maximum Xnet capacity</h2>
 
     <p>
-      Purpose: Measure the maximum capacity of all-to-all Xnet communication.
+      Purpose: Measure the maximum capacity of all-to-all Xnet communication.<br />
+      The benchmark executes an all to all communiation tests and determines the maximum message throughput achieved
+      in the experiment.<br />
+      This is important since many canisters need to communicate with other canisters to complete user requests.
+      The total number of such calls is cruicial for scaling up the IC.
+      
+      {{! <table> }}
+      {{!   <tr> }}
+      {{!     <td>Canister</td> }}
+      {{!     <td>Benchmark</td> }}
+      {{!   </tr> }}
+      {{!   <tr> }}
+      {{!     <td></td> }}
+      {{!     <td></td> }}
+      {{!   </tr> }}
+      {{! </table> }}
+      
     </p>
+
+    <div style="background-color: orange;">
+      This benchmark is currently broken. We leave it here so that we do not forget about it and put some pressure to fix it.
+    </div>
 
     <div id="plot-xnet" class="plot"></div>
     <script>
@@ -250,6 +204,5 @@
 
       }, false);
     </script>
-
   </div> <!-- Container //-->
 </body>
