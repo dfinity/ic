@@ -20,11 +20,16 @@ import common.prometheus as prometheus  # noqa
 
 FLAGS = gflags.FLAGS
 
+GB = 1024 * 1024 * 1024
+CANISTER_MEMORY = 1 * GB
+DEFAULT_NUM_PAGES = CANISTER_MEMORY / 4096
+
 gflags.DEFINE_integer("call_graph_depth", 2, "Depth of the call graph to generate")
 gflags.DEFINE_integer("call_graph_fanout", 2, "Rank of the out degree in each node")
 gflags.DEFINE_boolean("dry_run", False, "Just print how many canisters would be needed")
 gflags.DEFINE_boolean("duplicate_subtrees", False, "Duplicate subtrees instead of building copies.")
 gflags.DEFINE_boolean("debug", False, "Create a list of message exchanges. For debugging purposes.")
+gflags.DEFINE_integer("num_pages", DEFAULT_NUM_PAGES, "Create a list of message exchanges. For debugging purposes.")
 
 # Configuration for load
 CANISTER = "call-tree-test-canister"
@@ -93,6 +98,7 @@ class IcqcExperiment(base_experiment.BaseExperiment):
             {
                 "calltrees": self.graph,
                 "debug": FLAGS.debug,
+                "num_pages": FLAGS.num_pages,
             }
         )
         print(f"Graph JSON is: {graph_as_json}")
