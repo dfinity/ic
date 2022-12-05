@@ -331,12 +331,6 @@ def make_argparser():
         help="Name of the Dockerfile to target.",
     )
     parser.add_argument(
-        "--extra-dockerfile",
-        type=str,
-        help="An additional dockerfile to be layered on top of the first image.",
-    )
-    parser.add_argument("--dev-root-ca", type=str, default="", help="Root CA for the dev image")
-    parser.add_argument(
         "build_args",
         metavar="build_args",
         type=str,
@@ -386,9 +380,7 @@ def main():
 
     out_file = args.output
     dockerfile = args.dockerfile
-    extra_dockerfile = args.extra_dockerfile
     build_args = list(args.build_args)
-    extra_args = list(args.build_args)
 
     # Build the docker image.
     if not args.skip_pull:
@@ -400,21 +392,8 @@ def main():
         ]
     ):
         build_args.append("--no-cache")
-        extra_args.append("--no-cache")
-    image_hash = docker_build(build_args, dockerfile)
 
-    # If an additional Dockerfile is specified, build an additional layer on top of the one already built
-    if extra_dockerfile:
-        extra_args.append("--build-arg")
-        extra_args.append("PREVIOUS_IMAGE=%s" % image_hash)
-        if args.dev_root_ca != "":
-            try:
-                ca_contents = open(args.dev_root_ca, "r").read()
-                extra_args.append("--build-arg")
-                extra_args.append("DEV_ROOT_CA=" + ca_contents)
-            except FileNotFoundError:
-                print(f"WARNING: Skipping --dev-ca-root file {args.dev_root_ca}, which does not exist")
-        image_hash = docker_build(extra_args, extra_dockerfile)
+    image_hash = docker_build(build_args, dockerfile)
 
     # Extract and flatten all layers, build an in-memory pseudo filesystem
     # representing the docker image.

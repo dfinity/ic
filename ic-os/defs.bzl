@@ -8,11 +8,6 @@ load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
-img_bases = {
-    "dev": "dfinity/guestos-base-dev@sha256:f39d867ec4b09697f5f9f55a57349baa62da72b6d3562c22bfafd54147b4366a",
-    "prod": "dfinity/guestos-base@sha256:909ba788b6b6c65a7414b5f710868027a421067bd7d1f9eb114c187754be3f09",
-}
-
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
 # compute the hash over all inputs going into the image and derive the
@@ -59,6 +54,36 @@ def _image_deps(mode, malicious = False):
     deps["rootfs"].update(extra_rootfs_deps[mode])
     return deps
 
+def _set_dockerfile_arg_default(ctx):
+    """
+    Set a default value for an `ARG` in a Dockerfile, by adding the value to a temporary file, and using that to build with.
+    """
+    dockerfile_out = ctx.actions.declare_file("Dockerfile." + ctx.label.name)
+    command = "<{input} sed 's/^ARG {name}=$/&\\\\/; T; r {default}' >{output}".format(
+        name = ctx.attr.arg_name,
+        default = ctx.file.arg_default_file.path,
+        input = ctx.file.dockerfile_in.path,
+        output = dockerfile_out.path,
+    )
+    ctx.actions.run_shell(
+        inputs = [
+            ctx.file.dockerfile_in,
+            ctx.file.arg_default_file,
+        ],
+        outputs = [dockerfile_out],
+        command = command,
+    )
+    return [DefaultInfo(files = depset(direct = [dockerfile_out]))]
+
+set_dockerfile_arg_default = rule(
+    implementation = _set_dockerfile_arg_default,
+    attrs = {
+        "dockerfile_in": attr.label(allow_single_file = True),
+        "arg_default_file": attr.label(allow_single_file = True),
+        "arg_name": attr.string(),
+    },
+)
+
 def icos_build(name, mode = None, malicious = False, visibility = None):
     """
     An ICOS build parameterized by mode.
@@ -74,24 +99,26 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
 
     image_deps = _image_deps(mode, malicious)
 
-    dev_rootfs_args = []
-
-    if mode == "dev":
-        dev_rootfs_args = ["--extra-dockerfile", "ic-os/guestos/rootfs/Dockerfile.dev", "--dev-root-ca", "ic-os/guestos/dev/certs/canister_http_test_ca.cert"]
-
-    extra_args_docker = ["--build-arg", "BASE_IMAGE=" + img_bases[mode]]
+    extra_args_docker = ["--build-arg", "BUILD_TYPE=" + mode]
 
     # set root password only in dev mode
     if mode == "dev":
         extra_args_docker.extend(["--build-arg", "ROOT_PASSWORD=root"])
 
+    set_dockerfile_arg_default(
+        name = "rootfs-dockerfile",
+        dockerfile_in = "//ic-os/guestos:rootfs/Dockerfile",
+        arg_default_file = "//ic-os/guestos:rootfs/docker-base." + mode,
+        arg_name = "BASE_IMAGE",
+    )
+
     docker_tar(
         visibility = visibility,
         name = "rootfs-tree.tar",
+        dockerfile = ":rootfs-dockerfile",
         src = "//ic-os/guestos:rootfs",
-        dep = ["//ic-os/guestos:rootfs-files"] + native.glob(["dev-root-ca.crt"] if mode == "dev" else []),
-        extra_args_before = dev_rootfs_args,
-        extra_args_after = extra_args_docker,
+        dep = ["//ic-os/guestos:rootfs-files"],
+        extra_args = extra_args_docker,
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -451,8 +478,7 @@ def boundary_node_icos_build(name, mode = None, sev = False, visibility = None):
         name = "rootfs-tree.tar",
         src = "//ic-os/boundary-guestos:rootfs",
         dep = ["//ic-os/boundary-guestos:rootfs-files"],
-        extra_args_before = [],
-        extra_args_after = [
+        extra_args = [
             "--build-arg",
             "BUILD_TYPE=" + mode,
             "--build-arg",

@@ -126,12 +126,8 @@ echo "${VERSION}" >"${TMPDIR}/version.txt"
 
 # Build all pieces and assemble the disk image.
 
-# If specified, and ONLY on dev, add an additional layer to the built image,
-# containing an extra certificate.
-if [ "${BUILD_TYPE}" == "dev" ]; then
-    EXTRA_DOCKERFILE=("--extra-dockerfile" "${BASE_DIR}/rootfs/Dockerfile.dev" "--dev-root-ca" "${BASE_DIR}/dev/certs/canister_http_test_ca.cert")
-fi
-"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" "${EXTRA_DOCKERFILE[@]}" -- \
+"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- \
+    --build-arg BUILD_TYPE="${BUILD_TYPE}" \
     --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
     --build-arg BASE_IMAGE="${BASE_IMAGE}" \
     "${BASE_DIR}/rootfs"

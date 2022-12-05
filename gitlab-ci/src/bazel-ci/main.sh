@@ -10,7 +10,6 @@ bazel version
 AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
 ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
-ln -fs "${DEV_ROOT_CA}" ic-os/guestos/dev-root-ca.crt # https://gitlab.com/dfinity-lab/public/ic/-/blob/master/ic-os/defs.bzl#L85
 
 upload_target_args=""
 if [ -n "${BAZEL_UPLOAD_TARGETS:-}" ]; then
