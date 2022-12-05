@@ -74,7 +74,7 @@ pub fn user_public_key_from_bytes(
         )
     } else if pkix_algo_id == ecdsa_secp256r1::algorithm_identifier() {
         (
-            ecdsa_secp256r1::api::public_key_from_der(bytes)?.0,
+            ecdsa_secp256r1::public_key_from_der(bytes)?.0,
             AlgorithmId::EcdsaP256,
             KeyBytesContentType::EcdsaP256PublicKeyDer,
         )
@@ -111,7 +111,7 @@ pub fn user_public_key_from_bytes(
 /// # Errors
 /// * `CryptoError::MalformedSignature`: if the signature cannot be DER decoded.
 pub fn ecdsa_p256_signature_from_der_bytes(bytes: &[u8]) -> CryptoResult<BasicSig> {
-    let ecdsa_sig = ecdsa_secp256r1::api::signature_from_der(bytes)?;
+    let ecdsa_sig = ecdsa_secp256r1::signature_from_der(bytes)?;
     Ok(BasicSig(ecdsa_sig.0.to_vec()))
 }
 

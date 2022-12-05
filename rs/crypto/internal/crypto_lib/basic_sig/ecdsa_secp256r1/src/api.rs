@@ -1,12 +1,10 @@
 //! ECDSA signature methods
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
-use ic_crypto_secrets_containers::SecretVec;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use openssl::bn::{BigNum, BigNumContext};
 use openssl::ec::{EcGroup, EcKey, EcPoint};
 use openssl::ecdsa::EcdsaSig;
-use openssl::nid::Nid;
 use openssl::pkey::PKey;
 use simple_asn1::oid;
 
@@ -19,53 +17,6 @@ pub fn algorithm_identifier() -> PkixAlgorithmIdentifier {
         oid!(1, 2, 840, 10045, 2, 1),
         oid!(1, 2, 840, 10045, 3, 1, 7),
     )
-}
-
-// NOTE: prime256v1 is a yet another name for secp256r1 (aka. NIST P-256),
-// cf. https://tools.ietf.org/html/rfc5480
-const CURVE_NAME: Nid = Nid::X9_62_PRIME256V1;
-
-// NOTE: both `new_keypair()` and `sign()` are exposed as public but
-// are not used in production. They are exposed due to requirements on
-// how the tests are structured. This should be resolved.
-//
-// For the same reason the majority of tests is using signature verification
-// test vectors (addition of test vectors for signature creation is more
-// involved as Rust OpenSSL API doesn't seem to provide a way for
-// "de-randomization" of signing operation).
-
-/// Create a new secp256r1 keypair. This function should only be used for
-/// testing.
-///
-/// # Errors
-/// * `AlgorithmNotSupported` if an error occurs while generating the key
-/// # Returns
-/// A tuple of the secret key bytes and public key bytes
-pub fn new_keypair() -> CryptoResult<(types::SecretKeyBytes, types::PublicKeyBytes)> {
-    let group = EcGroup::from_curve_name(CURVE_NAME)
-        .map_err(|e| wrap_openssl_err(e, "unable to create EC group"))?;
-    let ec_key =
-        EcKey::generate(&group).map_err(|e| wrap_openssl_err(e, "unable to generate EC key"))?;
-    let mut ctx =
-        BigNumContext::new().map_err(|e| wrap_openssl_err(e, "unable to create BigNumContext"))?;
-    let mut sk_der =
-        ec_key
-            .private_key_to_der()
-            .map_err(|e| CryptoError::AlgorithmNotSupported {
-                algorithm: AlgorithmId::EcdsaP256,
-                reason: format!("OpenSSL failed with error {}", e),
-            })?;
-    let sk = types::SecretKeyBytes(SecretVec::new_and_zeroize_argument(&mut sk_der));
-    let pk_bytes = ec_key
-        .public_key()
-        .to_bytes(
-            &group,
-            openssl::ec::PointConversionForm::UNCOMPRESSED,
-            &mut ctx,
-        )
-        .map_err(|e| wrap_openssl_err(e, "unable to serialize EC public key"))?;
-    let pk = types::PublicKeyBytes::from(pk_bytes);
-    Ok((sk, pk))
 }
 
 /// Parse a secp256r1 public key from the DER enncoding
@@ -90,7 +41,7 @@ pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes>
     })?;
     let mut ctx =
         BigNumContext::new().map_err(|e| wrap_openssl_err(e, "unable to create BigNumContext"))?;
-    let group = EcGroup::from_curve_name(CURVE_NAME)
+    let group = EcGroup::from_curve_name(crate::CURVE_NAME)
         .map_err(|e| wrap_openssl_err(e, "unable to create EC group"))?;
     let pk_bytes = ec_key
         .public_key()
@@ -169,7 +120,7 @@ pub fn der_encoding_from_xy_coordinates(x: &[u8], y: &[u8]) -> CryptoResult<Vec<
 }
 
 fn public_key_to_der(pk: &types::PublicKeyBytes) -> CryptoResult<Vec<u8>> {
-    let group = EcGroup::from_curve_name(CURVE_NAME)
+    let group = EcGroup::from_curve_name(crate::CURVE_NAME)
         .map_err(|e| wrap_openssl_err(e, "unable to create EC group"))?;
     let mut ctx =
         BigNumContext::new().map_err(|e| wrap_openssl_err(e, "unable to create BigNumContext"))?;
@@ -315,7 +266,7 @@ pub fn verify(
             sig_bytes: sig.0.to_vec(),
             internal_error: e.to_string(),
         })?;
-    let group = EcGroup::from_curve_name(CURVE_NAME)
+    let group = EcGroup::from_curve_name(crate::CURVE_NAME)
         .map_err(|e| wrap_openssl_err(e, "unable to create EC group"))?;
     let mut ctx =
         BigNumContext::new().map_err(|e| wrap_openssl_err(e, "unable to create BigNumContext"))?;
@@ -353,7 +304,7 @@ pub fn verify(
     }
 }
 
-fn wrap_openssl_err(e: openssl::error::ErrorStack, err_msg: &str) -> CryptoError {
+pub(crate) fn wrap_openssl_err(e: openssl::error::ErrorStack, err_msg: &str) -> CryptoError {
     CryptoError::AlgorithmNotSupported {
         algorithm: AlgorithmId::EcdsaP256,
         reason: format!("{}: OpenSSL failed with error {}", err_msg, e),

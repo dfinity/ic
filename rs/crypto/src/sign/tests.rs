@@ -262,6 +262,7 @@ pub fn dummy_secret_key_store() -> impl SecretKeyStore {
     MockSecretKeyStore::new()
 }
 
+#[cfg(test)]
 pub fn request_id_signature_and_public_key_with_domain_separator(
     domain_separator: &[u8],
     request_id: &MessageId,
@@ -276,14 +277,11 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
     let (pk_vec, signature_bytes_vec) = {
         match algorithm_id {
             AlgorithmId::EcdsaP256 => {
-                let (sk, pk) = ecdsa_secp256r1::new_keypair().unwrap();
+                let (sk, pk) = ecdsa_secp256r1::test_utils::new_keypair(&mut thread_rng()).unwrap();
                 let msg_hash = sha256(&bytes_to_sign);
                 (
                     pk.0,
-                    ecdsa_secp256r1::api::sign(&msg_hash, &sk)
-                        .unwrap()
-                        .0
-                        .to_vec(),
+                    ecdsa_secp256r1::sign(&msg_hash, &sk).unwrap().0.to_vec(),
                 )
             }
             AlgorithmId::Ed25519 => {
@@ -304,6 +302,7 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
     (signature, public_key)
 }
 
+#[cfg(test)]
 pub fn request_id_signature_and_public_key(
     request_id: &MessageId,
     algorithm_id: AlgorithmId,

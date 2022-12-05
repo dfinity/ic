@@ -13,12 +13,13 @@ const ED25519_PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqo
 
 mod keygen {
     use super::*;
-    use crate::{new_keypair, public_key_from_der};
+    use crate::{public_key_from_der, test_utils::new_keypair};
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::{AlgorithmId, CryptoError};
 
     #[test]
     fn should_correctly_generate_ecdsa_keys() {
-        let (_sk, _pk) = new_keypair().unwrap();
+        let (_sk, _pk) = new_keypair(&mut reproducible_rng()).unwrap();
     }
 
     #[test]
@@ -68,11 +69,12 @@ mod keygen {
 
 mod sign {
     use crate::api::tests::SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX;
-    use crate::{new_keypair, sign, signature_from_der, types, verify};
+    use crate::{sign, signature_from_der, test_utils::new_keypair, types, verify};
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
     #[test]
     fn should_correctly_sign_and_verify() {
-        let (sk, pk) = new_keypair().unwrap();
+        let (sk, pk) = new_keypair(&mut reproducible_rng()).unwrap();
 
         let msg = b"some message to sign";
         let signature = sign(msg, &sk).unwrap();
@@ -108,7 +110,7 @@ mod sign {
     // (the number of signatures = 300 has been picked empirically)
     #[test]
     fn should_correctly_generate_and_verify_shorter_signatures() {
-        let (sk, pk) = new_keypair().unwrap();
+        let (sk, pk) = new_keypair(&mut reproducible_rng()).unwrap();
 
         let msg = b"some message to sign";
         for _i in 1..300 {
@@ -124,7 +126,8 @@ mod verify {
 
     use crate::api::{der_encoding_from_xy_coordinates, public_key_from_der};
     use crate::types::{PublicKeyBytes, SignatureBytes};
-    use crate::verify;
+    use crate::{sign, test_utils::new_keypair, verify};
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::{AlgorithmId, CryptoError};
     use openssl::sha::sha256;
     use std::convert::TryFrom;
@@ -162,11 +165,11 @@ mod verify {
 
     #[test]
     fn should_reject_truncated_ecdsa_pubkey() {
-        let (sk, pk) = crate::new_keypair().unwrap();
+        let (sk, pk) = new_keypair(&mut reproducible_rng()).unwrap();
 
         let msg = b"abc";
-        let signature = crate::sign(msg, &sk).unwrap();
-        assert!(crate::verify(&signature, msg, &pk).is_ok());
+        let signature = sign(msg, &sk).unwrap();
+        assert!(verify(&signature, msg, &pk).is_ok());
 
         let invalid_pk = PublicKeyBytes(pk.0[0..pk.0.len() - 1].to_vec());
         let result = verify(&signature, msg, &invalid_pk);
@@ -191,11 +194,11 @@ mod verify {
 
     #[test]
     fn should_reject_modified_ecdsa_pubkey() {
-        let (sk, pk) = crate::new_keypair().unwrap();
+        let (sk, pk) = new_keypair(&mut reproducible_rng()).unwrap();
 
         let msg = b"abc";
-        let signature = crate::sign(msg, &sk).unwrap();
-        assert!(crate::verify(&signature, msg, &pk).is_ok());
+        let signature = sign(msg, &sk).unwrap();
+        assert!(verify(&signature, msg, &pk).is_ok());
 
         /*
         We are encoding using uncompressed coordinates so the format is (h,x,y)

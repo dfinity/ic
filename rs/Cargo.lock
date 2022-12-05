@@ -4822,10 +4822,13 @@ dependencies = [
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "openssl",
+ "p256",
  "proptest",
  "proptest-derive",
+ "rand 0.8.5",
  "regex",
  "serde",
  "serde_bytes",
@@ -11090,7 +11093,9 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51f44edd08f51e2ade572f141051021c5af22677e42b7dd28a88155151c33594"
 dependencies = [
+ "ecdsa",
  "elliptic-curve",
+ "sha2 0.10.6",
 ]
 
 [[package]]

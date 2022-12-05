@@ -1,5 +1,5 @@
 {
-  "checksum": "847b094f06e0bc5d42aadc9497a18ad88d4406cc09fe4185e2962e5e4f15d957",
+  "checksum": "534b17a311c886df2cd6ccf298cf594aaca1340d98513daf97b5a5f39c2b84a7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10426,9 +10426,7 @@
           "**"
         ],
         "crate_features": [
-          "generic-array",
-          "rand_core",
-          "zeroize"
+          "generic-array"
         ],
         "deps": {
           "common": [
@@ -10437,16 +10435,8 @@
               "target": "generic_array"
             },
             {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
               "id": "subtle 2.4.1",
               "target": "subtle"
-            },
-            {
-              "id": "zeroize 1.5.7",
-              "target": "zeroize"
             }
           ],
           "selects": {}
@@ -12660,7 +12650,7 @@
               "alias": "opentelemetry_prometheus_0_11_0"
             },
             {
-              "id": "p256 0.10.1",
+              "id": "p256 0.11.1",
               "target": "p256"
             },
             {
@@ -13872,91 +13862,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "elliptic-curve 0.11.12": {
-      "name": "elliptic-curve",
-      "version": "0.11.12",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/elliptic-curve/0.11.12/download",
-          "sha256": "25b477563c2bfed38a3b7a60964c49e058b2510ad3f12ba3483fd8f62c2306d6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "elliptic_curve",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "elliptic_curve",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "arithmetic",
-          "ff",
-          "group",
-          "hazmat",
-          "sec1"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "base16ct 0.1.1",
-              "target": "base16ct"
-            },
-            {
-              "id": "crypto-bigint 0.3.2",
-              "target": "crypto_bigint"
-            },
-            {
-              "id": "der 0.5.1",
-              "target": "der"
-            },
-            {
-              "id": "ff 0.11.1",
-              "target": "ff"
-            },
-            {
-              "id": "generic-array 0.14.6",
-              "target": "generic_array"
-            },
-            {
-              "id": "group 0.11.0",
-              "target": "group"
-            },
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
-              "id": "sec1 0.2.1",
-              "target": "sec1"
-            },
-            {
-              "id": "subtle 2.4.1",
-              "target": "subtle"
-            },
-            {
-              "id": "zeroize 1.5.7",
-              "target": "zeroize"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.11.12"
-      },
-      "license": "Apache-2.0 OR MIT"
-    },
     "elliptic-curve 0.12.3": {
       "name": "elliptic-curve",
       "version": "0.12.3",
@@ -15016,52 +14921,6 @@
         },
         "edition": "2015",
         "version": "0.10.0"
-      },
-      "license": "MIT/Apache-2.0"
-    },
-    "ff 0.11.1": {
-      "name": "ff",
-      "version": "0.11.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/ff/0.11.1/download",
-          "sha256": "131655483be284720a17d74ff97592b8e76576dc25563148601df2d7c9080924"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ff",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "ff",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
-              "id": "subtle 2.4.1",
-              "target": "subtle"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.11.1"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -17227,56 +17086,6 @@
         ],
         "edition": "2015",
         "version": "0.3.0"
-      },
-      "license": "MIT/Apache-2.0"
-    },
-    "group 0.11.0": {
-      "name": "group",
-      "version": "0.11.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/group/0.11.0/download",
-          "sha256": "bc5ac374b108929de78460075f3dc439fa66df9d8fc77e8f12caa5165fcf0c89"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "group",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "group",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "ff 0.11.1",
-              "target": "ff"
-            },
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
-              "id": "subtle 2.4.1",
-              "target": "subtle"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.11.0"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -29822,13 +29631,13 @@
       },
       "license": "MIT"
     },
-    "p256 0.10.1": {
+    "p256 0.11.1": {
       "name": "p256",
-      "version": "0.10.1",
+      "version": "0.11.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/p256/0.10.1/download",
-          "sha256": "19736d80675fbe9fe33426268150b951a3fb8f5cfca2a23a17c85ef3adb24e3b"
+          "url": "https://crates.io/api/v1/crates/p256/0.11.1/download",
+          "sha256": "51f44edd08f51e2ade572f141051021c5af22677e42b7dd28a88155151c33594"
         }
       },
       "targets": [
@@ -29851,23 +29660,33 @@
           "**"
         ],
         "crate_features": [
-          "arithmetic"
+          "arithmetic",
+          "digest",
+          "ecdsa",
+          "ecdsa-core",
+          "sha2",
+          "sha256"
         ],
         "deps": {
           "common": [
             {
-              "id": "elliptic-curve 0.11.12",
+              "id": "ecdsa 0.14.8",
+              "target": "ecdsa",
+              "alias": "ecdsa_core"
+            },
+            {
+              "id": "elliptic-curve 0.12.3",
               "target": "elliptic_curve"
             },
             {
-              "id": "sec1 0.2.1",
-              "target": "sec1"
+              "id": "sha2 0.10.6",
+              "target": "sha2"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.1"
+        "version": "0.11.1"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -38493,64 +38312,6 @@
         "version": "4.1.0"
       },
       "license": "MIT"
-    },
-    "sec1 0.2.1": {
-      "name": "sec1",
-      "version": "0.2.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/sec1/0.2.1/download",
-          "sha256": "08da66b8b0965a5555b6bd6639e68ccba85e1e2506f5fbb089e93f8a04e1a2d1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "sec1",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "sec1",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "subtle",
-          "zeroize"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "der 0.5.1",
-              "target": "der"
-            },
-            {
-              "id": "generic-array 0.14.6",
-              "target": "generic_array"
-            },
-            {
-              "id": "subtle 2.4.1",
-              "target": "subtle"
-            },
-            {
-              "id": "zeroize 1.5.7",
-              "target": "zeroize"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.2.1"
-      },
-      "license": "Apache-2.0 OR MIT"
     },
     "sec1 0.3.0": {
       "name": "sec1",
