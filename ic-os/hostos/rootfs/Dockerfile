@@ -9,7 +9,7 @@
 # - Construct the actual target image (IC-OS root filesystem)
 #
 # Update below image when new dfinity/hostos-base image gets produced (see deploy-host-os-baseimg CI job on master/rc).
-FROM dfinity/hostos-base@sha256:f744cac1e9f7110ed46defa6ab3877dfd8dac9881f153af6898dab9c3ad2f3cd
+FROM dfinity/hostos-base@sha256:3d22efcee90c5d8ff6b167f67c0c2d3a11ad7fb3398d186d99da3866c67ce2d4
 
 USER root:root
 

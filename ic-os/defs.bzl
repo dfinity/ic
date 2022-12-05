@@ -9,8 +9,8 @@ load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
 img_bases = {
-    "dev": "dfinity/guestos-base-dev@sha256:8c8e3af85547dffdf669b58c03b9c9a5bb997c0fc6df6ed3ae4d0d03087ab118",
-    "prod": "dfinity/guestos-base@sha256:b3a3df659d28559d2effae2622c516ecddd8d954c18b06b695a2b9dfa8de2309",
+    "dev": "dfinity/guestos-base-dev@sha256:f39d867ec4b09697f5f9f55a57349baa62da72b6d3562c22bfafd54147b4366a",
+    "prod": "dfinity/guestos-base@sha256:909ba788b6b6c65a7414b5f710868027a421067bd7d1f9eb114c187754be3f09",
 }
 
 # Declare the dependencies that we will have for the built filesystem images.
