@@ -17,6 +17,10 @@ enum WasmEncoding {
     Gzip,
 }
 
+/// # Warning
+///
+/// If the Wasm is gzipped, then the returned size cannot be trusted. It would
+/// come from the gzip footer which could have been manipulated.
 fn wasm_encoding_and_size(
     module_bytes: &[u8],
 ) -> Result<(WasmEncoding, usize), WasmValidationError> {
@@ -51,10 +55,15 @@ fn wasm_encoding_and_size(
     ))
 }
 
-/// Returns the size of the WASM that will result from decoding this module
-/// (which may require uncompressing it). This function doesn't actually unzip
-/// the module - it just reads the header and footer, so is safe to run outside
-/// of the sandbox.
+/// Returns the expected size of the WASM that will result from decoding this module
+/// (which may require uncompressing it).
+///
+/// # Warning
+/// The returned size cannot be trusted. If the canisters is compressed, the
+/// size in the gzip file may have been manipulated.
+///
+/// This function doesn't actually unzip the module - it just reads the header
+/// and footer, so is safe to run outside of the sandbox.
 pub fn decoded_wasm_size(module_bytes: &[u8]) -> Result<usize, WasmValidationError> {
     wasm_encoding_and_size(module_bytes).map(|(_, s)| s)
 }
