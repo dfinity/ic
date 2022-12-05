@@ -680,6 +680,7 @@ impl ValidatedConfig {
         });
         let metrics = self.metrics_addr.map(|metrics_addr| MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
+            ..Default::default()
         });
 
         let mut artifact_pool_cfg =

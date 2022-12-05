@@ -939,6 +939,9 @@ def external_crates_repository(name, annotations):
                     "time",
                 ],
             ),
+            "tokio-io-timeout": crate.spec(
+                version = "^1.2.0",
+            ),
             "tokio-openssl": crate.spec(
                 version = "^0.6.1",
             ),

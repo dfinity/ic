@@ -11,10 +11,12 @@ use std::string::String;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::net::TcpListener;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::{TcpListener, TcpSocket};
+use tokio_io_timeout::TimeoutStream;
 use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, load_shed::error::Overloaded,
-    util::BoxCloneService, BoxError, ServiceBuilder, ServiceExt,
+    timeout::error::Elapsed, util::BoxCloneService, BoxError, ServiceBuilder, ServiceExt,
 };
 
 const LOG_INTERVAL_SECS: u64 = 30;
@@ -26,11 +28,6 @@ const DEFAULT_ADAPTER_COLLECTION_TIMEOUT: Duration = Duration::from_secs(1);
 const PROMETHEUS_TIMEOUT_FRACTION: f64 = 0.5;
 /// Header in prometheus scrape request that indicates the timeout used by scraping service.
 const PROMETHEUS_TIMEOUT_HEADER: &str = "X-Prometheus-Scrape-Timeout-Seconds";
-// We can serve from at most  'MAX_OUTSTANDING_CONNECTIONS'
-// live TCP connections. If we are at the limit, we won't
-// accept new TCP connections.
-const MAX_OUTSTANDING_CONNECTIONS: usize = 20;
-const MAX_CONCURRENT_REQUESTS: usize = 50;
 
 /// The type of a metrics runtime implementation.
 pub struct MetricsHttpEndpoint {
@@ -56,6 +53,8 @@ impl From<BoxError> for HttpError {
     fn from(err: BoxError) -> Self {
         let builder = if err.is::<Overloaded>() {
             Response::builder().status(StatusCode::TOO_MANY_REQUESTS)
+        } else if err.is::<Elapsed>() {
+            Response::builder().status(StatusCode::GATEWAY_TIMEOUT)
         } else {
             Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR)
         };
@@ -181,9 +180,15 @@ impl MetricsHttpEndpoint {
     fn start_http(&self, address: SocketAddr) {
         let metrics_registry = self.metrics_registry.clone();
         let log = self.log.clone();
+        // we need to enter the tokio context in order to create the timeout layer and the tcp
+        // socket
+        let _enter = self.rt_handle.enter();
         let metrics_svc = ServiceBuilder::new()
             .load_shed()
-            .layer(GlobalConcurrencyLimitLayer::new(MAX_CONCURRENT_REQUESTS))
+            .timeout(Duration::from_secs(self.config.request_timeout_seconds))
+            .layer(GlobalConcurrencyLimitLayer::new(
+                self.config.max_concurrent_requests,
+            ))
             .service_fn(move |req: Request<Body>| {
                 // Clone again to ensure that `metrics_registry` outlives this closure.
                 let metrics_registry = metrics_registry.clone();
@@ -229,18 +234,16 @@ impl MetricsHttpEndpoint {
         // out IPv6 in prometheus and ic_p8s_service_discovery.
         let mut addr = "[::]:9090".parse::<SocketAddr>().unwrap();
         addr.set_port(address.port());
+        let tcp_listener = start_listener(addr).unwrap_or_else(|err| {
+            panic!("Could not start listener at addr = {}. err = {}", addr, err)
+        });
 
         let metrics = self.metrics.clone();
+        let connection_read_timeout_seconds = self.config.connection_read_timeout_seconds;
+        let tcp_acceptor = TcpAcceptor::new(tcp_listener, self.config.max_outstanding_conections);
         self.rt_handle.spawn(async move {
-            let tcp_listener = TcpListener::bind(&addr)
-                .await
-                .unwrap_or_else(|err| panic!("Could not bind to addr = {}. err = {}", addr, err));
-            let tcp_acceptor = TcpAcceptor::new(tcp_listener, MAX_OUTSTANDING_CONNECTIONS);
-
-            let http = Http::new();
             loop {
                 let log = log.clone();
-                let http = http.clone();
                 let metrics_svc = metrics_svc.clone();
                 let metrics = metrics.clone();
                 let crypto_tls = crypto_tls.clone();
@@ -267,8 +270,12 @@ impl MetricsHttpEndpoint {
                                 {
                                     Err(e) => warn!(log, "TLS error: {}", e),
                                     Ok(stream) => {
-                                        if let Err(e) =
-                                            http.serve_connection(stream, metrics_svc).await
+                                        if let Err(e) = serve_connection_with_read_timeout(
+                                            stream,
+                                            metrics_svc,
+                                            connection_read_timeout_seconds,
+                                        )
+                                        .await
                                         {
                                             trace!(log, "Connection error: {}", e);
                                         }
@@ -278,7 +285,13 @@ impl MetricsHttpEndpoint {
                         } else {
                             metrics.connections_total.with_label_values(&["http"]).inc();
                             // Fallback to Http.
-                            if let Err(e) = http.serve_connection(tcp_stream, metrics_svc).await {
+                            if let Err(e) = serve_connection_with_read_timeout(
+                                tcp_stream,
+                                metrics_svc,
+                                connection_read_timeout_seconds,
+                            )
+                            .await
+                            {
                                 trace!(log, "Connection error: {}", e);
                             }
                         }
@@ -320,6 +333,30 @@ impl Drop for MetricsHttpEndpoint {
     }
 }
 
+async fn serve_connection_with_read_timeout<T: AsyncRead + AsyncWrite + 'static>(
+    stream: T,
+    metrics_svc: BoxCloneService<Request<Body>, Response<Body>, HttpError>,
+    connection_read_timeout_seconds: u64,
+) -> Result<(), hyper::Error> {
+    let http = Http::new();
+    let mut stream = TimeoutStream::new(stream);
+    stream.set_read_timeout(Some(Duration::from_secs(connection_read_timeout_seconds)));
+    let stream = Box::pin(stream);
+    http.serve_connection(stream, metrics_svc).await
+}
+
+fn start_listener(local_addr: SocketAddr) -> std::io::Result<TcpListener> {
+    let socket = if local_addr.is_ipv6() {
+        TcpSocket::new_v6()?
+    } else {
+        TcpSocket::new_v4()?
+    };
+    socket.set_reuseaddr(true)?;
+    socket.set_reuseport(true)?;
+    socket.bind(local_addr)?;
+    socket.listen(128)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,14 +369,13 @@ mod tests {
         core::{Collector, Desc},
         proto::MetricFamily,
     };
-    use slog::info;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     };
     use std::time::Duration;
     use tokio::{
-        net::TcpSocket,
+        net::{TcpSocket, TcpStream},
         sync::mpsc::{channel, Sender},
         time::sleep,
     };
@@ -370,51 +406,33 @@ mod tests {
     async fn create_client_and_send_request(
         addr: SocketAddr,
     ) -> Result<Client<HttpConnector, Body>, Error> {
-        let client: Client<HttpConnector, Body> = Client::builder()
-            .http2_only(true)
-            .http2_max_concurrent_reset_streams(2 * MAX_CONCURRENT_REQUESTS)
-            .build_http();
+        let client: Client<HttpConnector, Body> = Client::builder().http2_only(true).build_http();
 
         send_request(&client, addr).await?;
         Ok(client)
     }
+
+    /// Once we have reached the number of outstanding connection, new connections are refused.
     #[tokio::test]
-    async fn test_bounding_number_of_tcp_streams() {
+    async fn test_max_outstanding_conections() {
         with_test_replica_logger(|log| async move {
             let rt_handle = tokio::runtime::Handle::current();
             let addr = get_free_localhost_port().unwrap();
             let config = Config {
                 exporter: Exporter::Http(addr),
+                ..Default::default()
             };
             let metrics_registry = MetricsRegistry::default();
             let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
                 rt_handle,
-                config,
+                config.clone(),
                 metrics_registry,
                 &log.inner_logger.root,
             );
 
             // it is important to keep around the http clients so the connections don't get closed
             let mut clients = vec![];
-
-            // loop until the server is up
-            loop {
-                match create_client_and_send_request(addr).await {
-                    Err(err) => {
-                        info!(
-                            log.inner_logger.root,
-                            "failed to send initial request: error = {:?}", err
-                        );
-                        sleep(Duration::from_secs(1)).await;
-                    }
-                    Ok(client) => {
-                        clients.push(client);
-                        break;
-                    }
-                }
-            }
-
-            for _i in 1..MAX_OUTSTANDING_CONNECTIONS {
+            for _i in 0..config.max_outstanding_conections {
                 let c = create_client_and_send_request(addr).await.expect(
                     "Creating a new http client/tcp connection and sending a message failed.",
                 );
@@ -423,6 +441,56 @@ mod tests {
             // Check we hit the limit of live TCP connections by expecting a failure when yet
             // another request is send.
             assert!(create_client_and_send_request(addr).await.is_err());
+        })
+        .await
+    }
+
+    /// Once no bytes are read for the duration of 'connection_read_timeout_seconds', then
+    /// the connection is dropped.
+    #[tokio::test]
+    async fn test_connection_read_timeout() {
+        with_test_replica_logger(|log| async move {
+            let rt_handle = tokio::runtime::Handle::current();
+            let addr = get_free_localhost_port().unwrap();
+            let config = Config {
+                exporter: Exporter::Http(addr),
+                connection_read_timeout_seconds: 2,
+                ..Default::default()
+            };
+            let metrics_registry = MetricsRegistry::default();
+            let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+                rt_handle,
+                config.clone(),
+                metrics_registry,
+                &log.inner_logger.root,
+            );
+
+            let target_stream = TcpStream::connect(addr).await.unwrap();
+
+            let (mut request_sender, connection) =
+                hyper::client::conn::handshake(target_stream).await.unwrap();
+
+            // spawn a task to poll the connection and drive the HTTP state
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    eprintln!("Error in connection: {}", e);
+                }
+            });
+
+            let request = Request::builder()
+                .method(Method::GET)
+                .uri(format!("http://{}", addr))
+                .header(hyper::header::HOST, "hyper.rs")
+                .body(Body::from(""))
+                .expect("Building the request failed.");
+            let response = request_sender.send_request(request).await.unwrap();
+            assert!(response.status() == StatusCode::OK);
+
+            sleep(Duration::from_secs(
+                config.connection_read_timeout_seconds + 1,
+            ))
+            .await;
+            assert!(request_sender.ready().await.err().unwrap().is_closed());
         })
         .await
     }
@@ -465,6 +533,8 @@ mod tests {
         }
     }
 
+    /// Test once the number of in-flight requests reaches 'max_concurrent_requests', a 429 should
+    /// be returned for new requests.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_load_shedding() {
         with_test_replica_logger(|log| async move {
@@ -472,13 +542,14 @@ mod tests {
             let addr = get_free_localhost_port().unwrap();
             let config = Config {
                 exporter: Exporter::Http(addr),
+                ..Default::default()
             };
             let metrics_registry = MetricsRegistry::default();
             let (tx, mut rx) = channel(1);
             let blocking_collector = metrics_registry.register(BlockingCollector::new(tx));
             let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
                 rt_handle,
-                config,
+                config.clone(),
                 metrics_registry,
                 &log.inner_logger.root,
             );
@@ -487,28 +558,19 @@ mod tests {
             let client = Client::builder()
                 .http2_only(true)
                 .retry_canceled_requests(false)
-                .http2_max_concurrent_reset_streams(2 * MAX_CONCURRENT_REQUESTS)
+                .http2_max_concurrent_reset_streams(config.max_concurrent_requests * 2)
                 .build_http();
 
             let mut set = tokio::task::JoinSet::new();
 
-            loop {
-                match send_request(&client, addr).await {
-                    Err(_err) => {
-                        // in case the server is not up and running due to scheduling
-                        // timing resend the request
-                        sleep(Duration::from_millis(1)).await;
-                    }
-                    Ok(resp) => {
-                        assert_eq!(resp.status(), StatusCode::OK);
-                        break;
-                    }
-                }
-            }
+            assert_eq!(
+                send_request(&client, addr).await.unwrap().status(),
+                StatusCode::OK
+            );
             // reset the counter to 0 after we confirmed there is a listening socket
             blocking_collector.collect_calls.store(0, Ordering::SeqCst);
-            // Send 'MAX_CONCURRENT_REQUESTS' and block their progress.
-            for _i in 0..MAX_CONCURRENT_REQUESTS {
+            // Send 'max_concurrent_requests' and block their progress.
+            for _i in 0..config.max_concurrent_requests {
                 set.spawn({
                     let client = client.clone();
                     async move {
@@ -521,7 +583,8 @@ mod tests {
             }
 
             // What until all requests reached the blocking/sync point.
-            while blocking_collector.collect_calls.load(Ordering::SeqCst) != MAX_CONCURRENT_REQUESTS
+            while blocking_collector.collect_calls.load(Ordering::SeqCst)
+                != config.max_concurrent_requests
             {
                 tokio::task::yield_now().await;
             }
@@ -531,11 +594,101 @@ mod tests {
             );
 
             // unblock and join the tasks that have sent the initial requets
-            for _i in 0..MAX_CONCURRENT_REQUESTS + 1 {
+            for _i in 0..config.max_concurrent_requests + 1 {
                 rx.recv().await.unwrap();
             }
-            for _i in 0..MAX_CONCURRENT_REQUESTS {
+            for _i in 0..config.max_concurrent_requests {
                 set.join_next().await.unwrap().unwrap();
+            }
+        })
+        .await
+    }
+
+    /// If the downstream service is stuck return 504.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_request_timeout() {
+        with_test_replica_logger(|log| async move {
+            let rt_handle = tokio::runtime::Handle::current();
+            let addr = get_free_localhost_port().unwrap();
+            let config = Config {
+                exporter: Exporter::Http(addr),
+                request_timeout_seconds: 2,
+                ..Default::default()
+            };
+            let metrics_registry = MetricsRegistry::default();
+            let (tx, mut rx) = channel(1);
+            let _blocking_collector = metrics_registry.register(BlockingCollector::new(tx));
+            let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+                rt_handle,
+                config.clone(),
+                metrics_registry,
+                &log.inner_logger.root,
+            );
+
+            // Use a single client so we don't hit the max TCP connetions limit.
+            let client = Client::builder()
+                .http2_only(true)
+                .retry_canceled_requests(false)
+                .http2_max_concurrent_reset_streams(config.max_concurrent_requests * 2)
+                .build_http();
+
+            assert_eq!(
+                send_request(&client, addr).await.unwrap().status(),
+                StatusCode::OK
+            );
+
+            assert_eq!(
+                send_request(&client, addr).await.unwrap().status(),
+                StatusCode::GATEWAY_TIMEOUT
+            );
+            rx.recv().await.unwrap();
+            rx.recv().await.unwrap();
+        })
+        .await
+    }
+
+    // Test if slow downstream services don't cause connection drop.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_connection_is_alive_with_slow_downstream() {
+        with_test_replica_logger(|log| async move {
+            let rt_handle = tokio::runtime::Handle::current();
+            let addr = get_free_localhost_port().unwrap();
+            let config = Config {
+                exporter: Exporter::Http(addr),
+                request_timeout_seconds: 2,
+                connection_read_timeout_seconds: 3,
+                ..Default::default()
+            };
+            let metrics_registry = MetricsRegistry::default();
+            let (tx, mut rx) = channel(1);
+            let _blocking_collector = metrics_registry.register(BlockingCollector::new(tx));
+            let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+                rt_handle,
+                config.clone(),
+                metrics_registry,
+                &log.inner_logger.root,
+            );
+
+            // Use a single client so we don't hit the max TCP connetions limit.
+            let client = Client::builder()
+                .http2_only(true)
+                .retry_canceled_requests(false)
+                .http2_max_concurrent_reset_streams(config.max_concurrent_requests * 2)
+                .build_http();
+
+            assert_eq!(
+                send_request(&client, addr).await.unwrap().status(),
+                StatusCode::OK
+            );
+            let n = config.connection_read_timeout_seconds / config.request_timeout_seconds + 2;
+            for _i in 0..n {
+                assert_eq!(
+                    send_request(&client, addr).await.unwrap().status(),
+                    StatusCode::GATEWAY_TIMEOUT
+                );
+            }
+            for _i in 0..n + 1 {
+                rx.recv().await.unwrap();
             }
         })
         .await

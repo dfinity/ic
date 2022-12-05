@@ -96,6 +96,7 @@ fn main() -> Result<()> {
     );
     let exporter_config = MetricsConfig {
         exporter: Exporter::Http(cli_args.metrics_listen_addr),
+        ..Default::default()
     };
     let metrics_runtime = MetricsHttpEndpoint::new_insecure(
         rt.handle().clone(),
