@@ -137,6 +137,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     let create_new_subnet = !topology_snapshot
         .subnets()
         .any(|s| s.subnet_type() == SubnetType::Application);
+    assert!(ecdsa >= create_new_subnet);
 
     let ecdsa_pub_key = ecdsa.then(|| {
         info!(logger, "ECDSA flag set, creating key on NNS.");
@@ -151,10 +152,18 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
                 &nns_canister,
                 subnet_size,
                 master_version.clone(),
+                true,
                 &logger,
             )
         } else {
-            enable_ecdsa_on_nns(&nns_node, &nns_canister, root_subnet_id, None, &logger)
+            enable_ecdsa_on_nns(
+                &nns_node,
+                &nns_canister,
+                root_subnet_id,
+                None,
+                false,
+                &logger,
+            )
         }
     });
 
@@ -330,8 +339,8 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
 
     if ecdsa {
         if !create_new_subnet {
-            disable_ecdsa_on_subnet(&nns_node, root_subnet_id, &nns_canister, &logger);
-            let app_key = enable_ecdsa_on_app_subnet(&nns_node, &nns_canister, subnet_id, &logger);
+            let app_key =
+                enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, subnet_id, &logger);
             assert_eq!(ecdsa_pub_key.unwrap(), app_key)
         }
         run_ecdsa_signature_test(&nns_canister, &logger, ecdsa_pub_key.unwrap());

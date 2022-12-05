@@ -6,8 +6,8 @@ use crate::orchestrator::utils::rw_message::{
 use crate::orchestrator::utils::ssh_access::execute_bash_command;
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::tecdsa::tecdsa_signature_test::{
-    create_new_subnet_with_keys, empty_subnet_update, enable_ecdsa_signing,
-    enable_ecdsa_signing_with_timeout_and_rotation_period, execute_update_subnet_proposal,
+    add_ecdsa_key_with_timeout_and_rotation_period, create_new_subnet_with_keys,
+    empty_subnet_update, enable_ecdsa_signing, execute_update_subnet_proposal,
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature, KEY_ID1,
 };
 use crate::util::*;
@@ -226,13 +226,14 @@ pub(crate) fn enable_ecdsa_on_nns(
     canister: &MessageCanister,
     root_subnet_id: SubnetId,
     rotation_period: Option<Duration>,
+    enable_signing: bool,
     logger: &Logger,
 ) -> VerifyingKey {
     info!(logger, "Enabling ECDSA signatures.");
     let nns_runtime = runtime_from_url(nns_node.get_public_url());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
-    block_on(enable_ecdsa_signing_with_timeout_and_rotation_period(
+    block_on(add_ecdsa_key_with_timeout_and_rotation_period(
         &governance,
         root_subnet_id,
         make_key(KEY_ID1),
@@ -240,18 +241,22 @@ pub(crate) fn enable_ecdsa_on_nns(
         rotation_period,
     ));
 
-    get_ecdsa_pub_key(canister, logger)
+    if enable_signing {
+        enable_ecdsa_signing_on_subnet(nns_node, canister, root_subnet_id, logger)
+    } else {
+        get_ecdsa_pub_key(canister, logger)
+    }
 }
 
 /// Pre-condition: subnet has the ECDSA key and no other subnet has signing enabled for that key.
 /// Enables ECDSA signing on the given subnet and returns a public key for the given canister.
-pub(crate) fn enable_ecdsa_on_app_subnet(
+pub(crate) fn enable_ecdsa_signing_on_subnet(
     nns_node: &IcNodeSnapshot,
     canister: &MessageCanister,
     subnet_id: SubnetId,
     logger: &Logger,
 ) -> VerifyingKey {
-    info!(logger, "Enabling signing on app subnet.");
+    info!(logger, "Enabling signing on subnet {}.", subnet_id);
     let nns_runtime = runtime_from_url(nns_node.get_public_url());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
@@ -279,17 +284,29 @@ pub(crate) fn enable_ecdsa_on_new_subnet(
     canister: &MessageCanister,
     subnet_size: usize,
     replica_version: ReplicaVersion,
+    enable_signing: bool,
     logger: &Logger,
 ) -> VerifyingKey {
-    info!(logger, "Enabling ECDSA signatures on NNS.");
     let nns_runtime = runtime_from_url(nns_node.get_public_url());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
     let root_subnet_id = env.topology_snapshot().root_subnet_id();
-    block_on(enable_ecdsa_signing(
-        &governance,
-        root_subnet_id,
-        make_key(KEY_ID1),
-    ));
+
+    if enable_signing {
+        info!(logger, "Enabling ECDSA signatures on NNS.");
+        block_on(enable_ecdsa_signing(
+            &governance,
+            root_subnet_id,
+            make_key(KEY_ID1),
+        ));
+    } else {
+        block_on(add_ecdsa_key_with_timeout_and_rotation_period(
+            &governance,
+            root_subnet_id,
+            make_key(KEY_ID1),
+            None,
+            None,
+        ));
+    }
 
     let nns_key = get_ecdsa_pub_key(canister, logger);
 
@@ -324,10 +341,13 @@ pub(crate) fn enable_ecdsa_on_new_subnet(
             .expect("Timeout while waiting for all subnets to be healthy");
     });
 
-    info!(logger, "Disabling signing on NNS.");
-    disable_ecdsa_on_subnet(nns_node, root_subnet_id, canister, logger);
-
-    let app_key = enable_ecdsa_on_app_subnet(nns_node, canister, app_subnet.subnet_id, logger);
+    let app_key = if enable_signing {
+        info!(logger, "Disabling signing on NNS.");
+        disable_ecdsa_on_subnet(nns_node, root_subnet_id, canister, logger);
+        enable_ecdsa_signing_on_subnet(nns_node, canister, app_subnet.subnet_id, logger)
+    } else {
+        get_ecdsa_pub_key(canister, logger)
+    };
 
     assert_eq!(app_key, nns_key);
     app_key

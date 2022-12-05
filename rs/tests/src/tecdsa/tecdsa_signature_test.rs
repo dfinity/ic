@@ -425,6 +425,27 @@ pub(crate) async fn enable_ecdsa_signing_with_timeout(
     .await
 }
 
+pub(crate) async fn add_ecdsa_key_with_timeout_and_rotation_period(
+    governance: &Canister<'_>,
+    subnet_id: SubnetId,
+    key_id: EcdsaKeyId,
+    timeout: Option<Duration>,
+    period: Option<Duration>,
+) {
+    let proposal_payload = UpdateSubnetPayload {
+        subnet_id,
+        ecdsa_config: Some(EcdsaConfig {
+            quadruples_to_create_in_advance: 10,
+            key_ids: vec![key_id],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
+            idkg_key_rotation_period_ms: period.map(|t| t.as_millis() as u64),
+        }),
+        ..empty_subnet_update()
+    };
+    execute_update_subnet_proposal(governance, proposal_payload).await;
+}
+
 pub(crate) async fn enable_ecdsa_signing_with_timeout_and_rotation_period(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
@@ -435,18 +456,14 @@ pub(crate) async fn enable_ecdsa_signing_with_timeout_and_rotation_period(
     // The ECDSA key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
-    let proposal_payload = UpdateSubnetPayload {
+    add_ecdsa_key_with_timeout_and_rotation_period(
+        governance,
         subnet_id,
-        ecdsa_config: Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 10,
-            key_ids: vec![key_id.clone()],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
-            idkg_key_rotation_period_ms: period.map(|t| t.as_millis() as u64),
-        }),
-        ..empty_subnet_update()
-    };
-    execute_update_subnet_proposal(governance, proposal_payload).await;
+        key_id.clone(),
+        timeout,
+        period,
+    )
+    .await;
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
