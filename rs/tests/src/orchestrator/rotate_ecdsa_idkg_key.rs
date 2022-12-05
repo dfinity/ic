@@ -98,7 +98,14 @@ pub fn test(env: TestEnv) {
     let mut init_keys: HashMap<NodeId, PublicKey> = HashMap::new();
     let mut rotated_keys: HashMap<NodeId, PublicKey> = HashMap::new();
 
-    let pub_key = enable_ecdsa_on_nns(&nns_node, &nns_canister, root_subnet_id, delta, &logger);
+    let pub_key = enable_ecdsa_on_nns(
+        &nns_node,
+        &nns_canister,
+        root_subnet_id,
+        delta,
+        true,
+        &logger,
+    );
 
     let topology_snapshot =
         block_on(topology_snapshot.block_for_min_registry_version(RegistryVersion::from(3)))
