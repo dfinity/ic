@@ -37,6 +37,7 @@ rust_test(
     ],
     deps = [
         "//rs/crypto/internal/test_vectors",
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:num-bigint",
         "@crate_index//:proptest",
         "@crate_index//:serde_cbor",
