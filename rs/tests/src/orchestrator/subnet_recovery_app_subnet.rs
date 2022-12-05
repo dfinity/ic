@@ -236,7 +236,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
-        keep_downloaded_state: None,
+        keep_downloaded_state: Some(ecdsa),
         subnet_id,
         upgrade_version: version_is_broken
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
