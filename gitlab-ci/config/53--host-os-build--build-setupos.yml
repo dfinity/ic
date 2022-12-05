@@ -25,11 +25,9 @@ setup-os-diskimg:
       cd "${CI_PROJECT_DIR}"/ic-os/setupos
 
       mkdir -p guestos/disk-img
-      curl "http://download.proxy-global.dfinity.network:8080/ic/${VERSION}/guest-os/disk-img/disk-img.tar.gz" \
-        -o guestos/disk-img/disk-img.tar.gz --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500
+      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "guest-os/disk-img/disk-img.tar.gz" > guestos/disk-img/disk-img.tar.gz
       mkdir -p hostos/disk-img
-      curl "http://download.proxy-global.dfinity.network:8080/ic/${VERSION}/host-os/disk-img/disk-img.tar.gz" \
-        -o hostos/disk-img/disk-img.tar.gz --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500
+      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "host-os/disk-img/disk-img.tar.gz" > hostos/disk-img/disk-img.tar.gz
 
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-host-img -- \
       "${CI_PROJECT_DIR}"/gitlab-ci/src/job_scripts/lib/setup-os-diskimg.sh \
