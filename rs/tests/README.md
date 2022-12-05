@@ -100,6 +100,17 @@ IC_VERSION_ID=<version> ./run-system-tests.py \
 
 If you have further questions, please contact the testing team on #eng-testing.
 
+### How can I run system tests in Bazel? (experimental)
+**IMPORTANT**: Bazel runs of the system tests are not yet fully standardized and are therefore discouraged. T&V team is working actively on the [bazelification](https://docs.google.com/document/d/1RGyvOkRluFsqroDmyM9hfr37VG-nCrTOrutQnStJsco/edit#heading=h.fcajjuvgc2dn) of all system tests. However, currently we strongly encourage developers to only use the [conventional approach](#how-can-i-run-system-tests) for launching system tests. If in **strong** need, try to use an *experimental* way of launching a bazelified system test. 
+Namely, login to the docker container:
+```
+/ic$ ./gitlab-ci/tools/docker-run --bazel
+```
+To launch a test target (`my_test_target` in this case) within the docker run:
+```
+docker$ bazel test //rs/tests:my_test_target --test_output=streamed --cache_test_results=no --test_tag_filters="system_test" --s3_endpoint=https://s3-upload.zh1-idx1.dfinity.network
+```
+
 # How to write a system test
 
 Before progressing, it is worth understanding how system tests work
@@ -242,27 +253,6 @@ For example, to run all the `pre-master` system tests use:
 
 Note: This requires the commit to be built by CI/CD, i.e. it must be pushed to the remote and an MR has to be created. If the script can't find artifacts for the current commit, it will fail.
 
-Below is the usage of the "legacy" system tests.
-
-To run all tests, but still log debug-level messages to `my-log` we run:
-
-```
-$ ./setup-and-cargo-test.sh -- -v --log-to-file my-log
-```
-
-The `--` separates the arguments to `setup-and-cargo-test.sh` from the arguments
-consumed by `rs/tests/src/main.rs`. In general,
-
-```
-$ ./setup-and-cargo-test.sh [SCRIPT-OPTIONS] [-- SYSTEM-TEST-OPTIONS]
-```
-
-If you wish to see more info on which options are supported, run:
-
-```
-$ ./setup-and-cargo-test.sh -- --help
-```
-
 ### Pots and Tests
 
 In `fondue`, tests are organized in _pots_ of two different kinds:
@@ -280,23 +270,13 @@ In `fondue`, tests are organized in _pots_ of two different kinds:
 	`IcManager::handle()`; hence, it is allowed to perform arbitrary changes in
 	its environment.
 
-
-## Legacy system tests
-
-The `rs/tests` crate also hosts the so-called _legacy system tests_ declared in
-`rs/tests/src/main.rs`. The tests use largely the same API, however, the nodes
-for legacy system tests are instantiated as _processes_ (rather than virtual machines).
-These processes all share the resources of a single OS that launched the legacy system tests.
-Conversely, we encourage you to use the new system tests framework based on the Farm service that offers on-demand resource allocation and load balancing across a pool of remote servers.
-
-**Note**: Legacy system tests are **not** supported on Darwin!
 ### My test is failing/flaky, what do I do?
 
 Please, check the [FAQ](doc/FAQ.md) or [TROUBLESHOOTING](doc/TROUBLESHOOTING.md) before submitting
 a bug report.
 
 ### Running the tests
-Legacy system tests can be launched via the `setup-and-cargo-test.sh` script. Go to the end of the page for info on the CLI arguments.
+Go to the end of the page for info on the CLI arguments.
 If you are running the script within nix-shell on Linux and run out of disk space, `export TMPDIR=` might solve this issue for you.
 In particular, the `nix-shell` command run in Ubuntu 20.04 sets the `TMPDIR` variable to `/run/user/1000`, which might correspond to a disk partition that is be too small for storing all the artifacts produced by the tests. To mitigate the problem, one could run, e.g., `export TMPDIR=/tmp`.
 
