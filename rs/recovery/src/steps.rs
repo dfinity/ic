@@ -76,8 +76,8 @@ impl Step for DownloadIcStateStep {
             )
         } else {
             format!(
-                "Copy config from {} to {}. Then copy to {}",
-                config_src, self.target, self.working_dir
+                "Copy node state from {} and config from {} to {}.",
+                data_src, config_src, self.working_dir
             )
         }
     }
