@@ -1,6 +1,5 @@
 #!/bin/python
 import glob
-import itertools
 import json
 import os
 import shlex
@@ -9,15 +8,16 @@ import subprocess
 import sys
 import time
 import traceback
+from dataclasses import dataclass
 from datetime import datetime
 
 import gflags
 import pybars
 import requests
-from termcolor import colored
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import misc  # noqa
+from common import report  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string("experiment_data", ".", "Path to experiment data")
@@ -37,6 +37,8 @@ BLACKLIST = [
     ("c27a168344ebc7922c862f21232f62bf9f0d9f75", "1650241110"),
     ("d3ba740100ef275aa5281c584b163d16a9c76c64", "1649858580"),
     ("c610c3fec6ea8acd1b831099317cc0b98fe4b310", "1649613136"),
+    ("b0d3c45e14b116f8213ed88dea064fbc631c038c", "1667834847"),
+    ("903c8b3a520c69a953b4cdf6468bf2612e86be49", "1660642902"),
 ]
 
 
@@ -50,6 +52,54 @@ MAINNET_CURR_TRANSACTION_RATE = 3300  # per second
 # Total facility enery (incl compute + cooling) / IT equipment energy (only compute)
 # https://en.wikipedia.org/wiki/Power_usage_effectiveness
 PUE = 2.33
+
+
+def ensure_report_generated(githash, timestamp):
+    """Atempt to generate report for the given githash and timestamp if not already done."""
+    try:
+        target_dir = (
+            os.path.join(FLAGS.asset_root, githash, timestamp)
+            if len(FLAGS.asset_root) > 0
+            else os.path.join(FLAGS.experiment_data, githash, timestamp)
+        )
+        if os.path.isfile(os.path.join(target_dir, "report.html")) and not FLAGS.regenerate:
+            print(f"✅ Report exists for {githash}/{timestamp}")
+        else:
+            print("⚠️  Report does not exists yet, generating")
+            if len(FLAGS.asset_root) > 0:
+                if not os.path.exists(target_dir):
+                    os.makedirs(target_dir)
+                cmd = [
+                    "python3",
+                    "common/generate_report.py",
+                    "--git_revision",
+                    githash,
+                    "--timestamp",
+                    timestamp,
+                    "--base_dir",
+                    FLAGS.experiment_data,
+                    "--asset_root",
+                    FLAGS.asset_root,
+                    "--strict=True",
+                ]
+                print("Generating external report: ", shlex.join(cmd))
+                subprocess.check_output(cmd)
+                copy_results(githash, timestamp)
+            else:
+                subprocess.check_output(
+                    [
+                        "python3",
+                        "common/generate_report.py",
+                        "--git_revision",
+                        githash,
+                        "--timestamp",
+                        timestamp,
+                        "--base_dir",
+                        FLAGS.experiment_data,
+                    ]
+                )
+    except Exception as e:
+        print(f"❌ Failed to generate report: {e}")
 
 
 def copy_results(git_revision: str, timestamp: str):
@@ -68,107 +118,185 @@ def copy_results(git_revision: str, timestamp: str):
             shutil.copy(svg, svg_target_dir)
 
 
-def parse_rps_experiment(data, githash, timestamp):
-    xvalue = data["t_experiment_start"]
-    yvalue = data["experiment_details"]["rps_max"]
-    meta_data = {
-        "timestamp": timestamp,
-        "date": convert_date(int(timestamp)),
-        "githash": githash,
-        "yvalue": yvalue,
-        "xvalue": xvalue,
-    }
+def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_data, raw_data, f):
 
-    try:
-        canisters = data["canister_id"]
-        # Older reports have the canisters encoded as list of canister IDs
-        if type(canisters) is list:
-            num_canisters = len(canisters)
-        else:
-            # Newer ones as a string, which is a json encoded dict
-            canisters = json.loads(canisters)
-            if type(canisters) is dict:
-                num_canisters = len(list(itertools.chain.from_iterable([k for _, k in canisters.items()])))
-            else:
-                num_canisters = 1
-    except Exception:
-        print("Failed to determine number of canisters, assuming its 1")
-        print(colored(traceback.format_exc(), "red"))
-        num_canisters = 1
+    added = False
 
-    print(
-        "  {:40} {:30} {:10.3f}".format(
-            data["experiment_name"],
-            convert_date(data["t_experiment_start"]),
-            float(data["experiment_details"]["rps_max"]),
-        )
+    base_dir = os.path.join(FLAGS.experiment_data, githash, timestamp)
+    assert os.path.exists(base_dir)
+
+    experiment_file = report.parse_experiment_file(data)
+    timestamp = experiment_file.t_experiment_start
+    xvalue = timestamp
+
+    for iteration, workloads in report.find_experiment_summaries(base_dir).items():
+
+        for workload_id, summary_files in workloads.items():
+            # Find xlabel for given iteration
+            label = str(workload_id) + " " + str(experiment_file.xlabels[iteration - 1]) + " rps"
+            print(f"Summary files are: {summary_files}")
+
+            evaluated_summaries = report.evaluate_summaries(summary_files)
+            yvalue = float(f(evaluated_summaries))
+
+            meta_data.append(
+                {
+                    "timestamp": timestamp,
+                    "date": convert_date(int(timestamp)),
+                    "githash": githash,
+                    "yvalue": yvalue,
+                    "xvalue": xvalue,
+                }
+            )
+
+            raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
+            added = True
+
+    return added
+
+
+def parse_rps_experiment_failure_rate(data, githash, timestamp, meta_data, raw_data):
+    return parse_rps_experiment_with_evaluated_summary(
+        data,
+        githash,
+        timestamp,
+        meta_data,
+        raw_data,
+        lambda evaluated_summaries: evaluated_summaries.get_median_failure_rate(),
     )
-    raw_data = (xvalue, yvalue)
-    return (f"{num_canisters} canisters", meta_data, raw_data)
 
 
-def parse_xnet_experiment(data, githash, timestamp):
+def parse_rps_experiment_latency(data, githash, timestamp, meta_data, raw_data):
+    return parse_rps_experiment_with_evaluated_summary(
+        data, githash, timestamp, meta_data, raw_data, lambda evaluated_summaries: evaluated_summaries.percentiles[90]
+    )
+
+
+def parse_rps_experiment_max_capacity(data, githash, timestamp, meta_data, raw_data):
+    added = False
+
+    base_dir = os.path.join(FLAGS.experiment_data, githash, timestamp)
+    assert os.path.exists(base_dir)
+
+    experiment_file = report.parse_experiment_file(data)
+    timestamp = experiment_file.t_experiment_start
+    xvalue = timestamp
+
+    MAX_FAILURE_RATE = 0.3
+    MAX_LATENCY = 20000
+
+    experiment_details = report.parse_experiment_details_with_fallback_duration(data["experiment_details"])
+    experiment_summaries = report.find_experiment_summaries(base_dir)
+    max_rps_per_workload = report.get_maximum_capacity(
+        experiment_summaries, MAX_FAILURE_RATE, MAX_LATENCY, experiment_details.iter_duration
+    )
+
+    for idx, max_rps in enumerate(max_rps_per_workload):
+        yvalue = max_rps
+
+        if yvalue <= 0:
+            continue
+
+        meta_data.append(
+            {
+                "timestamp": timestamp,
+                "date": convert_date(int(timestamp)),
+                "githash": githash,
+                "yvalue": yvalue,
+                "xvalue": xvalue,
+            }
+        )
+
+        label = f"workload {idx}"
+        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
+        added = True
+
+    return added
+
+
+def parse_xnet_experiment(data, githash, timestamp, meta_data, raw_data):
     xvalue = data["t_experiment_start"]
 
+    yvalue = None
     if "max_capacity" in data["experiment_details"]:
         yvalue = data["experiment_details"]["max_capacity"]
-        meta_data = {
+    if "rps_max" in data["experiment_details"]:
+        yvalue = float(data["experiment_details"]["rps_max"])
+
+    if yvalue is not None:
+        meta_data.append(
+            {
+                "timestamp": timestamp,
+                "date": convert_date(int(timestamp)),
+                "githash": githash,
+                "yvalue": yvalue,
+                "xvalue": xvalue,
+            }
+        )
+
+        print(
+            "  {:40} {:30} {:10.3f}".format(data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
+        )
+        label = None
+        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
+        return True
+
+    else:
+        return False
+
+
+def parse_statesync_experiment(data, githash, timestamp, meta_data, raw_data):
+    xvalue = data["t_experiment_start"]
+    yvalue = data["experiment_details"]["state_sync_duration"]
+
+    # Some older versions of the experiment data have Prometheus metrics as values,
+    # instead of the extracted float value.
+    if type(yvalue) is dict:
+        if "result" in yvalue:
+            yvalue = yvalue["result"][0]["value"][1]
+        elif "data" in yvalue:
+            yvalue = yvalue["data"]["result"][0]["value"][1]
+    yvalue = float(yvalue)
+
+    meta_data.append(
+        {
             "timestamp": timestamp,
             "date": convert_date(int(timestamp)),
             "githash": githash,
             "yvalue": yvalue,
             "xvalue": xvalue,
         }
-
-        print(
-            "  {:40} {:30} {:10.3f}".format(data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
-        )
-        raw_data = (xvalue, yvalue)
-        return (None, meta_data, raw_data)
-    else:
-        return (None, None, None)
-
-
-def parse_statesync_experiment(data, githash, timestamp):
-    xvalue = data["t_experiment_start"]
-    yvalue = data["experiment_details"]["state_sync_duration"]
-    meta_data = {
-        "timestamp": timestamp,
-        "date": convert_date(int(timestamp)),
-        "githash": githash,
-        "yvalue": yvalue,
-        "xvalue": xvalue,
-    }
-
-    # Some older versions of the experiment data have Prometheus metrics as values,
-    # instead of the extracted float value.
-    if type(yvalue) is dict:
-        yvalue = yvalue["result"][0]["value"][1]
-    yvalue = float(yvalue)
+    )
 
     if yvalue > 0:
         print(
             "  {:40} {:30} {:10.3f}".format(data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
         )
-        raw_data = (xvalue, yvalue)
-        return (None, meta_data, raw_data)
+        label = False
+        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
+        return True
     else:
-        return (None, None, None)
+        return False
+
+
+@dataclass
+class ExperimentResultDirectory:
+    """Represents a search result for find_results."""
+
+    result_file_path: str
+    result_file_content: report.ExperimentFile
+    githash: str
+    timestamp: str
 
 
 def find_results(
-    experiment_names,
-    experiment_type,
-    parser,
-    threshold: [str],
-    testnet="cdslo",
-    time_start=None,
-    yaxis_title="maximum rate [requests / s]",
+    experiment_names: [str],
+    experiment_type: [str],
+    testnet: str,
+    time_start: int,
 ):
-    """Find and collect data from all experiments for the given testnet and experiment type."""
-    meta_data = []
-    raw_data = {}
-    # Find all experiments
+    """Find experiment results matching the given data and return a list of results."""
+    results = []
     for result in glob.glob(f"{FLAGS.experiment_data}/*/*/experiment.json"):
         with open(result) as resultfile:
             try:
@@ -188,61 +316,43 @@ def find_results(
                         timestamp,
                     ) not in BLACKLIST:
 
-                        label, new_meta_data, new_raw_data = parser(data, githash, timestamp)
-                        if new_meta_data is not None and new_raw_data is not None:
-                            meta_data.append(new_meta_data)
-                            if label not in raw_data:
-                                raw_data[label] = []
-                            raw_data[label].append(new_raw_data)
-
-                            try:
-                                target_dir = (
-                                    os.path.join(FLAGS.asset_root, githash, timestamp)
-                                    if len(FLAGS.asset_root) > 0
-                                    else os.path.join(FLAGS.experiment_data, githash, timestamp)
-                                )
-                                if os.path.isfile(os.path.join(target_dir, "report.html")) and not FLAGS.regenerate:
-                                    print("✅ Report exists")
-                                else:
-                                    print("⚠️  Report does not exists yet, generating")
-                                    if len(FLAGS.asset_root) > 0:
-                                        if not os.path.exists(target_dir):
-                                            os.makedirs(target_dir)
-                                        cmd = [
-                                            "python3",
-                                            "common/generate_report.py",
-                                            "--git_revision",
-                                            githash,
-                                            "--timestamp",
-                                            timestamp,
-                                            "--base_dir",
-                                            FLAGS.experiment_data,
-                                            "--asset_root",
-                                            FLAGS.asset_root,
-                                            "--strict=True",
-                                        ]
-                                        print("Generating external report: ", shlex.join(cmd))
-                                        subprocess.check_output(cmd)
-                                        copy_results(githash, timestamp)
-                                    else:
-                                        subprocess.check_output(
-                                            [
-                                                "python3",
-                                                "common/generate_report.py",
-                                                "--git_revision",
-                                                githash,
-                                                "--timestamp",
-                                                timestamp,
-                                                "--base_dir",
-                                                FLAGS.experiment_data,
-                                            ]
-                                        )
-                            except Exception as e:
-                                print(f"❌ Failed to generate report: {e}")
+                        report_file = report.parse_experiment_file(data)
+                        results.append(ExperimentResultDirectory(result, report_file, githash, timestamp))
 
             except Exception as e:
                 print(traceback.format_exc())
                 print(f"Failed to check ${result} - error: {e}")
+
+    return results
+
+
+def render_results(
+    experiment_names,
+    experiment_type,
+    parser,
+    threshold: [str],
+    testnet="cdslo",
+    time_start=None,
+    yaxis_title="maximum rate [requests / s]",
+):
+    """Find and collect data from all experiments for the given testnet and experiment type."""
+    meta_data = []
+    raw_data = {}
+
+    for result in find_results(experiment_names, experiment_type, testnet, time_start):
+
+        resultfile = result.result_file_path
+        githash = result.githash
+        timestamp = result.timestamp
+        data = json.loads(open(resultfile).read())
+
+        # if githash != "9008471a1b2d3447129c348fc42fb1e2c13aa2a3" and timestamp != "1669773930":
+        #     continue
+
+        print("Result file content: ", result.result_file_content)
+
+        if parser(data, githash, timestamp, meta_data, raw_data):
+            ensure_report_generated(githash, timestamp)
 
     if len(raw_data) < 1:
         raise Exception(f"Could not find any data for: {testnet} {experiment_names} {experiment_type}")
@@ -346,72 +456,36 @@ if __name__ == "__main__":
             "last_generated": int(time.time()),
         }
 
-        print("Experiment 1")
-        data["plot_exp1_query"] = find_results(
+        data["plot_exp1_query"] = render_results(
             ["experiment_1", "run_system_baseline_experiment", "system-baseline-experiment"],
             ["query"],
-            parse_rps_experiment,
-            2800,
+            parse_rps_experiment_max_capacity,
+            4000,
         )
-        data["plot_exp1_update"] = find_results(
+        data["plot_exp1_update"] = render_results(
             ["experiment_1", "run_system_baseline_experiment", "system-baseline-experiment"],
             ["update"],
-            parse_rps_experiment,
-            500,
+            parse_rps_experiment_max_capacity,
+            800,
         )
 
-        # Calculate theoretical stats from latest system overhead experiments
-        latest_query_performance = data["plot_exp1_query"]["plot"][0]["y"][-1]
-        latest_update_performance = data["plot_exp1_update"]["plot"][0]["y"][-1]
-        print("query", data["plot_exp1_query"]["plot"][0]["y"], latest_query_performance)
-        print("update", latest_update_performance)
-
-        latest_approx_mainnet_update_performance = num_app_subnets * latest_update_performance
-        latest_approx_mainnet_query_performance = num_app_nodes * latest_query_performance
-
-        data["latest_approx_mainnet_subnet_update_performance"] = "{:.0f}".format(latest_update_performance)
-        data["latest_approx_mainnet_node_query_performance"] = "{:.0f}".format(latest_query_performance)
-
-        data["latest_approx_mainnet_update_performance"] = "{:.0f}".format(latest_approx_mainnet_update_performance)
-        data["latest_approx_mainnet_query_performance"] = "{:.0f}".format(latest_approx_mainnet_query_performance)
-
-        data["watts_per_node"] = WATTS_PER_NODE
-        watts_per_node_total = WATTS_PER_NODE * PUE
-        data["watts_per_node_total"] = watts_per_node_total
-        watts_ic = watts_per_node_total * (num_nodes + num_boundary_nodes)
-        data["watts_ic"] = "{:.0f}".format(watts_ic)
-
-        data["pue"] = PUE
-
-        joules_per_update_at_capacity = watts_ic / (latest_approx_mainnet_update_performance)
-        joules_per_query_at_capacity = watts_ic / (latest_approx_mainnet_query_performance)
-        data["joules_per_update_at_capacity"] = "{:.2f}".format(joules_per_update_at_capacity)
-        data["joules_per_query_at_capacity"] = "{:.2f}".format(joules_per_query_at_capacity)
-
-        data["transaction_current"] = MAINNET_CURR_TRANSACTION_RATE
-        joules_per_transaction_current = watts_ic / MAINNET_CURR_TRANSACTION_RATE
-        data["joules_per_transaction_current"] = "{:.2f}".format(joules_per_transaction_current)
-
-        print("Experiment 2")
-        data["plot_exp2_update"] = find_results(
+        data["plot_exp2_update"] = render_results(
             ["experiment_2", "run_large_memory_experiment"],
             ["update", "update_copy"],
-            parse_rps_experiment,
+            parse_rps_experiment_max_capacity,
             20,
             time_start=1639939557,
         )
-        data["plot_exp2_query"] = find_results(
-            ["experiment_2", "run_large_memory_experiment"], ["query", "query_copy"], parse_rps_experiment, 150
-        )
-        data["plot_statesync"] = find_results(
+
+        data["plot_statesync"] = render_results(
             ["run_statesync_experiment"],
             ["query"],
             parse_statesync_experiment,
             2.2,
             yaxis_title="State Sync duration [s]",
         )
-        data["plot_xnet"] = find_results(["run_xnet_experiment"], ["query"], parse_xnet_experiment, 5500)
-        print(data)
+
+        data["plot_xnet"] = render_results(["run_xnet_experiment"], ["query"], parse_xnet_experiment, 5500)
 
         # Render the internal CD overview
         with open(f"{FLAGS.experiment_data}/cd-overview.html", "w") as outfile:

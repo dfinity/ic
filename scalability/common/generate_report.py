@@ -45,6 +45,77 @@ ALLOWABLE_FAILURE_RATE = 0.2
 ALLOWABLE_LATENCY = 5000
 
 
+def parse_prometheus(prometheus_path: str, evaluated_summaries):
+    """Parse the given prometheus data."""
+    http_request_duration = None
+    finalization_rate = None
+    metrics = None
+    if os.path.exists(prometheus_path):
+        with open(prometheus_path) as prometheus_metrics:
+            try:
+                metrics = json.loads(prometheus_metrics.read())
+                try:
+                    request_duration = statistics.mean(
+                        map(float, filter(lambda x: x != "NaN", metrics["http_request_duration"]))
+                    )
+                    http_request_duration.append(request_duration)
+                except Exception as err:
+                    print(f"Failed to determine HTTP request duration for file {prometheus_path} - {err}")
+
+                t_start = int(metrics["http_request_rate"][0][0][0])
+                xdata = [int(x) - t_start for x, _ in metrics["http_request_rate"][0]]
+                ydata = [float(y) for _, y in metrics["http_request_rate"][0]]
+
+                if evaluated_summaries:
+                    sorted_histograms = sorted(evaluated_summaries.get_success_rate_histograms())
+                    plots = [
+                        {"x": xdata, "y": ydata, "name": "HTTP handler"},
+                        {
+                            "x": [s for s, _ in sorted_histograms],
+                            "y": [s for _, s in sorted_histograms],
+                            "name": "aggregated workload generator stats",
+                        },
+                    ]
+
+                    layout = {
+                        "yaxis": {"title": "rate [requests / s]", "range": [0, 1.2 * max(ydata)]},
+                        "xaxis": {"title": "iteration time [s]"},
+                    }
+
+                    metrics.update(
+                        {
+                            "http_request_rate_plot": plots,
+                            "http_request_rate_layout": layout,
+                        }
+                    )
+
+                if "finalization_rate" in metrics:
+                    finalization_rate = metrics["finalization_rate"][1]
+
+            except Exception as err:
+                traceback.print_exc()
+                print(colored(f"Failed to parse prometheus.json file for {prometheus_path} - {err}", "red"))
+    return (http_request_duration, metrics, finalization_rate)
+
+
+def parse_workload_generator_commands(base_dir: str):
+    wg_commands = ""
+    i = 0
+    run = True
+    while run:
+        i += 1
+        try:
+            with open(os.path.join(base_dir, f"workload-generator-cmd-{i}")) as wg_cmd_file:
+                wg_commands += wg_cmd_file.read() + "\n"
+        except Exception:
+            run = False
+    return [
+        "./ic-workload-generator {}".format(c)
+        for c in wg_commands.split("./ic-workload-generator")
+        if len(c.strip()) > 0
+    ]
+
+
 def add_plot(name: str, xlabel: str, ylabel: str, x: [str], plots: [([str], str)]):
     """Return a dictionary representing the given plot for templating."""
     plot_data = []
@@ -232,21 +303,7 @@ def generate_report(base, githash, timestamp):
             if len(flamegraph) > 0:
                 iter_data.update({"flamegraph": flamegraph[0]})
 
-            wg_commands = ""
-            i = 0
-            run = True
-            while run:
-                i += 1
-                try:
-                    with open(os.path.join(path, f"workload-generator-cmd-{i}")) as wg_cmd_file:
-                        wg_commands += wg_cmd_file.read() + "\n"
-                except Exception:
-                    run = False
-                    iter_data["wg_commands"] = [
-                        "./ic-workload-generator {}".format(c)
-                        for c in wg_commands.split("./ic-workload-generator")
-                        if len(c.strip()) > 0
-                    ]
+            iter_data["wg_commands"] = parse_workload_generator_commands(path)
 
             # Iteration configuration
             try:
@@ -258,55 +315,15 @@ def generate_report(base, githash, timestamp):
 
             # Prometheus report
             prometheus_path = os.path.join(path, "prometheus.json")
-            if os.path.exists(prometheus_path):
-                with open(prometheus_path) as prometheus_metrics:
-                    try:
-                        metrics = json.loads(prometheus_metrics.read())
-                        try:
-                            request_duration = statistics.mean(
-                                map(float, filter(lambda x: x != "NaN", metrics["http_request_duration"]))
-                            )
-                            http_request_duration.append(request_duration)
-                        except Exception as err:
-                            print(
-                                f"Failed to determine HTTP request duration for iteration {i} in file {path}/prometheus.json - {err}"
-                            )
-
-                        t_start = int(metrics["http_request_rate"][0][0][0])
-                        xdata = [int(x) - t_start for x, _ in metrics["http_request_rate"][0]]
-                        ydata = [float(y) for _, y in metrics["http_request_rate"][0]]
-
-                        if evaluated_summaries:
-                            sorted_histograms = sorted(evaluated_summaries.get_success_rate_histograms())
-                            plots = [
-                                {"x": xdata, "y": ydata, "name": "HTTP handler"},
-                                {
-                                    "x": [s for s, _ in sorted_histograms],
-                                    "y": [s for _, s in sorted_histograms],
-                                    "name": "aggregated workload generator stats",
-                                },
-                            ]
-
-                            layout = {
-                                "yaxis": {"title": "rate [requests / s]", "range": [0, 1.2 * max(ydata)]},
-                                "xaxis": {"title": "iteration time [s]"},
-                            }
-
-                            metrics.update(
-                                {
-                                    "http_request_rate_plot": plots,
-                                    "http_request_rate_layout": layout,
-                                }
-                            )
-
-                        iter_data.update({"prometheus": metrics})
-
-                        if "finalization_rate" in metrics:
-                            finalization_rates.append(metrics["finalization_rate"][1])
-
-                    except Exception as err:
-                        traceback.print_exc()
-                        print(colored(f"Failed to parse prometheus.json file for iteration {i} - {err}", "red"))
+            p_http_request_duration, p_metrics, p_finalization_rate = parse_prometheus(
+                prometheus_path, evaluated_summaries
+            )
+            if p_http_request_duration is not None:
+                http_request_duration.append(p_http_request_duration)
+            if p_metrics is not None:
+                iter_data.update({"prometheus": p_metrics})
+            if p_finalization_rate is not None:
+                finalization_rates.append(p_finalization_rate)
 
             data["iterations"].append(iter_data)
 
