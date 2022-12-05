@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 bson = "0.14"
-capnp = "0.12"
+capnp = "0.13"
 prost = "0.6"
 prost-types = "0.6"
 serde = { version = "1", features = ['derive'] }
