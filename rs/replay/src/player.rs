@@ -425,7 +425,16 @@ impl Player {
             // Redeliver certifications to state manager. It will panic if there is any
             // mismatch.
             print!("Redelivering certifications:");
-            for h in certification_pool.certified_heights() {
+            let mut cert_heights =
+                Vec::from_iter(certification_pool.certified_heights().into_iter());
+            cert_heights.sort();
+            for (i, &h) in cert_heights.iter().enumerate() {
+                match cert_heights.get(i - 1) {
+                    Some(&prev) if prev.increment() != h => {
+                        println!("Missing persisted certification at height {:?}", h);
+                    }
+                    _ => {}
+                }
                 let certification = certification_pool
                     .certification_at_height(h)
                     .unwrap_or_else(|| panic!("Missing certification at height {:?}", h));
