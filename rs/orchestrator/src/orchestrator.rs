@@ -404,6 +404,7 @@ impl Orchestrator {
     ) -> (OrchestratorMetrics, MetricsHttpEndpoint) {
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
+            ..Default::default()
         };
 
         let metrics_endpoint = MetricsHttpEndpoint::new(

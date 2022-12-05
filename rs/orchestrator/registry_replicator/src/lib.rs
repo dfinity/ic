@@ -134,6 +134,7 @@ impl RegistryReplicator {
 
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
+            ..Default::default()
         };
         let metrics_endpoint = MetricsHttpEndpoint::new(
             tokio::runtime::Handle::current(),

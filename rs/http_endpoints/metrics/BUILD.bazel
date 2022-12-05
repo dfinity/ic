@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-io-timeout",
     "@crate_index//:tower",
 ]
 

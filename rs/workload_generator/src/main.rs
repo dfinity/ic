@@ -352,6 +352,7 @@ async fn main() {
                 exporter: Exporter::Http(
                     SocketAddrV4::new("0.0.0.0".parse().expect("can't fail"), port).into(),
                 ),
+                ..Default::default()
             };
             Some(
                 ic_http_endpoints_metrics::MetricsHttpEndpoint::new_insecure(

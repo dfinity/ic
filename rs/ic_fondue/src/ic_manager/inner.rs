@@ -493,6 +493,7 @@ impl IcManager {
         });
         replica_config.metrics = Some(MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
+            ..Default::default()
         });
         replica_config.artifact_pool = Some(ArtifactPoolTomlConfig::new(artifact_pool_root, None));
         replica_config.crypto = Some(CryptoConfig::new(crypto_root));
