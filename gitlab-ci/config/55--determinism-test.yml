@@ -59,6 +59,7 @@ build-determinism-host-update-img:
   extends:
     - .ubuntu-nix-docker-k8s-pinned-dc
     - .rules-parent-pipeline
+    - .rules-hostos
   stage: build-determinism-test
   needs:
     - job: host-os-updateimg
@@ -82,6 +83,7 @@ build-determinism-setup-os:
   extends:
     - .ubuntu-nix-docker-k8s-pinned-dc
     - .rules-parent-pipeline
+    - .rules-hostos
   stage: build-determinism-test
   needs:
     - job: setup-os-diskimg

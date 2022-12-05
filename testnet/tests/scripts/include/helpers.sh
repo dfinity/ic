@@ -38,9 +38,9 @@ if [[ -z "${GIT_REVISION:-}" ]]; then
 fi
 function disk_image_exists() {
     curl --output /dev/null --silent --head --fail \
-        "https://download.dfinity.systems/ic/$GIT_REVISION/guest-os/disk-img/disk-img.tar.gz" \
+        "https://download.dfinity.systems/ic/$GIT_REVISION/guest-os/disk-img/disk-img.tar.zst" \
         || curl --output /dev/null --silent --head --fail \
-            "https://download.dfinity.systems/ic/$GIT_REVISION/guest-os/disk-img.tar.gz"
+            "https://download.dfinity.systems/ic/$GIT_REVISION/guest-os/disk-img.tar.zst"
 }
 
 for i in {1..60}; do

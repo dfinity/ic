@@ -8,7 +8,8 @@ let
     pkgs.coreutils # Ansible uses `uname` among other core utilities.
     pkgs.ansible # We deploy the IC using ansible.
     pkgs.gnutar # Ansible needs to untar,
-    pkgs.gzip # and unzip IC tarballs.
+    pkgs.gzip # and unzip IC tarballs,
+    pkgs.zstd # and unzip more IC tarballs.
     pkgs.jq # To parse the ansible inventory.
     pkgs.openssh # Ansible uses ssh to connect to the nodes.
     pkgs.runtimeShellPackage # the ic-workload-genertor uses `sh -c ulimit -n`.
