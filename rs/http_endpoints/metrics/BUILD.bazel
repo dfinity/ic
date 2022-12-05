@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -36,4 +36,14 @@ rust_test(
     size = "small",
     crate = ":metrics",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "metrics_integration",
+    size = "small",
+    srcs = glob(
+        ["tests/**"],
+    ),
+    proc_macro_deps = [],
+    deps = [":metrics"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
