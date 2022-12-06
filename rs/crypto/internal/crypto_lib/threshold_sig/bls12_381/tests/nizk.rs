@@ -10,6 +10,7 @@ use dkg::nizk_sharing::{
 };
 use dkg::random_oracles::UniqueHash;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, Scalar};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -82,7 +83,7 @@ fn assert_expected_scalar(scalar: &Scalar, expected: &'static str) {
 
 #[test]
 fn sharing_nizk_should_verify() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
     let instance = SharingInstance::new(pk, aa, rr, cc);
@@ -143,7 +144,7 @@ fn sharing_nizk_is_stable() {
 #[test]
 #[should_panic(expected = "The sharing proof instance is invalid: InvalidInstance")]
 fn sharing_prover_should_panic_on_empty_coefficients() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (pk, _aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
     let instance = SharingInstance::new(pk, vec![], rr, cc);
@@ -154,7 +155,7 @@ fn sharing_prover_should_panic_on_empty_coefficients() {
 #[test]
 #[should_panic(expected = "The sharing proof instance is invalid: InvalidInstance")]
 fn sharing_prover_should_panic_on_invalid_instance() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
     pk.push(G1Affine::generator().clone());
 
@@ -166,7 +167,7 @@ fn sharing_prover_should_panic_on_invalid_instance() {
 
 #[test]
 fn sharing_nizk_should_fail_on_invalid_instance() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
     let instance = SharingInstance::new(pk.clone(), aa.clone(), rr.clone(), cc.clone());
@@ -188,7 +189,7 @@ fn sharing_nizk_should_fail_on_invalid_instance() {
 
 #[test]
 fn sharing_nizk_should_fail_on_invalid_proof() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
     let instance = SharingInstance::new(pk, aa, rr, cc);
@@ -253,7 +254,7 @@ fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
 
 #[test]
 fn chunking_nizk_should_verify() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     let nizk = prove_chunking(&instance, &witness, &mut rng);
@@ -267,7 +268,7 @@ fn chunking_nizk_should_verify() {
 #[test]
 #[should_panic(expected = "The chunking proof instance is invalid: InvalidInstance")]
 fn chunking_prover_should_panic_on_empty_chunks() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (mut instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     // invalidate the instance:
@@ -300,7 +301,7 @@ fn chunking_nizk_is_stable() {
 #[test]
 #[should_panic(expected = "The chunking proof instance is invalid: InvalidInstance")]
 fn chunking_prover_should_panic_on_invalid_instance() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (mut instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     instance.public_keys.push(G1Affine::generator().clone());
@@ -310,7 +311,7 @@ fn chunking_prover_should_panic_on_invalid_instance() {
 
 #[test]
 fn chunking_nizk_should_fail_on_invalid_instance() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (valid_instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     let mut invalid_instance = valid_instance.clone();
@@ -330,7 +331,7 @@ fn chunking_nizk_should_fail_on_invalid_instance() {
 fn chunking_nizk_should_fail_on_invalid_proof() {
     use ic_crypto_internal_bls12_381_type::G1Affine;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     let chunking_proof = prove_chunking(&instance, &witness, &mut rng);

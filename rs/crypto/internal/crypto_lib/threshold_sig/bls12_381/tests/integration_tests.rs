@@ -7,12 +7,13 @@ use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
     forward_secure::*, nizk_chunking::*, nizk_sharing::*,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 
 #[test]
 fn potpourri() {
     let sys = SysParam::global();
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 0u8, 2u8, 1u8];
 
     println!("generating key pair...");
@@ -91,7 +92,7 @@ fn potpourri() {
 /// * Varying the plaintexts more; here we have only fairly noddy variation.
 fn encrypted_chunks_should_validate(epoch: Epoch) {
     let sys = SysParam::global();
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1u8, 9u8, 8u8, 4u8];
 
     let num_receivers = 3;

@@ -1,6 +1,7 @@
 //! Tests for the POP of the Encryption Key
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::encryption_key_pop::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 
 fn setup_pop_instance_and_witness<R: RngCore + CryptoRng>(
@@ -68,7 +69,7 @@ fn should_encryption_key_pop_be_stable() -> Result<(), EncryptionKeyPopError> {
 
 #[test]
 fn should_verify_encryption_key_pop() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (instance, witness) = setup_pop_instance_and_witness(&mut rng);
 
     let pop = prove_pop(&instance, &witness, &mut rng);
@@ -87,7 +88,7 @@ fn should_verify_encryption_key_pop() {
 
 #[test]
 fn prover_should_return_error_on_invalid_instance() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (instance, _witness) = setup_pop_instance_and_witness(&mut rng);
     let (_other_instance, other_witness) = setup_pop_instance_and_witness(&mut rng);
 
@@ -102,7 +103,7 @@ fn prover_should_return_error_on_invalid_instance() {
 
 #[test]
 fn verifier_should_return_error_on_invalid_proof() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     let (instance, _witness) = setup_pop_instance_and_witness(&mut rng);
     let (other_instance, other_witness) = setup_pop_instance_and_witness(&mut rng);
 
