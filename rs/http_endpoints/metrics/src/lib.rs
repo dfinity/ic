@@ -1,5 +1,4 @@
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
-use ic_async_utils::TcpAcceptor;
 use ic_config::metrics::{Config, Exporter};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_registry::RegistryClient;
@@ -12,11 +11,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::{TcpListener, TcpSocket};
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio_io_timeout::TimeoutStream;
 use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, load_shed::error::Overloaded,
-    timeout::error::Elapsed, util::BoxCloneService, BoxError, ServiceBuilder, ServiceExt,
+    timeout::error::Elapsed, util::BoxCloneService, BoxError, Service, ServiceBuilder, ServiceExt,
 };
 
 const LOG_INTERVAL_SECS: u64 = 30;
@@ -178,11 +177,11 @@ impl MetricsHttpEndpoint {
     /// task does not terminate and if/when we support clean shutdown this
     /// task will need to be joined.
     fn start_http(&self, address: SocketAddr) {
-        let metrics_registry = self.metrics_registry.clone();
-        let log = self.log.clone();
         // we need to enter the tokio context in order to create the timeout layer and the tcp
         // socket
         let _enter = self.rt_handle.enter();
+
+        let metrics_registry = self.metrics_registry.clone();
         let metrics_svc = ServiceBuilder::new()
             .load_shed()
             .timeout(Duration::from_secs(self.config.request_timeout_seconds))
@@ -226,9 +225,52 @@ impl MetricsHttpEndpoint {
                     Err(err) => Ok(HttpError::from(err).response),
                 }
             });
-
         let metrics_svc = BoxCloneService::new(metrics_svc);
+
+        let log = self.log.clone();
         let crypto_tls = self.crypto_tls.clone();
+        let metrics = self.metrics.clone();
+        let config = self.config.clone();
+        let conn_svc = ServiceBuilder::new()
+            .load_shed()
+            .layer(GlobalConcurrencyLimitLayer::new(
+                self.config.max_outstanding_conections,
+            ))
+            .service_fn(move |tcp_stream: TcpStream| {
+                let log = log.clone();
+                let metrics_svc = metrics_svc.clone();
+                let metrics = metrics.clone();
+                let crypto_tls = crypto_tls.clone();
+                let config = config.clone();
+
+                async move {
+                    match crypto_tls {
+                        Some((registry_client, crypto)) => {
+                            handshake_and_serve_connection(
+                                log,
+                                config,
+                                tcp_stream,
+                                metrics_svc,
+                                registry_client,
+                                crypto,
+                                metrics,
+                            )
+                            .await
+                        }
+                        None => {
+                            metrics.connections_total.with_label_values(&["http"]).inc();
+                            serve_connection_with_read_timeout(
+                                tcp_stream,
+                                metrics_svc,
+                                config.connection_read_timeout_seconds,
+                            )
+                            .await
+                        }
+                    }
+                }
+            });
+        let conn_svc = BoxCloneService::new(conn_svc);
+
         // Temporarily listen on [::] so that we accept both IPv4 and IPv6 connections.
         // This requires net.ipv6.bindv6only = 0.  TODO: revert this once we have rolled
         // out IPv6 in prometheus and ic_p8s_service_discovery.
@@ -237,64 +279,17 @@ impl MetricsHttpEndpoint {
         let tcp_listener = start_listener(addr).unwrap_or_else(|err| {
             panic!("Could not start listener at addr = {}. err = {}", addr, err)
         });
-
-        let metrics = self.metrics.clone();
-        let connection_read_timeout_seconds = self.config.connection_read_timeout_seconds;
-        let tcp_acceptor = TcpAcceptor::new(tcp_listener, self.config.max_outstanding_conections);
         self.rt_handle.spawn(async move {
             loop {
-                let log = log.clone();
-                let metrics_svc = metrics_svc.clone();
-                let metrics = metrics.clone();
-                let crypto_tls = crypto_tls.clone();
-                if let Ok((tcp_stream, _)) = tcp_acceptor.accept().await {
+                let mut conn_svc = conn_svc.clone();
+                if let Ok((tcp_stream, _)) = tcp_listener.accept().await {
                     tokio::spawn(async move {
-                        let mut b = [0_u8; 1];
-                        let (tcp_stream, _counter) = tcp_stream.take();
-                        if tcp_stream.peek(&mut b).await.is_ok() && b[0] == 22 {
-                            metrics
-                                .connections_total
-                                .with_label_values(&["https"])
-                                .inc();
-
-                            if let Some((registry_client, crypto)) = crypto_tls {
-                                // Note: the unwrap() can't fail since we tested Some(crypto)
-                                // above.
-                                let registry_version = registry_client.get_latest_version();
-                                match crypto
-                                    .perform_tls_server_handshake_without_client_auth(
-                                        tcp_stream,
-                                        registry_version,
-                                    )
-                                    .await
-                                {
-                                    Err(e) => warn!(log, "TLS error: {}", e),
-                                    Ok(stream) => {
-                                        if let Err(e) = serve_connection_with_read_timeout(
-                                            stream,
-                                            metrics_svc,
-                                            connection_read_timeout_seconds,
-                                        )
-                                        .await
-                                        {
-                                            trace!(log, "Connection error: {}", e);
-                                        }
-                                    }
-                                };
-                            }
-                        } else {
-                            metrics.connections_total.with_label_values(&["http"]).inc();
-                            // Fallback to Http.
-                            if let Err(e) = serve_connection_with_read_timeout(
-                                tcp_stream,
-                                metrics_svc,
-                                connection_read_timeout_seconds,
-                            )
+                        let _ = conn_svc
+                            .ready()
                             .await
-                            {
-                                trace!(log, "Connection error: {}", e);
-                            }
-                        }
+                            .expect("The load shedder must always be ready.")
+                            .call(tcp_stream)
+                            .await;
                     });
                 }
             }
@@ -330,6 +325,50 @@ impl Drop for MetricsHttpEndpoint {
                 }
             }
         }
+    }
+}
+
+async fn handshake_and_serve_connection(
+    log: slog::Logger,
+    config: Config,
+    tcp_stream: TcpStream,
+    metrics_svc: BoxCloneService<Request<Body>, Response<Body>, HttpError>,
+    registry_client: Arc<dyn RegistryClient>,
+    tls_handhake: Arc<dyn TlsHandshake + Send + Sync>,
+    metrics: MetricsEndpointMetrics,
+) -> Result<(), hyper::Error> {
+    let mut b = [0_u8; 1];
+    if tcp_stream.peek(&mut b).await.is_ok() && b[0] == 22 {
+        let registry_version = registry_client.get_latest_version();
+        match tls_handhake
+            .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
+            .await
+        {
+            Err(err) => {
+                warn!(log, "TLS handshake failed {}", err);
+                Ok(())
+            }
+            Ok(stream) => {
+                metrics
+                    .connections_total
+                    .with_label_values(&["https"])
+                    .inc();
+                serve_connection_with_read_timeout(
+                    stream,
+                    metrics_svc,
+                    config.connection_read_timeout_seconds,
+                )
+                .await
+            }
+        }
+    } else {
+        metrics.connections_total.with_label_values(&["http"]).inc();
+        serve_connection_with_read_timeout(
+            tcp_stream,
+            metrics_svc,
+            config.connection_read_timeout_seconds,
+        )
+        .await
     }
 }
 
