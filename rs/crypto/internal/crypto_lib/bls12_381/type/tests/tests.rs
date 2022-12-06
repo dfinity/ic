@@ -1,6 +1,7 @@
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
 use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use paste::paste;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -30,13 +31,6 @@ fn g2_test_encoding(pt: G2Affine, expected_value: &'static str) {
         .expect("Invalid encoding");
 
     assert_eq!(decoded, pt);
-}
-
-fn seeded_rng() -> ChaCha20Rng {
-    let mut thread_rng = rand::thread_rng();
-    let seed = thread_rng.gen::<u64>();
-    println!("RNG seed {}", seed);
-    ChaCha20Rng::seed_from_u64(seed)
 }
 
 #[test]
@@ -98,7 +92,7 @@ fn scalar_batch_random_generates_expected_values() {
 
 #[test]
 fn test_scalar_batch_random_generates_unique_values() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     fn assert_no_duplicates(scalars: &[Scalar]) {
         let mut uniq = std::collections::BTreeSet::new();
@@ -168,7 +162,7 @@ fn test_scalar_comparison() {
     assert!(one <= one);
     assert!(one >= one);
 
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     for _ in 0..300 {
         let a = Scalar::random(&mut rng);
@@ -195,7 +189,7 @@ fn test_scalar_comparison() {
 
 #[test]
 fn test_scalar_from_integer_type() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     assert_eq!(Scalar::zero(), Scalar::from_i32(0));
     assert_eq!(Scalar::zero(), Scalar::from_u32(0));
@@ -236,7 +230,7 @@ fn test_scalar_from_integer_type() {
 
 #[test]
 fn test_scalar_small_random() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     for bit_size in 1..32 {
         let n = u64::MAX >> (64 - bit_size);
@@ -283,7 +277,7 @@ fn test_scalar_is_zero() {
 
 #[test]
 fn test_scalar_addition() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     for _ in 0..30 {
         let s1 = Scalar::random(&mut rng);
@@ -304,7 +298,7 @@ fn test_scalar_addition() {
 
 #[test]
 fn test_scalar_neg() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     for _ in 0..30 {
         let scalar = Scalar::random(&mut rng);
@@ -315,7 +309,7 @@ fn test_scalar_neg() {
 
 #[test]
 fn test_scalar_inverse() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     assert_eq!(Scalar::zero().inverse(), None);
     assert_eq!(Scalar::one().inverse(), Some(Scalar::one()));
@@ -366,7 +360,7 @@ fn test_gt_hash_has_no_collisions_in_range() {
 
 #[test]
 fn test_gt_mul_u16_is_correct() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     // We could do an exhaustive search here but because Gt standard
     // mul is so slow it takes several minutes to complete. So instead
@@ -396,7 +390,7 @@ fn test_gt_mul_u16_is_correct_exhaustive_test() {
 
 #[test]
 fn test_pairing_bilinearity() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let g1 = G1Affine::generator();
     let g2 = G2Affine::generator();
@@ -505,7 +499,7 @@ fn test_multipairing() {
 
     assert_eq!(Gt::multipairing(&[(&g1n, g2p)]), Gt::generator().neg());
 
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     for _ in 0..5 {
         let a = Scalar::random(&mut rng);
@@ -587,7 +581,7 @@ fn test_g2_deserialize_rejects_out_of_range_x_value() {
 
 #[test]
 fn test_scalar_serialization_round_trips() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     for _ in 1..30 {
         let s_orig = Scalar::random(&mut rng);
@@ -661,7 +655,7 @@ fn test_g2_test_vectors() {
 fn test_scalar_muln() {
     use BiasedValue;
 
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     assert_eq!(Scalar::muln_vartime(&[], &[]), Scalar::zero());
 
@@ -687,7 +681,7 @@ fn test_scalar_muln() {
 
 #[test]
 fn test_verify_bls_signature() {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let sk = Scalar::random(&mut rng);
     let pk = G2Affine::from(G2Affine::generator() * &sk);
@@ -889,7 +883,7 @@ macro_rules! test_point_operation {
 }
 
 test_point_operation!(serialization_round_trip, [g1, g2], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     for _ in 1..30 {
         let orig = Projective::hash(b"serialization-round-trip-test", &rng.gen::<[u8; 32]>());
@@ -906,7 +900,7 @@ test_point_operation!(serialization_round_trip, [g1, g2], {
 });
 
 test_point_operation!(is_torsion_free, [g1, g2], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     for _ in 0..30 {
         let mut buf = [0u8; Affine::BYTES];
@@ -942,7 +936,7 @@ test_point_operation!(negation, [g1, g2, gt], {
     assert_eq!(Affine::identity(), Affine::identity().neg());
     assert_eq!(Projective::identity(), Projective::identity().neg());
 
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let s = Scalar::random(&mut rng);
 
@@ -955,7 +949,7 @@ test_point_operation!(negation, [g1, g2, gt], {
 });
 
 test_point_operation!(addition, [g1, g2, gt], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let g = Affine::generator();
 
@@ -974,7 +968,7 @@ test_point_operation!(addition, [g1, g2, gt], {
 });
 
 test_point_operation!(sum, [g1, g2], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let pt = Affine::generator();
 
@@ -995,7 +989,7 @@ test_point_operation!(sum, [g1, g2], {
 });
 
 test_point_operation!(multiply, [g1, g2, gt], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let pt = Affine::generator();
 
@@ -1010,7 +1004,7 @@ test_point_operation!(multiply, [g1, g2, gt], {
 });
 
 test_point_operation!(mul_with_precompute, [g1, g2], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let g = Affine::hash(b"random-point-for-mul-precompute", &rng.gen::<[u8; 32]>());
 
@@ -1032,7 +1026,7 @@ test_point_operation!(mul_with_precompute, [g1, g2], {
 });
 
 test_point_operation!(batch_mul, [g1, g2], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let pt = Affine::hash(b"ic-crypto-batch-mul-test", &rng.gen::<[u8; 32]>());
 
@@ -1050,7 +1044,7 @@ test_point_operation!(batch_mul, [g1, g2], {
 });
 
 test_point_operation!(mul2, [g1, g2], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let g = Projective::generator();
     let zero = Scalar::zero();
@@ -1075,7 +1069,7 @@ test_point_operation!(mul2, [g1, g2], {
 });
 
 test_point_operation!(muln, [g1, g2], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     assert_eq!(Projective::muln_vartime(&[], &[]), Projective::identity());
 
@@ -1100,7 +1094,7 @@ test_point_operation!(muln, [g1, g2], {
 });
 
 test_point_operation!(batch_normalize, [g1, g2], {
-    let mut rng = seeded_rng();
+    let mut rng = reproducible_rng();
 
     let g = Affine::generator();
 
