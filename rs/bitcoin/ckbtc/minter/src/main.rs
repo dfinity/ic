@@ -1,6 +1,7 @@
 use candid::candid_method;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
+use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::{self, init::InitArgs};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
@@ -82,6 +83,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     .build()
             }
         }
+    } else if req.path() == "/dashboard" {
+        let dashboard: Vec<u8> = build_dashboard();
+        HttpResponseBuilder::ok()
+            .header("Content-Type", "text/html; charset=utf-8")
+            .with_body_and_content_length(dashboard)
+            .build()
     } else {
         HttpResponseBuilder::not_found().build()
     }
