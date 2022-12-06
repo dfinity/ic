@@ -5,6 +5,7 @@ use super::super::Polynomial;
 use super::PublicCoefficients;
 use crate::types::{PublicKey, ThresholdError};
 use ic_crypto_internal_bls12_381_type::{G2Affine, G2Projective, Scalar};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use std::ops::MulAssign;
 
 fn uint_to_g2(num: u32) -> G2Projective {
@@ -186,7 +187,7 @@ mod public_coefficients {
 
     #[test]
     fn test_lagrange_coefficients_at_zero_rejects_duplicate_points() {
-        let mut rng = rand::thread_rng();
+        let mut rng = reproducible_rng();
 
         for num_coefficients in 1..50 {
             let mut inputs = vec![];
@@ -211,7 +212,7 @@ mod public_coefficients {
 
     #[test]
     fn test_interpolation_is_resilient_to_duplicate_points() {
-        let mut rng = rand::thread_rng();
+        let mut rng = reproducible_rng();
 
         for num_coefficients in 1..50 {
             let poly = Polynomial::random(num_coefficients, &mut rng);

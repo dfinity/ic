@@ -5105,6 +5105,7 @@ dependencies = [
  "ic-crypto-internal-threshold-sig-bls12381-der",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "lazy_static",
  "proptest",
