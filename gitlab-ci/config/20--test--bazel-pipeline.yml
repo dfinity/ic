@@ -42,7 +42,7 @@
     when: always
     paths:
       - bazel-build-log*.json*
-      - bazep-bep.pb
+      - bazel-bep.pb
     reports:
       junit: bazel-testlogs-gitlab/**/test.xml
   variables:
