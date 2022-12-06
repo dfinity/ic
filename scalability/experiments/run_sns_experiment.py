@@ -392,6 +392,8 @@ if __name__ == "__main__":
                 "propose-to-update-subnet",
                 "--subnet",
                 sns_subnet,
+                "--summary",
+                "'Updating subnets'",
                 "--test-neuron-proposer",
                 "--initial-notary-delay-millis",
                 str(nns_subnet_json["initial_notary_delay_mills"]),

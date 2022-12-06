@@ -109,6 +109,7 @@ echo "➡️  Bless upgrade $VERSION"
     LOG_BLESSING=$(mktemp)
     retry_command 5 $IC_ADMIN_BIN --nns-url $NNS_URL propose-to-bless-replica-version-flexible \
         --test-neuron-proposer $VERSION \
+        --summary "Blessing replica version" \
         $UPGRADE_URL $SHA256 2>&1 | tee "$LOG_BLESSING"
 )
 

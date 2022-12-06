@@ -414,6 +414,8 @@ class BaseExperiment:
                 "--test-neuron-proposer",
                 "--subnet-id",
                 str(subnet_index),
+                "--summary",
+                "'Adding nodes to subnet'",
                 node_id,
             ]
             print(f"Executing {cmd}")

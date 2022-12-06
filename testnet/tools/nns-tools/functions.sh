@@ -243,7 +243,8 @@ add_sns_wasms_allowed_principal() {
     $IC_ADMIN --nns-url "$NNS_URL" -s "$PEM" \
         propose-to-update-sns-deploy-whitelist \
         --proposer "$NEURON_ID" \
-        --added-principals "$PRINCIPAL_TO_ADD"
+        --added-principals "$PRINCIPAL_TO_ADD" \
+        --summary "Updating deploy whitelist"
 }
 
 set_sns_wasms_allowed_subnets() {
@@ -261,7 +262,7 @@ set_sns_wasms_allowed_subnets() {
         | grep principal \
         | sed 's/.*"\(.*\)";/\1/')
 
-    cmd=($IC_ADMIN --nns-url $NNS_URL -s $PEM propose-to-update-sns-subnet-ids-in-sns-wasm)
+    cmd=($IC_ADMIN --nns-url $NNS_URL -s $PEM propose-to-update-sns-subnet-ids-in-sns-wasm --summary "Updating SNS subnet ids in SNS-WASM")
 
     for current_subnet in $CURRENT_SUBNETS; do
         cmd+=(--sns-subnet-ids-to-remove $current_subnet)
@@ -287,6 +288,7 @@ create_new_subnet() {
     # shellcheck disable=SC2068
     $IC_ADMIN -s "$PEM" --nns-url "$NNS_URL" \
         propose-to-create-subnet \
+        --summary "Creating a subnet" \
         --proposer "$NEURON_ID" \
         --subnet-type "$SUBNET_TYPE" \
         --replica-version-id "$REPLICA_VERSION" \
@@ -305,6 +307,7 @@ set_default_subnets() {
     $IC_ADMIN -s "$PEM" --nns-url "$NNS_URL" \
         propose-to-set-authorized-subnetworks \
         --proposer "$NEURON_ID" \
+        --summary "Setting authorized subnetworks" \
         --subnets "$SUBNET_ID"
 }
 

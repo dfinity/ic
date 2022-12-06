@@ -91,6 +91,7 @@ echo "➡️  Upgrade subnetwork $SUBNET to $VERSION"
     $IC_ADMIN_BIN --nns-url=$NNS_URL get-subnet $SUBNET | grep replica_version || true
 
     retry_command 5 $IC_ADMIN_BIN --nns-url=$NNS_URL propose-to-update-subnet-replica-version \
+        --summary "Updating subnet replica version" \
         --test-neuron-proposer $SUBNET $VERSION | tee "$LOG_UPGRADE"
 
     sleep 5
