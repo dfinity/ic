@@ -150,7 +150,7 @@ pub fn with_endpoint(
     excluded_tests: Vec<&str>,
 ) {
     let status = Command::new(ic_ref_test_path)
-        .arg("-j8")
+        .arg("-j12")
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests))
         .arg("--endpoint")
