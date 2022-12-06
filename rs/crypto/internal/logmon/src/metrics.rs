@@ -98,6 +98,7 @@ impl CryptoMetrics {
         }
     }
 
+    /// Observes results of iDKG dealing encryption key operations.
     pub fn observe_key_rotation_result(&self, result: KeyRotationResult) {
         if let Some(metrics) = &self.metrics {
             metrics
@@ -107,6 +108,7 @@ impl CryptoMetrics {
         }
     }
 
+    /// Observes the results of operations returning a boolean.
     pub fn observe_boolean_result(&self, operation: BooleanOperation, result: BooleanResult) {
         if let Some(metrics) = &self.metrics {
             metrics
@@ -204,6 +206,8 @@ impl KeyCounts {
     }
 }
 
+/// A result for operations returning booleans. Using an enum allows adding errors, and using
+/// macros for deriving the string representation needed for the dashboards.
 #[derive(IntoStaticStr)]
 pub enum BooleanResult {
     True,
