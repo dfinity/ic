@@ -121,7 +121,10 @@ pub fn test(env: TestEnv) {
             proxy_server.await.ok();
         });
 
-        let runtime = runtime_from_url(root_subnet_endpoint.url.clone());
+        let runtime = runtime_from_url(
+            root_subnet_endpoint.url.clone(),
+            root_subnet_endpoint.effective_canister_id(),
+        );
 
         info!(ctx.logger, "creating a new registry canister...");
         let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();

@@ -76,7 +76,10 @@ pub fn test(env: TestEnv) {
     let (canister_id, public_key) = block_on(async {
         let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
         nns_endpoint.assert_ready(ctx).await;
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+        let nns = runtime_from_url(
+            nns_endpoint.url.clone(),
+            nns_endpoint.effective_canister_id(),
+        );
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         info!(logger, "Enable ECDSA signing");
         enable_ecdsa_signing(

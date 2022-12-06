@@ -7,6 +7,7 @@ use crate::{
     util::runtime_from_url,
 };
 
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_types::{time::current_time, SubnetId};
 use openssh_keys::PublicKey;
@@ -181,7 +182,7 @@ pub(crate) fn get_updatesubnetpayload_with_keys(
 }
 
 pub(crate) async fn update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
-    let r = runtime_from_url(nns_url);
+    let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
     let gov_can = get_governance_canister(&r);
 
     let proposal_id =
@@ -192,7 +193,7 @@ pub(crate) async fn update_subnet_record(nns_url: Url, payload: UpdateSubnetPayl
 }
 
 pub(crate) async fn fail_to_update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
-    let r = runtime_from_url(nns_url);
+    let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
     let gov_can = get_governance_canister(&r);
 
     let proposal_id =
@@ -215,7 +216,7 @@ pub(crate) async fn update_ssh_keys_for_all_unassigned_nodes(
     nns_url: Url,
     payload: UpdateUnassignedNodesConfigPayload,
 ) {
-    let r = runtime_from_url(nns_url);
+    let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
     let gov_can = get_governance_canister(&r);
 
     let proposal_id = submit_external_proposal_with_test_id(
@@ -232,7 +233,7 @@ pub(crate) async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
     nns_url: Url,
     payload: UpdateUnassignedNodesConfigPayload,
 ) {
-    let r = runtime_from_url(nns_url);
+    let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
     let gov_can = get_governance_canister(&r);
 
     let proposal_id = submit_external_proposal_with_test_id(

@@ -112,7 +112,10 @@ pub fn test(env: TestEnv) {
         let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
         nns_endpoint.assert_ready(ctx).await;
 
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+        let nns = runtime_from_url(
+            nns_endpoint.url.clone(),
+            nns_endpoint.effective_canister_id(),
+        );
 
         let agent_client = HttpClient::new();
         let tst = TestAgent::new(&nns_endpoint.url, &agent_client);
@@ -506,17 +509,19 @@ pub fn test(env: TestEnv) {
         let application_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
         application_endpoint.assert_ready(ctx).await;
 
-        let new_canister_status: CanisterStatusResult =
-            runtime_from_url(application_endpoint.url.clone())
-                .get_management_canister()
-                .update_from_sender(
-                    "canister_status",
-                    candid_one,
-                    CanisterIdRecord::from(new_canister_id),
-                    &Sender::from_keypair(&controller_user_keypair),
-                )
-                .await
-                .unwrap();
+        let new_canister_status: CanisterStatusResult = runtime_from_url(
+            application_endpoint.url.clone(),
+            application_endpoint.effective_canister_id(),
+        )
+        .get_management_canister()
+        .update_from_sender(
+            "canister_status",
+            candid_one,
+            CanisterIdRecord::from(new_canister_id),
+            &Sender::from_keypair(&controller_user_keypair),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(new_canister_status.controller(), controller_pid);
         let config = CyclesAccountManagerConfig::application_subnet();
@@ -581,17 +586,19 @@ pub fn test(env: TestEnv) {
             let application_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
             application_endpoint.assert_ready(ctx).await;
 
-            let new_canister_status: CanisterStatusResult =
-                runtime_from_url(application_endpoint.url.clone())
-                    .get_management_canister()
-                    .update_from_sender(
-                        "canister_status",
-                        candid_one,
-                        CanisterIdRecord::from(new_canister_id),
-                        &Sender::from_keypair(&controller_user_keypair),
-                    )
-                    .await
-                    .unwrap();
+            let new_canister_status: CanisterStatusResult = runtime_from_url(
+                application_endpoint.url.clone(),
+                application_endpoint.effective_canister_id(),
+            )
+            .get_management_canister()
+            .update_from_sender(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(new_canister_id),
+                &Sender::from_keypair(&controller_user_keypair),
+            )
+            .await
+            .unwrap();
 
             assert_eq!(new_canister_status.controller(), controller_pid);
             let config = CyclesAccountManagerConfig::application_subnet();
@@ -843,7 +850,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
         let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
         nns_endpoint.assert_ready(ctx).await;
 
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+        let nns = runtime_from_url(nns_endpoint.url.clone(), nns_endpoint.effective_canister_id());
 
         let agent_client = HttpClient::new();
         let tst = TestAgent::new(&nns_endpoint.url, &agent_client);
@@ -962,7 +969,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
         let node_on_type1_subnet =
             get_random_node_endpoint_of_subnet(&handle, subnet_of_type1, &mut rng);
 
-        let _status: CanisterStatusResult = runtime_from_url(node_on_authorized_subnet.url.clone())
+        let _status: CanisterStatusResult = runtime_from_url(node_on_authorized_subnet.url.clone(), node_on_authorized_subnet.effective_canister_id())
             .get_management_canister()
             .update_from_sender(
                 "canister_status",
@@ -973,7 +980,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             .await
             .unwrap();
 
-        let _status: CanisterStatusResult = runtime_from_url(node_on_type1_subnet.url.clone())
+        let _status: CanisterStatusResult = runtime_from_url(node_on_type1_subnet.url.clone(), node_on_type1_subnet.effective_canister_id())
             .get_management_canister()
             .update_from_sender(
                 "canister_status",
@@ -1117,7 +1124,7 @@ impl UserHandle {
         let arg = ProtoBuf(payload).into_bytes()?;
         let bytes = self
             .agent
-            .execute_update(canister_id, method, arg, self.get_nonce())
+            .execute_update(canister_id, canister_id, method, arg, self.get_nonce())
             .await?
             .ok_or_else(|| "Reply payload was empty".to_string())?;
         ProtoBuf::from_bytes(bytes).map(|c| c.0)
@@ -1135,7 +1142,7 @@ impl UserHandle {
         let arg = CandidOne(payload).into_bytes()?;
         let bytes = self
             .agent
-            .execute_update(canister_id, method, arg, self.get_nonce())
+            .execute_update(canister_id, canister_id, method, arg, self.get_nonce())
             .await?
             .ok_or_else(|| "Reply payload was empty".to_string())?;
         CandidOne::from_bytes(bytes).map(|c| c.0)

@@ -52,7 +52,7 @@ pub fn test_update_balance(env: TestEnv) {
         .unwrap();
 
     block_on(async {
-        let runtime = runtime_from_url(node.get_public_url());
+        let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
         let minting_user = minter_canister.canister_id().get();

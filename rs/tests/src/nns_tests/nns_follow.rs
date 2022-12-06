@@ -86,7 +86,7 @@ pub fn test(env: TestEnv) {
 
     rt.block_on(async move {
         endpoint.assert_ready(ctx).await;
-        let nns = runtime_from_url(endpoint.url.clone());
+        let nns = runtime_from_url(endpoint.url.clone(), endpoint.effective_canister_id());
 
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         let valid_topic = Topic::ParticipantManagement as i32;

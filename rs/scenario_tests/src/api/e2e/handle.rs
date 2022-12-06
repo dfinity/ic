@@ -35,6 +35,7 @@ impl Node for NodeHandle {
                 self.ic_instance.node_api_url(self.id),
                 Sender::from_keypair(&self.ic_instance.caller_principal.0),
             ),
+            effective_canister_id: self.ic_instance.testnet.effective_canister_id(self.id),
         })
     }
 }

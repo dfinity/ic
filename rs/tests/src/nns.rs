@@ -21,7 +21,7 @@ use ic_fondue::{
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
@@ -182,7 +182,7 @@ impl NnsExt for ic_fondue::pot::Context {
         let replica_version = impl_version.replica_version;
         let root_url = first_root_url(handle);
         block_on(async move {
-            let rt = runtime_from_url(root_url);
+            let rt = runtime_from_url(root_url, REGISTRY_CANISTER_ID.into());
             add_replica_version(&rt, replica_version)
                 .await
                 .expect("adding replica version failed.");
@@ -228,7 +228,7 @@ impl NnsExt for ic_fondue::pot::Context {
         let url = first_root_url(handle);
         // send the update proposal
         block_on(async move {
-            let rt = runtime_from_url(url);
+            let rt = runtime_from_url(url, REGISTRY_CANISTER_ID.into());
             update_subnet_replica_version(&rt, subnet_id, version.to_string())
                 .await
                 .expect("updating subnet failed");
@@ -621,7 +621,7 @@ pub async fn add_nodes_to_subnet(
     subnet_id: SubnetId,
     node_ids: &[NodeId],
 ) -> Result<(), String> {
-    let nns_api = runtime_from_url(url);
+    let nns_api = runtime_from_url(url, REGISTRY_CANISTER_ID.into());
     let governance_canister = get_canister(&nns_api, GOVERNANCE_CANISTER_ID);
     let proposal_payload = AddNodesToSubnetPayload {
         node_ids: node_ids.to_vec(),
@@ -644,7 +644,7 @@ pub async fn add_nodes_to_subnet(
 }
 
 pub async fn remove_nodes_via_endpoint(url: Url, node_ids: &[NodeId]) -> Result<(), String> {
-    let nns_api = runtime_from_url(url);
+    let nns_api = runtime_from_url(url, REGISTRY_CANISTER_ID.into());
     let governance_canister = get_canister(&nns_api, GOVERNANCE_CANISTER_ID);
     let proposal_payload = RemoveNodesFromSubnetPayload {
         node_ids: node_ids.to_vec(),
@@ -671,7 +671,7 @@ pub async fn change_subnet_membership(
     node_ids_add: &[NodeId],
     node_ids_remove: &[NodeId],
 ) -> Result<(), String> {
-    let nns_api = runtime_from_url(url);
+    let nns_api = runtime_from_url(url, REGISTRY_CANISTER_ID.into());
     let governance_canister = get_canister(&nns_api, GOVERNANCE_CANISTER_ID);
     let proposal_payload = ChangeSubnetMembershipPayload {
         subnet_id: subnet_id.get(),

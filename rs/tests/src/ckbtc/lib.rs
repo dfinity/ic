@@ -79,7 +79,7 @@ pub(crate) async fn activate_ecdsa_signature(
         logger,
         "Activating ECDSA signature with key {:?} on subnet {:?}", key_name, app_subnet_id
     );
-    let nns = runtime_from_url(sys_node.get_public_url());
+    let nns = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
     let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
     enable_ecdsa_signing(&governance, app_subnet_id, make_key(key_name)).await;
     let sys_agent = assert_create_agent(sys_node.get_public_url().as_str()).await;

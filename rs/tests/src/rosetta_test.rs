@@ -465,7 +465,7 @@ pub fn test_everything(env: TestEnv) {
             Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
         );
         let root_key = agent.root_key().await.unwrap().unwrap();
-        let remote_runtime = Runtime::Remote(RemoteTestRuntime { agent });
+        let remote_runtime = Runtime::Remote(RemoteTestRuntime { agent, effective_canister_id: endpoint.effective_canister_id() });
 
         // Reserve the registry canister to ensure that the governance
         // and ledger canisters have the right canister ID.

@@ -75,7 +75,10 @@ pub fn test(env: TestEnv) {
         "All NNS endpoints are ready, connecting to ledger canister..."
     );
     let nns_endpoint = nns_endpoints.first().expect("no NNS nodes");
-    let nns_runtime = util::runtime_from_url(nns_endpoint.url.clone());
+    let nns_runtime = util::runtime_from_url(
+        nns_endpoint.url.clone(),
+        nns_endpoint.effective_canister_id(),
+    );
     let ledger = Canister::new(&nns_runtime, LEDGER_CANISTER_ID);
     info!(&ctx.logger, "Creating nns agent...");
     let nns_agent = rt.block_on(util::assert_create_agent(nns_endpoint.url.as_str()));

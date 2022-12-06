@@ -92,7 +92,7 @@ pub fn test(env: TestEnv) {
         .install_nns_canisters()
         .expect("Could not install NNS canisters.");
     info!(log, "Enabling ECDSA signatures.");
-    let nns_runtime = runtime_from_url(nns_node.get_public_url());
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
     block_on(async {
         enable_ecdsa_signing(&governance, nns_subnet.subnet_id, make_key(KEY_ID1)).await;

@@ -101,7 +101,7 @@ pub fn test(env: TestEnv) {
 
     rt.block_on(async move {
         endpoint.assert_ready(ctx).await;
-        let nns = runtime_from_url(endpoint.url.clone());
+        let nns = runtime_from_url(endpoint.url.clone(), endpoint.effective_canister_id());
 
         // Voting method calls of the governance canister by an entity other than
         // the neuron holders are rejected

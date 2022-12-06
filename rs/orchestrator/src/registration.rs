@@ -137,6 +137,7 @@ impl NodeRegistration {
             if let Err(e) = agent
                 .execute_update(
                     &REGISTRY_CANISTER_ID,
+                    &REGISTRY_CANISTER_ID,
                     "add_node",
                     Encode!(&add_node_payload)
                         .expect("Could not encode payload for add_node-call."),
@@ -358,6 +359,7 @@ impl NodeRegistration {
 
         if let Err(e) = agent
             .execute_update(
+                &REGISTRY_CANISTER_ID,
                 &REGISTRY_CANISTER_ID,
                 "update_node_directly",
                 Encode!(&update_node_payload)

@@ -85,7 +85,7 @@ pub fn test(env: TestEnv) {
 
     // Create NNS runtime.
     info!(logger, "Creating NNS runtime");
-    let nns_runtime = runtime_from_url(nns_node.get_public_url());
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
 
     // Send a proposal for the nodes to join a subnet via the governance canister.
     let governance_canister = canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);

@@ -194,7 +194,7 @@ async fn bless_replica_version_with_sha(
     sha256: &String,
     upgrade_url: Vec<String>,
 ) {
-    let nns = runtime_from_url(nns_node.get_public_url());
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
 
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
@@ -275,7 +275,7 @@ pub(crate) async fn bless_replica_version_with_urls(
     release_package_urls: Vec<String>,
     logger: &Logger,
 ) {
-    let nns = runtime_from_url(nns_node.get_public_url());
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
@@ -318,7 +318,7 @@ pub(crate) async fn update_subnet_replica_version(
     new_replica_version: &ReplicaVersion,
     subnet_id: SubnetId,
 ) {
-    let nns = runtime_from_url(nns_node.get_public_url());
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);

@@ -8,6 +8,7 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_nns_data_provider::create_nns_data_provider;
+use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_routing_table::RoutingTable;
 use ic_types::{registry::connection_endpoint::ConnectionEndpoint, NodeId, PrincipalId, SubnetId};
 use std::{
@@ -29,6 +30,9 @@ pub trait TestnetT {
 
     /// Returns the subnet hosting the given `PrincipalId`, if any.
     fn route(&self, principal_id: PrincipalId) -> Option<SubnetId>;
+
+    /// Returns a canister id in the canister ranges of the subnet to which the node belongs.
+    fn effective_canister_id(&self, node_id: NodeId) -> PrincipalId;
 }
 
 #[derive(Debug)]
@@ -192,5 +196,29 @@ impl TestnetT for Testnet {
 
     fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
         self.routing_table.route(principal_id)
+    }
+
+    fn effective_canister_id(&self, node_id: NodeId) -> PrincipalId {
+        let subnet_id: Option<SubnetId> = self
+            .subnet_ids
+            .clone()
+            .iter()
+            .find(|s| self.node_ids(**s).contains(&node_id))
+            .copied();
+        match subnet_id {
+            Some(sub) => {
+                let canister_ranges: Vec<CanisterIdRange> = self
+                    .routing_table
+                    .iter()
+                    .filter(|(_, sub_id)| sub_id.get() == sub.get())
+                    .map(|(ran, _)| *ran)
+                    .collect();
+                match canister_ranges.get(0) {
+                    Some(range) => range.start.get(),
+                    None => PrincipalId::default(),
+                }
+            }
+            None => PrincipalId::default(),
+        }
     }
 }

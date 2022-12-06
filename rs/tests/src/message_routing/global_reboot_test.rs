@@ -62,7 +62,12 @@ pub fn test(env: TestEnv) {
     let mut rng = ctx.rng.clone();
     let endpoints = handle.as_permutation(&mut rng).collect::<Vec<_>>();
     let endpoints_runtime = (0..SUBNETS_COUNT)
-        .map(|i| runtime_from_url(endpoints[i].url.clone()))
+        .map(|i| {
+            runtime_from_url(
+                endpoints[i].url.clone(),
+                endpoints[i].effective_canister_id(),
+            )
+        })
         .collect::<Vec<_>>();
     // Assert all nodes are reachable after IC setup.
     block_on(assert_endpoints_health(

@@ -173,7 +173,7 @@ pub fn test(env: TestEnv, config: Config) {
     // All elements are related to subnets with different ids.
     let endpoints_runtime = endpoints
         .iter()
-        .map(|ep| runtime_from_url(ep.url.clone()))
+        .map(|ep| runtime_from_url(ep.url.clone(), ep.effective_canister_id()))
         .collect::<Vec<_>>();
     assert_eq!(endpoints_runtime.len(), config.subnets);
     // Step 1: Build and install Xnet canisters on each subnet.

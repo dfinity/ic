@@ -5050,6 +5050,7 @@ impl NnsCanisterClient {
                 .agent
                 .execute_update(
                     &canister_id,
+                    &canister_id,
                     msg.to_string(),
                     arguments.clone(),
                     generate_nonce(),
