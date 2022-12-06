@@ -7,6 +7,7 @@ use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod address;
+pub mod dashboard;
 pub mod guard;
 pub mod lifecycle;
 pub mod management;
