@@ -14,7 +14,7 @@ Success:: An agent can complete the signing process and result signature verifie
 
 end::catalog[] */
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::time::Duration;
 
 use crate::driver::ic::{InternetComputer, Subnet};
@@ -33,7 +33,6 @@ use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_ic00_types::{
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, Payload, SignWithECDSAArgs,
     SignWithECDSAReply,
@@ -49,6 +48,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::p2p::{self};
 use ic_types::{Height, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
+use itertools::Itertools;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::do_create_subnet::{
     CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest,
@@ -203,60 +203,6 @@ fn scale_cycles(cycles: Cycles) -> Cycles {
         }
     }
 }
-struct Endpoints {
-    nns_endpoint: IcEndpoint,
-    app_endpoint_1: IcEndpoint,
-    app_endpoint_2: Option<IcEndpoint>,
-}
-
-fn get_endpoints(handle: &IcHandle) -> Endpoints {
-    let mut subnet_endpoints = BTreeMap::new();
-    for endpoint in &handle.public_api_endpoints {
-        if let Some(subnet) = endpoint.subnet.as_ref() {
-            subnet_endpoints.entry(subnet.id).or_insert(endpoint);
-        }
-    }
-    let n = subnet_endpoints.len();
-
-    let mut ordered = subnet_endpoints.into_iter();
-    let mut nns_endpoint = None;
-    let mut app_endpoint_1 = None;
-    let mut app_endpoint_2 = None;
-    for _ in 0..n {
-        let endpoint = ordered.next().unwrap().1.clone();
-        if endpoint.is_root_subnet {
-            assert_eq!(
-                endpoint.subnet.as_ref().unwrap().type_of,
-                SubnetType::System
-            );
-            nns_endpoint = Some(endpoint);
-        } else {
-            assert_eq!(
-                endpoint.subnet.as_ref().unwrap().type_of,
-                SubnetType::Application
-            );
-            if app_endpoint_1.is_none() {
-                app_endpoint_1 = Some(endpoint);
-            } else {
-                app_endpoint_2 = Some(endpoint);
-            }
-        }
-    }
-
-    Endpoints {
-        nns_endpoint: nns_endpoint.unwrap(),
-        app_endpoint_1: app_endpoint_1.unwrap(),
-        app_endpoint_2,
-    }
-}
-
-pub(crate) async fn get_public_key(
-    key_id: EcdsaKeyId,
-    msg_can: &MessageCanister<'_>,
-    ctx: &ic_fondue::pot::Context,
-) -> Result<VerifyingKey, AgentError> {
-    get_public_key_with_logger(key_id, msg_can, &ctx.logger).await
-}
 
 pub(crate) async fn get_public_key_with_logger(
     key_id: EcdsaKeyId,
@@ -336,16 +282,6 @@ async fn execute_create_subnet_proposal(
 
     let proposal_result = vote_and_execute_proposal(governance, proposal_id).await;
     assert_eq!(proposal_result.status(), ProposalStatus::Executed);
-}
-
-pub(crate) async fn get_signature(
-    message_hash: &[u8; 32],
-    cycles: Cycles,
-    key_id: EcdsaKeyId,
-    msg_can: &MessageCanister<'_>,
-    ctx: &ic_fondue::pot::Context,
-) -> Result<Signature, AgentError> {
-    get_signature_with_logger(message_hash, cycles, key_id, msg_can, &ctx.logger).await
 }
 
 pub(crate) async fn get_signature_with_logger(
@@ -531,35 +467,32 @@ pub(crate) async fn create_new_subnet_with_keys(
 
 /// Tests whether a call to `sign_with_ecdsa` is responded with a signature
 /// that is verifiable with the result from `ecdsa_public_key`.
-pub fn test_threshold_ecdsa_signature_same_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on(async move {
-        let endpoints = get_endpoints(&handle);
-        let nns_endpoint = endpoints.nns_endpoint;
-        let app_endpoint = endpoints.app_endpoint_1;
-        nns_endpoint.assert_ready(ctx).await;
-        app_endpoint.assert_ready(ctx).await;
-
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+pub fn test_threshold_ecdsa_signature_same_subnet(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let app_subnet = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+    let app_node = app_subnet.nodes().next().unwrap();
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    block_on(async move {
+        let nns = runtime_from_url(nns_node.get_public_url());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(
-            &governance,
-            app_endpoint.subnet.as_ref().unwrap().id,
-            make_key(KEY_ID1),
-        )
-        .await;
-        let agent = assert_create_agent(app_endpoint.url.as_str()).await;
-        let msg_can = MessageCanister::new(&agent, app_endpoint.effective_canister_id()).await;
+        enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID1)).await;
+        let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
+        let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
             .await
             .unwrap();
-        let signature = get_signature(
+        let signature = get_signature_with_logger(
             &message_hash,
             scale_cycles(ECDSA_SIGNATURE_FEE),
             make_key(KEY_ID1),
             &msg_can,
-            ctx,
+            &log,
         )
         .await
         .unwrap();
@@ -571,41 +504,39 @@ pub fn test_threshold_ecdsa_signature_same_subnet(handle: IcHandle, ctx: &ic_fon
 /// is verifiable with the result from `get_ecdsa_public_key` when the subnet
 /// sending the request is different than the subnet responsible for signing
 /// with the key.
-pub fn test_threshold_ecdsa_signature_from_other_subnet(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on(async move {
-        let endpoints = get_endpoints(&handle);
-        let nns_endpoint = endpoints.nns_endpoint;
-        let app_endpoint = endpoints.app_endpoint_1;
-        nns_endpoint.assert_ready(ctx).await;
-        app_endpoint.assert_ready(ctx).await;
-
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+pub fn test_threshold_ecdsa_signature_from_other_subnet(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let (app_subnet_1, app_subnet_2) = topology
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::Application)
+        .tuples()
+        .next()
+        .unwrap();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+    let node_from_app_subnet_1 = app_subnet_1.nodes().next().unwrap();
+    let agent_for_app_subnet_1 =
+        node_from_app_subnet_1.with_default_agent(|agent| async move { agent });
+    block_on(async move {
+        let nns = runtime_from_url(nns_node.get_public_url());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(
-            &governance,
-            app_endpoint.subnet.as_ref().unwrap().id,
-            make_key(KEY_ID2),
+        enable_ecdsa_signing(&governance, app_subnet_2.subnet_id, make_key(KEY_ID2)).await;
+        let msg_can = MessageCanister::new(
+            &agent_for_app_subnet_1,
+            node_from_app_subnet_1.effective_canister_id(),
         )
         .await;
-
-        let endpoint = endpoints.app_endpoint_2.unwrap();
-        endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(endpoint.url.as_str()).await;
-        let msg_can = MessageCanister::new(&agent, endpoint.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID2), &msg_can, ctx)
+        let public_key = get_public_key_with_logger(make_key(KEY_ID2), &msg_can, &log)
             .await
             .unwrap();
-        let signature = get_signature(
+        let signature = get_signature_with_logger(
             &message_hash,
             scale_cycles(ECDSA_SIGNATURE_FEE),
             make_key(KEY_ID2),
             &msg_can,
-            ctx,
+            &log,
         )
         .await
         .unwrap();
@@ -615,46 +546,38 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(
 
 /// Tests whether a call to `sign_with_ecdsa` fails when not enough cycles are
 /// sent.
-pub fn test_threshold_ecdsa_signature_fails_without_cycles(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on(async move {
-        let endpoints = get_endpoints(&handle);
-        let nns_endpoint = endpoints.nns_endpoint;
-        let app_endpoint = endpoints.app_endpoint_1;
-        nns_endpoint.assert_ready(ctx).await;
-        app_endpoint.assert_ready(ctx).await;
-
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+pub fn test_threshold_ecdsa_signature_fails_without_cycles(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let app_subnet = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+    let app_node = app_subnet.nodes().next().unwrap();
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    block_on(async move {
+        let nns = runtime_from_url(nns_node.get_public_url());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(
-            &governance,
-            app_endpoint.subnet.as_ref().unwrap().id,
-            make_key(KEY_ID1),
-        )
-        .await;
+        enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID1)).await;
 
         // Cycles are only required for application subnets.
-        let endpoint = endpoints.app_endpoint_2.unwrap();
-        endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(endpoint.url.as_str()).await;
-        let msg_can = MessageCanister::new(&agent, endpoint.effective_canister_id()).await;
+        let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
 
-        info!(ctx.logger, "Getting the public key to make sure the subnet has the latest registry changes and routing of ECDSA messages is working");
-        let _public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
+        info!(log, "Getting the public key to make sure the subnet has the latest registry changes and routing of ECDSA messages is working");
+        let _public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
             .await
             .unwrap();
 
-        info!(ctx.logger, "Checking that signature request fails");
-        let error = get_signature(
+        info!(log, "Checking that signature request fails");
+        let error = get_signature_with_logger(
             &message_hash,
             scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
             make_key(KEY_ID1),
             &msg_can,
-            ctx,
+            &log,
         )
         .await
         .unwrap_err();
@@ -674,39 +597,31 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
 
 /// Tests that an ECDSA signature request coming from the NNS succeeds even when
 /// there are no cycles sent with the request.
-pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on(async move {
-        let endpoints = get_endpoints(&handle);
-        let nns_endpoint = endpoints.nns_endpoint;
-        let app_endpoint = endpoints.app_endpoint_1;
-        nns_endpoint.assert_ready(ctx).await;
-        app_endpoint.assert_ready(ctx).await;
-
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let app_subnet = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+    let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
+    block_on(async move {
+        let nns = runtime_from_url(nns_node.get_public_url());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(
-            &governance,
-            app_endpoint.subnet.as_ref().unwrap().id,
-            make_key(KEY_ID2),
-        )
-        .await;
-
-        let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
-        let msg_can = MessageCanister::new(&agent, nns_endpoint.effective_canister_id()).await;
+        enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID2)).await;
+        let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID2), &msg_can, ctx)
+        let public_key = get_public_key_with_logger(make_key(KEY_ID2), &msg_can, &log)
             .await
             .unwrap();
-        let signature = get_signature(
+        let signature = get_signature_with_logger(
             &message_hash,
             Cycles::zero(),
             make_key(KEY_ID2),
             &msg_can,
-            ctx,
+            &log,
         )
         .await
         .unwrap();
@@ -715,19 +630,16 @@ pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(
 }
 
 pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let topology_snapshot = &env.topology_snapshot();
     let log = &env.logger();
-
-    rt.block_on(async move {
-        let root_subnet = topology_snapshot.root_subnet();
-        let nns_endpoint = root_subnet.nodes().next().unwrap();
-        let app_subnet = topology_snapshot
-          .subnets()
-          .find(|s| s.subnet_type() == SubnetType::Application)
-          .expect("Could not find application subnet.");
-        let agent = assert_create_agent(nns_endpoint.get_public_url().as_str()).await;
-        let msg_can = MessageCanister::new(&agent, nns_endpoint.effective_canister_id()).await;
+    let app_subnet = topology_snapshot
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .expect("Could not find application subnet.");
+    let nns_node = topology_snapshot.root_subnet().nodes().next().unwrap();
+    let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
+    block_on(async move {
+        let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
 
         info!(
             log,
@@ -762,14 +674,9 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
 
         info!(log, "2. Enabling signing and verifying that it works.");
 
-        let nns = runtime_from_url(nns_endpoint.get_public_url());
+        let nns = runtime_from_url(nns_node.get_public_url());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(
-            &governance,
-            app_subnet.subnet_id,
-            make_key(KEY_ID2),
-        )
-        .await;
+        enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID2)).await;
 
         let public_key = get_public_key_with_logger(make_key(KEY_ID2), &msg_can, log)
             .await
@@ -791,16 +698,19 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         );
 
         let registry_client = RegistryCanister::new_with_query_timeout(
-            vec![nns_endpoint.get_public_url()],
+            vec![nns_node.get_public_url()],
             Duration::from_secs(10),
         );
         let original_subnets: HashSet<_> = get_subnet_list_from_registry(&registry_client)
             .await
             .into_iter()
             .collect();
-        let unassigned_node_ids: Vec<_> = topology_snapshot.unassigned_nodes().map(|n| n.node_id).collect();
+        let unassigned_node_ids: Vec<_> = topology_snapshot
+            .unassigned_nodes()
+            .map(|n| n.node_id)
+            .collect();
 
-        let replica_version = crate::nns::get_software_version_from_snapshot(&nns_endpoint)
+        let replica_version = crate::nns::get_software_version_from_snapshot(&nns_node)
             .await
             .expect("could not obtain replica software version");
         create_new_subnet_with_keys(
@@ -872,9 +782,18 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         };
         execute_update_subnet_proposal(&governance, proposal_payload).await;
 
-        let topology_snapshot = env.topology_snapshot().block_for_newer_registry_version().await.expect("Could not obtain updated registry.");
-        let new_subnet = topology_snapshot.subnets().find(|s| s.subnet_id == new_subnet_id).expect("Could not find newly created subnet.");
-        new_subnet.nodes().for_each(|node| node.await_status_is_healthy().unwrap());
+        let topology_snapshot = env
+            .topology_snapshot()
+            .block_for_newer_registry_version()
+            .await
+            .expect("Could not obtain updated registry.");
+        let new_subnet = topology_snapshot
+            .subnets()
+            .find(|s| s.subnet_id == new_subnet_id)
+            .expect("Could not find newly created subnet.");
+        new_subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap());
 
         let new_public_key = get_public_key_with_logger(make_key(KEY_ID2), &msg_can, log)
             .await
@@ -894,37 +813,39 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
 }
 
 /// Tests whether a call to `sign_with_ecdsa` can be timed out when setting signature_request_timeout_ns.
-pub fn test_threshold_ecdsa_signature_timeout(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on(async move {
-        let endpoints = get_endpoints(&handle);
-        let nns_endpoint = endpoints.nns_endpoint;
-        let app_endpoint = endpoints.app_endpoint_1;
-        nns_endpoint.assert_ready(ctx).await;
-        app_endpoint.assert_ready(ctx).await;
-
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+pub fn test_threshold_ecdsa_signature_timeout(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let app_subnet = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+    let app_node = app_subnet.nodes().next().unwrap();
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    block_on(async move {
+        let nns = runtime_from_url(nns_node.get_public_url());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         enable_ecdsa_signing_with_timeout(
             &governance,
-            app_endpoint.subnet.as_ref().unwrap().id,
+            app_subnet.subnet_id,
             make_key(KEY_ID1),
             Some(Duration::from_secs(1)),
         )
         .await;
-        let agent = assert_create_agent(app_endpoint.url.as_str()).await;
-        let msg_can = MessageCanister::new(&agent, app_endpoint.effective_canister_id()).await;
+        let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
         // Get the public key first to make sure ECDSA is working
-        let _public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
+        let _public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
             .await
             .unwrap();
-        let error = get_signature(
+        let error = get_signature_with_logger(
             &message_hash,
             scale_cycles(ECDSA_SIGNATURE_FEE),
             make_key(KEY_ID1),
             &msg_can,
-            ctx,
+            &log,
         )
         .await
         .unwrap_err();

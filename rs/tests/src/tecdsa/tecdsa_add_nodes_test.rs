@@ -20,15 +20,16 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
     HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
 };
-use crate::tecdsa::tecdsa_signature_test::{enable_ecdsa_signing, make_key};
+use crate::tecdsa::tecdsa_signature_test::{
+    enable_ecdsa_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
+};
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
-    tecdsa::tecdsa_signature_test::{get_public_key, get_signature, verify_signature, KEY_ID1},
+    tecdsa::tecdsa_signature_test::{verify_signature, KEY_ID1},
     util::*,
 };
 use canister_test::{Canister, Cycles};
@@ -72,8 +73,6 @@ pub fn config(env: TestEnv) {
 
 pub fn test(env: TestEnv) {
     let log = env.logger();
-    // TODO: refactor functions accepting Context to Logger (e.g. get_public_key)
-    let (_, ref ctx) = get_ic_handle_and_ctx(env.clone());
     let topology_snapshot = env.topology_snapshot();
     let (nns_subnet, nns_node, unassigned_node_ids) = {
         let subnet = topology_snapshot.root_subnet();
@@ -102,7 +101,7 @@ pub fn test(env: TestEnv) {
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let (canister_id, public_key) = block_on(async {
         let msg_can = MessageCanister::new(&agent, nns_node.effective_canister_id()).await;
-        let public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
+        let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
             .await
             .unwrap();
         (msg_can.canister_id(), public_key)
@@ -145,16 +144,16 @@ pub fn test(env: TestEnv) {
         info!(log, "Run through ecdsa signature test.");
         let message_hash = [0xabu8; 32];
         let msg_can = MessageCanister::from_canister_id(&agent, canister_id);
-        let public_key_ = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
+        let public_key_ = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
             .await
             .unwrap();
         assert_eq!(public_key, public_key_);
-        let signature = get_signature(
+        let signature = get_signature_with_logger(
             &message_hash,
             Cycles::zero(),
             make_key(KEY_ID1),
             &msg_can,
-            ctx,
+            &log,
         )
         .await
         .unwrap();

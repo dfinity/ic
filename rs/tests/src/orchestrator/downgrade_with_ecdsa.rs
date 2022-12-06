@@ -15,7 +15,6 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_message_canisters;
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::upgrade_downgrade::{start_node, stop_node, MIN_HASH_LENGTH};
 use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
@@ -120,8 +119,7 @@ fn downgrade_test(env: TestEnv, subnet_type: SubnetType) {
 
     info!(&logger, "Blessed all versions");
 
-    let (handle, ctx) = get_ic_handle_and_ctx(env.clone());
-    test_threshold_ecdsa_signature_same_subnet(handle, &ctx);
+    test_threshold_ecdsa_signature_same_subnet(env.clone());
     downgrade(env, &nns_node, &mainnet_version, subnet_type);
 }
 
