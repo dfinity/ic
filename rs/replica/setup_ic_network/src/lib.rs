@@ -119,8 +119,7 @@ pub fn create_networking_stack(
     registry_poll_delay_duration_ms: u64,
 ) -> (IngressIngestionService, P2PThreadJoiner) {
     let gossip_config = fetch_gossip_config(registry_client.clone(), subnet_id);
-    let advert_subscriber =
-        AdvertBroadcaster::new(log.clone(), &metrics_registry, gossip_config.clone());
+    let advert_subscriber = AdvertBroadcaster::new(log.clone(), &metrics_registry);
 
     // Now we setup the Artifact Pools and the manager.
     let artifact_manager = setup_artifact_manager(

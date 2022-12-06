@@ -73,7 +73,6 @@ use ic_types::{
 };
 use lru::LruCache;
 use parking_lot::{Mutex, RwLock};
-use phantom_newtype::AmountOf;
 use std::collections::HashMap;
 use std::{sync::Arc, time::Instant};
 
@@ -142,18 +141,11 @@ pub struct GossipAdvertSendRequest {
     pub(crate) action: GossipAdvertAction,
 }
 
-pub(crate) enum PercentageType {}
-pub(crate) type Percentage = AmountOf<PercentageType, u32>;
-
 /// Specifies how to distribute the adverts
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GossipAdvertAction {
     /// Send to all peers
     SendToAllPeers,
-
-    /// Send to a random subset of peers.
-    /// The argument specifies the subset size, as percentage of subnet size
-    SendToRandomSubset(Percentage),
 }
 
 /// The cache used to check if a certain artifact has been received recently.

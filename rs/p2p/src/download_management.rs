@@ -69,9 +69,7 @@ extern crate lru;
 use crate::{
     artifact_download_list::ArtifactDownloadList,
     download_prioritization::{AdvertTracker, AdvertTrackerFinalAction, DownloadAttemptTracker},
-    gossip_protocol::{
-        GossipAdvertAction, GossipAdvertSendRequest, GossipImpl, Percentage, ReceiveCheckCache,
-    },
+    gossip_protocol::{GossipAdvertAction, GossipAdvertSendRequest, GossipImpl, ReceiveCheckCache},
     gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     peer_context::{
         GossipChunkRequestTracker, GossipChunkRequestTrackerKey, PeerContext, PeerContextMap,
@@ -93,7 +91,6 @@ use ic_types::{
     p2p::GossipAdvert,
     NodeId, RegistryVersion,
 };
-use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::BTreeMap,
     error::Error,
@@ -109,10 +106,6 @@ impl GossipImpl {
     pub fn send_advert_to_peers(&self, advert_request: GossipAdvertSendRequest) {
         let (peers, label) = match advert_request.action {
             GossipAdvertAction::SendToAllPeers => (self.get_current_peer_ids(), "all_peers"),
-            GossipAdvertAction::SendToRandomSubset(percentage) => (
-                get_random_subset_of_peers(self.get_current_peer_ids(), percentage),
-                "random_subset",
-            ),
         };
         self.metrics
             .adverts_by_action
@@ -1212,17 +1205,6 @@ impl GossipImpl {
     }
 }
 
-/// The method returns a random subset from the list of peers.
-fn get_random_subset_of_peers(peers: Vec<NodeId>, percentage: Percentage) -> Vec<NodeId> {
-    let multiplier = (percentage.get() as f64) / 100.0_f64;
-    let subset_size = (peers.len() as f64 * multiplier).ceil() as usize;
-    let mut rng = thread_rng();
-    peers
-        .choose_multiple(&mut rng, subset_size)
-        .cloned()
-        .collect()
-}
-
 fn get_peer_addr(node_record: &NodeRecord) -> Result<SocketAddr, String> {
     let socket_addr: (IpAddr, u16) = node_record
         .p2p_flow_endpoints
@@ -1243,7 +1225,6 @@ fn get_peer_addr(node_record: &NodeRecord) -> Result<SocketAddr, String> {
 pub mod tests {
     use super::*;
     use crate::download_prioritization::DownloadPrioritizerError;
-    use crate::gossip_protocol::Percentage;
     use ic_interfaces::artifact_manager::{ArtifactManager, OnArtifactError};
     use ic_interfaces::consensus_pool::ConsensusPoolCache;
     use ic_interfaces_registry::RegistryClient;
@@ -2033,36 +2014,6 @@ pub mod tests {
             adverts.len(),
             gossip.metrics.integrity_hash_check_failed.get() as usize
         );
-    }
-    #[test]
-    fn test_get_random_subset_of_peers() {
-        let mut current_peers = vec![];
-        for id in 1..29 {
-            let node_id = node_test_id(id);
-            current_peers.push(node_id);
-        }
-        {
-            // Verify 10% of 28 = 3 (rounded up) nodes are returned.
-            let ret = get_random_subset_of_peers(current_peers.clone(), Percentage::from(10));
-            assert_eq!(ret.len(), 3);
-            let mut unique_peers = HashSet::new();
-            for entry in &ret {
-                assert!(unique_peers.insert(entry));
-                assert!(current_peers.contains(entry));
-            }
-        }
-
-        {
-            // Verify all 28 nodes are returned.
-            let ret = get_random_subset_of_peers(current_peers.clone(), Percentage::from(100));
-            assert_eq!(ret.len(), 28);
-            let mut unique_peers = HashSet::new();
-            for entry in &ret {
-                assert!(unique_peers.insert(entry));
-                assert!(current_peers.contains(entry));
-            }
-        }
-        assert!(get_random_subset_of_peers(vec![], Percentage::from(10)).is_empty());
     }
 
     #[test]
