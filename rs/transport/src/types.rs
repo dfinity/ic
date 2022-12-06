@@ -251,44 +251,6 @@ impl H2Reader {
     }
 }
 
-pub(crate) struct TransportImplH2 {
-    /// The node ID of this replica
-    pub _node_id: NodeId,
-    /// The IP address of this node
-    pub node_ip: IpAddr,
-    /// Configuration
-    pub config: TransportConfig,
-
-    /// Port used to accept connections for this transport-client
-    pub accept_port: Mutex<Option<ServerPortState>>,
-    /// Mapping of peers to their corresponding state
-    pub peer_map: RwLock<HashMap<NodeId, RwLock<PeerStateH2>>>,
-    /// Event handler to report back to the transport client
-    pub event_handler: Mutex<Option<TransportEventHandler>>,
-
-    // Crypto and data required for TLS handshakes
-    /// Clients that are allowed to connect to this node
-    pub allowed_clients: Arc<RwLock<BTreeSet<NodeId>>>,
-    /// The registry version that is used
-    pub registry_version: Arc<RwLock<RegistryVersion>>,
-    /// Reference to the crypto component
-    pub crypto: Arc<dyn TlsHandshake + Send + Sync>,
-
-    /// Data plane metrics
-    pub data_plane_metrics: DataPlaneMetrics,
-    /// Control plane metrics
-    pub control_plane_metrics: ControlPlaneMetrics,
-    /// Send queue metrics
-    pub send_queue_metrics: SendQueueMetrics,
-
-    /// The tokio runtime
-    pub rt_handle: Handle,
-    /// Logger
-    pub log: ReplicaLogger,
-    /// Guarded self weak-reference
-    pub weak_self: std::sync::RwLock<Weak<TransportImplH2>>,
-}
-
 /// Our role in a connection
 #[derive(Debug, PartialEq, Eq, Copy, Clone, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
@@ -393,94 +355,6 @@ impl Drop for PeerState {
     }
 }
 
-pub(crate) struct PeerStateH2 {
-    _log: ReplicaLogger,
-    /// Transport channel label, used for metrics
-    pub _channel_id_label: String,
-    /// Peer label, used for metrics
-    pub peer_label: String,
-    /// Connection state where peer is server
-    connection_state_write_path: ConnectionState,
-    /// Connection state where peer is client
-    connection_state_read_path: ConnectionState,
-    /// The send queue of this flow
-    pub send_queue: Box<dyn SendQueue + Send + Sync>,
-    /// Metrics
-    _control_plane_metrics: ControlPlaneMetrics,
-}
-
-impl PeerStateH2 {
-    pub(crate) fn new(
-        _log: ReplicaLogger,
-        channel_id: TransportChannelId,
-        peer_label: String,
-        connection_state_write_path: ConnectionState,
-        connection_state_read_path: ConnectionState,
-        queue_size: QueueSize,
-        send_queue_metrics: SendQueueMetrics,
-        _control_plane_metrics: ControlPlaneMetrics,
-    ) -> Self {
-        let send_queue = Box::new(SendQueueImpl::new(
-            peer_label.clone(),
-            channel_id,
-            queue_size,
-            send_queue_metrics,
-        ));
-        let ret = Self {
-            _log,
-            _channel_id_label: channel_id.to_string(),
-            peer_label,
-            connection_state_write_path,
-            connection_state_read_path,
-            send_queue,
-            _control_plane_metrics,
-        };
-        ret.report_connection_state(ConnectionRole::Client);
-        ret.report_connection_state(ConnectionRole::Server);
-        ret
-    }
-
-    // Connection role represents role of calling node, not the peer
-    pub(crate) fn update(
-        &mut self,
-        connection_state: ConnectionState,
-        connection_role: ConnectionRole,
-    ) {
-        match connection_role {
-            ConnectionRole::Client => self.connection_state_write_path.update(connection_state),
-            ConnectionRole::Server => self.connection_state_read_path.update(connection_state),
-        }
-        self.report_connection_state(connection_role);
-    }
-
-    /// Reports the state of a flow to metrics
-    fn report_connection_state(&self, _connection_role: ConnectionRole) {
-        //TODO - metrics
-    }
-
-    pub(crate) fn get_connected(&self, connection_role: ConnectionRole) -> Option<&Connected> {
-        match connection_role {
-            ConnectionRole::Client => {
-                if let ConnectionState::Connected(connected) = &self.connection_state_write_path {
-                    return Some(connected);
-                }
-            }
-            ConnectionRole::Server => {
-                if let ConnectionState::Connected(connected) = &self.connection_state_read_path {
-                    return Some(connected);
-                }
-            }
-        }
-        None
-    }
-}
-
-impl Drop for PeerStateH2 {
-    fn drop(&mut self) {
-        // TODO: Metrics
-    }
-}
-
 /// The connection state machine for a flow with a peer
 pub(crate) enum ConnectionState {
     /// We are the server, waiting for peer to connect
@@ -489,8 +363,6 @@ pub(crate) enum ConnectionState {
     Connecting(Connecting),
     /// Connection established
     Connected(Connected),
-    /// Connection established (H2)
-    ConnectedH2(ConnectedH2),
 }
 
 /// Info about a flow in ConnectionState::Connecting
@@ -512,18 +384,6 @@ pub(crate) struct Connected {
 
     /// The write task handle
     pub write_task: JoinHandle<()>,
-
-    /// Our role
-    pub role: ConnectionRole,
-}
-
-/// Info about a flow in ConnectionState::Connected
-pub(crate) struct ConnectedH2 {
-    /// Peer node
-    pub peer_addr: SocketAddr,
-
-    /// The read or write task handle
-    pub _task: JoinHandle<()>,
 
     /// Our role
     pub role: ConnectionRole,
@@ -553,11 +413,6 @@ impl ConnectionState {
                         valid = true;
                     }
                 }
-                if let Self::ConnectedH2(s) = next_state {
-                    if s.role == ConnectionRole::Server {
-                        valid = true;
-                    }
-                }
             }
             Self::Connecting(_) => {
                 if let Self::Connected(s) = next_state {
@@ -565,26 +420,8 @@ impl ConnectionState {
                         valid = true;
                     }
                 }
-                if let Self::ConnectedH2(s) = next_state {
-                    if s.role == ConnectionRole::Client {
-                        valid = true;
-                    }
-                }
             }
             Self::Connected(s) => match next_state {
-                Self::Listening => {
-                    if s.role == ConnectionRole::Server {
-                        valid = true;
-                    }
-                }
-                Self::Connecting(_) => {
-                    if s.role == ConnectionRole::Client {
-                        valid = true;
-                    }
-                }
-                _ => (),
-            },
-            Self::ConnectedH2(s) => match next_state {
                 Self::Listening => {
                     if s.role == ConnectionRole::Server {
                         valid = true;
@@ -606,7 +443,6 @@ impl ConnectionState {
             Self::Listening => 1,
             Self::Connecting(_) => 2,
             Self::Connected(_) => 3,
-            Self::ConnectedH2(_) => 4,
         }
     }
 }
@@ -628,13 +464,6 @@ impl Debug for ConnectionState {
                 write!(
                     f,
                     "ConnectionState::Connected(peer = {:?}, role = {:?})",
-                    state.peer_addr, state.role
-                )
-            }
-            Self::ConnectedH2(state) => {
-                write!(
-                    f,
-                    "ConnectionState::ConnectedH2(peer = {:?}, role = {:?})",
                     state.peer_addr, state.role
                 )
             }
