@@ -198,6 +198,9 @@ def external_crates_repository(name, annotations):
             "console": crate.spec(
                 version = "^0.11",
             ),
+            "convert_case": crate.spec(
+                version = "^0.6.0",
+            ),
             "crc32fast": crate.spec(
                 version = "^1.2.0",
             ),

@@ -1,17 +1,40 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+DEPENDENCIES = [
+    "//rs/monitoring/metrics",
+    "@crate_index//:convert_case",
+    "@crate_index//:prometheus",
+    "@crate_index//:strum",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_library(
     name = "logmon",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_internal_logmon",
-    proc_macro_deps = [
-        "@crate_index//:strum_macros",
-    ],
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
-    visibility = ["//rs/crypto:__subpackages__"],
-    deps = [
-        "//rs/monitoring/metrics",
-        "@crate_index//:prometheus",
-        "@crate_index//:strum",
-    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "logmon_test",
+    aliases = ALIASES,
+    crate = ":logmon",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

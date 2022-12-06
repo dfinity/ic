@@ -1,5 +1,6 @@
 //! Metrics exported by crypto
 
+use convert_case::{Case, Casing};
 use core::fmt;
 use ic_metrics::MetricsRegistry;
 use prometheus::{HistogramVec, IntCounterVec, IntGauge};
@@ -8,7 +9,7 @@ use std::fmt::{Display, Formatter};
 use std::time;
 use std::time::Instant;
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use strum_macros::{EnumIter, IntoStaticStr};
 
 /// Provides metrics for the crypto component.
 ///
@@ -116,14 +117,14 @@ impl CryptoMetrics {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
 pub enum KeyType {
     PublicRegistry,
     PublicLocal,
     SecretSKS,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
 pub enum MetricsDomain {
     BasicSignature,
     MultiSignature,
@@ -136,13 +137,13 @@ pub enum MetricsDomain {
     PublicSeed,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
 pub enum MetricsScope {
     Full,
     Local,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
 pub enum MetricsResult {
     Ok,
     Err,
@@ -157,7 +158,7 @@ impl<T, E> From<&Result<T, E>> for MetricsResult {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
 pub enum KeyRotationResult {
     KeyRotated,
     LatestLocalRotationTooRecent,
@@ -203,6 +204,7 @@ impl KeyCounts {
     }
 }
 
+#[derive(IntoStaticStr)]
 pub enum BooleanResult {
     True,
     False,
@@ -210,19 +212,12 @@ pub enum BooleanResult {
 
 impl Display for BooleanResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str_snake_case())
+        let value: &'static str = self.into();
+        write!(f, "{}", value.to_case(Case::Snake))
     }
 }
 
-impl BooleanResult {
-    fn as_str_snake_case(&self) -> &str {
-        match self {
-            BooleanResult::True => "true",
-            BooleanResult::False => "false",
-        }
-    }
-}
-
+#[derive(IntoStaticStr)]
 pub enum BooleanOperation {
     KeyInRegistryMissingLocally,
     LatestLocalIDkgKeyExistsInRegistry,
@@ -230,18 +225,8 @@ pub enum BooleanOperation {
 
 impl Display for BooleanOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str_snake_case())
-    }
-}
-
-impl BooleanOperation {
-    fn as_str_snake_case(&self) -> &str {
-        match self {
-            BooleanOperation::KeyInRegistryMissingLocally => "key_in_registry_missing_locally",
-            BooleanOperation::LatestLocalIDkgKeyExistsInRegistry => {
-                "latest_local_idkg_key_exists_in_registry"
-            }
-        }
+        let value: &'static str = self.into();
+        write!(f, "{}", value.to_case(Case::Snake))
     }
 }
 
@@ -281,91 +266,40 @@ struct Metrics {
 
 impl Display for MetricsDomain {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str_snake_case())
-    }
-}
-
-impl MetricsDomain {
-    fn as_str_snake_case(&self) -> &str {
-        match self {
-            MetricsDomain::BasicSignature => "basic_signature",
-            MetricsDomain::MultiSignature => "multi_signature",
-            MetricsDomain::ThresholdSignature => "threshold_signature",
-            MetricsDomain::NiDkgAlgorithm => "ni_dkg",
-            MetricsDomain::TlsHandshake => "tls_handshake",
-            MetricsDomain::IDkgProtocol => "idkg",
-            MetricsDomain::ThresholdEcdsa => "threshold_ecdsa",
-            MetricsDomain::IcCanisterSignature => "ic_canister_signature",
-            MetricsDomain::PublicSeed => "public_seed",
-        }
+        let value: &'static str = self.into();
+        write!(f, "{}", value.to_case(Case::Snake))
     }
 }
 
 impl Display for MetricsScope {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str_snake_case())
-    }
-}
-
-impl MetricsScope {
-    fn as_str_snake_case(&self) -> &str {
-        match self {
-            MetricsScope::Full => "full",
-            MetricsScope::Local => "local",
-        }
+        let value: &'static str = self.into();
+        write!(f, "{}", value.to_case(Case::Snake))
     }
 }
 
 impl Display for MetricsResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str_snake_case())
-    }
-}
-
-impl MetricsResult {
-    fn as_str_snake_case(&self) -> &str {
-        match self {
-            MetricsResult::Ok => "ok",
-            MetricsResult::Err => "err",
-        }
+        let value: &'static str = self.into();
+        write!(f, "{}", value.to_case(Case::Snake))
     }
 }
 
 impl Display for KeyRotationResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str_snake_case())
-    }
-}
-
-impl KeyRotationResult {
-    fn as_str_snake_case(&self) -> &str {
-        match self {
-            KeyRotationResult::KeyRotated => "key_rotated",
-            KeyRotationResult::LatestLocalRotationTooRecent => "latest_local_rotation_too_recent",
-            KeyRotationResult::KeyGenerationError => "key_generation_error",
-            KeyRotationResult::RegistryError => "registry_error",
-            KeyRotationResult::KeyRotationNotEnabled => "key_rotation_not_enabled",
-            KeyRotationResult::KeyNotRotated => "key_not_rotated",
-            KeyRotationResult::RegistryKeyBadOrMissing => "registry_key_bad_or_missing",
-        }
+        let value: &'static str = self.into();
+        write!(f, "{}", value.to_case(Case::Snake))
     }
 }
 
 impl Display for KeyType {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str_snake_case())
+        let value: &'static str = self.into();
+        write!(f, "{}", value.to_case(Case::Snake))
     }
 }
 
 impl KeyType {
-    fn as_str_snake_case(&self) -> &str {
-        match self {
-            KeyType::PublicLocal => "public_local",
-            KeyType::PublicRegistry => "public_registry",
-            KeyType::SecretSKS => "secret_sks",
-        }
-    }
-
     fn key_count_metric_name(&self) -> String {
         format!("crypto_{}_key_count", self)
     }

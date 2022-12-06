@@ -5033,6 +5033,7 @@ dependencies = [
 name = "ic-crypto-internal-logmon"
 version = "0.8.0"
 dependencies = [
+ "convert_case 0.6.0",
  "ic-metrics",
  "prometheus 0.12.0",
  "strum 0.23.0",
