@@ -1,5 +1,7 @@
 python-tests:
-  extends: .ubuntu-nix-docker-k8s
+  extends:
+    - .ubuntu-nix-docker-k8s
+    - .rules-pipeline-no-merge-train
   needs:
     job: bazel-test-all # Some tests download canisters from the s3 - it has to only run when all canisters were uploaded to not populate proxy cache with partial results.
     artifacts: false
