@@ -95,6 +95,10 @@ pub struct DeployArgs {
     /// Default: canister_ids.json
     #[structopt(long)]
     save_to: Option<String>,
+
+    /// The fee to provide
+    #[structopt(default_value = "180000000000000", long)]
+    with_cycles: u64,
 }
 
 /// The arguments used to display the account balance of a user
