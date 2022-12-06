@@ -23,7 +23,7 @@ SYNCING_PERIOD=1800 # 1/2 hour
 REPLAY_PERIOD=14400 # 4 hours
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="834f216faa3e1d2bb870023679a507cd90c545df"
+DEFAULT_BUILD_ID="cdefdf1be9e43219a4578373d4acc54bc28c41eb"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -31,7 +31,7 @@ if [ -z "${BUILD_ID// /}" ]; then
     BUILD_ID=${DEFAULT_BUILD_ID}
 fi
 
-DEFAULT_USER_ID="op"
+DEFAULT_USER_ID=$(whoami)
 echo "Enter the local USER_ID that will run the backup:"
 echo "(default: ${DEFAULT_USER_ID}):"
 read USER_ID
@@ -48,10 +48,12 @@ fi
 DEFAULT_WORK_DIR="/var/backups/ic"
 echo "Please enter backup work directory"
 echo "(default: ${DEFAULT_WORK_DIR}):"
-read WORK_DIR
-if [ -z "${WORK_DIR// /}" ]; then
-    WORK_DIR=${DEFAULT_WORK_DIR}
+read INPUT_WORK_DIR
+if [ -z "${INPUT_WORK_DIR// /}" ]; then
+    INPUT_WORK_DIR=${DEFAULT_WORK_DIR}
 fi
+
+WORK_DIR=$(realpath -s ${INPUT_WORK_DIR})
 
 echo
 echo
@@ -139,8 +141,12 @@ mkdir -p ${ROOT_DIR}
 cp ${BACKUP_EXE} ${WORK_DIR}
 cp ${CONFIG_FILE} ${WORK_DIR}
 cp ${PUBLIC_KEY_FILE} ${WORK_DIR}
-echo "Installing system config:"
+
+echo "Installing system config..."
 sudo cp ${SERVICE_CONFIG_FILE} /etc/systemd/system
+echo "Reloading services..."
+sudo systemctl daemon-reload
+
 rm -rf ${TMP_DIR}
 
 echo
@@ -148,11 +154,11 @@ echo
 echo
 echo "Please edit the config file ${CONFIG_FILE_NAME} placed in ${WORK_DIR}"
 echo
-echo "then copy the state the with the command:"
+echo "then initialise subnet backups with an existing execution state by running this command:"
 echo "${WORK_DIR}/ic-backup --config-file ${WORK_DIR}/config.json5 init"
 echo
-echo "finaly start the backup service with:"
+echo "finaly start the backup service with this command:"
 echo "sudo systemctl start ic-backup.service"
 echo
-echo "also consider to let it run on reboot with:"
+echo "also consider to let it run on a reboot with this command:"
 echo "sudo systemctl enable ic-backup.service"
