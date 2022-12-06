@@ -110,6 +110,8 @@ impl AdminHelper {
         ic_admin.push(format!("\"{}\"", upgrade_version));
         ic_admin.push(format!("\"{}\"", upgrade_url));
         ic_admin.push(format!("\"{}\"", sha256));
+        ic_admin.push("--summary".to_string());
+        ic_admin.push(format!("\"Bless replica version {}.\"", upgrade_version));
         AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
         ic_admin
     }
@@ -218,6 +220,8 @@ impl AdminHelper {
             "--is-halted".to_string(),
             "--subnet-type".to_string(),
             "system".to_string(),
+            "--summary".to_string(),
+            format!("Create subnet with id {}", subnet_id_override),
         ]);
         node_ids.iter().for_each(|id| ic_admin.push(id.to_string()));
         AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);

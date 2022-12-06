@@ -114,6 +114,7 @@ cargo run --bin ic-admin -- --registry-url http://localhost:8080 add-all-pb-file
 cargo run --bin ic-admin -- \
   --nns-url http://localhost:8080 \
   propose-to-create-subnet \
+  --summary "Creating subnet" \
   --subnet-handler 3llps-yifaa-aaaaa-aaaaj-waiaa-aaaaa-aaaaa-q \
   3jo2y-lqbaa-aaaaa-aaaap-2ai gfvbo-licaa-aaaaa-aaaap-2ai 32uhy-eydaa-aaaaa-aaaap-2ai
 ----

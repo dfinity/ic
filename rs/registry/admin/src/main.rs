@@ -424,15 +424,15 @@ struct GetTlsCertificateCmd {
     node_id: PrincipalId,
 }
 
-/// Extracts the summary from either a file or from a string or returns the
-/// empty summary.
+/// Extracts the summary from either a file or from a string.
 pub fn summary_from_string_or_file(
     summary: &Option<String>,
     summary_file: &Option<PathBuf>,
 ) -> String {
     match (summary, summary_file) {
-        (None, None) => "".to_string(),
-        (Some(_), Some(_)) => panic!("Can't provide both a summary string and a summary file."),
+        (None, None) | (Some(_), Some(_)) => {
+            panic!("Exactly one of summary or summary_file must be specified.")
+        }
         (Some(s), None) => s.clone(),
         (None, Some(p)) => read_to_string(p).expect("Couldn't read summary from file."),
     }
