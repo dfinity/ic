@@ -17,5 +17,5 @@ NotifyAccess=main
 Restart=always
 
 [Install]
-RequiredBy=ic-replica.service
+WantedBy=ic-replica.service
 Also=ic-btc-testnet-adapter.socket
