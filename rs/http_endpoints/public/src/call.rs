@@ -2,7 +2,10 @@
 
 use crate::{
     body::BodyReceiverLayer,
-    common::{get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response},
+    common::{
+        get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response,
+        remove_effective_canister_id,
+    },
     types::{to_legacy_request_type, ApiReqType},
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
@@ -20,7 +23,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
-    CountBytes, RegistryVersion, SubnetId,
+    CanisterId, CountBytes, RegistryVersion, SubnetId,
 };
 use std::convert::{Infallible, TryInto};
 use std::future::Future;
@@ -140,7 +143,9 @@ impl Service<Request<Vec<u8>>> for CallService {
                 UNKNOWN_LABEL,
             ])
             .observe(request.body().len() as f64);
-        let msg: SignedIngress = match SignedRequestBytes::from(request.into_body()).try_into() {
+
+        let (mut parts, body) = request.into_parts();
+        let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
             Ok(msg) => msg,
             Err(e) => {
                 let res = make_plaintext_response(
@@ -150,6 +155,35 @@ impl Service<Request<Vec<u8>>> for CallService {
                 return Box::pin(async move { Ok(res) });
             }
         };
+
+        let effective_canister_id = match remove_effective_canister_id(&mut parts) {
+            Ok(canister_id) => canister_id,
+            Err(res) => {
+                error!(
+                    self.log,
+                    "Effective canister ID is not attached to call request. This is a bug."
+                );
+                return Box::pin(async move { Ok(res) });
+            }
+        };
+
+        // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
+        // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
+        // in the url and the replica processes the request based on the `canister_id`.
+        // If this is not enforced, a blocked canisters can still be accessed by specifying
+        // a non-blocked `effective_canister_id` and a blocked `canister_id`.
+        if msg.canister_id() != CanisterId::ic_00() && msg.canister_id() != effective_canister_id {
+            let res = make_plaintext_response(
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Specified CanisterId {} does not match effective canister id in URL {}",
+                    msg.canister_id(),
+                    effective_canister_id
+                ),
+            );
+            return Box::pin(async move { Ok(res) });
+        }
+
         let message_id = msg.id();
         let registry_version = self.registry_client.get_latest_version();
         let (ingress_registry_settings, provisional_whitelist) = match get_registry_data(

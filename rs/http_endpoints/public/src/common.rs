@@ -1,5 +1,6 @@
 use crate::state_reader_executor::StateReaderExecutor;
 use crate::HttpError;
+use http::request::Parts;
 use hyper::{Body, HeaderMap, Response, StatusCode};
 use ic_crypto_tree_hash::Path;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label};
@@ -8,6 +9,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_types::CanisterId;
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId, RegistryVersion, SubnetId,
 };
@@ -221,6 +223,21 @@ pub(crate) async fn get_latest_certified_state(
         .await
         .ok()?
         .map(|r| r.0)
+}
+
+/// Remove the effective canister id from the request parts.
+/// The effective canister id is added to the request during routing by looking at the url.
+/// Returns an BAD_REQUEST response if the effective canister id is not found in the request parts.
+pub(crate) fn remove_effective_canister_id(
+    parts: &mut Parts,
+) -> Result<CanisterId, Response<Body>> {
+    match parts.extensions.remove::<CanisterId>() {
+        Some(canister_id) => Ok(canister_id),
+        _ => Err(make_plaintext_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to get effective canister id from request. This is a bug.".to_string(),
+        )),
+    }
 }
 
 // A few test helpers, improving readability in the tests
