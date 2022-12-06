@@ -1,4 +1,5 @@
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
+use ic_async_utils::start_tcp_listener;
 use ic_config::metrics::{Config, Exporter};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_registry::RegistryClient;
@@ -11,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::{TcpListener, TcpSocket, TcpStream};
+use tokio::net::TcpStream;
 use tokio_io_timeout::TimeoutStream;
 use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, load_shed::error::Overloaded,
@@ -276,9 +277,7 @@ impl MetricsHttpEndpoint {
         // out IPv6 in prometheus and ic_p8s_service_discovery.
         let mut addr = "[::]:9090".parse::<SocketAddr>().unwrap();
         addr.set_port(address.port());
-        let tcp_listener = start_listener(addr).unwrap_or_else(|err| {
-            panic!("Could not start listener at addr = {}. err = {}", addr, err)
-        });
+        let tcp_listener = start_tcp_listener(addr);
         self.rt_handle.spawn(async move {
             loop {
                 let mut conn_svc = conn_svc.clone();
@@ -382,16 +381,4 @@ async fn serve_connection_with_read_timeout<T: AsyncRead + AsyncWrite + 'static>
     stream.set_read_timeout(Some(Duration::from_secs(connection_read_timeout_seconds)));
     let stream = Box::pin(stream);
     http.serve_connection(stream, metrics_svc).await
-}
-
-fn start_listener(local_addr: SocketAddr) -> std::io::Result<TcpListener> {
-    let socket = if local_addr.is_ipv6() {
-        TcpSocket::new_v6()?
-    } else {
-        TcpSocket::new_v4()?
-    };
-    socket.set_reuseaddr(true)?;
-    socket.set_reuseport(true)?;
-    socket.bind(local_addr)?;
-    socket.listen(128)
 }
