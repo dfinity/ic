@@ -10,6 +10,15 @@
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
 
+.bazel-rules-pipeline-no-merge-train-allow-to-fail:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+      allow_failure: true
+
 .bazel-rules-post-master:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
@@ -65,6 +74,16 @@ bazel-test-all:
     - .bazel-rules-pipeline-no-merge-train
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going"
+    BAZEL_TARGETS: "//..."
+    BAZEL_UPLOAD_TARGETS: "//..."
+
+# VER-1818: bazelified system tests should not block pre-master pipelines, as they run on a new (WIP) test driver implementation.
+bazel-test-all-allow-to-fail:
+  extends:
+    - .bazel-test-all
+    - .bazel-rules-pipeline-no-merge-train-allow-to-fail
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --test_tag_filters=allow_to_fail"
     BAZEL_TARGETS: "//..."
     BAZEL_UPLOAD_TARGETS: "//..."
 
