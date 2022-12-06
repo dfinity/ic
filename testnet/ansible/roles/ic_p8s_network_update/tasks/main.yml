@@ -16,8 +16,14 @@
     mode: 0775
   become: true
   loop:
-    - boundary_node_nginx
     - boundary_node_control_plane
+    - boundary_node_denylist_updater
+    - boundary_node_ic_registry_replicator
+    - boundary_node_icx_proxy
+    - boundary_node_node_exporter
+    - boundary_node_process_exporter
+    - boundary_node_vector
+    - boundary_node_vector_nginx_exporter
     - orchestrator
     - node_exporter
 
@@ -50,6 +56,12 @@
     # Ensure the targets list in the generated file is non-zero length
     validate: jq -e '.[0].targets | length != 0' %s
   loop:
-    - boundary_node_nginx
     - boundary_node_control_plane
-  when: "'boundary_nodes' in groups"
+    - boundary_node_denylist_updater
+    - boundary_node_ic_registry_replicator
+    - boundary_node_icx_proxy
+    - boundary_node_node_exporter
+    - boundary_node_process_exporter
+    - boundary_node_vector
+    - boundary_node_vector_nginx_exporter
+  when: "'boundary' in groups"

@@ -2,13 +2,13 @@
     {
         "targets": [
             {% for boundary_node in groups['boundary'] -%}
-            "{{ hostvars[boundary_node]['control_plane_metrics_addr']}}"{{ "," if not loop.last else ""}}
+            "{{ hostvars[boundary_node]['icx_proxy_metrics_addr']}}"{{ "," if not loop.last else ""}}
             {% endfor %}
         ],
         "labels": {
             "ic": "{{ ic }}",
             "env": "testnet",
-            "service": "control_plane"
+            "service": "icx_proxy"
         }
     }
 ]

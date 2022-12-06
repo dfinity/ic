@@ -122,6 +122,37 @@ boundary:
       - "2a05:d01c:e2c:a700::/56" # AWS eu-west-2 London Monitoring VPC
       - "2a05:d01c:d9:2b00::/56" # prometheus.mainnet.dfinity.network
 
+    node_exporter_metrics_ip: "{{ ipv6_address }}"
+    node_exporter_metrics_port: 9100
+    node_exporter_metrics_addr: "[{{ node_exporter_metrics_ip }}]:{{ node_exporter_metrics_port }}"
+
+    control_plane_metrics_ip: "{{ ipv6_address }}"
+    control_plane_metrics_port: 9312
+    control_plane_metrics_addr: "[{{ control_plane_metrics_ip }}]:{{ control_plane_metrics_port }}"
+
+    icx_proxy_metrics_ip: "{{ ipv6_address }}"
+    icx_proxy_metrics_port: 9314
+    icx_proxy_metrics_addr: "[{{ icx_proxy_metrics_ip }}]:{{ icx_proxy_metrics_port }}"
+
+    nginx_metrics_ip: "{{ ipv6_address }}"
+    nginx_metrics_port: 9316
+    nginx_metrics_addr: "[{{ nginx_metrics_ip }}]:{{ nginx_metrics_port }}"
+
+    vector_metrics_ip: "{{ ipv6_address }}"
+    vector_metrics_port: 9317
+    vector_metrics_addr: "[{{ vector_metrics_ip }}]:{{ vector_metrics_port }}"
+
+    denylist_updater_metrics_ip: "{{ ipv6_address }}"
+    denylist_updater_metrics_port: 9318
+    denylist_updater_metrics_addr: "[{{ denylist_updater_metrics_ip }}]:{{ denylist_updater_metrics_port }}"
+
+    process_exporter_metrics_ip: "{{ ipv6_address }}"
+    process_exporter_metrics_port: 9319
+    process_exporter_metrics_addr: "[{{ process_exporter_metrics_ip }}]:{{ process_exporter_metrics_port }}"
+
+    ic_registry_replicator_metrics_ip: "{{ ipv6_address }}"
+    ic_registry_replicator_metrics_port: 9320
+    ic_registry_replicator_metrics_addr: "[{{ ic_registry_replicator_metrics_ip }}]:{{ ic_registry_replicator_metrics_port }}"
 
 all:
   vars:
