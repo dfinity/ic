@@ -5,6 +5,7 @@ use crate::address::BitcoinAddress;
 use crate::signature::EncodedSignature;
 use ic_crypto_sha::Sha256;
 use serde_bytes::{ByteBuf, Bytes};
+use std::fmt;
 
 pub use ic_btc_types::{OutPoint, Satoshi};
 
@@ -29,6 +30,26 @@ mod ops {
     pub const HASH160: u8 = 0xa9;
     pub const EQUALVERIFY: u8 = 0x88;
     pub const CHECKSIG: u8 = 0xac;
+}
+
+pub struct DisplayTxid<'a>(pub &'a [u8; 32]);
+
+impl fmt::Display for DisplayTxid<'_> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // In Bitcoin, you display hash bytes in reverse order.
+        //
+        // > Due to historical accident, the tx and block hashes that bitcoin core
+        // > uses are byte-reversed. I’m not entirely sure why. Maybe something
+        // > like using openssl bignum to store hashes or something like that,
+        // > then printing them as a number.
+        // > -- Wladimir van der Laan
+        //
+        // Source: https://learnmeabitcoin.com/technical/txid
+        for b in self.0.iter().rev() {
+            write!(fmt, "{:02x}", *b)?
+        }
+        Ok(())
+    }
 }
 
 pub trait Buffer {

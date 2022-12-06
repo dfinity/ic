@@ -45,7 +45,12 @@ pub fn encode_metrics(
         )?
         .value(
             &[("status", "submitted")],
-            state::read_state(|s| s.submitted_requests.len()) as f64,
+            state::read_state(|s| {
+                s.submitted_transactions
+                    .iter()
+                    .map(|tx| tx.requests.len())
+                    .sum::<usize>()
+            }) as f64,
         )?;
 
     metrics.encode_gauge(

@@ -32,21 +32,23 @@ struct SignTxRequest {
     ecdsa_public_key: ECDSAPublicKey,
     unsigned_tx: tx::UnsignedTransaction,
     outpoint_account: BTreeMap<OutPoint, Account>,
-    /// The original request that we keep around to place it back to the queue
+    /// The original requests that we keep around to place back to the queue
     /// if the signature fails.
-    original_request: state::RetrieveBtcRequest,
+    requests: Vec<state::RetrieveBtcRequest>,
     /// The list of UTXOs we use as transaction inputs.
     utxos: Vec<Utxo>,
 }
 
 /// Undoes changes we make to the ckBTC state when we construct a pending transaction.
 /// We call this function if we fail to sign or send a Bitcoin transaction.
-fn undo_sign_request(req: state::RetrieveBtcRequest, utxos: Vec<Utxo>) {
+fn undo_sign_request(requests: Vec<state::RetrieveBtcRequest>, utxos: Vec<Utxo>) {
     state::mutate_state(|s| {
         for utxo in utxos {
             assert!(s.available_utxos.insert(utxo));
         }
-        s.push_pending_request(req);
+        for req in requests {
+            s.push_pending_request(req);
+        }
     })
 }
 
@@ -160,9 +162,8 @@ async fn submit_pending_requests() {
             Some(req) => {
                 match build_unsigned_transaction(
                     &mut s.available_utxos,
-                    req.address.clone(),
+                    vec![(req.address.clone(), req.amount)],
                     main_address,
-                    req.amount,
                     fee_millisatoshi_per_vbyte,
                 ) {
                     Ok((unsigned_tx, utxos)) => {
@@ -174,7 +175,7 @@ async fn submit_pending_requests() {
                             outpoint_account: filter_output_accounts(s, &unsigned_tx),
                             network: s.btc_network,
                             unsigned_tx,
-                            original_request: req,
+                            requests: vec![req],
                             utxos,
                         })
                     }
@@ -226,10 +227,12 @@ async fn submit_pending_requests() {
         {
             Ok(signed_tx) => {
                 state::mutate_state(|s| {
-                    s.push_in_flight_request(
-                        req.original_request.block_index,
-                        state::InFlightStatus::Sending { txid },
-                    );
+                    for retrieve_req in req.requests.iter() {
+                        s.push_in_flight_request(
+                            retrieve_req.block_index,
+                            state::InFlightStatus::Sending { txid },
+                        );
+                    }
                 });
 
                 ic_cdk::print(format!(
@@ -243,8 +246,8 @@ async fn submit_pending_requests() {
                             hex::encode(txid)
                         ));
                         state::mutate_state(|s| {
-                            s.push_submitted_request(state::SubmittedBtcRetrieval {
-                                request: req.original_request,
+                            s.push_submitted_request(state::SubmittedBtcTransaction {
+                                requests: req.requests,
                                 txid,
                                 used_utxos: req.utxos,
                                 submitted_at: ic_cdk::api::time(),
@@ -256,7 +259,7 @@ async fn submit_pending_requests() {
                             "[heartbeat]: failed to send a bitcoin transaction: {}",
                             err
                         ));
-                        undo_sign_request(req.original_request, req.utxos);
+                        undo_sign_request(req.requests, req.utxos);
                     }
                 }
             }
@@ -265,7 +268,7 @@ async fn submit_pending_requests() {
                     "[heartbeat]: failed to sign a BTC transaction: {}",
                     err
                 ));
-                undo_sign_request(req.original_request, req.utxos);
+                undo_sign_request(req.requests, req.utxos);
             }
         }
     }
@@ -284,7 +287,7 @@ fn finalization_time_estimate(min_confirmations: u32, network: Network) -> u64 {
 }
 
 async fn finalize_requests() {
-    if state::read_state(|s| s.submitted_requests.is_empty()) {
+    if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
     }
 
@@ -294,7 +297,7 @@ async fn finalize_requests() {
         state::read_state(|s| {
             let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
             let reqs: Vec<_> = s
-                .submitted_requests
+                .submitted_transactions
                 .iter()
                 .filter(|req| req.submitted_at + wait_time >= now)
                 .cloned()
@@ -350,14 +353,14 @@ async fn finalize_requests() {
             continue;
         }
 
-        state::mutate_state(|s| s.finalize_request(req.request.block_index));
+        state::mutate_state(|s| s.finalize_transaction(&req.txid));
 
         let now = ic_cdk::api::time();
 
         ic_cdk::println!(
-            "[heartbeat]: finalized request {} (amount = {}) at {} (after {} sec)",
-            req.request.block_index,
-            req.request.amount,
+            "[heartbeat]: finalized transaction {} (retrieved amount = {}) at {} (after {} sec)",
+            tx::DisplayTxid(&req.txid),
+            req.requests.iter().map(|r| r.amount).sum::<u64>(),
             now,
             (now - req.submitted_at) / 1_000_000_000
         );
@@ -504,18 +507,22 @@ pub enum BuildTxError {
     AmountTooLow,
 }
 
-/// Builds a transaction that moves the specified BTC `amount` to the specified
-/// destination using the UTXOs that the minter owns. The receiver pays the fee.
+/// Builds a transaction that moves BTC to the specified destination accounts
+/// using the UTXOs that the minter owns. The receivers pay the fee.
 ///
 /// Sends the change back to the specified minter main address.
 ///
 /// # Arguments
 ///
 /// * `minter_utxos` - The set of all UTXOs minter owns
-/// * `dst_address` - The destination BTC address.
-/// * `main_address` - The BTC address of minter's main account.
-/// * `amount` - The amount to transfer to the `dst_pubkey`.
+/// * `outputs` - The destination BTC addresses and respective amounts.
+/// * `main_address` - The BTC address of the minter's main account do absorb the change.
 /// * `fee_per_vbyte` - The current 50th percentile of BTC fees, in millisatoshi/byte
+///
+/// # Panics
+///
+/// This function panics if the `outputs` vector is empty as it indicates a bug
+/// in the caller's code.
 ///
 /// # Success case properties
 ///
@@ -543,17 +550,27 @@ pub enum BuildTxError {
 ///
 pub fn build_unsigned_transaction(
     minter_utxos: &mut BTreeSet<Utxo>,
-    dst_address: BitcoinAddress,
+    outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
-    amount: Satoshi,
     fee_per_vbyte: u64,
 ) -> Result<(tx::UnsignedTransaction, Vec<Utxo>), BuildTxError> {
-    const DUST_THRESHOLD: Satoshi = 300;
+    assert!(!outputs.is_empty());
+
+    // The DUST_TRESHOLD parameter should be:
+    // - P2WPKH outputs: 294 Satoshi
+    // - P2TR outputs: 330 Satoshi
+    // - P2SH outputs: 330 Satoshi
+    // - P2PKH outputs: 546 Satoshi
+    // Source: ckBTC design doc (go/ckbtc-design).
+    const P2WPKH_DUST_THRESHOLD: Satoshi = 294;
+
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
     /// It allows us to increase the fee of a transaction already sent to the mempool.
     /// The rbf option is used in `resubmit_retrieve_btc`.
     /// https://github.com/bitcoin/bips/blob/master/bip-0125.mediawiki
     const SEQUENCE_RBF_ENABLED: u32 = 0xfffffffd;
+
+    let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
 
     let input_utxos = greedy(amount, minter_utxos);
 
@@ -566,28 +583,27 @@ pub fn build_unsigned_transaction(
     debug_assert!(inputs_value >= amount);
 
     let change = inputs_value - amount;
-    let outputs = if change == 0 {
-        vec![tx::TxOut {
-            value: amount,
-            address: dst_address.clone(),
-        }]
-    } else {
-        let send_to_main = change.max(DUST_THRESHOLD + 1);
 
-        vec![
-            tx::TxOut {
-                value: inputs_value - send_to_main,
-                address: dst_address.clone(),
-            },
-            tx::TxOut {
+    let base_outputs = outputs.iter().map(|(address, value)| tx::TxOut {
+        address: address.clone(),
+        value: *value,
+    });
+
+    let tx_outputs: Vec<tx::TxOut> = if change == 0 {
+        base_outputs.collect()
+    } else {
+        let send_to_main = change.max(P2WPKH_DUST_THRESHOLD + 1);
+
+        base_outputs
+            .chain(std::iter::once(tx::TxOut {
                 value: send_to_main,
-                address: main_address,
-            },
-        ]
+                address: main_address.clone(),
+            }))
+            .collect()
     };
 
     debug_assert_eq!(
-        outputs.iter().map(|out| out.value).sum::<u64>(),
+        tx_outputs.iter().map(|out| out.value).sum::<u64>(),
         inputs_value
     );
 
@@ -600,12 +616,12 @@ pub fn build_unsigned_transaction(
                 sequence: SEQUENCE_RBF_ENABLED,
             })
             .collect(),
-        outputs,
+        outputs: tx_outputs,
         lock_time: 0,
     };
 
-    let tx_len = fake_sign(&unsigned_tx).vsize();
-    let fee = (tx_len as u64 * fee_per_vbyte) / 1000;
+    let tx_vsize = fake_sign(&unsigned_tx).vsize();
+    let fee = (tx_vsize as u64 * fee_per_vbyte) / 1000;
 
     if fee > amount {
         for utxo in input_utxos {
@@ -614,9 +630,38 @@ pub fn build_unsigned_transaction(
         return Err(BuildTxError::AmountTooLow);
     }
 
-    // NB. The receiver (always the first output) pays the fee.
-    debug_assert_eq!(&unsigned_tx.outputs[0].address, &dst_address);
-    unsigned_tx.outputs[0].value -= fee;
+    let fee_shares = distribute(fee, outputs.len() as u64);
+
+    for (output, fee_share) in unsigned_tx.outputs.iter_mut().zip(fee_shares.iter()) {
+        if output.address != main_address {
+            output.value = output.value.saturating_sub(*fee_share);
+        }
+    }
 
     Ok((unsigned_tx, input_utxos))
+}
+
+/// Distributes an amount across the specified number of shares as fairly as
+/// possible.
+///
+/// For example, `distribute(5, 3) = [2, 2, 1]`.
+fn distribute(amount: u64, n: u64) -> Vec<u64> {
+    if n == 0 {
+        return vec![];
+    }
+
+    let avg = amount / n;
+
+    debug_assert!(avg * n <= amount);
+
+    // Fill the shares with the average value.
+    let mut shares = vec![avg; n as usize];
+    // Distribute the remainder across the shares.
+    let remainder = amount - avg * n;
+    debug_assert!(remainder < n);
+    for i in 0..remainder {
+        shares[i as usize] += 1;
+    }
+
+    shares
 }
