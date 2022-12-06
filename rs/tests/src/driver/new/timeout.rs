@@ -52,7 +52,7 @@ impl Task for TimeoutTask {
             let task_id = self.task_id.clone();
             let stopped = stopped.clone();
             async move {
-                let _ = tokio::time::sleep(duration);
+                tokio::time::sleep(duration).await;
                 // xxx: ignore send errors
                 if !stopped.fetch_or(true, Ordering::Relaxed) {
                     (sub)(Event::task_failed(
