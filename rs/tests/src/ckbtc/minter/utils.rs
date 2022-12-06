@@ -26,7 +26,8 @@ use crate::{
 };
 use bitcoincore_rpc::{
     bitcoin::{Address, Amount, Txid},
-    bitcoincore_rpc_json, Auth, Client, RpcApi,
+    bitcoincore_rpc_json::{self, LoadWalletResult},
+    Auth, Client, RpcApi,
 };
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
@@ -471,14 +472,39 @@ pub async fn assert_update_balance_error(
 
 /// Ensure wallet existence by creating one if required.
 pub fn ensure_wallet(btc_rpc: &Client, logger: &Logger) {
-    let wallets = btc_rpc
-        .list_wallets()
-        .expect("Error while retrieving wallets.");
+    let mut wallets: Vec<String> = vec![];
+    let start = Instant::now();
+    while wallets.is_empty() {
+        if start.elapsed() >= TIMEOUT_30S {
+            panic!("list_wallets timeout");
+        };
+        match btc_rpc.list_wallets() {
+            Ok(wallet) => {
+                wallets = wallet;
+                break;
+            }
+            Err(e) => {
+                info!(&logger, "Error while retrieving wallets : {}", e);
+            }
+        }
+    }
     if wallets.is_empty() {
         // Create wallet if not existing yet.
-        let res = btc_rpc
-            .create_wallet("mywallet", None, None, None, None)
-            .expect("Error while creating wallet.");
+        let mut res = LoadWalletResult {
+            name: Default::default(),
+            warning: None,
+        };
+        while res.name.is_empty() {
+            if start.elapsed() >= TIMEOUT_30S {
+                panic!("create_wallet timeout");
+            };
+            match btc_rpc.create_wallet("mywallet", None, None, None, None) {
+                Ok(r) => res = r,
+                Err(e) => {
+                    info!(&logger, "Error while creating wallet : {:?}", e)
+                }
+            }
+        }
         info!(&logger, "Created wallet: {}", res.name);
     } else {
         info!(&logger, "Existing wallets:");
