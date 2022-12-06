@@ -21,10 +21,12 @@ use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
 use crate::driver::vm_control::IcControl;
-use crate::tecdsa::tecdsa_signature_test::{enable_ecdsa_signing, make_key};
+use crate::nns::NnsExt;
+use crate::tecdsa::tecdsa_signature_test::{
+    enable_ecdsa_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
+};
 use crate::{
-    nns::NnsExt,
-    tecdsa::tecdsa_signature_test::{get_public_key, get_signature, verify_signature, KEY_ID1},
+    tecdsa::tecdsa_signature_test::{verify_signature, KEY_ID1},
     util::*,
 };
 use canister_test::{Canister, Cycles};
@@ -89,7 +91,7 @@ pub fn test(env: TestEnv) {
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
         let msg_can = MessageCanister::new(&agent, endpoints[0].effective_canister_id()).await;
         info!(logger, "Getting public key");
-        let public_key = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
+        let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &logger)
             .await
             .unwrap();
         (msg_can.canister_id(), public_key)
@@ -132,16 +134,16 @@ pub fn test(env: TestEnv) {
     block_on(async {
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
         let msg_can = MessageCanister::from_canister_id(&agent, canister_id);
-        let public_key_ = get_public_key(make_key(KEY_ID1), &msg_can, ctx)
+        let public_key_ = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &logger)
             .await
             .unwrap();
         assert_eq!(public_key, public_key_);
-        let signature = get_signature(
+        let signature = get_signature_with_logger(
             &message_hash,
             Cycles::zero(),
             make_key(KEY_ID1),
             &msg_can,
-            ctx,
+            &logger,
         )
         .await
         .unwrap();
