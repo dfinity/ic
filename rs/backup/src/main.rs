@@ -1,5 +1,8 @@
 use clap::Parser;
-use ic_backup::{backup_manager::BackupManager, cmd::BackupArgs};
+use ic_backup::{
+    backup_manager::BackupManager,
+    cmd::{BackupArgs, SubCommand},
+};
 use slog::{o, Drain};
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -53,7 +56,11 @@ async fn main() {
     let rt = Handle::current();
     spawn_blocking(move || {
         let bm = BackupManager::new(args.config_file, &rt, log);
-        Arc::new(bm).do_backups();
+        if let Some(SubCommand::Init) = args.subcmd {
+            bm.init();
+        } else {
+            Arc::new(bm).do_backups();
+        }
     })
     .await
     .expect("Blocking task panicked")

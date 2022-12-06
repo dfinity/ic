@@ -70,7 +70,7 @@ impl BackupHelper {
         self.root_dir.join("ic_registry_local_store")
     }
 
-    fn data_dir(&self) -> PathBuf {
+    pub fn data_dir(&self) -> PathBuf {
         self.root_dir.join(format!("data/{}", self.subnet_id))
     }
 
