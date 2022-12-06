@@ -1,8 +1,9 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::Write,
+    io::{self, Write},
     path::PathBuf,
+    process::Command,
     sync::{Arc, Mutex, RwLock},
     thread,
     time::{Duration, Instant},
@@ -10,6 +11,7 @@ use std::{
 
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_logger::ReplicaLogger;
+use ic_recovery::command_helper::exec_cmd;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
@@ -191,6 +193,53 @@ impl BackupManager {
             subnet_backups: backups,
             save_state: RwLock::new(save_state),
             log,
+        }
+    }
+
+    pub fn init(&self) {
+        for b in &self.subnet_backups {
+            if !b.backup_helper.data_dir().exists() {
+                fs::create_dir_all(b.backup_helper.data_dir())
+                    .expect("Failure creating a directory");
+            }
+            if !b
+                .backup_helper
+                .data_dir()
+                .join("ic_state/checkpoints")
+                .exists()
+            {
+                let stdin = io::stdin();
+                loop {
+                    let mut state_dir = String::new();
+                    println!(
+                        "Enter ic_state directory for subnet {}:",
+                        b.backup_helper.subnet_id
+                    );
+                    let _ = stdin.read_line(&mut state_dir);
+                    let old_state_dir = PathBuf::from(&state_dir.trim());
+                    if !old_state_dir.exists() {
+                        println!("Error: directory {:?} doesn't exist!", old_state_dir);
+                        continue;
+                    }
+                    if !old_state_dir.join("checkpoints").exists() {
+                        println!(
+                            "Error: directory {:?} doesn't have checkpints!",
+                            old_state_dir
+                        );
+                        continue;
+                    }
+                    let mut cmd = Command::new("rsync");
+                    cmd.arg("-a")
+                        .arg(old_state_dir)
+                        .arg(b.backup_helper.data_dir());
+                    info!(self.log, "Will execute: {:?}", cmd);
+                    if let Err(e) = exec_cmd(&mut cmd) {
+                        println!("Error: {}", e);
+                    } else {
+                        break;
+                    }
+                }
+            }
         }
     }
 

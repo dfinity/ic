@@ -23,7 +23,7 @@ SYNCING_PERIOD=1800 # 1/2 hour
 REPLAY_PERIOD=14400 # 4 hours
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="7657b1f1762ddfc39d5ac63e00c7c54ecf2cf132"
+DEFAULT_BUILD_ID="834f216faa3e1d2bb870023679a507cd90c545df"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -148,7 +148,10 @@ echo
 echo
 echo "Please edit the config file ${CONFIG_FILE_NAME} placed in ${WORK_DIR}"
 echo
-echo "then start the backup service with:"
+echo "then copy the state the with the command:"
+echo "${WORK_DIR}/ic-backup --config-file ${WORK_DIR}/config.json5 init"
+echo
+echo "finaly start the backup service with:"
 echo "sudo systemctl start ic-backup.service"
 echo
 echo "also consider to let it run on reboot with:"
