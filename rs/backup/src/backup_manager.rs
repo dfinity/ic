@@ -37,7 +37,7 @@ pub struct BackupManager {
     pub root_dir: PathBuf,
     pub local_store: Arc<LocalStoreImpl>,
     pub registry_client: Arc<RegistryClientImpl>,
-    pub registry_replicator: Arc<RegistryReplicator>,
+    pub registry_replicator: Option<Arc<RegistryReplicator>>,
     subnet_backups: Vec<SubnetBackup>,
     save_state: RwLock<BackupManagerState>,
     pub log: Logger,
@@ -78,12 +78,14 @@ fn fetch_value_or_default<T>(
 }
 
 impl BackupManager {
-    pub fn new(config_file: PathBuf, rt: &Handle, log: Logger) -> Self {
+    pub fn new(config_file: PathBuf, rt: &Handle, init: bool, log: Logger) -> Self {
         let config = Config::load_config(config_file).expect("Updated config file can't be loaded");
         // Load the manager state
         let state_file = config.root_dir.join(STATE_FILE_NAME);
         let manager_state = load_state_file(&state_file);
-        info!(log, "Loaded manager state: {:?}", manager_state);
+        if !init {
+            info!(log, "Loaded manager state: {:?}", manager_state);
+        }
         let ssh_credentials_file = match config.ssh_private_key.into_os_string().into_string() {
             Ok(f) => f,
             Err(e) => panic!("Bad file name for ssh credentials: {:?}", e),
@@ -94,36 +96,41 @@ impl BackupManager {
         let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
 
         let local_store = Arc::new(LocalStoreImpl::new(local_store_dir));
-        let replica_logger = ReplicaLogger::from(log.clone());
-        let registry_replicator = Arc::new(RegistryReplicator::new_with_clients(
-            replica_logger,
-            local_store.clone(),
-            registry_client.clone(),
-            Duration::from_secs(30),
-        ));
-        let nns_public_key =
-            parse_threshold_sig_key(&config.nns_pem).expect("Missing NNS public key");
-        let nns_urls = vec![nns_url.clone()];
-        let registry_replicator2 = registry_replicator.clone();
+        let registry_replicator = if init {
+            None
+        } else {
+            let replica_logger = ReplicaLogger::from(log.clone());
+            let reg_replicator = Arc::new(RegistryReplicator::new_with_clients(
+                replica_logger,
+                local_store.clone(),
+                registry_client.clone(),
+                Duration::from_secs(30),
+            ));
+            let nns_public_key =
+                parse_threshold_sig_key(&config.nns_pem).expect("Missing NNS public key");
+            let nns_urls = vec![nns_url.clone()];
+            let reg_replicator2 = reg_replicator.clone();
 
-        info!(log.clone(), "Starting the registry replicator");
-        block_on(async {
-            rt.spawn(async move {
-                registry_replicator2
-                    .start_polling(nns_urls, Some(nns_public_key))
-                    .await
-                    .expect("Failed to start registry replicator");
-            })
-            .await
-            .expect("Task spawned in Tokio executor panicked")
-        });
-        info!(log.clone(), "Fetch and start polling");
-        if let Err(err) = registry_client.fetch_and_start_polling() {
-            error!(
-                log.clone(),
-                "Error fetching registry by the client: {}", err
-            );
-        }
+            info!(log.clone(), "Starting the registry replicator");
+            block_on(async {
+                rt.spawn(async move {
+                    reg_replicator2
+                        .start_polling(nns_urls, Some(nns_public_key))
+                        .await
+                        .expect("Failed to start registry replicator");
+                })
+                .await
+                .expect("Task spawned in Tokio executor panicked")
+            });
+            info!(log.clone(), "Fetch and start polling");
+            if let Err(err) = registry_client.fetch_and_start_polling() {
+                error!(
+                    log.clone(),
+                    "Error fetching registry by the client: {}", err
+                );
+            }
+            Some(reg_replicator)
+        };
 
         let mut backups = Vec::new();
         let mut save_state = BackupManagerState::default();

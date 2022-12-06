@@ -55,10 +55,11 @@ async fn main() {
     let args = BackupArgs::parse();
     let rt = Handle::current();
     spawn_blocking(move || {
-        let bm = BackupManager::new(args.config_file, &rt, log);
         if let Some(SubCommand::Init) = args.subcmd {
+            let bm = BackupManager::new(args.config_file, &rt, true, log);
             bm.init();
         } else {
+            let bm = BackupManager::new(args.config_file, &rt, false, log);
             Arc::new(bm).do_backups();
         }
     })

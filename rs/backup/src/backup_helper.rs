@@ -167,7 +167,12 @@ impl BackupHelper {
     }
 
     fn rsync_node_backup(&self, node_ip: &IpAddr) {
-        info!(self.log, "Sync backup data from the node: {}", node_ip);
+        info!(
+            self.log,
+            "Sync backup data from the node: {} for subnet_id: {}",
+            node_ip,
+            self.subnet_id.to_string()
+        );
         let remote_dir = format!(
             "{}@[{}]:/var/lib/ic/backup/{}/",
             self.username(),
@@ -194,7 +199,13 @@ impl BackupHelper {
     }
 
     fn rsync_config(&self, node_ip: &IpAddr, replica_version: &ReplicaVersion) {
-        info!(self.log, "Sync ic.json5 from the node: {}", node_ip);
+        info!(
+            self.log,
+            "Sync ic.json5 from the node: {} for replica: {} and subnet_id: {}",
+            node_ip,
+            replica_version,
+            self.subnet_id.to_string()
+        );
         let remote_dir = format!(
             "{}@[{}]:/run/ic-node/config/ic.json5",
             self.username(),
