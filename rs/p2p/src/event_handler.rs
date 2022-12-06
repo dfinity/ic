@@ -484,26 +484,18 @@ pub struct AdvertBroadcaster {
 
 #[allow(clippy::mutex_atomic)]
 impl AdvertBroadcaster {
-    pub fn new(
-        log: ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
-        gossip_config: GossipConfig,
-    ) -> Self {
+    pub fn new(log: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
         let threadpool = threadpool::Builder::new()
             .num_threads(P2P_PER_FLOW_THREADS)
             .thread_name("P2P_Advert_Thread".into())
             .build();
 
         Self {
-            log: log.clone(),
+            log,
             threadpool,
             gossip: Arc::new(RwLock::new(None)),
 
-            advert_builder: AdvertRequestBuilder::new(
-                gossip_config.advert_config,
-                metrics_registry,
-                log,
-            ),
+            advert_builder: AdvertRequestBuilder::new(metrics_registry),
             sem: Arc::new(Semaphore::new(MAX_ADVERT_BUFFER)),
             started: Arc::new((Mutex::new(false), Condvar::new())),
         }
@@ -688,7 +680,6 @@ pub mod tests {
         let advert_subscriber = AdvertBroadcaster::new(
             p2p_test_setup_logger().root.clone().into(),
             &MetricsRegistry::new(),
-            ic_types::p2p::build_default_gossip_config(),
         );
 
         (handler, advert_subscriber)

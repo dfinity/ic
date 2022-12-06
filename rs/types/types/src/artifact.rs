@@ -326,15 +326,6 @@ pub enum AdvertClass {
     /// if the optimizations are not enabled.
     Critical,
 
-    /// The client does not need all the peers to be notified
-    /// for the artifact. Instead, it lets the networking
-    /// layer decide the advert distribution volume and recipient
-    /// set, based on performance vs reliability trade offs.
-    /// Please note this is only advisory. Network layer may
-    /// decide to fall back to Critical class, depending on
-    /// its configuration.
-    BestEffort,
-
     /// The client does not need peers to be notified for this
     /// artifact type. Please note this is only advisory.
     /// Network layer may decide to fall back to  Critical class,
@@ -346,7 +337,6 @@ impl AdvertClass {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Critical => "critical",
-            Self::BestEffort => "best_effort",
             Self::None => "none",
         }
     }
