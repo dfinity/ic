@@ -347,7 +347,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             accumulated_priority: canister_state_bits.accumulated_priority,
             // Longs executions get aborted at the checkpoint,
             // so both the credit and the execution mode below are set to their defaults.
-            priority_credit: 0.into(),
+            priority_credit: Default::default(),
             long_execution_mode: LongExecutionMode::default(),
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,

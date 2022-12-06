@@ -1804,7 +1804,7 @@ mod test {
             last_full_execution_round: ExecutionRound::from(0),
             call_context_manager: None,
             compute_allocation: ComputeAllocation::try_from(0).unwrap(),
-            accumulated_priority: AccumulatedPriority::from(0),
+            accumulated_priority: AccumulatedPriority::default(),
             execution_state_bits: None,
             memory_allocation: MemoryAllocation::default(),
             freeze_threshold: NumSeconds::from(0),
