@@ -29,12 +29,12 @@ mod idkg_gen_dealing_encryption_key_pair {
     use ic_crypto_internal_threshold_sig_ecdsa::EccCurveType;
     use ic_protobuf::registry::crypto::v1::PublicKey;
     use mockall::Sequence;
-    use proptest::prop_assert;
-    use proptest::prop_assert_eq;
-    use proptest::proptest;
+    use proptest::prelude::*;
     use std::collections::HashSet;
 
     proptest! {
+        #![proptest_config(ProptestConfig::with_cases(10))]
+
         #[test]
         fn should_generate_mega_key_pair_and_store_it_in_the_vault(seed: [u8;32]) {
             let temp_vault =  TempLocalCspVault::new_with_rng(Seed::from_bytes(&seed).into_rng());
@@ -63,19 +63,18 @@ mod idkg_gen_dealing_encryption_key_pair {
         let rng = reproducible_rng();
         let temp_vault = TempLocalCspVault::new_with_rng(rng);
         let mut generated_keys = HashSet::new();
-        let expected_number_of_keys = 100;
-        for _ in 1..=expected_number_of_keys {
+        for _ in 1..=100 {
             let public_key = temp_vault
                 .vault
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("error generating I-DKG dealing encryption key pair");
             // MEGaPublicKey does not implement Hash so we use the serialized form
-            let is_inserted = generated_keys.insert(public_key.serialize());
-            if !is_inserted {
-                panic!("MEGaPublicKey {:?} was already inserted!", public_key);
-            }
+            assert!(
+                generated_keys.insert(public_key.serialize()),
+                "MEGaPublicKey {:?} was already inserted!",
+                public_key
+            );
         }
-        assert_eq!(generated_keys.len(), expected_number_of_keys);
     }
 
     #[test]
