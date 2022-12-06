@@ -1003,8 +1003,7 @@ mod public_seed {
         let expected_seeds: Vec<_> = (0..10)
             .map(|_| {
                 let intermediate_seed: [u8; 32] = csprng.gen();
-                let rng_for_seed_generation = &mut ChaCha20Rng::from_seed(intermediate_seed);
-                Seed::from_rng(rng_for_seed_generation)
+                Seed::from_bytes(&intermediate_seed)
             })
             .collect();
         let csp_vault = new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), vault);

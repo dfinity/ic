@@ -1,6 +1,7 @@
 use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
 use crate::key_id::KeyId;
+use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStorePersistenceError};
 use crate::types::CspSecretKey;
@@ -17,6 +18,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     SecretShares, Seed,
 };
 use ic_logger::debug;
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
     IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError,
@@ -26,6 +28,7 @@ use ic_types::{NodeIndex, NumberOfNodes};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
+use std::io;
 
 #[cfg(test)]
 mod tests;
@@ -148,13 +151,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         debug!(self.logger; crypto.method_name => "idkg_gen_dealing_encryption_key_pair");
         let start_time = self.metrics.now();
-
-        let (public_key, private_key) = self.idkg_gen_mega_key_pair_internal()?;
-        let result = self
-            .idkg_add_private_key_to_secret_key_store(&public_key, private_key)
-            .and_then(|()| self.idkg_add_public_key_to_public_key_store(public_key.clone()))
-            .map(|()| public_key);
-
+        let result = self.idkg_gen_dealing_encryption_key_pair_internal();
         self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
             MetricsScope::Local,
@@ -162,7 +159,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             MetricsResult::from(&result),
             start_time,
         );
-
         result
     }
 
@@ -429,56 +425,35 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         }
     }
 
-    fn idkg_gen_mega_key_pair_internal(
+    fn idkg_gen_dealing_encryption_key_pair_internal(
         &self,
-    ) -> Result<(MEGaPublicKey, MEGaPrivateKey), CspCreateMEGaKeyError> {
-        let seed = Seed::from_rng(&mut *self.rng_write_lock());
-
-        gen_keypair(EccCurveType::K256, seed).map_err(CspCreateMEGaKeyError::FailedKeyGeneration)
+    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
+        let seed = self.generate_seed();
+        let (public_key, csp_secret_key, key_id) = generate_idkg_key_material_from_seed(seed)?;
+        let public_key_proto = idkg_dealing_encryption_pk_to_proto(public_key.clone());
+        self.idkg_store_secret_and_public_keys(key_id, csp_secret_key, public_key_proto)?;
+        Ok(public_key)
     }
 
-    fn idkg_add_private_key_to_secret_key_store(
+    fn idkg_store_secret_and_public_keys(
         &self,
-        public_key: &MEGaPublicKey,
-        private_key: MEGaPrivateKey,
+        key_id: KeyId,
+        csp_secret_key: CspSecretKey,
+        public_key_proto: PublicKey,
     ) -> Result<(), CspCreateMEGaKeyError> {
-        let key_id =
-            KeyId::try_from(public_key).map_err(|e| CspCreateMEGaKeyError::InternalError {
-                internal_error: format!(
-                    "Failed to create key ID from MEGa public key {:?}: {}",
-                    public_key, e
-                ),
-            })?;
-        let public_key_bytes = MEGaPublicKeyK256Bytes::try_from(public_key)
-            .map_err(CspCreateMEGaKeyError::SerializationError)?;
-        let private_key_bytes = MEGaPrivateKeyK256Bytes::try_from(&private_key)
-            .map_err(CspCreateMEGaKeyError::SerializationError)?;
-        self.store_secret_key(
-            key_id,
-            CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
-                public_key: public_key_bytes,
-                private_key: private_key_bytes,
-            }),
-            Some(IDKG_MEGA_SCOPE),
-        )
-        .map_err(|err| CspCreateMEGaKeyError::from(err))
-    }
-
-    fn idkg_add_public_key_to_public_key_store(
-        &self,
-        public_key: MEGaPublicKey,
-    ) -> Result<(), CspCreateMEGaKeyError> {
-        let mut existing_public_keys = self
-            .public_key_store_read_lock()
-            .idkg_dealing_encryption_pubkeys()
-            .clone();
-        existing_public_keys.push(crate::keygen::utils::idkg_dealing_encryption_pk_to_proto(
-            public_key,
-        ));
-        self.public_key_store_write_lock()
-            .set_idkg_dealing_encryption_pubkeys(existing_public_keys)
-            .map_err(|err| CspCreateMEGaKeyError::TransientInternalError {
-                internal_error: format!("IO error: {:?}", err),
+        let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
+        sks_write_lock
+            .insert(key_id, csp_secret_key, Some(IDKG_MEGA_SCOPE))
+            .map_err(CspCreateMEGaKeyError::from)
+            .and_then(|()| {
+                let mut public_keys = pks_write_lock.idkg_dealing_encryption_pubkeys().clone();
+                public_keys.push(public_key_proto);
+                pks_write_lock
+                    .set_idkg_dealing_encryption_pubkeys(public_keys)
+                    .map_err(|ioe: io::Error| CspCreateMEGaKeyError::TransientInternalError {
+                            internal_error: format!("failed to persist iDKG dealing encryption public keys: IO error: {ioe:?}"),
+                        },
+                    )
             })
     }
 
@@ -606,4 +581,26 @@ impl From<MEGaKeysetFromSksError> for IDkgLoadTranscriptError {
             Mkfse::PrivateKeyNotFound => Ilte::PrivateKeyNotFound,
         }
     }
+}
+
+fn generate_idkg_key_material_from_seed(
+    seed: Seed,
+) -> Result<(MEGaPublicKey, CspSecretKey, KeyId), CspCreateMEGaKeyError> {
+    let (public_key, private_key) = gen_keypair(EccCurveType::K256, seed)
+        .map_err(CspCreateMEGaKeyError::FailedKeyGeneration)?;
+
+    let key_id =
+        KeyId::try_from(&public_key).map_err(|e| CspCreateMEGaKeyError::InternalError {
+            internal_error: format!(
+                "Failed to create key ID from MEGa public key {:?}: {e}",
+                &public_key
+            ),
+        })?;
+    let csp_secret_key = CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
+        public_key: MEGaPublicKeyK256Bytes::try_from(&public_key)
+            .map_err(CspCreateMEGaKeyError::SerializationError)?,
+        private_key: MEGaPrivateKeyK256Bytes::try_from(&private_key)
+            .map_err(CspCreateMEGaKeyError::SerializationError)?,
+    });
+    Ok((public_key, csp_secret_key, key_id))
 }

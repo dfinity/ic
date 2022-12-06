@@ -22,6 +22,7 @@ use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
 use crate::types::CspSecretKey;
 use crate::CspRwLock;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::scope::Scope;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
@@ -38,6 +39,22 @@ use tempfile::TempDir;
 
 /// An implementation of `CspVault`-trait that runs in-process
 /// and uses local secret key stores.
+///
+/// # Deadlock prevention when locking multiple resources
+///
+/// To avoid circular waits and thus deadlocks when locking multiple resources
+/// simultaneously, we define the following total order that MUST be
+/// respected when *acquiring* multiple locks at the same time:
+/// 1. `csprng`
+/// 2. `node_secret_key_store`
+/// 3. `canister_secret_key_store`
+/// 4. `public_key_store`
+///
+/// Note that it is really just the order in which the locks are *acquired*
+/// that matters for preventing circular waits, and not the order in which
+/// the locks are released (see, e.g., [1]).
+///
+/// [1] https://softwareengineering.stackexchange.com/questions/418568/is-releases-mutexes-in-reverse-order-required-to-make-this-deadlock-prevention
 ///
 /// # Remarks
 ///
@@ -185,6 +202,16 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         self.node_secret_key_store.write()
     }
 
+    /// Acquires write locks for both the node secret key store and the public key store.
+    ///
+    /// The locks are acquired according to the total resource order defined in the
+    /// section on deadlock prevention in the documentation of the `LocalCspVault`.
+    fn sks_and_pks_write_locks(&self) -> (RwLockWriteGuard<'_, S>, RwLockWriteGuard<'_, P>) {
+        let sks_write_lock = self.node_secret_key_store.write();
+        let pks_write_lock = self.public_key_store.write();
+        (sks_write_lock, pks_write_lock)
+    }
+
     fn sks_read_lock(&self) -> RwLockReadGuard<'_, S> {
         self.node_secret_key_store.read()
     }
@@ -212,6 +239,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         scope: Option<Scope>,
     ) -> Result<(), SecretKeyStoreError> {
         self.sks_write_lock().insert(key_id, csp_secret_key, scope)
+    }
+
+    fn generate_seed(&self) -> Seed {
+        let intermediate_seed: [u8; 32] = self.csprng.write().gen(); // lock is released after this line
+        Seed::from_bytes(&intermediate_seed) // use of intermediate seed minimizes locking time
     }
 }
 

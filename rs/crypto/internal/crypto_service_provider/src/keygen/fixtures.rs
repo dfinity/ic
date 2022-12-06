@@ -39,7 +39,7 @@ pub fn mega_test_vector() -> MEGaTestVector {
         seed: 42,
         public_key: MEGaPublicKey::deserialize(
             EccCurveType::K256,
-            &hex::decode("039a6f8ffe8e8d252f0ba25230a77ed334da43a8661480c07e85db88dde355f096")
+            &hex::decode("036a503d726f507e472c28b35df36d53313736c4fcddefe1b69f30fcb97f0b603d")
                 .expect("invalid hex string"),
         )
         .expect("invalid MEGa public key"),

@@ -11,8 +11,7 @@ fn local_csp_vault_should_generate_correct_public_seeds() {
     let expected_seeds: Vec<_> = (0..10)
         .map(|_| {
             let intermediate_seed: [u8; 32] = csprng.gen();
-            let rng_for_seed_generation = &mut ChaCha20Rng::from_seed(intermediate_seed);
-            Seed::from_rng(rng_for_seed_generation)
+            Seed::from_bytes(&intermediate_seed)
         })
         .collect();
     should_generate_particular_seeds(vault, expected_seeds);
