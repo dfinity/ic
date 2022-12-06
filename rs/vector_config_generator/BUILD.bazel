@@ -4,8 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/async_utils",
-    "//rs/config",
-    "//rs/http_endpoints/metrics",
     "//rs/monitoring/metrics",
     "//rs/service_discovery",
     "//rs/types/types",

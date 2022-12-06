@@ -11,8 +11,6 @@ crossbeam-channel = "0.5.5"
 futures-util = "0.3.5"
 humantime = "2.0"
 ic-async-utils = { path = "../async_utils" }
-ic-config = { path = "../config" }
-ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils/" }
