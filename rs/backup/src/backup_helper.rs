@@ -95,12 +95,23 @@ impl BackupHelper {
         "backup".to_string()
     }
 
-    fn download_binaries(&self, replica_version: &ReplicaVersion) -> Result<(), String> {
+    fn download_binaries(
+        &self,
+        replica_version: &ReplicaVersion,
+        start_height: u64,
+    ) -> Result<(), String> {
         info!(self.log, "Check if there are new artifacts.");
-        // Make sure that some artifacts from this replica version are already synced from the node.
+        let cup_file = format!(
+            "{}/{}/{}/catch_up_package.bin",
+            replica_version,
+            start_height - start_height % 10000,
+            start_height
+        );
+        // Make sure that the CUP from this replica version and at this height is
+        // already synced from the node.
         // That way it is guaranteed that the node is running the new replica version and
         // has the latest version of the ic.json5 file.
-        while !self.spool_dir().join(replica_version.to_string()).exists() {
+        while !self.spool_dir().join(&cup_file).exists() {
             sleep_secs(30);
         }
         info!(self.log, "Start downloading binaries.");
@@ -408,7 +419,7 @@ impl BackupHelper {
             self.subnet_id,
             replica_version
         );
-        self.download_binaries(replica_version)?;
+        self.download_binaries(replica_version, start_height)?;
         info!(self.log, "Binaries are downloaded.");
 
         let ic_admin = self.binary_file("ic-replay", replica_version);
