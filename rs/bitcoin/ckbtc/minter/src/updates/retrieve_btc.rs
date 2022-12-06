@@ -93,6 +93,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         amount: args.amount,
         address: parsed_address,
         block_index,
+        received_at: ic_cdk::api::time(),
     };
 
     mutate_state(|s| s.pending_retrieve_btc_requests.push_back(request));

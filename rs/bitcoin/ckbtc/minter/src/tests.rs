@@ -351,9 +351,8 @@ proptest! {
         let target = total_value / 2;
         let (unsigned_tx, _) = build_unsigned_transaction(
             &mut utxos,
-            BitcoinAddress::P2wpkhV0(dst_pkhash),
+            vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             BitcoinAddress::P2wpkhV0(main_pkhash),
-            target,
             fee_per_vbyte
         )
         .expect("failed to build transaction");
@@ -379,6 +378,8 @@ proptest! {
         target in 10000..50000u64,
         fee_per_vbyte in 1000..2000u64,
     ) {
+        prop_assume!(dst_pkhash != main_pkhash);
+
         let value_by_outpoint: HashMap<_, _> = utxos
             .iter()
             .map(|utxo| (utxo.outpoint.clone(), utxo.value))
@@ -386,9 +387,8 @@ proptest! {
 
         let (unsigned_tx, _) = build_unsigned_transaction(
             &mut utxos,
-            BitcoinAddress::P2wpkhV0(dst_pkhash),
+            vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             BitcoinAddress::P2wpkhV0(main_pkhash),
-            target,
             fee_per_vbyte
         )
         .expect("failed to build transaction");
@@ -429,9 +429,8 @@ proptest! {
         prop_assert_eq!(
             build_unsigned_transaction(
                 &mut utxos,
-                BitcoinAddress::P2wpkhV0(dst_pkhash),
+                vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), total_value * 2)],
                 BitcoinAddress::P2wpkhV0(main_pkhash),
-                total_value * 2,
                 fee_per_vbyte
             ).expect_err("build transaction should fail because the amount is too high"),
             BuildTxError::NotEnoughFunds
@@ -441,9 +440,8 @@ proptest! {
         prop_assert_eq!(
             build_unsigned_transaction(
                 &mut utxos,
-                BitcoinAddress::P2wpkhV0(dst_pkhash),
+                vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), 1)],
                 BitcoinAddress::P2wpkhV0(main_pkhash),
-                1,
                 fee_per_vbyte
             ).expect_err("build transaction should fail because the amount is too low to pay the fee"),
             BuildTxError::AmountTooLow
@@ -568,6 +566,24 @@ proptest! {
 
         let encoded = crate::signature::EncodedSignature::from_sec1(&sig);
         crate::signature::validate_encoded_signature(encoded.as_slice()).expect("invalid signature");
+    }
+
+    #[test]
+    fn amount_distribute_props(amount in any::<u64>(), n in 1..20u64) {
+        let shares = crate::distribute(amount, n);
+
+        // Distribute respects the share number.
+        prop_assert_eq!(shares.len(), n as usize);
+
+        // Distribute preserves the total.
+        prop_assert_eq!(amount, shares.iter().sum::<u64>());
+
+        // Distribute is fair
+        for x in shares.iter() {
+            for y in shares.iter() {
+                prop_assert!(x.max(y) - x.min(y) <= 1);
+            }
+        }
     }
 
 }
