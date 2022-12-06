@@ -4,7 +4,6 @@ use ic_config::{
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
-use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces::execution_environment::IngressHistoryReader;
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
@@ -139,12 +138,6 @@ pub(crate) fn setup() -> (
         config.hypervisor.clone(),
         Arc::clone(&cycles_account_manager),
         Arc::clone(&state_manager) as Arc<_>,
-    );
-    let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
-        tokio::runtime::Handle::current(),
-        config.metrics.clone(),
-        metrics_registry.clone(),
-        &log,
     );
 
     let message_routing = MessageRoutingImpl::new(

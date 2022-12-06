@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/interfaces/state_manager",
     "//rs/messaging",
     "//rs/monitoring/metrics",
-    "//rs/http_endpoints/metrics",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/keys",

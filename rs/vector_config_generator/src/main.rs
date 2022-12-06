@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{bail, Result};
 use clap::Parser;
@@ -7,8 +7,6 @@ use config_writer::ConfigWriter;
 use futures_util::FutureExt;
 use humantime::parse_duration;
 use ic_async_utils::shutdown_signal;
-use ic_config::metrics::{Config as MetricsConfig, Exporter};
-use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
 use regex::Regex;
 use service_discovery::{
@@ -78,7 +76,7 @@ fn main() -> Result<()> {
         ic_discovery,
         stop_signal_rcv,
         cli_args.poll_interval,
-        Metrics::new(metrics_registry.clone()),
+        Metrics::new(metrics_registry),
         config_writer,
         jobs.into_iter().map(|(job, _)| job).collect(),
     );
@@ -89,23 +87,7 @@ fn main() -> Result<()> {
     );
     let scrape_handle = Some((stop_signal_sender, join_handle));
 
-    info!(
-        log,
-        "Metrics are exposed on {}.", cli_args.metrics_listen_addr
-    );
-    let exporter_config = MetricsConfig {
-        exporter: Exporter::Http(cli_args.metrics_listen_addr),
-        ..Default::default()
-    };
-    let metrics_runtime = MetricsHttpEndpoint::new_insecure(
-        rt.handle().clone(),
-        exporter_config,
-        metrics_registry,
-        &log,
-    );
-
     rt.block_on(shutdown_signal);
-    std::mem::drop(metrics_runtime);
 
     if let Some((stop_signal_handler, join_handle)) = scrape_handle {
         stop_signal_handler.send(())?;
@@ -170,16 +152,6 @@ targets.
 "#
     )]
     generation_dir: Option<PathBuf>,
-
-    #[clap(
-        long = "metrics-listen-addr",
-        default_value = "[::]:9099",
-        help = r#"
-The listen address on which metrics for this service should be exposed.
-
-"#
-    )]
-    metrics_listen_addr: SocketAddr,
 
     #[clap(
         long = "filter-node-id-regex",
