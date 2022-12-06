@@ -86,6 +86,64 @@ mod idkg_gen_dealing_encryption_key_pair {
     }
 
     #[test]
+    fn should_correctly_extend_public_key_vector() {
+        let rng = reproducible_rng();
+        let temp_vault = TempLocalCspVault::new_with_rng(rng);
+        let mut generated_keys = Vec::new();
+        for _ in 1..=5 {
+            let public_key = temp_vault
+                .vault
+                .idkg_gen_dealing_encryption_key_pair()
+                .expect("failed to create keys");
+            let public_key_proto = idkg_dealing_encryption_pk_to_proto(public_key.clone());
+            generated_keys.push(public_key_proto);
+        }
+        assert_eq!(
+            temp_vault
+                .vault
+                .public_key_store
+                .read()
+                .idkg_dealing_encryption_pubkeys(),
+            &generated_keys
+        );
+    }
+
+    #[test]
+    fn should_eventually_detect_race_condition_when_extending_public_key_vector() {
+        const NUM_ITERATIONS: usize = 200;
+        let temp_vault = Arc::new(TempLocalCspVault::new_with_rng(reproducible_rng()));
+        let mut thread_handles = Vec::new();
+        for _ in 1..=NUM_ITERATIONS {
+            let temp_vault = Arc::clone(&temp_vault);
+            thread_handles.push(std::thread::spawn(move || {
+                temp_vault
+                    .vault
+                    .idkg_gen_dealing_encryption_key_pair()
+                    .expect("failed to create keys")
+            }));
+        }
+        let mut generated_keys = Vec::new();
+        let mut duplicate_key_detector = HashSet::new();
+        for thread_handle in thread_handles {
+            let public_key = thread_handle.join().expect("failed to join");
+            assert!(duplicate_key_detector.insert(public_key.serialize()));
+            generated_keys.push(public_key);
+        }
+        let public_key_store_read_lock = temp_vault.vault.public_key_store.read();
+        for generated_key in generated_keys {
+            assert!(public_key_store_read_lock
+                .idkg_dealing_encryption_pubkeys()
+                .contains(&idkg_dealing_encryption_pk_to_proto(generated_key)));
+        }
+        assert_eq!(
+            public_key_store_read_lock
+                .idkg_dealing_encryption_pubkeys()
+                .len(),
+            NUM_ITERATIONS
+        );
+    }
+
+    #[test]
     fn should_store_idkg_secret_key_before_public_key() {
         let mut seq = Sequence::new();
 
@@ -156,7 +214,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     fn should_store_generated_secret_key_with_correct_key_id_and_scope() {
         let mut sks = MockSecretKeyStore::new();
         let expected_key_id =
-            KeyId::from_hex("568eafefbc843ff381017aad14151150f4147e212f7e53bb57258f4547e69546")
+            KeyId::from_hex("20087da760d4dcc7488ab32c611ed83f0ca9e58778ba6c441cca2d46609ea90b")
                 .expect("invalid key id");
         sks.expect_insert()
             .times(1)
