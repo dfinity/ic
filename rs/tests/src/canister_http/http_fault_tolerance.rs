@@ -51,7 +51,10 @@ pub fn test(env: TestEnv) {
         .filter(|e| e.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::Application))
         .collect();
     let app_endpoint = app_endpoints.first().expect("no Application nodes.");
-    let app_runtime = util::runtime_from_url(app_endpoint.url.clone());
+    let app_runtime = util::runtime_from_url(
+        app_endpoint.url.clone(),
+        app_endpoint.effective_canister_id(),
+    );
     rt.block_on(app_endpoint.assert_ready(&ctx));
     info!(&logger, "NNS endpoint reachable over http.");
 
@@ -153,7 +156,10 @@ pub fn test(env: TestEnv) {
     // recover the killed node and observe it caught up on state
     info!(&logger, "Restarting the killed node now.");
     app_endpoints[1].start_node(ctx.logger.clone());
-    let restarted_endpoint = &util::runtime_from_url(app_endpoints[1].url.clone());
+    let restarted_endpoint = &util::runtime_from_url(
+        app_endpoints[1].url.clone(),
+        app_endpoints[1].effective_canister_id(),
+    );
     let restarted_canister_endpoint = Canister::new(
         restarted_endpoint,
         CanisterId::new(PrincipalId::from(cid)).unwrap(),

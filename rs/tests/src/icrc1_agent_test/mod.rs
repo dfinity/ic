@@ -50,6 +50,7 @@ pub fn test(env: TestEnv) {
                 endpoint.url.clone(),
                 Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
             ),
+            effective_canister_id: endpoint.effective_canister_id(),
         });
 
         let agent = assert_create_agent(endpoint.url.as_str()).await;

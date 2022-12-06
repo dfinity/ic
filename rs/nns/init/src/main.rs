@@ -3,6 +3,7 @@ use clap::Parser;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client::{Agent, Sender};
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance::pb::v1::Governance as GovernanceProto;
 use ic_nns_init::make_hsm_sender;
 use ic_nns_init::set_up_env_vars_for_all_canisters;
@@ -195,7 +196,10 @@ async fn main() {
 
         // Don't let the "Test" distract you -- the RemoteTestRuntime is simply a
         // client-side view of a subnet.
-        let runtime = Runtime::Remote(RemoteTestRuntime { agent });
+        let runtime = Runtime::Remote(RemoteTestRuntime {
+            agent,
+            effective_canister_id: REGISTRY_CANISTER_ID.into(),
+        });
         NnsCanisters::set_up(&runtime, init_payloads).await;
         eprintln!(
             "{}All NNS canisters have been set up on the replica with {}",

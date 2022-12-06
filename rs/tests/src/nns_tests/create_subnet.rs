@@ -132,7 +132,7 @@ pub fn test(env: TestEnv) {
         let version = get_software_version_from_snapshot(&endpoint)
             .await
             .expect("could not obtain replica software version");
-        let nns = runtime_from_url(endpoint.get_public_url());
+        let nns = runtime_from_url(endpoint.get_public_url(), endpoint.effective_canister_id());
         let governance = nns::get_governance_canister(&nns);
 
         let proposal_id =

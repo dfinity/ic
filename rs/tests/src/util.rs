@@ -67,12 +67,15 @@ fn get_identity() -> ic_agent::identity::BasicIdentity {
 /// tempting to pack a [Runtime] and a [Canister<'_>] into the same struct but
 /// this can lead to inconsistent data if we install a canister from one node's
 /// runtime but delete it from another node's runtime.
-pub fn runtime_from_url(url: Url) -> Runtime {
+pub fn runtime_from_url(url: Url, effective_canister_id: PrincipalId) -> Runtime {
     let agent = DeprecatedAgent::new(
         url,
         Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
     );
-    Runtime::Remote(RemoteTestRuntime { agent })
+    Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id,
+    })
 }
 
 /// Provides an abstraction to the universal canister.

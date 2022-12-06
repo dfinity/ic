@@ -75,7 +75,10 @@ pub fn test(env: TestEnv) {
     block_on(unassigned_node_endpoint.assert_ready(ctx));
 
     // Get the governance canister for sending proposals to.
-    let nns_runtime = util::runtime_from_url(nns_endpoint.url.clone());
+    let nns_runtime = util::runtime_from_url(
+        nns_endpoint.url.clone(),
+        nns_endpoint.effective_canister_id(),
+    );
     let governance_canister = canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
     block_on(async {

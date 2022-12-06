@@ -479,7 +479,7 @@ pub fn test_threshold_ecdsa_signature_same_subnet(env: TestEnv) {
     let app_node = app_subnet.nodes().next().unwrap();
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
     block_on(async move {
-        let nns = runtime_from_url(nns_node.get_public_url());
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID1)).await;
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
@@ -519,7 +519,7 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(env: TestEnv) {
     let agent_for_app_subnet_1 =
         node_from_app_subnet_1.with_default_agent(|agent| async move { agent });
     block_on(async move {
-        let nns = runtime_from_url(nns_node.get_public_url());
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         enable_ecdsa_signing(&governance, app_subnet_2.subnet_id, make_key(KEY_ID2)).await;
         let msg_can = MessageCanister::new(
@@ -558,7 +558,7 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(env: TestEnv) {
     let app_node = app_subnet.nodes().next().unwrap();
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
     block_on(async move {
-        let nns = runtime_from_url(nns_node.get_public_url());
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID1)).await;
 
@@ -608,7 +608,7 @@ pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(env: TestEnv) {
     let nns_node = nns_subnet.nodes().next().unwrap();
     let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
     block_on(async move {
-        let nns = runtime_from_url(nns_node.get_public_url());
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID2)).await;
         let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
@@ -674,7 +674,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
 
         info!(log, "2. Enabling signing and verifying that it works.");
 
-        let nns = runtime_from_url(nns_node.get_public_url());
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID2)).await;
 
@@ -825,7 +825,7 @@ pub fn test_threshold_ecdsa_signature_timeout(env: TestEnv) {
     let app_node = app_subnet.nodes().next().unwrap();
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
     block_on(async move {
-        let nns = runtime_from_url(nns_node.get_public_url());
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         enable_ecdsa_signing_with_timeout(
             &governance,

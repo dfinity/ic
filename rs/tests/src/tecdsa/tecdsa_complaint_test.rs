@@ -66,7 +66,10 @@ pub fn test(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
-        let nns_runtime = runtime_from_url(nns_honest_node.get_public_url());
+        let nns_runtime = runtime_from_url(
+            nns_honest_node.get_public_url(),
+            nns_honest_node.effective_canister_id(),
+        );
         let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
         enable_ecdsa_signing(&governance, nns_subnet.subnet_id, make_key(KEY_ID1)).await;
 

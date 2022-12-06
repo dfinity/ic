@@ -70,6 +70,7 @@ pub(crate) async fn create_canister(
     debug!("Create canister with agent: {:?}", agent);
     let creation_result = agent
         .execute_update(
+            &IC_00, // TODO(RUN-496): replace with a proper effective canister id
             &IC_00,
             ic_ic00_types::Method::ProvisionalCreateCanisterWithCycles,
             ProvisionalCreateCanisterWithCyclesArgs::new(Some(u64::MAX as u128), None).encode(),

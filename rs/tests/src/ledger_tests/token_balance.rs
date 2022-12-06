@@ -88,7 +88,10 @@ pub fn test(env: TestEnv) {
 
         // upgrade the `lifeline` canister, since it is the minting
         // canister as tracked by the ledger
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+        let nns = runtime_from_url(
+            nns_endpoint.url.clone(),
+            nns_endpoint.effective_canister_id(),
+        );
         let nns_agent = assert_create_agent(nns_endpoint.url.as_str()).await;
         let lifeline = UniversalCanister::upgrade(&nns, &nns_agent, &LIFELINE_CANISTER_ID).await;
 

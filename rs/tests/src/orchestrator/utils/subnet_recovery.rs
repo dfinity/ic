@@ -230,7 +230,7 @@ pub(crate) fn enable_ecdsa_on_nns(
     logger: &Logger,
 ) -> VerifyingKey {
     info!(logger, "Enabling ECDSA signatures.");
-    let nns_runtime = runtime_from_url(nns_node.get_public_url());
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
     block_on(add_ecdsa_key_with_timeout_and_rotation_period(
@@ -257,7 +257,7 @@ pub(crate) fn enable_ecdsa_signing_on_subnet(
     logger: &Logger,
 ) -> VerifyingKey {
     info!(logger, "Enabling signing on subnet {}.", subnet_id);
-    let nns_runtime = runtime_from_url(nns_node.get_public_url());
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
     let enable_signing_payload = UpdateSubnetPayload {
@@ -287,7 +287,7 @@ pub(crate) fn enable_ecdsa_on_new_subnet(
     enable_signing: bool,
     logger: &Logger,
 ) -> VerifyingKey {
-    let nns_runtime = runtime_from_url(nns_node.get_public_url());
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
     let root_subnet_id = env.topology_snapshot().root_subnet_id();
 
@@ -360,7 +360,7 @@ pub(crate) fn disable_ecdsa_on_subnet(
     canister: &MessageCanister,
     logger: &Logger,
 ) {
-    let nns_runtime = runtime_from_url(nns_node.get_public_url());
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
     let disable_signing_payload = UpdateSubnetPayload {

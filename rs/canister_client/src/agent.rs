@@ -228,10 +228,11 @@ impl Agent {
         }
     }
 
-    /// Calls the query method 'method' on the canister located at 'url',
+    /// Calls the update method 'method' on the given canister,
     /// optionally with 'arguments'.
     pub async fn execute_update<S: ToString>(
         &self,
+        effective_canister_id: &CanisterId,
         canister_id: &CanisterId,
         method: S,
         arguments: Vec<u8>,
@@ -245,7 +246,7 @@ impl Agent {
         self.http_client
             .post_with_response(
                 &self.url,
-                &update_path(*canister_id),
+                &update_path(*effective_canister_id),
                 http_body,
                 tokio::time::Instant::from_std(deadline),
             )
@@ -260,7 +261,7 @@ impl Agent {
             sleep_until(tokio::time::Instant::from_std(next_poll_time)).await;
             next_poll_time = Instant::now() + backoff.next_backoff().expect("Backoff interval MUST be available. If you see this error the backoff is misconfigured.");
             match self
-                .wait_ingress(request_id.clone(), deadline, canister_id)
+                .wait_ingress(request_id.clone(), deadline, effective_canister_id)
                 .await
             {
                 Ok(request_status) => match request_status.status.as_ref() {
@@ -300,7 +301,7 @@ impl Agent {
         &self,
         request_id: MessageId,
         deadline: Instant,
-        canister_id: &CanisterId,
+        effective_canister_id: &CanisterId,
     ) -> Result<CBOR, String> {
         let path = Path::new(vec!["request_status".into(), request_id.into()]);
         let status_request_body = self
@@ -311,7 +312,7 @@ impl Agent {
             .http_client
             .post_with_response(
                 &self.url,
-                &read_state_path(*canister_id),
+                &read_state_path(*effective_canister_id),
                 status_request_body,
                 tokio::time::Instant::from_std(deadline),
             )
@@ -327,10 +328,10 @@ impl Agent {
         &self,
         request_id: MessageId,
         deadline: Instant,
-        canister_id: &CanisterId,
+        effective_canister_id: &CanisterId,
     ) -> Result<RequestStatus, String> {
         let cbor = self
-            .request_status_once(request_id.clone(), deadline, canister_id)
+            .request_status_once(request_id.clone(), deadline, effective_canister_id)
             .await?;
         parse_read_state_response(&request_id, cbor)
     }
@@ -369,8 +370,16 @@ impl Agent {
 
     // Ships a binary wasm module to a canister.
     pub async fn install_canister(&self, install_args: InstallCodeArgs) -> Result<(), String> {
-        self.execute_update(&IC_00, Method::InstallCode, install_args.encode(), vec![])
-            .await
-            .map(|_| ())
+        let effective_canister_id: CanisterId =
+            CanisterId::try_from(install_args.canister_id).unwrap();
+        self.execute_update(
+            &effective_canister_id,
+            &IC_00,
+            Method::InstallCode,
+            install_args.encode(),
+            vec![],
+        )
+        .await
+        .map(|_| ())
     }
 }

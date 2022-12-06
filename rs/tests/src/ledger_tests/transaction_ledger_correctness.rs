@@ -91,12 +91,18 @@ pub fn test(env: TestEnv) {
         let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
         nns_endpoint.assert_ready(ctx).await;
         // upgrade the minting canister
-        let nns = runtime_from_url(nns_endpoint.url.clone());
+        let nns = runtime_from_url(
+            nns_endpoint.url.clone(),
+            nns_endpoint.effective_canister_id(),
+        );
         holder::upgrade(&nns, &LIFELINE_CANISTER_ID).await;
 
         let root_endpoint = get_random_non_root_node_endpoint(&handle, &mut rng);
         root_endpoint.assert_ready(ctx).await;
-        let rt = runtime_from_url(root_endpoint.url.clone());
+        let rt = runtime_from_url(
+            root_endpoint.url.clone(),
+            root_endpoint.effective_canister_id(),
+        );
         let agent = create_agent(root_endpoint.url.as_str())
             .await
             .expect("could not create agent?");

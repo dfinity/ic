@@ -268,8 +268,13 @@ pub enum Runtime {
 impl<'a> Runtime {
     /// Returns a client-side view of the management canister.
     pub fn get_management_canister(&'a self) -> Canister<'a> {
+        let effective_canister_id = match self {
+            Runtime::Remote(r) => r.effective_canister_id,
+            _ => PrincipalId::default(),
+        };
         Canister {
             runtime: self,
+            effective_canister_id,
             canister_id: IC_00,
             wasm: None,
         }
@@ -305,9 +310,11 @@ impl<'a> Runtime {
                 ),),
             )
             .await;
+        let canister_id = canister_id_record?.get_canister_id();
         Ok(Canister {
             runtime: self,
-            canister_id: canister_id_record?.get_canister_id(),
+            effective_canister_id: canister_id.into(),
+            canister_id,
             wasm: None,
         })
     }
@@ -338,6 +345,7 @@ impl<'a> Runtime {
 /// it gets, depending on how the target was set up.
 pub struct RemoteTestRuntime {
     pub agent: Agent,
+    pub effective_canister_id: PrincipalId,
 }
 
 impl RemoteTestRuntime {
@@ -426,6 +434,7 @@ where
 #[derive(Clone)]
 pub struct Canister<'a> {
     runtime: &'a Runtime,
+    effective_canister_id: PrincipalId,
     canister_id: CanisterId,
 
     // If the canister has been installed, then this is the code that was used.
@@ -444,9 +453,14 @@ impl<'a> Canister<'a> {
     pub fn new(runtime: &'a Runtime, canister_id: CanisterId) -> Self {
         Self {
             runtime,
+            effective_canister_id: canister_id.into(),
             canister_id,
             wasm: None,
         }
+    }
+
+    pub fn effective_canister_id(&self) -> PrincipalId {
+        self.effective_canister_id
     }
 
     pub fn canister_id(&self) -> CanisterId {
@@ -458,13 +472,14 @@ impl<'a> Canister<'a> {
     }
 
     pub fn from_vec8(runtime: &'a Runtime, canister_id_vec8: Vec<u8>) -> Canister<'a> {
+        let canister_id = CanisterId::new(
+            PrincipalId::try_from(&canister_id_vec8[..]).expect("failed to decode principal id"),
+        )
+        .unwrap();
         Self {
             runtime,
-            canister_id: CanisterId::new(
-                PrincipalId::try_from(&canister_id_vec8[..])
-                    .expect("failed to decode principal id"),
-            )
-            .unwrap(),
+            effective_canister_id: canister_id.into(),
+            canister_id,
             wasm: None,
         }
     }
@@ -830,6 +845,7 @@ impl<'a> Update<'a> {
                 let ingress_result = c
                     .agent
                     .execute_update(
+                        &CanisterId::try_from(canister.effective_canister_id()).unwrap(),
                         &canister.canister_id(),
                         &self.method_name,
                         payload,
@@ -864,6 +880,7 @@ impl<'a> Update<'a> {
                 let agent_with_sender = r.agent.new_for_test(sender.clone());
                 let ingress_result = agent_with_sender
                     .execute_update(
+                        &CanisterId::try_from(canister.effective_canister_id()).unwrap(),
                         &canister.canister_id(),
                         &self.method_name,
                         payload,

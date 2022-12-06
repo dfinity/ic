@@ -72,7 +72,10 @@ pub fn test(env: TestEnv) {
     // Assert that `update` message can be sent to the test canister.
     block_on(assert_canister_update_call(true, &test_canister_id, &agent));
     // Submit a proposal to the Governance Canister to uninstall the test canister.
-    let nns_runtime = runtime_from_url(endpoints[0].url.clone());
+    let nns_runtime = runtime_from_url(
+        endpoints[0].url.clone(),
+        endpoints[0].effective_canister_id(),
+    );
     let governance_canister =
         canister_test::Canister::new(&nns_runtime, ic_nns_constants::GOVERNANCE_CANISTER_ID);
     let proposal_payload = CanisterIdRecord {

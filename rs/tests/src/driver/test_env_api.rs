@@ -153,7 +153,9 @@ use ic_fondue::ic_manager::handle::READY_RESPONSE_TIMEOUT;
 use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
@@ -1440,7 +1442,10 @@ pub fn install_nns_canisters(
             url,
             Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
         );
-        let runtime = Runtime::Remote(RemoteTestRuntime { agent });
+        let runtime = Runtime::Remote(RemoteTestRuntime {
+            agent,
+            effective_canister_id: REGISTRY_CANISTER_ID.into(),
+        });
 
         NnsCanisters::set_up(&runtime, init_payloads.build()).await;
     });

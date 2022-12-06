@@ -375,7 +375,10 @@ async fn execute_proposal<T: Clone + CandidType>(
         Proposal::Remove(payload, func) => (payload, func),
         Proposal::Update(payload, func) => (payload, func),
     };
-    let nns = util::runtime_from_url(nns_endpoint.url.clone());
+    let nns = util::runtime_from_url(
+        nns_endpoint.url.clone(),
+        nns_endpoint.effective_canister_id(),
+    );
     let governance = crate::nns::get_governance_canister(&nns);
     let proposal_id =
         submit_external_proposal_with_test_id(&governance, function, proposal_payload.clone())

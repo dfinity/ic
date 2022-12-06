@@ -120,7 +120,7 @@ pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapsh
 }
 
 pub fn get_runtime_from_node(node: &IcNodeSnapshot) -> Runtime {
-    util::runtime_from_url(node.get_public_url())
+    util::runtime_from_url(node.get_public_url(), node.effective_canister_id())
 }
 
 pub fn create_proxy_canister<'a>(

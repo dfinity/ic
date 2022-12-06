@@ -204,7 +204,13 @@ impl RegistryCanister {
             .to_vec();
         match self
             .choose_random_agent()
-            .execute_update(&self.canister_id, "atomic_mutate", payload, nonce)
+            .execute_update(
+                &self.canister_id,
+                &self.canister_id,
+                "atomic_mutate",
+                payload,
+                nonce,
+            )
             .await
         {
             Ok(result) => match result {
