@@ -10,7 +10,9 @@ use std::fmt;
 
 // See https://en.bitcoin.it/wiki/List_of_address_prefixes.
 const BTC_MAINNET_PREFIX: u8 = 0;
+const BTC_MAINNET_P2SH_PREFIX: u8 = 5;
 const BTC_TESTNET_PREFIX: u8 = 111;
+const BTC_TESTNET_P2SH_PREFIX: u8 = 196;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BitcoinAddress {
@@ -19,6 +21,8 @@ pub enum BitcoinAddress {
     P2wpkhV0([u8; 20]),
     /// Pay to public key hash address.
     P2pkh([u8; 20]),
+    /// Pay to script hash address.
+    P2sh([u8; 20]),
 }
 
 impl BitcoinAddress {
@@ -26,7 +30,20 @@ impl BitcoinAddress {
     pub fn display(&self, network: Network) -> String {
         match self {
             Self::P2wpkhV0(pkhash) => network_and_pkhash_to_p2wpkh(network, pkhash),
-            Self::P2pkh(pkhash) => network_and_pkhash_to_p2pkh(network, pkhash),
+            Self::P2pkh(pkhash) => version_and_hash_to_address(
+                match network {
+                    Network::Mainnet => BTC_MAINNET_PREFIX,
+                    Network::Testnet | Network::Regtest => BTC_TESTNET_PREFIX,
+                },
+                pkhash,
+            ),
+            Self::P2sh(script_hash) => version_and_hash_to_address(
+                match network {
+                    Network::Mainnet => BTC_MAINNET_P2SH_PREFIX,
+                    Network::Testnet | Network::Regtest => BTC_TESTNET_P2SH_PREFIX,
+                },
+                script_hash,
+            ),
         }
     }
 
@@ -35,6 +52,8 @@ impl BitcoinAddress {
         // See https://en.bitcoin.it/wiki/Base58Check_encoding#Version_bytes.
         match address.chars().next() {
             Some('1') => parse_base58_address(address, network),
+            Some('2') => parse_base58_address(address, network),
+            Some('3') => parse_base58_address(address, network),
             Some('m') => parse_base58_address(address, network),
             Some('n') => parse_base58_address(address, network),
             Some('b') => parse_bip173_address(address, network),
@@ -115,15 +134,10 @@ pub fn network_and_pkhash_to_p2wpkh(network: Network, pkhash: &[u8; 20]) -> Stri
     bech32::encode(hrp, data, bech32::Variant::Bech32).unwrap()
 }
 
-pub fn network_and_pkhash_to_p2pkh(network: Network, pkhash: &[u8; 20]) -> String {
+pub fn version_and_hash_to_address(version: u8, hash: &[u8; 20]) -> String {
     let mut buf = Vec::with_capacity(25);
-    let prefix = match network {
-        Network::Mainnet => BTC_MAINNET_PREFIX,
-        Network::Testnet => BTC_TESTNET_PREFIX,
-        Network::Regtest => BTC_TESTNET_PREFIX,
-    };
-    buf.push(prefix);
-    buf.extend_from_slice(pkhash);
+    buf.push(version);
+    buf.extend_from_slice(hash);
     let sha256d = Sha256::hash(&Sha256::hash(&buf));
     buf.extend_from_slice(&sha256d[0..4]);
     bs58::encode(&buf).into_string()
@@ -201,7 +215,7 @@ fn parse_base58_address(
         return Err(ParseAddressError::NoData);
     }
 
-    // P2PKH address
+    // P2PKH or P2SH address
     // 1 byte address type + 20 bytes of PK hash + 4 bytes of checksum
     if bytes.len() != 25 {
         return Err(ParseAddressError::MalformedAddress(format!(
@@ -240,6 +254,26 @@ fn parse_base58_address(
         let mut pkhash: [u8; 20] = [0; 20];
         pkhash.copy_from_slice(&bytes[1..21]);
         return Ok(BitcoinAddress::P2pkh(data));
+    }
+
+    if bytes[0] == BTC_MAINNET_P2SH_PREFIX {
+        if network != Network::Mainnet {
+            return Err(ParseAddressError::WrongNetwork {
+                expected: network,
+                actual: Network::Mainnet,
+            });
+        }
+        return Ok(BitcoinAddress::P2sh(data));
+    }
+
+    if bytes[0] == BTC_TESTNET_P2SH_PREFIX {
+        if network != Network::Testnet && network != Network::Regtest {
+            return Err(ParseAddressError::WrongNetwork {
+                expected: network,
+                actual: Network::Testnet,
+            });
+        }
+        return Ok(BitcoinAddress::P2sh(data));
     }
 
     Err(ParseAddressError::UnsupportedAddressType)
