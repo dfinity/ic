@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::{fs::File, sync::Arc};
 
 use ic_types::NodeId;
+use service_discovery::job_types::JobType;
 use slog::{info, warn};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpSocket;
@@ -20,7 +21,7 @@ pub async fn scrape_logs<F>(
     filter: Option<String>,
     out_file: File,
     shutdown_signal: F,
-    job_name: &'static str,
+    job: JobType,
 ) where
     F: Future<Output = ()>,
 {
@@ -43,7 +44,7 @@ pub async fn scrape_logs<F>(
         let log = log.clone();
         async move {
             while should_run.load(Ordering::Relaxed) {
-                let mut cur_targets = match scraper.get_target_groups(job_name) {
+                let mut cur_targets = match scraper.get_target_groups(job) {
                     Ok(targets) => targets,
                     Err(e) => {
                         warn!(log, "Could not fetch targets: {:?}", e);

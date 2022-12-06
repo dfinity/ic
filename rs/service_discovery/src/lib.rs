@@ -36,15 +36,12 @@ use ic_types::{
     },
     NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
+use job_types::{JobType, NodeOS};
 use thiserror::Error;
-
-pub const REPLICA_JOB_NAME: &str = "replica";
-pub const HOST_NODE_EXPORTER_JOB_NAME: &str = "host_node_exporter";
-pub const NODE_EXPORTER_JOB_NAME: &str = "node_exporter";
-pub const ORCHESTRATOR_JOB_NAME: &str = "orchestrator";
 
 pub mod config_generator;
 pub mod file_sd;
+pub mod job_types;
 pub mod mainnet_registry;
 pub mod metrics;
 pub mod poll_loop;
@@ -60,7 +57,7 @@ pub trait IcServiceDiscovery: Send + Sync {
     /// or `host_node_exporter`.
     fn get_target_groups(
         &self,
-        job_name: &str,
+        job_name: JobType,
     ) -> Result<BTreeSet<TargetGroup>, IcServiceDiscoveryError>;
 }
 
@@ -94,7 +91,7 @@ pub struct IcServiceDiscoveryImpl {
     /// calling `load_new_scraping_targets`.
     registries: Arc<RwLock<BTreeMap<String, LocalRegistry>>>,
 
-    jobs: HashMap<&'static str, u16>,
+    jobs: HashMap<JobType, u16>,
 }
 
 impl IcServiceDiscoveryImpl {
@@ -104,7 +101,7 @@ impl IcServiceDiscoveryImpl {
     pub fn new<P: AsRef<Path>>(
         ic_scraping_targets_dir: P,
         registry_query_timeout: Duration,
-        jobs: HashMap<&'static str, u16>,
+        jobs: HashMap<JobType, u16>,
     ) -> Result<Self, IcServiceDiscoveryError> {
         let ic_scraping_targets_dir = PathBuf::from(ic_scraping_targets_dir.as_ref());
         if !ic_scraping_targets_dir.is_dir() {
@@ -311,18 +308,18 @@ impl IcServiceDiscoveryImpl {
 impl IcServiceDiscovery for IcServiceDiscoveryImpl {
     fn get_target_groups(
         &self,
-        job_name: &str,
+        job: JobType,
     ) -> Result<BTreeSet<TargetGroup>, IcServiceDiscoveryError> {
         let mut mapping: Option<Box<dyn Fn(SocketAddr) -> Option<SocketAddr>>> = None;
 
-        if job_name == HOST_NODE_EXPORTER_JOB_NAME {
+        if job == JobType::NodeExporter(NodeOS::Host) {
             mapping = Some(Box::new(|sockaddr: SocketAddr| {
                 guest_to_host_address((set_port(9100))(sockaddr))
             }));
         }
 
-        for (job, port) in &self.jobs {
-            if *job == job_name {
+        for (listed_job, port) in &self.jobs {
+            if *listed_job == job {
                 mapping = Some(some_after(set_port(*port)));
                 break;
             }
@@ -330,7 +327,7 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
 
         if mapping.is_none() {
             return Err(IcServiceDiscoveryError::JobNameNotFound {
-                job_name: job_name.to_string(),
+                job_name: job.to_string(),
             });
         }
 
@@ -348,7 +345,7 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
             .filter_map(|target_group| {
                 // replica targets are only exposed if they are assigned to a
                 // subnet (i.e. if the subnet id is set)
-                if job_name != REPLICA_JOB_NAME || target_group.subnet_id.is_some() {
+                if job != JobType::Replica || target_group.subnet_id.is_some() {
                     let targets: BTreeSet<_> = target_group
                         .targets
                         .into_iter()
@@ -493,12 +490,12 @@ mod tests {
         let tempdir = TempDir::new().unwrap();
         let ic_dir = PathBuf::from(tempdir.path()).join("mainnet");
         let _store = create_local_store_from_changelog(ic_dir, get_mainnet_delta_6d_c1());
-        let mut jobs: HashMap<&'static str, u16> = HashMap::new();
-        jobs.insert("replica", 9090);
+        let mut jobs: HashMap<JobType, u16> = HashMap::new();
+        jobs.insert(JobType::Replica, 9090);
 
         let ic_scraper = IcServiceDiscoveryImpl::new(tempdir.path(), QUERY_TIMEOUT, jobs).unwrap();
         ic_scraper.load_new_ics().unwrap();
-        let target_groups = ic_scraper.get_target_groups("replica").unwrap();
+        let target_groups = ic_scraper.get_target_groups(JobType::Replica).unwrap();
 
         let nns_targets: HashSet<_> = target_groups
             .iter()

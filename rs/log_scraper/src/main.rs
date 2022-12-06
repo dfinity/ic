@@ -12,6 +12,7 @@ use ic_config::metrics::Exporter;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
 use service_discovery::config_generator::ConfigGenerator;
+use service_discovery::job_types::{JobType, NodeOS};
 use service_discovery::{
     file_sd::FileSd,
     mainnet_registry::{create_local_store_from_changelog, get_mainnet_delta_6d_c1},
@@ -23,8 +24,6 @@ use service_discovery::{IcServiceDiscovery, IcServiceDiscoveryImpl};
 use slog::{info, o, Drain, Logger};
 
 mod log_scraper;
-
-pub const NODE_EXPORTER: &str = "node_exporter";
 
 fn main() -> Result<()> {
     let cli_args = CliArgs::parse().validate()?;
@@ -59,13 +58,13 @@ fn main() -> Result<()> {
             "Writing service discovery files to base dir: {:?}", file_sd_base_path
         );
         let file_sd = FileSd::new(file_sd_base_path);
-        for job_name in get_jobs()
+        for job in get_jobs()
             .into_iter()
-            .map(|(job, _)| job)
-            .collect::<Vec<&str>>()
+            .map(|(j, _)| j)
+            .collect::<Vec<JobType>>()
         {
-            let targets = ic_discovery.get_target_groups(job_name)?;
-            file_sd.write_sd_config(job_name, targets)?;
+            let targets = ic_discovery.get_target_groups(job)?;
+            file_sd.write_sd_config(job, targets)?;
         }
         Some(Box::new(file_sd) as Box<dyn ConfigGenerator>)
     } else {
@@ -112,7 +111,7 @@ fn main() -> Result<()> {
             cli_args.gatewayd_logs_target_filter,
             file,
             shutdown_signal.clone(),
-            NODE_EXPORTER,
+            JobType::NodeExporter(NodeOS::Guest),
         )))
     } else {
         None
@@ -303,10 +302,10 @@ fn check_logs_filter_format(log_filter: &str) -> Result<()> {
     Ok(())
 }
 
-fn get_jobs() -> HashMap<&'static str, u16> {
-    let mut x: HashMap<&str, u16> = HashMap::new();
+fn get_jobs() -> HashMap<JobType, u16> {
+    let mut x: HashMap<JobType, u16> = HashMap::new();
 
-    x.insert(NODE_EXPORTER, 9100);
+    x.insert(JobType::NodeExporter(NodeOS::Guest), 9100);
 
     x
 }

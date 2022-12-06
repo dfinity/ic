@@ -11,7 +11,7 @@ use std::{
 use crate::vector_configuration::VectorServiceDiscoveryConfigEnriched;
 
 use regex::Regex;
-use service_discovery::{config_generator::ConfigGenerator, TargetGroup};
+use service_discovery::{config_generator::ConfigGenerator, job_types::JobType, TargetGroup};
 
 pub trait TargetGroupFilter: Send + Sync + Debug {
     fn filter(&self, target_groups: TargetGroup) -> bool;
@@ -86,15 +86,15 @@ impl ConfigWriter {
     /// same arguments will have no effect.
     pub fn write_config(
         &self,
-        job_name: &str,
+        job: JobType,
         target_groups: BTreeSet<TargetGroup>,
     ) -> std::io::Result<()> {
         let mut last_targets = self.last_targets.write().unwrap();
-        let last_job_targets = last_targets.entry(job_name.to_string()).or_default();
+        let last_job_targets = last_targets.entry(job.to_string()).or_default();
         if last_job_targets == &target_groups {
             return Ok(());
         }
-        let target_path = self.base_directory.join(format!("{}.json", job_name));
+        let target_path = self.base_directory.join(format!("{}.json", job));
 
         let filtered_target_groups: BTreeSet<TargetGroup> = target_groups
             .clone()
@@ -112,7 +112,7 @@ impl ConfigWriter {
                 )
             })
         })?;
-        last_targets.insert(job_name.to_string(), target_groups);
+        last_targets.insert(job.to_string(), target_groups);
         Ok(())
     }
 }
@@ -120,9 +120,9 @@ impl ConfigWriter {
 impl ConfigGenerator for ConfigWriter {
     fn generate_config(
         &self,
-        job_name: &str,
+        job: JobType,
         target_groups: BTreeSet<TargetGroup>,
     ) -> std::io::Result<()> {
-        self.write_config(job_name, target_groups)
+        self.write_config(job, target_groups)
     }
 }

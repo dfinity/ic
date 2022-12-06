@@ -13,11 +13,11 @@ use ic_metrics::MetricsRegistry;
 use regex::Regex;
 use service_discovery::{
     config_generator::ConfigGenerator,
+    job_types::{JobType, NodeOS},
     mainnet_registry::{create_local_store_from_changelog, get_mainnet_delta_6d_c1},
     metrics::Metrics,
     poll_loop::make_poll_loop,
-    IcServiceDiscoveryImpl, HOST_NODE_EXPORTER_JOB_NAME, NODE_EXPORTER_JOB_NAME,
-    ORCHESTRATOR_JOB_NAME, REPLICA_JOB_NAME,
+    IcServiceDiscoveryImpl,
 };
 use slog::{info, o, Drain, Logger};
 
@@ -26,13 +26,12 @@ use crate::config_writer::{NodeIDRegexFilter, TargetGroupFilter, TargetGroupFilt
 mod config_writer;
 mod vector_configuration;
 
-// TODO Change jobs to make them an enum
-fn get_jobs() -> HashMap<&'static str, u16> {
-    let mut x: HashMap<&str, u16> = HashMap::new();
-    x.insert(NODE_EXPORTER_JOB_NAME, 9100);
-    x.insert(HOST_NODE_EXPORTER_JOB_NAME, 9100);
-    x.insert(ORCHESTRATOR_JOB_NAME, 9091);
-    x.insert(REPLICA_JOB_NAME, 9090);
+fn get_jobs() -> HashMap<JobType, u16> {
+    let mut x: HashMap<JobType, u16> = HashMap::new();
+    x.insert(JobType::NodeExporter(NodeOS::Guest), 9100);
+    x.insert(JobType::NodeExporter(NodeOS::Host), 9100);
+    x.insert(JobType::Orchestrator, 9091);
+    x.insert(JobType::Replica, 9090);
     x
 }
 

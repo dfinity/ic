@@ -3,10 +3,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::config_generator::ConfigGenerator;
 use crate::metrics::Metrics;
 use crate::IcServiceDiscovery;
 use crate::IcServiceDiscoveryImpl;
+use crate::{config_generator::ConfigGenerator, job_types::JobType};
 use crossbeam::select;
 use crossbeam_channel::Receiver;
 use slog::{info, warn};
@@ -19,7 +19,7 @@ pub fn make_poll_loop(
     poll_interval: Duration,
     metrics: Metrics,
     config_generator: Option<Box<dyn ConfigGenerator>>,
-    jobs: Vec<&'static str>,
+    jobs: Vec<JobType>,
 ) -> impl FnMut() {
     let interval = crossbeam::channel::tick(poll_interval);
     move || {
@@ -52,20 +52,22 @@ pub fn make_poll_loop(
                 err = true;
             }
             if let Some(config_generator) = &config_generator {
-                for job_name in &jobs {
-                    let targets = match ic_discovery.get_target_groups(job_name) {
+                for job in &jobs {
+                    let targets = match ic_discovery.get_target_groups(*job) {
                         Ok(t) => t,
                         Err(e) => {
-                            warn!(
-                                log,
-                                "Failed to retrieve targets for job {}: {:?}", job_name, e
-                            );
+                            warn!(log, "Failed to retrieve targets for job {}: {:?}", job, e);
                             err = true;
                             continue;
                         }
                     };
-                    if let Err(e) = config_generator.generate_config(job_name, targets) {
-                        warn!(log, "Failed to write targets for job {}: {:?}", job_name, e);
+                    if let Err(e) = config_generator.generate_config(*job, targets) {
+                        warn!(
+                            log,
+                            "Failed to write targets for job {}: {:?}",
+                            &job.to_string(),
+                            e
+                        );
                         err = true;
                     }
                 }
