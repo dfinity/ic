@@ -26,8 +26,6 @@ use std::io::BufReader;
 
 use crate::{call_dfx, get_identity, hex_encode_candid, DeployArgs};
 
-const SNS_CREATION_FEE: u64 = 50_000_000_000_000;
-
 /// If SNS canisters have already been created, return their canister IDs, else create the
 /// SNS canisters and return their canister IDs.
 pub fn lookup_or_else_create_canisters(args: &DeployArgs) -> SnsCanisterIds {
@@ -161,8 +159,8 @@ impl SnsWasmSnsDeployer {
         writeln!(temp_file, "{}", request_idl).expect("Failed to write to temp file");
 
         let output = {
-            let sns_creation_fee = SNS_CREATION_FEE.to_string();
             let wallet_canister = format!("{}", self.wallet_canister);
+            let sns_creation_fee = self.args.with_cycles.to_string();
             let mut args = vec![
                 "canister",
                 "--network",
