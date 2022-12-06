@@ -16,10 +16,12 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::future::{Future, Ready};
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::task::Poll;
 
 use super::{IcServiceDiscovery, IcServiceDiscoveryError, TargetGroup};
+use crate::job_types::JobType;
 use crate::service_discovery_record::ServiceDiscoveryRecord;
 
 pub async fn start_http_server<F>(
@@ -113,7 +115,8 @@ impl Service<Request<Body>> for RestApi {
             s if !s.is_empty() && s[1..].bytes().all(is_ident) => {
                 // strip leading `/`
                 let job_name = &s[1..];
-                let targets = self.scraper.get_target_groups(job_name);
+                let job = JobType::from_str(job_name).unwrap();
+                let targets = self.scraper.get_target_groups(job);
                 self.target_groups_to_response(targets)
             }
             path => {

@@ -8,7 +8,10 @@ use std::{
 };
 
 use super::TargetGroup;
-use crate::{config_generator::ConfigGenerator, service_discovery_record::ServiceDiscoveryRecord};
+use crate::{
+    config_generator::ConfigGenerator, job_types::JobType,
+    service_discovery_record::ServiceDiscoveryRecord,
+};
 
 #[derive(Clone, Debug)]
 pub struct FileSd {
@@ -26,22 +29,22 @@ impl FileSd {
         }
     }
 
-    /// Write configuration files for the job `job_name`.
+    /// Write configuration files for the job.
     ///
     /// The assumption is that no external process manipulates or deletes the written files.
     /// FileSd will memoize the calls. Thus, calling this method twice with the
     /// same arguments will have no effect.
     pub fn write_sd_config(
         &self,
-        job_name: &str,
+        job: JobType,
         p8s_target_groups: BTreeSet<TargetGroup>,
     ) -> std::io::Result<()> {
         let mut last_targets = self.last_targets.write().unwrap();
-        let last_job_targets = last_targets.entry(job_name.to_string()).or_default();
+        let last_job_targets = last_targets.entry(job.to_string()).or_default();
         if last_job_targets == &p8s_target_groups {
             return Ok(());
         }
-        let job_path = self.base_directory.join(job_name);
+        let job_path = self.base_directory.join(job.to_string());
         if !job_path.is_dir() {
             std::fs::create_dir(&job_path)?;
         }
@@ -60,7 +63,7 @@ impl FileSd {
                 )
             })
         })?;
-        last_targets.insert(job_name.to_string(), p8s_target_groups);
+        last_targets.insert(job.to_string(), p8s_target_groups);
         Ok(())
     }
 }
@@ -68,9 +71,9 @@ impl FileSd {
 impl ConfigGenerator for FileSd {
     fn generate_config(
         &self,
-        job_name: &str,
+        job: JobType,
         p8s_target_groups: BTreeSet<TargetGroup>,
     ) -> std::io::Result<()> {
-        self.write_sd_config(job_name, p8s_target_groups)
+        self.write_sd_config(job, p8s_target_groups)
     }
 }
