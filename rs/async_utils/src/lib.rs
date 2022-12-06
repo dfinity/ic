@@ -42,3 +42,19 @@ pub async fn shutdown_signal(log: Logger) {
         }
     }
 }
+
+/// Recommended way of starting a TCP listener given a socket addr. The function
+/// will panic if it cannot start the listener, because the OS error can't be
+/// handled by the caller.
+pub fn start_tcp_listener(local_addr: std::net::SocketAddr) -> tokio::net::TcpListener {
+    let err_msg = format!("Could not start TCP listener at addr = {}", local_addr);
+    let socket = if local_addr.is_ipv6() {
+        tokio::net::TcpSocket::new_v6().expect(&err_msg)
+    } else {
+        tokio::net::TcpSocket::new_v4().expect(&err_msg)
+    };
+    socket.set_reuseaddr(true).expect(&err_msg);
+    socket.set_reuseport(true).expect(&err_msg);
+    socket.bind(local_addr).expect(&err_msg);
+    socket.listen(128).expect(&err_msg)
+}

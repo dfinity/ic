@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.36"
 bytes = "1.2.0"
+ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }

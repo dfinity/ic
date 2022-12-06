@@ -46,7 +46,7 @@ use hyper::{
     client::HttpConnector, server::conn::Http, Body, Client, Request, Response, StatusCode,
 };
 use hyper_tls::HttpsConnector;
-use ic_async_utils::{TcpAcceptor, WrappedTcpStream};
+use ic_async_utils::{start_tcp_listener, TcpAcceptor, WrappedTcpStream};
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -89,10 +89,7 @@ use std::{
     time::Duration,
 };
 use tempfile::NamedTempFile;
-use tokio::{
-    net::TcpListener,
-    time::{sleep, timeout, Instant},
-};
+use tokio::time::{sleep, timeout, Instant};
 use tower::{
     load_shed::LoadShed, service_fn, util::BoxCloneService, BoxError, Service, ServiceBuilder,
     ServiceExt,
@@ -266,10 +263,7 @@ fn create_port_file(path: PathBuf, port: u16) {
     });
 }
 
-/// Creates HTTP server, binds to HTTP port and handles HTTP requests forever.
-/// This ***async*** function ***never*** returns unless binding to the HTTP
-/// port fails.
-/// The function spawns a tokio task per connection.
+/// Creates HTTP server. The function returns only after a TCP listener is bound to a port.
 #[allow(clippy::too_many_arguments)]
 pub fn start_server(
     rt_handle: tokio::runtime::Handle,
@@ -291,116 +285,112 @@ pub fn start_server(
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
 ) {
-    let metrics = HttpHandlerMetrics::new(&metrics_registry);
-
     let listen_addr = config.listen_addr;
-    let port_file_path = config.port_file_path.clone();
+    info!(log, "Starting HTTP server...");
 
+    let _enter = rt_handle.enter();
     // TODO(OR4-60): temporarily listen on [::] so that we accept both IPv4 and
     // IPv6 connections. This requires net.ipv6.bindv6only = 0. Revert this once
     // we have rolled out IPv6 in prometheus and ic_p8s_service_discovery.
     let mut addr = "[::]:8080".parse::<SocketAddr>().unwrap();
     addr.set_port(listen_addr.port());
-    info!(log, "Starting HTTP server...");
+    let tcp_listener = start_tcp_listener(addr);
+
+    if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
+        error!(log, "Replica health status uses locks instead of atomics.");
+    }
+    let metrics = HttpHandlerMetrics::new(&metrics_registry);
+
+    let delegation_from_nns = Arc::new(RwLock::new(None));
+    let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
+    let state_reader_executor = StateReaderExecutor::new(state_reader);
+    let validator_executor = ValidatorExecutor::new(ingress_verifier, log.clone());
+    let call_service = CallService::new_service(
+        log.clone(),
+        metrics.clone(),
+        subnet_id,
+        Arc::clone(&registry_client),
+        validator_executor.clone(),
+        ingress_sender,
+        ingress_filter,
+        malicious_flags.clone(),
+    );
+    let query_service = QueryService::new_service(
+        log.clone(),
+        metrics.clone(),
+        Arc::clone(&health_status),
+        Arc::clone(&delegation_from_nns),
+        validator_executor.clone(),
+        Arc::clone(&registry_client),
+        query_execution_service,
+        malicious_flags.clone(),
+    );
+    let read_state_service = ReadStateService::new_service(
+        log.clone(),
+        metrics.clone(),
+        Arc::clone(&health_status),
+        Arc::clone(&delegation_from_nns),
+        state_reader_executor.clone(),
+        validator_executor,
+        Arc::clone(&registry_client),
+        malicious_flags,
+    );
+    let status_service = StatusService::new_service(
+        log.clone(),
+        config.clone(),
+        nns_subnet_id,
+        Arc::clone(&registry_client),
+        Arc::clone(&health_status),
+    );
+    let dashboard_service =
+        DashboardService::new_service(config.clone(), subnet_type, state_reader_executor.clone());
+    let catchup_service =
+        CatchUpPackageService::new_service(metrics.clone(), consensus_pool_cache.clone());
+
+    let health_status_refresher = HealthStatusRefreshLayer::new(
+        log.clone(),
+        metrics.clone(),
+        Arc::clone(&health_status),
+        consensus_pool_cache,
+        state_reader_executor.clone(),
+    );
+
+    start_server_initialization(
+        log.clone(),
+        metrics.clone(),
+        subnet_id,
+        nns_subnet_id,
+        registry_client.clone(),
+        state_reader_executor,
+        Arc::clone(&delegation_from_nns),
+        Arc::clone(&health_status),
+        rt_handle.clone(),
+    );
+
+    let http_handler = HttpHandler {
+        registry_client,
+        call_service,
+        query_service,
+        status_service,
+        catchup_service,
+        dashboard_service,
+        read_state_service,
+        health_status_refresher,
+    };
+    let main_service = create_main_service(metrics.clone(), http_handler.clone());
+
+    let port_file_path = config.port_file_path;
+    // If addr == 0, then a random port will be assigned. In this case it
+    // is useful to report the randomly assigned port by writing it to a file.
+    let local_addr = tcp_listener.local_addr().unwrap();
+    if let Some(path) = port_file_path {
+        create_port_file(path, local_addr.port());
+    }
+    let tcp_acceptor = TcpAcceptor::new(tcp_listener, MAX_OUTSTANDING_CONNECTIONS);
+
+    let mut http = Http::new();
+    http.http2_max_concurrent_streams(HTTP_MAX_CONCURRENT_STREAMS);
     rt_handle.clone().spawn(async move {
-        let delegation_from_nns = Arc::new(RwLock::new(None));
-        let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
-        let state_reader_executor = StateReaderExecutor::new(state_reader);
-        let validator_executor = ValidatorExecutor::new(ingress_verifier, log.clone());
-
-        if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
-            error!(log, "Replica health status uses locks instead of atomics.");
-        }
-
-        let call_service = CallService::new_service(
-            log.clone(),
-            metrics.clone(),
-            subnet_id,
-            Arc::clone(&registry_client),
-            validator_executor.clone(),
-            ingress_sender,
-            ingress_filter,
-            malicious_flags.clone(),
-        );
-        let query_service = QueryService::new_service(
-            log.clone(),
-            metrics.clone(),
-            Arc::clone(&health_status),
-            Arc::clone(&delegation_from_nns),
-            validator_executor.clone(),
-            Arc::clone(&registry_client),
-            query_execution_service,
-            malicious_flags.clone(),
-        );
-        let read_state_service = ReadStateService::new_service(
-            log.clone(),
-            metrics.clone(),
-            Arc::clone(&health_status),
-            Arc::clone(&delegation_from_nns),
-            state_reader_executor.clone(),
-            validator_executor,
-            Arc::clone(&registry_client),
-            malicious_flags,
-        );
-        let status_service = StatusService::new_service(
-            log.clone(),
-            config.clone(),
-            nns_subnet_id,
-            Arc::clone(&registry_client),
-            Arc::clone(&health_status),
-        );
-        let dashboard_service = DashboardService::new_service(
-            config.clone(),
-            subnet_type,
-            state_reader_executor.clone(),
-        );
-        let catchup_service =
-            CatchUpPackageService::new_service(metrics.clone(), consensus_pool_cache.clone());
-
-        let health_status_refresher = HealthStatusRefreshLayer::new(
-            log.clone(),
-            metrics.clone(),
-            Arc::clone(&health_status),
-            consensus_pool_cache,
-            state_reader_executor.clone(),
-        );
-        info!(log, "Binding HTTP server to address {}", addr);
-        let tcp_listener = TcpListener::bind(addr).await.unwrap();
-
-        start_server_initialization(
-            log.clone(),
-            metrics.clone(),
-            subnet_id,
-            nns_subnet_id,
-            registry_client.clone(),
-            state_reader_executor,
-            Arc::clone(&delegation_from_nns),
-            Arc::clone(&health_status),
-            rt_handle.clone(),
-        );
-
-        let http_handler = HttpHandler {
-            registry_client,
-            call_service,
-            query_service,
-            status_service,
-            catchup_service,
-            dashboard_service,
-            read_state_service,
-            health_status_refresher,
-        };
-        let main_service = create_main_service(metrics.clone(), http_handler.clone());
-
-        // If addr == 0, then a random port will be assigned. In this case it
-        // is useful to report the randomly assigned port by writing it to a file.
-        let local_addr = tcp_listener.local_addr().unwrap();
-        if let Some(path) = port_file_path {
-            create_port_file(path, local_addr.port());
-        }
-        let tcp_acceptor = TcpAcceptor::new(tcp_listener, MAX_OUTSTANDING_CONNECTIONS);
-
-        let mut http = Http::new();
-        http.http2_max_concurrent_streams(HTTP_MAX_CONCURRENT_STREAMS);
         loop {
             let log = log.clone();
             let http = http.clone();

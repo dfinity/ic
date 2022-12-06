@@ -11,8 +11,9 @@ use crate::{
         Connecting, ConnectionRole, ConnectionState, PeerState, QueueSize, ServerPortState,
         TransportImpl,
     },
-    utils::{get_peer_label, start_listener},
+    utils::get_peer_label,
 };
+use ic_async_utils::start_tcp_listener;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
 use ic_interfaces_transport::{
@@ -488,12 +489,7 @@ impl TransportImpl {
         // Creating the listeners requres that we are within a tokio runtime context.
         let _rt_enter_guard = self.rt_handle.enter();
         let server_addr = SocketAddr::new(self.node_ip, self.config.listening_port);
-        let tcp_listener = start_listener(server_addr).unwrap_or_else(|err| {
-            panic!(
-                "Failed to init listener: local_addr = {:?}, error = {:?}",
-                server_addr, err
-            )
-        });
+        let tcp_listener = start_tcp_listener(server_addr);
 
         let channel_id = TransportChannelId::from(self.config.legacy_flow_tag);
         let accept_task = self.spawn_accept_task(channel_id, tcp_listener);

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/async_utils",
     "//rs/config",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces/registry",

@@ -7,6 +7,7 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    "//rs/async_utils",
     "//rs/config",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces/transport",
