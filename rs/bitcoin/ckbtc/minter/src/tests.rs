@@ -2,6 +2,7 @@ use crate::{
     address::BitcoinAddress, build_unsigned_transaction, fake_sign, greedy,
     signature::EncodedSignature, tx, BuildTxError,
 };
+use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_types::{Network, OutPoint, Satoshi, Utxo};
@@ -34,6 +35,39 @@ fn address_to_script_pubkey(address: &BitcoinAddress) -> bitcoin::Script {
     let address_string = address.display(Network::Mainnet);
     let btc_address = bitcoin::Address::from_str(&address_string).unwrap();
     btc_address.script_pubkey()
+}
+
+fn network_to_btc_network(network: Network) -> BtcNetwork {
+    match network {
+        Network::Mainnet => BtcNetwork::Bitcoin,
+        Network::Testnet => BtcNetwork::Testnet,
+        Network::Regtest => BtcNetwork::Regtest,
+    }
+}
+
+fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin::Address {
+    use bitcoin::util::address::{Payload, WitnessVersion};
+    match address {
+        BitcoinAddress::P2wpkhV0(pkhash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V0,
+                program: pkhash.to_vec(),
+            },
+            network: network_to_btc_network(network),
+        },
+        BitcoinAddress::P2pkh(pkhash) => bitcoin::Address {
+            payload: Payload::PubkeyHash(bitcoin::PubkeyHash::from_hash(
+                bitcoin::hashes::Hash::from_slice(pkhash).unwrap(),
+            )),
+            network: network_to_btc_network(network),
+        },
+        BitcoinAddress::P2sh(script_hash) => bitcoin::Address {
+            payload: Payload::ScriptHash(bitcoin::ScriptHash::from_hash(
+                bitcoin::hashes::Hash::from_slice(script_hash).unwrap(),
+            )),
+            network: network_to_btc_network(network),
+        },
+    }
 }
 
 fn as_txid(hash: &[u8]) -> bitcoin::Txid {
@@ -163,6 +197,7 @@ fn arb_address() -> impl Strategy<Value = BitcoinAddress> {
     prop_oneof![
         uniform20(any::<u8>()).prop_map(BitcoinAddress::P2wpkhV0),
         uniform20(any::<u8>()).prop_map(BitcoinAddress::P2pkh),
+        uniform20(any::<u8>()).prop_map(BitcoinAddress::P2sh),
     ]
 }
 
@@ -484,8 +519,6 @@ proptest! {
 
     #[test]
     fn btc_address_parsing_model(mut pkbytes in pvec(any::<u8>(), 32)) {
-        use bitcoin::network::constants::Network as BtcNetwork;
-
         pkbytes.insert(0, 0x02);
 
         let pk_result = bitcoin::PublicKey::from_slice(&pkbytes);
@@ -496,11 +529,7 @@ proptest! {
         let pkhash = tx::hash160(&pkbytes);
 
         for network in [Network::Mainnet, Network::Testnet, Network::Regtest].iter() {
-            let btc_net = match network {
-                Network::Mainnet => BtcNetwork::Bitcoin,
-                Network::Testnet => BtcNetwork::Testnet,
-                Network::Regtest => BtcNetwork::Regtest,
-            };
+            let btc_net = network_to_btc_network(*network);
             let btc_addr = bitcoin::Address::p2pkh(&pk, btc_net);
             prop_assert_eq!(
                 Ok(BitcoinAddress::P2pkh(tx::hash160(&pkbytes))),
@@ -512,6 +541,15 @@ proptest! {
                 Ok(BitcoinAddress::P2wpkhV0(pkhash)),
                 BitcoinAddress::parse(&btc_addr.to_string(), *network)
             );
+        }
+    }
+
+    #[test]
+    fn btc_address_display_model(address in arb_address()) {
+        for network in [Network::Mainnet, Network::Testnet].iter() {
+            let addr_str = address.display(*network);
+            let btc_addr = address_to_btc_address(&address, *network);
+            prop_assert_eq!(btc_addr, bitcoin::Address::from_str(&addr_str).unwrap());
         }
     }
 

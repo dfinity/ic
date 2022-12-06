@@ -28,6 +28,7 @@ mod ops {
     pub const PUSH_20: u8 = 0x14;
     pub const DUP: u8 = 0x76;
     pub const HASH160: u8 = 0xa9;
+    pub const EQUAL: u8 = 0x87;
     pub const EQUALVERIFY: u8 = 0x88;
     pub const CHECKSIG: u8 = 0xac;
 }
@@ -173,6 +174,7 @@ pub fn encode_address_scipt_pubkey(btc_address: &BitcoinAddress, buf: &mut impl 
     match btc_address {
         BitcoinAddress::P2wpkhV0(pkhash) => encode_p2wpkh_script_pubkey(pkhash, buf),
         BitcoinAddress::P2pkh(pkhash) => encode_sighash_script_code(pkhash, buf),
+        BitcoinAddress::P2sh(pkhash) => encode_p2sh_script_code(pkhash, buf),
     }
 }
 
@@ -185,6 +187,14 @@ pub fn encode_sighash_script_code(pkhash: &[u8; 20], buf: &mut impl Buffer) {
     buf.write(&[25, ops::DUP, ops::HASH160, ops::PUSH_20][..]);
     buf.write(pkhash);
     buf.write(&[ops::EQUALVERIFY, ops::CHECKSIG][..]);
+}
+
+/// Encodes a script code for verifying a P2SH payment.
+pub fn encode_p2sh_script_code(script_hash: &[u8; 20], buf: &mut impl Buffer) {
+    // OP_HASH160 <ScriptHash> OP_EQUAL
+    buf.write(&[23, ops::HASH160, ops::PUSH_20][..]);
+    buf.write(script_hash);
+    buf.write(&[ops::EQUAL][..]);
 }
 
 pub struct TxSigHasher<'a> {
