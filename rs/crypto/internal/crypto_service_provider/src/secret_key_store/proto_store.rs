@@ -416,7 +416,8 @@ pub mod tests {
     #[test]
     fn should_deserialize_all_existing_secret_key_stores() {
         for version in SecretKeyStoreVersion::all_versions() {
-            let (_temp_dir, secret_key_store) = existing_secret_key_store_in_temp_dir(&version);
+            let (_temp_dir, secret_key_store) =
+                open_existing_secret_key_store_in_temp_dir(&version);
             let guard = secret_key_store.keys.read();
             assert_eq!(guard.keys().len(), 5);
 
@@ -454,7 +455,7 @@ pub mod tests {
         //TODO CRP-1806: change `supported_versions` to only contain CURRENT_SKS_VERSION
         assert_eq!(CURRENT_SKS_VERSION, 2);
         let (_temp_dir, mut secret_key_store) =
-            existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V3);
+            open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V3);
 
         let seed = 42;
         let (key_id, secret_key) = (make_key_id(seed), make_secret_key(seed));
@@ -477,9 +478,9 @@ pub mod tests {
     }
 
     #[test]
-    fn should_have_scope_for_mega_private() {
+    fn should_have_scope_for_mega_private_key_that_had_no_scope_before_migration() {
         let (_temp_dir, secret_key_store) =
-            existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V2);
+            open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V2);
         let (_csp_key, scope) = with_read_lock(&secret_key_store.keys, |keys| {
             keys.get(&TestVector::mega_encryption().key_id)
                 .map(|(csp_key, scope)| (csp_key.to_owned(), scope.to_owned()))
@@ -490,9 +491,35 @@ pub mod tests {
     }
 
     #[test]
+    fn should_be_idempotent_when_opening_v2_secret_key_store() {
+        let (temp_dir, secret_key_store) =
+            open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V2);
+        let secret_keys_after_first_migration =
+            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+
+        let secret_key_store = ProtoSecretKeyStore::open(
+            temp_dir.path(),
+            secret_key_store
+                .proto_file_path()
+                .file_name()
+                .expect("missing file name")
+                .to_str()
+                .expect("invalid UTF-8 characters"),
+            None,
+        );
+        let secret_keys_after_second_migration =
+            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+
+        assert_eq!(
+            secret_keys_after_first_migration,
+            secret_keys_after_second_migration
+        );
+    }
+
+    #[test]
     fn should_fail_to_write_to_read_only_secret_key_store_directory() {
         let (temp_dir, mut secret_key_store) =
-            existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V2);
+            open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V2);
         let mut seed = ChaCha20Rng::seed_from_u64(42);
         let key_id = KeyId::from(seed.gen::<[u8; 32]>());
         let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
@@ -568,14 +595,10 @@ pub mod tests {
     }
 
     fn existing_secret_key_store_file_name(version: &SecretKeyStoreVersion) -> String {
-        let version_suffix = match version {
-            SecretKeyStoreVersion::V2 => "v2",
-            SecretKeyStoreVersion::V3 => "v3",
-        };
-        format!("sks_data_{}.pb", version_suffix)
+        format!("sks_data_v{}.pb", version.as_u32())
     }
 
-    fn existing_secret_key_store_in_temp_dir(
+    fn open_existing_secret_key_store_in_temp_dir(
         version: &SecretKeyStoreVersion,
     ) -> (TempDir, ProtoSecretKeyStore) {
         let temp_dir: TempDir = mk_temp_dir_with_permissions(0o700);
@@ -600,6 +623,13 @@ pub mod tests {
         fn all_versions() -> Vec<SecretKeyStoreVersion> {
             vec![SecretKeyStoreVersion::V2, SecretKeyStoreVersion::V3]
         }
+
+        fn as_u32(&self) -> u32 {
+            match self {
+                SecretKeyStoreVersion::V2 => 2,
+                SecretKeyStoreVersion::V3 => 3,
+            }
+        }
     }
 
     fn assert_secret_key_store_proto_has_correct_version(
@@ -609,11 +639,7 @@ pub mod tests {
         let data = fs::read(sks_data_file).expect("error reading SKS");
         let sks_proto = pb::SecretKeyStore::decode(&*data).expect("error parsing SKS data");
         let actual_version = sks_proto.version;
-        let expected_version = match version {
-            SecretKeyStoreVersion::V2 => 2,
-            SecretKeyStoreVersion::V3 => 3,
-        };
-        assert_eq!(actual_version, expected_version);
+        assert_eq!(actual_version, version.as_u32());
     }
 
     struct TestVector {
