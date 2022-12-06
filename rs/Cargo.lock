@@ -5817,7 +5817,6 @@ name = "ic-http-endpoints-metrics"
 version = "0.8.0"
 dependencies = [
  "hyper",
- "ic-async-utils",
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-interfaces-registry",
