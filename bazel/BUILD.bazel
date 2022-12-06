@@ -109,3 +109,20 @@ py_test(
     ],
     visibility = ["//visibility:public"],
 )
+
+sh_test(
+    name = "gazelle_test",
+    srcs = ["gazelle_test.sh"],
+    data = [
+        "//:WORKSPACE.bazel",
+        "//:gazelle",
+    ],
+    env = {
+        "GAZELLE_BIN": "$(rootpath //:gazelle)",
+        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+    },
+    tags = [
+        "external",  # force test to be unconditionally executed.
+        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
+    ],
+)
