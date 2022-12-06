@@ -20,11 +20,16 @@ type = "filter"
 inputs = ["nginx"]
 condition = ".SYSLOG_IDENTIFIER == \"access\""
 
+# Do not index remote_user, remote_addr and remote_port
 [transforms.nginx_access_json]
 type = "remap"
 inputs = ["nginx_access"]
 source = """
 . = parse_json!(.message)
+
+del(.remote_user)
+del(.remote_addr)
+del(.remote_port)
 
 .@timestamp, err = to_float(.msec) * 1000
 if err != null {
