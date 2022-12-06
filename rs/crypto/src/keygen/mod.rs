@@ -41,9 +41,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         self.collect_and_store_key_count_metrics(registry_version);
         // Get the public keys from the registry, and ensure that we have the
         // secret keys locally in the SKS.
-        let keys_in_registry = match self
-            .ensure_keys_and_certs_set_up_and_get_current_node_public_keys(registry_version)
-        {
+        let keys_in_registry = match self.check_local_key_material(registry_version) {
             Ok(current_node_public_keys) => current_node_public_keys,
             Err(err) => {
                 match err {
@@ -301,7 +299,18 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         }
     }
 
-    fn ensure_keys_and_certs_set_up_and_get_current_node_public_keys(
+    /// Check local key material wrt. what exists in the registry. This function gets the public
+    /// keys and certificates for the node from the registry at the provided registry version, and
+    /// verifies that the corresponding secret keys exist locally.
+    ///
+    /// # Params
+    /// * `registry_version` the registry version to retrieve the public keys and certificates for
+    ///
+    /// # Returns
+    /// A `CurrentNodePublicKey` struct with the keys and certificates from the registry, or an
+    /// error if the retrieval of public keys or certificates from the registry failed, if a
+    /// corresponding secret key was not found locally, or if a key was malformed.
+    fn check_local_key_material(
         &self,
         registry_version: RegistryVersion,
     ) -> CryptoResult<CurrentNodePublicKeys> {
