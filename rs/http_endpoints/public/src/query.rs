@@ -2,7 +2,7 @@
 
 use crate::{
     body::BodyReceiverLayer,
-    common::{cbor_response, make_plaintext_response},
+    common::{cbor_response, make_plaintext_response, remove_effective_canister_id},
     types::{to_legacy_request_type, ApiReqType},
     validator_executor::ValidatorExecutor,
     EndpointService, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
@@ -13,11 +13,11 @@ use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{trace, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
-        CertificateDelegation, HttpQueryContent, HttpRequest, HttpRequestEnvelope,
+        CertificateDelegation, HasCanisterId, HttpQueryContent, HttpRequest, HttpRequestEnvelope,
         SignedRequestBytes, UserQuery,
     },
 };
@@ -81,7 +81,6 @@ impl Service<Request<Vec<u8>>> for QueryService {
     }
 
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
-        trace!(self.log, "in handle query");
         self.metrics
             .requests_body_size_bytes
             .with_label_values(&[
@@ -102,8 +101,9 @@ impl Service<Request<Vec<u8>>> for QueryService {
         }
         let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
 
+        let (mut parts, body) = request.into_parts();
         let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
-            &SignedRequestBytes::from(request.into_body()),
+            &SignedRequestBytes::from(body),
         ) {
             Ok(request) => request,
             Err(e) => {
@@ -127,6 +127,35 @@ impl Service<Request<Vec<u8>>> for QueryService {
                 return Box::pin(async move { Ok(res) });
             }
         };
+
+        let effective_canister_id = match remove_effective_canister_id(&mut parts) {
+            Ok(canister_id) => canister_id,
+            Err(res) => {
+                error!(
+                    self.log,
+                    "Effective canister ID is not attached to query request. This is a bug."
+                );
+                return Box::pin(async move { Ok(res) });
+            }
+        };
+
+        // Reject requests where `canister_id` != `effective_canister_id`. In comparison to update
+        // requests we don't need to check for the mgmt canister since all mgmt canister calls are updated calls.
+        // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
+        // in the url and the replica processes the request based on the `canister_id`.
+        // If this is not enforced, a blocked canisters can still be accessed by specifying
+        // a non-blocked `effective_canister_id` and a blocked `canister_id`.
+        let canister_id = request.content().canister_id();
+        if canister_id != effective_canister_id {
+            let res = make_plaintext_response(
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Specified CanisterId {} does not match effective canister id in URL {}",
+                    canister_id, effective_canister_id
+                ),
+            );
+            return Box::pin(async move { Ok(res) });
+        }
 
         // In case the inner service has state that's driven to readiness and
         // not tracked by clones (such as `Buffer`), pass the version we have

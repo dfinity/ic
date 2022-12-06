@@ -1,9 +1,15 @@
 use crate::common::{
+    basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
     setup_ingress_filter_mock, setup_ingress_ingestion_mock, setup_query_execution_mock,
+    IngressFilterHandle, IngressIngestionHandle, QueryExecutionHandle,
 };
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, agent_error::HttpErrorPayload,
-    export::Principal, hash_tree::Label, Agent, AgentError,
+    agent::{http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder, UpdateBuilder},
+    agent_error::HttpErrorPayload,
+    export::Principal,
+    hash_tree::Label,
+    identity::AnonymousIdentity,
+    Agent, AgentError,
 };
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
@@ -47,6 +53,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
     },
     malicious_flags::MaliciousFlags,
+    messages::{Blob, HttpQueryResponse, HttpQueryResponseReply},
     signature::ThresholdSignature,
     CryptoHashOfPartialState, Height, RegistryVersion,
 };
@@ -83,15 +90,19 @@ fn start_http_endpoint(
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     registry_client: Arc<dyn RegistryClient>,
+) -> (
+    IngressFilterHandle,
+    IngressIngestionHandle,
+    QueryExecutionHandle,
 ) {
     let metrics = MetricsRegistry::new();
     let config = Config {
         listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         ..Default::default()
     };
-    let (ingress_filter, _ingress_filter_handle) = setup_ingress_filter_mock();
-    let (ingress_ingestion, _ingress_ingestion_handler) = setup_ingress_ingestion_mock();
-    let (query_exe, _query_exe_handler) = setup_query_execution_mock();
+    let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
+    let (ingress_ingestion, ingress_ingestion_handler) = setup_ingress_ingestion_mock();
+    let (query_exe, query_exe_handler) = setup_query_execution_mock();
     // Run test on "nns" to avoid fetching root delegation
     let subnet_id = subnet_test_id(1);
     let nns_subnet_id = subnet_test_id(1);
@@ -116,6 +127,11 @@ fn start_http_endpoint(
         SubnetType::Application,
         MaliciousFlags::default(),
     );
+    (
+        ingress_filter_handle,
+        ingress_ingestion_handler,
+        query_exe_handler,
+    )
 }
 
 #[test]
@@ -282,110 +298,9 @@ fn test_unathorized_controller() {
     let rt = Runtime::new().unwrap();
     let port = get_free_port().expect("No ports available on host");
 
-    let mut mock_state_manager = MockStateManager::new();
-    let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
-    let network_topology = NetworkTopology {
-        subnets: BTreeMap::new(),
-        routing_table: Arc::new(RoutingTable::default()),
-        canister_migrations: Arc::new(CanisterMigrations::default()),
-        nns_subnet_id: subnet_test_id(1),
-        ecdsa_signing_subnets: Default::default(),
-        bitcoin_mainnet_canister_id: None,
-        bitcoin_testnet_canister_id: None,
-    };
-    metadata.network_topology = network_topology;
-    mock_state_manager
-        .expect_get_latest_state()
-        .returning(move || {
-            let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
-            metadata.batch_time = mock_time();
-            Labeled::new(
-                Height::from(1),
-                Arc::new(ReplicatedState::new_from_checkpoint(
-                    BTreeMap::new(),
-                    metadata,
-                    CanisterQueues::default(),
-                    Vec::new(),
-                    BitcoinState::default(),
-                )),
-            )
-        });
-    mock_state_manager
-        .expect_latest_certified_height()
-        .returning(move || Height::from(1));
-    mock_state_manager
-        .expect_read_certified_state()
-        .returning(move |_labeled_tree| {
-            let rs: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
-            let mht = MixedHashTree::Leaf(Vec::new());
-            let cert = Certification {
-                height: Height::from(1),
-                signed: Signed {
-                    signature: ThresholdSignature {
-                        signer: NiDkgId {
-                            start_block_height: Height::from(0),
-                            dealer_subnet: subnet_test_id(0),
-                            dkg_tag: NiDkgTag::HighThreshold,
-                            target_subnet: NiDkgTargetSubnet::Local,
-                        },
-                        signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-                    },
-                    content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                        vec![],
-                    ))),
-                },
-            };
-            Some((rs, mht, cert))
-        });
-
-    // We use this atomic to make sure that the health transistion is from healthy -> certified_state_behind
-    let mut mock_consensus_cache = MockConsensusCache::new();
-    mock_consensus_cache
-        .expect_finalized_block()
-        .returning(move || {
-            Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
-                Payload::new(
-                    ic_types::crypto::crypto_hash,
-                    (
-                        BatchPayload::default(),
-                        Dealings::new_empty(Height::from(1)),
-                        None,
-                    )
-                        .into(),
-                ),
-                Height::from(1),
-                Rank(456),
-                ValidationContext {
-                    registry_version: RegistryVersion::from(99),
-                    certified_height: Height::from(1),
-                    time: mock_time(),
-                },
-            )
-        });
-
-    let mut mock_registry_client = MockRegistryClient::new();
-    mock_registry_client
-        .expect_get_latest_version()
-        .return_const(RegistryVersion::from(1));
-    mock_registry_client
-        .expect_get_value()
-        .withf(move |key, version| {
-            key == make_crypto_threshold_signing_pubkey_key(subnet_test_id(1)).as_str()
-                && version == &RegistryVersion::from(1)
-        })
-        .return_const({
-            let pk = PublicKeyProto {
-                algorithm: AlgorithmIdProto::ThresBls12381 as i32,
-                key_value: [42; ThresholdSigPublicKey::SIZE].to_vec(),
-                version: 0,
-                proof_data: None,
-                timestamp: Some(42),
-            };
-            let mut v = Vec::new();
-            pk.encode(&mut v).unwrap();
-            Ok(Some(v))
-        });
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
 
     start_http_endpoint(
         rt.handle().clone(),
@@ -435,6 +350,200 @@ fn test_unathorized_controller() {
                     println!("Received unexpeceted success: {:?}", r);
                     sleep(Duration::from_millis(250)).await
                 }
+            }
+        }
+    });
+}
+
+// Test that that http endpoint rejects queries with mismatch between canister id an effective canister id.
+#[test]
+fn test_unathorized_query() {
+    let rt = Runtime::new().unwrap();
+    let port = get_free_port().expect("No ports available on host");
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let (_, _, mut query_handler) = start_http_endpoint(
+        rt.handle().clone(),
+        port,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+    );
+
+    let agent = Agent::builder()
+        .with_transport(
+            ReqwestHttpReplicaV2Transport::create(format!("http://127.0.0.1:{}", port)).unwrap(),
+        )
+        .build()
+        .unwrap();
+
+    let canister1 = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
+    let canister2 = Principal::from_text("224lq-3aaaa-aaaaf-ase7a-cai").unwrap();
+
+    // Query mock that returns empty Ok("success") response.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = query_handler.next_request().await.unwrap();
+            resp.send_response(HttpQueryResponse::Replied {
+                reply: HttpQueryResponseReply {
+                    arg: Blob("success".into()),
+                },
+            })
+        }
+    });
+
+    // Query call tests.
+    let mut query_tests = Vec::new();
+
+    // Valid query call with canister_id = effective_canister_id
+    let query = QueryBuilder::new(&agent, canister1, "test".to_string())
+        .with_effective_canister_id(canister1)
+        .with_arg(Vec::new())
+        .sign()
+        .unwrap();
+    let expected_resp = "success".into();
+    query_tests.push((query, Ok(expected_resp)));
+
+    // Invalid query call with canister_id != effective_canister_id
+    let query = QueryBuilder::new(&agent, canister1, "test".to_string())
+        .with_effective_canister_id(canister2)
+        .with_arg(Vec::new())
+        .sign()
+        .unwrap();
+    let expected_resp = AgentError::HttpError(HttpErrorPayload {
+        status: 400,
+        content_type: None,
+        content: format!(
+            "Specified CanisterId {} does not match effective canister id in URL {}",
+            canister1, canister2
+        )
+        .as_bytes()
+        .to_vec(),
+    });
+    query_tests.push((query, Err(expected_resp)));
+
+    rt.block_on(async {
+        for (query, expected_resp) in query_tests {
+            loop {
+                let q = query.clone();
+                let resp = agent
+                    .query_signed(q.effective_canister_id, q.signed_query)
+                    .await;
+                if resp == expected_resp {
+                    break;
+                }
+                println!("Received unexpeceted response: {:?}", resp);
+                sleep(Duration::from_millis(250)).await
+            }
+        }
+    });
+}
+
+// Test that that http endpoint rejects calls with mismatch between canister id an effective canister id.
+#[test]
+fn test_unathorized_call() {
+    let rt = Runtime::new().unwrap();
+    let port = get_free_port().expect("No ports available on host");
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let (mut ingress_filter, mut ingress_sender, _) = start_http_endpoint(
+        rt.handle().clone(),
+        port,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+    );
+
+    let agent = Agent::builder()
+        .with_identity(AnonymousIdentity)
+        .with_transport(
+            ReqwestHttpReplicaV2Transport::create(format!("http://127.0.0.1:{}", port)).unwrap(),
+        )
+        .build()
+        .unwrap();
+
+    let canister1 = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
+    let canister2 = Principal::from_text("224lq-3aaaa-aaaaf-ase7a-cai").unwrap();
+
+    // Ingress sender mock that returns empty Ok(()) response.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = ingress_sender.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    // Ingress filter mock that returns empty Ok(()) response.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    // Query call tests.
+    let mut update_tests = Vec::new();
+
+    // Valid update call with canister_id = effective_canister_id
+    let update = UpdateBuilder::new(&agent, canister1, "test".to_string())
+        .with_effective_canister_id(canister1)
+        .with_arg(Vec::new())
+        .sign()
+        .unwrap();
+    update_tests.push((update.clone(), Ok(update.request_id)));
+
+    // Invalid update call with canister_id != effective_canister_id
+    let update = UpdateBuilder::new(&agent, canister1, "test".to_string())
+        .with_effective_canister_id(canister2)
+        .with_arg(Vec::new())
+        .sign()
+        .unwrap();
+    let expected_resp = AgentError::HttpError(HttpErrorPayload {
+        status: 400,
+        content_type: None,
+        content: format!(
+            "Specified CanisterId {} does not match effective canister id in URL {}",
+            canister1, canister2
+        )
+        .as_bytes()
+        .to_vec(),
+    });
+    update_tests.push((update, Err(expected_resp)));
+
+    // Update call to mgmt canister with different effective canister id.
+    let update = UpdateBuilder::new(&agent, Principal::management_canister(), "test".to_string())
+        .with_effective_canister_id(canister2)
+        .with_arg(Vec::new())
+        .sign()
+        .unwrap();
+    update_tests.push((update.clone(), Ok(update.request_id)));
+
+    // Update call to mgmt canister.
+    let update = UpdateBuilder::new(&agent, Principal::management_canister(), "test".to_string())
+        .with_effective_canister_id(Principal::management_canister())
+        .with_arg(Vec::new())
+        .sign()
+        .unwrap();
+    update_tests.push((update.clone(), Ok(update.request_id)));
+
+    rt.block_on(async {
+        for (update, expected_resp) in update_tests {
+            loop {
+                let u = update.clone();
+                let resp = agent
+                    .update_signed(u.effective_canister_id, u.signed_update)
+                    .await;
+                if resp == expected_resp {
+                    break;
+                }
+                println!("Received unexpeceted response: {:?}", resp);
+                sleep(Duration::from_millis(250)).await
             }
         }
     });
