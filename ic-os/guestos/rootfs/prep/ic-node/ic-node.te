@@ -17,6 +17,7 @@ type ic_http_adapter_exec_t;
 # On-disk state types.
 type ic_crypto_store_t;
 type ic_data_t;
+type ic_canister_mem_t;
 
 permissive ic_orchestrator_t;
 permissive ic_replica_t;
@@ -28,6 +29,7 @@ permissive ic_http_adapter_t;
 # These are managed as separate mount points, allow mounting these.
 files_mountpoint(ic_data_t)
 files_mountpoint(ic_crypto_store_t)
+files_mountpoint(ic_canister_mem_t)
 
 # Type for the root volatile data directory at /run/ic-node.
 type ic_var_run_t;
@@ -38,6 +40,7 @@ systemd_tmpfilesd_managed(ic_var_run_t, dir)
 require { type fsadm_t; }
 allow fsadm_t ic_crypto_store_t : dir { read };
 allow fsadm_t ic_data_t : dir { read };
+allow fsadm_t ic_canister_mem_t : dir { read };
 
 # We need to bind-mount various things in order to support read-only root
 # filesystem.
@@ -51,9 +54,11 @@ allow mount_t etc_t : dir { mounton };
 
 # Allow basic permissions around umounting
 allow mount_t ic_data_t : filesystem { getattr };
+allow mount_t ic_canister_mem_t : filesystem { getattr };
 
 # Allow to mount /var/lib/ic/backup using correct label.
 allow mount_t ic_data_t : filesystem { relabelfrom };
+allow mount_t ic_canister_mem_t : filesystem { relabelfrom };
 
 # Allow to mount the old var partition overriding all stored labels.
 require { type var_t; }
@@ -80,6 +85,9 @@ ic_manageboot_read_upgrade_image(ic_data_t)
 # Manage relevant files
 ic_rw_data(ic_orchestrator_t)
 ic_rw_crypto_store(ic_orchestrator_t)
+
+# Manage files that back canister memory
+ic_rw_canister_mem(ic_replica_t)
 
 # For some reason, it wants to read this
 kernel_read_vm_overcommit_sysctl(ic_orchestrator_t)
@@ -209,6 +217,12 @@ create_dirs_pattern(ic_replica_t, ic_data_t, ic_data_t)
 rw_files_pattern(ic_replica_t, ic_data_t, ic_data_t)
 create_files_pattern(ic_replica_t, ic_data_t, ic_data_t)
 
+# Allow managing the dirs where page deltas are stored
+rw_dirs_pattern(ic_replica_t, ic_canister_mem_t, ic_canister_mem_t)
+create_dirs_pattern(ic_replica_t, ic_canister_mem_t, ic_canister_mem_t)
+rw_files_pattern(ic_replica_t, ic_canister_mem_t, ic_canister_mem_t)
+create_files_pattern(ic_replica_t, ic_canister_mem_t, ic_canister_mem_t)
+
 ### Replica interaction with sandbox.
 
 # Allow launching canister sandbox
@@ -302,6 +316,11 @@ allow ic_canister_sandbox_t tmpfs_t : file { map read write getattr };
 # Also allow read-only access to checkpoint files (also given passed via
 # file descriptor from replica).
 allow ic_canister_sandbox_t ic_data_t : file { map read getattr };
+# Allow read/write access to files that back the heap delta for both sandbox and replica
+# The workflow is that the replica creates the files but passes a file descriptor to the sandbox
+# We explicitly do not allow the sandbox to open files because they should only be open by the replica
+allow ic_canister_sandbox_t ic_canister_mem_t : file { map read write getattr };
+allow ic_replica_t ic_canister_mem_t : file { map read write getattr };
 
 # Wants to read its own control group. Should deny that.
 dontaudit ic_canister_sandbox_t cgroup_t : dir { search };
