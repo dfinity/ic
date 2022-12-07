@@ -80,7 +80,8 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", **kwa
         tags = tags + ["requires-network", "system_test"],
         timeout = test_timeout,
         # TODO: remove when PFOPS-3148 is resolved
-        flaky = True,
+        # We don't want reruns of hourly targets to reduce load on farm.
+        flaky = "system_test_hourly" not in tags,
     )
 
 def _symlink_dir(ctx):

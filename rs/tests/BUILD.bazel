@@ -359,8 +359,6 @@ system_test(
     name = "basic_health_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "allow_to_fail",
-        "external",
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -372,8 +370,6 @@ system_test(
     name = "workload_counter_canister_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "allow_to_fail",
-        "external",
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -385,8 +381,6 @@ system_test(
     name = "create_subnet_hourly_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "allow_to_fail",
-        "external",
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -420,8 +414,6 @@ system_test(
     name = "rejoin_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "allow_to_fail",
-        "external",
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -598,8 +590,6 @@ system_test(
     name = "two_third_latency_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "allow_to_fail",
-        "external",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
