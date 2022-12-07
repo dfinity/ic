@@ -13,9 +13,9 @@ use cycles_minting_canister::{
     UpdateSubnetTypeArgs,
 };
 use ic_canister_client::{Agent, Sender};
+use ic_canister_client_sender::SigKeys;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_sha::Sha256;
-use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
 use ic_http_utils::file_downloader::{check_file_hash, extract_tar_gz_into_dir, FileDownloader};
 use ic_prep_lib::subnet_configuration;
 use ic_registry_client_helpers::deserialize_registry_value;
@@ -3334,15 +3334,9 @@ async fn main() {
 
         if opts.secret_key_pem.is_some() {
             let secret_key_path = opts.secret_key_pem.unwrap();
-            use ic_crypto_internal_types::sign::eddsa::ed25519::SecretKey;
-            let contents = read_to_string(secret_key_path).expect("Could not read key file.");
-            let (secret_key, public_key) =
-                SecretKey::from_pem(&contents).expect("Invalid secret key.");
-            let keypair = ic_canister_client::Ed25519KeyPair {
-                secret_key: secret_key.0,
-                public_key: public_key.0,
-            };
-            Sender::from_keypair(&keypair)
+            let contents = read_to_string(secret_key_path).expect("Could not read key file");
+            let sig_keys = SigKeys::from_pem(&contents).expect("Failed to parse pem file");
+            Sender::SigKeys(sig_keys)
         } else if opts.use_hsm {
             make_hsm_sender(
                 &opts.hsm_slot.unwrap(),
