@@ -33,14 +33,6 @@ pub(crate) enum AppLayer {
     Https,
 }
 
-// TODO: NET-871
-pub(crate) fn to_legacy_request_type(req_type: ApiReqType) -> &'static str {
-    match req_type {
-        ApiReqType::Call => "submit",
-        _ => req_type.into(),
-    }
-}
-
 #[derive(IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
 pub(crate) enum ConnectionError {
@@ -80,8 +72,6 @@ mod tests {
             StaticStr::from(ApiReqType::PprofFlamegraph),
             "pprof_flamegraph"
         );
-
-        assert_eq!(to_legacy_request_type(ApiReqType::Call), "submit");
 
         assert_eq!(StaticStr::from(AppLayer::Http), "http");
         assert_eq!(StaticStr::from(AppLayer::Https), "https");

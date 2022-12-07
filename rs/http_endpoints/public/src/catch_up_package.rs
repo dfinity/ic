@@ -1,10 +1,8 @@
 //! Module that deals with requests to /_/catch_up_package
 
 use crate::{
-    body::BodyReceiverLayer,
-    common,
-    types::{to_legacy_request_type, ApiReqType},
-    EndpointService, HttpHandlerMetrics, UNKNOWN_LABEL,
+    body::BodyReceiverLayer, common, types::ApiReqType, EndpointService, HttpHandlerMetrics,
+    UNKNOWN_LABEL,
 };
 use http::Request;
 use hyper::{Body, Response, StatusCode};
@@ -82,11 +80,7 @@ impl Service<Request<Vec<u8>>> for CatchUpPackageService {
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
             .requests_body_size_bytes
-            .with_label_values(&[
-                to_legacy_request_type(ApiReqType::CatchUpPackage),
-                ApiReqType::CatchUpPackage.into(),
-                UNKNOWN_LABEL,
-            ])
+            .with_label_values(&[ApiReqType::CatchUpPackage.into(), UNKNOWN_LABEL])
             .observe(request.body().len() as f64);
 
         let body = request.into_body();

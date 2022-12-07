@@ -4,7 +4,7 @@ use crate::{
     body::BodyReceiverLayer,
     common::{cbor_response, into_cbor, make_plaintext_response},
     state_reader_executor::StateReaderExecutor,
-    types::{to_legacy_request_type, ApiReqType},
+    types::ApiReqType,
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
@@ -99,11 +99,7 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
             .requests_body_size_bytes
-            .with_label_values(&[
-                to_legacy_request_type(ApiReqType::ReadState),
-                ApiReqType::ReadState.into(),
-                UNKNOWN_LABEL,
-            ])
+            .with_label_values(&[ApiReqType::ReadState.into(), UNKNOWN_LABEL])
             .observe(request.body().len() as f64);
 
         if self.health_status.load() != ReplicaHealthStatus::Healthy {

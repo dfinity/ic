@@ -29,9 +29,7 @@ use crate::{
     },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
-    metrics::{
-        LABEL_REQUEST_TYPE, LABEL_STATUS, LABEL_TYPE, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS,
-    },
+    metrics::{LABEL_REQUEST_TYPE, LABEL_STATUS, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS},
     query::QueryService,
     read_state::ReadStateService,
     state_reader_executor::StateReaderExecutor,
@@ -488,7 +486,7 @@ fn create_main_service(
                 let request_timer = HistogramVecTimer::start_timer(
                     metrics.requests.clone(),
                     &REQUESTS_LABEL_NAMES,
-                    [UNKNOWN_LABEL, UNKNOWN_LABEL, UNKNOWN_LABEL],
+                    [UNKNOWN_LABEL, UNKNOWN_LABEL],
                 );
                 (request, request_timer)
             })
@@ -573,14 +571,6 @@ type ResponseWithTimer = (
     HistogramVecTimer<'static, REQUESTS_NUM_LABELS>,
 );
 
-fn set_timer_labels(
-    timer: &mut HistogramVecTimer<'static, REQUESTS_NUM_LABELS>,
-    api_req_type: ApiReqType,
-) {
-    timer.set_label(LABEL_TYPE, to_legacy_request_type(api_req_type));
-    timer.set_label(LABEL_REQUEST_TYPE, api_req_type.into());
-}
-
 async fn make_router(
     http_handler: HttpHandler,
     (mut req, mut timer): RequestWithTimer,
@@ -606,7 +596,7 @@ async fn make_router(
                     false
                 })
             {
-                set_timer_labels(&mut timer, ApiReqType::InvalidArgument);
+                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
                 return (
                     make_plaintext_response(
                         StatusCode::BAD_REQUEST,
@@ -621,23 +611,23 @@ async fn make_router(
             let (svc, effective_canister_id) =
                 match *path.split('/').collect::<Vec<&str>>().as_slice() {
                     ["", "api", "v2", "canister", effective_canister_id, "call"] => {
-                        set_timer_labels(&mut timer, ApiReqType::Call);
+                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Call.into());
                         (call_service, Some(effective_canister_id))
                     }
                     ["", "api", "v2", "canister", effective_canister_id, "query"] => {
-                        set_timer_labels(&mut timer, ApiReqType::Query);
+                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Query.into());
                         (query_service, Some(effective_canister_id))
                     }
                     ["", "api", "v2", "canister", effective_canister_id, "read_state"] => {
-                        set_timer_labels(&mut timer, ApiReqType::ReadState);
+                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::ReadState.into());
                         (read_state_service, Some(effective_canister_id))
                     }
                     ["", "_", "catch_up_package"] => {
-                        set_timer_labels(&mut timer, ApiReqType::CatchUpPackage);
+                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::CatchUpPackage.into());
                         (catch_up_package_service, None)
                     }
                     _ => {
-                        set_timer_labels(&mut timer, ApiReqType::InvalidArgument);
+                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
                         return (
                             make_plaintext_response(
                                 StatusCode::NOT_FOUND,
@@ -672,31 +662,31 @@ async fn make_router(
         }
         Method::GET => match req.uri().path() {
             "/api/v2/status" => {
-                set_timer_labels(&mut timer, ApiReqType::Status);
+                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Status.into());
                 status_service
             }
             "/" | "/_/" => {
-                set_timer_labels(&mut timer, ApiReqType::RedirectToDashboard);
+                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::RedirectToDashboard.into());
                 return (redirect_to_dasboard_response(), timer);
             }
             HTTP_DASHBOARD_URL_PATH => {
-                set_timer_labels(&mut timer, ApiReqType::Dashboard);
+                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Dashboard.into());
                 dashboard_service
             }
             "/_/pprof" => {
-                set_timer_labels(&mut timer, ApiReqType::PprofHome);
+                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofHome.into());
                 return (pprof::home(), timer);
             }
             "/_/pprof/profile" => {
-                set_timer_labels(&mut timer, ApiReqType::PprofProfile);
+                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofProfile.into());
                 return (pprof::cpu_profile(req.into_parts().0).await, timer);
             }
             "/_/pprof/flamegraph" => {
-                set_timer_labels(&mut timer, ApiReqType::PprofFlamegraph);
+                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofFlamegraph.into());
                 return (pprof::cpu_flamegraph(req.into_parts().0).await, timer);
             }
             _ => {
-                set_timer_labels(&mut timer, ApiReqType::InvalidArgument);
+                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
                 return (
                     make_plaintext_response(
                         StatusCode::NOT_FOUND,
@@ -707,11 +697,11 @@ async fn make_router(
             }
         },
         Method::OPTIONS => {
-            set_timer_labels(&mut timer, ApiReqType::Options);
+            timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Options.into());
             return (no_content_response(), timer);
         }
         _ => {
-            set_timer_labels(&mut timer, ApiReqType::InvalidArgument);
+            timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
             return (
                 make_plaintext_response(
                     StatusCode::METHOD_NOT_ALLOWED,
