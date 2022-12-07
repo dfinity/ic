@@ -82,6 +82,21 @@ where
     I: CandidType,
     O: CandidType + DeserializeOwned,
 {
+    let balance = ic_cdk::api::canister_balance128();
+    if balance < payment as u128 {
+        ic_cdk::println!(
+            "Failed to call {}: need {} cycles, the balance is only {}",
+            method,
+            payment,
+            balance
+        );
+
+        return Err(CallError {
+            method: method.to_string(),
+            reason: Reason::OutOfCycles,
+        });
+    }
+
     let res: Result<(O,), _> = ic_cdk::api::call::call_with_payment(
         Principal::management_canister(),
         method,
