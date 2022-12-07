@@ -226,41 +226,26 @@ impl Summary {
     }
 
     fn get_succ_rate_histogram(facts: &[Fact]) -> HashMap<usize, u32> {
-        let end_times = facts.iter().map(|f| (f.time_request_end, f.is_succ()));
-
-        let start_times_min = facts.iter().map(|f| f.time_request_start).min();
-        let end_times_max = facts.iter().map(|f| f.time_request_end).max();
-
         let mut buckets = HashMap::new();
+        let end_times = facts.iter().map(|f| (f.time_request_end, f.is_succ()));
+        let start_time_min = facts.iter().map(|f| f.time_request_start).min();
 
-        if let Some(start_time_min) = start_times_min {
-            if let Some(end_time_max) = end_times_max {
-                let total_duration = (end_time_max - start_time_min).as_millis() as f64 / 1000.;
-                let num_buckets = (total_duration / RATE_BUCKET_SIZE as f64).ceil() as usize;
+        if let Some(start_time_min) = start_time_min {
+            for (end_time, success) in end_times {
+                if success {
+                    let end_time_secs_since_start =
+                        (end_time - start_time_min).as_millis() as f64 / 1000.;
 
-                for i in 0..num_buckets {
-                    buckets.insert(i * RATE_BUCKET_SIZE, 0);
+                    let bucket_idx =
+                        (end_time_secs_since_start / RATE_BUCKET_SIZE as f64).floor() as usize;
+
+                    // We want the key in the hash map to be "seconds" since first workload.
+                    // Therefore, the hashmap we create should contain keys 0, RATE_BUCKET_SIZE, 2*RATE_BUCKET_SIZE ..
+                    let key = bucket_idx * RATE_BUCKET_SIZE;
+                    let mut_entry = buckets.entry(key).or_insert(0);
+
+                    *mut_entry += 1;
                 }
-
-                for (end_time, success) in end_times {
-                    if success {
-                        let end_time_secs_since_min =
-                            (end_time - start_time_min).as_millis() as f64 / 1000.;
-                        assert!(end_time_secs_since_min <= total_duration);
-
-                        let bucket_idx =
-                            (end_time_secs_since_min / RATE_BUCKET_SIZE as f64).floor() as usize;
-                        assert!(bucket_idx < num_buckets);
-
-                        let mut_entry = buckets
-                            .get_mut(&(bucket_idx * RATE_BUCKET_SIZE))
-                            .expect("Buckets should have been initialized to 0");
-
-                        *mut_entry += 1;
-                    }
-                }
-
-                return buckets;
             }
         }
 
