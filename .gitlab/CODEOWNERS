@@ -146,6 +146,14 @@
 /rs/protobuf/def/registry/              @dfinity-lab/teams/nns-team
 /rs/protobuf/def/state/                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
 /rs/protobuf/def/types/                 @dfinity-lab/teams/interface-owners
+/rs/protobuf/gen/bitcoin/               @dfinity-lab/teams/execution-team
+/rs/protobuf/gen/canister_http/         @dfinity-lab/teams/consensus-owners
+/rs/protobuf/gen/crypto/                @dfinity-lab/teams/crypto-owners
+/rs/protobuf/gen/messaging/             @dfinity-lab/teams/message-routing-owners
+/rs/protobuf/gen/p2p/                   @dfinity-lab/teams/networking-team
+/rs/protobuf/gen/registry/              @dfinity-lab/teams/nns-team
+/rs/protobuf/gen/state/                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
+/rs/protobuf/gen/types/                 @dfinity-lab/teams/interface-owners
 /rs/recovery/                           @dfinity-lab/teams/orchestrator-owners
 /rs/registry/                           @dfinity-lab/teams/nns-team
 /rs/registry/admin/                     @dfinity-lab/teams/nns-team
