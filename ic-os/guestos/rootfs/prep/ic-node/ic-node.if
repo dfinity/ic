@@ -39,3 +39,12 @@ interface(`ic_rw_crypto_store',`
 	manage_dirs_pattern($1, ic_crypto_store_t, ic_crypto_store_t)
 	manage_files_pattern($1, ic_crypto_store_t, ic_crypto_store_t)
 ')
+
+interface(`ic_rw_canister_mem',`
+	gen_require(`
+		type var_lib_t, ic_canister_mem_t;
+	')
+
+	manage_files_pattern($1, ic_canister_mem_t, ic_canister_mem_t)
+	mmap_read_files_pattern($1, ic_canister_mem_t, ic_canister_mem_t)
+')
