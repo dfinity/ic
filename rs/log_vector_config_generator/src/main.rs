@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use std::{fs::OpenOptions, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::vec;
+use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
-use crate::log_scraper::scrape_logs;
+use crate::config_writer_loop::config_writer_loop;
 use anyhow::{bail, Result};
 use clap::Parser;
 use futures_util::FutureExt;
@@ -11,19 +12,18 @@ use ic_config::metrics::Config as MetricsConfig;
 use ic_config::metrics::Exporter;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
-use service_discovery::config_generator::ConfigGenerator;
 use service_discovery::job_types::{JobType, NodeOS};
+use service_discovery::IcServiceDiscoveryImpl;
 use service_discovery::{
-    file_sd::FileSd,
     mainnet_registry::{create_local_store_from_changelog, get_mainnet_delta_6d_c1},
     metrics::Metrics,
     poll_loop::make_poll_loop,
-    rest_api::start_http_server,
 };
-use service_discovery::{IcServiceDiscovery, IcServiceDiscoveryImpl};
 use slog::{info, o, Drain, Logger};
 
-mod log_scraper;
+mod config_writer;
+mod config_writer_loop;
+mod vector_config_structure;
 
 fn main() -> Result<()> {
     let cli_args = CliArgs::parse().validate()?;
@@ -31,6 +31,7 @@ fn main() -> Result<()> {
     let log = make_logger();
     let metrics_registry = MetricsRegistry::new();
     let shutdown_signal = shutdown_signal(log.clone()).shared();
+    let mut handles = vec![];
 
     info!(log, "Starting mercury ...");
     let mercury_dir = cli_args.targets_dir.join("mercury");
@@ -52,45 +53,16 @@ fn main() -> Result<()> {
         get_jobs(),
     )?);
 
-    let file_sd = if let Some(file_sd_base_path) = &cli_args.file_sd_base_path {
-        info!(
-            log,
-            "Writing service discovery files to base dir: {:?}", file_sd_base_path
-        );
-        let file_sd = FileSd::new(file_sd_base_path);
-        for job in get_jobs()
-            .into_iter()
-            .map(|(j, _)| j)
-            .collect::<Vec<JobType>>()
-        {
-            let targets = ic_discovery.get_target_groups(job)?;
-            file_sd.write_sd_config(job, targets)?;
-        }
-        Some(Box::new(file_sd) as Box<dyn ConfigGenerator>)
-    } else {
-        None
-    };
-
-    let http_handle = cli_args.listen_addr.map(|listen_addr| {
-        info!(log, "Starting REST API ...");
-        rt.spawn(start_http_server(
-            log.clone(),
-            ic_discovery.clone(),
-            listen_addr,
-            shutdown_signal.clone(),
-        ))
-    });
-
     let (stop_signal_sender, stop_signal_rcv) = crossbeam::channel::bounded::<()>(0);
+    let (update_signal_sender, update_signal_rcv) = crossbeam::channel::bounded::<()>(0);
     let poll_loop = make_poll_loop(
         log.clone(),
         rt.handle().clone(),
         ic_discovery.clone(),
-        stop_signal_rcv,
+        stop_signal_rcv.clone(),
         cli_args.poll_interval,
         Metrics::new(metrics_registry.clone()),
-        file_sd,
-        get_jobs().into_iter().map(|(job, _)| job).collect(),
+        Some(update_signal_sender),
     );
 
     info!(
@@ -98,24 +70,20 @@ fn main() -> Result<()> {
         "Spawning scraping thread. Interval: {:?}", cli_args.poll_interval
     );
     let join_handle = std::thread::spawn(poll_loop);
+    handles.push(join_handle);
 
-    let log_scrape_handle = if let Some(journal_file_path) = cli_args.gatewayd_logs_path {
-        let file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(journal_file_path)
-            .expect("Could not open file.");
-        Some(rt.spawn(scrape_logs(
-            log.clone(),
-            ic_discovery,
-            cli_args.gatewayd_logs_target_filter,
-            file,
-            shutdown_signal.clone(),
-            JobType::NodeExporter(NodeOS::Guest),
-        )))
-    } else {
-        None
-    };
+    let config_generator_loop = config_writer_loop(
+        log.clone(),
+        ic_discovery,
+        cli_args.gatewayd_logs_target_filter,
+        stop_signal_rcv,
+        JobType::NodeExporter(NodeOS::Guest),
+        update_signal_rcv,
+        cli_args.vector_config_dir,
+    );
+    info!(log, "Spawning config generator thread.");
+    let config_join_handle = std::thread::spawn(config_generator_loop);
+    handles.push(config_join_handle);
 
     info!(
         log,
@@ -133,17 +101,13 @@ fn main() -> Result<()> {
     );
 
     rt.block_on(shutdown_signal);
-    if let Some(http_handle) = http_handle {
-        let _ = rt.block_on(http_handle)?;
-    }
-    if let Some(log_scrape_handle) = log_scrape_handle {
-        rt.block_on(log_scrape_handle)?;
-    }
 
     std::mem::drop(metrics_endpoint);
 
-    stop_signal_sender.send(())?;
-    join_handle.join().expect("join() failed.");
+    for handle in handles {
+        stop_signal_sender.send(())?;
+        handle.join().expect("Join failed");
+    }
 
     Ok(())
 }
@@ -195,26 +159,6 @@ The HTTP-request timeout used when quering for registry updates.
     registry_query_timeout: Duration,
 
     #[clap(
-        long = "listen-addr",
-        help = r#"
-The listen address for service discovery.
-
-"#
-    )]
-    listen_addr: Option<SocketAddr>,
-
-    #[clap(
-        long = "file-sd-base-path",
-        help = r#"
-If specified, for each job, a json file containing the targets will be written
-to <base_directory>/<job_name>/ic_p8s_sd.json containing the corresponding
-targets.
-
-"#
-    )]
-    file_sd_base_path: Option<PathBuf>,
-
-    #[clap(
         long = "metrics-listen-addr",
         default_value = "[::]:9099",
         help = r#"
@@ -241,17 +185,16 @@ Example:
     gatewayd_logs_target_filter: Option<String>,
 
     #[clap(
-        long = "scrape-journal-gatewayd-logs",
+        long = "generation-dir",
         help = r#"
-If specified, scrape logs from targets and write all logs to the given file. The
-logs are scraped from the endpoint exposed by the systemd-journal-gatewayd
-service.
+If specified, generate vector config based on the service discovery to the specified 
+directory.
 
 https://www.freedesktop.org/software/systemd/man/systemd-journal-gatewayd.service.html
         
 "#
     )]
-    gatewayd_logs_path: Option<PathBuf>,
+    vector_config_dir: PathBuf,
 }
 
 impl CliArgs {
@@ -264,17 +207,9 @@ impl CliArgs {
             bail!("Not a directory: {:?}", self.targets_dir);
         }
 
-        if let Some(file_sd_base_path) = &self.file_sd_base_path {
-            if !file_sd_base_path.is_dir() {
-                bail!("Not a directory: {:?}", file_sd_base_path);
-            }
-        }
-
-        if let Some(gatewayd_logs_path) = &self.gatewayd_logs_path {
-            let parent_dir = gatewayd_logs_path.parent().unwrap();
-            if !parent_dir.is_dir() {
-                bail!("Directory does not exist: {:?}", parent_dir);
-            }
+        let parent_dir = self.vector_config_dir.parent().unwrap();
+        if !parent_dir.is_dir() {
+            bail!("Directory does not exist: {:?}", parent_dir);
         }
 
         if let Some(log_filter) = &self.gatewayd_logs_target_filter {

@@ -5,11 +5,12 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
-    "//rs/ic_p8s_service_discovery/log",
-    "//rs/service_discovery",
-    "//rs/monitoring/metrics",
     "//rs/http_endpoints/metrics",
+    "//rs/ic_p8s_service_discovery/log",
+    "//rs/monitoring/metrics",
+    "//rs/service_discovery",
     "//rs/types/types",
+    "//rs/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
     "@crate_index//:crossbeam",
@@ -17,6 +18,9 @@ DEPENDENCIES = [
     "@crate_index//:futures-util",
     "@crate_index//:humantime",
     "@crate_index//:humantime-serde",
+    "@crate_index//:regex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
@@ -34,20 +38,19 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_binary(
-    name = "log_scraper",
+    name = "log_vector_config_generator",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_name = "log_scraper",
+    crate_name = "log_vector_config_generator",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "log_scraper_test",
+    name = "log_vector_config_generator_test",
     aliases = ALIASES,
-    crate = ":log_scraper",
+    crate = ":log_vector_config_generator",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

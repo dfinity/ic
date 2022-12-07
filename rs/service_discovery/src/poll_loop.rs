@@ -3,12 +3,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::metrics::Metrics;
-use crate::IcServiceDiscovery;
-use crate::IcServiceDiscoveryImpl;
-use crate::{config_generator::ConfigGenerator, job_types::JobType};
+use crate::{metrics::Metrics, IcServiceDiscoveryImpl};
 use crossbeam::select;
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use slog::{info, warn};
 
 pub fn make_poll_loop(
@@ -18,8 +15,7 @@ pub fn make_poll_loop(
     stop_signal: Receiver<()>,
     poll_interval: Duration,
     metrics: Metrics,
-    config_generator: Option<Box<dyn ConfigGenerator>>,
-    jobs: Vec<JobType>,
+    update_notifier: Option<Sender<()>>,
 ) -> impl FnMut() {
     let interval = crossbeam::channel::tick(poll_interval);
     move || {
@@ -51,32 +47,19 @@ pub fn make_poll_loop(
                     .inc();
                 err = true;
             }
-            if let Some(config_generator) = &config_generator {
-                for job in &jobs {
-                    let targets = match ic_discovery.get_target_groups(*job) {
-                        Ok(t) => t,
-                        Err(e) => {
-                            warn!(log, "Failed to retrieve targets for job {}: {:?}", job, e);
-                            err = true;
-                            continue;
-                        }
-                    };
-                    if let Err(e) = config_generator.generate_config(*job, targets) {
-                        warn!(
-                            log,
-                            "Failed to write targets for job {}: {:?}",
-                            &job.to_string(),
-                            e
-                        );
-                        err = true;
-                    }
+            if let Some(sender) = &update_notifier {
+                if let Err(e) = sender.send(()) {
+                    warn!(log, "Failed to send update signal : {:?}", e);
                 }
             }
             std::mem::drop(timer);
             let poll_status = if err { "error" } else { "successful" };
             metrics.poll_count.with_label_values(&[poll_status]).inc();
             tick = select! {
-                recv(stop_signal) -> _ => return,
+                recv(stop_signal) -> _ => {
+                    info!(log, "Received shutdown signal in poll_loop");
+                    return
+                },
                 recv(interval) -> msg => msg.expect("tick failed!")
             };
         }

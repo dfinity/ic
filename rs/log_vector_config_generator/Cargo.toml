@@ -1,5 +1,5 @@
 [package]
-name = "log-scraper"
+name = "log_vector_config_generator"
 version = "0.1.0"
 edition = "2021"
 
@@ -25,3 +25,7 @@ ic-config = { path = "../config" }
 ic-async-utils = { path = "../async_utils" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
+serde = { version = "1.0.115", features = ["derive"] }
+serde_json = "1.0.54"
+ic-utils = { path = "../utils/" }
+regex = "1.7.0"

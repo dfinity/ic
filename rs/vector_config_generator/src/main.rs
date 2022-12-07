@@ -3,14 +3,12 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use config_writer::ConfigWriter;
 use futures_util::FutureExt;
 use humantime::parse_duration;
 use ic_async_utils::shutdown_signal;
 use ic_metrics::MetricsRegistry;
 use regex::Regex;
 use service_discovery::{
-    config_generator::ConfigGenerator,
     job_types::{JobType, NodeOS},
     mainnet_registry::{create_local_store_from_changelog, get_mainnet_delta_6d_c1},
     metrics::Metrics,
@@ -19,11 +17,10 @@ use service_discovery::{
 };
 use slog::{info, o, Drain, Logger};
 
-use crate::config_writer::{
-    NodeIDRegexFilter, OldMachinesFilter, TargetGroupFilter, TargetGroupFilterList,
-};
+use crate::config_writer_loop::config_writer_loop;
 
 mod config_writer;
+mod config_writer_loop;
 mod vector_configuration;
 
 fn get_jobs() -> HashMap<JobType, u16> {
@@ -41,6 +38,7 @@ fn main() -> Result<()> {
     let log = make_logger();
     let metrics_registry = MetricsRegistry::new();
     let shutdown_signal = shutdown_signal(log.clone()).shared();
+    let mut handles = vec![];
 
     info!(log, "Starting vector-config-generator");
     let mercury_dir = cli_args.targets_dir.join("mercury");
@@ -55,47 +53,41 @@ fn main() -> Result<()> {
         jobs.clone(),
     )?);
 
-    let mut filters_vec: Vec<Box<dyn TargetGroupFilter>> = vec![];
-    if let Some(filter_node_id_regex) = &cli_args.filter_node_id_regex {
-        filters_vec.push(Box::new(NodeIDRegexFilter::new(
-            filter_node_id_regex.clone(),
-        )));
-    };
-
-    filters_vec.push(Box::new(OldMachinesFilter {}));
-
-    let filters = TargetGroupFilterList::new(filters_vec);
-
-    let config_writer = if let Some(generation_dir) = &cli_args.generation_dir {
-        let config_writer = ConfigWriter::new(generation_dir, filters);
-        Some(Box::new(config_writer) as Box<dyn ConfigGenerator>)
-    } else {
-        None
-    };
-
     let (stop_signal_sender, stop_signal_rcv) = crossbeam::channel::bounded::<()>(0);
+    let (update_signal_sender, update_signal_rcv) = crossbeam::channel::bounded::<()>(0);
     let loop_fn = make_poll_loop(
         log.clone(),
         rt.handle().clone(),
-        ic_discovery,
-        stop_signal_rcv,
+        ic_discovery.clone(),
+        stop_signal_rcv.clone(),
         cli_args.poll_interval,
         Metrics::new(metrics_registry),
-        config_writer,
-        jobs.into_iter().map(|(job, _)| job).collect(),
+        Some(update_signal_sender),
     );
     let join_handle = std::thread::spawn(loop_fn);
+    handles.push(join_handle);
     info!(
         log,
         "Scraping thread spawned. Interval: {:?}", cli_args.poll_interval
     );
-    let scrape_handle = Some((stop_signal_sender, join_handle));
+
+    let config_writer_loop = config_writer_loop(
+        log.clone(),
+        ic_discovery,
+        stop_signal_rcv,
+        jobs.into_iter().map(|(job, _)| job).collect(),
+        update_signal_rcv,
+        cli_args.generation_dir,
+        cli_args.filter_node_id_regex,
+    );
+    let config_join_handle = std::thread::spawn(config_writer_loop);
+    handles.push(config_join_handle);
 
     rt.block_on(shutdown_signal);
 
-    if let Some((stop_signal_handler, join_handle)) = scrape_handle {
-        stop_signal_handler.send(())?;
-        join_handle.join().expect("join() failed.");
+    for handle in handles {
+        stop_signal_sender.send(())?;
+        handle.join().expect("Join of a handle failed");
     }
     Ok(())
 }
@@ -155,7 +147,7 @@ targets.
 
 "#
     )]
-    generation_dir: Option<PathBuf>,
+    generation_dir: PathBuf,
 
     #[clap(
         long = "filter-node-id-regex",
@@ -176,10 +168,8 @@ impl CliArgs {
             bail!("Not a directory: {:?}", self.targets_dir);
         }
 
-        if let Some(generation_dir) = &self.generation_dir {
-            if !generation_dir.is_dir() {
-                bail!("Not a directory: {:?}", generation_dir)
-            }
+        if !self.generation_dir.is_dir() {
+            bail!("Not a directory: {:?}", self.generation_dir)
         }
 
         Ok(self)
