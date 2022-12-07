@@ -6,7 +6,7 @@ use crate::{
         get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response,
         remove_effective_canister_id,
     },
-    types::{to_legacy_request_type, ApiReqType},
+    types::ApiReqType,
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
 };
@@ -137,11 +137,7 @@ impl Service<Request<Vec<u8>>> for CallService {
         // Actual parsing.
         self.metrics
             .requests_body_size_bytes
-            .with_label_values(&[
-                to_legacy_request_type(ApiReqType::Call),
-                ApiReqType::Call.into(),
-                UNKNOWN_LABEL,
-            ])
+            .with_label_values(&[ApiReqType::Call.into(), UNKNOWN_LABEL])
             .observe(request.body().len() as f64);
 
         let (mut parts, body) = request.into_parts();

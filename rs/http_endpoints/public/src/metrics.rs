@@ -8,18 +8,18 @@ use tokio::time::Instant;
 
 pub const LABEL_DETAIL: &str = "detail";
 pub const LABEL_PROTOCOL: &str = "protocol";
+/// For requests defined in the interface specification, the request type label is extracted from
+/// specified request part the CBOR-encoded request body.
 pub const LABEL_REQUEST_TYPE: &str = "request_type";
 pub const LABEL_STATUS: &str = "status";
-pub const LABEL_TYPE: &str = "type";
 pub const LABEL_HEALTH_STATUS_BEFORE: &str = "before";
 pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 
 const STATUS_SUCCESS: &str = "success";
 const STATUS_ERROR: &str = "error";
 
-pub const REQUESTS_NUM_LABELS: usize = 3;
-pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] =
-    [LABEL_TYPE, LABEL_REQUEST_TYPE, LABEL_STATUS];
+pub const REQUESTS_NUM_LABELS: usize = 2;
+pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] = [LABEL_REQUEST_TYPE, LABEL_STATUS];
 
 // Struct holding only Prometheus metric objects. Hence, it is thread-safe iff
 // the data members are thread-safe.
