@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+rust_library(
+    name = "canister_log",
+    srcs = [
+        "src/lib.rs",
+    ],
+    crate_name = "ic_canister_log",
+    version = "0.8.0",
+)
+
+rust_doc_test(
+    name = "canister_log_doc_test",
+    crate = ":canister_log",
+)
+
+rust_test(
+    name = "canister_log_test",
+    srcs = ["tests/tests.rs"],
+    deps = [":canister_log"],
+)
