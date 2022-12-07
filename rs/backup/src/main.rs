@@ -11,6 +11,7 @@ use tokio::task::spawn_blocking;
 // Here is an example config file:
 //
 // {
+//     "ic_name_metrics": "mercury",
 //     "backup_instance": "zh1-spm34",
 //     "nns_url": "https://smallXYZ.testnet.dfinity.network",
 //     "nns_pem": "ic_public_key.pem",

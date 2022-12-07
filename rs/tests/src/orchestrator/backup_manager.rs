@@ -132,6 +132,7 @@ pub fn test(env: TestEnv) {
     };
 
     let config = Config {
+        ic_name_metrics: "testing".to_string(),
         backup_instance: "backup_test_node".to_string(),
         nns_url: Some(nns_node.get_public_url()),
         nns_pem: nns_public_key,
