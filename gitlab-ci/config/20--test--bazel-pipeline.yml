@@ -178,6 +178,11 @@ bazel-cargo-test-parity:
     when: always
     paths:
       - artifacts/*
+  tags:
+    # TODO: remove when IDX-2575 is complete
+    - docker
+    - dfinity
+    - zh
   script:
     - |
       set -eufo pipefail
