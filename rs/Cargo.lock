@@ -4648,6 +4648,7 @@ dependencies = [
  "arrayvec 0.5.2",
  "async-trait",
  "base64 0.11.0",
+ "bincode",
  "clap 3.2.23",
  "criterion",
  "ed25519-consensus",

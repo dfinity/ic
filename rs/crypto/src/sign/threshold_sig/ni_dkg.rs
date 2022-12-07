@@ -112,6 +112,15 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         );
         let start_time = self.metrics.now();
         let result = transcript::create_transcript(&self.csp, config, verified_dealings);
+        self.metrics.observe_parameter_size(
+            MetricsDomain::NiDkgAlgorithm,
+            "create_transcript",
+            "transcript",
+            result.as_ref().map_or(0, |transcript| {
+                bincode::serialize(transcript).map_or(0, |bytes| bytes.len())
+            }),
+            MetricsResult::from(&result),
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
@@ -150,6 +159,13 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             transcript,
             &logger,
         );
+        self.metrics.observe_parameter_size(
+            MetricsDomain::NiDkgAlgorithm,
+            "load_transcript",
+            "transcript",
+            bincode::serialize(transcript).map_or(0, |bytes| bytes.len()),
+            MetricsResult::from(&result),
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
@@ -170,6 +186,10 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         &self,
         transcripts: HashSet<NiDkgTranscript>,
     ) -> Result<(), DkgKeyRemovalError> {
+        let mut transcripts_len = 0;
+        for transcript in &transcripts {
+            transcripts_len += bincode::serialize(transcript).map_or(0, |bytes| bytes.len());
+        }
         let transcripts = TranscriptsToRetain::new(transcripts)
             .map_err(DkgKeyRemovalError::InputValidationError)?;
         let log_id = get_log_id(&self.logger, module_path!());
@@ -184,6 +204,13 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         );
         let start_time = self.metrics.now();
         let result = retain_active_keys::retain_only_active_keys(&self.csp, transcripts);
+        self.metrics.observe_parameter_size(
+            MetricsDomain::NiDkgAlgorithm,
+            "load_transcript",
+            "transcript",
+            transcripts_len,
+            MetricsResult::from(&result),
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
