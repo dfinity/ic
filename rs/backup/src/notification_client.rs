@@ -2,7 +2,7 @@ use crate::util::block_on;
 use slog::{error, info, Logger};
 
 pub struct NotificationClient {
-    pub ic_name_metrics: String,
+    pub push_metrics: bool,
     pub backup_instance: String,
     pub slack_token: String,
     pub subnet: String,
@@ -52,6 +52,10 @@ impl NotificationClient {
     }
 
     fn push_metrics(&self, message: String) {
+        if !self.push_metrics {
+            return;
+        }
+
         let url = format!(
             "http://prometheus.mainnet.dfinity.network:9091/metrics/job/backup-pod/instance/{}",
             self.backup_instance
@@ -65,8 +69,7 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_last_restored_height gauge\n\
             # HELP backup_last_restored_height The height of the last restored state on a backup pod.\n\
-            backup_last_restored_height{{ic=\"{}\", ic_subnet=\"{}\"}} {}\n",
-            self.ic_name_metrics,
+            backup_last_restored_height{{ic=\"mercury\", ic_subnet=\"{}\"}} {}\n",
             self.subnet,
             height,
         );
@@ -77,8 +80,8 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_replay_time_minutes gauge\n\
             # HELP backup_replay_time_minutes Time spent on a replay.\n\
-            backup_replay_time_minutes{{ic=\"{}\", ic_subnet=\"{}\"}} {}\n",
-            self.ic_name_metrics, self.subnet, minutes,
+            backup_replay_time_minutes{{ic=\"mercury\", ic_subnet=\"{}\"}} {}\n",
+            self.subnet, minutes,
         );
         self.push_metrics(message)
     }
@@ -87,8 +90,7 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_sync_minutes gauge\n\
             # HELP backup_sync_minutes The time it took a backup pod to sync artifacts from NNS nodes.\n\
-            backup_sync_minutes{{ic=\"{}\", ic_subnet=\"{}\"}} {}\n",
-            self.ic_name_metrics,
+            backup_sync_minutes{{ic=\"mercury\", ic_subnet=\"{}\"}} {}\n",
             self.subnet,
             minutes,
         );
@@ -99,9 +101,9 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_disk_usage gauge\n\
             # HELP backup_disk_usage The allocation percentage of some resource on a backup pod.\n\
-            backup_disk_usage{{ic=\"{}\", ic_subnet=\"{}\", resource=\"space\"}} {}\n\
-            backup_disk_usage{{ic=\"{}\", ic_subnet=\"{}\", resource=\"inodes\"}} {}\n",
-            self.ic_name_metrics, self.subnet, space, self.ic_name_metrics, self.subnet, inodes,
+            backup_disk_usage{{ic=\"mercury\", ic_subnet=\"{}\", resource=\"space\"}} {}\n\
+            backup_disk_usage{{ic=\"mercury\", ic_subnet=\"{}\", resource=\"inodes\"}} {}\n",
+            self.subnet, space, self.subnet, inodes,
         );
         self.push_metrics(message)
     }

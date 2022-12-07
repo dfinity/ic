@@ -146,7 +146,7 @@ impl BackupManager {
                 s.initial_replica_version,
             );
             let notification_client = NotificationClient {
-                ic_name_metrics: config.ic_name_metrics.clone(),
+                push_metrics: config.push_metrics,
                 backup_instance: config.backup_instance.clone(),
                 slack_token: config.slack_token.clone(),
                 subnet: s.subnet_id.to_string(),
