@@ -1,5 +1,6 @@
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
@@ -141,12 +142,12 @@ fn make_open_sns_token_swap_proposal(
         .as_secs();
 
     let params = SnsSwapParams {
-        max_icp_e8s: 42,
-        min_icp_e8s: 42,
+        max_icp_e8s: 42 * E8,
+        min_icp_e8s: 42 * E8,
         min_participants: 1,
-        max_participant_icp_e8s: 42,
-        min_participant_icp_e8s: 42,
-        sns_token_e8s: 42,
+        max_participant_icp_e8s: 42 * E8,
+        min_participant_icp_e8s: 42 * E8,
+        sns_token_e8s: 42 * E8,
         swap_due_timestamp_seconds: now + 87500,
         neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
             count: 3,

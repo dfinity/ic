@@ -96,7 +96,7 @@ impl IcpLedger for MockLedger {
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        unimplemented!()
+        Err(NervousSystemError::default())
     }
 
     async fn account_balance(

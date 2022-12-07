@@ -103,7 +103,7 @@ fn params() -> Params {
         }),
     };
     assert!(result.is_valid_at(START_TIMESTAMP_SECONDS));
-    assert!(result.validate().is_ok());
+    assert!(result.validate(&init()).is_ok());
     result
 }
 

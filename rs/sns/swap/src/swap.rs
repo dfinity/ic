@@ -243,7 +243,7 @@ impl Swap {
             return Err("Invalid lifecycle state to OPEN the swap: must be PENDING".to_string());
         }
 
-        req.validate(now_seconds)?;
+        req.validate(now_seconds, self.init())?;
         let params = req.params.as_ref().expect("The params field has no value.");
 
         let sns_token_amount = Self::get_sns_tokens(this_canister, sns_ledger).await?;
@@ -1202,8 +1202,9 @@ impl Swap {
         init.validate()?;
 
         if let Some(params) = &self.params {
-            params.validate()?;
+            params.validate(init)?;
         }
+
         for (k, b) in &self.buyers {
             if !is_valid_principal(k) {
                 return Err(format!("Invalid principal {}", k));
@@ -1216,6 +1217,7 @@ impl Swap {
         for nr in &self.neuron_recipes {
             nr.validate()?;
         }
+
         Ok(())
     }
 
@@ -1400,6 +1402,7 @@ impl Init {
         validate_canister_id(&self.sns_ledger_canister_id)?;
         validate_canister_id(&self.icp_ledger_canister_id)?;
         validate_canister_id(&self.sns_root_canister_id)?;
+
         if self.fallback_controller_principal_ids.is_empty() {
             return Err("at least one fallback controller required".to_string());
         }
@@ -1425,16 +1428,46 @@ impl Init {
 }
 
 impl Params {
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self, init: &Init) -> Result<(), String> {
         if self.min_icp_e8s == 0 {
             return Err("min_icp_e8s must be > 0".to_string());
         }
         if self.min_participants == 0 {
             return Err("min_participants must be > 0".to_string());
         }
-        if self.min_participant_icp_e8s == 0 {
-            return Err("min_participant_icp_e8s must be > 0".to_string());
+
+        let transaction_fee_e8s = init
+            .transaction_fee_e8s
+            .expect("transaction_fee_e8s was not supplied.");
+        let neuron_minimum_stake_e8s = init
+            .neuron_minimum_stake_e8s
+            .expect("neuron_minimum_stake_e8s was not supplied");
+        let neuron_basket_count = self
+            .neuron_basket_construction_parameters
+            .as_ref()
+            .expect("participant_neuron_basket not populated.")
+            .count as u128;
+        let min_participant_sns_e8s = self.min_participant_icp_e8s as u128
+            * self.sns_token_e8s as u128
+            / self.max_icp_e8s as u128;
+        let ok = min_participant_sns_e8s
+            >= neuron_basket_count * (neuron_minimum_stake_e8s + transaction_fee_e8s) as u128;
+        if !ok {
+            return Err(format!(
+                "min_participant_icp_e8s={} is too small. It needs to be \
+                 large enough to ensure that participants will end up with \
+                 enough SNS tokens to form {} SNS neurons, each of which \
+                 require at least {} SNS e8s, plus {} e8s in transaction \
+                 fees. More precisely, the following inequality must hold: \
+                 min_participant_icp_e8s >= neuron_basket_count * (neuron_minimum_stake_e8s + transaction_fee_e8s) * max_icp_e8s / sns_token_e8s \
+                 (where / denotes floor division).",
+                self.min_participant_icp_e8s,
+                neuron_basket_count,
+                neuron_minimum_stake_e8s,
+                transaction_fee_e8s,
+            ));
         }
+
         if self.sns_token_e8s == 0 {
             return Err("sns_token_e8s must be > 0".to_string());
         }
@@ -1639,18 +1672,20 @@ impl TransferableAmount {
 }
 
 impl OpenRequest {
-    pub fn validate(&self, current_timestamp_seconds: u64) -> Result<(), String> {
+    pub fn validate(&self, current_timestamp_seconds: u64, init: &Init) -> Result<(), String> {
         let mut defects = vec![];
 
         // Inspect params.
-        let params = self.params.as_ref();
-        if params.is_none() {
-            defects.push("The parameters of the swap are missing.".to_string());
-        } else if let Some(params) = params {
-            if !params.is_valid_at(current_timestamp_seconds) {
-                defects.push("The parameters of the swap are invalid.".to_string());
-            } else if let Err(err) = params.validate() {
-                defects.push(err);
+        match self.params.as_ref() {
+            None => {
+                defects.push("The parameters of the swap are missing.".to_string());
+            }
+            Some(params) => {
+                if !params.is_valid_at(current_timestamp_seconds) {
+                    defects.push("The parameters of the swap are invalid.".to_string());
+                } else if let Err(err) = params.validate(init) {
+                    defects.push(err);
+                }
             }
         }
 
@@ -1839,11 +1874,49 @@ mod tests {
             },],
             open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         };
+
+        // Fill out Init just enough to test Params validation. These values are
+        // similar to, but not the same analgous values in NNS.
+        static ref INIT: Init = Init {
+            transaction_fee_e8s: Some(12_345),
+            neuron_minimum_stake_e8s: Some(123_456_789),
+            ..Default::default()
+        };
+    }
+
+    #[test]
+    fn accept_iff_can_form_sns_neuron_in_the_worst_case() {
+        let mut init = INIT.clone();
+
+        let sns_token_e8s = PARAMS.min_participant_icp_e8s as u128 * PARAMS.sns_token_e8s as u128
+            / PARAMS.max_icp_e8s as u128;
+        let neuron_basket_count = PARAMS
+            .neuron_basket_construction_parameters
+            .as_ref()
+            .expect("participant_neuron_basket not populated.")
+            .count as u128;
+        let available_sns_token_e8s_per_neuron =
+            sns_token_e8s / neuron_basket_count as u128 - init.transaction_fee_e8s.unwrap() as u128;
+        assert!(available_sns_token_e8s_per_neuron < u64::MAX as u128);
+        let available_sns_token_e8s_per_neuron = available_sns_token_e8s_per_neuron as u64;
+        assert!(init.neuron_minimum_stake_e8s.unwrap() <= available_sns_token_e8s_per_neuron);
+
+        // Set the bar as high as min_participant_icp_e8s can "jump".
+        init.neuron_minimum_stake_e8s = Some(available_sns_token_e8s_per_neuron);
+        assert_is_ok!(PARAMS.validate(&init));
+
+        // The bar can still be cleared if lowered.
+        init.neuron_minimum_stake_e8s = Some(available_sns_token_e8s_per_neuron - 1);
+        assert_is_ok!(PARAMS.validate(&init));
+
+        // Raise the bar so that it can no longer be cleared.
+        init.neuron_minimum_stake_e8s = Some(available_sns_token_e8s_per_neuron + 1);
+        assert_is_err!(PARAMS.validate(&init));
     }
 
     #[test]
     fn open_request_validate_ok() {
-        assert_is_ok!(OPEN_REQUEST.validate(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_is_ok!(OPEN_REQUEST.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
     }
 
     #[test]
@@ -1856,7 +1929,7 @@ mod tests {
             ..OPEN_REQUEST.clone()
         };
 
-        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
     }
 
     #[test]
@@ -1866,7 +1939,7 @@ mod tests {
             ..OPEN_REQUEST.clone()
         };
 
-        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
     }
 
     #[test]
