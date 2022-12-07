@@ -1773,16 +1773,12 @@ fn test_intermittent_proposal_submission() {
         assert_eq!(reward_event_round, last_reward_round);
         assert_eq!(next_reward_event.settled_proposals, vec![p1_id]);
 
-        // Phase 2: Test that reward periods can occur without any proposals, and RewardEvents
-        // can still take place.
+        // Phase 2: Test that reward periods can occur without any proposals. In
+        // this case, RewardEvents are not generated. This is so that voting
+        // rewards roll over when there are no voting rewards within a reward
+        // period.
         delta_s += reward_round_duration_seconds as i64; // Add a reward_round to the running time warp
         sns_canisters.set_time_warp(delta_s).await?;
-
-        // Even though no proposals were submitted, a RewardEvent should have been created
-        let next_reward_event = sns_canisters.await_reward_event(last_reward_round).await;
-        assert_eq!(next_reward_event.round, last_reward_round + 1);
-        last_reward_round = next_reward_event.round;
-        assert_eq!(next_reward_event.settled_proposals, vec![]);
 
         // Phase 3: Given that no Proposals were submitted in the last reward period, all periodic
         // tasks should still succeed.
@@ -1797,8 +1793,7 @@ fn test_intermittent_proposal_submission() {
             .vote(&voter.sender, &voter.subaccount, p2_id, true)
             .await;
 
-        // Now warp time to the middle of the next reward period. The proposal should have been
-        // decided and executed, but since another period hasn't completed, not rewarded.
+        // Now warp time to the middle of the next reward period.
         delta_s += initial_voting_period_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
@@ -1806,11 +1801,6 @@ fn test_intermittent_proposal_submission() {
         let proposal_data = sns_canisters.get_proposal(p2_id).await;
         assert!(proposal_data.decided_timestamp_seconds > 0);
         assert!(proposal_data.executed_timestamp_seconds > 0);
-        assert_eq!(proposal_data.reward_event_round, 0);
-        assert_eq!(
-            proposal_data.reward_status(now_seconds(Some(delta_s as u64))),
-            ProposalRewardStatus::ReadyToSettle
-        );
 
         // Advance time well into the next reward period.
         delta_s += reward_round_duration_seconds as i64;

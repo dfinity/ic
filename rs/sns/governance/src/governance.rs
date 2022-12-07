@@ -73,8 +73,10 @@ use crate::sns_upgrade::{
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
 use dfn_core::api::{spawn, CanisterId};
-use ic_nervous_system_common::ledger::compute_distribution_subaccount_bytes;
-use ic_nervous_system_common::{ledger, NervousSystemError};
+use ic_nervous_system_common::{
+    ledger::{self, compute_distribution_subaccount_bytes},
+    NervousSystemError,
+};
 use ic_nervous_system_root::ChangeCanisterProposal;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
@@ -3766,7 +3768,7 @@ impl Governance {
                 None => {
                     println!(
                         "{}WARNING: distribute_rewards called even though \
-                     voting_rewards_parameters not set.",
+                         voting_rewards_parameters not set.",
                         log_prefix(),
                     );
                     return;
@@ -3786,7 +3788,7 @@ impl Governance {
         // Log if we are about to "back fill".
         if most_recent_round > 1 + self.latest_reward_event().round {
             println!(
-                "{}Some reward distribution should have happened, but were missed.\
+                "{}Some reward distribution should have happened, but were missed. \
                  It is now {} periods since rewards start time, and the last distribution \
                  nominally happened at {} periods since rewards start time.",
                 log_prefix(),
@@ -3827,6 +3829,15 @@ impl Governance {
 
         let considered_proposals: Vec<ProposalId> =
             self.ready_to_be_settled_proposal_ids().collect();
+        if considered_proposals.is_empty() {
+            // This early return is needed to make rewards roll over when there
+            // are no proposals that need to be settled (i.e. give voting
+            // rewards to neurons). This early return could be moved to
+            // immediately before generating a new RewardEvent, near the end,
+            // but returning early is done here, because none of the intervening
+            // code does anything when there are no proposals to consider.
+            return;
+        }
 
         // Add up reward shares based on voting power that was exercised.
         let mut neuron_id_to_reward_shares: HashMap<NeuronId, Decimal> = HashMap::new();
@@ -3847,7 +3858,7 @@ impl Governance {
                         Err(e) => {
                             println!(
                                 "{} Could not use voter {} to calculate total_voting_rights \
-                                    since it's NeuronId was invalid. Underlying error: {:?}.",
+                                 since it's NeuronId was invalid. Underlying error: {:?}.",
                                 log_prefix(),
                                 voter,
                                 e
@@ -4334,22 +4345,21 @@ fn get_neuron_id_from_memo_and_controller(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::neuron;
-    use crate::sns_upgrade::{
-        CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-        GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-        GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
-    };
     use crate::{
         pb::v1::{
             governance::SnsMetadata,
             manage_neuron_response,
             nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-            Account as AccountProto, Motion, NeuronPermissionType, ProposalData, ProposalId, Tally,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, VotingRewardsParameters,
-            WaitForQuietState,
+            neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData,
+            ProposalId, Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion,
+            VotingRewardsParameters, WaitForQuietState,
         },
-        tests::assert_is_ok,
+        reward,
+        sns_upgrade::{
+            CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
+            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
+            GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
+        },
         types::test_helpers::NativeEnvironment,
     };
     use assert_matches::assert_matches;
@@ -4360,8 +4370,10 @@ mod tests {
     use ic_ic00_types::{
         CanisterIdRecord, CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType,
     };
-    use ic_nervous_system_common::assert_is_ok;
     use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
+    use ic_nervous_system_common::{
+        assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
+    };
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
     };
@@ -4370,7 +4382,7 @@ mod tests {
     use ic_test_utilities::types::ids::canister_test_id;
     use maplit::btreemap;
     use proptest::prelude::{prop_assert, proptest};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     struct DoNothingLedger {}
 
@@ -4418,9 +4430,6 @@ mod tests {
         }
     }
 
-    const E8: u64 = 1_0000_0000;
-    const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
-    const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640991600;
     const TRANSITION_ROUND_COUNT: u64 = 42;
     const BASE_VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
         round_duration_seconds: Some(7 * 24 * 60 * 60), // 1 week
@@ -4429,10 +4438,40 @@ mod tests {
         final_reward_rate_basis_points: Some(100),   // 1%
     };
 
+    lazy_static! {
+        static ref A_NEURON_PRINCIPAL_ID: PrincipalId = PrincipalId::new_user_test_id(956560);
+
+        static ref A_NEURON_ID: NeuronId = NeuronId::from(
+            compute_neuron_staking_subaccount_bytes(*A_NEURON_PRINCIPAL_ID, /* nonce = */ 0),
+        );
+
+        static ref A_NEURON: Neuron = Neuron {
+            id: Some(A_NEURON_ID.clone()),
+            permissions: vec![NeuronPermission {
+                principal: Some(*A_NEURON_PRINCIPAL_ID),
+                permission_type: NeuronPermissionType::all(),
+            }],
+            cached_neuron_stake_e8s: 100 * E8,
+            aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
+            voting_power_percentage_multiplier: 100,
+            ..Default::default()
+        };
+
+        static ref A_MOTION_PROPOSAL: Proposal = Proposal {
+            title: "This Proposal is Wunderbar!".to_string(),
+            summary: "This will solve all of your problems.".to_string(),
+            url: "https://www.example.com/some/path".to_string(),
+            action: Some(Action::Motion(Motion {
+                motion_text: "See the summary.".to_string(),
+            }))
+        };
+    }
+
     #[test]
     fn fixtures_are_valid() {
-        assert_is_ok(ValidGovernanceProto::try_from(basic_governance_proto()));
-        assert_is_ok(BASE_VOTING_REWARDS_PARAMETERS.validate());
+        assert_is_ok!(ValidGovernanceProto::try_from(basic_governance_proto()));
+        assert_is_ok!(BASE_VOTING_REWARDS_PARAMETERS.validate());
     }
 
     #[test]
@@ -5014,34 +5053,17 @@ mod tests {
     #[tokio::test]
     async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap() {
         // Step 1: Prepare the world, i.e. Governance.
-
-        let principal_id = PrincipalId::new_user_test_id(8807);
-        let neuron_id = NeuronId {
-            id: vec![249, 83, 240, 16],
-        };
-        let neuron = Neuron {
-            id: Some(neuron_id.clone()),
-            permissions: vec![NeuronPermission {
-                principal: Some(principal_id),
-                permission_type: NeuronPermissionType::all(),
-            }],
-            cached_neuron_stake_e8s: 100 * E8,
-            aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
-            ..Default::default()
-        };
-
         let mut governance = Governance::new(
             GovernanceProto {
                 neurons: btreemap! {
-                    neuron_id.to_string() => neuron,
+                    A_NEURON_ID.to_string() => A_NEURON.clone(),
                 },
                 mode: governance::Mode::PreInitializationSwap as i32,
                 ..basic_governance_proto()
             }
             .try_into()
             .unwrap(),
-            Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
+            Box::new(NativeEnvironment::new(Some(CanisterId::from_u64(350519)))),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         );
@@ -5049,8 +5071,8 @@ mod tests {
         // Step 2: Run code under test.
         let result = governance
             .make_proposal(
-                &neuron_id,
-                &principal_id,
+                &A_NEURON_ID,
+                &A_NEURON_PRINCIPAL_ID,
                 &Proposal {
                     action: Some(Action::ManageNervousSystemParameters(
                         NervousSystemParameters {
@@ -5073,6 +5095,209 @@ mod tests {
         let err = err.error_message.to_lowercase();
         assert!(err.contains("mode"), "{:#?}", err);
         assert!(err.contains("vot"), "{:#?}", err);
+    }
+
+    #[tokio::test]
+    async fn no_new_reward_event_when_there_are_no_new_proposals() {
+        // Step 0: Define helper type(s).
+
+        // The main feature this implements is control of perceived time.
+        struct DummyEnvironment {
+            now: Arc<Mutex<u64>>,
+        }
+
+        impl DummyEnvironment {
+            fn new(now: Arc<Mutex<u64>>) -> Self {
+                Self { now }
+            }
+        }
+
+        #[async_trait]
+        impl Environment for DummyEnvironment {
+            fn now(&self) -> u64 {
+                *self.now.lock().unwrap()
+            }
+
+            fn set_time_warp(&mut self, _new_time_warp: TimeWarp) {
+                unimplemented!();
+            }
+
+            fn random_u64(&mut self) -> u64 {
+                unimplemented!();
+            }
+
+            fn random_byte_array(&mut self) -> [u8; 32] {
+                unimplemented!();
+            }
+
+            async fn call_canister(
+                &self,
+                _canister_id: CanisterId,
+                _method_name: &str,
+                _arg: Vec<u8>,
+            ) -> Result<
+                /* reply: */ Vec<u8>,
+                (
+                    /* error_code: */ Option<i32>,
+                    /* message: */ String,
+                ),
+            > {
+                unimplemented!();
+            }
+
+            fn heap_growth_potential(&self) -> HeapGrowthPotential {
+                HeapGrowthPotential::NoIssue
+            }
+
+            fn canister_id(&self) -> CanisterId {
+                CanisterId::from_u64(318680)
+            }
+        }
+
+        // Step 1: Prepare the world.
+
+        // Step 1.1: Helper.
+        let now = Arc::new(Mutex::new(START_OF_2022_TIMESTAMP_SECONDS));
+
+        // Step 1.2: Craft the test subject.
+        let mut governance_proto = GovernanceProto {
+            neurons: btreemap! {
+                A_NEURON_ID.to_string() => A_NEURON.clone(),
+            },
+            ..basic_governance_proto()
+        };
+        let voting_rewards_parameters = governance_proto
+            .parameters
+            .as_mut()
+            .unwrap()
+            .voting_rewards_parameters
+            .as_mut()
+            .unwrap();
+        *voting_rewards_parameters = VotingRewardsParameters {
+            round_duration_seconds: Some(SECONDS_PER_DAY),
+            reward_rate_transition_duration_seconds: Some(1),
+            initial_reward_rate_basis_points: Some(101),
+            final_reward_rate_basis_points: Some(100),
+        };
+        let min_reward_rate = i2d(1) / i2d(100);
+        let mut governance = Governance::new(
+            governance_proto.try_into().unwrap(),
+            Box::new(DummyEnvironment::new(now.clone())),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+        );
+
+        // Step 1.3: Record original last_reward_event. That way, we can detect
+        // changes (there aren't supposed to be any).
+        let original_latest_reward_event = governance.proto.latest_reward_event.clone();
+        assert!(
+            original_latest_reward_event.is_some(),
+            "{:#?}",
+            original_latest_reward_event
+        );
+
+        // Step 1.4: Make a proposal.
+        let proposal_id = governance
+            .make_proposal(&A_NEURON_ID, &A_NEURON_PRINCIPAL_ID, &A_MOTION_PROPOSAL)
+            .await
+            .unwrap();
+
+        // Step 1.5: Assert pre-condition.
+        assert_eq!(
+            governance
+                .ready_to_be_settled_proposal_ids()
+                .collect::<Vec<_>>(),
+            vec![]
+        );
+
+        // Step 2: Run code under test (to wit, distribute_rewards), which
+        // usually updates latest_reward_event, but not this time, because there
+        // are no proposals that are ready to settle yet.
+        let supply = Tokens::from_e8s(100 * E8);
+        governance.distribute_rewards(supply);
+
+        // Step 3: Inspect result(s): No change to latest_reward_event.
+        assert_eq!(
+            governance.proto.latest_reward_event,
+            original_latest_reward_event
+        );
+
+        // Step 4: Repeat, but with a twist: this time, there is indeed a
+        // proposal that's ready to settle. Because of this, calling
+        // distribute_rewards causes latest_reward_event to update, unlike
+        // before.
+
+        // Step 4.1: Advance time so that the proposal we made earlier becomes
+        // ready to settle.
+        let wait_days = 9;
+        *now.lock().unwrap() += SECONDS_PER_DAY * wait_days;
+        assert_eq!(
+            governance
+                .ready_to_be_settled_proposal_ids()
+                .collect::<Vec<_>>(),
+            vec![proposal_id]
+        );
+
+        // Step 4.2: Call code under test (to wit, distribute_rewards) a second time.
+        let supply = Tokens::from_e8s(100 * E8);
+        governance.distribute_rewards(supply);
+
+        // Step 4.3: Inspect result(s). This time, latest_reward_event has
+        // changed, unlike in step 3.
+        assert_ne!(
+            governance.proto.latest_reward_event,
+            original_latest_reward_event
+        );
+
+        // Now that we've seen that latest_reward_event has changed, let's take
+        // a closer look at it.
+        let final_latest_reward_event = governance.proto.latest_reward_event.as_ref().unwrap();
+        assert_eq!(
+            final_latest_reward_event.settled_proposals,
+            vec![proposal_id]
+        );
+
+        // Inspect the amount distributed in final_latest_reward_event. In
+        // principal, we could calculate this exactly, but it's someone
+        // complicated, because the reward rate varies. To make this assertion a
+        // simpler, we instead calculate a range that the reward amount must
+        // fall within. That window is pretty small, and should be sufficient to
+        // detect an incorrect implementation of roll over, which is the main
+        // thing we are trying to do here.
+        let min_distributed_e8s = (i2d(supply.get_e8s()) * i2d(wait_days)
+            / *reward::NOMINAL_DAYS_PER_YEAR
+            * min_reward_rate)
+            .floor();
+        // Scale up by 1%, because the max/initial reward rate is exactly this
+        // much bigger than the min/final reward rate.
+        let max_distributed_e8s = min_distributed_e8s * i2d(101) / i2d(100);
+        let distributed_e8s_range = min_distributed_e8s..max_distributed_e8s;
+        assert!(
+            distributed_e8s_range
+                .contains(&i2d(final_latest_reward_event.distributed_e8s_equivalent)),
+            "distributed_e8s_range = {:?}\n\
+             final_latest_reward_event = {:#?}",
+            distributed_e8s_range,
+            final_latest_reward_event,
+        );
+
+        assert_eq!(
+            governance
+                .ready_to_be_settled_proposal_ids()
+                .collect::<Vec<_>>(),
+            vec![]
+        );
+
+        let neuron = governance
+            .proto
+            .neurons
+            .get(&A_NEURON_ID.to_string())
+            .unwrap();
+        assert_eq!(
+            neuron.maturity_e8s_equivalent, final_latest_reward_event.distributed_e8s_equivalent,
+            "neuron = {:#?}",
+            neuron,
+        );
     }
 
     #[test]
@@ -6132,7 +6357,7 @@ mod tests {
                 },
             )),
         };
-        assert_is_ok(governance.perform_add_generic_nervous_system_function(valid));
+        assert_is_ok!(governance.perform_add_generic_nervous_system_function(valid));
     }
 
     fn default_governance_with_proto(governance_proto: GovernanceProto) -> Governance {
