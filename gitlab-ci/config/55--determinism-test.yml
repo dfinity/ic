@@ -40,7 +40,7 @@ build-determinism-guest-update-img:
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
-    - job: guest-os-updateimg-build
+    - job: wait-for-bazel-test-all
       artifacts: false
     - job: docker-build-ic
       artifacts: false

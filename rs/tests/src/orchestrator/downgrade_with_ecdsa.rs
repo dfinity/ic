@@ -97,7 +97,7 @@ fn downgrade_test(env: TestEnv, subnet_type: SubnetType) {
 
     if is_bazel {
         let sha256 = env
-            .read_dependency_to_string("ic-os/guestos/dev/upgrade.tar.zst.sha256")
+            .read_dependency_to_string("ic-os/guestos/dev/update-img.tar.zst.sha256")
             .unwrap();
         block_on(bless_replica_version(
             &nns_node,

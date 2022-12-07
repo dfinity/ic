@@ -122,7 +122,7 @@ if [ "$BUILD_BINARIES" == "true" ] || [ "$BUILD_CANISTERS" == "true" ]; then
 fi
 
 if [ "$BUILD_IMAGES" == "true" ]; then
-    setup_docker_image ic-build
+    setup_docker_image ic-build-bazel
 
     "$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic -a=i
 fi

@@ -165,6 +165,13 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         tags = ["manual"],
     )
 
+    native.genrule(
+        name = "test_version_txt",
+        srcs = [":copy_version_txt"],
+        outs = ["version-test.txt"],
+        cmd = "sed -e 's/.*/&-test/' < $< > $@",
+    )
+
     ext4_image(
         name = "partition-boot.tar",
         src = "rootfs-tree.tar",
@@ -176,6 +183,31 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
                 image_deps["bootfs"].items() + [
                     ("version.txt", "/boot/version.txt:0644"),
                     ("extra_boot_args", "/boot/extra_boot_args:0644"),
+                ]
+            )
+            if ":bootloader/extra_boot_args.template" not in k
+            # additional files to install
+            if v != "/"
+        },
+        file_contexts = ":file_contexts",
+        partition_size = "1G",
+        subdir = "boot/",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
+    ext4_image(
+        name = "partition-boot-test.tar",
+        src = "rootfs-tree.tar",
+        # Take the dependency list declared above, and add in the "version.txt"
+        # as well as the generated extra_boot_args file in the correct place.
+        extra_files = {
+            k: v
+            for k, v in (
+                image_deps["bootfs"].items() + [
+                    ("version-test.txt", "/boot/version.txt:0644"),
+                    ("extra_boot_test_args", "/boot/extra_boot_args:0644"),
                 ]
             )
             if ":bootloader/extra_boot_args.template" not in k
@@ -230,6 +262,45 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location //ic-os/guestos:bootloader/extra_boot_args.template) > $@",
     )
 
+    ext4_image(
+        name = "partition-root-test-unsigned.tar",
+        src = "rootfs-tree.tar",
+        # Take the dependency list declared above, and add in the "version.txt"
+        # at the correct place.
+        extra_files = {
+            k: v
+            for k, v in (image_deps["rootfs"].items() + [(":version-test.txt", "/opt/ic/share/version.txt:0644")])
+            if v != "/"
+        },
+        file_contexts = ":file_contexts",
+        partition_size = "3G",
+        strip_paths = [
+            "/run",
+            "/boot",
+        ],
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
+    native.genrule(
+        name = "partition-root-test-sign",
+        srcs = ["partition-root-test-unsigned.tar"],
+        outs = ["partition-root-test.tar", "partition-root-test-hash"],
+        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tar) -r $(location partition-root-test-hash)",
+        tools = ["//toolchains/sysimage:verity_sign.py"],
+    )
+
+    native.genrule(
+        name = "extra_boot_args_root_test_hash",
+        srcs = [
+            "//ic-os/guestos:bootloader/extra_boot_args.template",
+            ":partition-root-test-hash",
+        ],
+        outs = ["extra_boot_test_args"],
+        cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-test-hash))/ < $(location //ic-os/guestos:bootloader/extra_boot_args.template) > $@",
+    )
+
     disk_image(
         name = "disk-img.tar",
         layout = "//ic-os/guestos:partitions.csv",
@@ -246,19 +317,6 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-    )
-
-    upgrade_image(
-        name = "upgrade.tar",
-        boot_partition = ":partition-boot.tar",
-        root_partition = ":partition-root.tar",
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-        version_file = ":version.txt",
     )
 
     native.genrule(
@@ -284,10 +342,23 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         tags = ["no-remote-cache"],
     )
 
+    upgrade_image(
+        name = "update-img.tar",
+        boot_partition = ":partition-boot.tar",
+        root_partition = ":partition-root.tar",
+        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+        tags = ["no-remote-cache"],
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        version_file = ":version.txt",
+    )
+
     native.genrule(
-        name = "upgrade.tar_zst",
-        srcs = ["upgrade.tar"],
-        outs = ["upgrade.tar.zst"],
+        name = "update-img.tar_zst",
+        srcs = ["update-img.tar"],
+        outs = ["update-img.tar.zst"],
         cmd = "zstd --threads=0 -10 -f -z $< -o $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
@@ -295,8 +366,52 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     )
 
     sha256sum(
-        name = "upgrade.tar.zst.sha256",
-        srcs = [":upgrade.tar.zst"],
+        name = "update-img.tar.zst.sha256",
+        srcs = [":update-img.tar.zst"],
+    )
+
+    gzip_compress(
+        name = "update-img.tar.gz",
+        srcs = ["update-img.tar"],
+        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+        tags = ["no-remote-cache"],
+    )
+
+    upgrade_image(
+        name = "update-img-test.tar",
+        boot_partition = ":partition-boot-test.tar",
+        root_partition = ":partition-root-test.tar",
+        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+        tags = ["no-remote-cache"],
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        version_file = ":version-test.txt",
+    )
+
+    native.genrule(
+        name = "update-img-test.tar_zst",
+        srcs = ["update-img-test.tar"],
+        outs = ["update-img-test.tar.zst"],
+        cmd = "zstd --threads=0 -10 -f -z $< -o $@",
+        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+        tags = ["no-remote-cache"],
+    )
+
+    sha256sum(
+        name = "update-img-test.tar.zst.sha256",
+        srcs = [":update-img-test.tar.zst"],
+    )
+
+    gzip_compress(
+        name = "update-img-test.tar.gz",
+        srcs = ["update-img-test.tar"],
+        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+        tags = ["no-remote-cache"],
     )
 
     upload_suffix = ""
@@ -317,9 +432,12 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     upload_artifacts(
         name = "upload_update-img",
         inputs = [
-            ":upgrade.tar_zst",
+            ":update-img.tar.zst",
+            ":update-img.tar.gz",
+            ":update-img-test.tar.zst",
+            ":update-img-test.tar.gz",
         ],
-        remote_subdir = "guest-os/bazel-update-img" + upload_suffix,
+        remote_subdir = "guest-os/update-img" + upload_suffix,
     )
 
     native.filegroup(
@@ -333,10 +451,20 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
     )
 
     native.filegroup(
-        name = "hash_and_upload_upgrade-img",
+        name = "hash_and_upload_update-img",
         srcs = [
             ":upload_update-img",
-            ":upgrade.tar.zst.sha256",
+            ":update-img.tar.zst.sha256",
+        ],
+        visibility = ["//visibility:public"],
+        tags = ["manual"],
+    )
+
+    native.filegroup(
+        name = "hash_and_upload_update-img-test",
+        srcs = [
+            ":upload_update-img-test",
+            ":update-img-test.tar.zst.sha256",
         ],
         visibility = ["//visibility:public"],
         tags = ["manual"],
@@ -377,7 +505,14 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
 
     native.filegroup(
         name = name,
-        srcs = [":disk-img.tar.zst", ":disk-img.tar.gz", ":upgrade.tar.zst"],
+        srcs = [
+            ":disk-img.tar.zst",
+            ":disk-img.tar.gz",
+            ":update-img.tar.zst",
+            ":update-img.tar.gz",
+            ":update-img-test.tar.zst",
+            ":update-img-test.tar.gz",
+        ],
         visibility = visibility,
     )
 
