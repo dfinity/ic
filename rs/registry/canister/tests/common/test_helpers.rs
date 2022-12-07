@@ -254,7 +254,9 @@ pub async fn wait_for_ecdsa_setup(
         public_key_result = Some(
             try_call_via_universal_canister(
                 calling_canister,
-                &runtime.get_management_canister(),
+                &runtime.get_management_canister_with_effective_canister_id(
+                    calling_canister.canister_id().into(),
+                ),
                 &Ic00Method::ECDSAPublicKey.to_string(),
                 Encode!(&public_key_request).unwrap(),
             )

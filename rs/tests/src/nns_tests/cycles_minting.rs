@@ -513,7 +513,7 @@ pub fn test(env: TestEnv) {
             application_endpoint.url.clone(),
             application_endpoint.effective_canister_id(),
         )
-        .get_management_canister()
+        .get_management_canister_with_effective_canister_id(new_canister_id.into())
         .update_from_sender(
             "canister_status",
             candid_one,
@@ -590,7 +590,7 @@ pub fn test(env: TestEnv) {
                 application_endpoint.url.clone(),
                 application_endpoint.effective_canister_id(),
             )
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(new_canister_id.into())
             .update_from_sender(
                 "canister_status",
                 candid_one,
@@ -653,7 +653,7 @@ pub fn test(env: TestEnv) {
 
         /* Check the controller / cycles balance. */
         let new_canister_status: CanisterStatusResult = nns
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(new_canister_id.into())
             .update_from_sender(
                 "canister_status",
                 candid_one,
@@ -680,7 +680,7 @@ pub fn test(env: TestEnv) {
 
             /* Check the controller / cycles balance. */
             let new_canister_status: CanisterStatusResult = nns
-                .get_management_canister()
+                .get_management_canister_with_effective_canister_id(new_canister_id.into())
                 .update_from_sender(
                     "canister_status",
                     candid_one,
@@ -970,7 +970,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             get_random_node_endpoint_of_subnet(&handle, subnet_of_type1, &mut rng);
 
         let _status: CanisterStatusResult = runtime_from_url(node_on_authorized_subnet.url.clone(), node_on_authorized_subnet.effective_canister_id())
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(canister_on_authorized_subnet.into())
             .update_from_sender(
                 "canister_status",
                 candid_one,
@@ -981,7 +981,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             .unwrap();
 
         let _status: CanisterStatusResult = runtime_from_url(node_on_type1_subnet.url.clone(), node_on_type1_subnet.effective_canister_id())
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(canister_on_type1_subnet.into())
             .update_from_sender(
                 "canister_status",
                 candid_one,
