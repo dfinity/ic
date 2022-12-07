@@ -17,27 +17,30 @@ Success::
 
 end::catalog[] */
 
+use crate::util::{assert_subnet_can_make_progress, block_on, EndpointsStatus};
 use crate::{
     driver::ic::{InternetComputer, Subnet},
     driver::{
-        pot_dsl::get_ic_handle_and_ctx,
         test_env::TestEnv,
-        test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt},
-        vm_control::IcControl,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
+        },
     },
+    nns::remove_nodes_via_endpoint,
+    util::assert_nodes_health_statuses,
 };
-use crate::{
-    nns::NnsExt,
-    util::{assert_endpoints_health, assert_subnet_can_make_progress, block_on, EndpointsStatus},
-};
-use ic_fondue::ic_manager::IcEndpoint;
+use ic_base_types::NodeId;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
+use rand::seq::SliceRandom;
+use rand_chacha::ChaCha8Rng;
 use slog::info;
 
 const DKG_INTERVAL: u64 = 14;
 const NODES_COUNT: usize = 4;
 const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
+// Seed for a random generator
+const RND_SEED: u64 = 42;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
@@ -48,53 +51,56 @@ pub fn config(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
-    let logger = env.logger();
-    info!(logger, "Installing NNS canisters...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    let log = env.logger();
+    let mut nns_nodes: Vec<_> = env.topology_snapshot().root_subnet().nodes().collect();
+    let (nns_node, nns_nodes_to_remove) = {
+        let mut rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
+        nns_nodes.shuffle(&mut rng);
+        (&nns_nodes[0], &nns_nodes[1..REMOVE_NODES_COUNT + 1])
+    };
+    info!(log, "Installing NNS canisters ...");
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
-
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-    let mut rng = ctx.rng.clone();
-    let mut endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
-    // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
+    info!(
+        log,
+        "Assert nodes are healthy before their removal from subnet"
+    );
+    assert_nodes_health_statuses(
+        log.clone(),
+        nns_nodes_to_remove,
+        EndpointsStatus::AllHealthy,
+    );
+    info!(
+        log,
+        "Remove X=floor(N/3)+1=floor({NODES_COUNT}/3+1)={REMOVE_NODES_COUNT} nodes via proposal",
+    );
     block_on(async {
-        assert_endpoints_health(endpoints.as_slice(), EndpointsStatus::AllHealthy).await
+        let node_ids: Vec<NodeId> = nns_nodes_to_remove.iter().map(|n| n.node_id).collect();
+        remove_nodes_via_endpoint(nns_node.get_public_url(), node_ids.as_slice())
+            .await
+            .unwrap();
     });
-    // Randomly select X=floor(N/3)+1 nodes for removal.
-    let endpoint_to_remain = endpoints.pop().unwrap();
-    let mut endpoints_to_remove: Vec<&IcEndpoint> = Vec::new();
-    for _ in 0..REMOVE_NODES_COUNT {
-        endpoints_to_remove.push(endpoints.pop().unwrap());
-    }
-    // Remove the nodes via proposal.
-    let node_ids = endpoints_to_remove
-        .iter()
-        .map(|ep| ep.node_id)
-        .collect::<Vec<_>>();
-    ctx.remove_nodes(&handle, node_ids.as_slice());
-    // Assert all nodes are now unreachable via http:://[IPv6]:8080/api/v2/status
-    block_on(async {
-        assert_endpoints_health(
-            endpoints_to_remove.as_slice(),
-            EndpointsStatus::AllUnhealthy,
-        )
-        .await
-    });
-    // Kill nodes after removal (last shot to the victims).
-    for ep in endpoints_to_remove {
-        ep.kill_node(ctx.logger.clone());
-    }
+    info!(
+        log,
+        "Assert nodes are unhealthy after their removal from subnet"
+    );
+    assert_nodes_health_statuses(
+        log.clone(),
+        nns_nodes_to_remove,
+        EndpointsStatus::AllUnhealthy,
+    );
+    info!(log, "Kill nodes after removal (last shot to the victims)");
+    nns_nodes_to_remove.iter().for_each(|node| node.vm().kill());
     // Assert that `update` call can still be executed, this ensures that removed+killed nodes are not part of the consensus committee.
     let update_message = b"This beautiful prose should be persisted for future generations";
-    block_on(async {
-        assert_subnet_can_make_progress(&logger, update_message, endpoint_to_remain).await
-    });
+    block_on(async { assert_subnet_can_make_progress(update_message, nns_node).await });
 }

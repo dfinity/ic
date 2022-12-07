@@ -17,11 +17,11 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
-use crate::driver::vm_control::IcControl;
-use crate::nns::NnsExt;
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
+};
+use crate::nns::remove_nodes_via_endpoint;
 use crate::tecdsa::tecdsa_signature_test::{
     enable_ecdsa_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
 };
@@ -30,16 +30,20 @@ use crate::{
     util::*,
 };
 use canister_test::{Canister, Cycles};
-use ic_fondue::ic_manager::IcEndpoint;
+use ic_base_types::NodeId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
+use rand::seq::SliceRandom;
+use rand_chacha::ChaCha8Rng;
 use slog::info;
 
 use super::tecdsa_signature_test::DKG_INTERVAL;
 
 const NODES_COUNT: usize = 4;
 const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
+// Seed for a random generator
+const RND_SEED: u64 = 42;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
@@ -50,94 +54,74 @@ pub fn config(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
-    let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    info!(logger, "Setup: install all necessary NNS canisters");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    let log = env.logger();
+    let nns_subnet = env.topology_snapshot().root_subnet();
+    let mut nns_nodes: Vec<_> = nns_subnet.nodes().collect();
+    let (nns_node, nns_nodes_to_remove) = {
+        let mut rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
+        nns_nodes.shuffle(&mut rng);
+        (&nns_nodes[0], &nns_nodes[1..REMOVE_NODES_COUNT + 1])
+    };
+    info!(log, "Setup: install all necessary NNS canisters");
+    let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
-
-    let mut rng = ctx.rng.clone();
-    let mut endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     let message_hash = [0xabu8; 32];
-
-    info!(
-        logger,
-        "Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status"
-    );
     let (canister_id, public_key) = block_on(async {
-        let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-        nns_endpoint.assert_ready(ctx).await;
-        let nns = runtime_from_url(
-            nns_endpoint.url.clone(),
-            nns_endpoint.effective_canister_id(),
-        );
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        info!(logger, "Enable ECDSA signing");
-        enable_ecdsa_signing(
-            &governance,
-            nns_endpoint.subnet.as_ref().unwrap().id,
-            make_key(KEY_ID1),
-        )
-        .await;
-
-        info!(logger, "Asserting endpoint reachability");
-        assert_endpoints_health(endpoints.as_slice(), EndpointsStatus::AllHealthy).await;
-        let agent = assert_create_agent(endpoints[0].url.as_str()).await;
-        let msg_can = MessageCanister::new(&agent, endpoints[0].effective_canister_id()).await;
-        info!(logger, "Getting public key");
-        let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &logger)
+        info!(log, "Enable ECDSA signing");
+        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, make_key(KEY_ID1)).await;
+        let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
+        info!(log, "Getting public key");
+        let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
             .await
             .unwrap();
         (msg_can.canister_id(), public_key)
     });
-
-    info!(logger, "Randomly select X=floor(N/3)+1 nodes for removal");
-    let mut endpoints_to_remove: Vec<&IcEndpoint> = Vec::new();
-    for _ in 0..REMOVE_NODES_COUNT {
-        endpoints_to_remove.push(endpoints.pop().unwrap());
-    }
-
-    info!(logger, "Remove the nodes via proposal");
-    let node_ids = endpoints_to_remove
-        .iter()
-        .map(|ep| ep.node_id)
-        .collect::<Vec<_>>();
-    ctx.remove_nodes(&handle, node_ids.as_slice());
-
     info!(
-        logger,
-        "Assert all nodes are now unreachable via http:://[IPv6]:8080/api/v2/status"
+        log,
+        "Assert nodes are healthy before their removal from subnet"
+    );
+    assert_nodes_health_statuses(
+        log.clone(),
+        nns_nodes_to_remove,
+        EndpointsStatus::AllHealthy,
+    );
+    info!(
+        log,
+        "Remove X=floor(N/3)+1=floor({NODES_COUNT}/3+1)={REMOVE_NODES_COUNT} nodes via proposal",
     );
     block_on(async {
-        assert_endpoints_health(
-            endpoints_to_remove.as_slice(),
-            EndpointsStatus::AllUnhealthy,
-        )
-        .await
+        let node_ids: Vec<NodeId> = nns_nodes_to_remove.iter().map(|n| n.node_id).collect();
+        remove_nodes_via_endpoint(nns_node.get_public_url(), node_ids.as_slice())
+            .await
+            .unwrap();
     });
-
     info!(
-        logger,
-        "Kill nodes after removal (last shot to the victims)"
+        log,
+        "Assert nodes are unhealthy after their removal from subnet"
     );
-    for ep in endpoints_to_remove {
-        ep.kill_node(ctx.logger.clone());
-    }
-
-    info!(logger, "Verify signature");
+    assert_nodes_health_statuses(
+        log.clone(),
+        nns_nodes_to_remove,
+        EndpointsStatus::AllUnhealthy,
+    );
+    info!(log, "Kill nodes after removal (last shot to the victims)");
+    nns_nodes_to_remove.iter().for_each(|node| node.vm().kill());
+    info!(log, "Verify signature");
     block_on(async {
-        let agent = assert_create_agent(endpoints[0].url.as_str()).await;
-        let msg_can = MessageCanister::from_canister_id(&agent, canister_id);
-        let public_key_ = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &logger)
+        let msg_can = MessageCanister::from_canister_id(&nns_agent, canister_id);
+        let public_key_ = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
             .await
             .unwrap();
         assert_eq!(public_key, public_key_);
@@ -146,7 +130,7 @@ pub fn test(env: TestEnv) {
             Cycles::zero(),
             make_key(KEY_ID1),
             &msg_can,
-            &logger,
+            &log,
         )
         .await
         .unwrap();
