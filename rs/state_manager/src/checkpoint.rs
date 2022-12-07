@@ -192,7 +192,7 @@ fn serialize_canister_to_tip(
         }
     };
     // Priority credit must be zero at this point
-    assert_eq!(canister_state.scheduler_state.priority_credit.value(), 0);
+    assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
     canister_layout
         .canister()
         .serialize(
