@@ -2,12 +2,13 @@
 
 - name: Download disk images
   vars:
-    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) }}"
-    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux  | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) | join(' ') }}"
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) }}"
   shell: |
     set -eExuo pipefail
     # check if disk image is available on the new or the old location for the given hash
+    PROXY_CONNECT_TIMEOUT=5
     PROXY_CDN_URL="http://download.proxy-global.dfinity.network:8080"
     CDN_URL="https://download.dfinity.systems"
     DEFAULT_UNIVERSAL_VM_IMG_SHA256="ca2ddfab45f940564503e2edf3d2c02acc05988edde4e3a7400355bd22d69d44"
@@ -30,6 +31,16 @@
       [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
     )
 
+    # Try to download first from the proxy and fallback to the CDN if that fails.
+    # The proxy will always fail to connect in prod, so we should timeout connect fairly quickly
+    function curl_proxy() {
+      input_path=$1
+      output_path=$2
+      if ! curl --connect-timeout $PROXY_CONNECT_TIMEOUT --retry 5 --fail "$PROXY_CDN_BASE_URL/$input_path" --output $output_path ; then
+          curl --retry 5 --fail "$CDN_BASE_URL/$input_path" --output $output_path
+      fi
+    }
+
     function curl_disk_img() {
       set -eExuo pipefail
       disk_type=$1
@@ -43,18 +54,13 @@
       PROXY_CDN_BASE_URL="${proxy_image_cdn[$disk_type]}"
       CDN_BASE_URL="${image_cdn[$disk_type]}"
       if [ "$disk_type" == "aux" ]; then
-          if ! curl --retry 5 --fail "$PROXY_CDN_BASE_URL/universal-vm.img.zst" --output disk-img.zst ; then
-              curl --retry 5 --fail "$CDN_BASE_URL/universal-vm.img.zst" --output disk-img.zst
-          fi
+          curl_proxy universal-vm.img.zst disk-img.zst
 
           chmod 0644 "disk-img.zst"
           chown root:root "disk-img.zst"
       else
-          if ! curl --retry 5 --fail "$PROXY_CDN_BASE_URL/disk-img.tar.zst" --output disk-img.tar.zst ||
-             ! curl --retry 5 --fail "$PROXY_CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS ; then
-              curl --retry 5 --fail "$CDN_BASE_URL/disk-img.tar.zst" --output disk-img.tar.zst
-              curl --retry 5 --fail "$CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS
-          fi
+          curl_proxy disk-img.tar.zst disk-img.tar.zst
+          curl_proxy SHA256SUMS SHA256SUMS
 
           chmod 0644 "disk-img.tar.zst"
           chown root:root "disk-img.tar.zst"
@@ -64,14 +70,14 @@
     }
 
     disk_types=()
-    if [ ! -z "{{ aux_nodes }}" ]; then
+    if [ ! -z "{{ aux_nodes | join(' ') }}" ]; then
         disk_types+=(aux)
     fi
-    if [ ! -z "{{ boundary_nodes }}" ]; then
-        disk_types+=(replica)
-    fi
-    if [ ! -z "{{ replica_nodes }}" ]; then
+    if [ ! -z "{{ boundary_nodes | join(' ') }}" ]; then
         disk_types+=(boundary)
+    fi
+    if [ ! -z "{{ replica_nodes | join(' ') }}" ]; then
+        disk_types+=(replica)
     fi
 
     # download the IC-OS disk images for replica, boundary and aux, in parallel
@@ -89,9 +95,9 @@
 
 - name: unarchive image files # noqa risky-shell-pipe
   vars:
-    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) }}"
-    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux  | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) | join(' ') }}"
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) }}"
   shell: |
     # if the unpacked file does not exist or if the archive is newer than the unpacked file
     set -eExuo pipefail
@@ -103,14 +109,14 @@
     )
 
     disk_types=()
-    if [ ! -z "{{ aux_nodes }}" ]; then
+    if [ ! -z "{{ aux_nodes | join(' ') }}" ]; then
         disk_types+=(aux)
     fi
-    if [ ! -z "{{ boundary_nodes }}" ]; then
-        disk_types+=(replica)
-    fi
-    if [ ! -z "{{ replica_nodes }}" ]; then
+    if [ ! -z "{{ boundary_nodes | join(' ') }}" ]; then
         disk_types+=(boundary)
+    fi
+    if [ ! -z "{{ replica_nodes | join(' ') }}" ]; then
+        disk_types+=(replica)
     fi
 
     # unarchive each disk type
