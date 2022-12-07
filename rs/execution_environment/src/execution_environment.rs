@@ -334,6 +334,24 @@ impl ExecutionEnvironment {
         )
     }
 
+    fn verify_sender_id(req: &Request, state: &ReplicatedState) -> Result<(), UserError> {
+        match state.find_subnet_id(req.sender.into()) {
+            Ok(sender_subnet_id) => {
+                if sender_subnet_id == state.metadata.network_topology.nns_subnet_id
+                    || sender_subnet_id == state.metadata.own_subnet_id
+                {
+                    Ok(())
+                } else {
+                    Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        format!("Incorrect sender subnet id: {sender_subnet_id}. Sender should be on the same subnet or on the NNS subnet."),
+                    ))
+                }
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     /// Executes a replicated message sent to a subnet.
     /// Returns the new replicated state and the number of left instructions.
     #[allow(clippy::cognitive_complexity)]
@@ -478,30 +496,35 @@ impl ExecutionEnvironment {
                             Cycles::zero(),
                         )),
                     RequestOrIngress::Request(req) => {
-                        let cycles = Arc::make_mut(req).take_cycles();
-                        match CreateCanisterArgs::decode(req.method_payload()) {
-                            Err(err) => Some((Err(err), cycles)),
-                            Ok(args) => {
-                                // Start logging execution time for `create_canister`.
-                                let timer = Timer::start();
+                        match Self::verify_sender_id(req, &state) {
+                            Err(err) => Some((Err(err), msg.take_cycles())),
+                            Ok(_) => {
+                                let cycles = Arc::make_mut(req).take_cycles();
+                                match CreateCanisterArgs::decode(req.method_payload()) {
+                                    Err(err) => Some((Err(err), cycles)),
+                                    Ok(args) => {
+                                        // Start logging execution time for `create_canister`.
+                                        let timer = Timer::start();
 
-                                let settings = match args.settings {
-                                    None => CanisterSettingsArgs::default(),
-                                    Some(settings) => settings,
-                                };
-                                let result = match CanisterSettings::try_from(settings) {
-                                    Err(err) => Some((Err(err.into()), cycles)),
-                                    Ok(settings) =>
-                                        Some(self.create_canister(*msg.sender(), cycles, settings, registry_settings.max_number_of_canisters, &mut state, registry_settings.subnet_size, round_limits))
-                                };
-                                info!(
-                                    self.log,
-                                    "Finished executing create_canister message after {:?} with result: {:?}",
-                                    timer.elapsed(),
-                                    result
-                                );
+                                        let settings = match args.settings {
+                                            None => CanisterSettingsArgs::default(),
+                                            Some(settings) => settings,
+                                        };
+                                        let result = match CanisterSettings::try_from(settings) {
+                                            Err(err) => Some((Err(err.into()), cycles)),
+                                            Ok(settings) =>
+                                                Some(self.create_canister(*msg.sender(), cycles, settings, registry_settings.max_number_of_canisters, &mut state, registry_settings.subnet_size, round_limits))
+                                        };
+                                        info!(
+                                            self.log,
+                                            "Finished executing create_canister message after {:?} with result: {:?}",
+                                            timer.elapsed(),
+                                            result
+                                        );
 
-                                result
+                                        result
+                                    }
+                                }
                             }
                         }
                     }
@@ -649,17 +672,29 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok(Ic00Method::RawRand) => {
-                let res = match EmptyBlob::decode(payload) {
-                    Err(err) => Err(candid_error_to_user_error(err)),
-                    Ok(EmptyBlob) => {
-                        let mut buffer = vec![0u8; 32];
-                        rng.fill_bytes(&mut buffer);
-                        Ok(Encode!(&buffer).unwrap())
+            Ok(Ic00Method::RawRand) => match &msg {
+                RequestOrIngress::Ingress(_) => Some((
+                    Err(UserError::new(
+                        ErrorCode::CanisterMethodNotFound,
+                        "raw_rand can only be called by other canisters, not via ingress messages.",
+                    )),
+                    Cycles::zero(),
+                )),
+                RequestOrIngress::Request(req) => match Self::verify_sender_id(req, &state) {
+                    Err(err) => Some((Err(err), msg.take_cycles())),
+                    Ok(_) => {
+                        let res = match EmptyBlob::decode(payload) {
+                            Err(err) => Err(candid_error_to_user_error(err)),
+                            Ok(EmptyBlob) => {
+                                let mut buffer = vec![0u8; 32];
+                                rng.fill_bytes(&mut buffer);
+                                Ok(Encode!(&buffer).unwrap())
+                            }
+                        };
+                        Some((res, msg.take_cycles()))
                     }
-                };
-                Some((res, msg.take_cycles()))
-            }
+                },
+            },
 
             Ok(Ic00Method::DepositCycles) => match CanisterIdRecord::decode(payload) {
                 Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
@@ -668,48 +703,51 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
                 true => match &msg {
                     RequestOrIngress::Request(request) => {
-                        match CanisterHttpRequestArgs::decode(payload) {
-                            Err(err) => {
-                                Some((Err(candid_error_to_user_error(err)), msg.take_cycles()))
-                            }
-                            Ok(args) => match CanisterHttpRequestContext::try_from((
-                                state.time(),
-                                request.as_ref(),
-                                args,
-                            )) {
-                                Err(err) => Some((Err(err.into()), msg.take_cycles())),
-                                Ok(mut canister_http_request_context) => {
-                                    let http_request_fee =
-                                        self.cycles_account_manager.http_request_fee(
-                                            canister_http_request_context.variable_parts_size(),
-                                            canister_http_request_context.max_response_bytes,
-                                            registry_settings.subnet_size,
-                                        );
-                                    if request.payment < http_request_fee {
-                                        let err = Err(UserError::new(
-                                            ErrorCode::CanisterRejectedMessage,
-                                            format!(
-                                                "http_request request sent with {} cycles, but {} cycles are required.",
-                                                request.payment, http_request_fee
-                                            ),
-                                        ));
-                                        Some((err, msg.take_cycles()))
-                                    } else {
-                                        canister_http_request_context.request.payment -=
-                                            http_request_fee;
-                                        state
-                                            .metadata
-                                            .subnet_call_context_manager
-                                            .push_http_request(canister_http_request_context);
-                                        self.metrics.observe_message_with_label(
-                                            &request.method_name,
-                                            timer.elapsed(),
-                                            SUBMITTED_OUTCOME_LABEL.into(),
-                                            SUCCESS_STATUS_LABEL.into(),
-                                        );
-                                        None
-                                    }
+                        match Self::verify_sender_id(request, &state) {
+                            Err(err) => Some((Err(err), msg.take_cycles())),
+                            Ok(_) => match CanisterHttpRequestArgs::decode(payload) {
+                                Err(err) => {
+                                    Some((Err(candid_error_to_user_error(err)), msg.take_cycles()))
                                 }
+                                Ok(args) => match CanisterHttpRequestContext::try_from((
+                                    state.time(),
+                                    request.as_ref(),
+                                    args,
+                                )) {
+                                    Err(err) => Some((Err(err.into()), msg.take_cycles())),
+                                    Ok(mut canister_http_request_context) => {
+                                        let http_request_fee =
+                                            self.cycles_account_manager.http_request_fee(
+                                                canister_http_request_context.variable_parts_size(),
+                                                canister_http_request_context.max_response_bytes,
+                                                registry_settings.subnet_size,
+                                            );
+                                        if request.payment < http_request_fee {
+                                            let err = Err(UserError::new(
+                                                        ErrorCode::CanisterRejectedMessage,
+                                                        format!(
+                                                            "http_request request sent with {} cycles, but {} cycles are required.",
+                                                            request.payment, http_request_fee
+                                                        ),
+                                                    ));
+                                            Some((err, msg.take_cycles()))
+                                        } else {
+                                            canister_http_request_context.request.payment -=
+                                                http_request_fee;
+                                            state
+                                                .metadata
+                                                .subnet_call_context_manager
+                                                .push_http_request(canister_http_request_context);
+                                            self.metrics.observe_message_with_label(
+                                                &request.method_name,
+                                                timer.elapsed(),
+                                                SUBMITTED_OUTCOME_LABEL.into(),
+                                                SUCCESS_STATUS_LABEL.into(),
+                                            );
+                                            None
+                                        }
+                                    }
+                                },
                             },
                         }
                     }

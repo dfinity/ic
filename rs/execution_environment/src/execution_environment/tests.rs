@@ -970,8 +970,7 @@ fn create_canister_xnet_to_nns_called_from_non_nns() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "Cannot create canister. Sender should be on the same subnet or on the NNS subnet."
-            .to_string()
+        format!("Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.", other_subnet)
     );
 }
 
@@ -996,8 +995,7 @@ fn create_canister_xnet_called_from_non_nns() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "Cannot create canister. Sender should be on the same subnet or on the NNS subnet."
-            .to_string()
+        format!("Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.", other_subnet)
     );
 }
 
