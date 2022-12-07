@@ -129,7 +129,7 @@ async fn push_messages_to<R: Rng>(
     effective_canister_id: PrincipalId,
 ) -> (u32, [u8; MSG_LEN], Principal) {
     info!(logger, "Installing universal canister...");
-    let can = UniversalCanister::new(agent, effective_canister_id).await;
+    let can = UniversalCanister::new_with_retries(agent, effective_canister_id, logger).await;
     info!(
         logger,
         "Universal canister with id={} installed successfully",

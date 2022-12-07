@@ -23,6 +23,7 @@ pub fn config() -> InternetComputer {
 
 /// User queries A on first subnet. A queries B on another subnet which fails.
 pub fn cannot_query_xnet_canister(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -35,11 +36,16 @@ pub fn cannot_query_xnet_canister(env: TestEnv) {
             endpoint_application.assert_ready(ctx).await;
             let agent_application = assert_create_agent(endpoint_application.url.as_str()).await;
 
-            let canister_a =
-                UniversalCanister::new(&agent_nns, endpoint_nns.effective_canister_id()).await;
-            let canister_b = UniversalCanister::new(
+            let canister_a = UniversalCanister::new_with_retries(
+                &agent_nns,
+                endpoint_nns.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            let canister_b = UniversalCanister::new_with_retries(
                 &agent_application,
                 endpoint_application.effective_canister_id(),
+                &logger,
             )
             .await;
 
@@ -53,6 +59,7 @@ pub fn cannot_query_xnet_canister(env: TestEnv) {
 
 /// User queries canister A; A replies to user.
 pub fn simple_query(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -61,7 +68,12 @@ pub fn simple_query(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
             let arbitrary_bytes = b"l49sdk";
             assert_eq!(
                 canister
@@ -76,6 +88,7 @@ pub fn simple_query(env: TestEnv) {
 
 /// User queries canister A; A queries self which fails.
 pub fn self_loop_fails(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -84,7 +97,12 @@ pub fn self_loop_fails(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
             let res = canister
                 .query(wasm().inter_query(canister.canister_id(), call_args()))
                 .await;
@@ -95,6 +113,7 @@ pub fn self_loop_fails(env: TestEnv) {
 
 /// User queries canister A; A queries B; B queries A which fails.
 pub fn canisters_loop_fails(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -103,8 +122,18 @@ pub fn canisters_loop_fails(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
-            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_a = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            let canister_b = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
             let res = canister_a
                 .query(
                     wasm().inter_query(
@@ -122,6 +151,7 @@ pub fn canisters_loop_fails(env: TestEnv) {
 /// User queries canister A; A queries B; B replies to A; A does not reply to
 /// the user.
 pub fn intermediate_canister_does_not_reply(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -130,8 +160,18 @@ pub fn intermediate_canister_does_not_reply(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
-            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_a = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            let canister_b = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
             let res = canister_a
                 .query(
                     wasm().inter_query(
@@ -150,6 +190,7 @@ pub fn intermediate_canister_does_not_reply(env: TestEnv) {
 /// User queries canister A; canister A queries canister B; B replies to A; A
 /// replies to user.
 pub fn query_two_canisters(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -158,8 +199,18 @@ pub fn query_two_canisters(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
-            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_a = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            let canister_b = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
             let arbitrary_bytes = b";ioapusdvzn,x";
             assert_eq!(
                 canister_a
@@ -178,6 +229,7 @@ pub fn query_two_canisters(env: TestEnv) {
 /// User queries A; A queries B; B queries C; C replies to B; B replies to A; A
 /// replies to user
 pub fn query_three_canisters(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -186,9 +238,24 @@ pub fn query_three_canisters(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
-            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
-            let canister_c = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_a = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            let canister_b = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            let canister_c = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
             let arbitrary_bytes = b";ioapusdvzn,x";
             assert_eq!(
                 canister_a
@@ -209,6 +276,7 @@ pub fn query_three_canisters(env: TestEnv) {
 
 /// User queries A; A queries non-existent canister; A sends error to user;
 pub fn canister_queries_non_existent(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -217,7 +285,12 @@ pub fn canister_queries_non_existent(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_a = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
             let non_existent = CanisterId::from(12345);
             let res = canister_a
                 .query(wasm().inter_query(non_existent, call_args()))
@@ -230,6 +303,7 @@ pub fn canister_queries_non_existent(env: TestEnv) {
 /// User queries A; A queries B; B does not respond; A handles no-reply and
 /// replies to user;
 pub fn canister_queries_does_not_reply(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -238,8 +312,18 @@ pub fn canister_queries_does_not_reply(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
-            let canister_b = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister_a = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            let canister_b = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
             let res = canister_a
                 .query(wasm().inter_query(
                     canister_b.canister_id(),

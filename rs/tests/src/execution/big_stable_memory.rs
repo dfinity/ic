@@ -234,6 +234,7 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
 }
 
 pub fn canister_traps_if_32_bit_api_used_on_big_memory(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -244,7 +245,12 @@ pub fn canister_traps_if_32_bit_api_used_on_big_memory(env: TestEnv) {
             let agent = assert_create_agent(endpoint.url.as_str()).await;
 
             // Create a canister that uses 32-bit stable memory.
-            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
 
             // Canister can use 32-bit api.
             canister

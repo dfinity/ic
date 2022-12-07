@@ -81,14 +81,9 @@ pub fn test(env: TestEnv) {
             let inner_log = log.clone();
             let effective_canister_id = node.effective_canister_id();
             node.with_default_agent(move |agent| async move {
-                let ucan = UniversalCanister::new_with_retries(
-                    &agent,
-                    effective_canister_id,
-                    &inner_log,
-                    READY_WAIT_TIMEOUT,
-                    RETRY_BACKOFF,
-                )
-                .await;
+                let ucan =
+                    UniversalCanister::new_with_retries(&agent, effective_canister_id, &inner_log)
+                        .await;
 
                 // send a query call to it
                 assert_eq!(ucan.try_read_stable(0, 0).await, Vec::<u8>::new());

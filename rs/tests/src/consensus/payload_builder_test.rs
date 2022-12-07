@@ -119,6 +119,7 @@ pub fn max_ingress_payload_size_test(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         let (_, target_unican) = setup_unicans(
+            &log,
             &assist_agent,
             assist_effective_canister_id,
             &target_agent,
@@ -153,6 +154,7 @@ pub fn max_xnet_payload_size_test(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         let (assist_unican, target_unican) = setup_unicans(
+            &log,
             &assist_agent,
             assist_effective_canister_id,
             &target_agent,
@@ -186,6 +188,7 @@ pub fn dual_workload_test(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         let (assist_unican, target_unican) = setup_unicans(
+            &log,
             &assist_agent,
             assist_effective_canister_id,
             &target_agent,
@@ -235,6 +238,7 @@ fn setup_agents(
 }
 
 async fn setup_unicans<'a>(
+    logger: &Logger,
     assist_agent: &'a Agent,
     assist_effective_canister_id: PrincipalId,
     target_agent: &'a Agent,
@@ -242,8 +246,8 @@ async fn setup_unicans<'a>(
 ) -> (Arc<UniversalCanister<'a>>, Arc<UniversalCanister<'a>>) {
     // Install a `UniversalCanister` on each
     let (assist_unican, target_unican) = join!(
-        UniversalCanister::new(assist_agent, assist_effective_canister_id),
-        UniversalCanister::new(target_agent, target_effective_canister_id)
+        UniversalCanister::new_with_retries(assist_agent, assist_effective_canister_id, logger),
+        UniversalCanister::new_with_retries(target_agent, target_effective_canister_id, logger)
     );
 
     // NOTE: Since we will be making calls to these canisters in parallel, we have

@@ -108,10 +108,8 @@ impl<'a> UniversalCanister<'a> {
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
         log: &slog::Logger,
-        timeout: Duration,
-        backoff: Duration,
     ) -> UniversalCanister<'a> {
-        retry_async(log, timeout, backoff, || async {
+        retry_async(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             match Self::new_with_params(agent, effective_canister_id, None, None, None).await {
                 Ok(c) => Ok(c),
                 Err(e) => anyhow::bail!(e),
@@ -119,6 +117,49 @@ impl<'a> UniversalCanister<'a> {
         })
         .await
         .expect("Could not create universal canister.")
+    }
+
+    pub async fn new_with_cycles_with_retries<C: Into<u128>>(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        cycles: C,
+        log: &slog::Logger,
+    ) -> UniversalCanister<'a> {
+        let c = cycles.into();
+        retry_async(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            match Self::new_with_cycles(agent, effective_canister_id, c).await {
+                Ok(c) => Ok(c),
+                Err(e) => anyhow::bail!(e),
+            }
+        })
+        .await
+        .expect("Could not create universal canister with cycles.")
+    }
+
+    pub async fn new_with_params_with_retries(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        compute_allocation: Option<u64>,
+        cycles: Option<u128>,
+        pages: Option<u32>,
+        log: &slog::Logger,
+    ) -> UniversalCanister<'a> {
+        retry_async(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            match Self::new_with_params(
+                agent,
+                effective_canister_id,
+                compute_allocation,
+                cycles,
+                pages,
+            )
+            .await
+            {
+                Ok(c) => Ok(c),
+                Err(e) => anyhow::bail!(e),
+            }
+        })
+        .await
+        .expect("Could not create universal canister with params.")
     }
 
     pub async fn new_with_params(
@@ -158,7 +199,7 @@ impl<'a> UniversalCanister<'a> {
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
         cycles: C,
-    ) -> UniversalCanister<'a> {
+    ) -> Result<UniversalCanister<'a>, String> {
         let payload = universal_canister_argument_builder().stable_grow(1).build();
 
         // Create a canister.
@@ -177,9 +218,8 @@ impl<'a> UniversalCanister<'a> {
             .with_raw_arg(payload.clone())
             .call_and_wait(delay())
             .await
-            .unwrap_or_else(|err| panic!("Couldn't install universal canister: {}", err));
-
-        Self { agent, canister_id }
+            .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
+        Ok(Self { agent, canister_id })
     }
 
     pub async fn new_with_64bit_stable_memory(
@@ -881,9 +921,14 @@ pub fn get_unassinged_nodes_endpoints(handle: &IcHandle) -> Vec<&IcEndpoint> {
 // This indirectly asserts a non-zero finalization rate of the subnet:
 // - We store a string in the memory by sending an `update` message to a canister
 // - We retrieve the saved string by sending `query` message to a canister
-pub(crate) async fn assert_subnet_can_make_progress(message: &[u8], endpoint: &IcEndpoint) {
+pub(crate) async fn assert_subnet_can_make_progress(
+    logger: &slog::Logger,
+    message: &[u8],
+    endpoint: &IcEndpoint,
+) {
     let agent = assert_create_agent(endpoint.url.as_str()).await;
-    let universal_canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+    let universal_canister =
+        UniversalCanister::new_with_retries(&agent, endpoint.effective_canister_id(), logger).await;
     universal_canister.store_to_stable(0, message).await;
     assert_eq!(
         universal_canister

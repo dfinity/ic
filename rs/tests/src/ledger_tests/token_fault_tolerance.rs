@@ -94,13 +94,15 @@ pub fn test(env: TestEnv) {
     rt.block_on(app_endpoint.assert_ready(ctx));
     let agent = rt.block_on(util::assert_create_agent(app_endpoint.url.as_str()));
     info!(&ctx.logger, "Creating two universal canisters...");
-    let can1 = util::block_on(util::UniversalCanister::new(
+    let can1 = util::block_on(util::UniversalCanister::new_with_retries(
         &agent,
         app_endpoint.effective_canister_id(),
+        &logger,
     ));
-    let can2 = util::block_on(util::UniversalCanister::new(
+    let can2 = util::block_on(util::UniversalCanister::new_with_retries(
         &agent,
         app_endpoint.effective_canister_id(),
+        &logger,
     ));
 
     info!(

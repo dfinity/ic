@@ -94,5 +94,7 @@ pub fn test(env: TestEnv) {
     }
     // Assert that `update` call can still be executed, this ensures that removed+killed nodes are not part of the consensus committee.
     let update_message = b"This beautiful prose should be persisted for future generations";
-    block_on(async { assert_subnet_can_make_progress(update_message, endpoint_to_remain).await });
+    block_on(async {
+        assert_subnet_can_make_progress(&logger, update_message, endpoint_to_remain).await
+    });
 }

@@ -64,9 +64,10 @@ pub fn test(env: TestEnv) {
     });
     // Install a test canister.
     let agent = block_on(assert_create_agent(endpoints[0].url.as_str()));
-    let test_canister_id = block_on(UniversalCanister::new(
+    let test_canister_id = block_on(UniversalCanister::new_with_retries(
         &agent,
         endpoints[0].effective_canister_id(),
+        &logger,
     ))
     .canister_id();
     // Assert that `update` message can be sent to the test canister.

@@ -17,10 +17,7 @@ use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{
-            HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-        },
+        test_env_api::{HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     util::*,
 };
@@ -73,8 +70,6 @@ pub fn test(env: TestEnv) {
                 &agent,
                 malicious_node.effective_canister_id(),
                 &log,
-                READY_WAIT_TIMEOUT,
-                RETRY_BACKOFF,
             )
             .await;
 

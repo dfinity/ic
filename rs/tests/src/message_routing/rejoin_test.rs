@@ -47,6 +47,7 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     info!(&ctx.logger, "Checking readiness of all nodes...");
     block_on(assert_all_ready(
@@ -66,7 +67,11 @@ pub fn test(env: TestEnv) {
         "All nodes are ready. Installing universal canister on random node: {}...", node.url
     );
     let agent = block_on(assert_create_agent(node.url.as_str()));
-    let universal_canister = block_on(UniversalCanister::new(&agent, node.effective_canister_id()));
+    let universal_canister = block_on(UniversalCanister::new_with_retries(
+        &agent,
+        node.effective_canister_id(),
+        &logger,
+    ));
 
     let rejoin_node = perm.next().unwrap();
     info!(&ctx.logger, "Killing random node: {}...", rejoin_node.url);

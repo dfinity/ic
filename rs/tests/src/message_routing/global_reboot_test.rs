@@ -58,6 +58,7 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let endpoints = handle.as_permutation(&mut rng).collect::<Vec<_>>();
@@ -155,7 +156,7 @@ pub fn test(env: TestEnv) {
     let update_message = b"This beautiful prose should be persisted for future generations";
     block_on(async {
         for ep in endpoints {
-            assert_subnet_can_make_progress(update_message, ep).await;
+            assert_subnet_can_make_progress(&logger, update_message, ep).await;
         }
     });
     info!(

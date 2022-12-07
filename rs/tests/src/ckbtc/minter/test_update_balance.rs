@@ -61,7 +61,9 @@ pub fn test_update_balance(env: TestEnv) {
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
         let agent = assert_create_agent(node.get_public_url().as_str()).await;
-        let universal_canister = UniversalCanister::new(&agent, node.effective_canister_id()).await;
+        let universal_canister =
+            UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                .await;
         activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         let ledger_agent = Icrc1Agent {
