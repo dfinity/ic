@@ -4,8 +4,6 @@ e2e-scalability-suite-test:
   needs:
     - job: wait-for-bazel-test-all
       artifacts: false
-    - job: guest-os-updateimg-build
-      artifacts: false
   artifacts:
     paths:
     - scalability/

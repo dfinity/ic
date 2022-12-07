@@ -54,10 +54,6 @@
   needs:
     - job: wait-for-bazel-test-all
       artifacts: false
-    - job: guest-os-updateimg-build
-      artifacts: false
-    - job: guest-os-updateimg-build-dev
-      artifacts: false
   artifacts:
     when: always
     paths:
@@ -165,10 +161,6 @@ upgrade-compatibility-pre-master:
   extends: .system-tests
   needs:
     - job: wait-for-bazel-test-all
-      artifacts: false
-    - job: guest-os-updateimg-build
-      artifacts: false
-    - job: guest-os-updateimg-build-dev
       artifacts: false
   artifacts:
     paths:

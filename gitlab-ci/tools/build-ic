@@ -109,7 +109,9 @@ if [ "$BUILD_CANISTERS" == "true" ]; then
 fi
 if [ "$BUILD_IMAGES" == "true" ]; then
     echo "Building IC-OS Guest Update Image"
-    gitlab-ci/src/job_scripts/lib/guest-os-updateimg.sh "${DISK_DIR}"
+    mkdir -p "${DISK_DIR}"
+    bazel build --config=local --ic_version="${VERSION}" //ic-os/guestos/prod
+    bazel cquery --output=files //ic-os/guestos/prod | xargs -I {} cp {} "${DISK_DIR}"
 fi
 
 if [ "$BUILD_BINARIES" == "true" ]; then
