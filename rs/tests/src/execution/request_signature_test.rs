@@ -38,7 +38,7 @@ pub fn test(env: TestEnv) {
             debug!(ctx.logger, "Selected replica"; "url" => format!("{}", endpoint.url));
 
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister = UniversalCanister::new_with_retries(&agent, endpoint.effective_canister_id(), &logger).await;
 
             debug!(
                 logger,

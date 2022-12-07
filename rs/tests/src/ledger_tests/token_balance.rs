@@ -97,11 +97,31 @@ pub fn test(env: TestEnv) {
 
         let agent = assert_create_agent(application_endpoint.url.as_str()).await;
         let (can1, can2, can3, can4, can5) = tokio::join!(
-            UniversalCanister::new(&agent, application_endpoint.effective_canister_id()),
-            UniversalCanister::new(&agent, application_endpoint.effective_canister_id()),
-            UniversalCanister::new(&agent, application_endpoint.effective_canister_id()),
-            UniversalCanister::new(&agent, application_endpoint.effective_canister_id()),
-            UniversalCanister::new(&agent, application_endpoint.effective_canister_id())
+            UniversalCanister::new_with_retries(
+                &agent,
+                application_endpoint.effective_canister_id(),
+                &logger
+            ),
+            UniversalCanister::new_with_retries(
+                &agent,
+                application_endpoint.effective_canister_id(),
+                &logger
+            ),
+            UniversalCanister::new_with_retries(
+                &agent,
+                application_endpoint.effective_canister_id(),
+                &logger
+            ),
+            UniversalCanister::new_with_retries(
+                &agent,
+                application_endpoint.effective_canister_id(),
+                &logger
+            ),
+            UniversalCanister::new_with_retries(
+                &agent,
+                application_endpoint.effective_canister_id(),
+                &logger
+            )
         );
         let ledger = Canister::new(&nns, LEDGER_CANISTER_ID);
 

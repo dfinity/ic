@@ -63,6 +63,7 @@ pub fn canister_accepts_ingress_by_default(env: TestEnv) {
 
 /// Defining an empty `canister_inspect_message` rejects all messages.
 pub fn empty_canister_inspect_rejects_all_messages(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -71,7 +72,12 @@ pub fn empty_canister_inspect_rejects_all_messages(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
             canister
                 .update(wasm().set_inspect_message(wasm().noop()).reply())
                 .await
@@ -92,6 +98,7 @@ pub fn empty_canister_inspect_rejects_all_messages(env: TestEnv) {
 
 /// Defining a `canister_inspect_message` that accepts all messages.
 pub fn canister_can_accept_ingress(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -100,7 +107,12 @@ pub fn canister_can_accept_ingress(env: TestEnv) {
             let endpoint = get_random_node_endpoint(&handle, &mut rng);
             endpoint.assert_ready(ctx).await;
             let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new(&agent, endpoint.effective_canister_id()).await;
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
 
             // Explicitly accepts all ingress messages.
             canister
@@ -171,6 +183,7 @@ pub fn canister_only_accepts_ingress_with_payload(env: TestEnv) {
 }
 
 pub fn canister_rejects_ingress_only_from_one_caller(env: TestEnv) {
+    let logger = env.logger();
     let (handle, ref ctx) = get_ic_handle_and_ctx(env);
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -183,7 +196,12 @@ pub fn canister_rejects_ingress_only_from_one_caller(env: TestEnv) {
             let agent1 = agent_with_identity(endpoint.url.as_str(), user1)
                 .await
                 .unwrap();
-            let canister = UniversalCanister::new(&agent1, endpoint.effective_canister_id()).await;
+            let canister = UniversalCanister::new_with_retries(
+                &agent1,
+                endpoint.effective_canister_id(),
+                &logger,
+            )
+            .await;
 
             // Explicitly accepts all ingress messages except of those from user 1.
             canister
@@ -238,10 +256,11 @@ pub fn message_to_canister_with_not_enough_balance_is_rejected(
 
             // A canister is created with just the freeze balance reserve. An ingress
             // message to it should get rejected.
-            let canister = UniversalCanister::new_with_cycles(
+            let canister = UniversalCanister::new_with_cycles_with_retries(
                 &agent,
                 endpoint.effective_canister_id(),
                 CANISTER_FREEZE_BALANCE_RESERVE,
+                &ctx.logger,
             )
             .await;
 

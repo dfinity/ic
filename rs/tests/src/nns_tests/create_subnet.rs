@@ -198,8 +198,12 @@ pub fn test(env: TestEnv) {
             "successfully created agent for endpoint of an originally unassigned node"
         );
 
-        let universal_canister =
-            UniversalCanister::new(&agent, newly_assigned_endpoint.effective_canister_id()).await;
+        let universal_canister = UniversalCanister::new_with_retries(
+            &agent,
+            newly_assigned_endpoint.effective_canister_id(),
+            log,
+        )
+        .await;
         info!(log, "successfully created a universal canister instance");
 
         const UPDATE_MSG_1: &[u8] =

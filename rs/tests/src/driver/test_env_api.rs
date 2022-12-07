@@ -70,7 +70,7 @@
 //!
 //! ```text
 //! let ucan_id = node.with_default_agent(|agent| async move {
-//!     let ucan = UniversalCanister::new(&agent).await;
+//!     let ucan = UniversalCanister::new_with_retries(&agent, effective_canister_id, &logger).await;
 //!     ucan.canister_id()
 //! });
 //! ```
