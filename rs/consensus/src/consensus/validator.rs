@@ -768,7 +768,6 @@ impl Validator {
         // Collect the min of validated block proposal ranks in the range.
         let mut known_ranks: BTreeMap<Height, Option<Rank>> =
             get_min_validated_ranks(pool_reader, &range);
-        let dkg_pool = &*self.dkg_pool.read().unwrap();
 
         // It is necessary to traverse all the proposals and not only the ones with min
         // rank per height; because proposals for which there is an unvalidated
@@ -849,7 +848,7 @@ impl Validator {
                     continue;
                 }
 
-                match self.check_block_validity(pool_reader, &proposal, dkg_pool) {
+                match self.check_block_validity(pool_reader, &proposal) {
                     Ok(()) => {
                         self.metrics.observe_block(pool_reader, &proposal);
                         known_ranks.insert(proposal.height(), Some(proposal.rank()));
@@ -911,7 +910,6 @@ impl Validator {
         &self,
         pool_reader: &PoolReader<'_>,
         proposal: &BlockProposal,
-        dkg_pool: &dyn DkgPool,
     ) -> ValidationResult<ValidatorError> {
         if proposal.height() == Height::from(0) {
             Err(PermanentError::CannotVerifyBlockHeightZero)?
@@ -1013,6 +1011,7 @@ impl Validator {
             .validation_duration
             .with_label_values(&["Dkg"])
             .start_timer();
+        let dkg_pool = &*self.dkg_pool.read().unwrap();
         let ret = dkg::validate_payload(
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
