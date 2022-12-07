@@ -35,17 +35,7 @@ function purge_partitions() {
 }
 
 function setup_storage() {
-    # Create PVs on each additional drive, at the same time, check that we have the required amount
-    skew=$(detect_skew)
-    if [ "${skew}" == "dell" ]; then
-        target_drives=9
-    elif [ "${skew}" == "supermicro" ]; then
-        target_drives=4
-    else
-        log_and_reboot_on_error "1" "Unknown machine skew."
-    fi
-
-    count=0
+    # Create PVs on each additional drive
     large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
     for drive in $(echo ${large_drives[@]}); do
         # Avoid creating PV on main disk
@@ -53,18 +43,12 @@ function setup_storage() {
             continue
         fi
 
-        count=$((${count} + 1))
-
         test -b "/dev/${drive}"
         log_and_reboot_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
 
         pvcreate "/dev/${drive}"
         log_and_reboot_on_error "${?}" "Unable to setup PV on drive '/dev/${drive}'."
     done
-
-    if [ "${count}" -ne "${target_drives}" ]; then
-        log_and_reboot_on_error "1" "Not enough drives found. Are all drives correctly installed?"
-    fi
 }
 
 # Establish run order
