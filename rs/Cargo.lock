@@ -9983,31 +9983,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a94d21414c1f4a51209ad204c1776a3d0765002c76c6abcb602a6f09f1e881c7"
 
 [[package]]
-name = "log-scraper"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap 3.2.23",
- "crossbeam",
- "crossbeam-channel",
- "futures-util",
- "humantime 2.1.0",
- "humantime-serde",
- "ic-async-utils",
- "ic-config",
- "ic-http-endpoints-metrics",
- "ic-metrics",
- "ic-p8s-service-discovery-log",
- "ic-types",
- "service-discovery",
- "slog",
- "slog-async",
- "slog-term",
- "slog_derive",
- "tokio",
-]
-
-[[package]]
 name = "log4rs"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10031,6 +10006,35 @@ dependencies = [
  "thread-id",
  "typemap-ors",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "log_vector_config_generator"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 3.2.23",
+ "crossbeam",
+ "crossbeam-channel",
+ "futures-util",
+ "humantime 2.1.0",
+ "humantime-serde",
+ "ic-async-utils",
+ "ic-config",
+ "ic-http-endpoints-metrics",
+ "ic-metrics",
+ "ic-p8s-service-discovery-log",
+ "ic-types",
+ "ic-utils 0.8.0",
+ "regex",
+ "serde",
+ "serde_json",
+ "service-discovery",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "slog_derive",
+ "tokio",
 ]
 
 [[package]]

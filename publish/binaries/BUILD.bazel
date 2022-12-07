@@ -37,7 +37,7 @@ STRIP_BINARIES = {
     "state-tool": "//rs/state_tool:state-tool",
     "vector-config-generator": "//rs/vector_config_generator:vector_config_generator",
     "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
-    "log-scraper": "//rs/log_scraper:log_scraper",
+    "log-vector-config-generator": "//rs/log_vector_config_generator:log_vector_config_generator",
 }
 
 [release_nostrip_binary(

@@ -101,7 +101,7 @@ members = [
   "ic_p8s_service_discovery",
   "ic_p8s_service_discovery/log",
   "service_discovery",
-  "log_scraper",
+  "log_vector_config_generator",
   "identity",
   "ingress_manager",
   "interfaces",
