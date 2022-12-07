@@ -73,7 +73,7 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
-    "ic_name_metrics": "mercury",
+    "push_metrics": true,
     "backup_instance": "${BACKUP_INSTANCE}",
     "nns_url": "${NNS_URL}",
     "nns_pem": "${WORK_DIR}/$PUBLIC_KEY_NAME",
