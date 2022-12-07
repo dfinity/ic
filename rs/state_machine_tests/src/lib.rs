@@ -90,7 +90,6 @@ pub use ic_types::{
 use serde::Serialize;
 pub use slog::Level;
 use std::fmt;
-use std::path::Path;
 use std::str::FromStr;
 use std::string::ToString;
 use std::sync::Arc;
@@ -828,85 +827,6 @@ impl StateMachine {
             max_ticks,
             started_at.elapsed()
         )
-    }
-
-    /// Imports a directory containing a canister snapshot into the state machine.
-    ///
-    /// After you import the canister, you can execute methods on it and upgrade it.
-    /// The original directory is not modified.
-    ///
-    /// The function is currently not used in code, but it is useful for local
-    /// testing and debugging. Do not remove it.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if loading the canister snapshot fails.
-    pub fn import_canister_state<P: AsRef<Path>>(
-        &self,
-        canister_directory: P,
-        canister_id: CanisterId,
-    ) {
-        let canister_directory = canister_directory.as_ref();
-        assert!(
-            canister_directory.is_dir(),
-            "canister state at {} must be a directory",
-            canister_directory.display()
-        );
-
-        let tip = self
-            .state_manager
-            .tip_handler()
-            .lock()
-            .unwrap()
-            .tip(ic_types::Height::new(0))
-            .expect("failed to obtain tip");
-        let tip_canister_layout = tip
-            .canister(&canister_id)
-            .expect("failed to obtain writeable canister layout");
-
-        fn copy_as_writeable(src: &Path, dst: &Path) {
-            assert!(
-                src.is_file(),
-                "Canister layout contains only files, but {} is not a file.",
-                src.display()
-            );
-            std::fs::copy(src, dst).expect("failed to copy file");
-            let file = std::fs::File::open(dst).expect("failed to open file");
-            let mut permissions = file
-                .metadata()
-                .expect("failed to get file permission")
-                .permissions();
-            permissions.set_readonly(false);
-            file.set_permissions(permissions)
-                .expect("failed to set file persmission");
-        }
-
-        for entry in std::fs::read_dir(canister_directory).expect("failed to read_dir") {
-            let entry = entry.expect("failed to get directory entry");
-            copy_as_writeable(
-                &entry.path(),
-                &tip_canister_layout.raw_path().join(entry.file_name()),
-            );
-        }
-
-        let canister_state = ic_state_manager::checkpoint::load_canister_state(
-            &tip_canister_layout,
-            &canister_id,
-            ic_types::Height::new(0),
-        )
-        .unwrap_or_else(|e| {
-            panic!(
-                "failed to load canister state from {}: {}",
-                canister_directory.display(),
-                e
-            )
-        })
-        .0;
-
-        let (h, mut state) = self.state_manager.take_tip();
-        state.put_canister_state(canister_state);
-        self.state_manager
-            .commit_and_certify(state, h.increment(), CertificationScope::Full);
     }
 
     pub fn install_wasm_in_mode(

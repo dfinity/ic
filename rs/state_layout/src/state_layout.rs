@@ -330,26 +330,11 @@ impl TipHandler {
         }
     }
 
-    /// Creates a checkpoint from the "tip" state returning layout object of
-    /// the newly created checkpoint
-    pub fn tip_to_checkpoint(
-        &mut self,
-        state_layout: &StateLayout,
-        tip: CheckpointLayout<RwPolicy>,
-        mut thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        let height = tip.height;
-        #[allow(clippy::needless_option_as_deref)]
-        let cp = state_layout.scratchpad_to_checkpoint(tip, height, thread_pool.as_deref_mut())?;
-        self.reset_tip_to(state_layout, height, thread_pool)?;
-        Ok(cp)
-    }
-
     /// Deletes canisters from tip if they are not in ids.
     pub fn filter_tip_canisters(
         &mut self,
         height: Height,
-        ids: &BTreeSet<&CanisterId>,
+        ids: &BTreeSet<CanisterId>,
     ) -> Result<(), LayoutError> {
         let tip = self.tip(height)?;
         let canisters_on_disk = tip.canister_ids()?;
